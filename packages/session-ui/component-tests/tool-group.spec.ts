@@ -83,6 +83,19 @@ story("summarizes subagents as Agent while retaining their card titles", async (
   await expect(group.locator('[data-component="task-tool-title"]')).toHaveText(["General", "Explore"])
 })
 
+story("matches the question label-to-chevron spacing", async ({ mount }) => {
+  const root = await mount("current-session-research-agents--agent-research", { args: { scenario: "workflow" } })
+  const grouped = root.locator('[data-component="collapsed-tool-group"]').first()
+  const question = root.locator('[data-timeline-part-id="tool_family_question"]')
+  const gap = (node: Element) => {
+    const label = node.querySelector('[data-slot="basic-tool-tool-info"]')!.getBoundingClientRect()
+    const chevron = node.querySelector('[data-slot="collapsible-arrow-icon"]')!.getBoundingClientRect()
+    return chevron.left - label.right
+  }
+
+  await expect.poll(() => grouped.evaluate(gap)).toBe(await question.evaluate(gap))
+})
+
 for (const width of [840, 390]) {
   story(`keeps grouped cards inside their trigger bounds at ${width}px`, async ({ mount, page }) => {
     await page.setViewportSize({ width, height: 600 })
