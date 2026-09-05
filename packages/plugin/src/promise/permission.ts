@@ -1,4 +1,4 @@
-import type { PermissionApi } from "@opencode-ai/client/promise/api"
+import type { PermissionApi, PermissionCreateInput } from "@opencode-ai/client/promise/api"
 import type { Agent } from "@opencode-ai/schema/agent"
 import type { Permission } from "@opencode-ai/schema/permission"
 import type { Session } from "@opencode-ai/schema/session"
@@ -20,5 +20,6 @@ export interface PermissionHooks {
 }
 
 export type PermissionDomain = Pick<PermissionApi, "list" | "get" | "reply"> & {
+  readonly assert: (input: PermissionCreateInput) => Promise<void>
   readonly hook: Hooks<PermissionHooks>
 }

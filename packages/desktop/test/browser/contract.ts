@@ -11,6 +11,7 @@ export const Smoke = Rpc.define({
     },
     write: { input: Schema.Struct({ text: Schema.String }), output: Schema.String },
     read: { input: Schema.Struct({ path: Schema.String }), output: Schema.String },
+    deny: { input: Schema.Struct({ urls: Schema.Array(Schema.String) }), output: Schema.Void },
   },
   events: {},
 })
