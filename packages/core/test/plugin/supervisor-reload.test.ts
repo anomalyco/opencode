@@ -2,7 +2,7 @@ import { describe, expect, setDefaultTimeout } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Deferred, Duration, Effect, Fiber, Layer, LayerMap, Schedule } from "effect"
-import { TestClock, TestConsole } from "effect/testing"
+import { TestClock } from "effect/testing"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Event } from "@opencode-ai/schema/config"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -125,7 +125,7 @@ describe("PluginSupervisor reload", () => {
         const file = path.join(root, "index.ts")
         const helper = path.join(root, scenario.helper)
         const entry = `export { default } from ${JSON.stringify("./" + scenario.helper)}`
-        const source = (version: number) => `import { Schema } from "effect"
+        const source = (version: number) => `import { Schema } from ${JSON.stringify(import.meta.resolve("effect"))}
           export default {
             id: "greeter",
             async setup(ctx) {
@@ -142,7 +142,6 @@ describe("PluginSupervisor reload", () => {
         yield* Effect.promise(async () => {
           await Bun.write(file, entry)
           await Bun.write(helper, source(1))
-          await fs.symlink(path.resolve("node_modules"), path.join(directory.path, "node_modules"), "dir")
           await Bun.write(path.join(directory.path, ".opencode/opencode.json"), JSON.stringify({ plugins: [root] }))
         })
         const watcher = yield* Watcher.Test
@@ -152,15 +151,6 @@ describe("PluginSupervisor reload", () => {
           const rpc = yield* Rpc.Service
           const commands = yield* Command.Service
           yield* plugins.awaitActivation
-          const inventory = yield* plugins.list()
-          if (!inventory.some((plugin) => plugin.id === "greeter" && plugin.state.status === "active")) {
-            console.error("[DEBUG-reload-ci]", Bun.inspect(inventory, { depth: 12 }))
-            for (const line of yield* TestConsole.logLines) {
-              if (typeof line === "object" && line !== null && "cause" in line) {
-                console.error(Bun.inspect(line, { depth: 12 }))
-              }
-            }
-          }
           expect(yield* rpc.call("greeter", "status", {})).toBe(1)
           expect(yield* rpc.call("greeter", "info", {}).pipe(Effect.flip)).toMatchObject({
             type: "rpc.method_not_found",
