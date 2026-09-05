@@ -136,3 +136,12 @@ export class AutomationPromptConflictError extends Schema.TaggedErrorClass<Autom
   },
   { httpApiStatus: 409 },
 ) {}
+
+export class TeamJulesNotFoundError extends Schema.TaggedErrorClass<TeamJulesNotFoundError>()(
+  "TeamJulesNotFoundError",
+  {
+    taskID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}

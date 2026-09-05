@@ -1,6 +1,7 @@
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location"
+import { TeamJulesNotFoundError } from "../errors"
 
 const TaskID = Schema.String.pipe(Schema.brand("TeamJules.TaskID"))
 const WorkerID = Schema.String.pipe(Schema.brand("TeamJules.WorkerID"))
@@ -88,6 +89,7 @@ export const TeamJulesGroup = HttpApiGroup.make("server.teamjules")
     HttpApiEndpoint.get("teamjules.get", "/api/teamjules/tasks/:taskID", {
       params: { taskID: TaskID },
       success: TaskInfo,
+      error: [TeamJulesNotFoundError],
     })
       .annotateMerge(
         OpenApi.annotations({

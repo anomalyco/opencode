@@ -1,7 +1,8 @@
 import { TeamJules } from "@opencode-ai/core/teamjules"
 import { Effect } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
+import { TeamJulesNotFoundError } from "@opencode-ai/protocol/errors"
 
 export const TeamJulesHandler = HttpApiBuilder.group(Api, "server.teamjules", (handlers) =>
   handlers
@@ -29,7 +30,10 @@ export const TeamJulesHandler = HttpApiBuilder.group(Api, "server.teamjules", (h
         const service = yield* TeamJules.Service
         const task = yield* service.getTask(ctx.params.taskID as TeamJules.TaskID)
         if (!task) {
-          return Effect.fail(new Error("Task not found"))
+          return yield* new TeamJulesNotFoundError({
+            taskID: ctx.params.taskID as string,
+            message: `Task not found: ${ctx.params.taskID}`,
+          })
         }
         return task
       }),
