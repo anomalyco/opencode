@@ -2113,7 +2113,11 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
               <text fg={color()}>✗</text>
             </Match>
           </Switch>
-          <text fg={color()}>Compaction</text>
+          <text fg={color()}>
+            {props.message.status === "completed" && props.message.providerContext
+              ? "Provider compaction"
+              : "Compaction"}
+          </text>
           <Show when={cancelled()}>
             <text fg={color()}>· cancelled</text>
           </Show>
