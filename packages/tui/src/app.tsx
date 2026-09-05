@@ -288,7 +288,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                       input.args.continue
                                         ? {
                                             type: "session",
-                                            sessionID: "dummy",
+                                            // Placeholder until the continue effect resolves the
+                                            // real id from the session list. Empty, not "dummy",
+                                            // so no session API call fires for an invalid id.
+                                            sessionID: "",
                                           }
                                         : undefined
                                     }

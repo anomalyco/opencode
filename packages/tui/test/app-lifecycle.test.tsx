@@ -61,23 +61,32 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
 })
 
 test("app.exit prints the session epilogue after scoped cleanup", async () => {
+  // FAST_BOOT mounts the session route before the continue effect resolves
+  // the real id, mirroring how the app runs in practice.
+  process.env.OPENCODE_FAST_BOOT = "1"
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   const core = await import("@opentui/core")
   mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   const events = createEventSource()
+  const requested: string[] = []
+  const demoSession = {
+    id: "ses_demo",
+    title: "Demo session",
+    slug: "ses_demo",
+    projectID: "project",
+    directory,
+    version: "0.0.0-test",
+    time: { created: 0, updated: 0 },
+  }
   const calls = createFetch((url) => {
-    if (url.pathname === "/session")
-      return json([
-        {
-          id: "dummy",
-          title: "Demo session",
-          slug: "dummy",
-          projectID: "project",
-          directory,
-          version: "0.0.0-test",
-          time: { created: 0, updated: 0 },
-        },
-      ])
+    requested.push(url.pathname)
+    // Delay the session list so the mounted session route fires its eager
+    // fetch before the continue effect navigates. With the placeholder bug
+    // this produces /session/dummy* requests; with the fix it cannot.
+    if (url.pathname === "/session") {
+      return new Promise((resolve) => setTimeout(() => resolve(json([demoSession])), 50))
+    }
+    if (url.pathname === "/session/ses_demo") return json(demoSession)
   })
   const originalWrite = process.stdout.write.bind(process.stdout)
   let stdout = ""
@@ -115,11 +124,17 @@ test("app.exit prints the session epilogue after scoped cleanup", async () => {
     await ready
     await setup.renderOnce()
     await setup.renderOnce()
+    // Let the delayed session list resolve and the session route settle.
+    await new Promise((resolve) => setTimeout(resolve, 200))
     api?.keymap.dispatchCommand("app.exit")
     await task
 
     expect(stdout).toContain("Demo session")
-    expect(stdout).toContain("opencode -s dummy")
+    expect(stdout).toContain("opencode -s ses_demo")
+    // Regression: --continue must never fetch a placeholder session id.
+    // The server rejects ids without the "ses" prefix (400), which the
+    // session route surfaces as an error toast.
+    expect(requested).not.toContain("/session/dummy")
   } finally {
     process.stdout.write = originalWrite
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
