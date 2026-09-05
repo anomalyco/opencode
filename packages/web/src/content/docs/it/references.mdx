@@ -1,0 +1,157 @@
+---
+title: Riferimenti
+description: Aggiungi directory locali e repository Git come riferimenti di progetto.
+---
+
+I riferimenti danno a OpenCode l'accesso a directory esterne al progetto corrente. Usali per rendere disponibili documentazione, librerie condivise, esempi o un altro repository mentre lavori.
+
+I riferimenti si configurano per alias in `opencode.json` o `opencode.jsonc`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and documentation conventions",
+    },
+    "sdk": {
+      "repository": "anomalyco/opencode-sdk-js",
+      "branch": "main",
+      "description": "Use for JavaScript SDK implementation details",
+    },
+  },
+}
+```
+
+---
+
+## Directory locali
+
+Usa `path` per fare riferimento a una directory locale.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+    },
+  },
+}
+```
+
+I path possono essere:
+
+- Relativi al file di configurazione che definisce il riferimento
+- Assoluti, ad esempio `/home/user/docs`
+- Relativi alla home directory, ad esempio `~/docs`
+
+Puoi anche usare una forma abbreviata a stringa:
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": "../docs",
+  },
+}
+```
+
+---
+
+## Repository Git
+
+Usa `repository` per fare riferimento a un repository Git. OpenCode materializza il repository nella cache locale dei repository e rende il codice in checkout disponibile come directory di riferimento.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+`repository` accetta URL Git, riferimenti host/path e la forma abbreviata GitHub `owner/repo`. Il campo opzionale `branch` seleziona un branch o un ref. Senza `branch`, OpenCode usa il branch predefinito del repository.
+
+Puoi usare la forma abbreviata a stringa quando non ti servono branch, description o altre opzioni:
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+  },
+}
+```
+
+:::note
+I riferimenti Git vengono aggiornati in modo asincrono. Un repository appena configurato può impiegare un momento per completare il clone o l'aggiornamento.
+:::
+
+---
+
+## Descrivere l'uso
+
+Aggiungi `description` per spiegare quando un agente dovrebbe usare un riferimento.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when implementing UI components or design tokens",
+    },
+  },
+}
+```
+
+OpenCode include i riferimenti con description nel contesto degli agenti. Le description devono essere brevi e abbastanza specifiche da distinguere riferimenti con contenuti simili. I riferimenti senza description restano disponibili tramite autocomplete e uso diretto, ma non vengono proposti agli agenti.
+
+---
+
+## Nascondere voci dall'autocomplete
+
+Imposta `hidden` a `true` per escludere un riferimento dall'autocomplete `@` nel TUI.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal implementation details",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` influisce solo sull'autocomplete. Un riferimento nascosto con description resta incluso nel contesto degli agenti.
+
+---
+
+## Usare i riferimenti
+
+I riferimenti configurati compaiono nell'autocomplete `@` del TUI. Digita `@alias` per allegare la root del riferimento, oppure `@alias/` per cercare file al suo interno.
+
+```text
+Compare this implementation with @sdk/src/client.ts
+```
+
+Gli agenti ricevono anche i path risolti e le description dei riferimenti configurati che hanno una description nel system context, così possono ispezionare un riferimento quando è rilevante senza che tu lo alleghi manualmente.
+
+OpenCode consente automaticamente le directory di riferimento tramite il confine di permesso external-directory. I permessi normali degli strumenti restano validi; ad esempio, un agente che non può modificare i file non ottiene l'accesso in scrittura solo perché una directory è configurata come riferimento.
+
+---
+
+## Campi di configurazione
+
+| Campo         | Locale | Git | Descrizione                                              |
+| ------------- | ------ | --- | -------------------------------------------------------- |
+| `path`        | Sì     | No  | Directory locale del riferimento                         |
+| `repository`  | No     | Sì  | URL Git, host/path o valore GitHub `owner/repo`          |
+| `branch`      | No     | Sì  | Branch o ref Git opzionale                               |
+| `description` | Sì     | Sì  | Indicazioni su quando usare il riferimento               |
+| `hidden`      | Sì     | Sì  | Nasconde il riferimento dall'autocomplete `@` del TUI    |
+
+Gli alias dei riferimenti non possono essere vuoti né contenere `/`, spazi, backtick o virgole.
