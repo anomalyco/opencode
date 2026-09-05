@@ -79,6 +79,7 @@ import { WebSearchTool } from "../tool/plugin/websearch.js"
 import { WellKnown } from "../wellknown.js"
 import { WriteTool } from "../tool/plugin/write.js"
 import { AgentPlugin } from "./agent.js"
+import BrowserPlugin from "@opencode-ai/plugin-browser"
 import { CommandPlugin } from "./command.js"
 import { PlanPlugin } from "./plan.js"
 import { ModelsDevPlugin } from "./models-dev.js"
@@ -192,6 +193,7 @@ export const requirements = LayerNode.group([
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
 const pre = [
+  BrowserPlugin,
   ConfigMcpPlugin.Plugin,
   McpCodeModeExclusionPlugin.Plugin,
   WellKnownPlugin.Plugin,

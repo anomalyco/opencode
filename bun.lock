@@ -358,6 +358,7 @@
         "@opencode-ai/ai": "workspace:*",
         "@opencode-ai/codemode": "workspace:*",
         "@opencode-ai/plugin": "workspace:*",
+        "@opencode-ai/plugin-browser": "workspace:*",
         "@opencode-ai/pty": "0.1.13",
         "@opencode-ai/schema": "workspace:*",
         "@opencode-ai/util": "workspace:*",
@@ -604,6 +605,21 @@
         "@opentui/solid",
         "solid-js",
       ],
+    },
+    "packages/plugin-browser": {
+      "name": "@opencode-ai/plugin-browser",
+      "version": "0.0.0",
+      "dependencies": {
+        "@opencode-ai/plugin": "workspace:*",
+        "@opencode-ai/schema": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
+      },
     },
     "packages/posts": {
       "name": "@opencode-ai/posts",
@@ -2146,6 +2162,8 @@
     "@opencode-ai/merman": ["@opencode-ai/merman@workspace:packages/merman"],
 
     "@opencode-ai/plugin": ["@opencode-ai/plugin@workspace:packages/plugin"],
+
+    "@opencode-ai/plugin-browser": ["@opencode-ai/plugin-browser@workspace:packages/plugin-browser"],
 
     "@opencode-ai/posts": ["@opencode-ai/posts@workspace:packages/posts"],
 
