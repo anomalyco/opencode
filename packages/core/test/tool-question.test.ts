@@ -40,6 +40,7 @@ const question = Layer.succeed(
       }).pipe(Effect.andThen(reject ? Effect.fail(new QuestionV2.RejectedError()) : Effect.succeed([["Build"], []]))),
     reply: () => Effect.die("unused"),
     reject: () => Effect.die("unused"),
+    cancel: () => Effect.die("unused"),
     list: () => Effect.die("unused"),
   }),
 )
