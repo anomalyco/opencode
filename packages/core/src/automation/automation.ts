@@ -344,16 +344,23 @@ const layer = Layer.effect(
             sessionID: trigger.session_id,
             prompt: trigger.prompt,
             triggerID: id,
+            deduplicationKey: id,
             // Explicit per-trigger agent override wins over classified routing.
             ...(trigger.agent ? { agent: trigger.agent } : {}),
             lockOwner: owner,
           })
           return runID
         }).pipe(
-          Effect.catch((cause) =>
+          Effect.catchTag("AutomationQueue.DeduplicationError", () =>
             Effect.gen(function* () {
               yield* releaseLock(id, owner).pipe(Effect.orDie)
-              return yield* Effect.fail(cause)
+              return yield* new LockError({ id, message: "Trigger already has an active job" })
+            }),
+          ),
+          Effect.catch(() =>
+            Effect.gen(function* () {
+              yield* releaseLock(id, owner).pipe(Effect.orDie)
+              return yield* new LockError({ id, message: "Failed to enqueue job" })
             }),
           ),
         )

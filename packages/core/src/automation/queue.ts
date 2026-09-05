@@ -1,6 +1,6 @@
 export * as AutomationQueue from "./queue"
 
-import { Context, Effect, Layer, Ref, Fiber } from "effect"
+import { Context, Effect, Layer, Ref, Fiber, Schema } from "effect"
 import { makeGlobalNode } from "../effect/app-node"
 import {
   AutomationClassifier,
@@ -8,6 +8,13 @@ import {
   type Complexity,
   type TaskType,
 } from "./classifier"
+
+export class DeduplicationError extends Schema.TaggedErrorClass<DeduplicationError>()(
+  "AutomationQueue.DeduplicationError",
+  {
+    key: Schema.String,
+  },
+) {}
 
 export interface QueueConfig {
   readonly globalConcurrency: number
@@ -19,13 +26,17 @@ export interface QueueConfig {
   readonly highComplexityAgent?: string
   /** Runs the post-run reflection/verification gate for jobs of this complexity or higher. */
   readonly verifyFrom: Complexity
+  /** How long a deduplication key remains active after enqueue (ms). Default 60 000. */
+  readonly deduplicationTtlMs: number
+  /** Maps complexity to numeric priority when the caller doesn't provide one. */
+  readonly priorityByComplexity: Record<Complexity, number>
 }
 
 export const QueueConfigRef = Context.Reference<QueueConfig>(
   "@opencode/v2/AutomationQueueConfig",
   {
     defaultValue: () => ({
-      globalConcurrency: 2,
+      globalConcurrency: 4,
       defaultComplexity: "medium" as Complexity,
       defaultTaskType: "refactor" as TaskType,
       agentByTaskType: {
@@ -37,6 +48,8 @@ export const QueueConfigRef = Context.Reference<QueueConfig>(
       },
       highComplexityAgent: "build",
       verifyFrom: "high",
+      deduplicationTtlMs: 60_000,
+      priorityByComplexity: { low: 0, medium: 5, high: 10 } as Record<Complexity, number>,
     }),
   },
 )
@@ -71,21 +84,27 @@ export interface QueuedJob {
   readonly runID?: string
   /** Trigger lock owner to release when the job settles. */
   readonly lockOwner?: string
+  /** Numeric priority — higher values are dispatched first. Default 0. */
+  readonly priority: number
+  /** Idempotent deduplication key. Rejects a second enqueue while active. */
+  readonly deduplicationKey?: string
 }
 
 export type JobHandler = (job: QueuedJob) => Effect.Effect<void, never>
 
 export interface Interface {
   readonly enqueue: (
-    input: Omit<QueuedJob, "id" | "complexity" | "classification"> & {
+    input: Omit<QueuedJob, "id" | "complexity" | "classification" | "priority"> & {
       complexity?: Complexity
       classification?: Classification
+      priority?: number
     },
-  ) => Effect.Effect<void>
+  ) => Effect.Effect<void, DeduplicationError>
   readonly status: () => Effect.Effect<{
     readonly pending: number
     readonly running: number
     readonly byComplexity: Record<Complexity, number>
+    readonly dedupActive: number
   }>
   readonly stop: Effect.Effect<void>
   readonly setHandler: (handler: JobHandler) => Effect.Effect<void>
@@ -95,10 +114,16 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/AutomationQueue") {}
 
+interface DedupRecord {
+  readonly jobId: string
+  readonly expiresAt: number
+}
+
 interface QueueState {
   pending: QueuedJob[]
   running: Set<string>
   byComplexity: Record<Complexity, number>
+  dedupIndex: Map<string, DedupRecord>
   handler: JobHandler | null
 }
 
@@ -106,6 +131,7 @@ const initialState = (): QueueState => ({
   pending: [],
   running: new Set(),
   byComplexity: { low: 0, medium: 0, high: 0 },
+  dedupIndex: new Map(),
   handler: null,
 })
 
@@ -146,7 +172,9 @@ const layer = Layer.effect(
             yield* Ref.update(state, (s) => {
               const next = new Set(s.running)
               next.delete(job.id)
-              return { ...s, running: next }
+              const dedupIndex = new Map(s.dedupIndex)
+              if (job.deduplicationKey) dedupIndex.delete(job.deduplicationKey)
+              return { ...s, running: next, dedupIndex }
             })
           }).pipe(Effect.catch(() => Effect.void)),
         )
@@ -167,6 +195,17 @@ const layer = Layer.effect(
     const matchComplexity = (a: Complexity, b: Complexity) => RANK[a] >= RANK[b]
 
     const enqueue: Interface["enqueue"] = Effect.fn("AutomationQueue.enqueue")(function* (input) {
+      const now = Date.now()
+
+      // Deduplication check — reject if an active (non-expired) key already exists.
+      if (input.deduplicationKey) {
+        const s = yield* Ref.get(state)
+        const existing = s.dedupIndex.get(input.deduplicationKey)
+        if (existing && existing.expiresAt > now) {
+          return yield* new DeduplicationError({ key: input.deduplicationKey })
+        }
+      }
+
       const classification =
         input.classification ??
         (yield* classifier.classify(input.prompt).pipe(
@@ -181,35 +220,55 @@ const layer = Layer.effect(
 
       const complexity = input.complexity ?? classification.complexity
       const agent = input.agent ?? routeAgent(classification, config)
+      // Explicit priority wins; otherwise derive from complexity.
+      const priority = input.priority ?? config.priorityByComplexity[complexity] ?? 0
 
       const job: QueuedJob = {
         id: crypto.randomUUID(),
         prompt: input.prompt,
         complexity,
+        priority,
         sessionID: input.sessionID,
         triggerID: input.triggerID,
         classification,
         ...(agent ? { agent } : {}),
         ...(input.runID ? { runID: input.runID } : {}),
         ...(input.lockOwner ? { lockOwner: input.lockOwner } : {}),
+        ...(input.deduplicationKey ? { deduplicationKey: input.deduplicationKey } : {}),
       }
 
-      yield* Ref.update(state, (s) => ({
-        ...s,
-        pending: [...s.pending, job],
-        byComplexity: {
-          ...s.byComplexity,
-          [job.complexity]: s.byComplexity[job.complexity] + 1,
-        },
-      }))
+      yield* Ref.update(state, (s) => {
+        const dedupIndex = new Map(s.dedupIndex)
+        if (input.deduplicationKey) {
+          dedupIndex.set(input.deduplicationKey, {
+            jobId: job.id,
+            expiresAt: now + config.deduplicationTtlMs,
+          })
+        }
+        return {
+          ...s,
+          pending: [...s.pending, job].sort((a, b) => b.priority - a.priority),
+          dedupIndex,
+          byComplexity: {
+            ...s.byComplexity,
+            [job.complexity]: s.byComplexity[job.complexity] + 1,
+          },
+        }
+      })
     })
 
     const status: Interface["status"] = Effect.fn("AutomationQueue.status")(function* () {
       const s = yield* Ref.get(state)
+      const now = Date.now()
+      let dedupActive = 0
+      for (const record of s.dedupIndex.values()) {
+        if (record.expiresAt > now) dedupActive++
+      }
       return {
         pending: s.pending.length,
         running: s.running.size,
         byComplexity: s.byComplexity,
+        dedupActive,
       }
     })
 
