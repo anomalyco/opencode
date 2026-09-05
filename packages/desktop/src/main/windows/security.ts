@@ -1,18 +1,28 @@
-import type { BrowserWindow } from "electron"
+import { BrowserWindow } from "electron"
+import type { Session } from "electron"
+import { isMainWindowWebContents, isRendererPermission } from "./permissions"
 import { addRendererHeaders, isRendererUrl, upsertHeader } from "./protocol"
 
-const rendererPermissions = new Set(["clipboard-sanitized-write", "notifications"])
+const configuredSessions = new WeakSet<Session>()
 
 export function allowRendererPermissions(win: BrowserWindow) {
-  const webContentsId = win.webContents.id
-  win.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
+  const session = win.webContents.session
+  if (configuredSessions.has(session)) return
+  configuredSessions.add(session)
+  const windowIds = () =>
+    BrowserWindow.getAllWindows()
+      .filter((win) => !win.isDestroyed())
+      .map((win) => win.webContents.id)
+  session.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(
-      rendererPermissions.has(permission) && isRendererUrl(details.requestingUrl) && webContents.id === webContentsId,
+      isRendererPermission(permission) &&
+        isRendererUrl(details.requestingUrl) &&
+        isMainWindowWebContents(webContents.id, windowIds()),
     )
   })
-  win.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
-    if (!rendererPermissions.has(permission)) return false
-    if (webContents && webContents.id !== webContentsId) return false
+  session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+    if (!isRendererPermission(permission)) return false
+    if (webContents && !isMainWindowWebContents(webContents.id, windowIds())) return false
     return isRendererUrl(details.requestingUrl) || isRendererUrl(requestingOrigin)
   })
 }
