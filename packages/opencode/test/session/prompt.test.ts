@@ -889,6 +889,127 @@ it.instance("glob tool keeps instance context during prompt runs", () =>
   }),
 )
 
+// session-peer-awareness: the `peers` tool was computed in registry.ts's
+// custom-tool assembly but never added to the hand-maintained `builtin`
+// array the LLM actually sees — so despite being fully implemented and
+// unit-tested, it was never reachable by a real model. Fixed alongside
+// send_peer_message below (same missing-array-entry bug). This test proves
+// reachability, not just that the array literal contains the id.
+it.instance("peers tool is reachable by the model and reports another active session", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const asker = yield* sessions.create({
+      title: "Asker session",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    const other = yield* sessions.create({
+      title: "Merge five specsync worktrees into main",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* seed(other.id)
+    yield* llm.hang
+    yield* user(other.id, "keep going")
+    const otherFiber = yield* prompt.loop({ sessionID: other.id }).pipe(Effect.forkChild)
+    yield* llm.wait(1)
+    yield* waitForBusy(other.id)
+
+    yield* prompt.prompt({
+      sessionID: asker.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "who else is working here?" }],
+    })
+    yield* llm.tool("peers", {})
+    yield* llm.text("checked")
+
+    const result = yield* prompt.loop({ sessionID: asker.id })
+    expect(result.info.role).toBe("assistant")
+
+    const msgs = yield* MessageV2.filterCompactedEffect(asker.id)
+    const tool = msgs
+      .flatMap((msg) => msg.parts)
+      .find(
+        (part): part is CompletedToolPart =>
+          part.type === "tool" && part.tool === "peers" && part.state.status === "completed",
+      )
+    if (!tool) throw new Error("peers tool part never completed")
+    expect(tool.state.output).toContain(other.id)
+    expect(tool.state.output).toContain("Merge five specsync worktrees into main")
+
+    yield* prompt.cancel(other.id)
+    yield* Fiber.await(otherFiber)
+  }),
+)
+
+// peer-messaging: end-to-end through the real tool registry and service
+// layer, not just the pure resolveTarget/formatPeerMessage unit tests —
+// proves the ctx.extra.promptOps wiring, InstanceState.context, and the
+// forked delivery actually reach a second live session.
+it.instance("send_peer_message delivers into a second, idle session in the same directory", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const sender = yield* sessions.create({
+      title: "Sender session",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    const receiver = yield* sessions.create({
+      title: "Receiver session",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    // receiver is deliberately left idle — never prompted — to prove
+    // resolveMessageTargets (unlike the `peers` awareness roster) accepts an
+    // idle same-directory session as a valid target.
+
+    yield* prompt.prompt({
+      sessionID: sender.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "tell my peer the schema changed" }],
+    })
+    yield* llm.tool("send_peer_message", {
+      target: receiver.id,
+      message: "the /users schema now returns locale — update your client",
+    })
+    yield* llm.text("sent")
+
+    const result = yield* prompt.loop({ sessionID: sender.id })
+    expect(result.info.role).toBe("assistant")
+
+    const senderMsgs = yield* MessageV2.filterCompactedEffect(sender.id)
+    const tool = senderMsgs
+      .flatMap((msg) => msg.parts)
+      .find(
+        (part): part is CompletedToolPart =>
+          part.type === "tool" && part.tool === "send_peer_message" && part.state.status === "completed",
+      )
+    if (!tool) throw new Error("send_peer_message tool part never completed")
+    expect(tool.state.output).toContain("Accepted for delivery")
+
+    // Delivery into the receiver is forked, not awaited by the tool call —
+    // poll rather than assert immediately after prompt.loop resolves.
+    const delivered = yield* pollWithTimeout(
+      Effect.gen(function* () {
+        const msgs = yield* MessageV2.filterCompactedEffect(receiver.id)
+        const injected = msgs
+          .flatMap((msg) => msg.parts)
+          .find((part) => part.type === "text" && part.text.includes("update your client"))
+        return injected
+      }),
+      "peer message never arrived in the receiver session",
+    )
+    expect(delivered?.type).toBe("text")
+    if (delivered?.type === "text") {
+      expect(delivered.text).toContain(sender.id)
+      expect(delivered.text).toContain("Sender session")
+      expect(delivered.text).toContain("not a user")
+    }
+  }),
+)
+
 it.instance("loop continues when finish is stop but assistant has tool parts", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)

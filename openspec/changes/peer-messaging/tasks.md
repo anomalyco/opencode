@@ -67,5 +67,25 @@
       this change: a stale snapshot from `subagent-background-default`, fixed opportunistically
       since it was a one-line, safe `--update-snapshots`; and a known-flaky
       `test/session/prompt.test.ts` timing test, left as-is — see prior session notes).
-- [ ] 5.2 Live check: two same-directory sessions exchange a message end to end; if Slice 3 has
-      landed, two cross-instance sessions do too.
+- [x] 5.2 Live check: two same-directory sessions exchange a message end to end.
+  - Done 2026-09-05 — and it caught a real bug on the first attempt: the tool was constructed
+    in `tool/registry.ts`'s custom-tool assembly (with a node-graph layer) but never added to
+    the separate, hand-maintained `builtin` array that determines what the model actually sees.
+    The LLM's own error made this unambiguous: "Model tried to call unavailable tool
+    'send_peer_message'." Same bug, same fix, as the already-shipped `peers` tool — see
+    `session-peer-awareness` task 4.2. Fixed in `packages/opencode/src/tool/registry.ts`
+    (both added to `builtin`).
+  - Also fixed along the way: target resolution was scoped to `resolvePeers`'s "actively
+    working" roster, which — correctly for the awareness tool, wrongly here — excludes idle
+    sessions. Messaging an idle session ("when you get back to this, X changed") is the normal
+    case, not an edge case, so `resolveMessageTargets` (new, in `session/peers.ts`) is a
+    sibling projection that includes idle sessions while keeping the same
+    caller/descendant/directory exclusions.
+  - Validation: `packages/opencode/test/session/prompt.test.ts` — "send_peer_message delivers
+    into a second, idle session in the same directory" — a real model turn calls the tool
+    through the real `ToolRegistry`/`SessionTools.resolve` path targeting a deliberately idle
+    session, and the test polls the receiving session's actual message history for the
+    delivered, provenance-tagged text. Not a mock — the real registered tool, the real forked
+    delivery path.
+  - Cross-instance delivery (Slice 3) remains not live-checked — still blocked on
+    `fleet-instance-presence` Phase 4.

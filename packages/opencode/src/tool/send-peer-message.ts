@@ -4,7 +4,7 @@ import { Permission } from "@/permission"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { SessionStatus } from "@/session/status"
-import { formatPeerMessage, resolvePeers, resolveTarget } from "@/session/peers"
+import { formatPeerMessage, resolveMessageTargets, resolveTarget } from "@/session/peers"
 import type { TaskPromptOps } from "./task"
 import DESCRIPTION from "./send-peer-message.txt"
 import * as Tool from "./tool"
@@ -60,7 +60,7 @@ export const SendPeerMessageTool = Tool.define(
             permission.list(),
           ])
 
-          const peers = resolvePeers({
+          const peers = resolveMessageTargets({
             sessions: sessions.map((item) => ({
               id: item.id,
               parentID: item.parentID,
@@ -94,8 +94,9 @@ export const SendPeerMessageTool = Tool.define(
               title: "Peer not found",
               metadata: { reason: "not-found" },
               output:
-                `No active peer session matches "${params.target}". Call \`peers\` to see who is currently ` +
-                "active — an idle session, your own session, or a subagent you spawned are not valid targets.",
+                `No session in this directory matches "${params.target}" (idle sessions are valid targets here, ` +
+                "unlike the `peers` tool's awareness roster — but your own session and any subagent you spawned " +
+                "are excluded either way).",
             }
           }
           const peer = resolved.peer

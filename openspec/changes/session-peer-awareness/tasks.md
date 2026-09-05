@@ -52,7 +52,21 @@ status derivation, and `GET /agents`. Nothing new is discovered or transported h
     a clean worktree at HEAD — this change adds none.
   - Fixed in passing: `test/tool/__snapshots__/parameters.test.ts.snap` never contained the
     fork's `provider` param on the `task` tool, so that snapshot had been failing.
-- [ ] 4.2 Live check: two sessions in one repo, each able to see the other
+- [x] 4.2 Live check: two sessions in one repo, each able to see the other
+  - Done 2026-09-05, and it found a real bug: `peers` was constructed in
+    `tool/registry.ts`'s `Effect.all({...})` object and given a node-graph layer
+    (task 2.2), but was never added to the separate, hand-maintained `builtin`
+    array that `ToolRegistry.all()`/`.tools()` actually exposes to the model —
+    so despite passing every unit test and typechecking cleanly, no real model
+    could ever call it. This had been sitting unverified since 2026-08-07
+    because this exact task was left unchecked. Fixed alongside the same bug
+    in `send_peer_message` (see `peer-messaging`); both added to `builtin` in
+    `packages/opencode/src/tool/registry.ts`.
+  - Validation: `packages/opencode/test/session/prompt.test.ts` — "peers tool
+    is reachable by the model and reports another active session" — a real
+    model turn (via `TestLLMServer`) calls `peers` through the actual
+    `ToolRegistry`/`SessionTools.resolve` path and asserts the other session
+    appears in its output. Not a mock of the tool — the real registered tool.
 
 ## Note: an import cycle this uncovered
 

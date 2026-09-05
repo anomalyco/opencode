@@ -18,6 +18,18 @@ caller's own session and its descendants SHALL be excluded from resolution.
 - **WHEN** the resolved target is the caller's own session or a descendant of it
 - **THEN** the send is refused
 
+### Requirement: an idle session is a valid message target
+
+Target resolution SHALL include idle same-directory sessions, unlike the `peers` awareness
+roster (which excludes them to avoid alert fatigue on a tool nobody explicitly invoked). An
+explicit, named send has none of that fatigue problem, and messaging a session that will pick
+the note up next time it runs is the common case, not the exception.
+
+#### Scenario: an idle session receives a message
+- **WHEN** a message is sent to a same-directory session that has no active turn and would not
+  appear in `peers`' output
+- **THEN** the message is still accepted and delivered
+
 ### Requirement: delivered messages carry explicit provenance
 
 A message injected into a target session SHALL be distinguishable from a human-authored prompt,

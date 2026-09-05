@@ -250,6 +250,8 @@ export const layer = Layer.effect(
             tool.search,
             tool.skill,
             tool.patch,
+            tool.peers,
+            tool.send_peer_message,
             ...(tool.execute ? [tool.execute] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),

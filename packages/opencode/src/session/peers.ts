@@ -63,7 +63,17 @@ function isWorking(status: Status, loop: PeerLoop | undefined): boolean {
   return status !== "idle"
 }
 
-export function resolvePeers(input: ResolveInput): Peer[] {
+/**
+ * Shared projection from raw session/status/loop input to the `Peer` shape.
+ * `includeIdle` is the one behavioral difference between the two public
+ * entry points below: `resolvePeers` (awareness — an idle session is not a
+ * neighbour worth warning about) and `resolveMessageTargets` (messaging — an
+ * idle session is the NORMAL target: "when you get back to this, X changed"
+ * is the common case, not the exception, and an explicit named send has none
+ * of the alert-fatigue problem that motivated excluding idle sessions from
+ * the awareness roster).
+ */
+function projectPeers(input: ResolveInput, options: { includeIdle: boolean }): Peer[] {
   const parentOf = new Map<string, string | undefined>()
   for (const session of input.sessions) parentOf.set(session.id, session.parentID)
 
@@ -98,7 +108,7 @@ export function resolvePeers(input: ResolveInput): Peer[] {
       permissionPending: input.pendingPermission.has(session.id),
       loop,
     })
-    if (!isWorking(status, loop)) continue
+    if (!options.includeIdle && !isWorking(status, loop)) continue
 
     peers.push({
       sessionID: session.id,
@@ -123,6 +133,19 @@ export function resolvePeers(input: ResolveInput): Peer[] {
   }
   peers.sort((a, b) => rank[a.status] - rank[b.status] || a.idleForMs - b.idleForMs)
   return peers
+}
+
+export function resolvePeers(input: ResolveInput): Peer[] {
+  return projectPeers(input, { includeIdle: false })
+}
+
+/**
+ * The roster `send_peer_message` resolves targets against. Unlike
+ * `resolvePeers`, an idle session is included — see `projectPeers` for why.
+ * Caller/descendant exclusion and directory scoping are unchanged.
+ */
+export function resolveMessageTargets(input: ResolveInput): Peer[] {
+  return projectPeers(input, { includeIdle: true })
 }
 
 function age(ms: number): string {

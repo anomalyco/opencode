@@ -72,3 +72,13 @@ of every collision warning ever built.
   case, which is the one that has actually bitten.
 - `canPrompt` / `canBtw` in the presence record are the foundation `steer-running-subagent`
   needs. This change does not use them yet, but it is the same roster.
+
+## Addendum (2026-09-05)
+
+Task 4.2's live check was finally run and found the `peers` tool had never actually been
+reachable by a model since it shipped: it was registered in the tool registry's layer/node
+graph but never added to the separate `builtin` array that determines what the model actually
+sees. Fixed in `packages/opencode/src/tool/registry.ts`; see task 4.2 and `peer-messaging` (which
+found and fixed the identical bug for `send_peer_message`). This is a plausible partial
+explanation for reports that agents "don't even seem to bother" using peer-awareness features —
+the tool to do so was silently unavailable.

@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { describePeer, formatPeerMessage, resolvePeers, resolveTarget, type Peer, type ResolveInput } from "@/session/peers"
+import {
+  describePeer,
+  formatPeerMessage,
+  resolveMessageTargets,
+  resolvePeers,
+  resolveTarget,
+  type Peer,
+  type ResolveInput,
+} from "@/session/peers"
 
 const DIR = "/repo"
 const NOW = 1_000_000
@@ -14,8 +22,8 @@ function session(id: string, over: Partial<ResolveInput["sessions"][number]> = {
   }
 }
 
-function resolve(over: Partial<ResolveInput> = {}) {
-  const base: ResolveInput = {
+function baseInput(over: Partial<ResolveInput> = {}): ResolveInput {
+  return {
     sessions: [],
     statuses: new Map(),
     pendingPermission: new Set(),
@@ -25,7 +33,14 @@ function resolve(over: Partial<ResolveInput> = {}) {
     now: NOW,
     ...over,
   }
-  return resolvePeers(base)
+}
+
+function resolve(over: Partial<ResolveInput> = {}) {
+  return resolvePeers(baseInput(over))
+}
+
+function resolveMsg(over: Partial<ResolveInput> = {}) {
+  return resolveMessageTargets(baseInput(over))
 }
 
 describe("resolvePeers", () => {
@@ -151,6 +166,36 @@ describe("resolvePeers", () => {
       ]),
     })
     expect(peers.map((peer) => peer.sessionID).sort()).toEqual(["a", "b"])
+  })
+})
+
+describe("resolveMessageTargets", () => {
+  test("an idle session IS a valid message target, unlike resolvePeers", () => {
+    const input = {
+      sessions: [session("me"), session("idle-friend")],
+      statuses: new Map([["idle-friend", { type: "idle" as const }]]),
+    }
+    expect(resolve(input)).toEqual([])
+    const targets = resolveMsg(input)
+    expect(targets).toHaveLength(1)
+    expect(targets[0].sessionID).toBe("idle-friend")
+    expect(targets[0].status).toBe("idle")
+  })
+
+  test("still excludes the caller and its descendants", () => {
+    const targets = resolveMsg({
+      sessions: [session("me"), session("my-subagent", { parentID: "me" })],
+      statuses: new Map([["my-subagent", { type: "idle" as const }]]),
+    })
+    expect(targets).toEqual([])
+  })
+
+  test("still scoped to the same directory", () => {
+    const targets = resolveMsg({
+      sessions: [session("me"), session("elsewhere", { directory: "/other-repo" })],
+      statuses: new Map([["elsewhere", { type: "idle" as const }]]),
+    })
+    expect(targets).toEqual([])
   })
 })
 
