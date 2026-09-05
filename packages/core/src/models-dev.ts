@@ -7,7 +7,7 @@ import { Flag } from "./flag/flag"
 import { Flock } from "./util/flock"
 import { Hash } from "./util/hash"
 import { FSUtil } from "./fs-util"
-import { InstallationChannel, InstallationVersion } from "./installation/version"
+import { installationUserAgent } from "./installation/version"
 import { EventV2 } from "./event"
 import { makeGlobalNode } from "./effect/app-node"
 import { httpClient } from "./effect/app-node-platform"
@@ -19,8 +19,6 @@ const InterleavedField = Schema.Union([
   Schema.Literals(["reasoning", "reasoning_content", "reasoning_text"]),
   Schema.String,
 ])
-
-const userAgent = () => `opencode/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
 
 const CostTier = Schema.Struct({
   input: Schema.Finite,
@@ -174,7 +172,7 @@ const layer = Layer.effect(
 
     const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* () {
       return yield* HttpClientRequest.get(`${source}/api.json`).pipe(
-        HttpClientRequest.setHeader("User-Agent", userAgent()),
+        HttpClientRequest.setHeader("User-Agent", installationUserAgent(Flag.OPENCODE_CLIENT)),
         http.execute,
         Effect.flatMap((res) => res.text),
         Effect.timeout("10 seconds"),

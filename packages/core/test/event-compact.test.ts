@@ -8,6 +8,8 @@ import { EventTable } from "@opencode-ai/core/event/sql"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionID } from "@opencode-ai/schema/session-id"
+import { Provider } from "@opencode-ai/schema/provider"
+import { Model } from "@opencode-ai/schema/model"
 import { SessionV1 } from "@opencode-ai/schema/session-v1"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
@@ -56,6 +58,13 @@ describe("EventV2 compaction", () => {
       [Location.node, locationLayer],
     ]),
   )
+
+  const fetchRows = (aggregateID: string) =>
+    Database.Service.pipe(
+      Effect.flatMap((service) =>
+        service.db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).pipe(Effect.orDie),
+      ),
+    )
 
   it.effect("keeps only the latest snapshot per entity when compact is set", () =>
     Effect.gen(function* () {
@@ -115,7 +124,10 @@ describe("EventV2 compaction", () => {
         .where(eq(EventTable.aggregate_id, aggregateID))
         .pipe(Effect.orDie)
 
-      const titles = rows.map((row) => (Schema.decodeUnknownSync(SessionV1.Event.Updated.data)(row.data) as { info: { title: string } }).info.title)
+      const titles = rows.map(
+        (row) =>
+          (Schema.decodeUnknownSync(SessionV1.Event.Updated.data)(row.data) as { info: { title: string } }).info.title,
+      )
       expect(titles).toEqual(["three"])
     }),
   )
@@ -131,11 +143,7 @@ describe("EventV2 compaction", () => {
         info: sessionInfo(aggregateID, "two"),
       })
 
-      const stored = yield* Database.Service.pipe(
-        Effect.flatMap((service) =>
-          service.db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).pipe(Effect.orDie),
-        ),
-      )
+      const stored = yield* fetchRows(aggregateID)
       expect(stored).toHaveLength(1)
 
       yield* events.replay({
@@ -145,6 +153,75 @@ describe("EventV2 compaction", () => {
         aggregateID,
         data: { sessionID: aggregateID, info: sessionInfo(aggregateID, "one") },
       })
+    }),
+  )
+
+  it.effect("replay defects on a missing uncompacted row of a compactable type", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = SessionID.make("ses_compact_6")
+
+      const message = (id: SessionV1.MessageID) => ({
+        id,
+        sessionID: aggregateID,
+        role: "user" as const,
+        time: { created: 1 },
+        agent: "agent",
+        model: { providerID: Provider.ID.anthropic, modelID: Model.ID.make("m1") },
+      })
+
+      // Two snapshots of the same message: the first is compacted away.
+      yield* events.publish(SessionV1.Event.MessageUpdated, {
+        sessionID: aggregateID,
+        info: message(SessionV1.MessageID.make("msg_seed")),
+      })
+      const second = yield* events.publish(SessionV1.Event.MessageUpdated, {
+        sessionID: aggregateID,
+        info: message(SessionV1.MessageID.make("msg_seed")),
+      })
+      expect(second.durable!.seq).toBe(1)
+
+      // A different message id replayed at the compacted seq has no superseding
+      // snapshot with that key — that is divergence, not compaction.
+      const exit = yield* events
+        .replay({
+          id: EventV2.ID.create(),
+          type: EventV2.versionedType(SessionV1.Event.MessageUpdated.type, 1),
+          seq: 0,
+          aggregateID,
+          data: { sessionID: aggregateID, info: message(SessionV1.MessageID.make("msg_ghost")) },
+        })
+        .pipe(Effect.exit)
+
+      expect(String(exit)).toContain("Replay diverged")
+    }),
+  )
+
+  it.effect("replayAll defects on descending sequences", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = SessionID.make("ses_compact_7")
+
+      const exit = yield* events
+        .replayAll([
+          {
+            id: EventV2.ID.create(),
+            type: EventV2.versionedType(SessionV1.Event.Updated.type, 1),
+            seq: 5,
+            aggregateID,
+            data: { sessionID: aggregateID, info: sessionInfo(aggregateID, "five") },
+          },
+          {
+            id: EventV2.ID.create(),
+            type: EventV2.versionedType(SessionV1.Event.Updated.type, 1),
+            seq: 2,
+            aggregateID,
+            data: { sessionID: aggregateID, info: sessionInfo(aggregateID, "two") },
+          },
+        ])
+        .pipe(Effect.exit)
+
+      expect(String(exit)).toContain("Replay sequence mismatch")
     }),
   )
 
@@ -171,11 +248,7 @@ describe("EventV2 compaction", () => {
       ])
 
       expect(source).toBe(aggregateID)
-      const stored = yield* Database.Service.pipe(
-        Effect.flatMap((service) =>
-          service.db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).pipe(Effect.orDie),
-        ),
-      )
+      const stored = yield* fetchRows(aggregateID)
       // The seq 0 snapshot is compacted away by the newer seq 7 snapshot during replay: convergence.
       expect(stored.map((row) => row.seq)).toEqual([7])
     }),

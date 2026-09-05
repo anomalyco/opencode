@@ -297,8 +297,25 @@ export const layerWith = (options?: LayerOptions) =>
                               return
                             }
                             if (!stored && durable.compact) {
-                              // Row was compacted away by a newer snapshot of the same entity — skip.
-                              return
+                              // Tolerate a row only if a newer snapshot of the same compact entity
+                              // superseded it; a bare gap could equally be a lost or fabricated row.
+                              const key = compactKey(encoded, durable.compact)
+                              const superseded =
+                                key !== undefined &&
+                                (yield* db
+                                  .select({ id: EventTable.id })
+                                  .from(EventTable)
+                                  .where(
+                                    and(
+                                      eq(EventTable.aggregate_id, aggregateID),
+                                      eq(EventTable.type, versionedType(definition.type, durable.version)),
+                                      gt(EventTable.seq, input.seq),
+                                      sql`json_extract(${EventTable.data}, ${durable.compact}) = ${key}`,
+                                    ),
+                                  )
+                                  .get()
+                                  .pipe(Effect.orDie))
+                              if (superseded) return
                             }
                             yield* Effect.die(
                               new InvalidDurableEventError({
@@ -311,14 +328,6 @@ export const layerWith = (options?: LayerOptions) =>
                             return
                           }
                           const seq = input?.seq ?? latest + 1
-                          if (input && seq < latest + 1) {
-                            yield* Effect.die(
-                              new InvalidDurableEventError({
-                                type: event.type,
-                                message: `Sequence mismatch for aggregate ${aggregateID}: expected ${latest + 1} or above, got ${seq}`,
-                              }),
-                            )
-                          }
                           const stored = yield* db
                             .select({ aggregateID: EventTable.aggregate_id, seq: EventTable.seq })
                             .from(EventTable)
