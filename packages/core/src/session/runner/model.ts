@@ -132,11 +132,34 @@ export const fromCatalogModel = (
   model: ModelV2.Info,
   credential?: Credential.Value,
 ): Effect.Effect<Model, UnsupportedApiError> => {
+  // Key credentials may stash provider options (org, project, baseURL) in metadata.
+  // OAuth credentials may also carry routing metadata (e.g. Snowflake accountId →
+  // per-account Cortex base URL). Apply both at request time so login methods that
+  // persist account-scoped hosts work without a static catalog URL.
+  const metadata = credential?.metadata
   const resolved =
-    credential?.type !== "key" || credential.metadata === undefined
+    !credential || metadata === undefined
       ? model
       : produce(model, (draft) => {
-          Object.assign(draft.request.body, credential.metadata)
+          if (credential.type === "key") {
+            Object.assign(draft.request.body, metadata)
+          }
+          if (credential.type === "oauth") {
+            const accountId = typeof metadata.accountId === "string" ? metadata.accountId : undefined
+            const baseURL =
+              typeof metadata.baseURL === "string"
+                ? metadata.baseURL
+                : accountId
+                  ? `https://${accountId}.snowflakecomputing.com/api/v2/cortex/v1`
+                  : undefined
+            if (
+              baseURL &&
+              (draft.providerID === ProviderV2.ID.make("snowflake-cortex") || typeof metadata.baseURL === "string")
+            ) {
+              if (draft.api.type === "aisdk") draft.api = { ...draft.api, url: baseURL }
+              else if (draft.api.type === "native") draft.api = { ...draft.api, url: baseURL }
+            }
+          }
         })
   const key = apiKey(resolved, credential)
   if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/openai") {

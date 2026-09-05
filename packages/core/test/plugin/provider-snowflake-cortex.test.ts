@@ -1,10 +1,17 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect, it as bun_it } from "bun:test"
 import { Effect } from "effect"
+import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { SnowflakeCortexPlugin, cortexFetch } from "@opencode-ai/core/plugin/provider/snowflake-cortex"
+import {
+  SnowflakeCortexPlugin,
+  cortexBaseURL,
+  cortexFetch,
+  normalizeAccount,
+  oauthScope,
+} from "@opencode-ai/core/plugin/provider/snowflake-cortex"
 import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
@@ -46,6 +53,37 @@ describe("SnowflakeCortexPlugin", () => {
       expect(ProviderPlugins.map((item) => item.id)).toContain(PluginV2.ID.make("snowflake-cortex"))
       const ids = ProviderPlugins.map((p) => p.id)
       expect(ids.indexOf("snowflake-cortex")).toBeLessThan(ids.indexOf("openai-compatible"))
+    }),
+  )
+
+  it.effect("registers browser OAuth, PAT key, and env methods", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const integration = yield* (yield* Integration.Service).get(Integration.ID.make("snowflake-cortex"))
+      expect(integration?.name).toBe("Snowflake Cortex")
+      expect(integration?.methods).toEqual([
+        {
+          id: Integration.MethodID.make("snowflake-browser"),
+          type: "oauth",
+          label: "Login with Snowflake (External Browser)",
+          prompts: [
+            {
+              type: "text",
+              key: "account",
+              message: "Snowflake Account Identifier",
+              placeholder: "myorg-myaccount",
+            },
+            {
+              type: "text",
+              key: "role",
+              message: "Snowflake Role (optional)",
+              placeholder: "PUBLIC",
+            },
+          ],
+        },
+        { type: "key", label: "Paste PAT or bearer token manually" },
+        { type: "env", names: ["SNOWFLAKE_CORTEX_TOKEN", "SNOWFLAKE_CORTEX_PAT"] },
+      ])
     }),
   )
 
@@ -168,6 +206,28 @@ describe("SnowflakeCortexPlugin", () => {
       }),
     ),
   )
+})
+
+describe("Snowflake OAuth helpers", () => {
+  bun_it("normalizeAccount strips scheme, host suffix, and trailing slashes", () => {
+    expect(normalizeAccount("  myorg-myaccount  ")).toBe("myorg-myaccount")
+    expect(normalizeAccount("https://myorg-myaccount.snowflakecomputing.com")).toBe("myorg-myaccount")
+    expect(normalizeAccount("https://myorg-myaccount.snowflakecomputing.com/")).toBe("myorg-myaccount")
+    expect(normalizeAccount("myorg-myaccount.snowflakecomputing.com")).toBe("myorg-myaccount")
+    expect(normalizeAccount("")).toBe("")
+  })
+
+  bun_it("oauthScope uses Snowflake-compatible role encoding", () => {
+    expect(oauthScope(undefined)).toBe("refresh_token")
+    expect(oauthScope("PUBLIC")).toBe("refresh_token session:role:PUBLIC")
+    expect(oauthScope("AUTH SNOWFLAKE")).toBe("refresh_token session:role-encoded:AUTH%20SNOWFLAKE")
+  })
+
+  bun_it("cortexBaseURL builds the per-account Cortex OpenAI-compatible host", () => {
+    expect(cortexBaseURL("myorg-myaccount")).toBe(
+      "https://myorg-myaccount.snowflakecomputing.com/api/v2/cortex/v1",
+    )
+  })
 })
 
 type FetchLike = (url: string | URL | Request, init?: RequestInit) => Promise<Response>
