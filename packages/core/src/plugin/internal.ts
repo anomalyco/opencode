@@ -80,6 +80,7 @@ import { WellKnown } from "../wellknown.js"
 import { WriteTool } from "../tool/plugin/write.js"
 import { AgentPlugin } from "./agent.js"
 import { CommandPlugin } from "./command.js"
+import { GoalPlugin } from "./goal.js"
 import { PlanPlugin } from "./plan.js"
 import { ModelsDevPlugin } from "./models-dev.js"
 import { McpCodeModeExclusionPlugin } from "./mcp-codemode-exclusion.js"
@@ -199,6 +200,7 @@ const pre = [
   AgentPlugin.Plugin,
   PlanPlugin.Plugin,
   CommandPlugin.Plugin,
+  GoalPlugin.Plugin,
   SkillPlugin.Plugin,
   VcsHgPlugin.Plugin,
   ...SystemPromptPlugin.Plugins,
