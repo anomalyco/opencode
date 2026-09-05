@@ -1,5 +1,6 @@
 import type { Model } from "@opencode-ai/sdk/v2"
 import { Option, Schema } from "effect"
+import { anthropicUsesModernAdaptiveThinking } from "@/provider/transform"
 
 const item = Schema.Struct({
   model_picker_enabled: Schema.Boolean,
@@ -176,7 +177,9 @@ function build(key: string, remote: SelectableItem, url: string, prev?: Model): 
         variants[effort] = {
           thinking: {
             type: "adaptive",
-            ...(model.api.id.includes("opus-4.7") ? { display: "summarized" } : {}),
+            // Anthropic omits thinking content by default for adaptive-only
+            // models newer than opus-4.7; force a summary so it survives.
+            ...(anthropicUsesModernAdaptiveThinking(model.api.id) ? { display: "summarized" } : {}),
           },
           effort,
         }
