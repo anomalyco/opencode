@@ -1,5 +1,43 @@
 import { expect, test } from "bun:test"
-import { destroyRenderer } from "../../src/util/renderer"
+import { EventEmitter } from "node:events"
+import { destroyRenderer, installTerminalResizeRefresh } from "../../src/util/renderer"
+
+test("refreshes terminal dimensions before existing SIGWINCH listeners", () => {
+  const target = new EventEmitter()
+  const calls: string[] = []
+  target.on("SIGWINCH", () => calls.push("resize"))
+  const uninstall = installTerminalResizeRefresh(target, {
+    isTTY: true,
+    _refreshSize() {
+      calls.push("refresh")
+    },
+  })
+
+  expect(calls).toEqual(["refresh"])
+  calls.length = 0
+  target.emit("SIGWINCH")
+  expect(calls).toEqual(["refresh", "resize"])
+
+  uninstall()
+  calls.length = 0
+  target.emit("SIGWINCH")
+  expect(calls).toEqual(["resize"])
+})
+
+test("does not install a refresh hook for non-TTY output", () => {
+  const target = new EventEmitter()
+  let refreshes = 0
+  installTerminalResizeRefresh(target, {
+    isTTY: false,
+    _refreshSize() {
+      refreshes++
+    },
+  })
+
+  target.emit("SIGWINCH")
+  expect(refreshes).toBe(0)
+  expect(target.listenerCount("SIGWINCH")).toBe(0)
+})
 
 test("clears the terminal title before destroying the renderer", () => {
   const calls: string[] = []
