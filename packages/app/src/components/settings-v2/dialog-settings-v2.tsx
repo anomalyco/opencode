@@ -26,16 +26,25 @@ export const DialogSettings: Component<{
   const tabs = useTabs()
   const serverSync = useServerSync()
   const [tab, setTab] = createSignal(props.defaultValue ?? "general")
-  const directory = createMemo(() => {
+  const scope = createMemo(() => {
     const route = layout.route()
-    if (route.type === "dir-new-sesssion") return route.dir
+    if (route.type === "home") {
+      const selection = layout.home.selection()
+      if (!selection.directory) return
+      return selection
+    }
+    if (route.type === "dir-new-sesssion") return { directory: route.dir, server: route.server }
     if (route.type === "draft") {
       const draft = tabs.store.find((item) => item.type === "draft" && item.draftID === route.draftID)
-      return draft?.type === "draft" ? draft.directory : undefined
+      if (draft?.type !== "draft") return
+      return { directory: draft.directory, server: draft.server }
     }
-    if (route.type === "session") return serverSync().session.get(route.sessionId)?.directory
-    return undefined
+    const directory = serverSync().session.get(route.sessionId)?.directory
+    if (!directory) return
+    return { directory, server: route.server }
   })
+  const directory = createMemo(() => scope()?.directory)
+  const scopeServer = createMemo(() => scope()?.server)
 
   const showProviders = () => {
     void dialog.show(() => <DialogSettings sessionID={props.sessionID} defaultValue="providers" />)
@@ -94,7 +103,7 @@ export const DialogSettings: Component<{
           </div>
         </TabsV2.List>
         <TabsV2.Content value="general" class="settings-v2-panel">
-          <SettingsGeneralV2 sessionID={props.sessionID} />
+          <SettingsGeneralV2 sessionID={props.sessionID} directory={directory} server={scopeServer} />
         </TabsV2.Content>
         <TabsV2.Content value="shortcuts" class="settings-v2-panel">
           <SettingsKeybinds v2 />
