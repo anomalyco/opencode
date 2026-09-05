@@ -6,6 +6,7 @@ import { bootstrapGlobal, loadPathQuery, loadProjectsQuery } from "./bootstrap"
 import { ServerScope } from "@/runtime/server/scope"
 import type { ServerApi } from "@/runtime/server/api"
 import type { ServerSync } from "@/runtime/server/sync"
+import { worktreeInventoryKey } from "@/workspaces/inventory"
 
 test("bootstraps projects through the native store setter and preserves subsequent updates", async () => {
   const api = OpenCode.make({
@@ -20,7 +21,6 @@ test("bootstraps projects through the native store setter and preserves subseque
           })
         if (url.pathname === "/api/project")
           return Response.json([{ id: "project", canonical: "/repo", time: { created: 1, updated: 1 }, sandboxes: [] }])
-        if (url.pathname === "/api/worktree") return Response.json([{ directory: "/repo" }])
         throw new Error(`Unexpected request: ${url.pathname}`)
       },
       { preconnect() {} },
@@ -47,6 +47,18 @@ test("bootstraps projects through the native store setter and preserves subseque
     await bootstrapGlobal({ serverAPI: api, scope: ServerScope.local, setGlobalStore: setStore, queryClient })
     expect(store.project.map((project) => [project.id, project.worktree])).toEqual([["project", "/repo"]])
     expect(store.config).toEqual({})
+
+    // A refetch keeps the inventory a view already loaded for this project.
+    queryClient.setQueryData(worktreeInventoryKey(ServerScope.local, "/repo/"), [
+      { directory: "/repo" },
+      { directory: "/repo/feature", strategy: "git" },
+    ])
+    await bootstrapGlobal({ serverAPI: api, scope: ServerScope.local, setGlobalStore: setStore, queryClient })
+    expect(store.project[0]?.sandboxes).toEqual(["/repo/feature"])
+    expect(store.project[0]?.worktrees).toEqual([
+      { directory: "/repo" },
+      { directory: "/repo/feature", strategy: "git" },
+    ])
   } finally {
     queryClient.clear()
   }
@@ -76,70 +88,39 @@ describe("query keys", () => {
     expect(result).toMatchObject({ directory: "/repo/subpath", worktree: "/repo" })
   })
 
-  test("loads each project's inventory through its own location using the real client", async () => {
-    const calls: string[] = []
+  test("loads project metadata without enumerating any project's worktrees", async () => {
+    const requests: string[] = []
     const api = OpenCode.make({
       baseUrl: "http://localhost:3000",
       fetch: Object.assign(
         async (input: RequestInfo | URL, init?: RequestInit) => {
           const url = new URL(new Request(input, init).url)
-          if (url.pathname === "/api/project")
-            return Response.json([
-              { id: "b", canonical: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
-              { id: "a", canonical: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
-            ])
-          const directory = url.searchParams.get("location[directory]")
-          if (url.pathname !== "/api/worktree" || !directory) throw new Error(`Unexpected request: ${url}`)
-          calls.push(directory)
+          requests.push(url.pathname)
+          if (url.pathname !== "/api/project") throw new Error(`Unexpected request: ${url}`)
           return Response.json([
-            { directory },
-            { directory: `${directory}/clone` },
-            { directory: `${directory}/copy`, strategy: "git" },
+            ...Array.from({ length: 300 }, (_, index) => ({
+              id: `historical-${index.toString().padStart(3, "0")}`,
+              canonical: `/history/${index}`,
+              time: { created: 1, updated: 1 },
+              sandboxes: [],
+            })),
+            { id: "b", canonical: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
+            { id: "a", canonical: "/a", time: { created: 1, updated: 1 }, sandboxes: ["/a/legacy"] },
+            { id: "test", canonical: "/tmp/opencode-test-1", time: { created: 1, updated: 1 }, sandboxes: [] },
           ])
         },
         { preconnect() {} },
       ),
     })
 
-    const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, api.project, api.worktree))
+    const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, api.project))
 
-    expect(result.map((project) => project.id)).toEqual(["a", "b"])
-    expect(result.map((project) => project.sandboxes)).toEqual([
-      ["/a/clone", "/a/copy"],
-      ["/b/clone", "/b/copy"],
+    expect(requests).toEqual(["/api/project"])
+    expect(result).toHaveLength(302)
+    expect(result.slice(0, 2)).toMatchObject([
+      { id: "a", worktree: "/a", sandboxes: ["/a/legacy"], worktrees: [{ directory: "/a" }] },
+      { id: "b", worktree: "/b", sandboxes: [], worktrees: [{ directory: "/b" }] },
     ])
-    expect(result.map((project) => project.worktrees)).toEqual([
-      [{ directory: "/a" }, { directory: "/a/clone" }, { directory: "/a/copy", strategy: "git" }],
-      [{ directory: "/b" }, { directory: "/b/clone" }, { directory: "/b/copy", strategy: "git" }],
-    ])
-    expect(calls.toSorted()).toEqual(["/a", "/b"])
-  })
-
-  test("keeps projects whose directory inventory cannot load", async () => {
-    const api = OpenCode.make({
-      baseUrl: "http://localhost:3000",
-      fetch: Object.assign(
-        async (input: RequestInfo | URL, init?: RequestInit) => {
-          const url = new URL(new Request(input, init).url)
-          if (url.pathname === "/api/project")
-            return Response.json([
-              { id: "a", canonical: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
-              { id: "b", canonical: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
-            ])
-          const directory = url.searchParams.get("location[directory]")
-          if (url.pathname !== "/api/worktree" || !directory) throw new Error(`Unexpected request: ${url}`)
-          if (directory === "/b") return Response.json({ message: "unavailable" }, { status: 503 })
-          return Response.json([{ directory: "/a/copy", strategy: "git" }])
-        },
-        { preconnect() {} },
-      ),
-    })
-
-    const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, api.project, api.worktree))
-
-    expect(result.map((project) => ({ id: project.id, sandboxes: project.sandboxes }))).toEqual([
-      { id: "a", sandboxes: ["/a/copy"] },
-      { id: "b", sandboxes: [] },
-    ])
+    expect(result.some((project) => project.id === "test")).toBe(false)
   })
 })
