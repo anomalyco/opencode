@@ -1,17 +1,8 @@
 diff --git a/dist/dev.cjs b/dist/dev.cjs
-index 7104749..dc3eac9 100644
+index 11f3095..d4fbb2b 100644
 --- a/dist/dev.cjs
 +++ b/dist/dev.cjs
-@@ -764,6 +764,8 @@ function runComputation(node, value, time) {
-     if (node.updatedAt != null && "observers" in node) {
-       writeSignal(node, nextValue, true);
-     } else if (Transition && Transition.running && node.pure) {
-+      // On first computation during transition, also set committed value #2046
-+      if (!Transition.sources.has(node)) node.value = nextValue;
-       Transition.sources.add(node);
-       node.tValue = nextValue;
-     } else node.value = nextValue;
-@@ -987,18 +989,21 @@ function cleanNode(node) {
+@@ -1009,18 +1009,21 @@ function cleanNode(node) {
      }
    }
    if (node.tOwned) {
@@ -37,19 +28,10 @@ index 7104749..dc3eac9 100644
    if (Transition && Transition.running) node.tState = 0;else node.state = 0;
    delete node.sourceMap;
 diff --git a/dist/dev.js b/dist/dev.js
-index ea5e4bc..a2e2d59 100644
+index ea05c50..093bb7c 100644
 --- a/dist/dev.js
 +++ b/dist/dev.js
-@@ -762,6 +762,8 @@ function runComputation(node, value, time) {
-     if (node.updatedAt != null && "observers" in node) {
-       writeSignal(node, nextValue, true);
-     } else if (Transition && Transition.running && node.pure) {
-+      // On first computation during transition, also set committed value #2046
-+      if (!Transition.sources.has(node)) node.value = nextValue;
-       Transition.sources.add(node);
-       node.tValue = nextValue;
-     } else node.value = nextValue;
-@@ -985,18 +987,21 @@ function cleanNode(node) {
+@@ -1007,18 +1007,21 @@ function cleanNode(node) {
      }
    }
    if (node.tOwned) {
@@ -75,7 +57,7 @@ index ea5e4bc..a2e2d59 100644
    if (Transition && Transition.running) node.tState = 0;else node.state = 0;
    delete node.sourceMap;
 diff --git a/dist/server.cjs b/dist/server.cjs
-index e715309..188ba81 100644
+index 989ec19..df19676 100644
 --- a/dist/server.cjs
 +++ b/dist/server.cjs
 @@ -127,12 +127,14 @@ function onCleanup(fn) {
@@ -96,7 +78,7 @@ index e715309..188ba81 100644
  }
  function catchError(fn, handler) {
 diff --git a/dist/server.js b/dist/server.js
-index d5f8803..320d9af 100644
+index 1455ee9..23ff7d2 100644
 --- a/dist/server.js
 +++ b/dist/server.js
 @@ -125,12 +125,14 @@ function onCleanup(fn) {
@@ -117,19 +99,10 @@ index d5f8803..320d9af 100644
  }
  function catchError(fn, handler) {
 diff --git a/dist/solid.cjs b/dist/solid.cjs
-index 7c133a2..5ef1501 100644
+index 5fcf6a7..e1b375f 100644
 --- a/dist/solid.cjs
 +++ b/dist/solid.cjs
-@@ -717,6 +717,8 @@ function runComputation(node, value, time) {
-     if (node.updatedAt != null && "observers" in node) {
-       writeSignal(node, nextValue, true);
-     } else if (Transition && Transition.running && node.pure) {
-+      // On first computation during transition, also set committed value #2046
-+      if (!Transition.sources.has(node)) node.value = nextValue;
-       Transition.sources.add(node);
-       node.tValue = nextValue;
-     } else node.value = nextValue;
-@@ -938,18 +940,21 @@ function cleanNode(node) {
+@@ -964,18 +964,21 @@ function cleanNode(node) {
      }
    }
    if (node.tOwned) {
@@ -155,19 +128,10 @@ index 7c133a2..5ef1501 100644
    if (Transition && Transition.running) node.tState = 0;else node.state = 0;
  }
 diff --git a/dist/solid.js b/dist/solid.js
-index 656fd26..6e0038c 100644
+index 7bf60d4..5f25cc7 100644
 --- a/dist/solid.js
 +++ b/dist/solid.js
-@@ -715,6 +715,8 @@ function runComputation(node, value, time) {
-     if (node.updatedAt != null && "observers" in node) {
-       writeSignal(node, nextValue, true);
-     } else if (Transition && Transition.running && node.pure) {
-+      // On first computation during transition, also set committed value #2046
-+      if (!Transition.sources.has(node)) node.value = nextValue;
-       Transition.sources.add(node);
-       node.tValue = nextValue;
-     } else node.value = nextValue;
-@@ -936,18 +938,21 @@ function cleanNode(node) {
+@@ -962,18 +962,21 @@ function cleanNode(node) {
      }
    }
    if (node.tOwned) {
