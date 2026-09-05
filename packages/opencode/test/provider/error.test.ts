@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
+import { APICallError } from "ai"
 import { ProviderError } from "@/provider/error"
+import { SessionRetry } from "@/session/retry"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 describe("provider stream errors", () => {
   test("retries provider stream errors without a code", () => {
@@ -20,5 +23,33 @@ describe("provider stream errors", () => {
         isRetryable: true,
         responseBody: JSON.stringify({ type: "error", error: { message } }),
       })
+  })
+})
+
+describe("provider API call errors", () => {
+  test("rewrites FreeUsageLimitError message to Go upsell", () => {
+    const responseBody = JSON.stringify({
+      type: "error",
+      error: { type: "FreeUsageLimitError", message: "Rate limit exceeded. Please try again later." },
+    })
+    const parsed = ProviderError.parseAPICallError({
+      providerID: ProviderV2.ID.make("opencode"),
+      error: new APICallError({
+        message: "Rate limit exceeded. Please try again later.",
+        url: "https://opencode.ai/zen/v1/chat/completions",
+        requestBodyValues: {},
+        statusCode: 429,
+        responseHeaders: { "retry-after": "30000" },
+        responseBody,
+        isRetryable: true,
+      }),
+    })
+
+    expect(parsed).toMatchObject({
+      type: "api_error",
+      message: SessionRetry.GO_UPSELL_MESSAGE,
+      statusCode: 429,
+      responseBody,
+    })
   })
 })
