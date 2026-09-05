@@ -109,6 +109,7 @@ export const dict = {
   "command.category.provider": "Sağlayıcı",
   "command.category.server": "Sunucu",
   "command.category.session": "Oturum",
+  "command.category.session.archived": "Arşivlenmiş",
   "command.category.theme": "Tema",
   "command.category.language": "Dil",
   "command.category.file": "Dosya",
@@ -139,6 +140,7 @@ export const dict = {
   "command.session.previous.unseen": "Önceki okunmamış oturum",
   "command.session.next.unseen": "Sonraki okunmamış oturum",
   "command.session.archive": "Oturumu arşivle",
+  "command.session.unarchive": "Oturumu arşivden çıkar",
 
   "command.palette": "Komut paleti",
 
@@ -876,6 +878,7 @@ export const dict = {
   "common.export": "Dışa aktar",
   "common.reset": "Sıfırla",
   "common.archive": "Arşivle",
+  "common.unarchive": "Arşivden çıkar",
   "common.delete": "Sil",
   "common.close": "Kapat",
   "common.edit": "Düzenle",

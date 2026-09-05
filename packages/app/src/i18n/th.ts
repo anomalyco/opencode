@@ -103,6 +103,7 @@ export const dict = {
   "command.category.provider": "ผู้ให้บริการ",
   "command.category.server": "เซิร์ฟเวอร์",
   "command.category.session": "เซสชัน",
+  "command.category.session.archived": "จัดเก็บแล้ว",
   "command.category.theme": "ธีม",
   "command.category.language": "ภาษา",
   "command.category.file": "ไฟล์",
@@ -133,6 +134,7 @@ export const dict = {
   "command.session.previous.unseen": "เซสชันที่ยังไม่ได้อ่านก่อนหน้า",
   "command.session.next.unseen": "เซสชันที่ยังไม่ได้อ่านถัดไป",
   "command.session.archive": "จัดเก็บเซสชัน",
+  "command.session.unarchive": "เลิกจัดเก็บเซสชัน",
 
   "command.palette": "ชุดคำสั่ง",
 
@@ -858,6 +860,7 @@ export const dict = {
   "common.export": "ส่งออก",
   "common.reset": "รีเซ็ต",
   "common.archive": "จัดเก็บ",
+  "common.unarchive": "เลิกจัดเก็บ",
   "common.delete": "ลบ",
   "common.close": "ปิด",
   "common.edit": "แก้ไข",
