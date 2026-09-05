@@ -2,8 +2,8 @@ import { createRequire } from "node:module"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import { Host } from "@opencode-ai/plugin/host"
-import { localSource } from "./discovery"
+import { Host } from "./host.js"
+import { localSource } from "./source.js"
 
 let generation = Date.now()
 

@@ -54,11 +54,6 @@
     "./component/register-spinner": "./src/component/register-spinner.ts"
   },
   "imports": {
-    "#plugin-source": {
-      "bun": "./src/plugin/source.bun.ts",
-      "node": "./src/plugin/source.node.ts",
-      "default": "./src/plugin/source.node.ts"
-    },
     "#attention-sounds": {
       "bun": "./src/attention-sounds.bun.ts",
       "node": "./src/attention-sounds.node.ts",
