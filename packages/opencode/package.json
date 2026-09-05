@@ -128,6 +128,7 @@
     "ignore": "7.0.5",
     "immer": "11.1.4",
     "jsonc-parser": "3.3.1",
+    "merge-gateway-ai-sdk-provider": "0.2.0",
     "mime-types": "3.0.2",
     "minimatch": "10.0.3",
     "npm-package-arg": "13.0.2",
