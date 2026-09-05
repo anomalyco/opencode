@@ -69,9 +69,13 @@ export async function read() {
     if (x11.length) return { data: x11.toString("base64"), mime: "image/png" }
   }
 
-  const { default: clipboardy } = await import("clipboardy")
-  const text = await clipboardy.read().catch(() => undefined)
+  const text = await readText()
   if (text) return { data: text, mime: "text/plain" }
+}
+
+export async function readText() {
+  const { default: clipboardy } = await import("clipboardy")
+  return clipboardy.read().catch(() => undefined)
 }
 
 export function copyCommand(

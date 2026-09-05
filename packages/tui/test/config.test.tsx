@@ -101,6 +101,15 @@ test("resolves a session move keybind", () => {
   expect(config.keybinds.get("session.move")).toMatchObject([{ key: "ctrl+o" }])
 })
 
+test("resolves plain paste separately from attachment paste", () => {
+  const defaults = resolve({}, { terminalSuspend: true })
+  const config = resolve({ keybinds: { input_paste_plain: "alt+v" } }, { terminalSuspend: true })
+
+  expect(config.keybinds.get("prompt.paste")).toMatchObject([{ key: "ctrl+v" }])
+  expect(defaults.keybinds.get("prompt.paste_plain")).toMatchObject([{ key: "ctrl+alt+v" }])
+  expect(config.keybinds.get("prompt.paste_plain")).toMatchObject([{ key: "alt+v" }])
+})
+
 test("disables suspend and assigns ctrl+z to undo when unsupported", () => {
   const config = resolve({}, { terminalSuspend: false })
 
