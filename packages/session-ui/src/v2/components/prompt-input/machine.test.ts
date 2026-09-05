@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { PromptInputV2PersistedState, PromptInputV2Suggestion } from "./types"
-import { createPromptInputV2InteractionState, transitionPromptInputV2 } from "./machine"
+import { createPromptInputV2InteractionState, isWholePromptTrigger, transitionPromptInputV2 } from "./machine"
 
 const command: PromptInputV2Suggestion = {
   id: "review",
@@ -17,26 +17,57 @@ function persisted(value = ""): PromptInputV2PersistedState {
 }
 
 describe("prompt input v2 interaction machine", () => {
-  test("opens inline commands only when slash is the entire prompt", () => {
+  test("opens inline commands mid-prompt at the cursor", () => {
     const state = createPromptInputV2InteractionState()
-    const open = transitionPromptInputV2(state, { type: "input.changed", value: "/re" }, persisted())
-    const closed = transitionPromptInputV2(state, { type: "input.changed", value: "explain /re" }, persisted())
+    const open = transitionPromptInputV2(state, { type: "input.changed", value: "/re" }, persisted("/re"))
+    const mid = transitionPromptInputV2(state, { type: "input.changed", value: "explain /re" }, persisted("explain /re"))
 
     expect(open.state.popover).toEqual({ type: "command-inline", query: "re" })
-    expect(closed.state.popover).toEqual({ type: "closed" })
+    expect(mid.state.popover).toEqual({ type: "command-inline", query: "re" })
+  })
+
+  test("does not open on in-word paths or urls", () => {
+    const state = createPromptInputV2InteractionState()
+    const path = transitionPromptInputV2(state, { type: "input.changed", value: "edit src/app.tsx" }, persisted("edit src/app.tsx"))
+    const url = transitionPromptInputV2(state, { type: "input.changed", value: "open https://x.com" }, persisted("open https://x.com"))
+
+    expect(path.state.popover).toEqual({ type: "closed" })
+    expect(url.state.popover).toEqual({ type: "closed" })
+  })
+
+  test("splices a mid-prompt command and preserves surrounding text", () => {
+    const value = "a /rev b"
+    const input = persisted(value)
+    input.cursor = 6
+    const state = { ...createPromptInputV2InteractionState(), popover: { type: "command-inline" as const, query: "rev" } }
+
+    const selected = transitionPromptInputV2(state, { type: "popover.select", item: command }, input)
+
+    expect(selected.commands).toContainEqual({ type: "draft.setText", value: "a /review b", cursor: 9 })
+  })
+
+  test("completes the command token at the cursor, not the first slash", () => {
+    const value = "fix /a and /re"
+    const input = persisted(value)
+    input.cursor = value.length
+    const state = { ...createPromptInputV2InteractionState(), popover: { type: "command-inline" as const, query: "re" } }
+
+    const selected = transitionPromptInputV2(state, { type: "popover.select", item: command }, input)
+
+    expect(selected.commands).toContainEqual({ type: "draft.setText", value: "fix /a and /review ", cursor: 19 })
   })
 
   test("completes nested slash command names", () => {
     const open = transitionPromptInputV2(
       createPromptInputV2InteractionState(),
       { type: "input.changed", value: "/review/" },
-      persisted(),
+      persisted("/review/"),
     )
     const item = { ...command, label: "/review/nested" }
     const selected = transitionPromptInputV2(open.state, { type: "popover.select", item }, persisted("/review/"))
 
     expect(open.state.popover).toEqual({ type: "command-inline", query: "review/" })
-    expect(selected.commands).toContainEqual({ type: "draft.setText", value: "/review/nested " })
+    expect(selected.commands).toContainEqual({ type: "draft.setText", value: "/review/nested ", cursor: 15 })
   })
 
   test("opens context completion at the cursor", () => {
@@ -160,5 +191,19 @@ describe("prompt input v2 interaction machine", () => {
 
     expect(result.state.popover).toEqual({ type: "context", query: "", activeID: "first" })
     expect(result.handled).toBeTrue()
+  })
+
+  test("isWholePromptTrigger distinguishes a start-of-prompt slash from a mid-prompt one", () => {
+    const whole = persisted("/rev")
+    const trailingSpace = persisted("/rev ")
+    trailingSpace.cursor = 4
+    const midPrompt = persisted("explain /rev")
+    const withSuffix = persisted("/rev omega")
+    withSuffix.cursor = 4
+
+    expect(isWholePromptTrigger(whole)).toBeTrue()
+    expect(isWholePromptTrigger(trailingSpace)).toBeTrue()
+    expect(isWholePromptTrigger(midPrompt)).toBeFalse()
+    expect(isWholePromptTrigger(withSuffix)).toBeFalse()
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { displayCharAt, displaySlice, mentionTriggerIndex } from "../../src/prompt/display"
+import { displayCharAt, displaySlice, mentionTriggerIndex, slashTriggerIndex } from "../../src/prompt/display"
 
 describe("prompt display", () => {
   test("uses display-width offsets for mentions", () => {
@@ -29,5 +29,19 @@ describe("prompt display", () => {
     expect(mentionTriggerIndex("hello@")).toBeUndefined()
     expect(mentionTriggerIndex("foo@bar.com")).toBeUndefined()
     expect(mentionTriggerIndex("中文 @src file")).toBeUndefined()
+  })
+
+  test("locates the slash-command token at the cursor", () => {
+    expect(slashTriggerIndex("/")).toBe(0)
+    expect(slashTriggerIndex("/rev")).toBe(0)
+    expect(slashTriggerIndex("explain /rev")).toBe(8)
+    expect(slashTriggerIndex("中文 /rev")).toBe(5)
+    expect(slashTriggerIndex("/review/nested")).toBe(0)
+    // in-word paths and urls must not trigger
+    expect(slashTriggerIndex("edit src/app.tsx")).toBeUndefined()
+    expect(slashTriggerIndex("open https://x.com")).toBeUndefined()
+    // the token must end at the cursor
+    expect(slashTriggerIndex("explain /rev more")).toBeUndefined()
+    expect(slashTriggerIndex("explain /rev more", Bun.stringWidth("explain /rev"))).toBe(8)
   })
 })
