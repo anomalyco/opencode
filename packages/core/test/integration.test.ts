@@ -263,6 +263,56 @@ describe("Integration", () => {
     }),
   )
 
+  it.effect("refreshes an expired OAuth credential during batched registration", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      yield* TestClock.setTime(1_000)
+      const integrationID = Integration.ID.make("opencode")
+      const methodID = Integration.MethodID.make("device")
+      const stored = yield* credentials.create({
+        integrationID,
+        label: "Work",
+        value: Credential.OAuth.make({ type: "oauth", methodID, access: "expired", refresh: "refresh", expires: 1 }),
+      })
+      const connection = { type: "credential" as const, id: stored.id, label: "Work" }
+      let refreshes = 0
+
+      // Plugin.activate batches setup. The plugin registers its method, then
+      // resolves its saved connection before the enclosing batch completes.
+      const during = yield* State.batch(
+        Effect.gen(function* () {
+          yield* integrations.transform((draft) =>
+            draft.method.update({
+              integrationID,
+              method: { id: methodID, type: "oauth", label: "Device" },
+              authorize: () => Effect.die(new Error("unused authorize")),
+              refresh: (credential) =>
+                Effect.sync(() => {
+                  refreshes++
+                  return { ...credential, access: "fresh", expires: Number.MAX_SAFE_INTEGER }
+                }),
+            }),
+          )
+          const resolved = yield* integrations.connection.resolve(connection)
+          return { resolved, persisted: (yield* credentials.get(stored.id))?.value, refreshes }
+        }),
+      )
+
+      // The same method works after batch completion; neither the stored
+      // connection nor the refresh implementation needs to be replaced.
+      expect(yield* integrations.connection.resolve(connection)).toMatchObject({ type: "oauth", access: "fresh" })
+      expect((yield* credentials.get(stored.id))?.value).toMatchObject({ access: "fresh" })
+      expect(refreshes).toBe(1)
+
+      expect(during).toMatchObject({
+        resolved: { type: "oauth", access: "fresh" },
+        persisted: { access: "fresh" },
+        refreshes: 1,
+      })
+    }),
+  )
+
   it.effect("completes code OAuth once and stores the credential", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
