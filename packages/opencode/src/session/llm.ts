@@ -8,7 +8,7 @@ import { Context, Effect, Layer } from "effect"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
 import type { LLMEvent } from "@opencode-ai/llm"
-import { LLMClient } from "@opencode-ai/llm/route"
+import { LLMClient, MessageLogger, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
 import type { LLMClientService } from "@opencode-ai/llm/route"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
@@ -239,6 +239,7 @@ const live: Layer.Layer<
           providerOptions: prepared.params.options,
           headers: prepared.headers,
           abort: input.abort,
+          logMessages: cfg.experimental?.log_messages,
         })
         if (native.type === "supported") {
           yield* Effect.logInfo("llm runtime selected", {
@@ -268,6 +269,39 @@ const live: Layer.Layer<
         })
       }
 
+      const logMessages = cfg.experimental?.log_messages
+      if (logMessages) {
+        // The AI SDK runtime has no access to the provider-native request body,
+        // so "trace" carries the same payload as "debug" on this path.
+        const model = `${input.model.providerID}/${input.model.id}`
+        const texts: Array<string> = []
+        for (const s of prepared.system) texts.push(`system: ${s}`)
+        for (const m of prepared.messages) {
+          const content =
+            typeof m.content === "string"
+              ? m.content
+              : (m.content
+                  ?.map((p) =>
+                    p.type === "text"
+                      ? p.text
+                      : p.type === "tool-call"
+                        ? `tool-call(${p.toolName}): ${JSON.stringify(p.input)}`
+                        : p.type === "tool-result"
+                          ? `tool-result(${p.toolName}): ${JSON.stringify(p.output)}`
+                          : `[${p.type}]`,
+                  )
+                  .join("\n") ?? "")
+          texts.push(`${m.role}: ${content}`)
+        }
+        const payload: Record<string, unknown> = { model, messages: texts.join("\n") }
+        if (logMessages !== "info") {
+          payload.generation = Object.fromEntries(
+            Object.entries(prepared.params).filter(([, v]) => v !== undefined) as Array<[string, unknown]>,
+          )
+        }
+        yield* MessageLogger.log(logMessages, "LLM request", payload)
+      }
+
       yield* Effect.logInfo("llm runtime selected", {
         "llm.runtime": "ai-sdk",
         "llm.provider": input.model.providerID,
@@ -277,6 +311,7 @@ const live: Layer.Layer<
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
       return {
         type: "ai-sdk" as const,
+        logMessages,
         result: streamText({
           onError(error) {
             bridge.fork(
@@ -370,12 +405,17 @@ const live: Layer.Layer<
             // Adapter seam: both runtimes expose the same LLMEvent stream. Native
             // already returns one; AI SDK streams are converted here.
             const state = LLMAISDK.adapterState()
-            return Stream.fromAsyncIterable(result.result.fullStream, (e) =>
+            const model = `${input.model.providerID}/${input.model.id}`
+            let events = Stream.fromAsyncIterable(result.result.fullStream, (e) =>
               e instanceof Error ? e : new Error(String(e)),
             ).pipe(
               Stream.mapEffect((event) => LLMAISDK.toLLMEvents(state, event)),
               Stream.flatMap((events) => Stream.fromIterable(events)),
             )
+            if (result.logMessages) {
+              events = MessageLogger.responseStream(model, result.logMessages)(events)
+            }
+            return events
           }),
         ),
       )
