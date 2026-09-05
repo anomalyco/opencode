@@ -6,7 +6,7 @@ import { pathKey } from "@/workspaces/path-key"
 import { useServerHealth } from "@/runtime/server/health"
 import { createServerSdkContext } from "./client"
 import { createServerSyncContext } from "./sync"
-import { createData } from "@opencode-ai/client/solid"
+import { createAppData } from "./catalog-events"
 import type { ServerScope } from "@/runtime/server/scope"
 import { createPermissionAutoApprover } from "@/session/requests/auto-approve"
 import { createServerNotificationState } from "@/shell/notifications/notification"
@@ -133,7 +133,7 @@ function createServerController(
   const language = useLanguage()
   const connKey = ServerConnection.key(conn)
   const sdk = createServerSdkContext(conn, scope)
-  const source = createData({
+  const source = createAppData({
     api: () => sdk.api,
     event: {
       on: sdk.event.on,

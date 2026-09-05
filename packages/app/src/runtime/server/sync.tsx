@@ -20,6 +20,8 @@ import { toggleMcp } from "./global-sync/mcp"
 import { createConnectionSync } from "./server-sync/connection"
 import { usePlatform } from "@/runtime/platform/platform"
 import type { Data } from "@opencode-ai/client/solid"
+import { createWorktreeInventory, withWorktreeInventory, worktreeInventoryKey } from "@/workspaces/inventory"
+import { sameDirectory } from "@/workspaces/paths"
 
 type GlobalStore = {
   path: Path
@@ -79,6 +81,17 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   })
 
   const queryClient = useQueryClient()
+  const worktrees = createWorktreeInventory({
+    scope: serverSDK.scope,
+    queryClient,
+    api: () => serverSDK.api.worktree,
+    updated: (directory, items) =>
+      setGlobalStore("project", (projects) =>
+        projects.map((project) =>
+          sameDirectory(project.worktree, directory) ? withWorktreeInventory(project, items) : project,
+        ),
+      ),
+  })
   const bootstrap = useQuery(() => ({
     queryKey: [serverSDK.scope, "bootstrap"],
     queryFn: async () => {
@@ -197,17 +210,29 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
 
   function applyProjectUpdate(update: Parameters<typeof updateProjectInfo>[1]) {
     setGlobalStore("project", (projects) =>
-      projects.map((project) => (project.id === update.id ? updateProjectInfo(project, update) : project)),
+      projects.map((project) =>
+        project.id === update.id
+          ? withWorktreeInventory(
+              updateProjectInfo(project, update),
+              queryClient.getQueryData(worktreeInventoryKey(serverSDK.scope, update.canonical)),
+            )
+          : project,
+      ),
     )
   }
 
   const unsub = serverSDK.event.listen((event) => {
     connection.handleEvent({ type: event.type })
     if (event.type === "project.updated") applyProjectUpdate(event.data)
+    if (event.type === "worktree.updated") {
+      const project = globalStore.project.find((project) => project.id === event.data.projectID)
+      const directory = project?.worktree ?? data.project.get(event.data.projectID)?.canonical
+      if (directory) void worktrees.invalidate(directory)
+      return
+    }
 
     if (!event.location) {
-      if (event.type === "config.updated" || event.type === "agent.updated" || event.type === "worktree.updated")
-        bootstrap.refetch()
+      if (event.type === "config.updated" || event.type === "agent.updated") bootstrap.refetch()
       return
     }
 
@@ -216,7 +241,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     if (!children.children[key]) return
     children.mark(key)
     if (event.type === "config.updated" || event.type === "agent.updated") queue.push(key)
-    if (event.type === "worktree.updated") void bootstrap.refetch()
   })
 
   onCleanup(unsub)
@@ -261,6 +285,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     // bootstrap,
     updateConfig: updateConfigMutation.mutateAsync,
     project: projectApi,
+    worktrees,
     mcp: {
       toggle: async (directory: string, name: string) => {
         const key = directoryKey(directory)

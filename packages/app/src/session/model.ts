@@ -1,6 +1,7 @@
 import type { SessionMessageInfo, SessionMessageUser } from "@opencode-ai/client/promise"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createMemo } from "solid-js"
+import { useQuery } from "@tanstack/solid-query"
 import { useFile } from "@/workspaces/files/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useData } from "@/runtime/server/current"
@@ -18,6 +19,7 @@ import { useSessionLayout } from "./session-layout"
 import { createSessionOwnership } from "./session-ownership"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useServer } from "@/runtime/server/current"
+import { withWorktreeInventory } from "@/workspaces/inventory"
 
 const emptyMessages: SessionMessageInfo[] = []
 const emptyUserMessages: SessionMessageUser[] = []
@@ -73,6 +75,10 @@ export function useSessionModel() {
     if (!value) return
     return { ...value, worktree: value.canonical, worktrees: [] }
   })
+  const inventory = useQuery(() => ({
+    ...server.ctx.sync.worktrees.query(project()?.worktree ?? location().directory),
+    enabled: !!project() && server.ctx.sdk.connection.status() === "connected",
+  }))
   const canReview = createMemo(() => !!project())
   const normalizeTab = (tab: string) => normalizeSessionTab(tab, file.tab)
   const tabs = createSessionTabs({
@@ -94,12 +100,15 @@ export function useSessionModel() {
       current: createMemo(() => {
         const current = info()
         const directory = current?.location.directory ?? location().directory
-        // Global sync enriches projects with discovered worktrees; raw project metadata does not.
+        // Only mounted sessions demand inventory; historical projects remain metadata-only.
         const projects = server.ctx.sync.data.project
         const value = current
           ? projectForSession(current, projects)
           : projects.find((item) => isProjectDirectory(item, directory))
-        return isWorkspaceDirectory(value, directory)
+        return isWorkspaceDirectory(
+          value && withWorktreeInventory(value, inventory.isSuccess ? inventory.data : undefined),
+          directory,
+        )
       }),
     },
     identity: {

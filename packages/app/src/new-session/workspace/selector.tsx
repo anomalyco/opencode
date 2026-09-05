@@ -11,6 +11,9 @@ export function PromptWorkspaceSelector(props: {
   value: string
   projectRoot: string
   workspaces: string[]
+  loading?: boolean
+  error?: boolean
+  onOpenChange?: (open: boolean) => void
   branches: string[]
   branch?: string
   onboarding?: boolean
@@ -41,6 +44,7 @@ export function PromptWorkspaceSelector(props: {
     pending = { type: "select", value }
   }
   const onOpenChange = (open: boolean) => {
+    props.onOpenChange?.(open)
     if (open) {
       setSearch({ workspaces: "", branches: "" })
       props.onSearch("")
@@ -133,6 +137,11 @@ export function PromptWorkspaceSelector(props: {
                   </Show>
                 </Menu.Item>
               </Menu.Group>
+              <Show when={props.loading || props.error}>
+                <div class="px-3 py-1 text-13-regular text-v2-text-text-muted" role="status">
+                  {language.t(props.error ? "session.location.worktreesFailed" : "common.loading")}
+                </div>
+              </Show>
               <Show
                 when={props.workspaces.length > 0}
                 fallback={

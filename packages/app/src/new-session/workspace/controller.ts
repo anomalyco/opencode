@@ -1,20 +1,16 @@
 import { debounce } from "@solid-primitives/scheduled"
 import { createEffect, createMemo, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
+import { useQuery } from "@tanstack/solid-query"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServerSDK } from "@/runtime/server/client"
-import { useData } from "@/runtime/server/current"
+import { useData, useServer } from "@/runtime/server/current"
 import { useSettings } from "@/settings/model"
 import { useTabs } from "@/shell/tabs/tabs"
 import { ServerConnection } from "@/runtime/server/registry"
 import { normalizeProjectInfo } from "@/runtime/server/global-sync/utils"
-import {
-  isWorkspaceDirectory,
-  isWorkspaceSelection,
-  workspaceDefaultSelection,
-  workspaceDirectories,
-  workspaceSelectionDestination,
-} from "@/workspaces/paths"
+import { withWorktreeInventory } from "@/workspaces/inventory"
+import { workspaceDefaultSelection, workspaceDirectories, workspaceSelectionDestination } from "@/workspaces/paths"
 
 export function resolveNewSessionWorktree(input: { enabled: boolean; selected?: string; fallback?: string }) {
   if (!input.enabled) return "main"
@@ -46,15 +42,25 @@ export function createNewSessionWorkspaceController(input: {
 }) {
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
+  const server = useServer()
   const data = useData()
   const settings = useSettings()
   const tabs = useTabs()
-  const [state, setState] = createStore({ search: "" })
+  const [state, setState] = createStore({ search: "", open: false })
   const searchBranches = debounce((search: string) => setState("search", search.trim()), 100)
-  const currentProject = createMemo(() => {
+  const projectMetadata = createMemo(() => {
     const projectID = data.location.info({ directory: sdk().directory })?.project.id
     const current = projectID ? data.project.get(projectID) : undefined
     return current ? normalizeProjectInfo(current) : undefined
+  })
+  const projectRoot = createMemo(() => projectMetadata()?.worktree ?? sdk().directory)
+  const inventory = useQuery(() => ({
+    ...server.ctx.sync.worktrees.query(projectRoot()),
+    enabled: state.open && serverSDK.connection.status() === "connected",
+  }))
+  const currentProject = createMemo(() => {
+    const project = projectMetadata()
+    return project ? withWorktreeInventory(project, inventory.data) : undefined
   })
   const visible = createMemo(() =>
     resolveNewSessionGit({
@@ -62,12 +68,6 @@ export function createNewSessionWorkspaceController(input: {
       branch: data.location.vcs.info({ directory: sdk().directory })?.branch.current,
     }),
   )
-  const selected = createMemo(() => {
-    const project = currentProject()
-    const worktree = input.selectedWorktree()
-    if (!project || !worktree) return
-    return isWorkspaceSelection(project, worktree) ? worktree : undefined
-  })
   const fallback = createMemo(() => {
     const project = currentProject()
     if (!project) return "main"
@@ -79,13 +79,13 @@ export function createNewSessionWorkspaceController(input: {
   const value = createMemo(() =>
     resolveNewSessionWorktree({
       enabled: visible(),
-      selected: selected(),
+      // Inventory can predate a just-created worktree. Never replace an explicit destination with a fallback.
+      selected: input.selectedWorktree(),
       fallback: fallback(),
     }),
   )
-  const projectRoot = createMemo(() => currentProject()?.worktree ?? sdk().directory)
   const [branches] = createResource(
-    () => (visible() ? { directory: projectRoot(), search: state.search } : undefined),
+    () => (visible() && state.open ? { directory: projectRoot(), search: state.search } : undefined),
     ({ directory, search }) =>
       serverSDK.api.vcs
         .branches({ location: { directory }, search, limit: 50 })
@@ -96,9 +96,11 @@ export function createNewSessionWorkspaceController(input: {
     void Promise.all([data.location.syncInfo({ directory: sdk().directory }), data.project.sync()]).catch(
       () => undefined,
     )
-    const project = currentProject()
-    const directories = project ? [project.worktree, ...workspaceDirectories(project)] : [sdk().directory]
-    directories.forEach((directory) => void data.location.vcs.sync({ directory }).catch(() => undefined))
+  })
+  createEffect(() => {
+    const selection = value()
+    const directory = selection === "main" || selection === "create" ? sdk().directory : selection
+    void data.location.vcs.sync({ directory }).catch(() => undefined)
   })
   const branch = createMemo(() =>
     resolveNewSessionBranch({
@@ -122,7 +124,9 @@ export function createNewSessionWorkspaceController(input: {
       workspace: createMemo(() => {
         const project = currentProject()
         const current = value()
-        return current === "create" || (!!project && isWorkspaceDirectory(project, current))
+        return (
+          current === "create" || (!!project && workspaceSelectionDestination(current, project.worktree) !== "main")
+        )
       }),
       reset: () => {
         input.setSelectedWorktree(undefined)
@@ -142,6 +146,9 @@ export function createNewSessionWorkspaceController(input: {
     },
     project: {
       root: projectRoot,
+      loading: () => state.open && inventory.isPending,
+      error: () => inventory.isError,
+      setOpen: (open: boolean) => setState("open", open),
       workspaces: () => {
         const project = currentProject()
         return project ? workspaceDirectories(project) : []

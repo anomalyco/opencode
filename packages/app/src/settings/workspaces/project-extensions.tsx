@@ -1,7 +1,17 @@
 import { Icon } from "@opencode-ai/ui/icon"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { type Component, For, Show, createEffect, createMemo, createResource, createSignal, type JSX } from "solid-js"
+import {
+  type Component,
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createResource,
+  createSignal,
+  onCleanup,
+  type JSX,
+} from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useMcpToggle } from "@/providers/connect/mcp"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -71,10 +81,15 @@ export const ProjectSettingsExtensions: Component = () => {
 
   createEffect(() => {
     if (serverSDK.connection.status() !== "connected") return
+    // This view displays shared MCP servers as well as the project Location's catalog.
+    onCleanup(data.location.retain(data.location.default()))
+  })
+
+  createEffect(() => {
+    if (serverSDK.connection.status() !== "connected") return
     const ref = { directory: directorySDK().directory }
     void Promise.all([
-      data.location.mcp.server.sync(),
-      data.location.skill.sync(),
+      data.location.syncInfo().then(() => Promise.all([data.location.mcp.server.sync(), data.location.skill.sync()])),
       data.location.mcp.server.sync(ref),
       data.location.skill.sync(ref),
     ]).catch(() => undefined)

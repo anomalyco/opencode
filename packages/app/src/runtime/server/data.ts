@@ -5,7 +5,7 @@ import { createStore } from "solid-js/store"
 
 type SessionMutation = { readonly id: string; readonly type: "remove"; readonly sessionID: string }
 
-export function createDesktopData(input: { data: Data; remove: (sessionID: string) => Promise<void> }) {
+export function createDesktopData<T extends Data>(input: { data: T; remove: (sessionID: string) => Promise<void> }) {
   const mutation = createSessionMutations(input.remove)
   onCleanup(input.data.on("session.deleted", (event) => mutation.deleted(event.data.sessionID)))
 
