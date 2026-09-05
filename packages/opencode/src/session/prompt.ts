@@ -103,14 +103,35 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   return part.state.status === "error" && part.state.metadata?.interrupted === true
 }
 
-const parseReflectionModel = (
-  raw: Option.Option<string>,
+export const parseReflectionModel = (
+  raw: Option.Option<string> | string | undefined,
 ): { providerID: string; modelID: string } | undefined => {
-  const value = Option.getOrUndefined(raw)
+  const value = typeof raw === "string" ? raw : Option.isOption(raw) ? Option.getOrUndefined(raw) : undefined
   if (value === undefined) return undefined
   const slash = value.indexOf("/")
   if (slash <= 0 || slash === value.length - 1) return undefined
   return { providerID: value.slice(0, slash), modelID: value.slice(slash + 1) }
+}
+
+export const resolveReflectionModelOverride = (
+  session: SessionV1.SessionInfo | undefined,
+  configInfo: ConfigV1.Info | undefined,
+  flags: RuntimeFlags.Service,
+): { providerID: string; modelID: string } | undefined => {
+  if (session?.metadata && typeof session.metadata === "object") {
+    const fromMeta = (session.metadata as Record<string, unknown>).reflection_model
+    if (typeof fromMeta === "string") {
+      const parsed = parseReflectionModel(fromMeta)
+      if (parsed) return parsed
+    }
+  }
+  const fromFlag = parseReflectionModel(flags.experimentalReflectionModel)
+  if (fromFlag) return fromFlag
+  if (configInfo?.reflection_model) {
+    const fromConfig = parseReflectionModel(configInfo.reflection_model)
+    if (fromConfig) return fromConfig
+  }
+  return undefined
 }
 
 type StuckSignal = "doom-loop" | "step-limit" | "idle" | "tokens"
@@ -1069,7 +1090,9 @@ const layer = Layer.effect(
 
     const maybeReflect = Effect.fnUntraced(function* (sessionID: SessionID) {
       const signals = yield* SynchronizedRef.get(stuckSignals)
-      const modelOverride = parseReflectionModel(flags.experimentalReflectionModel)
+      const session = yield* sessions.get(sessionID).pipe(Effect.option)
+      const cfg = yield* config.get().pipe(Effect.orDie)
+      const modelOverride = resolveReflectionModelOverride(Option.getOrUndefined(session), cfg, flags)
       yield* sessionExecution
         .reflect(sessionID, modelOverride === undefined ? undefined : { model: modelOverride })
         .pipe(
@@ -1156,7 +1179,8 @@ const layer = Layer.effect(
           ) {
             const state = ReflectionState.get(sessionID)
             if (!state.directionConfirmed) {
-              const modelOverride = parseReflectionModel(flags.experimentalReflectionModel)
+              const cfg = yield* config.get().pipe(Effect.orDie)
+              const modelOverride = resolveReflectionModelOverride(session, cfg, flags)
               const thenResult = yield* sessionExecution
                 .thenLoop(sessionID, modelOverride === undefined ? undefined : { model: modelOverride })
                 .pipe(
@@ -1207,7 +1231,8 @@ const layer = Layer.effect(
           const hasHedge = containsHedge(assistantText)
 
           if (hasSettlementFailure || hasHedge) {
-            const modelOverride = parseReflectionModel(flags.experimentalReflectionModel)
+            const cfg = yield* config.get().pipe(Effect.orDie)
+            const modelOverride = resolveReflectionModelOverride(session, cfg, flags)
             yield* sessionExecution
               .whyLoop(sessionID, modelOverride === undefined ? undefined : { model: modelOverride })
               .pipe(

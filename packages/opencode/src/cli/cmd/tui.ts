@@ -83,6 +83,11 @@ export const TuiThreadCommand = cmd({
         alias: ["m"],
         describe: "model to use in the format of provider/model",
       })
+      .option("reflection-model", {
+        type: "string",
+        alias: ["rm"],
+        describe: "model to use for reasoning loops in the format of provider/model",
+      })
       .option("continue", {
         alias: ["c"],
         describe: "continue the last session",
@@ -289,6 +294,7 @@ export const TuiThreadCommand = cmd({
               sessionID: args.session,
               agent: args.agent,
               model: args.model,
+              reflectionModel: args["reflection-model"],
               prompt,
               fork: args.fork,
               auto: args.auto || args.yolo || args["dangerously-skip-permissions"],

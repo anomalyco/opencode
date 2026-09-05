@@ -8,13 +8,20 @@ import { DialogVariant } from "./dialog-variant"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 import { useSync } from "../context/sync"
+import { useRoute } from "../context/route"
+import { useSDK } from "../context/sdk"
+import { useToast } from "../ui/toast"
 
-export function DialogModel(props: { providerID?: string }) {
+export function DialogModel(props: { providerID?: string; mode?: "chat" | "reflection" }) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
+  const route = useRoute()
+  const sdk = useSDK()
+  const toast = useToast()
   const [query, setQuery] = createSignal("")
 
+  const isReflection = props.mode === "reflection"
   const connected = useConnected()
   const providers = createDialogProviderOptions()
 
@@ -126,7 +133,23 @@ export function DialogModel(props: { providerID?: string }) {
       ]
     }
 
-    return [...favoriteOptions, ...recentOptions, ...providerOptions, ...popularProviders]
+    const defaultReflectionOption =
+      isReflection && needle.length === 0
+        ? [
+            {
+              key: "default-reflection",
+              value: { providerID: "", modelID: "" },
+              title: "Default (Use session model)",
+              description: "Inherit model from active session",
+              category: "Default",
+              onSelect: () => {
+                onSelect("", "")
+              },
+            },
+          ]
+        : []
+
+    return [...defaultReflectionOption, ...favoriteOptions, ...recentOptions, ...providerOptions, ...popularProviders]
   })
 
   const provider = createMemo(() =>
@@ -134,12 +157,47 @@ export function DialogModel(props: { providerID?: string }) {
   )
 
   const title = createMemo(() => {
+    if (isReflection) return "Select reflection model"
     const value = provider()
     if (!value) return "Select model"
     return value.name
   })
 
   function onSelect(providerID: string, modelID: string) {
+    if (isReflection) {
+      if (!providerID || !modelID) {
+        local.model.setReflection(undefined)
+        if (route.data.type === "session") {
+          const s = sync.session.get(route.data.sessionID)
+          void sdk.client.session.update({
+            sessionID: route.data.sessionID,
+            metadata: { ...(s?.metadata ?? {}), reflection_model: undefined },
+          })
+        }
+        toast.show({
+          variant: "info",
+          message: "Reflection model reset to default (session model)",
+          duration: 3000,
+        })
+      } else {
+        local.model.setReflection({ providerID, modelID })
+        if (route.data.type === "session") {
+          const s = sync.session.get(route.data.sessionID)
+          void sdk.client.session.update({
+            sessionID: route.data.sessionID,
+            metadata: { ...(s?.metadata ?? {}), reflection_model: `${providerID}/${modelID}` },
+          })
+        }
+        toast.show({
+          variant: "success",
+          message: `Reflection model set to: ${providerID}/${modelID}`,
+          duration: 3000,
+        })
+      }
+      dialog.clear()
+      return
+    }
+
     local.model.set({ providerID, modelID }, { recent: true })
     const list = local.model.variant.list()
     const cur = local.model.variant.selected()
@@ -178,7 +236,7 @@ export function DialogModel(props: { providerID?: string }) {
       flat={true}
       skipFilter={true}
       title={title()}
-      current={local.model.current()}
+      current={isReflection ? local.model.reflection() : local.model.current()}
     />
   )
 }

@@ -639,6 +639,17 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
       },
       {
+        name: "model.reflection",
+        title: "Switch reflection model",
+        suggested: true,
+        category: "Agent",
+        slashName: "reflection-model",
+        slashAliases: ["reasoning-model", "rm"],
+        run: () => {
+          dialog.replace(() => <DialogModel mode="reflection" />)
+        },
+      },
+      {
         name: "model.cycle_recent",
         title: "Model cycle",
         category: "Agent",
