@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Fiber, Layer, LayerMap, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Fiber, Layer, LayerMap, Schema, Stream } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
 import { eq } from "drizzle-orm"
@@ -29,6 +29,7 @@ import type { LocationServices } from "@opencode-ai/core/location-services"
 import { Image } from "@opencode-ai/core/image"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
+import { PluginActivation } from "@opencode-ai/plugin/effect/activation"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Skill } from "@opencode-ai/core/skill"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -39,6 +40,12 @@ const interruptCalls: Session.ID[] = []
 const interruptContinuations: Array<boolean | undefined> = []
 const wakeCalls: Session.ID[] = []
 const activeSessions = new Set<Session.ID>()
+const wakeControl: {
+  started?: Deferred.Deferred<void>
+  release?: Deferred.Deferred<void>
+  activate?: boolean
+} = {}
+const pluginFlushHook: { effect: Effect.Effect<void> } = { effect: Effect.void }
 const execution = Layer.succeed(
   SessionExecution.Service,
   SessionExecution.Service.of({
@@ -55,8 +62,11 @@ const execution = Layer.succeed(
         return activeSessions.delete(sessionID)
       }),
     wake: (sessionID) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         wakeCalls.push(sessionID)
+        if (wakeControl.started) yield* Deferred.succeed(wakeControl.started, undefined)
+        if (wakeControl.release) yield* Deferred.await(wakeControl.release)
+        if (wakeControl.activate) activeSessions.add(sessionID)
       }),
     awaitIdle: () => Effect.void,
   }),
@@ -67,23 +77,43 @@ const locations = makeGlobalNode({
     LocationServiceMap.Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
-      return yield* LayerMap.make(
-        (_ref: Location.Ref) =>
-          // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-          Layer.mergeAll(
+      return yield* LayerMap.make((_ref: Location.Ref) =>
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+        Layer.suspend(() => {
+          let ready = false
+          return Layer.mergeAll(
             LayerNode.compile(LayerNode.group([PluginHooks.node, Skill.node]), {
               replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
             }),
             Layer.mock(Image.Service, {
               normalize: (_resource, content) =>
-                Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content),
+                ready
+                  ? Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content)
+                  : Effect.die(new Error("Image service used before plugins were ready")),
             }),
             Layer.mock(Snapshot.Service, {
-              capture: () => Effect.undefined,
-              restore: () => Effect.void,
+              capture: () =>
+                ready ? Effect.undefined : Effect.die(new Error("Snapshot used before plugins were ready")),
+              restore: () => (ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready"))),
             }),
-            Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
-          ).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices>,
+            Layer.mock(Plugin.Service, {
+              awaitActivation: Effect.gen(function* () {
+                const activation = {
+                  active: true,
+                  fiberID: yield* Effect.fiberId,
+                  token: {},
+                  directory: "/project",
+                  workspaceID: undefined,
+                }
+                return yield* Effect.sync(() => (ready = true)).pipe(
+                  Effect.andThen(Effect.suspend(() => pluginFlushHook.effect)),
+                  Effect.provideService(PluginActivation.Current, activation),
+                  Effect.ensuring(Effect.sync(() => (activation.active = false))),
+                )
+              }),
+            }),
+          ).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices>
+        }),
       )
     }),
   ),
@@ -252,6 +282,60 @@ describe("Session.prompt", () => {
     }),
   )
 
+  it.effect("admits synthetic context immediately before its user prompt", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const contextID = SessionMessage.ID.make("msg_prompt_context")
+      const promptID = SessionMessage.ID.make("msg_prompt_with_context")
+
+      const prompt = yield* session.prompt({
+        id: promptID,
+        sessionID,
+        text: "Inspect this",
+        context: { id: contextID, text: "editor context" },
+        resume: false,
+      })
+      const ignoredContextID = SessionMessage.ID.make("msg_ignored_retry_context")
+      const retry = yield* session.prompt({
+        id: promptID,
+        sessionID,
+        text: "ignored retry",
+        context: { id: ignoredContextID, text: "ignored context" },
+        resume: false,
+      })
+
+      expect((yield* session.inbox(sessionID)).map((item) => item.id)).toEqual([contextID, promptID])
+      expect(yield* admitted(contextID)).toMatchObject({
+        type: "synthetic",
+        payload: { text: "editor context" },
+      })
+      expect(yield* admitted(ignoredContextID)).toBeUndefined()
+      expect(retry).toEqual(prompt)
+    }),
+  )
+
+  it.effect("rejects queued prompts with synthetic context", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const contextID = SessionMessage.ID.make("msg_queued_context")
+
+      const error = yield* session
+        .prompt({
+          sessionID,
+          text: "Queue this",
+          context: { id: contextID, text: "editor context" },
+          delivery: "queue",
+          resume: false,
+        })
+        .pipe(Effect.flip)
+
+      expect(error).toMatchObject({ _tag: "Session.ContextDeliveryError", sessionID })
+      expect(yield* admittedCount).toBe(0)
+    }),
+  )
+
   it.effect("commits a staged revert before admitting a new prompt", () =>
     Effect.gen(function* () {
       yield* setup
@@ -285,6 +369,534 @@ describe("Session.prompt", () => {
     }),
   )
 
+  it.effect("atomically replaces a staged boundary under the same message ID", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const boundary = yield* session.prompt({ sessionID, text: "original", resume: false })
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
+      const stale = SessionMessage.ID.make("msg_stale_same_id_replacement")
+      yield* db.insert(SessionMessageTable).values(assistantRow(stale, 100)).run().pipe(Effect.orDie)
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        revert: { messageID: boundary.id, files: [] },
+      })
+      const context = SessionMessage.ID.make("msg_replacement_context")
+
+      const replacement = yield* session.prompt({
+        id: boundary.id,
+        sessionID,
+        text: "replacement",
+        context: { id: context, text: "editor context" },
+        delivery: "steer",
+        resume: false,
+      })
+      const retry = yield* session.prompt({
+        id: boundary.id,
+        sessionID,
+        text: "ignored retry",
+        delivery: "steer",
+        resume: false,
+      })
+      const rows = yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all().pipe(Effect.orDie)
+      const events = yield* db
+        .select({ type: EventTable.type })
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID))
+        .orderBy(EventTable.seq)
+        .all()
+        .pipe(Effect.orDie)
+
+      expect(replacement).toMatchObject({
+        id: boundary.id,
+        payload: { text: "replacement" },
+        delivery: "steer",
+      })
+      expect(retry).toEqual(replacement)
+      expect(rows.map((row) => row.id)).not.toContainAnyValues([boundary.id, stale])
+      expect(yield* admitted(boundary.id)).toEqual(replacement)
+      expect(yield* admitted(context)).toMatchObject({
+        id: context,
+        type: "synthetic",
+        payload: { text: "editor context" },
+      })
+      expect(events.slice(-3).map((event) => event.type)).toEqual([
+        "session.revert.committed.1",
+        "session.inbox.enqueued.1",
+        "session.inbox.enqueued.1",
+      ])
+      expect(yield* eventCount("session.revert.committed.1")).toBe(1)
+      expect(yield* eventCount("session.inbox.enqueued.1")).toBe(3)
+    }),
+  )
+
+  it.effect("commits a staged revert while preserving a delivered retry before the boundary", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const retained = yield* session.prompt({ sessionID, text: "retained", resume: false })
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
+      const boundary = yield* session.prompt({ sessionID, text: "boundary", resume: false })
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        revert: { messageID: boundary.id, files: [] },
+      })
+      const context = SessionMessage.ID.make("msg_ignored_retained_context")
+
+      const retried = yield* session.prompt({
+        id: retained.id,
+        sessionID,
+        text: "ignored retry",
+        context: { id: context, text: "ignored context" },
+        resume: false,
+      })
+
+      expect(retried.payload.text).toBe("retained")
+      expect((yield* session.get(sessionID)).revert).toBeUndefined()
+      expect((yield* session.messages({ sessionID })).map((message) => message.id)).toEqual([retained.id])
+      expect(yield* admitted(context)).toBeUndefined()
+    }),
+  )
+
+  it.effect("commits a staged revert while preserving a pending retry before the boundary", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const retained = yield* session.prompt({
+        sessionID,
+        text: "retained",
+        delivery: "queue",
+        resume: false,
+      })
+      const boundary = yield* session.prompt({ sessionID, text: "boundary", resume: false })
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        revert: { messageID: boundary.id, files: [] },
+      })
+      const context = SessionMessage.ID.make("msg_ignored_pending_context")
+
+      const retried = yield* session.prompt({
+        id: retained.id,
+        sessionID,
+        text: "ignored retry",
+        context: { id: context, text: "ignored context" },
+        resume: false,
+      })
+
+      expect(retried).toEqual(retained)
+      expect((yield* session.get(sessionID)).revert).toBeUndefined()
+      expect(yield* admitted(retained.id)).toEqual(retained)
+      expect(yield* admitted(context)).toBeUndefined()
+    }),
+  )
+
+  it.effect("keeps a staged revert recoverable when replacement prompt validation fails", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const boundary = yield* session.prompt({ sessionID, text: "boundary", resume: false })
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
+      const stale = SessionMessage.ID.make("msg_stale_after_failed_replacement")
+      yield* db.insert(SessionMessageTable).values(assistantRow(stale, 100)).run().pipe(Effect.orDie)
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        revert: { messageID: boundary.id, files: [] },
+      })
+
+      const error = yield* session
+        .prompt({
+          sessionID,
+          text: "replacement",
+          files: [{ uri: "data:image/png;base64,not-base64", name: "image.png" }],
+          resume: false,
+        })
+        .pipe(Effect.flip)
+      const rows = yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all().pipe(Effect.orDie)
+
+      expect({
+        error: error._tag,
+        revert: (yield* session.get(sessionID)).revert?.messageID,
+        boundary: rows.some((row) => row.id === boundary.id),
+        stale: rows.some((row) => row.id === stale),
+        admitted: yield* admittedCount,
+      }).toEqual({
+        error: "Session.AttachmentError",
+        revert: boundary.id,
+        boundary: true,
+        stale: true,
+        admitted: 0,
+      })
+    }),
+  )
+
+  it.effect("keeps a staged revert recoverable when replacement prompt admission conflicts", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const boundary = yield* session.prompt({ sessionID, text: "boundary", resume: false })
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
+      const stale = SessionMessage.ID.make("msg_stale_after_conflicting_replacement")
+      yield* db.insert(SessionMessageTable).values(assistantRow(stale, 100)).run().pipe(Effect.orDie)
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        revert: { messageID: boundary.id, files: [] },
+      })
+      const other = Session.ID.make("ses_prompt_conflict")
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: other,
+          project_id: Project.ID.global,
+          slug: "conflict",
+          directory: "/project",
+          title: "conflict",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const conflict = SessionMessage.ID.create()
+      yield* session.prompt({ id: conflict, sessionID: other, text: "first", resume: false })
+      const context = SessionMessage.ID.make("msg_context_before_conflict")
+
+      const error = yield* session
+        .prompt({
+          id: conflict,
+          sessionID,
+          text: "replacement",
+          context: { id: context, text: "editor context" },
+          resume: false,
+        })
+        .pipe(Effect.flip)
+      const rows = yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all().pipe(Effect.orDie)
+
+      expect({
+        error: error._tag,
+        revert: (yield* session.get(sessionID)).revert?.messageID,
+        boundary: rows.some((row) => row.id === boundary.id),
+        stale: rows.some((row) => row.id === stale),
+        context: yield* admitted(context),
+      }).toEqual({
+        error: "Session.PromptConflictError",
+        revert: boundary.id,
+        boundary: true,
+        stale: true,
+        context: undefined,
+      })
+    }),
+  )
+
+  it.effect("serializes revert staging before replacement prompt admission", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const boundary = yield* session.prompt({ sessionID, text: "boundary", resume: false })
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const locked = yield* SessionInbox.serialized(
+        sessionID,
+        Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))),
+      ).pipe(Effect.forkChild)
+      yield* Deferred.await(entered)
+
+      const staged = yield* session.revert
+        .stage({ sessionID, messageID: boundary.id, files: false })
+        .pipe(Effect.forkChild)
+      yield* Effect.yieldNow
+      const replacementID = SessionMessage.ID.make("msg_serialized_replacement")
+      const prompted = yield* session
+        .prompt({ id: replacementID, sessionID, text: "replacement", resume: false })
+        .pipe(Effect.forkChild)
+      yield* Effect.yieldNow
+
+      expect(yield* admitted(replacementID)).toBeUndefined()
+      yield* Deferred.succeed(release, undefined)
+      yield* Fiber.join(locked)
+      yield* Fiber.join(staged)
+      const replacement = yield* Fiber.join(prompted)
+
+      expect((yield* session.get(sessionID)).revert).toBeUndefined()
+      expect(replacement.payload.text).toBe("replacement")
+      expect(yield* admitted(replacementID)).toEqual(replacement)
+    }),
+  )
+
+  it.effect("starts execution before a waiting revert can stage", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const boundary = yield* session.prompt({ sessionID, text: "boundary", resume: false })
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
+      const started = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      wakeControl.started = started
+      wakeControl.release = release
+      wakeControl.activate = true
+
+      return yield* Effect.gen(function* () {
+        const prompted = yield* session.prompt({ sessionID, text: "replacement" }).pipe(Effect.forkChild)
+        yield* Deferred.await(started)
+        const staged = yield* session.revert
+          .stage({ sessionID, messageID: boundary.id, files: false })
+          .pipe(Effect.flip, Effect.forkChild)
+        yield* Effect.yieldNow
+
+        expect(staged.pollUnsafe()).toBeUndefined()
+        yield* Deferred.succeed(release, undefined)
+        const replacement = yield* Fiber.join(prompted)
+        const error = yield* Fiber.join(staged)
+
+        expect(error._tag).toBe("Session.BusyError")
+        expect(yield* admitted(replacement.id)).toEqual(replacement)
+      }).pipe(
+        Effect.ensuring(
+          Deferred.succeed(release, undefined).pipe(
+            Effect.andThen(
+              Effect.sync(() => {
+                delete wakeControl.started
+                delete wakeControl.release
+                delete wakeControl.activate
+                activeSessions.clear()
+              }),
+            ),
+          ),
+        ),
+      )
+    }),
+  )
+
+  it.effect("reserves revert staging before delayed plugin activation", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const boundary = yield* session.prompt({ sessionID, text: "boundary", resume: false })
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      pluginFlushHook.effect = Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))
+
+      yield* Effect.gen(function* () {
+        const staged = yield* session.revert
+          .stage({ sessionID, messageID: boundary.id, files: false })
+          .pipe(Effect.forkChild)
+        yield* Deferred.await(entered)
+        const replacementID = SessionMessage.ID.make("msg_delayed_stage_replacement")
+        const prompted = yield* session
+          .prompt({ id: replacementID, sessionID, text: "replacement", resume: false })
+          .pipe(Effect.forkChild)
+        yield* Effect.all(
+          Array.from({ length: 10 }, () => Effect.yieldNow),
+          { concurrency: 1 },
+        )
+
+        const promptBeforeRelease = prompted.pollUnsafe()
+        yield* Deferred.succeed(release, undefined)
+        yield* Fiber.join(staged)
+        const replacement = yield* Fiber.join(prompted)
+
+        expect(promptBeforeRelease).toBeUndefined()
+        expect((yield* session.get(sessionID)).revert).toBeUndefined()
+        expect(replacement.payload.text).toBe("replacement")
+        expect(yield* admitted(replacementID)).toEqual(replacement)
+      }).pipe(Effect.ensuring(Effect.sync(() => (pluginFlushHook.effect = Effect.void))))
+    }),
+  )
+
+  it.effect("reserves revert clearing before delayed plugin activation", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const retained = yield* session.prompt({ sessionID, text: "retained", resume: false })
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
+      const boundary = yield* session.prompt({ sessionID, text: "boundary", resume: false })
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
+      yield* session.revert.stage({ sessionID, messageID: boundary.id, files: false })
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      pluginFlushHook.effect = Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))
+
+      yield* Effect.gen(function* () {
+        const cleared = yield* session.revert.clear(sessionID).pipe(Effect.forkChild)
+        yield* Deferred.await(entered)
+        const replacementID = SessionMessage.ID.make("msg_delayed_clear_replacement")
+        const prompted = yield* session
+          .prompt({ id: replacementID, sessionID, text: "after clear", resume: false })
+          .pipe(Effect.forkChild)
+        yield* Effect.all(
+          Array.from({ length: 10 }, () => Effect.yieldNow),
+          { concurrency: 1 },
+        )
+
+        const promptBeforeRelease = prompted.pollUnsafe()
+        yield* Deferred.succeed(release, undefined)
+        yield* Fiber.join(cleared)
+        yield* Fiber.join(prompted)
+
+        expect(promptBeforeRelease).toBeUndefined()
+        expect((yield* session.get(sessionID)).revert).toBeUndefined()
+        expect((yield* session.messages({ sessionID, order: "asc" })).map((message) => message.id)).toEqual([
+          retained.id,
+          boundary.id,
+        ])
+        expect(yield* admitted(replacementID)).toMatchObject({ id: replacementID, payload: { text: "after clear" } })
+      }).pipe(Effect.ensuring(Effect.sync(() => (pluginFlushHook.effect = Effect.void))))
+    }),
+  )
+
+  it.effect("reserves file prompt admission before a later revert stage", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const boundary = yield* session.prompt({ sessionID, text: "boundary", resume: false })
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      let flushes = 0
+      pluginFlushHook.effect = Effect.suspend(() => {
+        flushes++
+        if (flushes > 1) return Effect.void
+        return Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))
+      })
+      const uri =
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+
+      yield* Effect.gen(function* () {
+        const prompted = yield* session
+          .prompt({ sessionID, text: "inspect", files: [{ uri }], resume: false })
+          .pipe(Effect.forkChild)
+        yield* Deferred.await(entered)
+        const staged = yield* session.revert
+          .stage({ sessionID, messageID: boundary.id, files: false })
+          .pipe(Effect.forkChild)
+        yield* Effect.all(
+          Array.from({ length: 10 }, () => Effect.yieldNow),
+          { concurrency: 1 },
+        )
+
+        const stageBeforeRelease = staged.pollUnsafe()
+        const flushesBeforeRelease = flushes
+        yield* Deferred.succeed(release, undefined)
+        yield* Fiber.join(prompted)
+        yield* Fiber.join(staged)
+
+        expect(stageBeforeRelease).toBeUndefined()
+        expect(flushesBeforeRelease).toBe(1)
+        expect((yield* session.get(sessionID)).revert?.messageID).toBe(boundary.id)
+      }).pipe(Effect.ensuring(Effect.sync(() => (pluginFlushHook.effect = Effect.void))))
+    }),
+  )
+
+  it.effect("keeps later operations behind a failed middle reservation", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const firstEntered = yield* Deferred.make<void>()
+      const secondEntered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      let flushes = 0
+      pluginFlushHook.effect = Effect.suspend(() => {
+        flushes++
+        if (flushes === 1)
+          return Deferred.succeed(firstEntered, undefined).pipe(Effect.andThen(Deferred.await(release)))
+        if (flushes === 2)
+          return Deferred.succeed(secondEntered, undefined).pipe(
+            Effect.andThen(Effect.die(new Error("middle preparation failed"))),
+          )
+        return Effect.void
+      })
+
+      yield* Effect.gen(function* () {
+        const first = yield* session.prompt({ sessionID, text: "first", resume: false }).pipe(Effect.forkChild)
+        yield* Deferred.await(firstEntered)
+        const middle = yield* session.prompt({ sessionID, text: "middle", resume: false }).pipe(Effect.forkChild)
+        yield* Deferred.await(secondEntered)
+        const lastID = SessionMessage.ID.make("msg_after_failed_reservation")
+        const last = yield* session
+          .prompt({ id: lastID, sessionID, text: "last", resume: false })
+          .pipe(Effect.forkChild)
+        yield* Effect.all(
+          Array.from({ length: 10 }, () => Effect.yieldNow),
+          { concurrency: 1 },
+        )
+
+        expect(last.pollUnsafe()).toBeUndefined()
+        expect(yield* admitted(lastID)).toBeUndefined()
+        yield* Deferred.succeed(release, undefined)
+        yield* Fiber.join(first)
+        expect((yield* Fiber.await(middle))._tag).toBe("Failure")
+        expect(yield* Fiber.join(last)).toMatchObject({ id: lastID, payload: { text: "last" } })
+      }).pipe(Effect.ensuring(Effect.sync(() => (pluginFlushHook.effect = Effect.void))))
+    }),
+  )
+
+  it.effect("interrupts a middle reservation without releasing later operations", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const firstEntered = yield* Deferred.make<void>()
+      const middleEntered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      let flushes = 0
+      pluginFlushHook.effect = Effect.suspend(() => {
+        flushes++
+        if (flushes === 1)
+          return Deferred.succeed(firstEntered, undefined).pipe(Effect.andThen(Deferred.await(release)))
+        if (flushes === 2) return Deferred.succeed(middleEntered, undefined).pipe(Effect.andThen(Effect.never))
+        return Effect.void
+      })
+
+      yield* Effect.gen(function* () {
+        const first = yield* session.prompt({ sessionID, text: "first", resume: false }).pipe(Effect.forkChild)
+        yield* Deferred.await(firstEntered)
+        const middle = yield* session.prompt({ sessionID, text: "middle", resume: false }).pipe(Effect.forkChild)
+        yield* Deferred.await(middleEntered)
+        const lastID = SessionMessage.ID.make("msg_after_interrupted_reservation")
+        const last = yield* session
+          .prompt({ id: lastID, sessionID, text: "last", resume: false })
+          .pipe(Effect.forkChild)
+
+        yield* Fiber.interrupt(middle).pipe(Effect.timeout("1 second"))
+        yield* Effect.all(
+          Array.from({ length: 10 }, () => Effect.yieldNow),
+          { concurrency: 1 },
+        )
+        expect(last.pollUnsafe()).toBeUndefined()
+        expect(yield* admitted(lastID)).toBeUndefined()
+        yield* Deferred.succeed(release, undefined)
+        yield* Fiber.join(first)
+        expect(yield* Fiber.join(last)).toMatchObject({ id: lastID, payload: { text: "last" } })
+      }).pipe(
+        Effect.ensuring(
+          Deferred.succeed(release, undefined).pipe(
+            Effect.andThen(Effect.sync(() => (pluginFlushHook.effect = Effect.void))),
+          ),
+        ),
+      )
+    }),
+  )
+
   it.effect("holds synthetic input behind a staged revert and discards it when committed", () =>
     Effect.gen(function* () {
       yield* setup
@@ -311,6 +923,158 @@ describe("Session.prompt", () => {
       yield* session.revert.commit(sessionID)
 
       expect(yield* SessionInbox.find(db, completion.id)).toBeUndefined()
+    }),
+  )
+
+  it.effect("serializes synthetic admission with revert mutations", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const locked = yield* SessionInbox.serialized(
+        sessionID,
+        Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))),
+      ).pipe(Effect.forkChild)
+      yield* Deferred.await(entered)
+      const synthetic = yield* session
+        .synthetic({
+          id: SessionMessage.ID.make("msg_serialized_synthetic"),
+          sessionID,
+          text: "completion",
+          resume: false,
+        })
+        .pipe(Effect.forkChild)
+      yield* Effect.all(
+        Array.from({ length: 10 }, () => Effect.yieldNow),
+        { concurrency: 1 },
+      )
+
+      expect(synthetic.pollUnsafe()).toBeUndefined()
+      yield* Deferred.succeed(release, undefined)
+      yield* Fiber.join(locked)
+      expect((yield* Fiber.join(synthetic)).payload.text).toBe("completion")
+    }),
+  )
+
+  it.effect("does not hold the inbox lock while image plugins activate", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const uri =
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+      pluginFlushHook.effect = session
+        .synthetic({ sessionID, text: "plugin activated", resume: false })
+        .pipe(Effect.orDie, Effect.asVoid)
+
+      yield* Effect.gen(function* () {
+        const prompt = yield* session
+          .prompt({ sessionID, text: "Inspect this image", files: [{ uri }], resume: false })
+          .pipe(Effect.forkChild)
+        yield* Effect.all(
+          Array.from({ length: 10 }, () => Effect.yieldNow),
+          { concurrency: 1 },
+        )
+        expect(prompt.pollUnsafe()).toBeDefined()
+        yield* Fiber.join(prompt)
+      }).pipe(Effect.ensuring(Effect.sync(() => (pluginFlushHook.effect = Effect.void))))
+    }),
+  )
+
+  it.effect("expires plugin activation bypass for detached work", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const boundary = yield* session.prompt({ sessionID, text: "boundary", resume: false })
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
+      const trigger = yield* Deferred.make<void>()
+      const completed = yield* Deferred.make<void>()
+      pluginFlushHook.effect = Deferred.await(trigger).pipe(
+        Effect.andThen(session.synthetic({ sessionID, text: "detached activation", resume: false })),
+        Effect.andThen(Deferred.succeed(completed, undefined)),
+        Effect.forkDetach,
+        Effect.asVoid,
+      )
+      const uri =
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+
+      yield* session.prompt({ sessionID, text: "Inspect this image", files: [{ uri }], resume: false })
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      pluginFlushHook.effect = Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))
+
+      yield* Effect.gen(function* () {
+        const staged = yield* session.revert
+          .stage({ sessionID, messageID: boundary.id, files: false })
+          .pipe(Effect.forkChild)
+        yield* Deferred.await(entered)
+        yield* Deferred.succeed(trigger, undefined)
+        yield* Effect.all(
+          Array.from({ length: 10 }, () => Effect.yieldNow),
+          { concurrency: 1 },
+        )
+        const completedBeforeRelease = yield* Deferred.isDone(completed)
+        yield* Deferred.succeed(release, undefined)
+        yield* Fiber.join(staged)
+        yield* Deferred.await(completed)
+
+        expect(completedBeforeRelease).toBe(false)
+      }).pipe(
+        Effect.ensuring(
+          Effect.all([Deferred.succeed(trigger, undefined), Deferred.succeed(release, undefined)], {
+            discard: true,
+          }).pipe(Effect.andThen(Effect.sync(() => (pluginFlushHook.effect = Effect.void)))),
+        ),
+      )
+    }),
+  )
+
+  it.effect("does not grant plugin activation bypass to detached work", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const boundary = yield* session.prompt({ sessionID, text: "boundary", resume: false })
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const attempted = yield* Deferred.make<void>()
+      const completed = yield* Deferred.make<void>()
+      pluginFlushHook.effect = Deferred.succeed(attempted, undefined).pipe(
+        Effect.andThen(session.synthetic({ sessionID, text: "detached activation", resume: false })),
+        Effect.andThen(Deferred.succeed(completed, undefined)),
+        Effect.forkDetach({ startImmediately: true }),
+        Effect.andThen(Deferred.succeed(entered, undefined)),
+        Effect.andThen(Deferred.await(release)),
+        Effect.asVoid,
+      )
+
+      yield* Effect.gen(function* () {
+        const staged = yield* session.revert
+          .stage({ sessionID, messageID: boundary.id, files: false })
+          .pipe(Effect.forkChild)
+        yield* Deferred.await(entered)
+        yield* Deferred.await(attempted)
+        yield* Effect.all(
+          Array.from({ length: 10 }, () => Effect.yieldNow),
+          { concurrency: 1 },
+        )
+        const completedBeforeRelease = yield* Deferred.isDone(completed)
+        yield* Deferred.succeed(release, undefined)
+        yield* Fiber.join(staged)
+        yield* Deferred.await(completed)
+
+        expect(completedBeforeRelease).toBe(false)
+      }).pipe(
+        Effect.ensuring(
+          Deferred.succeed(release, undefined).pipe(
+            Effect.andThen(Effect.sync(() => (pluginFlushHook.effect = Effect.void))),
+          ),
+        ),
+      )
     }),
   )
 
@@ -595,6 +1359,69 @@ describe("Session.prompt", () => {
     }),
   )
 
+  it.effect("reconciles file-bearing retries before loading location plugins", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const id = SessionMessage.ID.create()
+      const original = yield* session.prompt({ id, sessionID, text: "First admission", resume: false })
+      pluginFlushHook.effect = Effect.die(new Error("plugins loaded for a durable retry"))
+
+      const retried = yield* session
+        .prompt({
+          id,
+          sessionID,
+          text: "Ignored retry",
+          files: [{ uri: "data:image/png;base64,invalid" }],
+          resume: false,
+        })
+        .pipe(Effect.ensuring(Effect.sync(() => (pluginFlushHook.effect = Effect.void))))
+
+      expect(retried).toEqual(original)
+    }),
+  )
+
+  it.effect("reconciles a queued durable retry before prompt preparation", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const id = SessionMessage.ID.create()
+      const original = yield* session.prompt({ id, sessionID, text: "First admission", resume: false })
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      let flushes = 0
+      pluginFlushHook.effect = Effect.suspend(() => {
+        flushes++
+        if (flushes === 1) return Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))
+        return Effect.die(new Error("plugins loaded for a queued durable retry"))
+      })
+
+      yield* Effect.gen(function* () {
+        const pending = yield* session.prompt({ sessionID, text: "Unrelated", resume: false }).pipe(Effect.forkChild)
+        yield* Deferred.await(entered)
+        const retried = yield* session
+          .prompt({
+            id,
+            sessionID,
+            text: "Ignored retry",
+            files: [{ uri: "data:image/png;base64,invalid" }],
+            resume: false,
+          })
+          .pipe(Effect.forkChild)
+        yield* Effect.all(
+          Array.from({ length: 10 }, () => Effect.yieldNow),
+          { concurrency: 1 },
+        )
+
+        expect(retried.pollUnsafe()).toBeUndefined()
+        expect(flushes).toBe(1)
+        yield* Deferred.succeed(release, undefined)
+        yield* Fiber.join(pending)
+        expect(yield* Fiber.join(retried)).toEqual(original)
+      }).pipe(Effect.ensuring(Effect.sync(() => (pluginFlushHook.effect = Effect.void))))
+    }),
+  )
+
   it.effect("reconciles an exact retry from the promoted message without admission history", () =>
     Effect.gen(function* () {
       yield* setup
@@ -824,11 +1651,19 @@ describe("Session.prompt", () => {
         .run()
         .pipe(Effect.orDie)
       yield* session.prompt({ id: messageID, sessionID, text: "Fix the failing tests", resume: false })
+      const contextID = SessionMessage.ID.make("msg_cross_session_context")
       const failure = yield* session
-        .prompt({ id: messageID, sessionID: other, text: "Fix the failing tests", resume: false })
+        .prompt({
+          id: messageID,
+          sessionID: other,
+          text: "Fix the failing tests",
+          context: { id: contextID, text: "editor context" },
+          resume: false,
+        })
         .pipe(Effect.flip)
 
       expect(failure).toMatchObject({ _tag: "Session.PromptConflictError", sessionID: other, messageID })
+      expect(yield* admitted(contextID)).toBeUndefined()
     }),
   )
 
@@ -1053,6 +1888,53 @@ describe("Session.prompt", () => {
           message.type === "user" || message.type === "synthetic" ? message.text : message.type,
         ),
       ).toEqual(["First prompt", "Background completion", "Second prompt"])
+    }),
+  )
+})
+
+describe("Session.revert", () => {
+  it.effect("does not hold the inbox lock while location plugins activate", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const session = yield* Session.Service
+      yield* db.insert(SessionMessageTable).values(assistantRow(messageID, 0)).run().pipe(Effect.orDie)
+      pluginFlushHook.effect = session
+        .synthetic({ sessionID, text: "plugin activated", resume: false })
+        .pipe(Effect.orDie, Effect.asVoid)
+
+      yield* Effect.gen(function* () {
+        const stage = yield* session.revert.stage({ sessionID, messageID }).pipe(Effect.forkChild)
+        yield* Effect.all(
+          Array.from({ length: 10 }, () => Effect.yieldNow),
+          { concurrency: 1 },
+        )
+        expect(stage.pollUnsafe()).toBeDefined()
+        yield* Fiber.join(stage)
+      }).pipe(Effect.ensuring(Effect.sync(() => (pluginFlushHook.effect = Effect.void))))
+    }),
+  )
+
+  it.effect("waits for location plugins before staging", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const session = yield* Session.Service
+      yield* db.insert(SessionMessageTable).values(assistantRow(messageID, 0)).run().pipe(Effect.orDie)
+      yield* session.revert.stage({ sessionID, messageID })
+    }),
+  )
+
+  it.effect("waits for location plugins before clearing", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        revert: { messageID, snapshot: Snapshot.ID.make("tree"), files: [] },
+      })
+      yield* session.revert.clear(sessionID)
     }),
   )
 })

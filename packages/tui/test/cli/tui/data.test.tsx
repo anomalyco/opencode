@@ -470,6 +470,7 @@ test("truncates committed revert messages without changing lifetime usage", asyn
   let tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
   const calls = createFetch((url) => {
     if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+    if (url.pathname === `/api/session/${sessionID}/inbox`) return json({ data: [] })
     if (url.pathname !== `/api/session/${sessionID}`) return
     return json({
       data: {
@@ -1087,6 +1088,20 @@ test("removes committed revert messages from local state", async () => {
   const sessionID = "session-revert"
   const calls = createFetch((url) => {
     if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+    // After the commit, the projector has already dropped msg_000 and msg_001 from the inbox.
+    if (url.pathname === `/api/session/${sessionID}/inbox`)
+      return json({
+        data: [
+          {
+            id: "msg_fff",
+            sessionID,
+            timeCreated: 0,
+            type: "user",
+            payload: { text: "msg_fff" },
+            delivery: "steer",
+          },
+        ],
+      })
   }, events)
   let data!: ReturnType<typeof useData>
 
@@ -1108,7 +1123,8 @@ test("removes committed revert messages from local state", async () => {
   ))
 
   try {
-    for (const [seq, inboxID] of ["msg_001", "msg_002", "msg_003"].entries()) {
+    data.session.remember(sessionInfo(sessionID, undefined))
+    for (const [seq, inboxID] of ["msg_fff", "msg_000", "msg_001"].entries()) {
       emitEvent(events, {
         id: Event.ID.create(),
         created: seq,
@@ -1124,17 +1140,70 @@ test("removes committed revert messages from local state", async () => {
       created: 3,
       type: "session.revert.committed",
       durable: durable(sessionID, 3),
-      data: { sessionID, to: "msg_002" },
+      data: { sessionID, to: "msg_000" },
     })
 
     await wait(() => data.session.message.list(sessionID).length === 1)
-    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(["msg_001"])
-    expect(data.session.message.get(sessionID, "msg_002")).toBeUndefined()
-    expect(data.session.message.get(sessionID, "msg_003")).toBeUndefined()
-    // The projector also drops inbox items enqueued at or after the boundary, without a cancel event.
-    expect(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["msg_001"])
-    expect(data.session.input.list(sessionID)).toEqual(["msg_001"])
-    expect(data.session.input.has(sessionID, "msg_002")).toBe(false)
+    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(["msg_fff"])
+    expect(data.session.message.get(sessionID, "msg_000")).toBeUndefined()
+    expect(data.session.message.get(sessionID, "msg_001")).toBeUndefined()
+    // The projector also drops inbox items enqueued at or after the boundary, without a cancel event;
+    // the client learns that from the pending resync rather than by comparing IDs.
+    await wait(() => data.session.pending.list(sessionID).length === 1)
+    expect(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["msg_fff"])
+    expect(data.session.input.list(sessionID)).toEqual(["msg_fff"])
+    expect(data.session.input.has(sessionID, "msg_000")).toBe(false)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("hides loaded rows when a staged revert boundary is outside the message page", async () => {
+  const events = createEventStream()
+  const sessionID = "session-revert-page"
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/message`)
+      return json({ data: [{ id: "msg_newer", type: "user", text: "Newer", time: { created: 2 } }], cursor: {} })
+    if (url.pathname === `/api/session/${sessionID}/inbox`) return json({ data: [] })
+  }, events)
+  let data!: ReturnType<typeof useData>
+  let rows!: ReturnType<typeof createSessionRows>
+  let client!: ReturnType<typeof useClient>
+
+  function Probe() {
+    client = useClient()
+    data = useData()
+    rows = createSessionRows(() => sessionID)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => client.connection.status() === "connected")
+    data.session.remember(sessionInfo(sessionID, undefined))
+    await data.session.message.sync(sessionID)
+    await wait(() => rows.some((row) => row.type === "message" && row.messageID === "msg_newer"))
+
+    emitEvent(events, {
+      id: "evt_revert_staged_outside_page",
+      created: 3,
+      type: "session.revert.staged",
+      durable: durable(sessionID),
+      data: { sessionID, revert: { messageID: "msg_boundary" } },
+    })
+
+    await wait(() => rows.length === 0)
   } finally {
     app.renderer.destroy()
   }

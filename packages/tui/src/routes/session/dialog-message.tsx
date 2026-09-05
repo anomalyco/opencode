@@ -3,7 +3,6 @@ import { useData } from "../../context/data"
 import { DialogSelect } from "../../ui/dialog-select"
 import { useClipboard } from "../../context/clipboard"
 import { useToast } from "../../ui/toast"
-import { useClient } from "../../context/client"
 import { errorMessage } from "../../util/error"
 import { DialogFork } from "./dialog-fork"
 import type { PromptInfo } from "../../prompt/history"
@@ -17,7 +16,6 @@ export function DialogMessage(props: {
   const data = useData()
   const clipboard = useClipboard()
   const toast = useToast()
-  const client = useClient()
   const message = createMemo(() => data.session.message.get(props.sessionID, props.messageID))
 
   return (
@@ -34,17 +32,23 @@ export function DialogMessage(props: {
           title: "Revert",
           value: "session.revert",
           description: "undo messages and file changes",
-          onSelect: (dialog) => {
+          onSelect: async (dialog) => {
             const value = message()
-            if (value?.type === "user") {
+            const error = await data.session.revert
+              .stage({ sessionID: props.sessionID, messageID: props.messageID })
+              .then(
+                () => undefined,
+                (error) => error,
+              )
+            if (error) {
+              toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
+              return
+            }
+            if (value?.type === "user")
               props.setPrompt?.({
                 ...projectedPromptInput(value),
                 pasted: [],
               })
-            }
-            void client.api.session.revert
-              .stage({ sessionID: props.sessionID, messageID: props.messageID })
-              .catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
             dialog.clear()
           },
         },

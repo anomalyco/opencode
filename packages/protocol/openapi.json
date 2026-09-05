@@ -2160,7 +2160,7 @@
             }
           }
         },
-        "description": "Durably admit one session input and schedule agent-loop execution unless resume is false.",
+        "description": "Durably admit optional synthetic context followed by one user input and schedule agent-loop execution unless resume is false. Context requires steer delivery.",
         "summary": "Send message",
         "requestBody": {
           "content": {
@@ -2199,6 +2199,16 @@
                     "items": {
                       "$ref": "#/components/schemas/PromptInput.SkillAttachment"
                     }
+                  },
+                  "context": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/PromptInput.Context"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "metadata": {
                     "type": "object"
@@ -17327,6 +17337,26 @@
           }
         },
         "required": ["id", "name"],
+        "additionalProperties": false
+      },
+      "PromptInput.Context": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^msg_"
+          },
+          "text": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          }
+        },
+        "required": ["id", "text"],
         "additionalProperties": false
       },
       "PromptInput.FileAttachment": {

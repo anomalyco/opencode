@@ -45,7 +45,7 @@ import { DialogProvider, useDialog } from "./ui/dialog"
 import { DialogIntegration } from "./component/dialog-integration"
 import { ErrorComponent } from "./component/error-component"
 import { PluginRouteMissing } from "./component/plugin-route-missing"
-import { EditorContextProvider } from "./context/editor"
+import { EditorContextProvider, useEditorContext } from "./context/editor"
 import { useEvent } from "./context/event"
 import { ClientProvider, useClient } from "./context/client"
 import { StartupLoading } from "./component/startup-loading"
@@ -103,6 +103,10 @@ import { SessionTerminalsProvider } from "./context/session-terminals"
 import { PanelProvider, usePanel } from "./context/panel"
 import { SessionFrame } from "./component/session-frame"
 import { createTuiClipboard } from "./clipboard"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
+import { acknowledgePromptRetry, clearPromptRetry } from "./component/prompt/retry"
+import { clearDraft } from "./component/prompt/draft-stash"
+import { isDuplicateEntry } from "./prompt/history"
 
 registerOpencodeSpinner()
 
@@ -492,6 +496,7 @@ function App(props: { pair?: DialogPairCredentials }) {
   const promptRef = usePromptRef()
   const plugins = usePlugin()
   const clipboard = useClipboard()
+  const editor = useEditorContext()
   const terminalEnvironment = useTuiTerminalEnvironment()
   createEffect(() => {
     if (client.connection.status() !== "connected") return
@@ -1255,8 +1260,21 @@ function App(props: { pair?: DialogPairCredentials }) {
     )
   })
 
+  event.on("session.inbox.enqueued", (evt) => {
+    if (evt.data.item.type !== "user") return
+    const retry = acknowledgePromptRetry(evt.data.sessionID, SessionMessage.ID.make(evt.data.inboxID))
+    if (retry?.restored) {
+      const active =
+        route.data.type === "session" && route.data.sessionID === evt.data.sessionID ? promptRef.current : undefined
+      if (active && isDuplicateEntry(active.current, retry.prompt)) active.reset()
+      clearDraft(evt.data.sessionID, retry.prompt)
+    }
+    if (retry?.contextIncluded && retry.contextKey) editor.markSelectionSent(retry.contextKey)
+  })
+
   event.on("session.deleted", (evt) => {
     setOpenSessions((sessions) => sessions.filter((session) => session.id !== evt.data.sessionID))
+    clearPromptRetry(evt.data.sessionID)
     if (route.data.type === "session" && route.data.sessionID === evt.data.sessionID) {
       const title = active?.id === evt.data.sessionID ? active.title : undefined
       route.navigate({ type: "home" })

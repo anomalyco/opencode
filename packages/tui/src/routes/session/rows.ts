@@ -51,12 +51,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       pending.flatMap((item) => (item.type === "user" && item.delivery === "queue" ? [item.id] : [])),
     )
     const visible = queued.size === 0 ? messages : messages.filter((message) => !queued.has(message.id))
-    const boundary = revertBoundary()
-    const rows = reduceSessionRows(
-      boundary ? visible.filter((message) => message.id < boundary) : visible,
-      inputs,
-      turnTokens(),
-    )
+    const rows = reduceSessionRows(partitionRevertMessages(visible, revertBoundary()).before, inputs, turnTokens())
     partitionPending(rows, pendingPermissions())
     const position = rows.findIndex((row) => row.type === "message" && inputs.has(row.messageID))
     rows.splice(
@@ -280,6 +275,28 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
   onCleanup(() => subscriptions.forEach((unsubscribe) => unsubscribe()))
 
   return rows
+}
+
+export function partitionRevertMessages(messages: SessionMessageInfo[], boundary?: string) {
+  if (!boundary) return { before: messages, from: [] }
+  const index = messages.findIndex((message) => message.id === boundary)
+  if (index < 0) return { before: [], from: [] }
+  return { before: messages.slice(0, index), from: messages.slice(index) }
+}
+
+export async function loadRevertMessages(input: {
+  boundary: string
+  messages: () => SessionMessageInfo[]
+  more: () => boolean
+  loadMore: () => Promise<void>
+}): Promise<SessionMessageInfo[] | undefined> {
+  const messages = input.messages()
+  const boundary = messages.findIndex((message) => message.id === input.boundary)
+  if (boundary >= 0 && messages.slice(0, boundary).some((message) => message.type === "user" && !!message.text.trim()))
+    return messages
+  if (!input.more()) return boundary >= 0 ? messages : undefined
+  await input.loadMore()
+  return loadRevertMessages(input)
 }
 
 export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new Set<string>(), turnTokens = false) {
