@@ -1,7 +1,7 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useQuery } from "@tanstack/solid-query"
+import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { DateTime } from "luxon"
 import { type Accessor, createEffect, createMemo, createRoot, type JSX, startTransition } from "solid-js"
 import { produce } from "solid-js/store"
@@ -43,6 +43,7 @@ export function createHomeSessionsController(home: HomeController) {
   const command = useCommand()
   const dialog = useDialog()
   const language = useLanguage()
+  const queryClient = useQueryClient()
   const projectDirectories = createMemo(() => {
     const project = home.project.selected()
     if (!project) return home.project.list().flatMap(directories)
@@ -203,6 +204,23 @@ export function createHomeSessionsController(home: HomeController) {
           const tab = tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
           tabs.select(tab)
         })
+      },
+      rename: async (session: Session, title: string) => {
+        const ctx = home.server.focusedContext()
+        if (!ctx) return false
+        try {
+          await ctx.sdk.api.session.rename({ sessionID: session.id, directory: session.directory, title })
+          const info = { ...(ctx.sync.session.get(session.id) ?? session), title }
+          ctx.sync.session.remember(info)
+          await queryClient.invalidateQueries({ queryKey: ctx.sync.homeSessions.indexKey, exact: true })
+          return true
+        } catch (cause) {
+          showToast({
+            title: language.t("common.requestFailed"),
+            description: errorMessage(cause, language.t("common.requestFailed")),
+          })
+          return false
+        }
       },
       archive: async (session: Session) => {
         const conn = home.server.focused()
