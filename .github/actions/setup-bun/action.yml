@@ -2,7 +2,7 @@ name: "Setup Bun"
 description: "Setup Bun with caching and install dependencies"
 inputs:
   bun-version:
-    description: "Bun version to install instead of the root packageManager version"
+    description: "Bun runtime version to restore instead of the root packageManager version"
     required: false
     default: ""
   install-flags:
@@ -33,14 +33,19 @@ runs:
             Windows) OS=windows ;;
           esac
           echo "url=https://github.com/oven-sh/bun/releases/download/${TAG}/bun-${OS}-x64-baseline.zip" >> "$GITHUB_OUTPUT"
+          echo "install-url=https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-${OS}-x64-baseline.zip" >> "$GITHUB_OUTPUT"
         fi
 
-    - name: Setup Bun
+    # Use Bun 1.4 as the package manager without upgrading the requested runtime.
+    # It also fixes patched peer-variant installs, avoiding hoisting on Windows.
+    - name: Setup Bun for dependency installation
+      id: bun-install
       uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       with:
-        bun-version: ${{ !steps.bun-url.outputs.url && inputs.bun-version || '' }}
-        bun-version-file: ${{ !steps.bun-url.outputs.url && !inputs.bun-version && 'package.json' || '' }}
-        bun-download-url: ${{ steps.bun-url.outputs.url }}
+        bun-version: "1.4.0"
+        bun-download-url: ${{ steps.bun-url.outputs.install-url }}
+        # The post action would otherwise cache the restored runtime as 1.4.0.
+        no-cache: true
 
     - name: Get cache directory
       id: cache
@@ -61,16 +66,16 @@ runs:
       shell: bash
 
     - name: Install dependencies
-      run: |
-        # Workaround for patched peer variants
-        # e.g. ./patches/ for standard-openapi
-        # https://github.com/oven-sh/bun/issues/28147
-        if [ "$RUNNER_OS" = "Windows" ]; then
-          bun install --linker hoisted ${{ inputs.install-flags }}
-        else
-          bun install ${{ inputs.install-flags }}
-        fi
+      run: bun install ${{ inputs.install-flags }}
       shell: bash
+
+    - name: Restore Bun runtime
+      if: ${{ !cancelled() && steps.bun-install.outcome == 'success' }}
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      with:
+        bun-version: ${{ !steps.bun-url.outputs.url && inputs.bun-version || '' }}
+        bun-version-file: ${{ !steps.bun-url.outputs.url && !inputs.bun-version && 'package.json' || '' }}
+        bun-download-url: ${{ steps.bun-url.outputs.url }}
 
     - name: Save Bun dependencies
       if: steps.bun-cache.outputs.cache-hit != 'true' && github.event_name != 'pull_request' && github.event_name != 'pull_request_target'
