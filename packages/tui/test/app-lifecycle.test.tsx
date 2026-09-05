@@ -62,7 +62,9 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
 
 test("app.exit prints the session epilogue after scoped cleanup", async () => {
   // FAST_BOOT mounts the session route before the continue effect resolves
-  // the real id, mirroring how the app runs in practice.
+  // the real id, mirroring how the app runs in practice. Saved/restored so
+  // the env never leaks across test files.
+  const ORIGINAL_FAST_BOOT = process.env.OPENCODE_FAST_BOOT
   process.env.OPENCODE_FAST_BOOT = "1"
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   const core = await import("@opentui/core")
@@ -124,8 +126,11 @@ test("app.exit prints the session epilogue after scoped cleanup", async () => {
     await ready
     await setup.renderOnce()
     await setup.renderOnce()
-    // Let the delayed session list resolve and the session route settle.
-    await new Promise((resolve) => setTimeout(resolve, 200))
+    // Poll until the session route fetched the real id, so the test never
+    // races the 50ms mock delay.
+    for (let waited = 0; !requested.includes("/session/ses_demo") && waited < 2000; waited += 20) {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
     api?.keymap.dispatchCommand("app.exit")
     await task
 
@@ -133,11 +138,20 @@ test("app.exit prints the session epilogue after scoped cleanup", async () => {
     expect(stdout).toContain("opencode -s ses_demo")
     // Regression: --continue must never fetch a placeholder session id.
     // The server rejects ids without the "ses" prefix (400), which the
-    // session route surfaces as an error toast.
+    // session route surfaces as an error toast. Every /session/:id request
+    // after the list itself must carry the resolved, valid id.
     expect(requested).not.toContain("/session/dummy")
+    expect(requested).toContain("/session/ses_demo")
+    const fetchedIds = requested
+      .filter((p) => p.startsWith("/session/") && p !== "/session" && p !== "/session/status")
+      .map((p) => p.split("/")[2])
+    expect(fetchedIds.length).toBeGreaterThan(0)
+    expect(fetchedIds.every((id) => id === "ses_demo")).toBe(true)
   } finally {
     process.stdout.write = originalWrite
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     mock.restore()
+    if (ORIGINAL_FAST_BOOT === undefined) delete process.env.OPENCODE_FAST_BOOT
+    else process.env.OPENCODE_FAST_BOOT = ORIGINAL_FAST_BOOT
   }
 })
