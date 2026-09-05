@@ -4217,6 +4217,35 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
+  test("azure deepseek-v4 deployments include a max reasoning effort variant", () => {
+    const model = createMockModel({
+      id: "azure/deepseek-v4-pro",
+      providerID: "azure",
+      api: {
+        id: "deepseek-v4-pro",
+        url: "https://azure.com",
+        npm: "@ai-sdk/azure",
+      },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+    expect(result.max).toMatchObject({ reasoningEffort: "max" })
+  })
+
+  test("azure non-deepseek deployments do not include a max reasoning effort variant", () => {
+    const model = createMockModel({
+      id: "azure/gpt-5",
+      providerID: "azure",
+      api: {
+        id: "gpt-5",
+        url: "https://azure.com",
+        npm: "@ai-sdk/azure",
+      },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(result.max).toBeUndefined()
+  })
+
   test("minimax returns empty object", () => {
     const model = createMockModel({
       id: "minimax/minimax-model",
