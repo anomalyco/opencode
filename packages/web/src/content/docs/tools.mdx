@@ -256,22 +256,15 @@ Allows the LLM to fetch and read web pages. Useful for looking up documentation 
 
 Search the web for information.
 
-:::note
-This tool is only available when using the OpenCode or OpenCode Go provider, or when either the `OPENCODE_ENABLE_EXA` or `OPENCODE_ENABLE_PARALLEL` environment variable is set to any truthy value (e.g., `true` or `1`).
+This tool is available to all model providers by default.
 
-To enable when launching OpenCode:
-
-```bash
-OPENCODE_ENABLE_EXA=1 opencode
-# or
-OPENCODE_ENABLE_PARALLEL=1 opencode
-```
-
-:::
-
-```json title="opencode.json" {4}
+```json title="opencode.json" {4-8}
 {
   "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "enabled": true,
+    "provider": "auto"
+  },
   "permission": {
     "websearch": "allow"
   }
@@ -280,7 +273,16 @@ OPENCODE_ENABLE_PARALLEL=1 opencode
 
 Performs web searches using Exa or Parallel to find relevant information online. Useful for researching topics, finding current events, or gathering information beyond the training data cutoff.
 
+The optional `websearch` config section controls the tool:
+
+- `enabled` — set to `false` to remove the tool from every provider (default: `true`)
+- `provider` — `auto` picks a backend per session; `exa` or `parallel` pins that backend for every call
+
 No API key is required — the tool connects directly to the backend's hosted MCP service without authentication.
+
+:::note
+Consent is managed through the `permission.websearch` rule, so air-gapped or privacy-sensitive setups can deny the tool while keeping it visible.
+:::
 
 :::tip
 Use `websearch` when you need to find information (discovery), and `webfetch` when you need to retrieve content from a specific URL (retrieval).
