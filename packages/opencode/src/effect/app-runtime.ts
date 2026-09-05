@@ -58,9 +58,13 @@ import { JulesDiagnostic } from "@opencode-ai/core/session/jules-diagnostic"
 import { SessionExecutionLocal } from "@opencode-ai/core/session/execution/local"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { TeamJules } from "@opencode-ai/core/teamjules"
+import { Automation } from "@opencode-ai/core/automation/automation"
 
 export const AppLayer = AppNodeBuilderV1.build(
   LayerNode.group([
+    TeamJules.node,
+    Automation.node,
     Npm.node,
     FSUtil.node,
     Database.node,

@@ -108,6 +108,66 @@ export const TeamJulesCommand = effectCmd({
           console.log("Task queued for retry")
         }
       )
+      .command(
+        "worker",
+        "Start TeamJules worker daemon",
+        (yargs) =>
+          yargs
+            .option("poll-interval", { type: "number", default: 2000, describe: "Poll interval in ms" })
+            .option("work-dir", { type: "string", describe: "Working directory for git clones" })
+            .option("github-token", { type: "string", describe: "GitHub token for creating PRs" }),
+        async (args) => {
+          const { createWorker } = await import("@/teamjules/worker")
+          const worker = await runEffect(
+            Effect.gen(function* () {
+              const service = yield* TeamJules.Service
+              return createWorker(service, {
+                pollIntervalMs: args.pollInterval,
+                workDir: args.workDir,
+                githubToken: args.githubToken ?? process.env.GITHUB_TOKEN,
+              })
+            }),
+          )
+          await worker.start()
+          console.log("Worker started. Press Ctrl+C to stop.")
+          const shutdown = async () => {
+            console.log("\nStopping worker...")
+            await worker.stop()
+            process.exit(0)
+          }
+          process.on("SIGINT", shutdown)
+          process.on("SIGTERM", shutdown)
+        },
+      )
+      .command(
+        "webhook",
+        "Start TeamJules GitHub webhook daemon",
+        (yargs) =>
+          yargs
+            .option("port", { type: "number", default: 4000, describe: "Port to listen on" })
+            .option("secret", { type: "string", describe: "GitHub webhook secret" }),
+        async (args) => {
+          const { createWebhookServer } = await import("@/teamjules/webhook")
+          const server = await runEffect(
+            Effect.gen(function* () {
+              const service = yield* TeamJules.Service
+              return createWebhookServer(service, {
+                port: args.port,
+                secret: args.secret ?? process.env.GITHUB_WEBHOOK_SECRET,
+              })
+            }),
+          )
+          await server.listen()
+          console.log(`Webhook server listening on port ${args.port}. Press Ctrl+C to stop.`)
+          const shutdown = async () => {
+            console.log("\nStopping webhook server...")
+            await server.close()
+            process.exit(0)
+          }
+          process.on("SIGINT", shutdown)
+          process.on("SIGTERM", shutdown)
+        },
+      )
       .demandCommand(1, "Please specify an action"),
   describe: "Manage TeamJules async coding tasks",
   instance: false,

@@ -1,5 +1,6 @@
 import { TeamJules } from "@opencode-ai/core/teamjules"
 import { Effect } from "effect"
+import { createHmac, timingSafeEqual } from "node:crypto"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 
 export interface WebhookConfig {
@@ -7,9 +8,11 @@ export interface WebhookConfig {
   secret?: string
 }
 
-function verifySignature(payload: string, signature: string | undefined, secret: string): boolean {
+export function verifySignature(payload: string, signature: string | undefined, secret: string): boolean {
   if (!signature) return false
-  return true
+  const expected = "sha256=" + createHmac("sha256", secret).update(payload, "utf8").digest("hex")
+  if (signature.length !== expected.length) return false
+  return timingSafeEqual(Buffer.from(signature, "utf8"), Buffer.from(expected, "utf8"))
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -19,6 +22,17 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on("end", () => resolve(body))
     req.on("error", reject)
   })
+}
+
+interface GitHubCommentPayload {
+  action?: string
+  comment?: {
+    body?: string
+  }
+  repository?: {
+    full_name?: string
+    default_branch?: string
+  }
 }
 
 export function createWebhookServer(
@@ -36,9 +50,9 @@ export function createWebhookServer(
         return
       }
 
-      let body: any
+      let body: GitHubCommentPayload
       try {
-        body = JSON.parse(bodyStr)
+        body = JSON.parse(bodyStr) as GitHubCommentPayload
       } catch {
         res.writeHead(400)
         res.end("Invalid JSON")
@@ -46,12 +60,12 @@ export function createWebhookServer(
       }
 
       if (body.action === "created" && body.comment?.body?.includes("/jules")) {
-        const prompt = body.comment.body.replace(/\/jules\s*/i, "").trim()
-        if (prompt) {
+        const prompt = body.comment.body.replace(/^[\s\S]*?\/jules\s*/i, "").trim()
+        if (prompt && body.repository?.full_name) {
           await Effect.runPromise(service.createTask({
             type: "issue",
             repo: body.repository.full_name,
-            branch: body.repository.default_branch,
+            branch: body.repository.default_branch || "main",
             prompt,
           }))
           res.writeHead(200)

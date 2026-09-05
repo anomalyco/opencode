@@ -181,27 +181,48 @@ async function executeTask(
       agent: "teamjules-worker",
     }),
   })
-  const session = await sessionResponse.json() as { id: string }
+  if (!sessionResponse.ok) {
+    const errText = await sessionResponse.text()
+    throw new Error(`Failed to create session: ${sessionResponse.status} ${errText}`)
+  }
+  const sessionJson = (await sessionResponse.json()) as { data?: { id: string }; id?: string }
+  const sessionId = sessionJson.data?.id ?? sessionJson.id
+  if (!sessionId) {
+    throw new Error(`Session ID not found in create response: ${JSON.stringify(sessionJson)}`)
+  }
 
   // Build the full prompt with system context
   const systemPrompt = config.agent?.prompt || TEAMJULES_WORKER_PROMPT
   const fullPrompt = `${systemPrompt}\n\n## Task\n${task.prompt}`
 
-  // Send prompt
-  await fetch(`${baseUrl}/api/session/${session.id}/prompt`, {
+  // Send prompt using V2 schema
+  const promptResponse = await fetch(`${baseUrl}/api/session/${sessionId}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      parts: [{ type: "text", text: fullPrompt }],
+      prompt: { text: fullPrompt },
     }),
   })
+  if (!promptResponse.ok) {
+    const errText = await promptResponse.text()
+    throw new Error(`Failed to prompt session: ${promptResponse.status} ${errText}`)
+  }
 
-  // Wait for completion (poll session status)
-  let status = "running"
-  while (status === "running") {
+  // Wait for completion (poll active session map via GET /api/session/active)
+  let running = true
+  while (running) {
     await new Promise((r) => setTimeout(r, 2_000))
-    const statusResponse = await fetch(`${baseUrl}/api/session/${session.id}`)
-    const sessionData = await statusResponse.json() as { status: string }
-    status = sessionData.status
+    try {
+      const activeResponse = await fetch(`${baseUrl}/api/session/active`)
+      if (activeResponse.ok) {
+        const activeData = (await activeResponse.json()) as { data?: Record<string, unknown> }
+        running = Boolean(activeData.data && activeData.data[sessionId])
+      } else {
+        break
+      }
+    } catch {
+      break
+    }
   }
 }
+

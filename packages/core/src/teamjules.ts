@@ -1,6 +1,6 @@
 export * as TeamJules from "./teamjules"
 
-import { asc, eq, sql } from "drizzle-orm"
+import { and, asc, eq, sql } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "./database/database"
 import { makeGlobalNode } from "./effect/app-node"
@@ -111,7 +111,7 @@ const layer = Layer.effect(
         repo: row.repo,
         branch: row.branch,
         prompt: row.prompt,
-        result: row.result as TaskResult | undefined,
+        result: (row.result as TaskResult | undefined) ?? undefined,
         session_id: row.session_id ?? undefined,
         worker_id: row.worker_id ?? undefined,
         attempt_count: row.attempt_count,
@@ -175,18 +175,15 @@ const layer = Layer.effect(
           conditions.push(eq(TeamJulesTaskTable.repo, filters.repo))
         }
 
-        const query = db
+        const baseQuery = db
           .select()
           .from(TeamJulesTaskTable)
-          .orderBy(asc(TeamJulesTaskTable.time_created))
-
-        if (conditions.length > 0) {
-          query.where(sql`${conditions[0]}`)
-        }
-
-        const rows = yield* query.all().pipe(Effect.orDie)
+        const where = conditions.length > 0 ? and(...conditions) : undefined
+        const filteredQuery = where ? baseQuery.where(where) : baseQuery
+        const orderedQuery = filteredQuery.orderBy(asc(TeamJulesTaskTable.time_created))
         const limit = filters?.limit ?? 100
-        return rows.slice(0, limit).map(toTaskInfo)
+        const rows = yield* orderedQuery.limit(limit).all().pipe(Effect.orDie)
+        return rows.map(toTaskInfo)
       }),
 
       cancelTask: Effect.fn("TeamJules.cancelTask")(function* (id) {
@@ -216,8 +213,9 @@ const layer = Layer.effect(
       claimTask: Effect.fn("TeamJules.claimTask")(function* (workerId) {
         const now = Date.now()
         const leaseMs = 30_000
+        const expiredLeaseCutoff = now - leaseMs
 
-        // Atomic claim: find a pending task and mark it running
+        // Atomic claim: find a pending task, retryable failed task, or expired running task
         const claimed = yield* db
           .update(TeamJulesTaskTable)
           .set({
@@ -229,7 +227,11 @@ const layer = Layer.effect(
           .where(
             sql`${TeamJulesTaskTable.id} IN (
               SELECT id FROM teamjules_task
-              WHERE (status = 'pending' OR (status = 'failed' AND attempt_count < max_attempts))
+              WHERE (
+                status = 'pending'
+                OR (status = 'failed' AND attempt_count < max_attempts)
+                OR (status = 'running' AND time_updated < ${expiredLeaseCutoff} AND attempt_count < max_attempts)
+              )
               ORDER BY time_created ASC
               LIMIT 1
             )`
@@ -283,10 +285,18 @@ const layer = Layer.effect(
       }),
 
       heartbeat: Effect.fn("TeamJules.heartbeat")(function* (workerId) {
+        const now = Date.now()
         yield* db
           .update(TeamJulesWorkerTable)
-          .set({ last_heartbeat: Date.now(), time_updated: Date.now() })
+          .set({ last_heartbeat: now, time_updated: now })
           .where(eq(TeamJulesWorkerTable.id, workerId))
+          .run()
+          .pipe(Effect.orDie)
+
+        yield* db
+          .update(TeamJulesTaskTable)
+          .set({ time_updated: now })
+          .where(and(eq(TeamJulesTaskTable.worker_id, workerId), eq(TeamJulesTaskTable.status, "running")))
           .run()
           .pipe(Effect.orDie)
       }),

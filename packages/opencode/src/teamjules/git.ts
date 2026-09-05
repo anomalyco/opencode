@@ -40,7 +40,13 @@ export function createGitClient(): GitClient {
 
     async commitAll(dir, message) {
       await run(dir, "git", ["add", "-A"])
-      await run(dir, "git", ["commit", "-m", message, "--allow-empty"])
+      await run(dir, "git", [
+        "-c", "user.name=TeamJules",
+        "-c", "user.email=teamjules@opencode.local",
+        "commit",
+        "-m", message,
+        "--allow-empty",
+      ])
     },
 
     async push(dir, branch, remote = "origin") {
