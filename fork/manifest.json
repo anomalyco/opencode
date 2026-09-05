@@ -85,11 +85,12 @@
     "packages/opencode/src/server/routes/instance/httpapi/handlers/loop.ts",
     "packages/opencode/src/session/peers.ts",
     "packages/opencode/src/session/prompt/instella.txt",
-    "packages/opencode/src/session/stream-stalled.ts",
-    "packages/opencode/src/session/tool-activity.ts",
     "packages/opencode/src/side-question/index.ts",
+    "packages/opencode/src/cli/cmd/permission.ts",
     "packages/opencode/src/tool/peers.ts",
     "packages/opencode/src/tool/peers.txt",
+    "packages/opencode/src/tool/send-peer-message.ts",
+    "packages/opencode/src/tool/send-peer-message.txt",
     "packages/opencode/src/util/which.ts",
     "packages/opencode/test/agent/presence.test.ts",
     "packages/opencode/test/agent/repo-personas.test.ts",
@@ -134,10 +135,10 @@
     "packages/opencode/test/server/local-sdk-contract.test.ts",
     "packages/opencode/test/session/host-paced-deadline.test.ts",
     "packages/opencode/test/session/peers.test.ts",
-    "packages/opencode/test/session/tool-activity.test.ts",
     "packages/opencode/test/tui/jsx-component-contract.test.ts",
     "packages/tui/src/component/dialog-loop-list.tsx",
     "packages/tui/src/component/dialog-model-ctx.tsx",
+    "packages/tui/test/component/dialog-model.test.ts",
     "packages/tui/src/component/dialog-tuning.tsx",
     "packages/tui/src/local/llama-skein/gen/client.gen.ts",
     "packages/tui/src/local/llama-skein/gen/client/client.gen.ts",
@@ -161,6 +162,12 @@
     "packages/tui/test/model-fit.test.ts",
     "packages/tui/test/ui/dialog-select-footer.test.ts"
   ],
+  "_ownedRemoved_2026-09-05": {
+    "note": "packages/opencode/src/session/stream-stalled.ts, packages/opencode/src/session/tool-activity.ts, and packages/opencode/test/session/tool-activity.test.ts were deleted by a90c49880b — confirmed intentional, not a merge regression: a full, reasoned commit message explains that the stream-inactivity watchdog these files implemented only ever fired on false positives (host-paced hybrid loads, foreground subagents, compaction's single big call, cold-load chunks — each already special-cased before this commit finished the trend) and never once caught a genuinely wedged socket, while its false positives were abandoning working turns fleet-wide. Same commit also removed the fork patches this manifest tracked in llm.ts (marker @/local/skein-loading — the SkeinLoading cold-load liveness tick that fed only this watchdog), message-v2.ts (marker StreamStalledError — the error-mapping case for the watchdog's failure type; message-v2.ts no longer diverges from upstream at all and was fully removed from `patched`), and tools.ts (marker \"fork: the stream watchdog must not count\" — the per-tool-call liveness ticks). llm.ts and tools.ts each still diverge from upstream for unrelated, still-live fork reasons and were re-registered in `patched` with fresh markers (see those entries) rather than dropped — only the watchdog-specific tracking was retired.",
+    "commits": [
+      "a90c49880b"
+    ]
+  },
   "_ownedRemoved_2026-08-14": {
     "note": "packages/opencode/src/util/sync-log.ts was deleted in the origin/dev merge — confirmed intentional, not a merge regression. It was added by 21c1ac9dd6 to give non-Effect call sites (provider.ts, local/placement.ts) a TUI-safe logger after the core/util/log shim was deleted. The dev-side design solved the same problem differently: those helpers now return outcomes (PickOutcome, DiscoveryResult.warnings) and the Effect caller logs (tool/task.ts, provider.ts). That left zero call sites, so the file was removed rather than carried as dead code.",
     "commits": [
@@ -227,6 +234,16 @@
       "file": "packages/opencode/src/session/compaction.ts",
       "marker": "self-healing compaction",
       "note": "Compaction that itself overflows retries with only the most recent user turn, then falls back to a minimal summary, instead of returning \"stop\" and stranding the session. Silently lost in the 0d927ba03f merge and only noticed because a fork-only test still asserted it."
+    },
+    {
+      "file": "packages/opencode/src/session/llm.ts",
+      "marker": "export const defaultLayer",
+      "note": "Fork edit to an upstream file (+2/-0 vs upstream/dev as of 2026-09-05). Re-registered here with a fresh marker after a90c49880b (deliberate stream-inactivity-watchdog removal, see _ownedRemoved_2026-09-05) retired the previous marker (`@/local/skein-loading`) along with the watchdog code it fed — llm.ts still diverges from upstream for this unrelated reason and must stay tracked."
+    },
+    {
+      "file": "packages/opencode/src/session/tools.ts",
+      "marker": "QueueAuthority",
+      "note": "Fork edit to an upstream file (+110/-82 vs upstream/dev as of 2026-09-05): the loop-spec-queue authority ceiling (deny-rules-before-auto-mode-skip ordering, credential-less shell for push-denied sessions). Re-registered here with a fresh marker after a90c49880b retired the previous marker (`fork: the stream watchdog must not count`) along with the watchdog's tool-liveness ticks — tools.ts still diverges substantially from upstream for this unrelated, load-bearing reason and must stay tracked."
     },
     {
       "file": "packages/core/src/git.ts",
@@ -389,16 +406,6 @@
       "note": "Fork edit to an upstream file (+14/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
     },
     {
-      "file": "packages/opencode/src/session/llm.ts",
-      "marker": "@/local/skein-loading",
-      "note": "Fork edit to an upstream file (+70/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
-    },
-    {
-      "file": "packages/opencode/src/session/message-v2.ts",
-      "marker": "StreamStalledError",
-      "note": "Fork edit to an upstream file (+16/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
-    },
-    {
       "file": "packages/opencode/src/session/overflow.ts",
       "marker": "inputLimit",
       "note": "Fork edit to an upstream file (+6/-4 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
@@ -412,11 +419,6 @@
       "file": "packages/opencode/src/session/summary.ts",
       "marker": "fork: processor.ts calls summarize() on",
       "note": "Fork edit to an upstream file (+55/-22 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
-    },
-    {
-      "file": "packages/opencode/src/session/tools.ts",
-      "marker": "fork: the stream watchdog must not count",
-      "note": "Fork edit to an upstream file (+116/-83 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
     },
     {
       "file": "packages/opencode/src/tool/code-mode.ts",
