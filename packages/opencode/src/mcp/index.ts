@@ -36,6 +36,7 @@ import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { McpBrowser } from "./browser"
 
 const DEFAULT_TIMEOUT = 30_000
+const cli = process.env.OPENCODE_CLI_NAME ?? "opencode"
 const CLIENT_OPTIONS = {
   capabilities: {
     // https://github.com/anomalyco/opencode/issues/11948
@@ -314,7 +315,7 @@ const layer = Layer.effect(
                 return events
                   .publish(TuiEvent.ToastShow, {
                     title: "MCP Authentication Required",
-                    message: `Server "${key}" requires authentication. Run: opencode mcp auth ${key}`,
+                    message: `Server "${key}" requires authentication. Run: ${cli} mcp auth ${key}`,
                     variant: "warning",
                     duration: 8000,
                   })
