@@ -628,7 +628,12 @@ async function mockServer(page: Page) {
         url.pathname === "/api/project" ? [project] : { id: project.id, directory: sessionA.directory },
       )
     }
-    if (url.pathname === "/api/location") return json(route, { directory: sessionA.directory })
+    if (url.pathname === "/api/location")
+      return json(route, {
+        directory: sessionA.directory,
+        project: { id: sessionA.projectID, directory: sessionA.directory, canonical: sessionA.directory },
+      })
+    if (url.pathname === "/api/worktree") return json(route, [{ directory: sessionA.directory }])
     if (url.pathname === "/api/vcs")
       return json(route, {
         location: { directory: sessionA.directory },
