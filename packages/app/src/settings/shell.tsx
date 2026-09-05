@@ -206,7 +206,24 @@ export const SettingsScreen: Component = () => {
         <Tabs.Content value="projects" class="settings-panel">
           <SettingsProjects />
         </Tabs.Content>
-        <SettingsServerScope directory={directory()}>
+        <SettingsServerScope
+          directory={directory()}
+          fallback={
+            <For each={["workspaces", "providers", "models", "extensions"]}>
+              {(value) => (
+                <Tabs.Content value={value} class="settings-panel">
+                  <div class="flex flex-col items-start gap-4 p-6">
+                    <h2 class="settings-tab-title">{language.t("home.connect.title")}</h2>
+                    <p class="text-v2-text-text-muted">{language.t("home.connect.description")}</p>
+                    <Button variant="contrast" onClick={() => surface.open("servers")}>
+                      {language.t("home.connect.manage")}
+                    </Button>
+                  </div>
+                </Tabs.Content>
+              )}
+            </For>
+          }
+        >
           <Tabs.Content value="workspaces" class="settings-panel">
             <SettingsWorkspaces activeDirectory={directory()} />
           </Tabs.Content>

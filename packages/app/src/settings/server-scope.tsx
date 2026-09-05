@@ -1,13 +1,13 @@
-import { type ParentProps, Show } from "solid-js"
+import { type JSX, type ParentProps, Show } from "solid-js"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ModelsProvider } from "@/providers/models/models"
 import { ServerProvider } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
 
-export function SettingsServerScope(props: ParentProps<{ directory?: string }>) {
+export function SettingsServerScope(props: ParentProps<{ directory?: string; fallback?: JSX.Element }>) {
   const global = useGlobal()
   return (
-    <Show when={global.settings.server.selected()} keyed fallback={props.children}>
+    <Show when={global.settings.server.selected()} keyed fallback={props.fallback}>
       {(server) => (
         <SettingsServerDataScope server={server} directory={props.directory}>
           {props.children}
