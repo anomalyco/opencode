@@ -21,6 +21,7 @@ import { SessionEvent } from "./event.js"
 import type { SessionContext } from "./context.js"
 import type { SessionMessage } from "./message.js"
 import { SessionModelRequest } from "./model-request.js"
+import { SessionProviderContext } from "./provider-context.js"
 import type { SessionRunnerModel } from "./runner/model.js"
 import { SessionRunnerRetry } from "./runner/retry.js"
 import { SessionSchema } from "./schema.js"
@@ -147,7 +148,12 @@ export const estimateTokens = (input: RequiredInput) => {
   const last = input.messages[index]
   // Keep the anchor's local tool results: they are not covered by its provider usage.
   const added = SessionModelRequest.unsupportedParts(
-    toLLMMessages(input.messages.slice(Math.max(0, index)), input.resolved.ref),
+    toLLMMessages(
+      input.messages.slice(Math.max(0, index)),
+      input.resolved.ref,
+      input.resolved.model.route.providerMetadataKey ?? input.resolved.model.provider,
+      SessionProviderContext.provenance(input.resolved),
+    ),
     input.resolved.capabilities,
   )
     .filter((message) => message.role !== "assistant" || message.id !== last?.id)
@@ -406,6 +412,7 @@ export const layer = Layer.effect(
         },
         transcript: {
           system: transcript.system,
+          providerContext: transcript.providerContext,
           messages: [
             ...transcript.messages,
             ...(input.instructionUpdate ? [Message.system(input.instructionUpdate)] : []),

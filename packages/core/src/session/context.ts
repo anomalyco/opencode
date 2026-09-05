@@ -18,6 +18,7 @@ import { SkillInstructions } from "../skill/instructions.js"
 import { Tool } from "../tool.js"
 import { AgentNotFoundError } from "./error.js"
 import { SessionHistory } from "./history.js"
+import { SessionProviderContext } from "./provider-context.js"
 import { InstructionEntry } from "./instruction-entry.js"
 import { SessionMessage } from "./message.js"
 import { SessionModelRequest } from "./model-request.js"
@@ -156,7 +157,12 @@ const layer = Layer.effect(
 
     const load = Effect.fn("SessionContext.load")(function* (selection: Selection) {
       const model = yield* resolveModel(selection.session)
-      const history = yield* SessionHistory.entriesForRunner(db, selection.session.id, selection.instructions)
+      const history = yield* SessionHistory.entriesForRunner(
+        db,
+        selection.session.id,
+        selection.instructions,
+        SessionProviderContext.provenance(model),
+      )
       return {
         session: selection.session,
         agent: selection.agent,
