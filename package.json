@@ -7,7 +7,7 @@
   "type": "module",
   "packageManager": "bun@1.4.1",
   "scripts": {
-    "dev": "bun run --cwd packages/cli --conditions=browser src/index.ts",
+    "dev": "bun run --cwd packages/cli src/index.ts",
     "dev:live": "sh -c 'OPENCODE_TUI_CHANNEL=dev OPENCODE_PASSWORD=\"$(opencode2 service get password)\" exec bun run dev \"$@\" --server \"$(opencode2 service status)\"' --",
     "dev:desktop": "bun --cwd packages/desktop dev",
     "dev:web": "bun --cwd packages/app dev",
