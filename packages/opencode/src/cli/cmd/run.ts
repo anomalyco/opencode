@@ -239,6 +239,11 @@ export const RunCommand = effectCmd({
         describe: "run in direct interactive split-footer mode",
         default: false,
       })
+      .option("stdin", {
+        type: "boolean",
+        describe: "read piped stdin and append it to the prompt (disable with --no-stdin)",
+        default: true,
+      })
       .option("auto", {
         type: "boolean",
         describe: "auto-approve permissions that are not explicitly denied (dangerous!)",
@@ -413,7 +418,7 @@ export const RunCommand = effectCmd({
         }
       }
 
-      const piped = process.stdin.isTTY ? undefined : await Bun.stdin.text()
+      const piped = !args.stdin || process.stdin.isTTY ? undefined : await Bun.stdin.text()
       message = resolveRunInput(message, piped) ?? ""
       const initialInput = resolveRunInput(rawMessage, piped)
 
@@ -985,6 +990,7 @@ export async function runMini(input: MiniCommandInput) {
     $0: "opencode",
     _: ["mini"],
     message: input.prompt ? [input.prompt] : [],
+    stdin: true,
     command: undefined,
     continue: input.continue,
     session: input.session,
