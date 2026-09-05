@@ -8,6 +8,7 @@ import PROMPT_DEFAULT from "./prompt/default.txt"
 import PROMPT_BEAST from "./prompt/beast.txt"
 import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_GPT from "./prompt/gpt.txt"
+import PROMPT_GPT_CHANNELS from "./prompt/gpt-channels.txt"
 import PROMPT_KIMI from "./prompt/kimi.txt"
 import PROMPT_META from "./prompt/meta.txt"
 
@@ -35,7 +36,7 @@ export function provider(model: Provider.Model) {
     if (model.api.id.includes("codex")) {
       return [PROMPT_CODEX]
     }
-    return [PROMPT_GPT]
+    return model.api.npm.includes("@ai-sdk/openai-compatible") ? [PROMPT_GPT] : [PROMPT_GPT, PROMPT_GPT_CHANNELS]
   }
   if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI]
   if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
