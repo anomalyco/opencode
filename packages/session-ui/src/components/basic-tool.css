@@ -394,7 +394,6 @@
 [data-component="tool-trigger"] [data-slot="basic-tool-tool-subtitle"].webfetch-link {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
   color: var(--v2-text-text-accent);
   text-decoration: none;
   overflow: visible;
@@ -420,18 +419,6 @@
     line-height: inherit;
   }
 
-  .webfetch-link-icon {
-    display: inline-flex;
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-    color: var(--v2-icon-icon-accent, var(--v2-text-text-accent));
-
-    @media (hover: hover) {
-      display: none;
-    }
-  }
-
   &:hover {
     color: var(--v2-text-text-accent);
     text-decoration: none;
@@ -439,10 +426,6 @@
     [data-slot="webfetch-link-text"] {
       text-decoration: underline;
       text-underline-offset: 2px;
-    }
-
-    .webfetch-link-icon {
-      display: inline-flex;
     }
   }
 
@@ -453,10 +436,6 @@
     [data-slot="webfetch-link-text"] {
       text-decoration: underline;
       text-underline-offset: 2px;
-    }
-
-    .webfetch-link-icon {
-      display: inline-flex;
     }
   }
 }
