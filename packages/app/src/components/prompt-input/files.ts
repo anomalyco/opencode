@@ -41,6 +41,8 @@ const IMAGE_EXTS = new Map([
   ["jpg", "image/jpeg"],
   ["png", "image/png"],
   ["webp", "image/webp"],
+  ["heic", "image/heic"],
+  ["heif", "image/heif"],
 ])
 const TEXT_MIMES = new Set([
   "application/json",
