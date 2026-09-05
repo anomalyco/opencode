@@ -56,6 +56,13 @@ export function PromptInputV2(props: PromptInputV2Props) {
     if (!editor || !window.getSelection()?.isCollapsed) return
     props.controller.onCursor(promptInputV2Cursor(editor))
   }
+  const syncEditor = (target: HTMLDivElement) => {
+    const cursor = promptInputV2Cursor(target)
+    const prompt = parsePromptInputV2Editor(target)
+    const images = props.controller.parts().filter((part) => part.type === "image")
+    localInput = true
+    props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...images], cursor)
+  }
   const mode = createMemo(() => state.mode)
   const buttons = createMemo(() => ({
     opacity: mode() === "normal" ? 1 : 0,
@@ -70,6 +77,9 @@ export function PromptInputV2(props: PromptInputV2Props) {
       localInput = false
       return
     }
+    // Rewriting the editor DOM while an IME composition is active makes Safari
+    // cancel it mid-flight; the compositionend write-back reconciles state.
+    if (props.controller.imeActive()) return
     renderPromptInputV2Editor(editor, parts)
   })
 
@@ -163,22 +173,36 @@ export function PromptInputV2(props: PromptInputV2Props) {
             class="relative z-10 block min-h-[60px] max-h-[180px] w-full overflow-y-auto whitespace-pre-wrap bg-transparent px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none empty:before:content-['\200B'] [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
             classList={{ "font-mono!": state.mode === "shell", "opacity-50": props.disabled }}
             onInput={(event) => {
-              const cursor = promptInputV2Cursor(event.currentTarget)
-              const prompt = parsePromptInputV2Editor(event.currentTarget)
-              const images = props.controller.parts().filter((part) => part.type === "image")
-              localInput = true
-              props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...images], cursor)
+              // Safari fires input (insertCompositionText) before compositionstart
+              // and on every composition keystroke; reacting here re-renders
+              // mid-composition and splits it into per-letter micro compositions.
+              // State is reconciled once by the compositionend write-back.
+              if (event.isComposing || props.controller.imeActive()) return
+              syncEditor(event.currentTarget)
             }}
             onKeyDown={(event) => {
+              // While composing (and shortly after compositionend) stay inert:
+              // dispatching here re-renders and makes Safari split the
+              // composition, and the confirming Enter must never submit.
+              if (props.controller.imeComposing(event)) return
               if (props.controller.onKeyDown(event)) return
-              if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+              if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault()
                 if (event.repeat) return
                 props.controller.submit()
               }
             }}
-            onKeyUp={updateCursor}
-            onPointerUp={updateCursor}
+            onCompositionStart={props.controller.onCompositionStart}
+            onCompositionEnd={(event) => {
+              props.controller.onCompositionEnd()
+              syncEditor(event.currentTarget)
+            }}
+            onKeyUp={() => {
+              if (!props.controller.imeActive()) updateCursor()
+            }}
+            onPointerUp={() => {
+              if (!props.controller.imeActive()) updateCursor()
+            }}
             onPaste={props.controller.onPaste}
             onFocus={() => props.controller.dispatch({ type: "focus.editor" })}
           />

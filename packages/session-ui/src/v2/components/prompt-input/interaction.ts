@@ -185,6 +185,22 @@ export function createPromptInputV2Controller(input: {
     return result.handled
   }
 
+  let composing = false
+  let lastCompositionEnd = 0
+  // Safari fires compositionend BEFORE the confirming Enter keydown, so that
+  // keydown reports isComposing=false (keyCode 229 on Safari 26, 13 in older
+  // reports). Treat any key event within 100ms of compositionend as part of
+  // the IME confirmation. Compare with performance.now() rather than
+  // event.timeStamp so the guard never depends on the event clock source.
+  const imeComposing = (event: KeyboardEvent) =>
+    event.isComposing || composing || event.keyCode === 229 || performance.now() - lastCompositionEnd < 100
+  // True while a composition is in flight or just ended. The editor must stay
+  // completely inert in this window: dispatching state updates or touching the
+  // selection makes Safari abort the composition and split it into per-letter
+  // micro compositions, after which the confirming Enter arrives as a plain
+  // keyCode 13 that no guard can recognize.
+  const imeActive = () => composing || performance.now() - lastCompositionEnd < 100
+
   const onKeyDown = (event: KeyboardEvent) => {
     if (
       state.mode === "normal" &&
@@ -201,7 +217,7 @@ export function createPromptInputV2Controller(input: {
       type: "key.down",
       key: event.key,
       ctrl: event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey,
-      composing: event.isComposing,
+      composing: imeComposing(event),
       ids: suggestions().map((item) => item.id),
       empty: draft.state.prompt.every((part) => !("content" in part) || part.content.length === 0),
     })
@@ -295,6 +311,15 @@ export function createPromptInputV2Controller(input: {
     suggestions,
     dispatch,
     onKeyDown,
+    imeComposing,
+    imeActive,
+    onCompositionStart() {
+      composing = true
+    },
+    onCompositionEnd() {
+      composing = false
+      lastCompositionEnd = performance.now()
+    },
     value() {
       return draft.state.prompt.map((part) => ("content" in part ? part.content : "")).join("")
     },
