@@ -9,6 +9,7 @@ import type {
   ToolPart,
 } from "@opencode-ai/sdk/v2"
 import { Effect } from "effect"
+import { exists, readText } from "@/util/filesystem"
 import { ACPSession } from "./session"
 import { ACPPermission } from "./permission"
 import { partsToContentChunks, type ReplayPart } from "./content"
@@ -29,6 +30,7 @@ type GlobalEventEnvelope = {
 type GlobalEventStream = {
   stream: AsyncIterable<GlobalEventEnvelope>
 }
+type FileEditedEvent = Extract<Event, { type: "file.edited" }>
 
 export function start(input: { sdk: OpencodeClient; connection: Connection; session: ACPSession.Interface }) {
   const subscription = new Subscription(input)
@@ -45,6 +47,8 @@ export class Subscription {
   private readonly permission: ACPPermission.Handler
   private connected = false
   private started = false
+  // file.edited has no session ID, so infer it from the most recent tool call, since edits happen during tool execution.
+  private activeSessionId: string | undefined
 
   constructor(
     private readonly input: {
@@ -102,6 +106,8 @@ export class Subscription {
         return this.handlePartUpdated(event)
       case "message.part.delta":
         return this.handlePartDelta(event)
+      case "file.edited":
+        return this.handleFileEdited(event)
     }
   }
 
@@ -207,6 +213,7 @@ export class Subscription {
       }),
     )
     if (part.type === "tool") {
+      this.activeSessionId = session.id
       await this.handleToolPart(session.id, part, session.cwd)
     }
   }
@@ -256,6 +263,18 @@ export class Subscription {
         },
       })
     }
+  }
+
+  private async handleFileEdited(event: FileEditedEvent) {
+    const sessionId = this.activeSessionId
+    const connection = this.input.connection
+    if (!sessionId || !connection.writeTextFile) return
+
+    const path = event.properties.file
+    if (!path || !(await exists(path))) return
+
+    const content = await readText(path)
+    await connection.writeTextFile({ sessionId, path, content })
   }
 
   private async fetchPartMetadata(sessionId: string, cwd: string, messageId: string, partId: string) {

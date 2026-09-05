@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test"
+import { rm } from "fs/promises"
+import { tmpdir } from "os"
+import { join } from "path"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import type { Event, Message, OpencodeClient, Part, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
@@ -9,6 +12,7 @@ import { Directory } from "@/acp/directory"
 import { ACPSession } from "@/acp/session"
 
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
+type WriteTextFileParams = Parameters<AgentSideConnection["writeTextFile"]>[0]
 type ToolSessionUpdateParams = SessionUpdateParams & {
   update: Extract<SessionUpdateParams["update"], { sessionUpdate: "tool_call" | "tool_call_update" }>
 }
@@ -80,6 +84,7 @@ function createEventStream() {
 
 function createHarness(messages: Record<string, SessionMessageResponse> = {}) {
   const updates: SessionUpdateParams[] = []
+  const writeTextFileCalls: WriteTextFileParams[] = []
   const calls = {
     eventSubscribe: 0,
     message: 0,
@@ -106,11 +111,15 @@ function createHarness(messages: Record<string, SessionMessageResponse> = {}) {
       updates.push(params)
       return Promise.resolve()
     },
-  } satisfies Pick<AgentSideConnection, "sessionUpdate">
+    writeTextFile: (params: WriteTextFileParams) => {
+      writeTextFileCalls.push(params)
+      return Promise.resolve({})
+    },
+  } satisfies Pick<AgentSideConnection, "sessionUpdate" | "writeTextFile">
   const session = makeSessionService()
   const subscription = new ACPEvent.Subscription({ sdk, connection, session })
 
-  return { calls, connection, events, sdk, session, subscription, updates }
+  return { calls, connection, events, sdk, session, subscription, updates, writeTextFileCalls }
 }
 
 function textDelta(sessionID: string, messageID: string, partID: string, delta: string): Event {
@@ -164,6 +173,14 @@ function toolUpdated(part: ToolPart): Event {
       time: Date.now(),
       part,
     },
+  }
+}
+
+function fileEdited(file: string): Event {
+  return {
+    id: `evt_file_edited_${file}`,
+    type: "file.edited",
+    properties: { file },
   }
 }
 
@@ -747,5 +764,38 @@ describe("acp event routing", () => {
         { type: "content", content: { type: "image", mimeType: "image/png", data: image } },
       ],
     ])
+  })
+
+  it("syncs the edited file content to the client during a tool call", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_edit", cwd: "/workspace" }))
+
+    const filepath = join(tmpdir(), `opencode-acp-file-edited-${process.pid}-${Date.now()}.txt`)
+    await Bun.write(filepath, "edited content")
+
+    try {
+      await harness.subscription.handle(toolUpdated(runningTool("ses_edit", "call_edit")))
+      await harness.subscription.handle(fileEdited(filepath))
+
+      expect(harness.writeTextFileCalls).toEqual([{ sessionId: "ses_edit", path: filepath, content: "edited content" }])
+    } finally {
+      await rm(filepath, { force: true })
+    }
+  })
+
+  it("does not sync file edits when no tool call is active", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_idle", cwd: "/workspace" }))
+
+    const filepath = join(tmpdir(), `opencode-acp-file-edited-idle-${process.pid}-${Date.now()}.txt`)
+    await Bun.write(filepath, "content")
+
+    try {
+      await harness.subscription.handle(fileEdited(filepath))
+
+      expect(harness.writeTextFileCalls).toEqual([])
+    } finally {
+      await rm(filepath, { force: true })
+    }
   })
 })
