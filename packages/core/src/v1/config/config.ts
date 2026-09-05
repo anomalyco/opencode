@@ -84,6 +84,10 @@ export const Info = Schema.Struct({
   subagent_depth: Schema.optional(NonNegativeInt).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1, which prevents subagents from launching subagents.",
   }),
+  plans_directory: Schema.optional(Schema.String).annotate({
+    description:
+      "Directory where plan mode files are written. Supports `~` expansion. Defaults to `<worktree>/.opencode/plans` for git projects, or the global data directory otherwise.",
+  }),
   username: Schema.optional(Schema.String).annotate({
     description: "Custom username to display in conversations instead of system username",
   }),
