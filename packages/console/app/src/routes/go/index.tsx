@@ -49,6 +49,7 @@ const models = [
   { name: "DeepSeek V4 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy4 preview", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Omen Alpha", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
 ] as const
 
 export default function Home() {

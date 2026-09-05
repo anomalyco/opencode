@@ -354,7 +354,7 @@ export const dict = {
     "Kraftigt nedsatte tokenpriser til gengæld for tilladelse til at bruge dine prompts og modelsvar til at træne fremtidige Meta-modeller.",
   "go.faq.a5.learnMore": "Læs mere",
   "go.faq.a5.deepseekRetention":
-    "ZDR-aftalen fornyes månedligt. Den nuværende aftale er gyldig til og med 31. august 2026.",
+    "ZDR-aftalen fornyes månedligt. Den nuværende aftale er gyldig til og med 30. september 2026.",
 
   "go.faq.a5.beforeExceptions":
     "Go-modeller hostes i USA. Udbydere følger en nulopbevaringspolitik og bruger ikke dine data til modeltræning, med de",
@@ -368,7 +368,7 @@ export const dict = {
 
   "go.faq.q9": "Hvad er forskellen på gratis modeller og Go?",
   "go.faq.a9":
-    "Gratis modeller inkluderer Big Pickle plus kampagnemodeller, der er tilgængelige på det pågældende tidspunkt, med en kvote på 200 forespørgsler/dag. Go tilbyder et kurateret modeludvalg med højere forespørgselskvoter håndhævet over rullende perioder (5 timer, ugentligt og månedligt), omtrent svarende til $12 pr. 5 timer, $30 pr. uge og $60 pr. måned (det faktiske antal forespørgsler varierer efter model og brug).",
+    "Gratis modeller inkluderer Big Pickle plus kampagnemodeller, der er tilgængelige på det pågældende tidspunkt, med en kvote på 200 forespørgsler/dag. Go tilbyder et kurateret modeludvalg med højere forespørgselskvoter håndhævet over rullende perioder (5 timer, ugentligt og månedligt), omtrent svarende til basiskvoter på $12 pr. 5 timer, $30 pr. uge og $60 pr. måned; modelspecifikke kvoter kan variere (det faktiske antal forespørgsler varierer efter model og brug).",
 
   "zen.api.error.rateLimitExceeded": "Hastighedsgrænse overskredet. Prøv venligst igen senere.",
   "zen.api.error.modelNotSupported": "Model {{model}} understøttes ikke",
