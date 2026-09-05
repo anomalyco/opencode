@@ -173,52 +173,71 @@ test("real watchers observe atomic saves to nested, outside-root, and symlinked 
   expect((await sources.read(entry.href)).module).toMatchObject({ default: 2 })
 })
 
-test("Node reloads the local ESM graph without relocating source files", async () => {
-  await using dir = await tmpdir()
-  const script = path.join(dir.path, "probe.ts")
-  await Bun.write(
-    script,
-    `
+test.each(["", "?mode=plugin", "?mode=plugin#section"])(
+  "Node reloads the local ESM graph without relocating source files: %s",
+  async (suffix) => {
+    await using dir = await tmpdir()
+    const script = path.join(dir.path, "probe.ts")
+    await Bun.write(
+      script,
+      `
     import { createPluginSources } from ${JSON.stringify(fileURLToPath(new URL("../src/plugin/source.ts", import.meta.url)))}
-    import { writeFile } from "node:fs/promises"
+    import { mkdir, symlink, writeFile } from "node:fs/promises"
+    import { fileURLToPath } from "node:url"
     import assert from "node:assert/strict"
     const entry = new URL("./entry.mjs", import.meta.url)
     const helper = new URL("./helper.mjs", import.meta.url)
-    const sources = createPluginSources(async () => {})
+    const suffix = ${JSON.stringify(suffix)}
+    const watched = []
+    const sources = createPluginSources(async file => { watched.push(file) })
     try {
-      await writeFile(entry, 'export { value as default, source } from "./helper.mjs"')
+      const library = new URL("./shared/index.mjs", import.meta.url)
+      await mkdir(new URL("./shared", import.meta.url), { recursive: true })
+      await writeFile(library, 'export default { shared: true }')
+      await mkdir(new URL("./node_modules", import.meta.url), { recursive: true })
+      await symlink(fileURLToPath(new URL("./shared", import.meta.url)), fileURLToPath(new URL("./node_modules/example", import.meta.url)), process.platform === "win32" ? "junction" : "dir")
+      const external = await import(library.href)
+      await writeFile(entry, 'import state from "./node_modules/example/index.mjs"; export { state }; export { value as default, source } from "./helper.mjs' + suffix + '"')
       await writeFile(helper, 'export const value = 1; export const source = import.meta.url')
       const initial = await sources.read(entry.href)
       assert.equal(initial.module.default, 1)
+      assert.equal(initial.module.state, external.default)
       assert.equal(new URL(initial.module.source).pathname, helper.pathname)
+      assert.equal(new URL(initial.module.source).searchParams.get("mode"), suffix ? "plugin" : null)
+      assert.equal(new URL(initial.module.source).hash, suffix.includes("#") ? "#section" : "")
       assert.equal(await sources.read(entry.href), initial)
       await writeFile(helper, 'export const value = 2; export const source = import.meta.url')
       const updated = (await sources.read(entry.href)).module
       assert.equal(updated.default, 2)
+      assert.equal(updated.state, external.default)
+      assert.equal(watched.includes(fileURLToPath(library)), false)
       assert.equal(new URL(updated.source).pathname, helper.pathname)
+      assert.equal(new URL(updated.source).searchParams.get("mode"), suffix ? "plugin" : null)
+      assert.equal(new URL(updated.source).hash, suffix.includes("#") ? "#section" : "")
       console.log("node graph reload passed")
     } finally { sources.dispose() }
   `,
-  )
-  const build = await Bun.build({
-    entrypoints: [script],
-    target: "node",
-    format: "esm",
-    outdir: dir.path,
-    naming: "probe.mjs",
-  })
-  expect(build.success).toBe(true)
-  const child = Bun.spawn(["node", "--no-warnings", path.join(dir.path, "probe.mjs")], {
-    stdout: "pipe",
-    stderr: "pipe",
-  })
-  const [stdout, stderr, exit] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ])
-  expect({ stdout, stderr, exit }).toEqual({ stdout: "node graph reload passed\n", stderr: "", exit: 0 })
-})
+    )
+    const build = await Bun.build({
+      entrypoints: [script],
+      target: "node",
+      format: "esm",
+      outdir: dir.path,
+      naming: "probe.mjs",
+    })
+    expect(build.success).toBe(true)
+    const child = Bun.spawn(["node", "--no-warnings", path.join(dir.path, "probe.mjs")], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [stdout, stderr, exit] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ])
+    expect({ stdout, stderr, exit }).toEqual({ stdout: "node graph reload passed\n", stderr: "", exit: 0 })
+  },
+)
 
 test("computed imports retain the importing helper's resolution base", async () => {
   await using sources = await fixture()

@@ -7,12 +7,22 @@ import { Host } from "@opencode-ai/plugin/host"
 let generation = Date.now()
 
 export async function prepareSource(entrypoint: string, track: (file: string, directory?: boolean) => void) {
-  const version = ++generation
+  const version = String(++generation)
+  const fresh = (specifier: string) => {
+    const url = new URL(specifier)
+    url.searchParams.set("__opencode_reload", version)
+    return url.href
+  }
   const hook = registerHooks({
     resolve(specifier, context, nextResolve) {
-      if (!context.parentURL?.endsWith(`?mtime=${version}`)) return nextResolve(specifier, context)
-      const local = localSource(specifier, path.dirname(fileURLToPath(context.parentURL)))
+      if (!context.parentURL || new URL(context.parentURL).searchParams.get("__opencode_reload") !== version)
+        return nextResolve(specifier, context)
+      const local =
+        specifier.startsWith("./") || specifier.startsWith("../")
+          ? new URL(specifier, context.parentURL)
+          : localSource(specifier, path.dirname(fileURLToPath(context.parentURL)))
       if (!local) return nextResolve(specifier, context)
+      if (fileURLToPath(local).split(path.sep).includes("node_modules")) return nextResolve(specifier, context)
       const resolved = (() => {
         try {
           return nextResolve(specifier, context)
@@ -25,9 +35,9 @@ export async function prepareSource(entrypoint: string, track: (file: string, di
       const file = fileURLToPath(resolved.url)
       if (file.split(path.sep).includes("node_modules")) return resolved
       track(file)
-      return { ...resolved, url: `${resolved.url}?mtime=${version}` }
+      return { ...resolved, url: fresh(resolved.url) }
     },
   })
-  const specifier = `${entrypoint}?mtime=${version}`
+  const specifier = fresh(entrypoint)
   return { version: specifier, load: () => Host.load(specifier), dispose: () => hook.deregister() }
 }
