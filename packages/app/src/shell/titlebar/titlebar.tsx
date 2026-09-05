@@ -356,10 +356,10 @@ export function Titlebar(props: {
                   aria-label={language.t("home.title")}
                   aria-pressed={layout.route().type === "home"}
                 >
-                  <Icon name="grid-plus" />
+                  <Icon name="grid-plus" class="shrink-0" />
                   <span class="min-w-0 truncate">{language.t("home.title")}</span>
                   <span
-                    class="ms-auto shrink-0 whitespace-nowrap text-v2-text-text-faint opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+                    class="ms-auto hidden min-w-0 truncate text-v2-text-text-faint group-hover:block group-focus-visible:block"
                     aria-hidden="true"
                   >
                     <bdi dir="ltr">{command.keybind("home.toggle")}</bdi>
@@ -654,10 +654,10 @@ export function Titlebar(props: {
                               onClick={openNewTab}
                               aria-label={language.t("command.session.new")}
                             >
-                              <Icon name="edit" />
+                              <Icon name="edit" class="shrink-0" />
                               <span class="min-w-0 truncate">{language.t("command.session.new")}</span>
                               <span
-                                class="ms-auto shrink-0 whitespace-nowrap text-v2-text-text-faint opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+                                class="ms-auto hidden min-w-0 truncate text-v2-text-text-faint group-hover:block group-focus-visible:block"
                                 aria-hidden="true"
                               >
                                 <bdi dir="ltr">{command.keybind("tab.new")}</bdi>

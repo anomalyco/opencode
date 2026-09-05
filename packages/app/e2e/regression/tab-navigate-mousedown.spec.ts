@@ -232,6 +232,74 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
   await expect(tabB).toBeVisible()
 })
 
+for (const count of [0, 26]) {
+  test(`vertical navigation labels and icons use the available width with ${count} tabs`, async ({
+    page,
+  }, testInfo) => {
+    await mockServer(page)
+    await page.addInitScript(
+      ({ server, directory, count }) => {
+        localStorage.setItem(
+          "settings.v3",
+          JSON.stringify({
+            appearance: { tabLayout: "vertical" },
+            keybinds: { "home.toggle": "alt+home", "tab.new": "ctrl+shift+n" },
+          }),
+        )
+        localStorage.setItem(
+          "opencode.window.browser.dat:tabs",
+          JSON.stringify(
+            Array.from({ length: count }, (_, index) => ({
+              type: "draft",
+              server,
+              directory,
+              draftID: `draft_navigation_${index}`,
+            })),
+          ),
+        )
+      },
+      { server, directory: sessionA.directory, count },
+    )
+    await page.goto("/")
+
+    const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+    await expect(sidebar).toHaveCSS("width", "260px")
+    await expect(sidebar.locator("[data-titlebar-tab-slot]")).toHaveCount(count)
+    for (const width of [260, 180, 130]) {
+      if (width !== 260) {
+        const handle = await sidebar.locator('[data-component="resize-handle"]').boundingBox()
+        const bounds = await sidebar.boundingBox()
+        if (!handle || !bounds) throw new Error("vertical tab sidebar has no bounding box")
+        await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
+        await page.mouse.down()
+        await page.mouse.move(handle.x + handle.width / 2 + width - bounds.width, handle.y + handle.height / 2)
+        await page.mouse.up()
+      }
+      await expect(sidebar).toHaveCSS("width", `${width}px`)
+      await testInfo.attach(`navigation-${count}-${width}`, {
+        body: await sidebar.screenshot(),
+        contentType: "image/png",
+      })
+      for (const name of ["Home", "New session"]) {
+        const button = sidebar.getByRole("button", { name, exact: true })
+        const label = button.getByText(name, { exact: true })
+        await expect(label).toBeVisible()
+        await expect
+          .poll(() => label.evaluate((element) => element.scrollWidth - element.clientWidth), { message: name })
+          .toBeLessThanOrEqual(1)
+        await expect(button.locator('[data-slot="icon-svg"]')).toHaveCSS("width", "16px")
+        await button.hover()
+        await expect(button.locator('span[aria-hidden="true"]')).toBeVisible()
+        await expect(button.locator('[data-slot="icon-svg"]')).toHaveCSS("width", "16px")
+        await expect
+          .poll(() => button.evaluate((element) => element.scrollWidth - element.clientWidth))
+          .toBeLessThanOrEqual(1)
+        await page.getByRole("main").hover()
+      }
+    }
+  })
+}
+
 for (const direction of ["ltr", "rtl"]) {
   test(`vertical tabs keep Settings pinned while scrolling in ${direction}`, async ({ page }, testInfo) => {
     await mockServer(page)
@@ -359,9 +427,9 @@ for (const profile of [
       const hint = button.locator('span[aria-hidden="true"]')
       await expect(hint).toHaveText(row.shortcut)
       await expect(hint.getByText(row.shortcut, { exact: true })).toHaveCSS("direction", "ltr")
-      await expect(hint).toHaveCSS("opacity", "0")
+      await expect(hint).toBeHidden()
       await button.hover()
-      await expect(hint).toHaveCSS("opacity", "1")
+      await expect(hint).toBeVisible()
       await expect
         .poll(() =>
           hint.evaluate((element) => {
@@ -373,7 +441,7 @@ for (const profile of [
         )
         .toBeCloseTo(8, 1)
       await page.getByRole("main").hover()
-      await expect(hint).toHaveCSS("opacity", "0")
+      await expect(hint).toBeHidden()
     }
 
     const home = sidebar.locator('[data-action="vertical-tabs-home"]')
@@ -381,10 +449,10 @@ for (const profile of [
     await home.focus()
     await page.keyboard.press("Tab")
     await expect(newSession).toBeFocused()
-    await expect(newSession.locator('span[aria-hidden="true"]')).toHaveCSS("opacity", "1")
+    await expect(newSession.locator('span[aria-hidden="true"]')).toBeVisible()
     await page.keyboard.press("Shift+Tab")
     await expect(home).toBeFocused()
-    await expect(home.locator('span[aria-hidden="true"]')).toHaveCSS("opacity", "1")
+    await expect(home.locator('span[aria-hidden="true"]')).toBeVisible()
   })
 }
 
