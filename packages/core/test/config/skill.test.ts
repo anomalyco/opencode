@@ -1,7 +1,8 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Queue, Schema, Stream } from "effect"
+import { Event } from "@opencode-ai/schema/event"
 import { Config } from "@opencode-ai/core/config"
 import { AgentsDirectory, ClaudeDirectory, Directory, Document, type Entry, Info } from "@opencode-ai/schema/config"
 import { ConfigSkillPlugin } from "@opencode-ai/core/config/plugin/skill"
@@ -277,6 +278,111 @@ describe("ConfigSkillPlugin.Plugin", () => {
           const skill = yield* start([tmp.path, url], tmp.path, discovery)
           expect((yield* skill.list()).find((item) => item.id === "review")?.description).toBe("Available")
         }),
+      ),
+    ),
+  )
+
+  it.live("skips unchanged config sources but refreshes ordered sources and watched files", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const first = path.join(tmp.path, "first")
+          const second = path.join(tmp.path, "second")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(first, "review"), { recursive: true })
+            await fs.mkdir(path.join(second, "review"), { recursive: true })
+            await write(first, "review", "First")
+            await write(second, "review", "Second")
+          })
+          const config = yield* Config.Test
+          const skill = yield* Skill.Service
+          const filesystem = yield* FSUtil.Service
+          const watcher = yield* Watcher.Test
+          const counts = { scans: 0, reloads: 0, pulls: 0 }
+          const updates = yield* Queue.unbounded<Deferred.Deferred<void>>()
+          const url = "https://example.test/skills/"
+          const entries = (skills: string[], shell = "/bin/sh") => [
+            new Document({ type: "document", info: decode({ skills, shell }) }),
+          ]
+          yield* config.setEntries(entries(["./first", url]))
+          yield* ConfigSkillPlugin.Plugin.effect(
+            host({
+              event: {
+                subscribe: () =>
+                  Stream.fromQueue(updates).pipe(
+                    Stream.flatMap((done) =>
+                      Stream.succeed({
+                        id: Event.ID.create(),
+                        created: Date.now(),
+                        type: "config.updated" as const,
+                        data: {},
+                      }).pipe(Stream.concat(Stream.fromEffect(Deferred.succeed(done, undefined)).pipe(Stream.drain))),
+                    ),
+                  ),
+              },
+              skill: {
+                list: () => Effect.die("unused skill.list"),
+                transform: skill.transform,
+                reload: () => Effect.sync(() => counts.reloads++).pipe(Effect.andThen(skill.reload())),
+              },
+            }),
+          ).pipe(
+            Effect.provideService(
+              FSUtil.Service,
+              FSUtil.Service.of({
+                ...filesystem,
+                scan: (pattern, options) =>
+                  Effect.sync(() => counts.scans++).pipe(Effect.andThen(filesystem.scan(pattern, options))),
+              }),
+            ),
+            Effect.provideService(
+              SkillDiscovery.Service,
+              SkillDiscovery.Service.of({
+                pull: () =>
+                  Effect.sync(() => {
+                    counts.pulls++
+                    return []
+                  }),
+              }),
+            ),
+            Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home: tmp.path })),
+            Effect.provideService(
+              Location.Service,
+              Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+            ),
+          )
+          const update = Effect.fnUntraced(function* (skills: string[], shell = "/bin/sh") {
+            yield* config.setEntries(entries(skills, shell))
+            const done = yield* Deferred.make<void>()
+            yield* Queue.offer(updates, done)
+            // The stream acknowledges only after the plugin has consumed this event.
+            yield* Deferred.await(done).pipe(Effect.timeout("2 seconds"))
+          })
+          expect(counts).toEqual({ scans: 1, reloads: 0, pulls: 1 })
+          yield* update(["./first", url], "/bin/zsh")
+          expect(counts).toEqual({ scans: 1, reloads: 0, pulls: 1 })
+          yield* update([first, first, url])
+          expect(counts).toEqual({ scans: 1, reloads: 0, pulls: 1 })
+          expect(yield* watcher.subscriptions()).toEqual([{ path: first, type: "directory" }])
+
+          yield* update([first, second, url])
+          expect(counts).toEqual({ scans: 3, reloads: 1, pulls: 2 })
+          expect((yield* skill.list())[0]?.description).toBe("Second")
+          yield* update([second, first, url])
+          expect(counts).toEqual({ scans: 5, reloads: 2, pulls: 3 })
+          expect((yield* skill.list())[0]?.description).toBe("First")
+          yield* update([second, "https://example.test/other/"])
+          expect(counts).toEqual({ scans: 6, reloads: 3, pulls: 4 })
+          expect((yield* skill.list())[0]?.description).toBe("Second")
+
+          yield* Effect.promise(() => write(second, "review", "Edited"))
+          yield* emitAndWait({ type: "update", path: path.join(second, "review", "SKILL.md") })
+          expect(counts).toEqual({ scans: 7, reloads: 4, pulls: 5 })
+          expect((yield* skill.list())[0]?.description).toBe("Edited")
+          yield* update([])
+          expect(yield* skill.list()).toEqual([])
+          expect(counts).toEqual({ scans: 7, reloads: 5, pulls: 5 })
+        }).pipe(Effect.provide(Config.testLayer())),
       ),
     ),
   )
