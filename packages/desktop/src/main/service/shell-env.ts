@@ -29,6 +29,35 @@ export function parseShellEnv(out: Buffer) {
   return env
 }
 
+export const loadWindowsPath = Effect.fn("ShellEnv.windowsPath")(function* () {
+  const path = yield* Path.Path
+  const out = spawnSync(
+    path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+    [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); [Console]::Write('machine=' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + [char]0 + 'user=' + [Environment]::GetEnvironmentVariable('Path', 'User'))`,
+    ],
+    { stdio: ["ignore", "pipe", "ignore"], timeout: TIMEOUT, windowsHide: true },
+  )
+  if (out.error || out.status !== 0) {
+    yield* Effect.logWarning("[server] Failed to read Windows PATH; keeping inherited environment")
+    return null
+  }
+  const env = parseShellEnv(out.stdout)
+  const value = repairWindowsPath(process.env.PATH, env.machine, env.user)
+  return value ? { PATH: value } : null
+})
+
+export function repairWindowsPath(current: string | undefined, machine: string | undefined, user: string | undefined) {
+  if (!machine || !user || current?.toLowerCase() !== machine.toLowerCase()) return
+  const value = machine + (machine.endsWith(";") ? "" : ";") + user
+  // Explorer's 4 KB environment rebuild drops the user PATH entirely. Leave custom launch environments alone.
+  if (value.length >= 4095) return value
+}
+
 const probe = Effect.fn("ShellEnv.probe")(function* (shell: string, mode: "-il" | "-l") {
   const out = spawnSync(shell, [mode, "-c", "env -0"], {
     stdio: ["ignore", "pipe", "ignore"],
