@@ -301,8 +301,12 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "async": {
+      "description": "Start the agent asynchronously; Task produces a running receipt without waiting for the agent's A2A return",
+      "type": "boolean",
+    },
     "background": {
-      "description": "Run the agent in the background. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress",
+      "description": "Deprecated alias for \`async\`, still accepted so existing callers keep working. Use \`async\` instead.",
       "type": "boolean",
     },
     "command": {
@@ -322,7 +326,7 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
       "type": "string",
     },
     "task_id": {
-      "description": "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
+      "description": "Continue a previous Task session. If task_id names a task this caller owns, a running task takes your prompt as a supplemental prompt in the same conversation, and a finished task resumes the same subagent session in a new turn. An unrecognized task_id starts a fresh Task; a task_id owned by another caller is rejected.",
       "type": "string",
     },
   },

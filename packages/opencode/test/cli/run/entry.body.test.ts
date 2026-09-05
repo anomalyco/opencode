@@ -254,6 +254,88 @@ describe("run entry body", () => {
     })
 
     expect(
+      entryBody(
+        toolCommit({
+          tool: "task",
+          state: {
+            status: "completed",
+            input: {
+              description: "Inspect reducer",
+              subagent_type: "explore",
+            },
+            title: "",
+            output: [
+              '<task id="child-1" state="error">',
+              "<task_error>",
+              "Task stopped before producing a clean final response.",
+              "</task_error>",
+              "</task>",
+            ].join("\n"),
+            metadata: {
+              sessionId: "child-1",
+            },
+            time: { start: 1, end: 2 },
+          },
+        }),
+      ),
+    ).toEqual({
+      type: "markdown",
+      content: "Task stopped before producing a clean final response.",
+    })
+
+    expect(
+      entryBody(
+        toolCommit({
+          tool: "task",
+          state: {
+            status: "completed",
+            input: { description: "Inspect reducer", subagent_type: "explore" },
+            title: "",
+            // A notice can precede the body, so extraction has to reach past it to the envelope's
+            // own result or error rather than starting at the first element it finds.
+            output: [
+              '<task id="child-1" state="error">',
+              "<task_notice>",
+              "A supplemental prompt could not be admitted: closing.",
+              "</task_notice>",
+              "<task_error>",
+              "current failure",
+              "</task_error>",
+              "</task>",
+            ].join("\n"),
+            metadata: { sessionId: "child-1" },
+            time: { start: 1, end: 2 },
+          },
+        }),
+      ),
+    ).toEqual({ type: "markdown", content: "current failure" })
+
+    expect(
+      entryBody(
+        toolCommit({
+          tool: "task",
+          state: {
+            status: "completed",
+            input: { description: "Inspect reducer", subagent_type: "explore" },
+            title: "",
+            output: [
+              '<task id="child-1" state="completed">',
+              "<task_notice>",
+              "Supplemental work was still registered when this answer completed.",
+              "</task_notice>",
+              "<task_result>",
+              "current report",
+              "</task_result>",
+              "</task>",
+            ].join("\n"),
+            metadata: { sessionId: "child-1" },
+            time: { start: 1, end: 2 },
+          },
+        }),
+      ),
+    ).toEqual({ type: "markdown", content: "current report" })
+
+    expect(
       structured(
         toolCommit({
           tool: "task",
@@ -279,6 +361,96 @@ describe("run entry body", () => {
       title: "# Explore Task",
       rows: ["Inspect reducer"],
       tail: "",
+    })
+  })
+
+  test("promotes running task status to markdown without leaking the raw wrapper", () => {
+    const body = entryBody(
+      toolCommit({
+        tool: "task",
+        state: {
+          status: "completed",
+          input: {
+            description: "Inspect reducer",
+            subagent_type: "explore",
+          },
+          title: "",
+          output: [
+            '<task id="child-1" state="running">',
+            "<summary>Async task started</summary>",
+            "<task_status>",
+            "The task is running asynchronously. Follow the Async Task Protocol.",
+            "</task_status>",
+            "</task>",
+          ].join("\n"),
+          metadata: {
+            sessionId: "child-1",
+            background: true,
+          },
+          time: { start: 1, end: 2 },
+        },
+      }),
+    )
+
+    expect(body).toEqual({
+      type: "markdown",
+      content: "The task is running asynchronously. Follow the Async Task Protocol.",
+    })
+    if (body.type === "markdown") {
+      expect(body.content).not.toContain("<task")
+      expect(body.content).not.toContain("<summary>")
+    }
+  })
+
+  test("retains the generic Task-body fallback", () => {
+    expect(
+      entryBody(
+        toolCommit({
+          tool: "task",
+          state: {
+            status: "completed",
+            input: {
+              description: "Inspect reducer",
+              subagent_type: "explore",
+            },
+            title: "",
+            output: "task_id: child-1\nPlain fallback result",
+            metadata: {
+              sessionId: "child-1",
+            },
+            time: { start: 1, end: 2 },
+          },
+        }),
+      ),
+    ).toEqual({
+      type: "markdown",
+      content: "Plain fallback result",
+    })
+  })
+
+  test("presents a multi-line Task failure reason verbatim", () => {
+    expect(
+      entryBody(
+        toolCommit({
+          tool: "task",
+          toolState: "error",
+          state: {
+            status: "error",
+            input: {
+              description: "Inspect reducer",
+              subagent_type: "explore",
+            },
+            error: ["Child stopped early", "No final answer"].join("\n"),
+            metadata: {
+              sessionId: "child-1",
+            },
+            time: { start: 1, end: 2 },
+          },
+        }),
+      ),
+    ).toEqual({
+      type: "text",
+      content: "✖ task failed: Child stopped early\nNo final answer",
     })
   })
 

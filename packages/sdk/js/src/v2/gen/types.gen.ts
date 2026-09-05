@@ -2468,6 +2468,12 @@ export type QuestionNotFoundError = {
   message: string
 }
 
+export type SessionBusyError = {
+  _tag: "SessionBusyError"
+  sessionID: string
+  message: string
+}
+
 export type PermissionRequest = {
   id: string
   sessionID: string
@@ -2550,6 +2556,12 @@ export type NotFoundError = {
   }
 }
 
+export type SessionClosureError = {
+  _tag: "SessionClosureError"
+  kind: "scope_incomplete" | "quiescence_failed" | "planning_failed" | "record_failed" | "closure_unavailable"
+  message: string
+}
+
 export type TextPartInput = {
   id?: string
   type: "text"
@@ -2596,12 +2608,6 @@ export type SubtaskPartInput = {
     modelID: string
   }
   command?: string
-}
-
-export type SessionBusyError = {
-  _tag: "SessionBusyError"
-  sessionID: string
-  message: string
 }
 
 export type EventTuiPromptAppend = {
@@ -7853,7 +7859,7 @@ export type ExperimentalSessionBackgroundError =
 
 export type ExperimentalSessionBackgroundResponses = {
   /**
-   * Backgrounded subagents
+   * Task subagents promoted to async
    */
   200: boolean
 }
@@ -9189,6 +9195,10 @@ export type QuestionReplyErrors = {
    * QuestionNotFoundError
    */
   404: QuestionNotFoundError
+  /**
+   * SessionBusyError
+   */
+  409: SessionBusyError
 }
 
 export type QuestionReplyError = QuestionReplyErrors[keyof QuestionReplyErrors]
@@ -9223,6 +9233,10 @@ export type QuestionRejectErrors = {
    * QuestionNotFoundError
    */
   404: QuestionNotFoundError
+  /**
+   * SessionBusyError
+   */
+  409: SessionBusyError
 }
 
 export type QuestionRejectError = QuestionRejectErrors[keyof QuestionRejectErrors]
@@ -9288,6 +9302,10 @@ export type PermissionReplyErrors = {
    * PermissionNotFoundError
    */
   404: PermissionNotFoundError
+  /**
+   * SessionBusyError
+   */
+  409: SessionBusyError
 }
 
 export type PermissionReplyError = PermissionReplyErrors[keyof PermissionReplyErrors]
@@ -9566,6 +9584,10 @@ export type SessionDeleteErrors = {
    * NotFoundError
    */
   404: NotFoundError
+  /**
+   * SessionBusyError
+   */
+  409: SessionBusyError
 }
 
 export type SessionDeleteError = SessionDeleteErrors[keyof SessionDeleteErrors]
@@ -9976,6 +9998,10 @@ export type SessionAbortErrors = {
    * BadRequest | InvalidRequestError
    */
   400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * SessionClosureError
+   */
+  500: SessionClosureError
 }
 
 export type SessionAbortError = SessionAbortErrors[keyof SessionAbortErrors]
@@ -10128,6 +10154,10 @@ export type SessionSummarizeErrors = {
    * NotFoundError
    */
   404: NotFoundError
+  /**
+   * SessionBusyError
+   */
+  409: SessionBusyError
 }
 
 export type SessionSummarizeError = SessionSummarizeErrors[keyof SessionSummarizeErrors]
@@ -10394,6 +10424,10 @@ export type PermissionRespondErrors = {
    * NotFoundError | PermissionNotFoundError
    */
   404: NotFoundError | PermissionNotFoundError
+  /**
+   * SessionBusyError
+   */
+  409: SessionBusyError
 }
 
 export type PermissionRespondError = PermissionRespondErrors[keyof PermissionRespondErrors]
@@ -10430,6 +10464,10 @@ export type PartDeleteErrors = {
    * NotFoundError
    */
   404: NotFoundError
+  /**
+   * SessionBusyError
+   */
+  409: SessionBusyError
 }
 
 export type PartDeleteError = PartDeleteErrors[keyof PartDeleteErrors]
@@ -10466,6 +10504,10 @@ export type PartUpdateErrors = {
    * NotFoundError
    */
   404: NotFoundError
+  /**
+   * SessionBusyError
+   */
+  409: SessionBusyError
 }
 
 export type PartUpdateError = PartUpdateErrors[keyof PartUpdateErrors]

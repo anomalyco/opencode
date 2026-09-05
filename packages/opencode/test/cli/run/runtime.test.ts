@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpencodeClient } from "@opencode-ai/sdk/v2"
 import { runInteractiveMode } from "@/cli/cmd/run/runtime"
-import type { FooterApi, RunProvider } from "@/cli/cmd/run/types"
+import type { FooterApi, RunProvider, StreamCommit } from "@/cli/cmd/run/types"
 
 type SessionMessage = NonNullable<Awaited<ReturnType<OpencodeClient["session"]["messages"]>>["data"]>[number]
 
@@ -81,7 +81,7 @@ function ok<T>(data: T) {
   })
 }
 
-function footer(): FooterApi {
+function footer(commits: StreamCommit[] = [], onAppend?: (commit: StreamCommit) => void): FooterApi {
   let closed = false
   const closes = new Set<() => void>()
 
@@ -107,7 +107,10 @@ function footer(): FooterApi {
       }
     },
     event() {},
-    append() {},
+    append(commit) {
+      commits.push(commit)
+      onAppend?.(commit)
+    },
     idle() {
       return Promise.resolve()
     },
@@ -234,5 +237,108 @@ describe("run interactive runtime", () => {
     await task
 
     expect(transportProviders).toEqual([[provider]])
+  })
+
+  test("renders typed interrupt failure and permits a repair retry", async () => {
+    const lifecycleReady = defer<void>()
+    const streamReady = defer<void>()
+    const failureRendered = defer<void>()
+    const commits: StreamCommit[] = []
+    const aborts: Array<{ sessionID: string; throwOnError: boolean | undefined }> = []
+    const sdk = new OpencodeClient()
+    const ui = footer(commits, (commit) => {
+      if (commit.kind === "error") failureRendered.resolve()
+    })
+    let interrupt: (() => void) | undefined
+    let attempt = 0
+
+    spyOn(sdk.config, "providers").mockImplementation(() => ok({ providers: [provider], default: {} }))
+    spyOn(sdk.session, "messages").mockImplementation(() => ok([]))
+    spyOn(sdk.session, "get").mockRejectedValue(new Error("not needed"))
+    spyOn(sdk.session, "abort").mockImplementation(
+      ((input, options) => {
+        attempt += 1
+        aborts.push({ sessionID: input.sessionID, throwOnError: options?.throwOnError })
+        if (attempt === 1) {
+          return Promise.reject({
+            _tag: "SessionClosureError",
+            kind: "record_failed",
+            message: "Closure evidence could not be recorded or verified.",
+          })
+        }
+        return ok(true)
+      }) as OpencodeClient["session"]["abort"],
+    )
+    spyOn(sdk.app, "agents").mockImplementation(() => ok([]))
+    spyOn(sdk.experimental.resource, "list").mockImplementation(() => ok({}))
+    spyOn(sdk.command, "list").mockImplementation(() => ok([]))
+
+    const task = runInteractiveMode(
+      {
+        sdk,
+        directory: "/tmp",
+        sessionID: "ses-interrupt",
+        sessionTitle: "Interrupt",
+        resume: false,
+        agent: "build",
+        model: { providerID: "openai", modelID: "gpt-5" },
+        variant: undefined,
+        files: [],
+        thinking: true,
+        backgroundSubagents: false,
+      },
+      {
+        createRuntimeLifecycle: async (input) => {
+          interrupt = input.onInterrupt
+          lifecycleReady.resolve()
+          return {
+            footer: ui,
+            onResize: () => () => {},
+            refreshTheme: () => {},
+            resetForReplay: () => Promise.resolve(),
+            close: () => Promise.resolve(),
+          }
+        },
+        streamTransport: Promise.resolve({
+          createSessionTransport: async () => {
+            streamReady.resolve()
+            return {
+              runPromptTurn: async () => {},
+              selectSubagent: () => {},
+              replayOnResize: async () => false,
+              close: async () => {},
+            }
+          },
+          formatUnknownError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
+        }),
+      },
+    )
+
+    await lifecycleReady.promise
+    await streamReady.promise
+    expect(interrupt).toBeDefined()
+    interrupt?.()
+    await failureRendered.promise
+    await Promise.resolve()
+
+    // The failure path must release the in-flight guard: a second interrupt reaches the same
+    // authoritative endpoint and can join/repair instead of being mistaken for clean cancellation.
+    interrupt?.()
+    ui.close()
+    await task
+
+    expect(aborts).toEqual([
+      { sessionID: "ses-interrupt", throwOnError: true },
+      { sessionID: "ses-interrupt", throwOnError: true },
+    ])
+    expect(commits).toEqual([
+      {
+        kind: "error",
+        text: "cancellation failed; retry interrupt to join repair: Closure evidence could not be recorded or verified.",
+        phase: "final",
+        source: "system",
+      },
+    ])
+    expect(commits.some((commit) => /cancel(?:led|ed) successfully|cancellation complete/i.test(commit.text))).toBe(false)
   })
 })

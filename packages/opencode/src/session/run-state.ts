@@ -7,21 +7,51 @@ import { Effect, Latch, Layer, Scope, Context } from "effect"
 import { Session } from "./session"
 import { SessionID } from "./schema"
 import { SessionStatus } from "./status"
+import { SessionClosure } from "./closure/coordinator"
+import { SessionAdmission } from "./closure/admission"
+import { SessionClosureModel as Model } from "./closure/model"
+import type { SessionMutation } from "./closure/mutation"
+// Type-only: the evidence shape is the closure ports contract's to define, and importing it keeps
+// one definition rather than a structural copy that can silently drift. No runtime edge is created.
+import type { SessionClosurePorts as Ports } from "./closure/ports"
+
+/**
+ * What the shared Runner store's work can refuse with.
+ *
+ * Both arms are refusals rather than faults: admission declined to admit the work, or a destructive
+ * mutation was refused because a branch is closing.
+ */
+export type RunnerError = SessionClosure.AdmissionRefused | SessionMutation.MutationRefused
 
 export interface Interface {
   readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError>
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
+  /**
+   * Interrupt one session's Runner without `cancel`'s recursive background-job sweep.
+   *
+   * That sweep is a graph walk, and a finalizer running inside the work being torn down cannot
+   * perform one: the scope close that invoked the finalizer is awaiting it. Returns whether a
+   * Runner was present, so a stale or absent target stays distinguishable from one that stopped.
+   */
+  readonly interruptRunner: (sessionID: SessionID) => Effect.Effect<boolean>
+  /** Sessions holding a live Runner, reported per axis. Reads the Runner store, not a status projection. */
+  readonly listActive: () => Effect.Effect<readonly Ports.RunnerActivity[]>
   readonly ensureRunning: (
     sessionID: SessionID,
     onInterrupt: Effect.Effect<SessionV1.WithParts>,
-    work: Effect.Effect<SessionV1.WithParts>,
-  ) => Effect.Effect<SessionV1.WithParts>
+    // The work may itself refuse: a subtask admission raised inside the loop surfaces here.
+    work: Effect.Effect<SessionV1.WithParts, SessionClosure.AdmissionRefused>,
+    // The union is the shared Runner store's error parameter. The run loop cannot raise a mutation
+    // refusal today, but the Runner it joins is the same one shell setup uses, so the seam's
+    // declared return admits both.
+  ) => Effect.Effect<SessionV1.WithParts, RunnerError>
   readonly startShell: (
     sessionID: SessionID,
     onInterrupt: Effect.Effect<SessionV1.WithParts>,
-    work: Effect.Effect<SessionV1.WithParts>,
+    // Shell setup runs revert cleanup, so the work may raise a destructive-mutation refusal.
+    work: Effect.Effect<SessionV1.WithParts, SessionMutation.MutationRefused>,
     ready?: Latch.Latch,
-  ) => Effect.Effect<SessionV1.WithParts, Session.BusyError>
+  ) => Effect.Effect<SessionV1.WithParts, Session.BusyError | RunnerError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRunState") {}
@@ -31,11 +61,15 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const background = yield* BackgroundJob.Service
     const status = yield* SessionStatus.Service
+    const closure = yield* SessionClosure.Service
 
     const state = yield* InstanceState.make(
       Effect.fn("SessionRunState.state")(function* () {
         const scope = yield* Scope.Scope
-        const runners = new Map<SessionID, Runner.Runner<SessionV1.WithParts>>()
+        // One store serves both seams, so its error parameter is the union of what either seam's
+        // work can raise. Shell setup reaches revert cleanup, which is where the mutation refusal
+        // comes from.
+        const runners = new Map<SessionID, Runner.Runner<SessionV1.WithParts, RunnerError>>()
         yield* Effect.addFinalizer(
           Effect.fnUntraced(function* () {
             yield* Effect.forEach(runners.values(), (runner) => runner.cancel, {
@@ -56,7 +90,7 @@ const layer = Layer.effect(
       const data = yield* InstanceState.get(state)
       const existing = data.runners.get(sessionID)
       if (existing) return existing
-      const next = Runner.make<SessionV1.WithParts>(data.scope, {
+      const next = Runner.make<SessionV1.WithParts, RunnerError>(data.scope, {
         onIdle: Effect.gen(function* () {
           data.runners.delete(sessionID)
           yield* status.set(sessionID, { type: "idle" })
@@ -85,26 +119,92 @@ const layer = Layer.effect(
       yield* existing.cancel
     })
 
+    const interruptRunner = Effect.fn("SessionRunState.interruptRunner")(function* (sessionID: SessionID) {
+      const data = yield* InstanceState.get(state)
+      const existing = data.runners.get(sessionID)
+      if (!existing) {
+        // Status parity with `cancel`'s no-Runner branch, and truthful on its own terms: a session
+        // with no Runner is idle. The `false` is what carries "nothing was interrupted" to the
+        // caller; the status write does not claim otherwise.
+        yield* status.set(sessionID, { type: "idle" })
+        return false
+      }
+      yield* existing.cancel
+      return true
+    })
+
+    const listActive = Effect.fn("SessionRunState.listActive")(function* () {
+      const data = yield* InstanceState.get(state)
+      return Array.from(data.runners, (entry) => ({ session: entry[0], tag: entry[1].state._tag }))
+        .filter((item) => item.tag !== "Idle")
+        .map((item) => ({
+          session: item.session,
+          running: item.tag === "Running" || item.tag === "ShellThenRun",
+          shell: item.tag === "Shell" || item.tag === "ShellThenRun",
+        }))
+    })
+
+    // `Model.AdmissionOwner` is scope | worker | job | participant and has no Runner or shell
+    // variant, so both map onto a scope ID denoting the owning identity. Distinct per session and
+    // per kind, because a session's Runner and its shell are different owners even though only one
+    // of them can hold the session at a time.
+    const owner = (kind: "runner" | "shell", sessionID: SessionID): Model.AdmissionOwner => ({
+      type: "scope",
+      id: Model.id("scope", `${kind}:${sessionID}`),
+    })
+
+    // Replace the pre-bind admission scope with whatever now owns the work, before that work can
+    // escape coordinator observation. A misroute discovered here fails closed; the finalizer
+    // installed by `admitted` then retires the lease it acquired.
+    const bindTo = (
+      context: SessionAdmission.Interface,
+      kind: "runner" | "shell",
+      sessionID: SessionID,
+    ): Effect.Effect<void, SessionClosure.AdmissionRefused> =>
+      Effect.forEach(context.leases, (lease) => closure.bind(lease, owner(kind, sessionID)), { discard: true }).pipe(
+        Effect.catchTag("SessionClosureLocationError", () =>
+          Effect.fail(new SessionClosure.AdmissionRefused({ session: sessionID, reason: "wrong_instance" })),
+        ),
+      )
+
     const ensureRunning = Effect.fn("SessionRunState.ensureRunning")(function* (
       sessionID: SessionID,
       onInterrupt: Effect.Effect<SessionV1.WithParts>,
-      work: Effect.Effect<SessionV1.WithParts>,
+      work: Effect.Effect<SessionV1.WithParts, SessionClosure.AdmissionRefused>,
     ) {
-      return yield* (yield* runner(sessionID, onInterrupt)).ensureRunning(work)
+      return yield* SessionAdmission.admitted(
+        closure,
+        { session: sessionID, origin: "internal", source: "SessionRunState.ensureRunning" },
+        (context) =>
+          Effect.gen(function* () {
+            const current = yield* runner(sessionID, onInterrupt)
+            yield* bindTo(context, "runner", sessionID)
+            return yield* current.ensureRunning(work)
+          }),
+      )
     })
 
     const startShell = Effect.fn("SessionRunState.startShell")(function* (
       sessionID: SessionID,
       onInterrupt: Effect.Effect<SessionV1.WithParts>,
-      work: Effect.Effect<SessionV1.WithParts>,
+      work: Effect.Effect<SessionV1.WithParts, SessionMutation.MutationRefused>,
       ready?: Latch.Latch,
     ) {
-      return yield* (yield* runner(sessionID, onInterrupt))
-        .startShell(work, ready)
-        .pipe(Effect.catchTag("RunnerBusy", () => Effect.fail(busyError(sessionID))))
+      return yield* SessionAdmission.admitted(
+        closure,
+        { session: sessionID, origin: "internal", source: "SessionRunState.startShell" },
+        (context) =>
+          Effect.gen(function* () {
+            const current = yield* runner(sessionID, onInterrupt)
+            yield* bindTo(context, "shell", sessionID)
+            return yield* current
+              .startShell(work, ready)
+              .pipe(Effect.catchTag("RunnerBusy", () => Effect.fail(busyError(sessionID))))
+          }),
+      )
     })
 
-    return Service.of({ assertNotBusy, cancel, ensureRunning, startShell })
+    return Service.of({ assertNotBusy, cancel, interruptRunner, listActive, ensureRunning, startShell })
   }),
 )
 
@@ -112,7 +212,12 @@ const cancelBackgroundJobs = Effect.fn("SessionRunState.cancelBackgroundJobs")(f
   background: BackgroundJob.Interface,
   sessionID: SessionID,
 ) {
-  const jobs = yield* background.list()
+  // Listing and cancelling are two operations, and a task job is filed under its session id, which
+  // is reused when that session is resumed. Between the two a matched job can settle and a new one
+  // can start under the same id, so cancelling by id would interrupt a run this sweep never matched.
+  // It would also widen the walk incorrectly: `pending` grows from the metadata of what was
+  // cancelled, so a replacement's metadata would pull in jobs from outside the requested branch.
+  const jobs = yield* background.listExact()
   const pending = new Set<string>([sessionID])
   const cancelled = new Set<string>()
   const matches = (job: BackgroundJob.Info) => {
@@ -122,23 +227,23 @@ const cancelBackgroundJobs = Effect.fn("SessionRunState.cancelBackgroundJobs")(f
     if (typeof job.metadata?.sessionId === "string" && pending.has(job.metadata.sessionId)) return true
     return typeof job.metadata?.parentSessionId === "string" && pending.has(job.metadata.parentSessionId)
   }
-  let batch = jobs.filter(matches)
+  let batch = jobs.filter((entry) => matches(entry.info))
   while (batch.length > 0) {
     yield* Effect.forEach(
       batch,
-      (job) =>
-        background.cancel(job.id).pipe(
+      (entry) =>
+        background.cancelExact(entry.lifetime).pipe(
           Effect.tap(() =>
             Effect.sync(() => {
-              cancelled.add(job.id)
-              pending.add(job.id)
-              if (typeof job.metadata?.sessionId === "string") pending.add(job.metadata.sessionId)
+              cancelled.add(entry.info.id)
+              pending.add(entry.info.id)
+              if (typeof entry.info.metadata?.sessionId === "string") pending.add(entry.info.metadata.sessionId)
             }),
           ),
         ),
       { concurrency: "unbounded", discard: true },
     )
-    batch = jobs.filter(matches)
+    batch = jobs.filter((entry) => matches(entry.info))
   }
 })
 
@@ -146,6 +251,13 @@ function busyError(sessionID: SessionID) {
   return new Session.BusyError({ sessionID })
 }
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [BackgroundJob.node, SessionStatus.node] })
+// This edge is `SessionClosure.node`, never the closure subsystem's own run-state adapter node.
+// Closure reaches run-state's activity view through request-scoped ports rather than a layer
+// dependency, so an edge in that direction would close a cycle.
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [BackgroundJob.node, SessionStatus.node, SessionClosure.node],
+})
 
 export * as SessionRunState from "./run-state"

@@ -280,11 +280,9 @@ describe("TUI inline tool wrapping", () => {
     expect(formatSubagentToolcalls(0)).toBe("0 toolcalls")
   })
 
-  test("keeps background state attached to the subagent identity", () => {
+  test("renders async vocabulary from retained background state", () => {
     expect(formatSubagentTitle("Explore", "Inspect renderer", false)).toBe("Explore Task — Inspect renderer")
-    expect(formatSubagentTitle("Explore", "Inspect renderer", true)).toBe(
-      "Explore Task (background) — Inspect renderer",
-    )
+    expect(formatSubagentTitle("Explore", "Inspect renderer", true)).toBe("Explore Task (async) — Inspect renderer")
   })
 
   test("keeps retry status ahead of wrapping messages", () => {

@@ -6,12 +6,16 @@ import { Deferred, Effect, Layer, Context } from "effect"
 import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { SessionClosure } from "@/session/closure/coordinator"
+import { SessionAdmission } from "@/session/closure/admission"
 
 export const Event = PermissionV1.Event
 
 export interface Interface {
   readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<void, PermissionV1.Error>
-  readonly reply: (input: PermissionV1.ReplyInput) => Effect.Effect<void, PermissionV1.NotFoundError>
+  readonly reply: (
+    input: PermissionV1.ReplyInput,
+  ) => Effect.Effect<void, PermissionV1.NotFoundError | SessionClosure.AdmissionRefused>
   readonly list: () => Effect.Effect<ReadonlyArray<PermissionV1.Request>>
 }
 
@@ -43,6 +47,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
+    const closure = yield* SessionClosure.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
         void ctx
@@ -109,8 +114,38 @@ const layer = Layer.effect(
     const reply = Effect.fn("Permission.reply")(function* (input: PermissionV1.ReplyInput) {
       const { approved, pending } = yield* InstanceState.get(state)
       const existing = pending.get(input.requestID)
+      // Unknown-request behaviour is unchanged and deliberately sits ahead of admission, so a reply
+      // naming an unknown request on a closing session still answers NotFound rather than a refusal.
       if (!existing) return yield* new PermissionV1.NotFoundError({ requestID: input.requestID })
 
+      // A reply resolves deferreds that resume blocked tools, so it is admission-controlled: once a
+      // branch has closed, resuming its tools would restart the work that was just stopped.
+      //
+      // One admission covers the whole resolved set. Both cascade loops below filter on this
+      // session, so a single reply can never resolve a deferred belonging to another one; per-
+      // continuation admissions would let a partial settle strand a resumed tool unaccounted for.
+      //
+      // Both polarities are admitted, because neither is proven terminal. A rejection reaches the
+      // processor's tool-call failure path, which writes the part to error — a durable mutation —
+      // and then breaks only conditionally; a correction carries model-visible feedback and does
+      // not take that branch at all.
+      //
+      // `retryable: false` is the point rather than an omission. Waiting for closure and then
+      // retrying is exactly resuming a blocked tool inside a branch that has just closed. Refusing
+      // is the answer; the joined admission is still settled.
+      return yield* SessionAdmission.admitted(
+        closure,
+        { session: existing.info.sessionID, origin: "external", source: "Permission.reply", retryable: false },
+        () => replyAdmitted(input, existing, approved, pending),
+      )
+    })
+
+    const replyAdmitted = Effect.fn("Permission.replyAdmitted")(function* (
+      input: PermissionV1.ReplyInput,
+      existing: PendingEntry,
+      approved: PermissionV1.Rule[],
+      pending: Map<PermissionV1.ID, PendingEntry>,
+    ) {
       pending.delete(input.requestID)
       yield* events.publish(Event.Replied, {
         sessionID: existing.info.sessionID,
@@ -218,6 +253,10 @@ export function visibleTools<T>(tools: Record<string, T>, ruleset: PermissionV1.
   return Object.fromEntries(Object.entries(tools).filter(([name]) => !hidden.has(name)))
 }
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node] })
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [EventV2Bridge.node, SessionClosure.node],
+})
 
 export * as Permission from "."

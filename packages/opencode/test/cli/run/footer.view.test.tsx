@@ -124,6 +124,7 @@ function subagent(input: {
   label: string
   description: string
   status?: FooterSubagentTab["status"]
+  background?: boolean
 }) {
   return {
     sessionID: input.sessionID,
@@ -132,6 +133,7 @@ function subagent(input: {
     label: input.label,
     description: input.description,
     status: input.status ?? "running",
+    ...(input.background === undefined ? {} : { background: input.background }),
     lastUpdatedAt: 1,
   } satisfies FooterSubagentTab
 }
@@ -166,6 +168,7 @@ async function renderFooter(
     state?: Partial<FooterState>
     onCycle?: () => void
     onSubmit?: (prompt: RunPrompt) => boolean
+    onBackground?: () => void
   } = {},
 ) {
   const [view] = createSignal<FooterView>({ type: "prompt" })
@@ -175,10 +178,12 @@ async function renderFooter(
   const state = footerState(input.state)
   const config = input.tuiConfig ?? tuiConfig
   let offKeymap: (() => void) | undefined
+  let registeredKeymap: ReturnType<typeof createDefaultOpenTuiKeymap> | undefined
 
   function Harness() {
     const renderer = useRenderer()
     const keymap = createDefaultOpenTuiKeymap(renderer)
+    registeredKeymap = keymap
     offKeymap = registerOpencodeKeymap(keymap, renderer, config)
 
     return (
@@ -215,6 +220,7 @@ async function renderFooter(
           onLayout={() => {}}
           onStatus={() => {}}
           onQueuedRemove={async () => true}
+          onBackground={input.onBackground}
         />
       </OpencodeKeymapProvider>
     )
@@ -231,6 +237,10 @@ async function renderFooter(
 
   return {
     ...app,
+    keymap() {
+      if (!registeredKeymap) throw new Error("footer keymap not registered")
+      return registeredKeymap
+    },
     cleanup() {
       app.renderer.currentFocusedRenderable?.blur()
       app.renderer.currentFocusedEditor?.blur()
@@ -1039,7 +1049,7 @@ test("direct footer shows editable prompts and additional queued work while runn
     expect(spinner).toBeDefined()
     expect(frame).toContain("a-model-name-long-enough-to-force-responsive-truncation")
     expect(frame).toContain("3 queued")
-    expect(frame).toContain("ctrl+b background")
+    expect(frame).toContain("ctrl+b async")
     expect(frame).toContain("ctrl+x q 3 queued")
     expect(frame).toContain("ctrl+x down subagents")
     expect(frame).toContain("ctrl+p cmd")
@@ -1081,8 +1091,69 @@ test("direct footer separates a lone context hint from model and command hint", 
 
     expect(frame).toContain("GPT-5")
     expect(frame).toContain("xhigh · ctrl+x down subagents · ctrl+p cmd")
-    expect(frame).not.toContain("ctrl+b background")
+    expect(frame).not.toContain("ctrl+b async")
     expect(frame).not.toContain("queued")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer keeps stable promotion command identity with async copy", async () => {
+  const calls: string[] = []
+  const app = await renderFooter({
+    subagents: {
+      tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" })],
+      details: {},
+      permissions: [],
+      questions: [],
+    },
+    backgroundSubagents: true,
+    onBackground: () => calls.push("background"),
+  })
+
+  try {
+    await app.renderOnce()
+    const command = app
+      .keymap()
+      .getCommands()
+      .find((item) => item.name === "session.background")
+
+    expect(command?.title).toBe("Make subagents async")
+    expect(app.captureCharFrame()).toContain("ctrl+b async")
+    app.keymap().dispatchCommand("session.background")
+    expect(calls).toEqual(["background"])
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer hides promotion for an already-async running subagent", async () => {
+  const app = await renderFooter({
+    subagents: {
+      tabs: [
+        subagent({
+          sessionID: "s-1",
+          label: "Explore",
+          description: "Inspect auth flow",
+          background: true,
+        }),
+      ],
+      details: {},
+      permissions: [],
+      questions: [],
+    },
+    backgroundSubagents: true,
+  })
+
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).not.toContain("ctrl+b async")
+    expect(
+      app
+        .keymap()
+        .getCommands()
+        .some((item) => item.name === "session.background"),
+    ).toBe(false)
   } finally {
     app.cleanup()
   }

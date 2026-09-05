@@ -15,6 +15,7 @@ import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } fr
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { AssistantParts, Message, MessageDivider, PART_MAPPING, type UserActions } from "./message-part"
+import { isHumanUserMessage } from "./closure-record"
 import { Card } from "@opencode-ai/ui/card"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
@@ -189,7 +190,7 @@ export function SessionTurn(
     if (index < 0) return -1
 
     const msg = messages[index]
-    if (!msg || msg.role !== "user") return -1
+    if (!msg || !isHumanUserMessage(msg, list(data.store.part?.[msg.id], emptyParts))) return -1
 
     return index
   })
@@ -219,7 +220,7 @@ export function SessionTurn(
     const messages = allMessages() ?? emptyMessages
     const result = Binary.search(messages, item.parentID, (m) => m.id)
     const msg = result.found ? messages[result.index] : messages.find((m) => m.id === item.parentID)
-    if (!msg || msg.role !== "user") return
+    if (!msg || !isHumanUserMessage(msg, list(data.store.part?.[msg.id], emptyParts))) return
     return msg
   })
 
