@@ -21,6 +21,7 @@ import { ServerRowMenuView, serverMenuLabels } from "@/servers/registry/row-menu
 import { ServerHealthIndicator } from "@/servers/registry/row"
 import { type ServerHealth } from "@/runtime/server/health"
 import { fileManagerApp } from "@/home/projects/file-manager"
+import "./view.css"
 
 const HOME_PROJECT_NAV_LABEL = "min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
 
@@ -325,10 +326,14 @@ function HomeServerRow(props: {
       inactive={!incompatible()}
       value={props.language.t("server.row.incompatible", { version: props.health?.version ?? "1" })}
     >
-      <div class="group/server relative flex h-7 w-full min-w-0 items-center rounded-[6px]">
+      <div
+        class="group/server relative flex h-7 w-full min-w-0 items-center rounded-[6px]"
+        data-home-row
+        data-dimmed={!healthy() && !incompatible()}
+        data-selected={props.selected ? "" : undefined}
+      >
         <HomeProjectNavButton
           type="button"
-          class="pr-16"
           classList={{ "opacity-60": !healthy() && !incompatible() }}
           data-selected={props.selected ? "" : undefined}
           disabled={!healthy()}
@@ -367,8 +372,8 @@ function HomeServerRow(props: {
           <div class="flex size-4 shrink-0 items-center justify-center -mr-0.5">
             <ServerHealthIndicator health={props.health} />
           </div>
-          <span class="flex min-w-0 items-center gap-1">
-            <span class={HOME_PROJECT_NAV_LABEL}>
+          <span data-slot="home-row-label" class="flex min-w-0 flex-1 items-center gap-1">
+            <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
               {props.server.displayName ?? new URL(props.server.http.url).host}
             </span>
             <Show when={props.server.label}>
@@ -386,8 +391,9 @@ function HomeServerRow(props: {
           </span>
         </HomeProjectNavButton>
         <div
+          data-slot="home-row-actions"
           class={`
-          hover-reveal absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1
+          hover-reveal absolute bottom-0 right-1 top-0 flex items-center gap-1 rounded-r-[6px] pl-2
           group-hover/server:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100
         `}
           data-menu={props.contextMenuOpen(contextMenuID())}
@@ -598,6 +604,10 @@ function HomeProjectRow(
       ref={sortable.ref}
       class="group/project relative flex h-7 min-w-0 items-center rounded-[6px]"
       classList={{ "z-10": sortable.isDragSource() }}
+      data-home-row
+      data-dimmed={serverUnreachable()}
+      data-dragging={sortable.isDragSource()}
+      data-selected={props.selected ? "" : undefined}
       onContextMenu={(event) => {
         event.preventDefault()
         props.onSetContextMenuOpen(contextMenuID(), true)
@@ -606,7 +616,7 @@ function HomeProjectRow(
       <HomeProjectNavButton
         type="button"
         data-component="home-project-row"
-        class="pr-16 disabled:opacity-60"
+        class="disabled:opacity-60"
         classList={{
           "bg-v2-background-bg-layer-01 text-v2-text-text-base": sortable.isDragSource(),
         }}
@@ -643,11 +653,14 @@ function HomeProjectRow(
         }}
       >
         <HomeProjectAvatar project={props.project} />
-        <span class={HOME_PROJECT_NAV_LABEL}>{displayName(props.project)}</span>
+        <span data-slot="home-row-label" class={HOME_PROJECT_NAV_LABEL}>
+          {displayName(props.project)}
+        </span>
       </HomeProjectNavButton>
       <div
+        data-slot="home-row-actions"
         class={`
-          hover-reveal absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1
+          hover-reveal absolute bottom-0 right-1 top-0 flex items-center gap-1 rounded-r-[6px] pl-2
           group-hover/project:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100
         `}
         data-menu={props.contextMenuOpen(contextMenuID())}
