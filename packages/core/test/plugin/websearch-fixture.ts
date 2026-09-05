@@ -17,24 +17,29 @@ interface WebSearchRequest {
 }
 
 export const requests: WebSearchRequest[] = []
+export const signals: AbortSignal[] = []
 let responseBody = ""
+let responseStatus = 200
 
-export function resetWebSearchFixture(body: string) {
+export function resetWebSearchFixture(body: string, status = 200) {
   requests.length = 0
+  signals.length = 0
   responseBody = body
+  responseStatus = status
 }
 
 const http = Layer.succeed(
   HttpClient.HttpClient,
-  HttpClient.make((request) =>
+  HttpClient.make((request, _url, signal) =>
     Effect.sync(() => {
+      signals.push(signal)
       if (request.body._tag !== "Uint8Array") throw new Error(`Unexpected request body: ${request.body._tag}`)
       requests.push({
         url: request.url,
         headers: request.headers,
         body: JSON.parse(new TextDecoder().decode(request.body.body)),
       })
-      return HttpClientResponse.fromWeb(request, new Response(responseBody, { status: 200 }))
+      return HttpClientResponse.fromWeb(request, new Response(responseBody, { status: responseStatus }))
     }),
   ),
 )
