@@ -801,6 +801,52 @@ const adaptGroup18 = (raw: RawClient["server.automation"]) => ({
   runGet: Endpoint18_8(raw),
 })
 
+type Endpoint19_0Request = Parameters<RawClient["server.teamjules"]["teamjules.list"]>[0]
+type Endpoint19_0Input = {
+  readonly status?: Endpoint19_0Request["query"]["status"]
+  readonly repo?: Endpoint19_0Request["query"]["repo"]
+  readonly limit?: Endpoint19_0Request["query"]["limit"]
+}
+const Endpoint19_0 = (raw: RawClient["server.teamjules"]) => (input?: Endpoint19_0Input) =>
+  raw["teamjules.list"]({ query: { status: input?.["status"], repo: input?.["repo"], limit: input?.["limit"] } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+type Endpoint19_1Request = Parameters<RawClient["server.teamjules"]["teamjules.create"]>[0]
+type Endpoint19_1Input = {
+  readonly type: Endpoint19_1Request["payload"]["type"]
+  readonly repo: Endpoint19_1Request["payload"]["repo"]
+  readonly branch: Endpoint19_1Request["payload"]["branch"]
+  readonly prompt: Endpoint19_1Request["payload"]["prompt"]
+}
+const Endpoint19_1 = (raw: RawClient["server.teamjules"]) => (input: Endpoint19_1Input) =>
+  raw["teamjules.create"]({
+    payload: { type: input["type"], repo: input["repo"], branch: input["branch"], prompt: input["prompt"] },
+  }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint19_2Request = Parameters<RawClient["server.teamjules"]["teamjules.get"]>[0]
+type Endpoint19_2Input = { readonly taskID: Endpoint19_2Request["params"]["taskID"] }
+const Endpoint19_2 = (raw: RawClient["server.teamjules"]) => (input: Endpoint19_2Input) =>
+  raw["teamjules.get"]({ params: { taskID: input["taskID"] } }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint19_3Request = Parameters<RawClient["server.teamjules"]["teamjules.cancel"]>[0]
+type Endpoint19_3Input = { readonly taskID: Endpoint19_3Request["params"]["taskID"] }
+const Endpoint19_3 = (raw: RawClient["server.teamjules"]) => (input: Endpoint19_3Input) =>
+  raw["teamjules.cancel"]({ params: { taskID: input["taskID"] } }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint19_4Request = Parameters<RawClient["server.teamjules"]["teamjules.retry"]>[0]
+type Endpoint19_4Input = { readonly taskID: Endpoint19_4Request["params"]["taskID"] }
+const Endpoint19_4 = (raw: RawClient["server.teamjules"]) => (input: Endpoint19_4Input) =>
+  raw["teamjules.retry"]({ params: { taskID: input["taskID"] } }).pipe(Effect.mapError(mapClientError))
+
+const adaptGroup19 = (raw: RawClient["server.teamjules"]) => ({
+  list: Endpoint19_0(raw),
+  create: Endpoint19_1(raw),
+  get: Endpoint19_2(raw),
+  cancel: Endpoint19_3(raw),
+  retry: Endpoint19_4(raw),
+})
+
 const adaptClient = (raw: RawClient) => ({
   health: adaptGroup0(raw["server.health"]),
   location: adaptGroup1(raw["server.location"]),
@@ -821,6 +867,7 @@ const adaptClient = (raw: RawClient) => ({
   references: adaptGroup16(raw["server.reference"]),
   projectCopies: adaptGroup17(raw["server.projectCopy"]),
   "server.automation": adaptGroup18(raw["server.automation"]),
+  "server.teamjules": adaptGroup19(raw["server.teamjules"]),
 })
 
 export const make = (options?: { readonly baseUrl?: URL | string }) =>

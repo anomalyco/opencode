@@ -3284,3 +3284,130 @@ export type ServerAutomationRunGetOutput = {
   readonly timeCreated: number
   readonly timeUpdated: number
 }
+
+export type ServerTeamjulesListInput = {
+  readonly status?: {
+    readonly status?: "pending" | "queued" | "running" | "completed" | "failed" | "cancelled" | undefined
+    readonly repo?: string | undefined
+    readonly limit?: number | undefined
+  }["status"]
+  readonly repo?: {
+    readonly status?: "pending" | "queued" | "running" | "completed" | "failed" | "cancelled" | undefined
+    readonly repo?: string | undefined
+    readonly limit?: number | undefined
+  }["repo"]
+  readonly limit?: {
+    readonly status?: "pending" | "queued" | "running" | "completed" | "failed" | "cancelled" | undefined
+    readonly repo?: string | undefined
+    readonly limit?: number | undefined
+  }["limit"]
+}
+
+export type ServerTeamjulesListOutput = ReadonlyArray<{
+  readonly id: string
+  readonly type: "issue" | "pr" | "manual"
+  readonly status: "pending" | "queued" | "running" | "completed" | "failed" | "cancelled"
+  readonly repo: string
+  readonly branch: string
+  readonly prompt: string
+  readonly result?:
+    | {
+        readonly pr_url?: string | undefined
+        readonly commit_sha?: string | undefined
+        readonly error?: string | undefined
+      }
+    | undefined
+  readonly session_id?: string | undefined
+  readonly worker_id?: string | undefined
+  readonly attempt_count: number
+  readonly max_attempts: number
+  readonly time_created: number
+  readonly time_updated: number
+  readonly started_at?: number | undefined
+  readonly completed_at?: number | undefined
+}>
+
+export type ServerTeamjulesCreateInput = {
+  readonly type: {
+    readonly type: "issue" | "pr" | "manual"
+    readonly repo: string
+    readonly branch: string
+    readonly prompt: string
+  }["type"]
+  readonly repo: {
+    readonly type: "issue" | "pr" | "manual"
+    readonly repo: string
+    readonly branch: string
+    readonly prompt: string
+  }["repo"]
+  readonly branch: {
+    readonly type: "issue" | "pr" | "manual"
+    readonly repo: string
+    readonly branch: string
+    readonly prompt: string
+  }["branch"]
+  readonly prompt: {
+    readonly type: "issue" | "pr" | "manual"
+    readonly repo: string
+    readonly branch: string
+    readonly prompt: string
+  }["prompt"]
+}
+
+export type ServerTeamjulesCreateOutput = {
+  readonly id: string
+  readonly type: "issue" | "pr" | "manual"
+  readonly status: "pending" | "queued" | "running" | "completed" | "failed" | "cancelled"
+  readonly repo: string
+  readonly branch: string
+  readonly prompt: string
+  readonly result?:
+    | {
+        readonly pr_url?: string | undefined
+        readonly commit_sha?: string | undefined
+        readonly error?: string | undefined
+      }
+    | undefined
+  readonly session_id?: string | undefined
+  readonly worker_id?: string | undefined
+  readonly attempt_count: number
+  readonly max_attempts: number
+  readonly time_created: number
+  readonly time_updated: number
+  readonly started_at?: number | undefined
+  readonly completed_at?: number | undefined
+}
+
+export type ServerTeamjulesGetInput = { readonly taskID: { readonly taskID: string }["taskID"] }
+
+export type ServerTeamjulesGetOutput = {
+  readonly id: string
+  readonly type: "issue" | "pr" | "manual"
+  readonly status: "pending" | "queued" | "running" | "completed" | "failed" | "cancelled"
+  readonly repo: string
+  readonly branch: string
+  readonly prompt: string
+  readonly result?:
+    | {
+        readonly pr_url?: string | undefined
+        readonly commit_sha?: string | undefined
+        readonly error?: string | undefined
+      }
+    | undefined
+  readonly session_id?: string | undefined
+  readonly worker_id?: string | undefined
+  readonly attempt_count: number
+  readonly max_attempts: number
+  readonly time_created: number
+  readonly time_updated: number
+  readonly started_at?: number | undefined
+  readonly completed_at?: number | undefined
+}
+
+export type ServerTeamjulesCancelInput = { readonly taskID: { readonly taskID: string }["taskID"] }
+
+export type ServerTeamjulesCancelOutput = void
+
+export type ServerTeamjulesRetryInput = { readonly taskID: { readonly taskID: string }["taskID"] }
+
+export type ServerTeamjulesRetryOutput = void

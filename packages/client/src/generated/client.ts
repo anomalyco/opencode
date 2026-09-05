@@ -132,6 +132,16 @@ import type {
   ServerAutomationRunListOutput,
   ServerAutomationRunGetInput,
   ServerAutomationRunGetOutput,
+  ServerTeamjulesListInput,
+  ServerTeamjulesListOutput,
+  ServerTeamjulesCreateInput,
+  ServerTeamjulesCreateOutput,
+  ServerTeamjulesGetInput,
+  ServerTeamjulesGetOutput,
+  ServerTeamjulesCancelInput,
+  ServerTeamjulesCancelOutput,
+  ServerTeamjulesRetryInput,
+  ServerTeamjulesRetryOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -1135,6 +1145,65 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [404, 401, 400],
             empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    "server.teamjules": {
+      list: (input?: ServerTeamjulesListInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamjulesListOutput>(
+          {
+            method: "GET",
+            path: `/api/teamjules/tasks`,
+            query: { status: input?.["status"], repo: input?.["repo"], limit: input?.["limit"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      create: (input: ServerTeamjulesCreateInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamjulesCreateOutput>(
+          {
+            method: "POST",
+            path: `/api/teamjules/tasks`,
+            body: { type: input["type"], repo: input["repo"], branch: input["branch"], prompt: input["prompt"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      get: (input: ServerTeamjulesGetInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamjulesGetOutput>(
+          {
+            method: "GET",
+            path: `/api/teamjules/tasks/${encodeURIComponent(input.taskID)}`,
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      cancel: (input: ServerTeamjulesCancelInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamjulesCancelOutput>(
+          {
+            method: "DELETE",
+            path: `/api/teamjules/tasks/${encodeURIComponent(input.taskID)}`,
+            successStatus: 204,
+            declaredStatuses: [401, 400],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      retry: (input: ServerTeamjulesRetryInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamjulesRetryOutput>(
+          {
+            method: "POST",
+            path: `/api/teamjules/tasks/${encodeURIComponent(input.taskID)}/retry`,
+            successStatus: 204,
+            declaredStatuses: [401, 400],
+            empty: true,
           },
           requestOptions,
         ),
