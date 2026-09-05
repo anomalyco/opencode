@@ -1514,7 +1514,9 @@ const layer = Layer.effect(
               name,
               providerID: ProviderV2.ID.make(providerID),
               capabilities: {
-                temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
+                // Config-defined custom models should forward agent-level temperature
+                // unless the user explicitly disables it for that model.
+                temperature: model.temperature ?? existingModel?.capabilities.temperature ?? true,
                 reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
                 attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
                 toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
