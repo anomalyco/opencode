@@ -84,7 +84,7 @@ export interface SessionHooks {
 
 /** Intentional subset of SessionApi["list"]: in-process only, no cursor/pagination. */
 export interface SessionList {
-  /** Filter to sessions created in this directory. Must be absolute. */
+  /** Filter to sessions created in this directory. Must be absolute; relative paths fail. */
   readonly directory?: string
   readonly search?: string
   readonly order?: "asc" | "desc"
@@ -116,7 +116,7 @@ export type SessionDomain = Pick<
   | "revert"
   | "context"
 > & {
-  readonly list: (input?: SessionList) => Effect.Effect<SessionListResult>
+  readonly list: (input?: SessionList) => Effect.Effect<SessionListResult, Error>
   readonly hook: ModelHooks<SessionHooks>
   readonly form: Pick<FormApi<unknown>, "list" | "get" | "state" | "reply" | "cancel">
 }

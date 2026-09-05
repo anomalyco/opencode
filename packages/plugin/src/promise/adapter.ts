@@ -574,6 +574,12 @@ export function fromPromise(plugin: Plugin) {
               register(
                 host.session.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))), options),
               ),
+            // list bypasses adaptApiMethod intentionally: the in-process
+            // SessionList is a cursor-free subset of the HTTP SessionsQuery
+            // (no anchor/cursor encoding), so there is no single endpoint
+            // schema to decode against. Input validation lives in
+            // host.session.list (absolute directory, asc/desc order, positive
+            // integer limit) and surfaces here as a rejected promise.
             list: (input) =>
               run(host.session.list(input ?? {})).then((result) => ({ data: result.data })),
             create: adaptApiMethod(SessionEndpoints["session.create"], host.session.create),

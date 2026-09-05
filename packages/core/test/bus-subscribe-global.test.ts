@@ -48,4 +48,19 @@ describe("Bus subscribeGlobal", () => {
       expect(globalEvents[1]).toEqual(done)
     }),
   )
+
+  it.effect("filters by definition when one is given", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const filtered = yield* bus
+        .subscribeGlobal(Ping)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+      // Done is published so the bus has more than one event type in flight;
+      // the definition-filtered stream must only ever see Ping.
+      yield* bus.publish(Done, {}, { global: true })
+      yield* bus.publish(Ping, {}, { location: a })
+      const events = Array.from(yield* Fiber.join(filtered))
+      expect(events.map((event) => event.type)).toEqual([Ping.type])
+    }),
+  )
 })

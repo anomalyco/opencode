@@ -575,7 +575,11 @@ export const make = Effect.fn("PluginHost.make")(function* (
       hook: (name, callback, options) => hooks.register("session", name, callback, options),
       list: (input) => {
         if (input?.directory !== undefined && !path.isAbsolute(input.directory))
-          return Effect.die(new Error(`session.list directory must be absolute: ${input.directory}`))
+          return Effect.fail(new Error(`session.list directory must be absolute: ${input.directory}`))
+        if (input?.order !== undefined && input.order !== "asc" && input.order !== "desc")
+          return Effect.fail(new Error(`session.list order must be "asc" or "desc": ${input.order}`))
+        if (input?.limit !== undefined && (!Number.isInteger(input.limit) || input.limit <= 0))
+          return Effect.fail(new Error(`session.list limit must be a positive integer: ${input.limit}`))
         return sessions.list({
           ...(input?.directory === undefined ? {} : { directory: AbsolutePath.make(input.directory) }),
           search: input?.search,

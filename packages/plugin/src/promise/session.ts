@@ -85,7 +85,7 @@ export interface SessionHooks {
 
 /** Intentional subset of SessionApi["list"]: in-process only, no cursor/pagination. */
 export interface SessionList {
-  /** Filter to sessions created in this directory. Must be absolute. */
+  /** Filter to sessions created in this directory. Must be absolute; relative paths reject. */
   readonly directory?: string
   readonly search?: string
   readonly order?: "asc" | "desc"

@@ -12,6 +12,12 @@ import { Permission } from "../permission.js"
  * then fails "not found"). Resolve the session's location first and use that
  * instance instead, like the HTTP session-location middleware does. Sessions
  * that no longer resolve fall back to the ambient instance (legacy behavior).
+ *
+ * Known limit: a request that pended before `session.move` stays in the old
+ * location's instance while the session now resolves to the new one, so it
+ * still reports not found (same move race as session forms). Migrating
+ * in-flight permission/form state on move is future work; callers that need
+ * it should reply before moving the session.
  */
 export function permissionForSession<A, E>(input: {
   sessions: {

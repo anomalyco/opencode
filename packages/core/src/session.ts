@@ -212,6 +212,7 @@ export interface Interface {
     readonly commit: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | BusyError>
   }
   readonly form: {
+    /** Pending forms only, matching Form.Service semantics; use get/state to observe settled forms. */
     readonly list: (input: { readonly sessionID: string }) => Effect.Effect<readonly Form.Info[], NotFoundError>
     readonly get: (input: {
       readonly sessionID: string
@@ -259,11 +260,21 @@ const layer = Layer.effect(
     // location and route through that location's Form.Service instead. The
     // lookup-then-route is best-effort: a session that moves between the two
     // steps resolves against the pre-move location and may report NotFound.
+    // Malformed session IDs fail with NotFoundError rather than dying in
+    // schema construction; the store lookup decides existence. The failure is
+    // built literally (not via `new`) because TaggedError constructors
+    // validate and would themselves throw on a malformed ID; tag-based
+    // routing (`catchTag("Session.NotFoundError")`) only reads `_tag`.
     const formFor = <A, E>(
       sessionID: string,
       run: (form: Form.Interface) => Effect.Effect<A, E>,
     ) => {
-      const id = SessionSchema.ID.descending(sessionID)
+      if (!Schema.is(SessionSchema.ID)(sessionID))
+        return Effect.fail({
+          _tag: "Session.NotFoundError",
+          sessionID,
+        } as unknown as NotFoundError) as Effect.Effect<A, NotFoundError | E>
+      const id = sessionID as SessionSchema.ID
       return store.get(id).pipe(
         Effect.flatMap(
           (session): Effect.Effect<A, NotFoundError | E> =>
