@@ -1,6 +1,6 @@
 export * as AutomationQueue from "./queue"
 
-import { Context, Effect, Layer, Ref, Fiber, Schema } from "effect"
+import { Context, Effect, Layer, Queue, Ref, Schema } from "effect"
 import { makeGlobalNode } from "../effect/app-node"
 import {
   AutomationClassifier,
@@ -142,19 +142,21 @@ const layer = Layer.effect(
     const config = yield* QueueConfigRef
 
     const state = yield* Ref.make<QueueState>(initialState())
+    const wake = yield* Queue.dropping<void>(1)
 
     const tryRunNext = Effect.gen(function* () {
       const current = yield* Ref.get(state)
-      if (current.running.size >= config.globalConcurrency) return false
-      if (current.pending.length === 0) return false
+      const available = config.globalConcurrency - current.running.size
+      if (available <= 0 || current.pending.length === 0) return false
 
-      const job = current.pending[0]!
-      const remaining = current.pending.slice(1)
+      const toRun = current.pending.slice(0, available)
+      const remaining = current.pending.slice(available)
       const newRunning = new Set(current.running)
-      newRunning.add(job.id)
-      const newByComplexity = {
-        ...current.byComplexity,
-        [job.complexity]: current.byComplexity[job.complexity] - 1,
+      const newByComplexity = { ...current.byComplexity }
+
+      for (const job of toRun) {
+        newRunning.add(job.id)
+        newByComplexity[job.complexity] = (newByComplexity[job.complexity] ?? 1) - 1
       }
 
       yield* Ref.set(state, {
@@ -166,18 +168,21 @@ const layer = Layer.effect(
 
       if (current.handler) {
         const handler = current.handler
-        yield* Effect.forkScoped(
-          Effect.gen(function* () {
-            yield* handler(job).pipe(Effect.ignore)
-            yield* Ref.update(state, (s) => {
-              const next = new Set(s.running)
-              next.delete(job.id)
-              const dedupIndex = new Map(s.dedupIndex)
-              if (job.deduplicationKey) dedupIndex.delete(job.deduplicationKey)
-              return { ...s, running: next, dedupIndex }
-            })
-          }).pipe(Effect.catch(() => Effect.void)),
-        )
+        for (const job of toRun) {
+          yield* Effect.forkScoped(
+            Effect.gen(function* () {
+              yield* handler(job).pipe(Effect.ignore)
+              yield* Ref.update(state, (s) => {
+                const next = new Set(s.running)
+                next.delete(job.id)
+                const dedupIndex = new Map(s.dedupIndex)
+                if (job.deduplicationKey) dedupIndex.delete(job.deduplicationKey)
+                return { ...s, running: next, dedupIndex }
+              })
+              yield* Queue.offer(wake, undefined).pipe(Effect.ignore)
+            }).pipe(Effect.catch(() => Effect.void)),
+          )
+        }
       }
 
       return true
@@ -185,8 +190,11 @@ const layer = Layer.effect(
 
     const worker = Effect.gen(function* () {
       while (true) {
-        yield* Effect.sleep("100 millis")
-        yield* tryRunNext
+        yield* Queue.take(wake)
+        let hasMore = true
+        while (hasMore) {
+          hasMore = yield* tryRunNext
+        }
       }
     })
 
@@ -255,6 +263,7 @@ const layer = Layer.effect(
           },
         }
       })
+      yield* Queue.offer(wake, undefined).pipe(Effect.ignore)
     })
 
     const status: Interface["status"] = Effect.fn("AutomationQueue.status")(function* () {
@@ -274,6 +283,7 @@ const layer = Layer.effect(
 
     const setHandler: Interface["setHandler"] = Effect.fn("AutomationQueue.setHandler")(function* (handler) {
       yield* Ref.update(state, (s) => ({ ...s, handler }))
+      yield* Queue.offer(wake, undefined).pipe(Effect.ignore)
     })
 
     const stop: Interface["stop"] = Effect.void

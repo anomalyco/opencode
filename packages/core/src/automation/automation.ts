@@ -262,6 +262,47 @@ const layer = Layer.effect(
 
     yield* queue.setHandler(handleJob)
 
+    // Startup recovery: recover pending and interrupted runs from SQLite
+    const pendingRuns = yield* db
+      .select()
+      .from(AutomationRunTable)
+      .where(eq(AutomationRunTable.status, "pending"))
+      .all()
+      .pipe(Effect.orDie)
+
+    for (const run of pendingRuns) {
+      yield* queue
+        .enqueue({
+          runID: run.id,
+          sessionID: run.session_id,
+          prompt: run.prompt,
+          triggerID: run.trigger_id,
+          ...(run.agent ? { agent: run.agent } : {}),
+        })
+        .pipe(
+          Effect.tap(() => updateRunStatus(run.id, "running")),
+          Effect.catch(() => updateRunStatus(run.id, "failed", "Startup recovery failed to enqueue")),
+        )
+    }
+
+    const abandonedRuns = yield* db
+      .select()
+      .from(AutomationRunTable)
+      .where(eq(AutomationRunTable.status, "running"))
+      .all()
+      .pipe(Effect.orDie)
+
+    for (const run of abandonedRuns) {
+      yield* updateRunStatus(run.id, "failed", "Interrupted by process restart")
+    }
+
+    yield* db
+      .update(AutomationTriggerTable)
+      .set({ locked: false, lock_owner: null, lock_expires: null, time_updated: Date.now() })
+      .where(eq(AutomationTriggerTable.locked, true))
+      .run()
+      .pipe(Effect.orDie)
+
     return Service.of({
       create: Effect.fn("Automation.create")(function* (input) {
         const id = input.id ?? crypto.randomUUID()
