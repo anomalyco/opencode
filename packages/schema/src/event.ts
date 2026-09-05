@@ -12,17 +12,25 @@ export const ID = Schema.String.check(Schema.isStartsWith("evt_")).pipe(
 )
 export type ID = typeof ID.Type
 
+export type DurableMeta = {
+  readonly version: number
+  readonly aggregate: string
+  /**
+   * JSON path into data identifying the entity this event snapshots; older
+   * snapshots of the same entity are compacted away. Supported subset:
+   * `$` root followed by dot-separated plain identifiers resolving to a
+   * string value (e.g. `$.sessionID`, `$.info.id`). Array subscripts and
+   * non-string values are not supported and silently disable compaction.
+   */
+  readonly compact?: string
+}
+
 export type Definition<
   Type extends string = string,
   DataSchema extends Schema.Codec<unknown, unknown> = Schema.Codec<unknown, unknown>,
 > = Schema.Top & {
   readonly type: Type
-  readonly durable?: {
-    readonly version: number
-    readonly aggregate: string
-    /** JSON path into data identifying the entity this event snapshots; older snapshots of the same entity are compacted away. */
-    readonly compact?: string
-  }
+  readonly durable?: DurableMeta
   readonly data: DataSchema
 }
 
@@ -46,11 +54,7 @@ export function define<
   const Fields extends Readonly<Record<PropertyKey, Schema.Codec<unknown, unknown>>>,
 >(input: {
   readonly type: Type
-  readonly durable?: {
-    readonly version: number
-    readonly aggregate: string
-    readonly compact?: string
-  }
+  readonly durable?: DurableMeta
   readonly schema: Fields
 }) {
   const data = Schema.Struct(input.schema)

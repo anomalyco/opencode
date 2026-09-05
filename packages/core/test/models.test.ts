@@ -242,6 +242,27 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.live("refresh(true) builds the user agent per request, not at import time", () =>
+    Effect.gen(function* () {
+      yield* writeCache(fixture)
+      const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
+      yield* provided(
+        state,
+        Effect.gen(function* () {
+          const svc = yield* ModelsDev.Service
+          yield* svc.refresh(true)
+          // Flip the client flag between fetches; a module-load-time constant would not see this.
+          process.env["OPENCODE_CLIENT"] = "desktop"
+          yield* svc.refresh(true)
+        }),
+      )
+      const final = yield* Ref.get(state)
+      expect(final.calls.length).toBe(2)
+      expect(final.calls[0].userAgent).toContain("/cli")
+      expect(final.calls[1].userAgent).toContain("/desktop")
+    }),
+  )
+
   it.live("refresh(false) skips fetch when on-disk file is fresh", () =>
     Effect.gen(function* () {
       // Fresh: mtime within the 5-minute TTL.
