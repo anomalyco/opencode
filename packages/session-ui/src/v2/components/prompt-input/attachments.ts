@@ -222,7 +222,10 @@ export function createPromptInputV2Attachments(
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
 
 async function blobReference(file: File) {
-  const id = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer())))
+  const bytes = crypto.subtle
+    ? new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()))
+    : crypto.getRandomValues(new Uint8Array(16))
+  const id = Array.from(bytes)
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("")
   return { id, url: URL.createObjectURL(file) }
