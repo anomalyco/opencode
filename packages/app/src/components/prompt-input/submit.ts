@@ -10,7 +10,13 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal, type ModelSelection } from "@/context/local"
 import { usePermission } from "@/context/permission"
-import { type ContextItem, type ImageAttachmentPart, type Prompt, type usePrompt } from "@/context/prompt"
+import {
+  type ContextItem,
+  type ImageAttachmentPart,
+  type Prompt,
+  type TextAttachmentPart,
+  type usePrompt,
+} from "@/context/prompt"
 import { useSDK, type DirectorySDK } from "@/context/sdk"
 import { useSync, type DirectorySync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
@@ -49,15 +55,23 @@ type FollowupSendInput = {
   messageID?: string
   optimisticBusy?: boolean
   before?: () => Promise<boolean> | boolean
+  prepareTextAttachment?: (
+    attachment: TextAttachmentPart,
+    session: { id: string; directory: string },
+  ) => Promise<{ id: string; url: string }>
+  cleanupTextAttachment?: (id: string, session: { id: string; directory: string }) => Promise<void>
 }
 
 const draftText = (prompt: Prompt) => prompt.map((part) => ("content" in part ? part.content : "")).join("")
 
 const draftImages = (prompt: Prompt) => prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
+const draftTextAttachments = (prompt: Prompt) =>
+  prompt.filter((part): part is TextAttachmentPart => part.type === "text-attachment")
 
 export async function sendFollowupDraft(input: FollowupSendInput) {
   const text = draftText(input.draft.prompt)
   const images = draftImages(input.draft.prompt)
+  const textAttachments = draftTextAttachments(input.draft.prompt)
   const setBusy = () => {
     if (!input.optimisticBusy) return
     input.serverSync.session.set("session_status", input.draft.sessionID, { type: "busy" })
@@ -85,24 +99,52 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       }
 
       const messageID = Identifier.ascending("message")
-      await input.api.command({
-        sessionID: input.draft.sessionID,
-        id: messageID,
-        command: cmd,
-        arguments: tail.join(" "),
-        agent: input.draft.agent,
-        model: {
-          id: input.draft.model.modelID,
-          providerID: input.draft.model.providerID,
-          variant: input.draft.variant,
-        },
-        files: await Promise.all(
-          images.map(async (attachment) => ({
-            uri: await blobDataUrl(attachment.blob, attachment.mime),
-            name: attachment.filename,
+      if (textAttachments.length > 0 && !input.prepareTextAttachment)
+        throw new Error("Text attachments are unavailable")
+      const preparedTextAttachments = await Promise.all(
+        textAttachments.map(async (attachment) => ({
+          attachment,
+          ...(await input.prepareTextAttachment!(attachment, {
+            id: input.draft.sessionID,
+            directory: input.draft.sessionDirectory,
           })),
-        ),
-      })
+        })),
+      )
+      try {
+        await input.api.command({
+          sessionID: input.draft.sessionID,
+          id: messageID,
+          command: cmd,
+          arguments: tail.join(" "),
+          agent: input.draft.agent,
+          model: {
+            id: input.draft.model.modelID,
+            providerID: input.draft.model.providerID,
+            variant: input.draft.variant,
+          },
+          files: [
+            ...(await Promise.all(
+              images.map(async (attachment) => ({
+                uri: await blobDataUrl(attachment.blob, attachment.mime),
+                name: attachment.filename,
+              })),
+            )),
+            ...preparedTextAttachments.map(({ attachment, url }) => ({
+              uri: url,
+              name: attachment.filename,
+            })),
+          ],
+        })
+      } finally {
+        await Promise.all(
+          preparedTextAttachments.map((attachment) =>
+            input.cleanupTextAttachment?.(attachment.id, {
+              id: input.draft.sessionID,
+              directory: input.draft.sessionDirectory,
+            }),
+          ),
+        )
+      }
       return true
     } catch (err) {
       setIdle()
@@ -117,10 +159,21 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       dataUrl: await blobDataUrl(attachment.blob, attachment.mime),
     })),
   )
+  if (textAttachments.length > 0 && !input.prepareTextAttachment) throw new Error("Text attachments are unavailable")
+  const preparedTextAttachments = await Promise.all(
+    textAttachments.map(async (attachment) => ({
+      attachment,
+      ...(await input.prepareTextAttachment!(attachment, {
+        id: input.draft.sessionID,
+        directory: input.draft.sessionDirectory,
+      })),
+    })),
+  )
   const { requestParts, optimisticParts } = buildRequestParts({
     prompt: input.draft.prompt,
     context: input.draft.context,
     images: encodedImages,
+    textAttachments: preparedTextAttachments,
     text,
     sessionID: input.draft.sessionID,
     messageID,
@@ -204,6 +257,15 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       remove()
     })
     throw err
+  } finally {
+    await Promise.all(
+      preparedTextAttachments.map((attachment) =>
+        input.cleanupTextAttachment?.(attachment.id, {
+          id: input.draft.sessionID,
+          directory: input.draft.sessionDirectory,
+        }),
+      ),
+    )
   }
 }
 
@@ -211,6 +273,7 @@ type PromptSubmitInput = {
   prompt: ReturnType<typeof usePrompt>
   info: Accessor<{ id: string } | undefined>
   imageAttachments: Accessor<ImageAttachmentPart[]>
+  textAttachments?: Accessor<TextAttachmentPart[]>
   commentCount: Accessor<number>
   autoAccept: Accessor<boolean>
   mode: Accessor<"normal" | "shell">
@@ -229,6 +292,11 @@ type PromptSubmitInput = {
   onAbort?: () => void
   onSubmit?: () => void
   model?: ModelSelection
+  prepareTextAttachment?: (
+    attachment: TextAttachmentPart,
+    session: { id: string; directory: string },
+  ) => Promise<{ id: string; url: string }>
+  cleanupTextAttachment?: (id: string, session: { id: string; directory: string }) => Promise<void>
 }
 
 export function createPromptSubmit(input: PromptSubmitInput) {
@@ -328,9 +396,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const context = submission.context
     const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
     const images = input.imageAttachments().slice()
+    const textAttachments = input.textAttachments?.().slice() ?? []
     const mode = input.mode()
 
-    if (text.trim().length === 0 && images.length === 0 && input.commentCount() === 0) {
+    if (text.trim().length === 0 && images.length === 0 && textAttachments.length === 0 && input.commentCount() === 0) {
       if (input.working()) void abort()
       return
     }
@@ -513,7 +582,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       const [cmdName, ...args] = text.split(" ")
       const commandName = cmdName.slice(1)
       const customCommand = sync().data.command.find((c) => c.name === commandName)
-      if (customCommand) {
+      if (customCommand && textAttachments.length === 0) {
         clearInput()
         const messageID = Identifier.ascending("message")
         serverSync().session.set("session_status", session.id, { type: "busy" })
@@ -624,6 +693,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       messageID,
       optimisticBusy: sessionDirectory === projectDirectory,
       before: waitForWorktree,
+      prepareTextAttachment: input.prepareTextAttachment,
+      cleanupTextAttachment: input.cleanupTextAttachment,
     }).catch((err) => {
       pending.delete(pendingKey(session.id))
       if (sessionDirectory === projectDirectory) {

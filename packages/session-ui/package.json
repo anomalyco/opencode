@@ -21,12 +21,14 @@
     "./v2/*": "./src/v2/components/*.tsx",
     "./v2/prompt-input": "./src/v2/components/prompt-input/index.tsx",
     "./v2/prompt-input/interaction": "./src/v2/components/prompt-input/interaction.ts",
+    "./v2/prompt-input/paste": "./src/v2/components/prompt-input/paste.ts",
     "./v2/prompt-input/store": "./src/v2/components/prompt-input/store.ts",
     "./v2/prompt-input/types": "./src/v2/components/prompt-input/types.ts"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "test": "bun test src --only-failures"
+    "test": "bun test src --only-failures",
+    "test:large-paste": "bun test src/v2/components/prompt-input/interaction.test.ts src/v2/components/prompt-input/paste.test.ts"
   },
   "devDependencies": {
     "@tsconfig/node22": "catalog:",

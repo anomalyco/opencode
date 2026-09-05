@@ -15,14 +15,16 @@ import { createPersistedPromptInputHistory } from "@/components/prompt-input/his
 import { promptDesignPlaceholder, promptPlaceholder } from "@/components/prompt-input/placeholder"
 import { createPromptSubmit } from "@/components/prompt-input/submit"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
+import { encodeFilePath } from "@/context/file/path"
 import { useComments } from "@/context/comments"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePermission } from "@/context/permission"
-import { type ImageAttachmentPart, usePrompt } from "@/context/prompt"
+import { type ImageAttachmentPart, type TextAttachmentPart, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
+import { ServerConnection } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { showToast } from "@/utils/toast"
@@ -116,6 +118,9 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   const attachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )
+  const textAttachments = createMemo(() =>
+    prompt.current().filter((part): part is TextAttachmentPart => part.type === "text-attachment"),
+  )
   const commentCount = createMemo(() => {
     if (mode() === "shell") return 0
     return prompt.context.items().filter((item) => !!item.comment?.trim()).length
@@ -125,7 +130,9 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       .current()
       .map((part) => ("content" in part ? part.content : ""))
       .join("")
-    return text.trim().length === 0 && attachments().length === 0 && commentCount() === 0
+    return (
+      text.trim().length === 0 && attachments().length === 0 && textAttachments().length === 0 && commentCount() === 0
+    )
   })
   const stopping = createMemo(() => working() && blank())
   const placeholder = createMemo(() =>
@@ -199,6 +206,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     prompt,
     info,
     imageAttachments: attachments,
+    textAttachments,
     commentCount,
     autoAccept: accepting,
     mode,
@@ -219,6 +227,27 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
     model: props.controls.model.selection,
+    prepareTextAttachment: async (attachment, session) => {
+      if (ServerConnection.local(sdk().server) && platform.materializeDraftBlob) {
+        const materialized = await platform.materializeDraftBlob(attachment.blob.id)
+        return { id: materialized.id, url: `file://${encodeFilePath(materialized.path)}` }
+      }
+      const content = await fetch(attachment.blob.url).then((response) => response.text())
+      const uploaded = await sdk()
+        .createClient({ directory: session.directory, throwOnError: true })
+        .session.attachment.upload({ sessionID: session.id, filename: attachment.filename, content })
+      if (!uploaded.data) throw new Error(language.t("prompt.toast.pasteUnsupported.description"))
+      return uploaded.data
+    },
+    cleanupTextAttachment: async (id, session) => {
+      if (ServerConnection.local(sdk().server)) {
+        await (platform.cleanupMaterializedDraftBlob?.(id) ?? Promise.resolve())
+        return
+      }
+      await sdk()
+        .createClient({ directory: session.directory, throwOnError: true })
+        .session.attachment.remove({ sessionID: session.id, attachmentID: id })
+    },
   })
 
   const referenceDescription = (reference: ReferenceInfo) =>
@@ -346,8 +375,10 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     onContextRemove(item) {
       if (item?.commentID) comments.remove(item.path, item.commentID)
     },
-    openAttachment: (attachment) =>
-      dialog.show(() => <ImagePreview src={attachment.blob.url} alt={attachment.filename} />),
+    openAttachment: (attachment) => {
+      if (attachment.type !== "image") return
+      dialog.show(() => <ImagePreview src={attachment.blob.url} alt={attachment.filename} />)
+    },
     openContext(key) {
       const item = controller.contextItem(key)
       if (item) openComment(item, props, sync, layout, files, comments)
@@ -384,6 +415,11 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     },
     view: {
       placeholder: designPlaceholder,
+      onLargePaste: () =>
+        showToast({
+          title: language.t("prompt.toast.pasteUnsupported.title"),
+          description: language.t("prompt.toast.pasteUnsupported.description"),
+        }),
       get agent() {
         return props.controls.agents.visible && props.controls.agents.options.length > 0
           ? {
