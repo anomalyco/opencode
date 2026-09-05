@@ -320,6 +320,129 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("publishes mixed durable event definitions as one ordered batch", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const aggregateID = EventV2.ID.create()
+      const eventID = EventV2.ID.create()
+      const projected = new Array<string>()
+      yield* events.project(SyncMessage, (event) => Effect.sync(() => projected.push(event.data.text)))
+      yield* events.project(SyncSent, (event) => Effect.sync(() => projected.push(event.data.text)))
+
+      const published = yield* events.publishBatch([
+        { definition: SyncMessage, data: { id: aggregateID, text: "first" }, options: { id: eventID } },
+        { definition: SyncSent, data: { messageID: aggregateID, text: "second" } },
+      ])
+      const rows = yield* db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, aggregateID))
+        .orderBy(EventTable.seq)
+        .all()
+        .pipe(Effect.orDie)
+
+      expect(projected).toEqual(["first", "second"])
+      expect(published[0]?.id).toBe(eventID)
+      expect(published.map((event) => event.location?.directory)).toEqual([
+        AbsolutePath.make("project"),
+        AbsolutePath.make("project"),
+      ])
+      expect(published.map((event) => event.durable?.seq)).toEqual([0, 1])
+      expect(rows.map((row) => [row.seq, row.type])).toEqual([
+        [0, EventV2.versionedType(SyncMessage.type, 1)],
+        [1, EventV2.versionedType(SyncSent.type, 1)],
+      ])
+    }),
+  )
+
+  it.effect("uses batch projectors only when every projector opts in", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const projected = new Array<string>()
+      yield* events.project(
+        SyncMessage,
+        (event) => Effect.sync(() => projected.push(`single:${event.data.text}`)),
+        (batch) => Effect.sync(() => projected.push(`batch:${batch.map((event) => event.data.text).join(",")}`)),
+      )
+
+      const firstAggregateID = EventV2.ID.create()
+      yield* events.publishBatch([
+        { definition: SyncMessage, data: { id: firstAggregateID, text: "first" } },
+        { definition: SyncMessage, data: { id: firstAggregateID, text: "second" } },
+      ])
+      expect(projected).toEqual(["batch:first,second"])
+
+      projected.length = 0
+      yield* events.project(SyncMessage, (event) => Effect.sync(() => projected.push(`legacy:${event.data.text}`)))
+      const aggregateID = EventV2.ID.create()
+      yield* events.publishBatch([
+        { definition: SyncMessage, data: { id: aggregateID, text: "third" } },
+        { definition: SyncMessage, data: { id: aggregateID, text: "fourth" } },
+      ])
+
+      expect(projected).toEqual(["single:third", "legacy:third", "single:fourth", "legacy:fourth"])
+    }),
+  )
+
+  it.effect("rolls back a durable batch without notifying listeners", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const aggregateID = EventV2.ID.create()
+      const notified = new Array<string>()
+      yield* db.run("CREATE TABLE IF NOT EXISTS event_batch_probe (value text NOT NULL)")
+      yield* db.run("DELETE FROM event_batch_probe")
+      yield* events.project(SyncMessage, () =>
+        db.run("INSERT INTO event_batch_probe (value) VALUES ('projected')").pipe(Effect.orDie, Effect.asVoid),
+      )
+      yield* events.listen((event) =>
+        Effect.sync(() => {
+          notified.push(event.type)
+        }),
+      )
+
+      const exit = yield* events
+        .publishBatch([
+          { definition: SyncMessage, data: { id: aggregateID, text: "first" } },
+          {
+            definition: SyncSent,
+            data: { messageID: aggregateID, text: "second" },
+            options: { commit: () => Effect.die("batch failed") },
+          },
+        ])
+        .pipe(Effect.exit)
+
+      expect(String(exit)).toContain("batch failed")
+      expect(notified).toEqual([])
+      expect(yield* db.all("SELECT value FROM event_batch_probe")).toEqual([])
+      expect(yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()).toEqual([])
+      expect(
+        yield* db.select().from(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, aggregateID)).all(),
+      ).toEqual([])
+    }),
+  )
+
+  it.effect("rejects durable batches spanning aggregates", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const first = EventV2.ID.create()
+      const second = EventV2.ID.create()
+
+      const exit = yield* events
+        .publishBatch([
+          { definition: SyncMessage, data: { id: first, text: "first" } },
+          { definition: SyncMessage, data: { id: second, text: "second" } },
+        ])
+        .pipe(Effect.exit)
+
+      expect(String(exit)).toContain("Batch events must belong to the same aggregate")
+      expect(yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, first)).all()).toEqual([])
+      expect(yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, second)).all()).toEqual([])
+    }),
+  )
+
   it.effect("ends only an overflowing bounded subscriber without blocking other listeners", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service

@@ -556,7 +556,7 @@ describe("Session.messages", () => {
   it.instance("returns all messages in chronological order across pages", () =>
     withSession(({ session, sessionID }) =>
       Effect.gen(function* () {
-        const ids = yield* fill(sessionID, 55)
+        const ids = yield* fill(sessionID, 1_005)
         const result = yield* session.messages({ sessionID })
         expect(result.map((item) => item.info.id)).toEqual(ids)
       }),
