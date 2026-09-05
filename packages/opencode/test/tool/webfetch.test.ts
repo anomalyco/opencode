@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
-import { Effect, Layer } from "effect"
+import { Effect, Exit, Layer } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { Agent } from "../../src/agent/agent"
 import { Truncate } from "@/tool/truncate"
@@ -113,6 +113,28 @@ describe("tool.webfetch", () => {
           const result = yield* exec({ url: new URL("/page.html", url).toString(), format: "text" })
           expect(result.output).toBe("Hello world")
           expect(result.attachments).toBeUndefined()
+        }),
+    ),
+  )
+
+  it.instance("times out when the body never finishes", () =>
+    withFetch(
+      () =>
+        new Response(
+          // Headers go out immediately, then the body stalls and is never closed.
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("partial"))
+            },
+          }),
+          { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } },
+        ),
+      (url) =>
+        Effect.gen(function* () {
+          const exit = yield* Effect.exit(
+            exec({ url: new URL("/stall.txt", url).toString(), format: "text", timeout: 1 }),
+          )
+          expect(Exit.isFailure(exit)).toBe(true)
         }),
     ),
   )
