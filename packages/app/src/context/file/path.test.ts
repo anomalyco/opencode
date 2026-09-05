@@ -55,6 +55,22 @@ describe("file path helpers", () => {
     expect(unquoteGitPath('"plain\\nname"')).toBe("plain\nname")
     expect(unquoteGitPath("a/b/c.ts")).toBe("a/b/c.ts")
   })
+
+  test.each([
+    ['"文件\\\".txt"', '文件".txt'],
+    ['"café\\t.txt"', "café\t.txt"],
+    ['"😀\\\".txt"', '😀".txt'],
+    ['"文\\303\\251😀\\t\\\".txt"', '文é😀\t".txt'],
+    ['"résumé\\\\文.txt"', "résumé\\文.txt"],
+  ])("preserves Unicode in quoted git path %s", (input, expected) => {
+    expect(unquoteGitPath(input)).toBe(expected)
+  })
+
+  test("normalizes quoted Unicode paths against workspace root", () => {
+    const path = createPathHelpers(() => "/repo")
+    expect(path.normalize('"/repo/文😀\\\".txt"')).toBe('文😀".txt')
+    expect(path.tab('"/repo/文😀\\\".txt"')).toBe("file://%E6%96%87%F0%9F%98%80%22.txt")
+  })
 })
 
 describe("encodeFilePath", () => {
