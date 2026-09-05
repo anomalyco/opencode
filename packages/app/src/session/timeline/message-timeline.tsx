@@ -354,8 +354,9 @@ type MessageTimelineProps = {
   workspaceMoveEligible: boolean
   onSummaryOpenChange: (open: boolean) => void
   anchor: (id: string) => string
-  setRevealMessage?: (fn: (id: string) => void) => void
+  setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
   setScrollToEnd?: (fn: () => void) => void
+  search?: JSX.Element
 }
 
 export function MessageTimeline(props: MessageTimelineProps) {
@@ -790,6 +791,7 @@ function MessageTimelineView(
               <Show when={sessionID()} keyed>
                 {(id) => (
                   <div class="shrink-0 flex items-center gap-2">
+                    {props.search}
                     <SessionContextUsage placement="bottom" />
                     <Show when={!parentID() && project()}>
                       {(project) => (

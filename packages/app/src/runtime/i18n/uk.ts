@@ -808,6 +808,8 @@ export const dict = {
 
   "session.header.search.placeholder": "Пошук {{project}}",
   "session.header.searchFiles": "Пошук файлів",
+  "session.search.placeholder": "Пошук у бесіді",
+  "session.search.noResults": "Збігів не знайдено",
   "session.header.openIn": "Відкрити в",
   "session.header.open.action": "Відкрити {{app}}",
   "session.header.open.ariaLabel": "Відкрити в {{app}}",

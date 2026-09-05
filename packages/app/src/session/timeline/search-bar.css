@@ -1,0 +1,14 @@
+[data-component="timeline-search-bar"] [data-component="text-input-v2"] {
+  background: var(--v2-background-bg-base);
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-base);
+  outline: none;
+}
+
+[data-component="timeline-search-bar"] [data-component="text-input-v2"]:hover {
+  background: var(--v2-background-bg-base);
+}
+
+[data-component="timeline-search-bar"] [data-component="text-input-v2"]:focus-within {
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
+  outline: none;
+}
