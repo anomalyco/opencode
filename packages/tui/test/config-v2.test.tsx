@@ -209,6 +209,7 @@ test("centralizes named command defaults and resolves explicit none", () => {
     "diff.next_hunk": "]",
     "diff.previous_hunk": "[",
     "diff.mark_reviewed": "m",
+    "diff.toggle_fullscreen": "f",
     "diff.help": "?,shift+?,shift+/",
   }
   const config = resolve({}, { terminalSuspend: true })
