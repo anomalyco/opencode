@@ -115,12 +115,22 @@ export const Deno: Info = {
 export const Typescript: Info = {
   id: "typescript",
   root: NearestRoot(
-    ["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"],
+    [
+      "package.json",
+      "tsconfig.json",
+      "jsconfig.json",
+      "package-lock.json",
+      "bun.lockb",
+      "bun.lock",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+    ],
     ["deno.json", "deno.jsonc"],
   ),
   extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
   async spawn(root, ctx) {
-    const tsserver = Module.resolve("typescript/lib/tsserver.js", ctx.directory)
+    const tsserver =
+      Module.resolve("typescript/lib/tsserver.js", root) ?? Module.resolve("typescript/lib/tsserver.js", ctx.directory)
     if (!tsserver) return
     const bin = await Npm.which("typescript-language-server")
     if (!bin) return
