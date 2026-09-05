@@ -17,6 +17,13 @@ export const AppGetDefaultServerUrl = Rpc.make("AppGetDefaultServerUrl", {
 export const AppSetDefaultServerUrl = Rpc.make("AppSetDefaultServerUrl", {
   payload: { url: Schema.NullOr(Schema.String) },
 })
+export const AppGetKeepAwakeEnabled = Rpc.make("AppGetKeepAwakeEnabled", { success: Schema.Boolean })
+export const AppSetKeepAwakeEnabled = Rpc.make("AppSetKeepAwakeEnabled", {
+  payload: { enabled: Schema.Boolean },
+})
+export const AppSetKeepAwakeActive = Rpc.make("AppSetKeepAwakeActive", {
+  payload: { active: Schema.Boolean },
+})
 export const AppIsFirstLaunchOnboardingPending = Rpc.make("AppIsFirstLaunchOnboardingPending", {
   success: Schema.Boolean,
 })
@@ -60,6 +67,9 @@ export const AppRpcs = RpcGroup.make(
   AppConsumeInitialDeepLinks,
   AppGetDefaultServerUrl,
   AppSetDefaultServerUrl,
+  AppGetKeepAwakeEnabled,
+  AppSetKeepAwakeEnabled,
+  AppSetKeepAwakeActive,
   AppIsFirstLaunchOnboardingPending,
   AppFinishFirstLaunchOnboarding,
   AppCheckAppExists,

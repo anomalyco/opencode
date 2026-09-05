@@ -10,6 +10,7 @@ import { DesktopLogging, scoped } from "../native/logging"
 import { createMenu, sendMenuCommand } from "../native/menu"
 import { setNativeTranslations } from "../native/translations"
 import { IpcPortHandoff } from "../ipc-transport"
+import { KeepAwake } from "../keep-awake"
 import { ApplicationLifecycle } from "../lifecycle"
 import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "../lifecycle/onboarding"
 import { BackgroundService } from "../service/background-service"
@@ -27,6 +28,7 @@ export const appHandlers = AppRpcs.toLayer(
     const desktopCli = yield* DesktopCli.Service
     const updater = yield* Updater.Service
     const logging = yield* DesktopLogging.Service
+    const awake = yield* KeepAwake.Service
     const runFork = Effect.runForkWith(yield* Effect.context())
     return AppRpcs.of({
       AppAwaitInitialization: () => background.connection,
@@ -34,6 +36,17 @@ export const appHandlers = AppRpcs.toLayer(
       AppConsumeInitialDeepLinks: () => Effect.sync(lifecycle.consumeInitialDeepLinks),
       AppGetDefaultServerUrl: () => Effect.sync(getDefaultServerUrl),
       AppSetDefaultServerUrl: ({ url }) => Effect.sync(() => setDefaultServerUrl(url)),
+      AppGetKeepAwakeEnabled: () => Effect.sync(awake.getEnabled),
+      AppSetKeepAwakeEnabled: ({ enabled }) => Effect.sync(() => awake.setEnabled(enabled)),
+      AppSetKeepAwakeActive: ({ active }, context) =>
+        Effect.sync(() => {
+          const contents = sender(handoff, context)
+          const win = BrowserWindow.fromWebContents(contents)
+          if (!win || win.isDestroyed() || win.webContents !== contents) {
+            throw new Error("Invalid keep-awake sender")
+          }
+          awake.setActive(contents, active)
+        }),
       AppIsFirstLaunchOnboardingPending: isFirstLaunchOnboardingPending,
       AppFinishFirstLaunchOnboarding: ({ createDefaultProject }) =>
         finishFirstLaunchOnboarding(createDefaultProject).pipe(Effect.orDie),
