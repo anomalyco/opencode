@@ -2,7 +2,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Image } from "@/image/image"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { Cause, Deferred, Effect, Exit, Layer, Context, Scope, Schema } from "effect"
+import { Cause, Deferred, Effect, Exit, Layer, Context, Option, Scope, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Config } from "@/config/config"
@@ -197,8 +197,16 @@ const layer = Layer.effect(
             time: { start: match.part.state.time.start, end: Date.now() },
           },
         })
-        if (error instanceof PermissionV1.RejectedError || error instanceof Question.RejectedError) {
+        if (error instanceof PermissionV1.RejectedError) {
           ctx.blocked = ctx.shouldBreak
+        }
+        if (error instanceof Question.RejectedError) {
+          const latestUser = yield* session
+            .findMessage(ctx.sessionID, (message) => message.info.role === "user")
+            .pipe(Effect.orDie)
+          ctx.blocked =
+            ctx.shouldBreak &&
+            (Option.isNone(latestUser) || latestUser.value.info.id === ctx.assistantMessage.parentID)
         }
         yield* settleToolCall(toolCallID)
         return true
