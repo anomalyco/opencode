@@ -766,7 +766,12 @@ async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
           name: skill.name,
           description: skill.description,
           source: "skill" as const,
-          template: skill.content,
+          template: skill.location === "<built-in>" ? skill.content : [
+            skill.content,
+            "",
+            `Base directory for this skill: ${skill.location}`,
+            "Relative paths in this skill (e.g., scripts/, references/) are relative to this base directory.",
+          ].join("\n"),
           hints: [],
         })),
     ] as Command.Info[]

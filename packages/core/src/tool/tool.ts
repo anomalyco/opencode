@@ -155,6 +155,11 @@ function runtimeOf(tool: AnyTool) {
   return runtime
 }
 
+export const validateTool = (tool: AnyTool): Effect.Effect<void, RegistrationError> =>
+  runtimes.has(tool)
+    ? Effect.void
+    : Effect.fail(new RegistrationError({ name: "", message: "Invalid Tool value" }))
+
 function toJsonSchema(schema: Schema.Top): JsonSchema.JsonSchema {
   const document = Schema.toJsonSchemaDocument(schema)
   if (Object.keys(document.definitions).length === 0) return document.schema

@@ -328,7 +328,7 @@ const layer = Layer.effect(
               tool.id === "execute" ? codeModeDescription : undefined,
             ]
               .filter(Boolean)
-              .join("\n"),
+              .join("\n\n"),
             parameters: output.parameters,
             jsonSchema,
             execute: tool.execute,

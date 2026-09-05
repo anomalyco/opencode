@@ -105,6 +105,14 @@ export const Plugin = define({
                 if (config.limit !== undefined) model.limit = { ...model.limit, ...config.limit }
               })
             }
+            if (item.npm !== undefined) {
+              for (const [modelID, model] of catalog.provider.get(providerID)?.models ?? []) {
+                if (item.models?.[modelID] !== undefined) continue
+                if (model.api.type === "aisdk") {
+                  model.api.package = item.npm
+                }
+              }
+            }
           }
         }
       }),

@@ -77,7 +77,14 @@ const cli = yargs(args)
     process.env.OPENCODE_PID = String(process.pid)
   })
   .usage("")
-  .completion("completion", "generate shell completion script")
+  .completion("completion", "generate shell completion script", async (_co) => {
+    const fishScript = `# fish completion for opencode
+
+complete -c opencode -f
+complete -c opencode -n '__fish_seen_subcommand_from opencode' -x -a '(opencode --get-yargs-completions (commandline -o)[2..-1])'
+`
+    return fishScript
+  })
   .command(AcpCommand)
   .command(McpCommand)
   .command(TuiThreadCommand)

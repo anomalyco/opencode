@@ -10,6 +10,7 @@ export const ModelHandler = HttpApiBuilder.group(Api, "server.model", (handlers)
       "model.list",
       Effect.fn(function* () {
         const catalog = yield* Catalog.Service
+        yield* catalog.readiness
         return yield* response(catalog.model.available())
       }),
     )

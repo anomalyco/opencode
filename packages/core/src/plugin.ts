@@ -24,6 +24,8 @@ export interface Interface {
   readonly add: (id: ID, effect: PluginRuntime["effect"]) => Effect.Effect<void>
   readonly remove: (id: ID) => Effect.Effect<void>
   readonly wait: (id: ID) => Effect.Effect<void>
+  /** Waits for all plugins added via `add` to finish loading. Used as an initial readiness barrier. */
+  readonly flush: Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Plugin") {}
@@ -136,6 +138,11 @@ const layer = Layer.effect(
       add,
       remove,
       wait,
+      flush: Effect.sync(() => {
+        const pending = Array.from(waiters.values()).flat()
+        if (pending.length === 0) return Effect.void
+        return Deferred.all(pending.map((d) => Deferred.await(d))).pipe(Effect.ignore)
+      }),
     })
     host = yield* PluginHost.make(service)
     return service

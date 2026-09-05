@@ -40,6 +40,10 @@ import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
 
+/** Strip HTML tags from provider error messages to avoid rendering raw markup in retry notices. */
+const sanitizeProviderErrorMessage = (message: string) =>
+  message.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim()
+
 /**
  * Runs one durable coding-agent Session until it settles.
  *
@@ -180,6 +184,19 @@ const layer = Layer.effect(
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
         return yield* Effect.interrupt
       const agent = yield* agents.select(session.agent)
+      let model
+      try {
+        model = yield* models.resolve(session)
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        yield* events.publish(SessionEvent.Step.Failed, {
+          sessionID: session.id,
+          timestamp: yield* DateTime.now,
+          assistantMessageID: undefined,
+          error: { type: "model_resolution", message: errorMessage },
+        })
+        return yield* Effect.fail(`Model resolution failed: ${errorMessage}`)
+      }
       const initialized = yield* SessionContextEpoch.initialize(db, loadSystemContext(agent), session.id)
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
       let needsContinuation = false
@@ -196,7 +213,6 @@ const layer = Layer.effect(
       }
       const system =
         initialized ?? (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
-      const model = yield* models.resolve(session)
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
@@ -297,7 +313,7 @@ const layer = Layer.effect(
           const llmFailure = failure instanceof LLMError ? failure : undefined
           if (llmFailure && !publisher.hasProviderError()) {
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
-            yield* withPublication(publisher.failAssistant(llmFailure.reason.message))
+            yield* withPublication(publisher.failAssistant(sanitizeProviderErrorMessage(llmFailure.reason.message)))
           }
           if (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) yield* FiberSet.clear(toolFibers)
           const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)

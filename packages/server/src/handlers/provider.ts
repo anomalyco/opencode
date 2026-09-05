@@ -12,6 +12,7 @@ export const ProviderHandler = HttpApiBuilder.group(Api, "server.provider", (han
         "provider.list",
         Effect.fn(function* () {
           const catalog = yield* Catalog.Service
+          yield* catalog.readiness
           return yield* response(catalog.provider.available())
         }),
       )
@@ -19,6 +20,7 @@ export const ProviderHandler = HttpApiBuilder.group(Api, "server.provider", (han
         "provider.get",
         Effect.fn(function* (ctx) {
           const catalog = yield* Catalog.Service
+          yield* catalog.readiness
           const provider = yield* catalog.provider.get(ctx.params.providerID)
           if (!provider)
             return yield* new ProviderNotFoundError({

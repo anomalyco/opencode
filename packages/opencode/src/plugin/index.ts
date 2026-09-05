@@ -104,7 +104,11 @@ function getLegacyPlugins(mod: Record<string, unknown>) {
     if (seen.has(entry)) continue
     seen.add(entry)
     const plugin = getServerPlugin(entry)
-    if (!plugin) throw new TypeError("Plugin export is not a function")
+    if (!plugin) {
+      // Skip exports that don't match the plugin shape (e.g. constants, types, helpers).
+      // A single non-function named export should not silently disable the entire plugin.
+      continue
+    }
     result.push(plugin)
   }
 
