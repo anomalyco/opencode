@@ -4,6 +4,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { Effect } from "effect"
 import { sql } from "drizzle-orm"
 import { effectCmd } from "../effect-cmd"
+import { writeStdout } from "../stdout"
 
 const QueryCommand = effectCmd({
   command: "$0 [query]",
@@ -27,7 +28,7 @@ const QueryCommand = effectCmd({
     if (query) {
       const { db } = yield* Database.Service
       const result = yield* db.all<Record<string, unknown>>(sql.raw(query)).pipe(Effect.orDie)
-      if (args.format === "json") console.log(JSON.stringify(result, null, 2))
+      if (args.format === "json") yield* writeStdout(JSON.stringify(result, null, 2) + "\n")
       else if (result.length > 0) {
         const keys = Object.keys(result[0])
         console.log(keys.join("\t"))
