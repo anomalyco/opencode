@@ -2,7 +2,7 @@ export * as Provider from "./provider.js"
 
 import { Effect, Schema } from "effect"
 import { Integration } from "./integration.js"
-import { optional, statics } from "./schema.js"
+import { optional, PositiveInt, statics } from "./schema.js"
 
 export const ID = Schema.String.pipe(
   Schema.brand("Provider.ID"),
@@ -28,10 +28,11 @@ export type Package = typeof Package.Type
 export const Activation = Schema.Literals(["auto", "enabled", "disabled"])
 export type Activation = typeof Activation.Type
 
-export interface Compaction extends Schema.Schema.Type<typeof Compaction> {}
-export const Compaction = Schema.Struct({
-  mode: Schema.Literals(["local", "provider"]),
-}).annotate({ identifier: "Provider.Compaction" })
+export type Compaction = typeof Compaction.Type
+export const Compaction = Schema.Union([
+  Schema.Struct({ mode: Schema.Literal("local") }),
+  Schema.Struct({ mode: Schema.Literal("provider"), threshold: PositiveInt.pipe(optional) }),
+]).annotate({ identifier: "Provider.Compaction" })
 
 export const Overlays = {
   settings: Schema.Record(Schema.String, Schema.Any).pipe(optional),

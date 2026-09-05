@@ -334,7 +334,27 @@ Control automatic context compaction and how much recent context it preserves.
 }
 ```
 
-See the [compaction guide](/compaction) for automatic context management.
+Local summaries remain the default. Opt into native provider compaction for both
+automatic and manual requests with a provider or model policy:
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "compaction": { "mode": "provider", "threshold": 120000 },
+      "models": {
+        "gpt-4.1": { "compaction": { "mode": "local" } },
+      },
+    },
+  },
+}
+```
+
+A model policy replaces the whole provider policy. The optional positive integer
+`threshold` defaults to the selected model's usable input budget and cannot exceed
+its safe ceiling. Top-level `compaction.auto: false` disables new automatic
+compaction without discarding installed checkpoints. See the
+[compaction guide](/compaction) for budgeting and overflow recovery.
 
 ### Session warming
 

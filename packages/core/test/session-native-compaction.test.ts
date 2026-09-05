@@ -54,7 +54,7 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
   const hooks = yield* PluginHooks.Service
   const blocked = Deferred.makeUnsafe<void>()
   const hanging = Promise.withResolvers<Response>()
-  const state = { failure: false, hang: false, calls: 0 }
+  const state = { failure: false, hang: false, overflow: false, localFailure: false, calls: 0 }
   const bodies: Record<string, unknown>[] = []
   const headers: Headers[] = []
   const server = yield* Effect.acquireRelease(
@@ -79,6 +79,18 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
               { error: { message: "fixture rate limit", type: "rate_limit_error" } },
               { status: 429 },
             )
+          const trigger = JSON.stringify(bodies.at(-1)).includes("compaction_trigger")
+          if (state.overflow && (trigger || state.localFailure))
+            return Response.json(
+              {
+                error: {
+                  message: "Your input exceeds the context window",
+                  code: "context_length_exceeded",
+                  type: "invalid_request_error",
+                },
+              },
+              { status: 400 },
+            )
           const checkpoint = {
             type: "compaction",
             id: `cmp_${state.calls}`,
@@ -94,9 +106,27 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
               ],
               usage: { input_tokens: 20, output_tokens: 4, total_tokens: 24 },
             })
-          const output = JSON.stringify(bodies.at(-1)).includes("compaction_trigger") ? [checkpoint] : []
+          const output = trigger ? [checkpoint] : []
+          const summary = state.overflow
+            ? [
+                {
+                  type: "response.output_item.added",
+                  output_index: 0,
+                  item: { type: "message", id: "summary", role: "assistant", content: [] },
+                },
+                {
+                  type: "response.output_text.delta",
+                  item_id: "summary",
+                  output_index: 0,
+                  content_index: 0,
+                  delta: "## Objective\n- Recovered locally",
+                },
+              ]
+                .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+                .join("")
+            : ""
           return new Response(
-            `data: ${JSON.stringify({
+            `${summary}data: ${JSON.stringify({
               type: "response.completed",
               response: {
                 id: `resp_${state.calls}`,
@@ -205,6 +235,9 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
   })
   return {
     compact,
+    automatic: Effect.gen(function* () {
+      return yield* compaction.compact({ context: yield* load, prepare: requests.prepare })
+    }),
     checkpoint,
     prompt,
     load,
@@ -273,17 +306,57 @@ it.live(
   15000,
 )
 
-it.live("endpoint-only compaction keeps the provider replacement unchanged", () =>
+it.live("manual and automatic endpoint compaction keep the provider replacement unchanged", () =>
   Effect.gen(function* () {
     const fixture = yield* setup(true)
     yield* fixture.prompt("Original user")
     expect(yield* fixture.compact).toEqual({ status: "completed" })
+    expect(yield* fixture.automatic).toEqual({ status: "completed" })
     const replacement = SessionProviderContext.decode(yield* fixture.checkpoint)
     expect(replacement[0]?.content).toEqual([Message.text("endpoint retained")])
     expect(JSON.stringify(replacement)).not.toContain("Original user")
-    expect(fixture.state.calls).toBe(1)
+    expect(fixture.state.calls).toBe(2)
     expect(fixture.headers[0]?.get("x-http-hook")).toBe("compaction")
     expect(fixture.bodies[0]).not.toHaveProperty("context_management")
+  }),
+)
+
+it.live("only known automatic native overflow falls back locally and failed recovery retains the checkpoint", () =>
+  Effect.gen(function* () {
+    const fixture = yield* setup()
+    yield* fixture.prompt("Original durable request")
+    expect(yield* fixture.compact).toEqual({ status: "completed" })
+    const installed = yield* fixture.checkpoint
+    yield* fixture.prompt("Recent request")
+    fixture.state.failure = true
+    expect(yield* fixture.automatic).toMatchObject({ status: "failed", error: { type: "provider.rate-limit" } })
+    expect(fixture.state.calls).toBe(2)
+    expect(yield* fixture.checkpoint).toEqual(installed)
+    fixture.state.failure = false
+    fixture.state.hang = true
+    const pending = yield* fixture.automatic.pipe(Effect.forkScoped)
+    yield* Deferred.await(fixture.blocked)
+    yield* Fiber.interrupt(pending)
+    expect((yield* fixture.load).messages.at(-1)).toMatchObject({
+      type: "compaction",
+      status: "failed",
+      error: { type: "compaction.interrupted" },
+    })
+    expect(yield* fixture.checkpoint).toEqual(installed)
+    fixture.state.hang = false
+    fixture.state.overflow = true
+    fixture.state.localFailure = true
+    expect(yield* fixture.automatic).toMatchObject({ status: "failed" })
+    expect(fixture.state.calls).toBe(5)
+    expect(yield* fixture.checkpoint).toEqual(installed)
+    expect(JSON.stringify(fixture.bodies[4])).toContain("Original durable request")
+    expect(JSON.stringify(fixture.bodies[4])).not.toContain("encrypted_1")
+    fixture.state.localFailure = false
+    expect(yield* fixture.automatic).toEqual({ status: "completed", recoveredOverflow: true })
+    expect(fixture.state.calls).toBe(7)
+    expect((yield* fixture.load).messages).toContainEqual(
+      expect.objectContaining({ type: "compaction", summary: "## Objective\n- Recovered locally" }),
+    )
   }),
 )
 
