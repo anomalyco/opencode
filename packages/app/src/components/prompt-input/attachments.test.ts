@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { attachmentMime, pickAttachmentFiles } from "./files"
-import { pasteMode } from "./paste"
+import { pasteMode } from "@opencode-ai/session-ui/v2/prompt-input/paste"
 
 describe("attachmentMime", () => {
   test("keeps PDFs when the browser reports the mime", async () => {

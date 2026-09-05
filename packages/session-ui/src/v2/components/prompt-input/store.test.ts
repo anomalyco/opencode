@@ -113,4 +113,68 @@ describe("prompt input v2 store", () => {
     expect(prompt.state.prompt).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
     expect(prompt.state.cursor).toBe(0)
   })
+
+  test("replaces a range across parts and leaves the cursor after the replacement", () => {
+    const prompt = createPromptInputV2Store(
+      createStore<PromptInputV2PersistedState>({
+        prompt: [
+          { type: "text", content: "see ", start: 0, end: 4 },
+          { type: "file", path: "src/a.ts", content: "@src/a.ts", start: 4, end: 13 },
+          { type: "text", content: " now", start: 13, end: 17 },
+        ],
+        cursor: 17,
+        context: { items: [] },
+      }),
+    )
+
+    prompt.replaceText(2, 15, "X")
+
+    expect(prompt.state.prompt).toEqual([
+      { type: "text", content: "seX", start: 0, end: 3 },
+      { type: "text", content: "ow", start: 3, end: 5 },
+    ])
+    expect(prompt.state.cursor).toBe(3)
+  })
+
+  test("puts the replacement where a fully covered leading mention was", () => {
+    const prompt = createPromptInputV2Store(
+      createStore<PromptInputV2PersistedState>({
+        prompt: [
+          { type: "file", path: "src/a.ts", content: "@src/a.ts", start: 0, end: 9 },
+          { type: "text", content: " tail", start: 9, end: 14 },
+        ],
+        cursor: 14,
+        context: { items: [] },
+      }),
+    )
+
+    prompt.replaceText(0, 9, "start")
+
+    expect(prompt.state.prompt).toEqual([
+      { type: "text", content: "start", start: 0, end: 5 },
+      { type: "text", content: " tail", start: 5, end: 10 },
+    ])
+    expect(prompt.state.cursor).toBe(5)
+  })
+
+  test("inserts at the caret without disturbing a mention that follows it", () => {
+    const prompt = createPromptInputV2Store(
+      createStore<PromptInputV2PersistedState>({
+        prompt: [
+          { type: "text", content: "see ", start: 0, end: 4 },
+          { type: "file", path: "src/a.ts", content: "@src/a.ts", start: 4, end: 13 },
+        ],
+        cursor: 4,
+        context: { items: [] },
+      }),
+    )
+
+    prompt.replaceText(4, 4, "\nlog\n")
+
+    expect(prompt.state.prompt).toEqual([
+      { type: "text", content: "see \nlog\n", start: 0, end: 9 },
+      { type: "file", path: "src/a.ts", content: "@src/a.ts", start: 9, end: 18 },
+    ])
+    expect(prompt.state.cursor).toBe(9)
+  })
 })

@@ -2,6 +2,8 @@ import { createEffect, on, type Accessor } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { createPromptInputV2Attachments, type PromptInputV2AttachmentConfig } from "./attachments"
+import { promptInputV2Cursor, promptInputV2SelectionRange } from "./editor"
+import { normalizePaste, pasteMode } from "./paste"
 import { createPromptInputV2Store, type PromptInputV2StoreInput } from "./store"
 import type {
   PromptInputV2Attachment,
@@ -260,8 +262,8 @@ export function createPromptInputV2Controller(input: {
     if (!input.history || !editor) return false
     const selection = window.getSelection()
     if (!selection?.isCollapsed || !editor.contains(selection.anchorNode)) return false
-    const text = draft.state.prompt.map((part) => ("content" in part ? part.content : "")).join("")
-    if (!canNavigateHistory(direction, text, editorCursor(editor), state.historyIndex >= 0)) return false
+    const length = promptLength(draft.state.prompt)
+    if (!canNavigateHistory(direction, length, promptInputV2Cursor(editor), state.historyIndex >= 0)) return false
     const entries = input.history.entries(state.mode)
     if (direction === "up") {
       if (entries.length === 0 || state.historyIndex >= entries.length - 1) return false
@@ -297,6 +299,11 @@ export function createPromptInputV2Controller(input: {
     onKeyDown,
     value() {
       return draft.state.prompt.map((part) => ("content" in part ? part.content : "")).join("")
+    },
+    // The placeholder only needs to know whether anything was typed, so it must not join
+    // the whole draft into a string on every prompt change.
+    empty() {
+      return draft.state.prompt.every((part) => !("content" in part) || part.content.length === 0)
     },
     parts() {
       return draft.state.prompt
@@ -382,9 +389,25 @@ export function createPromptInputV2Controller(input: {
       }
       input.view.onPaste?.(event)
       if (event.defaultPrevented) return
-      const text = clipboard?.getData("text/plain")
-      if (!text) return
+      const plain = clipboard?.getData("text/plain")
+      if (!plain) return
       event.preventDefault()
+      const text = normalizePaste(plain)
+      // Large and multi-line pastes are applied to the prompt model directly. Letting the
+      // browser insert them builds one node per line, and every following keystroke then
+      // has to walk that document back into prompt parts.
+      if (pasteMode(text) === "manual") {
+        const range = (editor && promptInputV2SelectionRange(editor)) ?? {
+          start: promptLength(draft.state.prompt),
+          end: promptLength(draft.state.prompt),
+        }
+        draft.replaceText(range.start, range.end, text)
+        // Pasted bulk text never opens a mention or command popover, and matching it
+        // against the suggestion patterns would scan the whole payload.
+        dispatch({ type: "popover.close" })
+        restoreFocus(Math.min(range.start, range.end) + text.length)
+        return
+      }
       if (typeof document.execCommand === "function" && document.execCommand("insertText", false, text)) return
       const target = event.currentTarget
       const selection = window.getSelection()
@@ -434,11 +457,13 @@ export function createPromptInputV2Controller(input: {
 
 export type PromptInputV2Interaction = ReturnType<typeof createPromptInputV2Controller>
 
-function canNavigateHistory(direction: "up" | "down", text: string, cursor: number, inHistory: boolean) {
-  const position = Math.max(0, Math.min(cursor, text.length))
-  if (inHistory) return position === 0 || position === text.length
-  if (direction === "up") return position === 0 && text.length === 0
-  return position === text.length
+// Only the caret's position within the draft decides this, so it takes the length rather than
+// the draft itself. Joining the prompt here copied the whole thing on every arrow key.
+function canNavigateHistory(direction: "up" | "down", length: number, cursor: number, inHistory: boolean) {
+  const position = Math.max(0, Math.min(cursor, length))
+  if (inHistory) return position === 0 || position === length
+  if (direction === "up") return position === 0 && length === 0
+  return position === length
 }
 
 function clonePrompt(prompt: PromptInputV2PersistedState["prompt"]): PromptInputV2PersistedState["prompt"] {
@@ -449,15 +474,6 @@ function clonePrompt(prompt: PromptInputV2PersistedState["prompt"]): PromptInput
 
 function promptLength(prompt: PromptInputV2PersistedState["prompt"]) {
   return prompt.reduce((length, part) => length + ("content" in part ? part.content.length : 0), 0)
-}
-
-function editorCursor(editor: HTMLElement) {
-  const selection = window.getSelection()
-  if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) return editor.textContent?.length ?? 0
-  const range = selection.getRangeAt(0).cloneRange()
-  range.selectNodeContents(editor)
-  range.setEnd(selection.anchorNode!, selection.anchorOffset)
-  return range.toString().length
 }
 
 function setEditorCursor(editor: HTMLElement | undefined, cursor: number) {
