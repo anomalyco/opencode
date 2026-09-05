@@ -631,7 +631,7 @@ describe("EventV2", () => {
       }),
   )
 
-  it.effect("replay defects on sequence mismatch", () =>
+  it.effect("replay defects on divergent stale replay at a stored sequence", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const aggregateID = Session.ID.create()
@@ -647,13 +647,13 @@ describe("EventV2", () => {
         .replay({
           id: EventV2.ID.create(),
           type: EventV2.versionedType(DurableMessage.type, 1),
-          seq: 5,
+          seq: 0,
           aggregateID,
           data: durableData(aggregateID, "bad"),
         })
         .pipe(Effect.exit)
 
-      expect(String(exit)).toContain("Sequence mismatch")
+      expect(String(exit)).toContain("Replay diverged")
     }),
   )
 

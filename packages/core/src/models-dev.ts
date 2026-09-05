@@ -20,7 +20,7 @@ const InterleavedField = Schema.Union([
   Schema.String,
 ])
 
-const USER_AGENT = `opencode/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
+const userAgent = () => `opencode/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
 
 const CostTier = Schema.Struct({
   input: Schema.Finite,
@@ -174,7 +174,7 @@ const layer = Layer.effect(
 
     const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* () {
       return yield* HttpClientRequest.get(`${source}/api.json`).pipe(
-        HttpClientRequest.setHeader("User-Agent", USER_AGENT),
+        HttpClientRequest.setHeader("User-Agent", userAgent()),
         http.execute,
         Effect.flatMap((res) => res.text),
         Effect.timeout("10 seconds"),
