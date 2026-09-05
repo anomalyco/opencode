@@ -267,7 +267,7 @@ export const dict = {
   "go.graph.free": "Free",
   "go.graph.freePill": "Big Pickle and free models",
   "go.graph.go": "Go",
-  "go.graph.label": "Requests per 5 hour",
+  "go.graph.label": "Requests / 5 hours",
   "go.graph.limitedRegions": "limited regions",
   "go.graph.limitedTime": "limited time",
   "go.graph.tick": "{{n}}x",
@@ -352,7 +352,7 @@ export const dict = {
   "go.faq.a5.museRetention":
     "Heavily discounted token pricing in exchange for permission to use your prompts and completions to train future Meta models.",
   "go.faq.a5.deepseekRetention":
-    "ZDR agreement is renewed monthly. The current agreement is valid through August 31, 2026.",
+    "ZDR agreement is renewed monthly. The current agreement is valid through September 30, 2026.",
   "go.faq.a5.learnMore": "Learn more",
 
   "go.faq.a5.beforeExceptions":
@@ -367,7 +367,7 @@ export const dict = {
 
   "go.faq.q9": "What is the difference between free models and Go?",
   "go.faq.a9":
-    "Free models include Big Pickle plus promotional models available at the time, with a quota of 200 requests/day. Go offers a curated model lineup with higher request quotas enforced across rolling windows (5-hour, weekly, and monthly), roughly equivalent to $12 per 5 hours, $30 per week, and $60 per month (actual request counts vary by model and usage).",
+    "Free models include Big Pickle plus promotional models available at the time, with a quota of 200 requests/day. Go offers a curated model lineup with higher request quotas enforced across rolling windows (5-hour, weekly, and monthly), roughly equivalent to base allowances of $12 per 5 hours, $30 per week, and $60 per month; model-specific allowances may differ (actual request counts vary by model and usage).",
 
   "zen.api.error.rateLimitExceeded": "Rate limit exceeded. Please try again later.",
   "zen.api.error.modelNotSupported": "Model {{model}} is not supported",
