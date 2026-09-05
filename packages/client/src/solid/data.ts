@@ -1126,7 +1126,8 @@ export function createData(config: CreateDataInput) {
         const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
         if (event.type === "credential.updated") {
           result.location.integration.invalidate(location)
-          refresh(() => result.location.integration.sync(location))
+          // Branch and shell events create location keys for unopened directories too.
+          if (result.location.integration.loaded(location)) refresh(() => result.location.integration.sync(location))
           return
         }
         setStore("location", key, (data) => ({
@@ -1144,30 +1145,34 @@ export function createData(config: CreateDataInput) {
         }))
         result.location.model.invalidate(location)
         result.location.provider.invalidate(location)
-        refresh(() => Promise.all([result.location.model.sync(location), result.location.provider.sync(location)]))
+        if (result.location.model.loaded(location)) refresh(() => result.location.model.sync(location))
+        if (result.location.provider.loaded(location)) refresh(() => result.location.provider.sync(location))
       })
       return
     }
 
     if (!event.location) return
     const location = event.location
+    // Every Location booted on the server emits these, including ones this client never opened.
+    // Invalidate always so the next explicit read is fresh, but only re-fetch catalogs a consumer
+    // already read; eagerly reading them all floods the browser's connection pool.
+    const resync = (...resources: Array<Pick<ReturnType<typeof locationResource>, "invalidate" | "loaded" | "sync">>) =>
+      resources.forEach((resource) => {
+        resource.invalidate(location)
+        if (resource.loaded(location)) refresh(() => resource.sync(location))
+      })
     switch (event.type) {
       case "catalog.updated":
-        result.location.model.invalidate(location)
-        result.location.provider.invalidate(location)
-        refresh(() => Promise.all([result.location.model.sync(location), result.location.provider.sync(location)]))
+        resync(result.location.model, result.location.provider)
         break
       case "agent.updated":
-        result.location.agent.invalidate(location)
-        refresh(() => result.location.agent.sync(location))
+        resync(result.location.agent)
         break
       case "command.updated":
-        result.location.command.invalidate(location)
-        refresh(() => result.location.command.sync(location))
+        resync(result.location.command)
         break
       case "skill.updated":
-        result.location.skill.invalidate(location)
-        refresh(() => result.location.skill.sync(location))
+        resync(result.location.skill)
         break
       case "vcs.branch.updated":
         setStore("location", locationKey(location), (data) => ({
@@ -1201,39 +1206,26 @@ export function createData(config: CreateDataInput) {
         }))
         break
       case "reference.updated":
-        result.location.reference.invalidate(location)
-        refresh(() => result.location.reference.sync(location))
+        resync(result.location.reference)
         break
       case "integration.updated":
-        result.location.integration.invalidate(location)
-        result.location.model.invalidate(location)
-        result.location.provider.invalidate(location)
-        refresh(() =>
-          Promise.all([
-            result.location.integration.sync(location),
-            result.location.model.sync(location),
-            result.location.provider.sync(location),
-          ]),
-        )
+        resync(result.location.integration, result.location.model, result.location.provider)
         break
+      // Nothing reads websearch providers explicitly; events populate them for opened locations.
       case "config.updated":
-        result.location.config.invalidate(location)
-        if (result.location.config.list(location) !== undefined || sync.has(`location.config:${locationKey(location)}`))
-          refresh(() => result.location.config.sync(location))
-        refresh(() => result.location.websearch.refresh(location))
+        resync(result.location.config)
+        if (result.location.info(location)) refresh(() => result.location.websearch.refresh(location))
         break
       case "websearch.updated":
-        refresh(() => result.location.websearch.refresh(location))
+        if (result.location.info(location)) refresh(() => result.location.websearch.refresh(location))
         break
       // Authenticating an MCP integration reconnects its server, which emits mcp.status.changed,
       // so the mcp list syncs here rather than off integration.updated.
       case "mcp.status.changed":
-        result.location.mcp.server.invalidate(location)
-        refresh(() => result.location.mcp.server.sync(location))
+        resync(result.location.mcp.server)
         break
       case "mcp.resources.changed":
-        result.location.mcp.resource.invalidate(location)
-        refresh(() => result.location.mcp.resource.sync(location))
+        resync(result.location.mcp.resource)
         break
     }
   }
@@ -1249,6 +1241,11 @@ export function createData(config: CreateDataInput) {
     const publish = (key: string, value: LocationData[Field]) => setStore("location", key, { [field]: value })
     return {
       list: (ref?: LocationRef) => store.location[locationKey(ref ?? defaultLocation())]?.[field],
+      // True once a consumer has read or is reading this catalog; event refreshes are opt-in to it.
+      loaded: (ref?: LocationRef) => {
+        const id = locationKey(ref ?? defaultLocation())
+        return store.location[id]?.[field] !== undefined || sync.has(`location.${field}:${id}`)
+      },
       sync: (ref?: LocationRef) => {
         const location = ref ?? defaultLocation()
         const id = locationKey(location)
