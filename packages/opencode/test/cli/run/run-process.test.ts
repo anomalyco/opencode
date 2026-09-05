@@ -6,7 +6,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { reply } from "../../lib/llm-server"
-import { cliIt } from "../../lib/cli-process"
+import { cliIt, testModelID } from "../../lib/cli-process"
 
 describe("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
@@ -122,13 +122,26 @@ describe("opencode run (non-interactive subprocess)", () => {
           expect(typeof evt.sessionID).toBe("string")
         }
         expect(events.map((event) => event.type)).toEqual(["step_start", "text", "step_finish"])
+        const [provider, model] = testModelID.split("/")
         expect(events.map(({ timestamp: _, sessionID: __, ...event }) => event)).toEqual([
-          { type: "step_start", part: expect.objectContaining({ type: "step-start" }) },
+          {
+            type: "step_start",
+            part: expect.objectContaining({ type: "step-start" }),
+            providerID: provider,
+            modelID: model,
+          },
           {
             type: "text",
             part: expect.objectContaining({ type: "text", text: "structured output" }),
+            providerID: provider,
+            modelID: model,
           },
-          { type: "step_finish", part: expect.objectContaining({ type: "step-finish" }) },
+          {
+            type: "step_finish",
+            part: expect.objectContaining({ type: "step-finish" }),
+            providerID: provider,
+            modelID: model,
+          },
         ])
         expect(result.stdout.endsWith("\n")).toBe(true)
         expect(
@@ -137,6 +150,62 @@ describe("opencode run (non-interactive subprocess)", () => {
             .slice(0, -1)
             .every((line) => line.length > 0),
         ).toBe(true)
+      }),
+    60_000,
+  )
+
+  // The model only exists on the assistant message, so the events have to pick it
+  // up from there. Running a non-default model proves the attribution follows the
+  // model that produced the part instead of a fixed value, and a tool call makes
+  // the run span several part types.
+  cliIt.concurrent(
+    "--format json attributes every part-bearing event to the model that produced it",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.push(
+          reply().reason("thinking it over").text("before tool").tool("bash", {
+            command: "printf tool-output",
+            description: "Print deterministic output",
+          }),
+        )
+        yield* llm.text("after tool")
+        const result = yield* opencode.run("say hi", {
+          format: "json",
+          model: "test/test-model-alt",
+          extraArgs: ["--thinking"],
+        })
+        opencode.expectExit(result, 0)
+
+        const events = opencode.parseJsonEvents(result.stdout)
+        expect(new Set(events.map((event) => event.type))).toEqual(
+          new Set(["step_start", "reasoning", "text", "tool_use", "step_finish"]),
+        )
+        for (const event of events) {
+          expect(event.providerID).toBe("test")
+          expect(event.modelID).toBe("test-model-alt")
+        }
+      }),
+    60_000,
+  )
+
+  // Every other test passes --model, so they can't tell the model being read off
+  // the message from one read off the argv. Without --model the server resolves
+  // the configured default and the argv holds nothing, so this run only reports
+  // a model if it really comes from the assistant message.
+  cliIt.concurrent(
+    "--format json attributes events to the resolved default model without --model",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.text("default model run")
+        const result = yield* opencode.spawn(["run", "--format", "json", "say hi"])
+        opencode.expectExit(result, 0)
+
+        const events = opencode.parseJsonEvents(result.stdout)
+        expect(events.length).toBeGreaterThan(0)
+        for (const event of events) {
+          expect(event.providerID).toBe("test")
+          expect(event.modelID).toBe("test-model")
+        }
       }),
     60_000,
   )

@@ -697,6 +697,12 @@ export const RunCommand = effectCmd({
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
           const toggles = new Map<string, boolean>()
           const sessions = new Set([sessionID])
+          // messageID -> model that produced it, so step events can carry the
+          // attribution that only lives on the assistant message. Only filled from
+          // messages seen on this stream, so a step for a message created before
+          // this subscription (attaching to a turn already in flight) emits
+          // without the fields rather than guessing.
+          const models = new Map<string, { providerID: string; modelID: string }>()
           let error: string | undefined
 
           for await (const event of events.stream) {
@@ -707,22 +713,28 @@ export const RunCommand = effectCmd({
             if (
               event.type === "message.updated" &&
               event.properties.sessionID === sessionID &&
-              event.properties.info.role === "assistant" &&
-              args.format !== "json" &&
-              toggles.get("start") !== true
+              event.properties.info.role === "assistant"
             ) {
-              UI.empty()
-              UI.println(`> ${event.properties.info.agent} · ${event.properties.info.modelID}`)
-              UI.empty()
-              toggles.set("start", true)
+              models.set(event.properties.info.id, {
+                providerID: event.properties.info.providerID,
+                modelID: event.properties.info.modelID,
+              })
+              if (args.format !== "json" && toggles.get("start") !== true) {
+                UI.empty()
+                UI.println(`> ${event.properties.info.agent} · ${event.properties.info.modelID}`)
+                UI.empty()
+                toggles.set("start", true)
+              }
             }
 
             if (event.type === "message.part.updated") {
               const part = event.properties.part
               if (part.sessionID !== sessionID) continue
 
+              const model = models.get(part.messageID)
+
               if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
-                if (emit("tool_use", { part })) continue
+                if (emit("tool_use", { part, ...model })) continue
                 if (part.state.status === "completed") {
                   await tool(part)
                   continue
@@ -743,15 +755,15 @@ export const RunCommand = effectCmd({
               }
 
               if (part.type === "step-start") {
-                if (emit("step_start", { part })) continue
+                if (emit("step_start", { part, ...model })) continue
               }
 
               if (part.type === "step-finish") {
-                if (emit("step_finish", { part })) continue
+                if (emit("step_finish", { part, ...model })) continue
               }
 
               if (part.type === "text" && part.time?.end) {
-                if (emit("text", { part })) continue
+                if (emit("text", { part, ...model })) continue
                 const text = part.text.trim()
                 if (!text) continue
                 if (!process.stdout.isTTY) {
@@ -764,7 +776,7 @@ export const RunCommand = effectCmd({
               }
 
               if (part.type === "reasoning" && part.time?.end && thinking) {
-                if (emit("reasoning", { part })) continue
+                if (emit("reasoning", { part, ...model })) continue
                 const text = part.text.trim()
                 if (!text) continue
                 const line = `Thinking: ${text}`
