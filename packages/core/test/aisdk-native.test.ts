@@ -5,6 +5,31 @@ const map = (packageName: string, settings: Readonly<Record<string, unknown>>, m
   AISDKNative.map({ packageName, settings, modelID, providerID: "test-provider" })
 
 describe("AISDKNative", () => {
+  test("maps Merge Gateway to the native compatible provider with its default endpoint", () => {
+    expect(map("merge-gateway-ai-sdk-provider", {})).toEqual({
+      package: "@opencode-ai/ai/providers/openai-compatible",
+      settings: {
+        baseURL: "https://api-gateway.merge.dev/v1/ai-sdk",
+        provider: "test-provider",
+      },
+    })
+    expect(
+      map("merge-gateway-ai-sdk-provider", {
+        apiKey: "test-key",
+        baseURL: "https://custom.example/v1",
+        reasoningEffort: "high",
+      }),
+    ).toEqual({
+      package: "@opencode-ai/ai/providers/openai-compatible",
+      settings: {
+        apiKey: "test-key",
+        baseURL: "https://custom.example/v1",
+        provider: "test-provider",
+        providerOptions: { reasoningEffort: "high" },
+      },
+    })
+  })
+
   test("maps OpenAI-family packages and request options to native providers", () => {
     expect(
       map("@ai-sdk/openai", {
