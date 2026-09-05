@@ -6,6 +6,7 @@ import { pathKey } from "@/utils/path-key"
 import { useServerHealth } from "@/utils/server-health"
 import { createServerSdkContext } from "./server-sdk"
 import { createServerSyncContext } from "./server-sync"
+import { enrichProject } from "./layout-helpers"
 import { getOwner } from "solid-js/web"
 import { QueryClient } from "@tanstack/solid-query"
 import type { ServerScope } from "@/utils/server-scope"
@@ -93,46 +94,6 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
   },
 })
 
-function enrichProject({
-  project,
-  data,
-}: {
-  project: { worktree: string; expanded: boolean }
-  data: {
-    project: { id?: string; worktree: string; sandboxes?: string[] }[]
-    child: (directory: string, options?: { bootstrap: boolean }) => [Store<unknown>, SetStoreFunction<unknown>]
-  }
-}) {
-  const [childStore] = data.child(project.worktree, { bootstrap: false })
-  const child = childStore as Record<string, unknown>
-  const key = pathKey(project.worktree)
-  const byDirectory =
-    data.project.find((x) => pathKey(x.worktree) === key) ??
-    data.project.find((x) => x.sandboxes?.some((sandbox) => pathKey(sandbox) === key))
-  if (byDirectory) {
-    const base = { ...byDirectory, ...project }
-    const icon = child.icon
-    if (icon) {
-      return { ...base, icon: { ...base.icon, override: icon } }
-    }
-    return base
-  }
-  const projectID = child.project as string | undefined
-  const metadata = projectID
-    ? data.project.find((x) => x.id === projectID)
-    : data.project.find((x) => x.worktree === project.worktree)
-
-  // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
-  // Without this, different subdirectories of the same git repo would share the same
-  // icon from the database instead of using their individual overrides.
-  const base = { ...metadata, ...project }
-  const icon = child.icon
-  if (icon) {
-    return { ...base, icon: { ...base.icon, override: icon } }
-  }
-  return base
-}
-
 function createServerCtx(
   conn: ServerConnection.Any,
   scope: ServerScope,
@@ -150,14 +111,14 @@ function createServerCtx(
   const sdk = createServerSdkContext(conn, scope)
   const sync = createServerSyncContext(sdk)
 
-  const projectsList = createMemo(() => projects.list().map((project) => enrichProject({ project, data: sync })))
+  const projectsList = createMemo(() => projects.list().map((project) => enrichProject({ project, sync })))
   const recentlyClosedList = createMemo(() => {
     const known = new Set(sync.data.project.map((project) => pathKey(project.worktree)))
     return projects
       .recentlyClosed()
       .filter((worktree) => known.has(pathKey(worktree)))
       .slice(0, RECENTLY_CLOSED_DISPLAY_LIMIT)
-      .map((worktree) => enrichProject({ project: { worktree, expanded: false }, data: sync }))
+      .map((worktree) => enrichProject({ project: { worktree, expanded: false }, sync }))
   })
 
   const isLocal =

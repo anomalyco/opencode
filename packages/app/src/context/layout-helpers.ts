@@ -1,4 +1,45 @@
 import type { Accessor } from "solid-js"
+import { pathKey } from "@/utils/path-key"
+import type { Project } from "@opencode-ai/sdk/v2"
+
+export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
+
+export function enrichProject(input: {
+  project: { worktree: string; expanded: boolean }
+  sync: {
+    data: { project: Project[] }
+    child: (directory: string, options?: { bootstrap: boolean }) => [unknown, unknown]
+  }
+}): LocalProject {
+  const [childStore] = input.sync.child(input.project.worktree, { bootstrap: false })
+  const child = (childStore ?? {}) as Record<string, unknown>
+  const key = pathKey(input.project.worktree)
+  const byDirectory =
+    input.sync.data.project.find((x) => pathKey(x.worktree) === key) ??
+    input.sync.data.project.find((x) => x.sandboxes?.some((sandbox) => pathKey(sandbox) === key))
+  if (byDirectory) {
+    const base = { ...byDirectory, ...input.project }
+    const icon = child.icon as string | undefined
+    if (icon) {
+      return { ...base, icon: { ...base.icon, override: icon } }
+    }
+    return base
+  }
+  const projectID = child.project as string | undefined
+  const metadata = projectID
+    ? input.sync.data.project.find((x) => x.id === projectID)
+    : input.sync.data.project.find((x) => pathKey(x.worktree) === key)
+
+  // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
+  // Without this, different subdirectories of the same git repo would share the same
+  // icon from the database instead of using their individual overrides.
+  const base = { ...metadata, ...input.project }
+  const icon = child.icon as string | undefined
+  if (icon) {
+    return { ...base, icon: { ...base.icon, override: icon } }
+  }
+  return base
+}
 
 export function ensureSessionKey(key: string, touch: (key: string) => void, seed: (key: string) => void) {
   touch(key)

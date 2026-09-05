@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
-import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
+import { createSessionKeyReader, enrichProject, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
+import { pathKey } from "@/utils/path-key"
+import type { Project } from "@opencode-ai/sdk/v2"
 
 describe("layout session-key helpers", () => {
   test("couples touch and scroll seed in order", () => {
@@ -136,5 +138,101 @@ describe("rootFor drive root guard", () => {
     const map = makeRoots([])
     expect(rootFor("C:/foo", map)).toBe("C:/foo")
     expect(rootFor("/tmp/test", map)).toBe("/tmp/test")
+  })
+})
+
+describe("enrichProject", () => {
+  const makeMockSync = (input?: {
+    projects?: Array<{ id?: string; worktree: string; sandboxes?: string[]; icon?: { override?: string } }>
+    childStores?: Record<string, { project?: string; icon?: string }>
+  }) => {
+    const projects = (input?.projects ?? []) as unknown as Project[]
+    const stores = input?.childStores ?? {}
+    return {
+      data: { project: projects },
+      // Include project API method stub to verify callers don't confuse sync.data.project with sync.project
+      project: {
+        loadSessions: () => Promise.resolve(),
+        meta: () => {},
+        icon: () => {},
+      },
+      child: (dir: string) => [stores[dir] ?? stores[pathKey(dir)] ?? {}, () => {}] as [unknown, unknown],
+    }
+  }
+
+  test("enriches project by matching worktree directory pathKey", () => {
+    const sync = makeMockSync({
+      projects: [{ id: "p1", worktree: "C:/projects/app", sandboxes: [] }],
+    })
+
+    const enriched = enrichProject({
+      project: { worktree: "C:\\projects\\app", expanded: true },
+      sync,
+    })
+
+    expect(enriched.id).toBe("p1")
+    expect(enriched.worktree).toBe("C:\\projects\\app")
+    expect(enriched.expanded).toBe(true)
+  })
+
+  test("enriches project by matching sandboxes", () => {
+    const sync = makeMockSync({
+      projects: [{ id: "p1", worktree: "C:/projects/main", sandboxes: ["C:/projects/branch-a"] }],
+    })
+
+    const enriched = enrichProject({
+      project: { worktree: "C:\\projects\\branch-a", expanded: false },
+      sync,
+    })
+
+    expect(enriched.id).toBe("p1")
+    expect(enriched.worktree).toBe("C:\\projects\\branch-a")
+  })
+
+  test("enriches project by childStore project ID when directory not found directly", () => {
+    const sync = makeMockSync({
+      projects: [{ id: "p1", worktree: "C:/projects/main", sandboxes: [] }],
+      childStores: {
+        "C:\\projects\\subdir": { project: "p1" },
+      },
+    })
+
+    const enriched = enrichProject({
+      project: { worktree: "C:\\projects\\subdir", expanded: false },
+      sync,
+    })
+
+    expect(enriched.id).toBe("p1")
+  })
+
+  test("preserves local icon override from childStore", () => {
+    const sync = makeMockSync({
+      projects: [{ id: "p1", worktree: "C:/projects/main", icon: { override: "default-icon" } }],
+      childStores: {
+        "C:/projects/main": { icon: "custom-icon" },
+      },
+    })
+
+    const enriched = enrichProject({
+      project: { worktree: "C:/projects/main", expanded: false },
+      sync,
+    })
+
+    expect(enriched.icon?.override).toBe("custom-icon")
+  })
+
+  test("does not crash when project is not found in sync.data.project", () => {
+    const sync = makeMockSync({
+      projects: [],
+    })
+
+    const enriched = enrichProject({
+      project: { worktree: "C:/projects/unknown", expanded: true },
+      sync,
+    })
+
+    expect(enriched.worktree).toBe("C:/projects/unknown")
+    expect(enriched.expanded).toBe(true)
+    expect(enriched.id).toBeUndefined()
   })
 })

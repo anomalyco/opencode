@@ -552,7 +552,7 @@ export default function LegacyLayout(props: ParentProps) {
       if (!last) return
       await openProject(last, true)
     } else {
-      const matched = last ?? list.find((project) => pathKey(project.worktree) === pathKey(last))
+      const matched = last ? list.find((project) => pathKey(project.worktree) === pathKey(last)) : undefined
       const next = matched ?? list[0]
       if (!next) return
       await openProject(next.worktree, true)

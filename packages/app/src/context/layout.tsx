@@ -17,7 +17,7 @@ import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
 import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { migrateLegacySessionStateKeys, ServerScope, SessionStateKey } from "@/utils/server-scope"
-import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
+import { createSessionKeyReader, enrichProject, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
 import { requireServerKey } from "@/utils/session-route"
 import { type DraftTab, useTabs } from "./tabs"
 import { closeSessionTab, openSessionTab, previewSessionTab, type SessionTabs } from "./layout-tabs"
@@ -125,46 +125,6 @@ const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
     all: normalizeSessionTabList(path, tabs.all),
     active: tabs.active ? normalizeSessionTab(path, tabs.active) : tabs.active,
   }
-}
-
-function enrichProject({
-  project,
-  data,
-}: {
-  project: { worktree: string; expanded: boolean }
-  data: {
-    project: { id?: string; worktree: string; sandboxes?: string[] }[]
-    child: (directory: string, options?: { bootstrap: boolean }) => [Store<unknown>, SetStoreFunction<unknown>]
-  }
-}) {
-  const [childStore] = data.child(project.worktree, { bootstrap: false })
-  const child = childStore as Record<string, unknown>
-  const key = pathKey(project.worktree)
-  const byDirectory =
-    data.project.find((x) => pathKey(x.worktree) === key) ??
-    data.project.find((x) => x.sandboxes?.some((sandbox) => pathKey(sandbox) === key))
-  if (byDirectory) {
-    const base = { ...byDirectory, ...project }
-    const icon = child.icon
-    if (icon) {
-      return { ...base, icon: { ...base.icon, override: icon } }
-    }
-    return base
-  }
-  const projectID = child.project as string | undefined
-  const metadata = projectID
-    ? data.project.find((x) => x.id === projectID)
-    : data.project.find((x) => x.worktree === project.worktree)
-
-  // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
-  // Without this, different subdirectories of the same git repo would share the same
-  // icon from the database instead of using their individual overrides.
-  const base = { ...metadata, ...project }
-  const icon = child.icon
-  if (icon) {
-    return { ...base, icon: { ...base.icon, override: icon } }
-  }
-  return base
 }
 
 export const currentRoute = (pathname: string, search: string): LayoutRoute => {
@@ -546,7 +506,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     })
 
     const enriched = createMemo(() =>
-      server.projects.list().map((project) => enrichProject({ project, data: serverSync() })),
+      server.projects.list().map((project) => enrichProject({ project, sync: serverSync() })),
     )
 
     const list = createMemo(() => {
@@ -673,7 +633,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             .recentlyClosed()
             .filter((worktree) => known.has(pathKey(worktree)))
             .slice(0, RECENTLY_CLOSED_DISPLAY_LIMIT)
-            .map((worktree) => enrichProject({ project: { worktree, expanded: false }, data: serverSync() }))
+            .map((worktree) => enrichProject({ project: { worktree, expanded: false }, sync: serverSync() }))
         }),
         open(directory: string) {
           const root = rootFor(directory)
