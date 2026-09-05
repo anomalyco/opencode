@@ -33,6 +33,7 @@
       "name": "@opencode-ai/ai",
       "version": "1.17.20",
       "dependencies": {
+        "@aws-sdk/credential-providers": "3.1057.0",
         "@opencode-ai/schema": "workspace:*",
         "@smithy/eventstream-codec": "4.2.14",
         "@smithy/util-utf8": "4.2.2",

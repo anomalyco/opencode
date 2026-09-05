@@ -2,9 +2,11 @@ import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { describe, expect } from "bun:test"
 import { Effect, Encoding, Ref, Stream } from "effect"
+import { HttpClientRequest } from "effect/unstable/http"
 import {
   CacheHint,
   GenerationOptions,
+  type LanguageModel,
   LLM,
   LLMEvent,
   LLMRequest,
@@ -18,7 +20,8 @@ import { compileRequest } from "../../src/route/client.js"
 import { AmazonBedrock } from "../../src/providers.js"
 import * as BedrockConverse from "../../src/protocols/bedrock-converse.js"
 import { it } from "../lib/effect.js"
-import { fixedResponse } from "../lib/http.js"
+import { withProcessEnv } from "../lib/env.js"
+import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import {
   eventSummary,
   expectWeatherToolLoop,
@@ -94,6 +97,41 @@ const fixedByteChunks = (...chunks: ReadonlyArray<Uint8Array>) =>
     }),
     { headers: { "content-type": "application/vnd.amazon.eventstream" } },
   )
+
+// Clears every input the AWS default chain reads so tests do not pick up the
+// developer's profiles, SSO cache, or instance metadata.
+const noAmbientAWS = {
+  AWS_ACCESS_KEY_ID: undefined,
+  AWS_SECRET_ACCESS_KEY: undefined,
+  AWS_SESSION_TOKEN: undefined,
+  AWS_BEARER_TOKEN_BEDROCK: undefined,
+  AWS_PROFILE: undefined,
+  AWS_REGION: undefined,
+  AWS_DEFAULT_REGION: undefined,
+  AWS_WEB_IDENTITY_TOKEN_FILE: undefined,
+  AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: undefined,
+  AWS_CONTAINER_CREDENTIALS_FULL_URI: undefined,
+  AWS_EC2_METADATA_DISABLED: "true",
+}
+
+const captureHeaders = (target: LanguageModel) =>
+  Effect.gen(function* () {
+    const seen: Array<Headers> = []
+    yield* LLMClient.generate(LLMRequest.update(baseRequest, { model: target })).pipe(
+      Effect.provide(
+        dynamicResponse((input) =>
+          Effect.gen(function* () {
+            const request = yield* HttpClientRequest.toWeb(input.request)
+            seen.push(request.headers)
+            return input.respond(eventStreamBody(["messageStop", { stopReason: "end_turn" }]), {
+              headers: { "content-type": "application/vnd.amazon.eventstream" },
+            })
+          }),
+        ),
+      ),
+    )
+    return seen[0]!
+  })
 
 const model = AmazonBedrock.configure({
   baseURL: "https://bedrock-runtime.test",
@@ -1311,35 +1349,137 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("rejects requests with no auth path", () =>
+  it.effect("fails with an authentication error when the default chain cannot resolve credentials", () =>
     Effect.gen(function* () {
       const unsignedModel = AmazonBedrock.configure({
         baseURL: "https://bedrock-runtime.test",
+        profile: "opencode-test-missing-profile",
       }).model("anthropic.claude-3-5-sonnet-20240620-v1:0")
       const error = yield* LLMClient.generate(LLMRequest.update(baseRequest, { model: unsignedModel })).pipe(
         Effect.provide(fixedBytes(eventStreamBody(["messageStop", { stopReason: "end_turn" }]))),
         Effect.flip,
       )
 
-      expect(error.message).toContain("Bedrock Converse requires either route bearer auth or AWS credentials")
-    }),
+      expect(error.reason._tag).toBe("Authentication")
+      expect(error.message).toContain("AWS default credential chain failed")
+    }).pipe(withProcessEnv(noAmbientAWS)),
   )
 
-  it.effect("signs requests with SigV4 when AWS credentials are provided (deterministic plumbing check)", () =>
+  it.effect("signs with static credentials using the configured region for the SigV4 scope", () =>
     Effect.gen(function* () {
       const signed = AmazonBedrock.configure({
         baseURL: "https://bedrock-runtime.test",
+        region: "eu-west-1",
         credentials: {
           region: "us-east-1",
           accessKeyId: "AKIAIOSFODNN7EXAMPLE",
           secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
         },
       }).model("anthropic.claude-3-5-sonnet-20240620-v1:0")
-      const prepared = yield* compileRequest(LLMRequest.update(baseRequest, { model: signed }))
+      const headers = yield* captureHeaders(signed)
 
-      expect(prepared.route).toBe("bedrock-converse")
-      expect(prepared.model).toBe(signed)
-    }),
+      expect(headers.get("authorization")).toContain("Credential=AKIAIOSFODNN7EXAMPLE/")
+      expect(headers.get("authorization")).toContain("/eu-west-1/bedrock/aws4_request")
+      expect(headers.get("x-amz-security-token")).toBeNull()
+    }).pipe(withProcessEnv(noAmbientAWS)),
+  )
+
+  it.effect("resolves SigV4 credentials through the AWS default chain on every request", () =>
+    Effect.gen(function* () {
+      const chained = AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", region: "us-west-2" }).model(
+        "anthropic.claude-3-5-sonnet-20240620-v1:0",
+      )
+      const headers = yield* captureHeaders(chained)
+
+      expect(headers.get("authorization")).toContain("Credential=AKIACHAINEXAMPLE/")
+      expect(headers.get("authorization")).toContain("/us-west-2/bedrock/aws4_request")
+      expect(headers.get("x-amz-security-token")).toBe("chain-session-token")
+    }).pipe(
+      withProcessEnv({
+        ...noAmbientAWS,
+        AWS_ACCESS_KEY_ID: "AKIACHAINEXAMPLE",
+        AWS_SECRET_ACCESS_KEY: "chain-secret",
+        AWS_SESSION_TOKEN: "chain-session-token",
+      }),
+    ),
+  )
+
+  it.effect("re-resolves rotated chain credentials on the next request without rebuilding the model", () =>
+    Effect.gen(function* () {
+      const chained = AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", region: "us-west-2" }).model(
+        "anthropic.claude-3-5-sonnet-20240620-v1:0",
+      )
+      const first = yield* captureHeaders(chained)
+      const second = yield* captureHeaders(chained).pipe(
+        withProcessEnv({ AWS_ACCESS_KEY_ID: "AKIAROTATEDEXAMPLE", AWS_SECRET_ACCESS_KEY: "rotated-secret" }),
+      )
+
+      expect(first.get("authorization")).toContain("Credential=AKIACHAINEXAMPLE/")
+      expect(second.get("authorization")).toContain("Credential=AKIAROTATEDEXAMPLE/")
+    }).pipe(
+      withProcessEnv({
+        ...noAmbientAWS,
+        AWS_ACCESS_KEY_ID: "AKIACHAINEXAMPLE",
+        AWS_SECRET_ACCESS_KEY: "chain-secret",
+      }),
+    ),
+  )
+
+  it.effect("prefers AWS_BEARER_TOKEN_BEDROCK over the credential chain", () =>
+    Effect.gen(function* () {
+      const bearer = AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test" }).model(
+        "anthropic.claude-3-5-sonnet-20240620-v1:0",
+      )
+      const headers = yield* captureHeaders(bearer)
+
+      expect(headers.get("authorization")).toBe("Bearer env-bearer-token")
+    }).pipe(
+      withProcessEnv({
+        ...noAmbientAWS,
+        AWS_BEARER_TOKEN_BEDROCK: "env-bearer-token",
+        AWS_ACCESS_KEY_ID: "AKIACHAINEXAMPLE",
+        AWS_SECRET_ACCESS_KEY: "chain-secret",
+      }),
+    ),
+  )
+
+  it.effect("auth: sigv4 ignores an ambient bearer token from configure and settings", () =>
+    Effect.gen(function* () {
+      const configured = AmazonBedrock.configure({ auth: "sigv4", baseURL: "https://bedrock-runtime.test" }).model(
+        "anthropic.claude-3-5-sonnet-20240620-v1:0",
+      )
+      const fromSettings = AmazonBedrock.model("anthropic.claude-3-5-sonnet-20240620-v1:0", {
+        auth: "sigv4",
+        baseURL: "https://bedrock-runtime.test",
+      })
+
+      for (const target of [configured, fromSettings]) {
+        const headers = yield* captureHeaders(target)
+        expect(headers.get("authorization")).toContain("Credential=AKIACHAINEXAMPLE/")
+        expect(headers.get("authorization")).toContain("/ap-southeast-2/bedrock/aws4_request")
+      }
+      expect(() => AmazonBedrock.configure({ auth: "sigv4", apiKey: "k" })).toThrow("does not accept apiKey")
+    }).pipe(
+      withProcessEnv({
+        ...noAmbientAWS,
+        AWS_BEARER_TOKEN_BEDROCK: "env-bearer-token",
+        AWS_REGION: "ap-southeast-2",
+        AWS_ACCESS_KEY_ID: "AKIACHAINEXAMPLE",
+        AWS_SECRET_ACCESS_KEY: "chain-secret",
+      }),
+    ),
+  )
+
+  it.effect("derives the endpoint region from AWS_REGION then AWS_DEFAULT_REGION", () =>
+    Effect.gen(function* () {
+      const fromRegion = AmazonBedrock.configure({ apiKey: "k" }).model("anthropic.claude-3-5-sonnet-20240620-v1:0")
+      expect(fromRegion.route.endpoint.baseURL).toBe("https://bedrock-runtime.eu-central-1.amazonaws.com")
+
+      const fromDefault = yield* Effect.sync(() =>
+        AmazonBedrock.configure({ apiKey: "k" }).model("anthropic.claude-3-5-sonnet-20240620-v1:0"),
+      ).pipe(withProcessEnv({ AWS_REGION: undefined }))
+      expect(fromDefault.route.endpoint.baseURL).toBe("https://bedrock-runtime.us-gov-west-1.amazonaws.com")
+    }).pipe(withProcessEnv({ ...noAmbientAWS, AWS_REGION: "eu-central-1", AWS_DEFAULT_REGION: "us-gov-west-1" })),
   )
 
   it.effect("emits cachePoint markers after system, user-text, and assistant-text with cache hints", () =>
