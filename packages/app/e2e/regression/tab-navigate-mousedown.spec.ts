@@ -225,7 +225,7 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
   await page.mouse.down()
   await page.mouse.move(resized.x - 200, resized.y + resized.height / 2)
   await page.mouse.up()
-  await expect(sidebar).toHaveCSS("width", "130px")
+  await expect(sidebar).toHaveCSS("width", "140px")
 
   await tabB.click()
   await expect(page).toHaveURL(new RegExp(`${hrefB.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`))
@@ -265,7 +265,7 @@ for (const count of [0, 26]) {
     const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
     await expect(sidebar).toHaveCSS("width", "260px")
     await expect(sidebar.locator("[data-titlebar-tab-slot]")).toHaveCount(count)
-    for (const width of [260, 180, 130]) {
+    for (const width of [260, 180, 140]) {
       if (width !== 260) {
         const handle = await sidebar.locator('[data-component="resize-handle"]').boundingBox()
         const bounds = await sidebar.boundingBox()

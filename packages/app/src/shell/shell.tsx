@@ -74,7 +74,7 @@ export default function Layout(props: ParentProps) {
                 class="-end-2"
                 direction="horizontal"
                 size={state.tabsWidth}
-                min={130}
+                min={140}
                 max={520}
                 onResize={(width) => setState("tabsWidth", width)}
               />
