@@ -15,6 +15,7 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useServerSync } from "@/context/server-sync"
+import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { Persist, persisted } from "@/utils/persist"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { decode64 } from "@/utils/base64"
@@ -30,6 +31,7 @@ import { Session } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { createStore, produce, reconcile } from "solid-js/store"
+import { createSessionMutation } from "@/utils/session-mutation"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
@@ -40,7 +42,6 @@ import { clearWorkspaceTerminals } from "@/context/terminal"
 import { pickSessionCacheEvictions } from "@/context/global-sync/session-cache"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
-import { Binary } from "@opencode-ai/core/util/binary"
 import { retry } from "@opencode-ai/core/util/retry"
 import { playSoundById } from "@/utils/sound"
 import { createAim } from "@/utils/aim"
@@ -869,29 +870,18 @@ export default function LegacyLayout(props: ParentProps) {
   }
 
   async function archiveSession(session: Session) {
-    if ((await serverSDK().protocol) !== "v1") return
-    const [store, setStore] = serverSync().child(session.directory)
-    const sessions = store.session ?? []
-    const index = sessions.findIndex((s) => s.id === session.id)
-    const nextSession = sessions[index + 1] ?? sessions[index - 1]
-
-    await serverSDK().client.session.update({
-      sessionID: session.id,
-      directory: session.directory,
-      time: { archived: Date.now() },
-    })
-    setStore(
-      produce((draft) => {
-        const match = Binary.search(draft.session, session.id, (s) => s.id)
-        if (match.found) draft.session.splice(match.index, 1)
-      }),
-    )
-    if (session.id === params.id) {
-      if (nextSession) {
-        navigate(`/${params.dir}/session/${nextSession.id}`)
-      } else {
-        navigate(`/${params.dir}/session`)
-      }
+    try {
+      await createSessionMutation({ client: serverSDK().ensureDirSdkContext(session.directory).client, serverSync: serverSync() }).archive(session)
+      notifySessionTabsRemoved({
+        server: server.key,
+        directory: session.directory,
+        sessionIDs: [session.id],
+      })
+    } catch (cause) {
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: errorMessage(cause, language.t("common.requestFailed")),
+      })
     }
   }
 
@@ -1481,12 +1471,8 @@ export default function LegacyLayout(props: ParentProps) {
         sessions
           .filter((session) => session.time.archived === undefined)
           .map((session) =>
-            serverSDK()
-              .client.session.update({
-                sessionID: session.id,
-                directory: session.directory,
-                time: { archived: Date.now() },
-              })
+            createSessionMutation({ client: serverSDK().client, serverSync: serverSync() })
+              .archive(session)
               .catch(() => undefined),
           ),
       )
