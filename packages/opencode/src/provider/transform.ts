@@ -1706,10 +1706,15 @@ export function reasoningVariants(model: ModelsDev.Model, target: Provider.Model
   if (options === undefined) return
   if (options.length === 0) return {}
 
-  const effort = options.find((option) => option.type === "effort")
-  if (effort) return effortVariants(target, effort.values)
-
   const toggle = options.some((option) => option.type === "toggle")
+  const effort = options.find((option) => option.type === "effort")
+  if (effort) {
+    // A model can declare both a toggle and effort values. Effort values cannot
+    // express "off", so keep the toggle's none variant rather than dropping it.
+    const off = toggle ? reasoningToggle(target).none : undefined
+    return { ...(off ? { none: off } : {}), ...effortVariants(target, effort.values) }
+  }
+
   const budget = options.find((option) => option.type === "budget_tokens")
   if (!budget) return toggle ? nonEmptyVariants(reasoningToggle(target)) : undefined
 
@@ -1763,6 +1768,15 @@ function reasoningToggle(model: Provider.Model): NonNullable<Provider.Model["var
       none: { thinking: { type: "disabled" } },
       high: { thinking: { type: "enabled" } },
     }
+  // Turning DeepSeek V4 thinking off is provider specific, so it is scoped the same
+  // way topP() scopes these models rather than matched on the model id alone.
+  if (model.api.npm === "@ai-sdk/openai-compatible" && model.api.id.toLowerCase().includes("deepseek-v4")) {
+    // api.deepseek.com uses thinking.type and rejects a "none" effort.
+    // https://api-docs.deepseek.com/guides/thinking_mode
+    if (model.providerID === "deepseek") return { none: { thinking: { type: "disabled" } } }
+    // zen accepts reasoning_effort "none" and ignores thinking entirely.
+    if (model.providerID.startsWith("opencode")) return { none: { reasoningEffort: "none" } }
+  }
   return {}
 }
 

@@ -3798,10 +3798,10 @@ describe("ProviderTransform sampling defaults - DeepSeek", () => {
 
 describe("ProviderTransform.reasoningVariants", () => {
   const model = (reasoning_options: ModelsDev.Model["reasoning_options"]) => ({ reasoning_options }) as ModelsDev.Model
-  const target = (npm: string, id = "test-model") =>
+  const target = (npm: string, id = "test-model", providerID = "test") =>
     ({
       id,
-      providerID: "test",
+      providerID,
       api: { id, npm, url: "" },
       capabilities: { reasoning: true },
       limit: { output: 64_000 },
@@ -4158,6 +4158,56 @@ describe("ProviderTransform.reasoningVariants", () => {
       )
     },
   )
+
+  test("keeps the thinking toggle as a none variant when effort values are also declared", () => {
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "toggle" }, { type: "effort", values: ["low", "high", "max"] }]),
+        target("@ai-sdk/openai-compatible", "deepseek-v4-flash", "deepseek"),
+      ),
+    ).toEqual({
+      none: { thinking: { type: "disabled" } },
+      low: { reasoningEffort: "low" },
+      high: { reasoningEffort: "high" },
+      max: { reasoningEffort: "max" },
+    })
+  })
+
+  test("disables deepseek thinking through reasoning effort on zen", () => {
+    // zen accepts reasoning_effort "none" and ignores thinking; api.deepseek.com
+    // is the other way round, so the payload follows the provider.
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "toggle" }, { type: "effort", values: ["low", "high", "max"] }]),
+        target("@ai-sdk/openai-compatible", "deepseek-v4-flash", "opencode"),
+      ),
+    ).toEqual({
+      none: { reasoningEffort: "none" },
+      low: { reasoningEffort: "low" },
+      high: { reasoningEffort: "high" },
+      max: { reasoningEffort: "max" },
+    })
+  })
+
+  test("only offers the deepseek toggle on providers known to support it", () => {
+    // 30 other providers resell deepseek over openai-compatible and may not
+    // accept either switch, so matching on the model id alone is too broad.
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "toggle" }, { type: "effort", values: ["high"] }]),
+        target("@ai-sdk/openai-compatible", "deepseek/deepseek-v4-flash", "novita-ai"),
+      ),
+    ).toEqual({ high: { reasoningEffort: "high" } })
+  })
+
+  test("does not add a none variant for openai-compatible models that are not deepseek", () => {
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "toggle" }, { type: "effort", values: ["high"] }]),
+        target("@ai-sdk/openai-compatible", "some-other-model"),
+      ),
+    ).toEqual({ high: { reasoningEffort: "high" } })
+  })
 })
 
 describe("ProviderTransform.variants", () => {
