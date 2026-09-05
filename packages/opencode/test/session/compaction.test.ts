@@ -1873,7 +1873,7 @@ describe("SessionNs.getUsage", () => {
     expect(result.cost).toBe(2.75 + 0.6 + 0.05)
   })
 
-  test("falls back to over-200k pricing when no cost tier matches", () => {
+  test("falls back to over-200k pricing when the model has no cost tiers", () => {
     const model = createModel({
       context: 1_000_000,
       output: 32_000,
@@ -1881,14 +1881,6 @@ describe("SessionNs.getUsage", () => {
         input: 1,
         output: 2,
         cache: { read: 0.1, write: 0.5 },
-        tiers: [
-          {
-            input: 5,
-            output: 6,
-            cache: { read: 0.5, write: 2.5 },
-            tier: { type: "context", size: 500_000 },
-          },
-        ],
         experimentalOver200K: {
           input: 3,
           output: 4,
@@ -1902,6 +1894,50 @@ describe("SessionNs.getUsage", () => {
     })
 
     expect(result.cost).toBe(0.9 + 0.4)
+  })
+
+  // Regression: `experimentalOver200K` is the legacy spelling of the lowest context
+  // tier, not a separate cheaper threshold — across every models.dev entry that
+  // carries both, its prices equal the lowest tier's exactly. Treating it as a live
+  // 200k threshold charged the high rate for every request between 200k and the
+  // model's real threshold. The GPT-5.6 family steps at 272k, so a 250k Luna request
+  // was estimated at 2x the documented rate.
+  test("does not use the 200k fallback below a higher real threshold", () => {
+    const model = createModel({
+      context: 1_050_000,
+      output: 128_000,
+      cost: {
+        input: 0.2,
+        output: 1.2,
+        cache: { read: 0.02, write: 0.25 },
+        tiers: [
+          {
+            input: 0.4,
+            output: 1.8,
+            cache: { read: 0.04, write: 0.5 },
+            tier: { type: "context", size: 272_000 },
+          },
+        ],
+        // Same prices as the tier above, which is what models.dev actually ships.
+        experimentalOver200K: {
+          input: 0.4,
+          output: 1.8,
+          cache: { read: 0.04, write: 0.5 },
+        },
+      },
+    })
+
+    const under = SessionNs.getUsage({
+      model,
+      usage: usage({ inputTokens: 250_000, outputTokens: 10_000, totalTokens: 260_000 }),
+    })
+    expect(under.cost).toBe(0.05 + 0.012)
+
+    const over = SessionNs.getUsage({
+      model,
+      usage: usage({ inputTokens: 300_000, outputTokens: 10_000, totalTokens: 310_000 }),
+    })
+    expect(over.cost).toBe(0.138)
   })
 
   test.each(["@ai-sdk/anthropic", "@ai-sdk/amazon-bedrock", "@ai-sdk/google-vertex/anthropic"])(
