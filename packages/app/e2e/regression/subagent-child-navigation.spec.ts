@@ -1,5 +1,5 @@
 import { base64Encode } from "@opencode-ai/util/encode"
-import type { OpenCodeEvent, SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { OpenCodeEvent, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode-ai/client/promise"
 import { expect, test, type Page } from "@playwright/test"
 import { currentSession, mockOpenCodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
@@ -34,6 +34,59 @@ test("returns to the parent session with Escape", async ({ page }) => {
 
   await Promise.all([expect(page).toHaveURL(sessionHref(parentID)), expectSessionTitle(page, parentTitle)])
 })
+
+for (const input of ["click", "keyboard", "narrow", "modified", "middle"] as const) {
+  test(`opens a background subagent from Session details with ${input}`, async ({ page, context }) => {
+    if (input === "narrow") await page.setViewportSize({ width: 390, height: 844 })
+    await setup(page, { background: true })
+    await page.goto(sessionHref(parentID))
+    await expectSessionTitle(page, parentTitle)
+    if (input === "narrow") {
+      await page
+        .locator('[data-slot="session-mobile-view-navigation"]')
+        .getByRole("button", { name: "More options", exact: true })
+        .click()
+      await page.getByRole("menuitem", { name: "Session details", exact: true }).click()
+    }
+    if (input !== "narrow") await page.getByRole("button", { name: "Session details", exact: true }).click()
+    const summary = page.getByRole("button", { name: "2 background tasks running", exact: true })
+    await summary.click()
+    const list = page.locator('[data-component="session-background-list"]')
+    const link = list.getByRole("link", { name: `Explore ${taskDescription}`, exact: true })
+    await expect(link).toHaveAttribute("href", sessionHref(childID))
+    await expect(list.getByRole("link")).toHaveCount(1)
+    await expect(list.getByText("sleep 120", { exact: true })).toBeVisible()
+
+    if (input === "modified" || input === "middle") {
+      const opened = context.waitForEvent("page")
+      await link.click(input === "middle" ? { button: "middle" } : { modifiers: ["ControlOrMeta"] })
+      const child = await opened
+      await expect(child).toHaveURL(sessionHref(childID))
+      await expect(page).toHaveURL(sessionHref(parentID))
+      await child.close()
+      return
+    }
+
+    if (input === "keyboard") {
+      await expect(link).toBeFocused()
+      await page.keyboard.press("Escape")
+      await expect(list).toBeHidden()
+      await expect(summary).toBeFocused()
+      await page.keyboard.press("Enter")
+      await expect(link).toBeFocused()
+      await page.keyboard.press("Enter")
+    }
+    if (input !== "keyboard") await link.click()
+
+    await expect(page).toHaveURL(sessionHref(childID))
+    await expectSessionTitle(page, input === "narrow" ? childTitle : taskDescription)
+    await expect(list).toBeHidden()
+    await expect(page.locator("[data-titlebar-tab-link]")).toHaveCount(1)
+    await page.keyboard.press("Escape")
+    await expect(page).toHaveURL(sessionHref(parentID))
+    await expectSessionTitle(page, parentTitle)
+  })
+}
 
 test("shows parent lineage while the child timeline loads", async ({ page }) => {
   await setup(page)
@@ -126,7 +179,7 @@ test("keeps the parent tab selected while a loaded child session resolves", asyn
 
 test("shows the not found fallback when the viewed session is deleted", async ({ page }) => {
   const events: OpenCodeEvent[] = []
-  await setup(page, () => events.splice(0, 1))
+  await setup(page, { events: () => events.splice(0, 1) })
   await openChildFromParent(page)
   await expectSessionTitle(page, taskDescription)
 
@@ -144,7 +197,7 @@ test("shows the not found fallback when the viewed session is deleted", async ({
   await expect(page.getByRole("heading", { name: taskDescription })).toHaveCount(0)
 })
 
-async function setup(page: Page, events?: () => OpenCodeEvent[]) {
+async function setup(page: Page, input: { events?: () => OpenCodeEvent[]; background?: boolean } = {}) {
   await mockOpenCodeServer(page, {
     directory,
     project: {
@@ -169,9 +222,9 @@ async function setup(page: Page, events?: () => OpenCodeEvent[]) {
       default: { providerID: "opencode", modelID: "claude-opus-4-6" },
     },
     sessions: [session(parentID, parentTitle, 1700000000000), childSession()],
-    pageMessages: (sessionID) => ({ items: sessionID === parentID ? parentMessages() : [] }),
-    events,
-    eventRetry: events ? 16 : undefined,
+    pageMessages: (sessionID) => ({ items: sessionID === parentID ? parentMessages(input.background) : [] }),
+    events: input.events,
+    eventRetry: input.events ? 16 : undefined,
   })
   // The child session resolves by ID but is absent from the session list,
   // matching a subagent session that has not been loaded into the list cache yet.
@@ -220,7 +273,7 @@ function childSession() {
   return session(childID, childTitle, 1700000001000, { parentID })
 }
 
-function parentMessages(): SessionMessageInfo[] {
+function parentMessages(background = false): SessionMessageInfo[] {
   const userID = "msg_user_0001"
   const assistantID = "msg_assistant_0001"
   return [
@@ -249,9 +302,25 @@ function parentMessages(): SessionMessageInfo[] {
             status: "completed",
             input: { description: taskDescription, agent: "explore", prompt: "Inspect the delegated work." },
             content: [{ type: "text", text: "Subagent finished" }],
-            metadata: { sessionID: childID },
+            metadata: { sessionID: childID, ...(background ? { status: "running" } : {}) },
           },
         },
+        ...(background
+          ? [
+              {
+                type: "tool",
+                id: "call_shell_background",
+                name: "shell",
+                time: { created: 1700000001000, completed: 1700000002000 },
+                state: {
+                  status: "completed",
+                  input: { command: "sleep 120" },
+                  content: [{ type: "text", text: "Running in background" }],
+                  metadata: { shellID: "shell_background", status: "running" },
+                },
+              } satisfies SessionMessageAssistantTool,
+            ]
+          : []),
       ],
     },
   ]
