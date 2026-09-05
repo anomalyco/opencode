@@ -5,6 +5,7 @@ interface Task {
   id: string
   status: string
   repo: string
+  branch: string
   prompt: string
   created: string
 }
@@ -25,7 +26,7 @@ export function TeamJulesPage() {
     setError(null)
     try {
       const client = sdk().client
-      const response = await client.teamjules.list({})
+      const response = await client["server.teamjules"].list({})
       setTasks(response.tasks ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch tasks")
@@ -40,7 +41,7 @@ export function TeamJulesPage() {
     if (!repo() || !prompt()) return
     try {
       const client = sdk().client
-      await client.teamjules.create({
+      await client["server.teamjules"].create({
         repo: repo(),
         prompt: prompt(),
         branch: branch(),
@@ -59,7 +60,7 @@ export function TeamJulesPage() {
   const cancelTask = async (id: string) => {
     try {
       const client = sdk().client
-      await client.teamjules.cancel({ taskID: id })
+      await client["server.teamjules"].cancel({ taskID: id })
       await fetchTasks()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to cancel task")
