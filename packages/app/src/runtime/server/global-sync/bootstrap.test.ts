@@ -6,6 +6,7 @@ import { bootstrapGlobal, loadPathQuery, loadProjectsQuery } from "./bootstrap"
 import { ServerScope } from "@/runtime/server/scope"
 import type { ServerApi } from "@/runtime/server/api"
 import type { ServerSync } from "@/runtime/server/sync"
+import { worktreeInventoryKey } from "@/workspaces/inventory"
 
 test("bootstraps projects through the native store setter and preserves subsequent updates", async () => {
   const api = OpenCode.make({
@@ -47,6 +48,17 @@ test("bootstraps projects through the native store setter and preserves subseque
     await bootstrapGlobal({ serverAPI: api, scope: ServerScope.local, setGlobalStore: setStore, queryClient })
     expect(store.project.map((project) => [project.id, project.worktree])).toEqual([["project", "/repo"]])
     expect(store.config).toEqual({})
+
+    queryClient.setQueryData(worktreeInventoryKey(ServerScope.local, "/repo"), [
+      { directory: "/repo" },
+      { directory: "/repo/feature", strategy: "git" },
+    ])
+    await bootstrapGlobal({ serverAPI: api, scope: ServerScope.local, setGlobalStore: setStore, queryClient })
+    expect(store.project[0]?.sandboxes).toEqual(["/repo/feature"])
+    expect(store.project[0]?.worktrees).toEqual([
+      { directory: "/repo" },
+      { directory: "/repo/feature", strategy: "git" },
+    ])
   } finally {
     queryClient.clear()
   }
@@ -76,7 +88,7 @@ describe("query keys", () => {
     expect(result).toMatchObject({ directory: "/repo/subpath", worktree: "/repo" })
   })
 
-  test("loads each project's inventory through its own location using the real client", async () => {
+  test("loads 400 historical project records without discovering their worktrees", async () => {
     const calls: string[] = []
     const api = OpenCode.make({
       baseUrl: "http://localhost:3000",
@@ -85,8 +97,16 @@ describe("query keys", () => {
           const url = new URL(new Request(input, init).url)
           if (url.pathname === "/api/project")
             return Response.json([
-              { id: "b", canonical: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
-              { id: "a", canonical: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
+              ...Array.from({ length: 400 }, (_, index) => ({
+                id: `project-${index.toString().padStart(3, "0")}`,
+                canonical: `/old/${index}`,
+                name: `Project ${index}`,
+                time: { created: 1, updated: 1 },
+                sandboxes: [`/old/${index}/known`],
+              })),
+              { id: "test", canonical: "/tmp/opencode-test-123", time: { created: 1, updated: 1 }, sandboxes: [] },
+              { id: "empty", canonical: "", time: { created: 1, updated: 1 }, sandboxes: [] },
+              { id: "duplicate", canonical: "/old/0", time: { created: 1, updated: 1 }, sandboxes: [] },
             ])
           const directory = url.searchParams.get("location[directory]")
           if (url.pathname !== "/api/worktree" || !directory) throw new Error(`Unexpected request: ${url}`)
@@ -101,21 +121,19 @@ describe("query keys", () => {
       ),
     })
 
-    const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, api.project, api.worktree))
+    const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, api.project))
 
-    expect(result.map((project) => project.id)).toEqual(["a", "b"])
-    expect(result.map((project) => project.sandboxes)).toEqual([
-      ["/a/clone", "/a/copy"],
-      ["/b/clone", "/b/copy"],
-    ])
-    expect(result.map((project) => project.worktrees)).toEqual([
-      [{ directory: "/a" }, { directory: "/a/clone" }, { directory: "/a/copy", strategy: "git" }],
-      [{ directory: "/b" }, { directory: "/b/clone" }, { directory: "/b/copy", strategy: "git" }],
-    ])
-    expect(calls.toSorted()).toEqual(["/a", "/b"])
+    expect(calls).toEqual([])
+    expect(result).toHaveLength(401)
+    expect(result.find((project) => project.id === "project-000")).toMatchObject({
+      name: "Project 0",
+      worktree: "/old/0",
+      sandboxes: ["/old/0/known"],
+    })
+    expect(result.some((project) => project.id === "test" || project.id === "empty")).toBe(false)
   })
 
-  test("keeps projects whose directory inventory cannot load", async () => {
+  test("keeps metadata without consulting unavailable directories", async () => {
     const api = OpenCode.make({
       baseUrl: "http://localhost:3000",
       fetch: Object.assign(
@@ -135,10 +153,10 @@ describe("query keys", () => {
       ),
     })
 
-    const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, api.project, api.worktree))
+    const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, api.project))
 
     expect(result.map((project) => ({ id: project.id, sandboxes: project.sandboxes }))).toEqual([
-      { id: "a", sandboxes: ["/a/copy"] },
+      { id: "a", sandboxes: [] },
       { id: "b", sandboxes: [] },
     ])
   })

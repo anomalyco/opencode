@@ -2,7 +2,7 @@ import type { Component } from "solid-js"
 import { For, Show, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionInfo } from "@opencode-ai/client/promise"
-import { useQuery } from "@tanstack/solid-query"
+import { useQueries, useQuery } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode-ai/ui/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -13,7 +13,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { getFilename } from "@opencode-ai/util/path"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
-import { useData } from "@/runtime/server/current"
+import { useData, useServer } from "@/runtime/server/current"
 import { showToast } from "@/shell/notifications/toast"
 import { getRelativeTime } from "@/shell/time"
 import { sessionLabel } from "@/session/title"
@@ -29,7 +29,6 @@ import {
   containsDirectory,
   filterWorkspaceInventory,
   inspectWorkspaceDeletion,
-  managedWorkspaceDirectories,
   mergeWorkspaceSessionInventory,
   removeWorkspacesSequentially,
   sessionsForWorkspace,
@@ -38,7 +37,8 @@ import {
 } from "@/workspaces/paths"
 import { listAllSessions } from "@/session/list"
 import type { ServerScope } from "@/runtime/server/scope"
-import { normalizeProjectInfo } from "@/runtime/server/global-sync/utils"
+import { loadProjectsQuery } from "@/runtime/server/global-sync/bootstrap"
+import { withWorktreeInventory, worktreeInventoryKey } from "@/workspaces/inventory"
 import "@/settings/settings.css"
 
 type Workspace = {
@@ -50,6 +50,7 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
   const dialog = useDialog()
   const language = useLanguage()
   const serverSDK = useServerSDK()
+  const server = useServer()
   const data = useData()
   const tabs = useTabs()
   const platform = usePlatform()
@@ -59,22 +60,15 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
   })
 
   const projectQuery = useQuery(() => ({
-    queryKey: [serverSDK.scope, "settings-workspace-projects"] as const,
+    ...loadProjectsQuery(serverSDK.scope, serverSDK.api.project),
     enabled: serverSDK.connection.status() === "connected",
-    queryFn: async () =>
-      Promise.all(
-        (await serverSDK.api.project.list()).map(async (project) => {
-          const worktrees = await serverSDK.api.worktree
-            .list({ location: { directory: project.canonical } })
-            .catch(() => [{ directory: project.canonical }, ...project.sandboxes.map((directory) => ({ directory }))])
-          return normalizeProjectInfo({ ...project, worktrees })
-        }),
-      ),
     refetchOnMount: "always",
   }))
-  const inventory = createMemo(() => (projectQuery.isPending ? [] : (projectQuery.data ?? [])))
-  const workspaces = createMemo(() => workspaceInventory(inventory()))
-  const projects = createMemo(() => inventory().filter((project) => managedWorkspaceDirectories(project).length > 0))
+  const projects = createMemo(() => [
+    ...new Map(
+      (projectQuery.data ?? []).map((project) => [worktreeInventoryKey(serverSDK.scope, project.worktree)[2], project]),
+    ).values(),
+  ])
   const projectName = (project: Project) => project.name || getFilename(project.worktree)
   const projectOptions = createMemo(() => [
     { id: "all", label: language.t("settings.workspaces.filter.all") },
@@ -83,12 +77,28 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
   const selectedProject = createMemo(() =>
     store.project === "all" || projects().some((project) => project.id === store.project) ? store.project : "all",
   )
+  const requested = createMemo(() =>
+    projects().filter((project) => selectedProject() === "all" || project.id === selectedProject()),
+  )
+  const inventoryQueries = useQueries(() => ({
+    queries: requested().map((project) => ({
+      ...server.ctx.sync.worktrees.query(project.worktree),
+      enabled: serverSDK.connection.status() === "connected",
+    })),
+  }))
+  const inventory = createMemo(() =>
+    requested().map((project, index) => withWorktreeInventory(project, inventoryQueries[index]?.data)),
+  )
+  const loading = () => projectQuery.isPending || inventoryQueries.some((query) => query.isPending)
+  const failed = () => projectQuery.isError || inventoryQueries.some((query) => query.isError)
+  const workspaces = createMemo(() => workspaceInventory(inventory()))
   const filtered = createMemo(() => filterWorkspaceInventory(workspaces(), selectedProject()))
   const captureDeleteContext = () => {
     const sdk = serverSDK
     return {
       sdk,
       data,
+      worktrees: server.ctx.sync.worktrees,
       server: ServerConnection.key(sdk.server),
       activeDirectory: props.activeDirectory,
     }
@@ -110,7 +120,7 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
       workspaceDirectories().map((directory) => String(pathKey(directory))),
     ] as const,
     queryFn: () => loadSessions(workspaceDirectories()),
-    enabled: serverSDK.connection.status() === "connected" && workspaceDirectories().length > 0,
+    enabled: serverSDK.connection.status() === "connected" && !loading() && workspaceDirectories().length > 0,
     refetchOnMount: "always",
   }))
   const sessionsByWorkspace = createMemo(() => {
@@ -205,7 +215,7 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
       })
     })
     clearWorkspaceTerminals(workspace.directory, platform, context.sdk.scope)
-    await projectQuery.refetch()
+    await context.worktrees.invalidate(workspace.project.worktree)
   }
 
   let inspectionID = 0
@@ -279,7 +289,7 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
       <div class="settings-tab-body settings-workspaces">
         <div class="settings-workspaces-toolbar">
           <span class="settings-workspaces-count">
-            <Show when={!projectQuery.isPending && !projectQuery.isError}>
+            <Show when={!loading() && !failed()}>
               {language.plural("settings.workspaces.count", filtered().length)}
             </Show>
           </span>
@@ -316,7 +326,7 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
                   variant="ghost-muted"
                   size="small"
                   aria-label={language.t("common.moreOptions")}
-                  disabled={!!store.transaction}
+                  disabled={!!store.transaction || loading() || failed()}
                   icon={<Icon name="outline-dots" size="small" />}
                 />
                 <Menu.Portal>
@@ -332,16 +342,17 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
         </div>
 
         <div class="settings-workspaces-inventory">
+          <Show when={filtered().length > 0 && (loading() || failed())}>
+            <div class="settings-workspaces-empty" role="status">
+              {language.t(failed() ? "common.requestFailed" : "common.loading")}
+            </div>
+          </Show>
           <Show
             when={filtered().length > 0}
             fallback={
               <div class="settings-workspaces-empty">
                 {language.t(
-                  projectQuery.isPending
-                    ? "common.loading"
-                    : projectQuery.isError
-                      ? "common.requestFailed"
-                      : "settings.workspaces.empty",
+                  loading() ? "common.loading" : failed() ? "common.requestFailed" : "settings.workspaces.empty",
                 )}
               </div>
             }
