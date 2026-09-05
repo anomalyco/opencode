@@ -109,23 +109,33 @@ describe("session.system", () => {
     }
   })
 
-  test("omits response channel instructions for OpenAI-compatible chat models", () => {
-    const prompt = SystemPrompt.provider({
-      providerID: "custom",
-      api: { id: "gpt-5.5", npm: "@ai-sdk/openai-compatible" },
-    } as Provider.Model).join("\n")
+  test.each(["@ai-sdk/openai-compatible", "@ai-sdk/openai-compatible@1.2.3", "@ai-sdk/openai-compatible@latest"])(
+    "omits response channel instructions for OpenAI-compatible chat models (%s)",
+    (npm) => {
+      for (const id of ["gpt-5.5", "foundry-gpt-5.5", "foundry-gpt-5.2"]) {
+        const prompt = SystemPrompt.provider({
+          providerID: "custom",
+          api: { id, npm },
+        } as Provider.Model).join("\n")
 
-    expect(prompt).not.toContain("## Response channels")
-  })
+        expect(prompt).toContain("You are OpenCode,")
+        expect(prompt).not.toContain("## Response channels")
+      }
+    },
+  )
 
-  test("keeps response channel instructions for OpenAI Responses models", () => {
-    const prompt = SystemPrompt.provider({
-      providerID: "openai",
-      api: { id: "gpt-5.5", npm: "@ai-sdk/openai" },
-    } as Provider.Model).join("\n")
+  test.each(["@ai-sdk/openai", "@ai-sdk/openai@1.2.3"])(
+    "keeps response channel instructions for OpenAI Responses models (%s)",
+    (npm) => {
+      const prompt = SystemPrompt.provider({
+        providerID: "openai",
+        api: { id: "gpt-5.5", npm },
+      } as Provider.Model).join("\n")
 
-    expect(prompt).toContain("## Response channels")
-  })
+      expect(prompt).toContain("You are OpenCode,")
+      expect(prompt).toContain("## Response channels")
+    },
+  )
 
   it.effect("skills output is sorted by name and stable across calls", () =>
     Effect.gen(function* () {

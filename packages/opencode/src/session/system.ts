@@ -36,7 +36,7 @@ export function provider(model: Provider.Model) {
     if (model.api.id.includes("codex")) {
       return [PROMPT_CODEX]
     }
-    return model.api.npm === "@ai-sdk/openai-compatible" ? [PROMPT_GPT] : [PROMPT_GPT, PROMPT_GPT_CHANNELS]
+    return model.api.npm.includes("@ai-sdk/openai-compatible") ? [PROMPT_GPT] : [PROMPT_GPT, PROMPT_GPT_CHANNELS]
   }
   if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI]
   if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
