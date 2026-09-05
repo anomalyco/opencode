@@ -1254,6 +1254,66 @@ const layer = Layer.effect(
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
+            // M3: auto-invoke recall on step==1 when query has trigger words
+            // D8: fallback semantico (se regex nao casa, tenta search com threshold 0.3)
+            let recallContext: string | undefined
+            let recallMode: "regex" | "semantic" | undefined
+            // Get the last user message's parts (lastUser is Info, need WithParts)
+            const lastUserParts = lastUser?.id
+              ? msgs.find((m) => m.info.id === lastUser.id)?.parts ?? []
+              : []
+            if (step === 1 && lastUserParts.length > 0 && flags.experimentalRecallAutoInvoke && flags.experimentalTranscriptRecall) {
+              const userText = lastUserParts
+                .filter((p): p is SessionV1.TextPart => p.type === "text")
+                .map((p) => p.text)
+                .join(" ")
+              // Sprint 4 fix: remove "antes" and "decidimos" (caused 20% FP in sprint 3 -
+              // matched "antes de ontem" and "decidimos o almoco?"). Add more specific terms.
+              const triggers = /\b(lembra|lembrar|ontem|voce disse|você disse|tempo atras|tempo atrás|que combinamos|anteriormente|lembrando|voce combinou|conversamos sobre)\b/i
+              const regexMatch = triggers.test(userText)
+              const allTools = yield* registry.all()
+              const recallDef = allTools.find((t) => t.id === "recall")
+              if (recallDef) {
+                const toolCtx = {
+                  sessionID,
+                  messageID: lastUser.id,
+                  agent: agent.name,
+                  abort: new AbortController().signal,
+                  messages: msgs,
+                  metadata: () => Effect.void,
+                  ask: () => Effect.void,
+                }
+                let result: any
+                try {
+                  result = yield* recallDef.execute(
+                    { query: userText, limit: regexMatch ? 5 : 1 } as any,
+                    toolCtx
+                  )
+                } catch (e) {
+                  yield* Effect.logWarning("M3/D8 recall failed", { error: String(e) })
+                  result = { title: "", output: "", metadata: { count: 0 } }
+                }
+                const output = (result as any).output ?? ""
+                const m = (result as any).metadata ?? { count: 0 }
+                if (regexMatch) {
+                  if (m.count > 0) {
+                    recallContext = `## Auto-recalled context from prior sessions\n\n${output}\n\nUse the above context to inform your response when relevant.`
+                    recallMode = "regex"
+                  }
+                } else {
+                  // D8: semantic path, top-1 com threshold 0.3
+                  if (m.count > 0) {
+                    const scoreMatch = output.match(/score=(\d+\.\d+)/)
+                    const topScore = scoreMatch ? parseFloat(scoreMatch[1]) : 0
+                    if (topScore >= 0.3) {
+                      recallContext = `## Auto-recalled context from prior sessions\n\n${output}\n\nUse the above context to inform your response when relevant.`
+                      recallMode = "semantic"
+                    }
+                  }
+                }
+              }
+            }
+
             const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
               sys.skills(agent),
               sys.environment(model),
@@ -1266,6 +1326,7 @@ const layer = Layer.effect(
               ...instructions,
               ...(mcpInstructions ? [mcpInstructions] : []),
               ...(skills ? [skills] : []),
+              ...(recallContext ? [recallContext] : []),
             ]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
