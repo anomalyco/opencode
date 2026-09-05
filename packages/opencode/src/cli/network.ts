@@ -1,6 +1,7 @@
 import type { Argv, InferredOptionTypes } from "yargs"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import type { Config } from "@/config/config"
+import { isRecord } from "@/util/record"
 import { Effect } from "effect"
 
 const options = {
@@ -77,4 +78,8 @@ export function resolveNetworkOptionsNoConfig(args: NetworkOptions, config?: Con
   const cors = [...configCors, ...argsCors]
 
   return { hostname, port, mdns, mdnsDomain, cors }
+}
+
+export function isPortInUseError(error: unknown) {
+  return isRecord(error) && isRecord(error.cause) && error.cause.code === "EADDRINUSE"
 }
