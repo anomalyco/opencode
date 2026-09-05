@@ -333,7 +333,9 @@ function createPacedValue(getValue: () => string, live?: () => boolean) {
   return value
 }
 
-function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boolean }) {
+function PacedMarkdown(
+  props: { text: string; cacheKey: string; streaming: boolean; onOpenPath?: (path: string, line?: number) => void },
+) {
   const value = createPacedValue(
     () => props.text,
     () => props.streaming,
@@ -341,7 +343,12 @@ function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boole
 
   return (
     <Show when={value()}>
-      <Markdown text={value()} cacheKey={props.cacheKey} streaming={props.streaming} />
+      <Markdown
+        text={value()}
+        cacheKey={props.cacheKey}
+        streaming={props.streaming}
+        onOpenPath={props.onOpenPath}
+      />
     </Show>
   )
 }
@@ -1732,7 +1739,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     <Show when={text()}>
       <div data-component="text-part" data-timeline-part-id={part().id}>
         <div data-slot="text-part-body">
-          <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
+          <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} onOpenPath={data.openFile} />
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
@@ -1767,7 +1774,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   return (
     <Show when={text()}>
       <div data-component="reasoning-part" data-timeline-part-id={part().id}>
-        <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
+        <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} onOpenPath={data.openFile} />
       </div>
     </Show>
   )
