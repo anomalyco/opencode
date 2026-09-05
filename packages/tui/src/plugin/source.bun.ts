@@ -1,15 +1,15 @@
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
-import { runtimeModuleIdForSpecifier } from "@opentui/core/runtime-plugin"
+import { isCoreRuntimeModuleSpecifier, runtimeModuleIdForSpecifier } from "@opentui/core/runtime-plugin"
 import { isBuiltin } from "node:module"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { localSource } from "./discovery"
 import { transformAsync, types, type PluginObj } from "@babel/core"
+import { additional } from "./runtime-plugin-support.bun"
 
+// OpenTUI supplies the defaults; custom host modules come from registration.
 const shared = new Set([
-  "@opencode-ai/plugin/tui",
-  "@opentui/core",
-  "@opentui/core/testing",
+  ...Object.keys(additional),
   "@opentui/solid",
   "@opentui/solid/components",
   "@opentui/solid/jsx-runtime",
@@ -26,6 +26,7 @@ export async function prepareSource(entrypoint: string, track: (file: string, di
     entrypoints: [fileURLToPath(entrypoint)],
     target: "bun",
     format: "esm",
+    sourcemap: "inline",
     throw: false,
     plugins: [
       {
@@ -38,7 +39,7 @@ export async function prepareSource(entrypoint: string, track: (file: string, di
               try {
                 const resolved = Bun.resolveSync(fileURLToPath(local), args.resolveDir)
                 const external = !isSource(resolved)
-                return { path: external ? pathToFileURL(resolved).href : resolved, external }
+                return { path: external ? args.path : resolved, external }
               } catch (error) {
                 track(path.dirname(fileURLToPath(local)), true)
                 throw error
@@ -103,10 +104,19 @@ async function transformSource(contents: string, file: string, loader: "js" | "t
       if (!/\.(?:[cm]?[jt]sx?|json)$/.test(local.pathname) && path.extname(local.pathname)) source.value = local.href
       return
     }
-    source.value = shared.has(source.value)
-      ? runtimeModuleIdForSpecifier(source.value)
-      : pathToFileURL(Bun.resolveSync(source.value, path.dirname(file))).href
+    source.value =
+      isCoreRuntimeModuleSpecifier(source.value) || shared.has(source.value)
+        ? runtimeModuleIdForSpecifier(source.value)
+        : pathToFileURL(Bun.resolveSync(source.value, path.dirname(file))).href
   }
+  const resolve = (argument: types.Expression) =>
+    types.callExpression(
+      types.memberExpression(
+        types.metaProperty(types.identifier("import"), types.identifier("meta")),
+        types.identifier("resolve"),
+      ),
+      [argument, types.stringLiteral(file)],
+    )
   const imports: PluginObj = {
     visitor: {
       ImportDeclaration: (p) => rewrite(p.node.source),
@@ -114,28 +124,58 @@ async function transformSource(contents: string, file: string, loader: "js" | "t
         if (p.node.source) rewrite(p.node.source)
       },
       ExportAllDeclaration: (p) => rewrite(p.node.source),
-      CallExpression: (p) => {
-        if (
-          p.node.callee.type !== "Import" &&
-          !(p.node.callee.type === "Identifier" && p.node.callee.name === "require")
-        )
-          return
-        const argument = p.node.arguments[0]
-        if (argument?.type === "StringLiteral") {
-          rewrite(argument)
-          return
-        }
-        if (p.node.callee.type === "Import" && types.isExpression(argument)) {
-          // Computed imports cannot join a static bundle; preserve their
-          // original resolution base rather than resolving beside a blob URL.
-          p.node.arguments[0] = types.callExpression(
-            types.memberExpression(
-              types.metaProperty(types.identifier("import"), types.identifier("meta")),
-              types.identifier("resolve"),
-            ),
-            [argument, types.stringLiteral(file)],
+      CallExpression: {
+        exit: (p) => {
+          if (
+            p.node.callee.type !== "Import" &&
+            !(p.node.callee.type === "Identifier" && p.node.callee.name === "require")
           )
-        }
+            return
+          const argument = p.node.arguments[0]
+          if (p.node.callee.type !== "Import" && argument?.type !== "StringLiteral") return
+          if (argument?.type === "StringLiteral") {
+            try {
+              const local = localSource(argument.value, path.dirname(file))
+              if (local) Bun.resolveSync(fileURLToPath(local), path.dirname(file))
+              rewrite(argument)
+              return
+            } catch {
+              // Optional dependencies must fail inside the plugin's own runtime
+              // fallback, not while visiting its source during the build.
+            }
+          }
+          if (!types.isExpression(argument)) return
+          if (p.node.callee.type === "Import") {
+            // Capture arguments now, but turn resolution errors into rejected
+            // promises so import(name).then(ok, fallback) keeps working.
+            const parameters = [
+              types.identifier("specifier"),
+              ...(p.node.arguments.length > 1 ? [types.identifier("options")] : []),
+            ]
+            p.replaceWith(
+              types.callExpression(
+                types.arrowFunctionExpression(
+                  parameters,
+                  types.callExpression(types.import(), [resolve(parameters[0]), ...parameters.slice(1)]),
+                  true,
+                ),
+                p.node.arguments,
+              ),
+            )
+            p.skip()
+            return
+          }
+          p.replaceWith(
+            types.callExpression(
+              types.memberExpression(
+                types.metaProperty(types.identifier("import"), types.identifier("meta")),
+                types.identifier("require"),
+              ),
+              [resolve(argument)],
+            ),
+          )
+          p.skip()
+        },
       },
     },
   }
@@ -150,16 +190,16 @@ async function transformSource(contents: string, file: string, loader: "js" | "t
   }).transformSync(contents)
   const code = !transformed.includes(name)
     ? transformed
-    : `const ${name} = { ...import.meta,
-    url: ${JSON.stringify(pathToFileURL(file).href)},
-    dir: ${JSON.stringify(path.dirname(file))},
-    dirname: ${JSON.stringify(path.dirname(file))},
-    path: ${JSON.stringify(file)},
-    filename: ${JSON.stringify(file)},
-    resolve: (specifier, parent) => import.meta.resolve(specifier, parent ?? ${JSON.stringify(file)}),
-    require: (specifier) => import.meta.require(import.meta.resolve(specifier, ${JSON.stringify(file)})),
-  };\n${transformed}`
-  const result = await transformAsync(code, { filename: file, configFile: false, babelrc: false, plugins: [imports] })
+    : `const ${name} = { ...import.meta, url: ${JSON.stringify(pathToFileURL(file).href)}, dir: ${JSON.stringify(path.dirname(file))}, dirname: ${JSON.stringify(path.dirname(file))}, path: ${JSON.stringify(file)}, filename: ${JSON.stringify(file)}, resolve: (specifier, parent) => import.meta.resolve(specifier, parent ?? ${JSON.stringify(file)}), require: (specifier) => import.meta.require(import.meta.resolve(specifier, ${JSON.stringify(file)})) };${transformed}`
+  // Keep filenames useful in stacks without adding formatter/prelude line
+  // drift. Exact original lines still require composing the earlier maps.
+  const result = await transformAsync(code, {
+    filename: file,
+    configFile: false,
+    babelrc: false,
+    retainLines: true,
+    plugins: [imports],
+  })
   if (result?.code == null) throw new Error(`Could not transform local plugin source: ${file}`)
   return result.code
 }

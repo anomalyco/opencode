@@ -1,7 +1,7 @@
 import { registerHooks } from "node:module"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { freshSpecifier, localSource } from "./discovery"
+import { localSource } from "./discovery"
 
 let generation = Date.now()
 
@@ -24,8 +24,8 @@ export async function prepareSource(entrypoint: string, track: (file: string, di
       const file = fileURLToPath(resolved.url)
       if (file.split(path.sep).includes("node_modules")) return resolved
       track(file)
-      return { ...resolved, url: freshSpecifier(resolved.url, version) }
+      return { ...resolved, url: `${resolved.url}?mtime=${version}` }
     },
   })
-  return { version: freshSpecifier(entrypoint, version), dispose: () => hook.deregister() }
+  return { version: `${entrypoint}?mtime=${version}`, dispose: () => hook.deregister() }
 }

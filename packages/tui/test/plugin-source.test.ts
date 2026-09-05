@@ -3,7 +3,7 @@ import path from "node:path"
 import { rename, symlink } from "node:fs/promises"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { Host } from "@opencode-ai/plugin/host"
-import "../src/plugin/runtime-plugin-support.bun"
+import { additional } from "../src/plugin/runtime-plugin-support.bun"
 import { createPluginSources } from "../src/plugin/source"
 import { createSourceWatcher } from "../src/plugin/watch"
 import { createSignal } from "solid-js"
@@ -320,6 +320,103 @@ test("unchanged evaluation failures do not repeat import-time effects", async ()
   await Bun.write(entry, code + "\n// another generation")
   await expect(sources.read(entry.href)).rejects.toThrow("broken evaluation")
   expect(await Bun.file(new URL("attempts.log", sources.url)).text()).toBe("attempt\nattempt\n")
+})
+
+test.each(Object.entries(additional))(
+  "host-registered module %s is shared with local plugins",
+  async (specifier, expected) => {
+    await using sources = await fixture()
+    const entry = new URL("tui.ts", sources.url)
+    await Bun.write(entry, `export default await import(${JSON.stringify(specifier)})`)
+    expect((await sources.read(entry.href)).module).toMatchObject({ default: expected })
+  },
+)
+
+test.each([
+  'export default await import("not-installed-pkg").then(m => m.default, () => "fallback")',
+  'let value; try { value = (await import("not-installed-pkg")).default } catch { value = "fallback" }; export default value',
+  'let value; try { value = require("not-installed-pkg") } catch { value = "fallback" }; export default value',
+  'export default await import("./not-installed").then(m => m.default, () => "fallback")',
+  'let value; try { value = require("./not-installed") } catch { value = "fallback" }; export default value',
+])("optional dependencies keep their runtime fallback: %s", async (code) => {
+  await using sources = await fixture()
+  const entry = new URL("tui.ts", sources.url)
+  await Bun.write(entry, code)
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: "fallback" })
+})
+
+test("installed optional dependencies still resolve beside the importing source", async () => {
+  await using sources = await fixture()
+  const entry = new URL("tui.ts", sources.url)
+  await Bun.write(new URL("node_modules/example/package.json", sources.url), '{"main":"index.cjs"}')
+  await Bun.write(new URL("node_modules/example/index.cjs", sources.url), 'module.exports = "installed"')
+  await Bun.write(
+    entry,
+    `const dynamic = await import("example").then(m => m.default, () => "fallback")
+    let sync; try { sync = require("example") } catch { sync = "fallback" }
+    export default { dynamic, sync }`,
+  )
+  expect((await sources.read(entry.href)).module).toMatchObject({
+    default: { dynamic: "installed", sync: "installed" },
+  })
+})
+
+test("computed imports reject asynchronously and capture their argument at the call site", async () => {
+  await using sources = await fixture()
+  const entry = new URL("tui.ts", sources.url)
+  await Bun.write(new URL("one.mjs", sources.url), 'export default "one"')
+  await Bun.write(new URL("two.mjs", sources.url), 'export default "two"')
+  await Bun.write(new URL("data.json", sources.url), '{"value":7}')
+  await Bun.write(
+    entry,
+    `const load = name => import(name)
+    const fallback = await load("not-installed-pkg").then(m => m.default, () => "fallback")
+    let name = "./one.mjs"
+    const pending = import(name)
+    name = "./two.mjs"
+    const json = name => import(name, { with: { type: "json" } })
+    export default { fallback, value: (await pending).default, json: (await json("./data.json")).default.value }`,
+  )
+  expect((await sources.read(entry.href)).module).toMatchObject({
+    default: { fallback: "fallback", value: "one", json: 7 },
+  })
+})
+
+test("missing static dependencies still fail the plugin load", async () => {
+  await using sources = await fixture()
+  const entry = new URL("tui.ts", sources.url)
+  await Bun.write(entry, 'import value from "not-installed-pkg"; export default value')
+  await expect(sources.read(entry.href)).rejects.toThrow("not-installed-pkg")
+})
+
+test.each([false, true])("plugin errors retain source filenames (during load: %s)", async (duringLoad) => {
+  await using sources = await fixture()
+  const entry = new URL("tui.ts", sources.url)
+  await Bun.write(
+    new URL("nested/helper.ts", sources.url),
+    'export function boom() { void import.meta.url; throw new Error("source trace") }',
+  )
+  await Bun.write(entry, `import { boom } from "./nested/helper"; ${duringLoad ? "boom();" : ""} export default boom`)
+  const error = await (async () => {
+    try {
+      const loaded = (await sources.read(entry.href)).module
+      if (
+        typeof loaded !== "object" ||
+        loaded === null ||
+        !("default" in loaded) ||
+        typeof loaded.default !== "function"
+      )
+        throw new Error("Missing stack fixture")
+      loaded.default()
+      return undefined
+    } catch (error) {
+      return error
+    }
+  })()
+  expect(error).toBeInstanceOf(Error)
+  if (!(error instanceof Error)) throw error
+  expect(error.message).toBe("source trace")
+  expect(error.stack).toMatch(/nested[/\\]helper\.ts:\d+:\d+/)
 })
 
 async function fixture(watch: (file: string) => Promise<void> = async () => {}) {
