@@ -1,6 +1,6 @@
 import { Global } from "@opencode-ai/util/global"
+import { HeapSnapshot } from "@opencode-ai/util/heap-snapshot"
 import { Effect, Queue } from "effect"
-import path from "node:path"
 
 export const listen = Effect.gen(function* () {
   const global = yield* Global.Service
@@ -16,18 +16,9 @@ export const listen = Effect.gen(function* () {
   )
   yield* Queue.take(signals).pipe(
     Effect.andThen(
-      Effect.suspend(() => {
-        const file = path.join(
-          global.log,
-          `heap-${process.pid}-${new Date().toISOString().replace(/[:.]/g, "")}.heapsnapshot`,
-        )
-        return Effect.gen(function* () {
-          yield* Effect.logInfo("writing heap snapshot", { path: file })
-          const { writeHeapSnapshot } = yield* Effect.tryPromise(() => import("node:v8"))
-          yield* Effect.try(() => writeHeapSnapshot(file))
-          yield* Effect.logInfo("heap snapshot written", { path: file })
-        }).pipe(Effect.catchCause((cause) => Effect.logError("failed to write heap snapshot", { path: file, cause })))
-      }),
+      HeapSnapshot.write(global.log).pipe(
+        Effect.catchCause((cause) => Effect.logError("failed to write heap snapshot", { cause })),
+      ),
     ),
     Effect.forever,
     Effect.forkScoped({ startImmediately: true }),

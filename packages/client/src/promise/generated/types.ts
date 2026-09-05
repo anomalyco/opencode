@@ -6248,6 +6248,8 @@ export type VcsDiffOutput = {
   data: Array<FileDiffInfo>
 }
 
+export type DebugHeapDumpOutput = { path: string; pid: number }
+
 export type DebugLocationListOutput = Array<LocationRef>
 
 export type DebugLocationEvictInput = {

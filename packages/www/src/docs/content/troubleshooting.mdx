@@ -173,6 +173,40 @@ The database normally lives at:
   daemon, and make a backup before inspecting persistent data with external tools.
 </Callout>
 
+## Capture a heap snapshot
+
+Request a JavaScript heap snapshot from the running background server:
+
+```sh
+opencode2 debug heap-dump
+```
+
+The command works on Windows, Linux, and macOS. It waits for the snapshot to finish and prints the saved file path.
+It uses the existing server's authentication and does not start, replace, or restart a server. If the running server
+does not support heap dumps, update and restart it first.
+
+<Callout type="warning">
+  A heap snapshot pauses JavaScript execution and can temporarily increase memory use. It can contain prompts, file
+  contents, credentials, and other sensitive data. Keep the snapshot private.
+</Callout>
+
+On Linux and macOS, you can also use the existing `SIGUSR1` signal. After checking `opencode2 service status`, use
+`opencode2 api get /api/health` to find the server's `pid`, then send:
+
+```sh
+kill -USR1 <server-pid>
+```
+
+OS signal-triggered heap snapshots are unsupported on Windows. Use `opencode2 debug heap-dump` instead.
+
+The command and Unix signal use the same snapshot writer. Files are saved on the server as
+`heap-<pid>-<timestamp>.heapsnapshot` in its log directory. For signal-triggered captures, wait for `heap snapshot written`
+in the log before opening the file; the log's `path` field identifies the completed snapshot. Repeated signals can coalesce.
+Use `opencode2 debug paths` to locate the local log directory.
+
+Open the snapshot in Chrome DevTools' Memory panel or a compatible heap analyzer. It describes the JavaScript heap,
+not all process RAM; native allocations, thread stacks, and file mappings need separate measurements.
+
 ## Report an issue
 
 Include the following when reporting a reproducible problem:
