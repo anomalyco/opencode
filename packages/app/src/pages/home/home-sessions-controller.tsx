@@ -254,7 +254,14 @@ function buildHomeSessionRecords(input: {
   projectByID: () => Map<string, LocalProject>
 }) {
   const directories = new Set(input.projectDirectories().map(pathKey))
-  const sessions = input.sessions().filter((session) => directories.has(pathKey(session.directory)))
+  const sessions = input.sessions().filter((session) => {
+    // Sessions outside any git repo belong to the global project, whose
+    // worktree is forced to "/" and which never accumulates sandboxes — so
+    // their real directory (e.g. C:/Users/Raphael) never matches the filter
+    // and they silently vanish from Home (#46444). Keep them visible.
+    if (session.projectID === "global") return true
+    return directories.has(pathKey(session.directory))
+  })
   return [...new Map(sessions.map((session) => [session.id, session] as const)).values()]
     .sort(compareSessionTime)
     .flatMap((session) => {
