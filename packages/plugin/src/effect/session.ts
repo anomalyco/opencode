@@ -7,7 +7,7 @@ import type { Session } from "@opencode-ai/schema/session"
 import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import type { SessionError } from "@opencode-ai/schema/session-error"
 import type { SessionMessage } from "@opencode-ai/schema/session-message"
-import { Effect, type JsonSchema, type Types } from "effect"
+import { Effect, Schema, type JsonSchema, type Types } from "effect"
 import type { ModelHooks } from "./registration.js"
 
 export interface SessionPrompt {
@@ -82,7 +82,7 @@ export interface SessionHooks {
   readonly retry: SessionRetry
 }
 
-/** Intentional subset of SessionApi["list"]: in-process only, no cursor/pagination. */
+/** Intentional subset of the HTTP session list: in-process only, no cursor/pagination. */
 export interface SessionList {
   /** Filter to sessions created in this directory. Must be absolute; relative paths fail. */
   readonly directory?: string
@@ -96,6 +96,19 @@ export interface SessionList {
 export type SessionListResult = {
   readonly data: Session.Info[]
 }
+
+/**
+ * Rejected when `list` input fails validation (relative directory, bad
+ * order, non-positive limit). A dedicated tag rather than a broad Error so
+ * plugin callers can distinguish input errors from store failures.
+ */
+export class SessionListInputError extends Schema.TaggedError<SessionListInputError>()(
+  "Plugin.SessionListInputError",
+  {
+    field: Schema.String,
+    message: Schema.String,
+  },
+) {}
 
 export type SessionDomain = Pick<
   SessionApi<unknown>,
@@ -116,7 +129,10 @@ export type SessionDomain = Pick<
   | "revert"
   | "context"
 > & {
-  readonly list: (input?: SessionList) => Effect.Effect<SessionListResult, Error>
+  // `list` is intentionally not `SessionApi["list"]`: the HTTP operation
+  // paginates via an opaque cursor encoding, which has no meaning in-process.
+  // The subset keeps the data shape and documents the truncation explicitly.
+  readonly list: (input?: SessionList) => Effect.Effect<SessionListResult, SessionListInputError>
   readonly hook: ModelHooks<SessionHooks>
   readonly form: Pick<FormApi<unknown>, "list" | "get" | "state" | "reply" | "cancel">
 }

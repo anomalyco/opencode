@@ -37,6 +37,7 @@ import {
   MessageNotFoundError,
   MessageToolIncompleteError,
   NotFoundError,
+  InvalidSessionIDError,
   PromptConflictError,
   SkillNotFoundError,
   SyntheticConflictError,
@@ -107,6 +108,7 @@ export {
   MessageNotFoundError,
   MessageToolIncompleteError,
   NotFoundError,
+  InvalidSessionIDError,
   PromptConflictError,
   SkillNotFoundError,
   SyntheticConflictError,
@@ -213,24 +215,27 @@ export interface Interface {
   }
   readonly form: {
     /** Pending forms only, matching Form.Service semantics; use get/state to observe settled forms. */
-    readonly list: (input: { readonly sessionID: string }) => Effect.Effect<readonly Form.Info[], NotFoundError>
+    readonly list: (input: { readonly sessionID: string }) => Effect.Effect<readonly Form.Info[], NotFoundError | InvalidSessionIDError>
     readonly get: (input: {
       readonly sessionID: string
       readonly formID: Form.ID
-    }) => Effect.Effect<Form.Info, NotFoundError | Form.NotFoundError>
+    }) => Effect.Effect<Form.Info, NotFoundError | InvalidSessionIDError | Form.NotFoundError>
     readonly state: (input: {
       readonly sessionID: string
       readonly formID: Form.ID
-    }) => Effect.Effect<Form.State, NotFoundError | Form.NotFoundError>
+    }) => Effect.Effect<Form.State, NotFoundError | InvalidSessionIDError | Form.NotFoundError>
     readonly reply: (input: {
       readonly sessionID: string
       readonly formID: Form.ID
       readonly answer: Form.Answer
-    }) => Effect.Effect<void, NotFoundError | Form.NotFoundError | Form.AlreadySettledError | Form.InvalidAnswerError>
+    }) => Effect.Effect<
+      void,
+      NotFoundError | InvalidSessionIDError | Form.NotFoundError | Form.AlreadySettledError | Form.InvalidAnswerError
+    >
     readonly cancel: (input: {
       readonly sessionID: string
       readonly formID: Form.ID
-    }) => Effect.Effect<void, NotFoundError | Form.NotFoundError | Form.AlreadySettledError>
+    }) => Effect.Effect<void, NotFoundError | InvalidSessionIDError | Form.NotFoundError | Form.AlreadySettledError>
   }
 }
 
@@ -260,20 +265,18 @@ const layer = Layer.effect(
     // location and route through that location's Form.Service instead. The
     // lookup-then-route is best-effort: a session that moves between the two
     // steps resolves against the pre-move location and may report NotFound.
-    // Malformed session IDs fail with NotFoundError rather than dying in
-    // schema construction; the store lookup decides existence. The failure is
-    // built literally (not via `new`) because TaggedError constructors
-    // validate and would themselves throw on a malformed ID; tag-based
-    // routing (`catchTag("Session.NotFoundError")`) only reads `_tag`.
+    // Malformed session IDs fail with InvalidSessionIDError rather than dying
+    // in schema construction; the store lookup decides existence for
+    // well-formed IDs.
     const formFor = <A, E>(
       sessionID: string,
       run: (form: Form.Interface) => Effect.Effect<A, E>,
     ) => {
       if (!Schema.is(SessionSchema.ID)(sessionID))
-        return Effect.fail({
-          _tag: "Session.NotFoundError",
-          sessionID,
-        } as unknown as NotFoundError) as Effect.Effect<A, NotFoundError | E>
+        return Effect.fail(new InvalidSessionIDError({ sessionID })) as Effect.Effect<
+          A,
+          InvalidSessionIDError | E
+        >
       const id = sessionID as SessionSchema.ID
       return store.get(id).pipe(
         Effect.flatMap(

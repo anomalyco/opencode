@@ -8,7 +8,7 @@ import type { Session as SchemaSession } from "@opencode-ai/schema/session"
 import { ServerConfig } from "@opencode-ai/schema/mcp"
 import { App } from "../app.js"
 import path from "path"
-import { Effect, Queue, Schema, Stream } from "effect"
+import { Effect, Queue, Ref, Schema, Stream } from "effect"
 import { Agent } from "../agent.js"
 import { AISDK } from "../aisdk.js"
 import { Catalog } from "../catalog.js"
@@ -20,6 +20,7 @@ import { KV } from "../kv.js"
 import { Location } from "../location.js"
 import { LocationServiceMap } from "../location-service-map.js"
 import { permissionForSession } from "./permission.js"
+import { SessionListInputError } from "@opencode-ai/plugin/effect/session"
 import { Model } from "../model.js"
 import { Mcp } from "../mcp/index.js"
 import { Session } from "../session.js"
@@ -290,22 +291,30 @@ export const make = Effect.fn("PluginHost.make")(function* (
        * events for sessions in other directories. This variant feeds from the
        * bus's unfiltered channel and delivers every server event (plus rpc
        * events, matching `subscribe`). The bounded dropping queue keeps a slow
-       * consumer from stalling publication; overflows are logged and dropped.
+       * consumer from stalling publication; overflows are dropped with a
+       * cumulative count in the warning. Consumers that need gap-free delivery
+       * must use the durable `log`, not this loss-tolerant live bridge.
        */
       subscribeGlobal: () =>
         Stream.scoped(
           Stream.unwrap(
             Effect.gen(function* () {
               const queue = yield* Queue.dropping<Event.Payload>(GLOBAL_EVENT_QUEUE_CAPACITY)
+              const dropped = yield* Ref.make(0)
               yield* bus.subscribeGlobal().pipe(
                 Stream.runForEach((event: Event.Payload) =>
                   Queue.offer(queue, event).pipe(
                     Effect.flatMap((accepted) =>
                       accepted
                         ? Effect.void
-                        : Effect.logWarning("Plugin global event buffer full, dropping event", {
-                            type: event.type,
-                          }),
+                        : Ref.updateAndGet(dropped, (total) => total + 1).pipe(
+                            Effect.flatMap((total) =>
+                              Effect.logWarning("Plugin global event buffer full, dropping event", {
+                                type: event.type,
+                                droppedTotal: total,
+                              }),
+                            ),
+                          ),
                     ),
                   ),
                 ),
@@ -575,11 +584,23 @@ export const make = Effect.fn("PluginHost.make")(function* (
       hook: (name, callback, options) => hooks.register("session", name, callback, options),
       list: (input) => {
         if (input?.directory !== undefined && !path.isAbsolute(input.directory))
-          return Effect.fail(new Error(`session.list directory must be absolute: ${input.directory}`))
+          return Effect.fail(
+            new SessionListInputError({
+              field: "directory",
+              message: `session.list directory must be absolute: ${input.directory}`,
+            }),
+          )
         if (input?.order !== undefined && input.order !== "asc" && input.order !== "desc")
-          return Effect.fail(new Error(`session.list order must be "asc" or "desc": ${input.order}`))
+          return Effect.fail(
+            new SessionListInputError({ field: "order", message: `session.list order must be "asc" or "desc": ${input.order}` }),
+          )
         if (input?.limit !== undefined && (!Number.isInteger(input.limit) || input.limit <= 0))
-          return Effect.fail(new Error(`session.list limit must be a positive integer: ${input.limit}`))
+          return Effect.fail(
+            new SessionListInputError({
+              field: "limit",
+              message: `session.list limit must be a positive integer: ${input.limit}`,
+            }),
+          )
         return sessions.list({
           ...(input?.directory === undefined ? {} : { directory: AbsolutePath.make(input.directory) }),
           search: input?.search,
