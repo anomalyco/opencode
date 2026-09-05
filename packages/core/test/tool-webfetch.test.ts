@@ -179,6 +179,28 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
+  it.effect("converts XHTML content instead of returning raw markup", () =>
+    Effect.gen(function* () {
+      reset()
+      respond = () =>
+        Effect.succeed(
+          new Response("<h1>Hello</h1><p>world</p>", {
+            headers: { "content-type": "application/xhtml+xml" },
+          }),
+        )
+      const registry = yield* ToolRegistry.Service
+
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/xhtml", format: "markdown" }))).toEqual({
+        type: "text",
+        value: "# Hello\n\nworld",
+      })
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/xhtml", format: "text" }))).toEqual({
+        type: "text",
+        value: "Helloworld",
+      })
+    }),
+  )
+
   it.effect("returns an error result when HTML-to-Markdown conversion throws", () =>
     Effect.gen(function* () {
       reset()
