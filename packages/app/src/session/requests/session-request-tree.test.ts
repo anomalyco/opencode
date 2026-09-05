@@ -105,7 +105,25 @@ describe("sessionQuestionForm", () => {
     expect(sessionQuestionForm(sessions, questions, "root")?.id).toBe("q-grand")
   })
 
-  test("skips forms that are not questions", () => {
+  test("returns web search consent from the current session", () => {
+    const sessions = [session({ id: "root" })]
+    const forms = {
+      root: [{ ...question("consent", "root"), metadata: { kind: "websearch.provider" } }],
+    }
+
+    expect(sessionQuestionForm(sessions, forms, "root")?.id).toBe("consent")
+  })
+
+  test("returns web search provider selection from a nested child", () => {
+    const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
+    const forms = {
+      child: [{ ...question("provider", "child"), metadata: { kind: "websearch.provider" } }],
+    }
+
+    expect(sessionQuestionForm(sessions, forms, "root")?.id).toBe("provider")
+  })
+
+  test("skips unrelated form kinds", () => {
     const sessions = [session({ id: "root" })]
     const forms = {
       root: [{ ...question("form", "root"), metadata: { kind: "integration" } }],

@@ -48,5 +48,10 @@ export function sessionQuestionForm(
   request: Record<string, FormInfo[] | undefined> | ((sessionID: string) => FormInfo[] | undefined),
   sessionID?: string,
 ) {
-  return sessionTreeRequest(session, request, sessionID, (item) => item.metadata?.kind === "question")
+  return sessionTreeRequest(
+    session,
+    request,
+    sessionID,
+    (item) => item.metadata?.kind === "question" || item.metadata?.kind === "websearch.provider",
+  )
 }
