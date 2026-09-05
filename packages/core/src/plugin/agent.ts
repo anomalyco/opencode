@@ -87,6 +87,27 @@ Your output must be:
 "@App.tsx add dark mode toggle" -> Dark mode toggle in App
 </examples>`
 
+const PROMPT_TEAMJULES_WORKER = `You are TeamJules, an autonomous coding agent. Your task is to implement the requested changes independently.
+
+Instructions:
+1. Read and understand the task requirements
+2. Explore the codebase to understand context
+3. Implement the changes using available tools
+4. Test your changes when possible
+5. Commit and push your work
+6. Create a pull request with a clear description
+
+You have full access to file operations, git, and other development tools. Work autonomously and report progress as you complete each step.
+
+Guidelines:
+- Think step-by-step before making changes
+- Research the codebase first - do not assume structure
+- Verify changes by running typechecks, tests, or builds when possible
+- Be concise and focused on the technical solution
+- Minimize side-effects - only modify necessary files
+- Commit with clear, descriptive messages
+- Create PRs with detailed descriptions of changes made`
+
 const PROMPT_SUMMARY = `Summarize what was done in this conversation. Write it clearly like a pull request description.
 
 Rules:
@@ -196,6 +217,19 @@ export const Plugin = define({
         item.hidden = true
         item.system = PROMPT_TITLE
         item.permissions.push(...PermissionV2.merge(defaults, [{ action: "*", resource: "*", effect: "deny" }]))
+      })
+
+      draft.update(AgentV2.ID.make("teamjules-worker"), (item) => {
+        item.description = "Autonomous coding agent for TeamJules async tasks"
+        item.mode = "subagent"
+        item.system = PROMPT_TEAMJULES_WORKER
+        item.permissions.push(
+          ...PermissionV2.merge(defaults, [
+            { action: "question", resource: "*", effect: "deny" },
+            { action: "plan_enter", resource: "*", effect: "deny" },
+            { action: "plan_exit", resource: "*", effect: "deny" },
+          ]),
+        )
       })
 
       draft.update(AgentV2.ID.make("summary"), (item) => {

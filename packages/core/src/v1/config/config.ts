@@ -16,6 +16,7 @@ import { ConfigPluginV1 } from "./plugin"
 import { ConfigProviderV1 } from "./provider"
 import { ConfigServerV1 } from "./server"
 import { ConfigSkillsV1 } from "./skills"
+import { ConfigTeamJulesV1 } from "./teamjules"
 
 export type Layout = ConfigLayoutV1.Layout
 
@@ -190,6 +191,7 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  teamjules: Schema.optional(ConfigTeamJulesV1.TeamJulesConfig),
 }).annotate({ identifier: "Config" })
 
 export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
