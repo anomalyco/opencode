@@ -6,6 +6,7 @@ import { Identifier } from "./identifier"
 import { KeyTable } from "./schema/key.sql"
 import { UserTable } from "./schema/user.sql"
 import { AuthTable } from "./schema/auth.sql"
+import { WorkspaceTable } from "./schema/workspace.sql"
 
 export namespace Key {
   export const list = fn(z.void(), async () => {
@@ -57,16 +58,24 @@ export namespace Key {
       }
       const keyID = Identifier.create("key")
 
-      await Database.use((tx) =>
-        tx.insert(KeyTable).values({
+      await Database.transaction(async (tx) => {
+        const workspace = await tx
+          .select({ id: WorkspaceTable.id })
+          .from(WorkspaceTable)
+          .where(and(eq(WorkspaceTable.id, Actor.workspace()), isNull(WorkspaceTable.timeDeleted)))
+          .for("update")
+          .then((rows) => rows[0])
+        if (!workspace) throw new Error("Workspace is not active")
+
+        await tx.insert(KeyTable).values({
           id: keyID,
           workspaceID: Actor.workspace(),
           userID: input.userID,
           name,
           key: secretKey,
           timeUsed: null,
-        }),
-      )
+        })
+      })
 
       return keyID
     },
