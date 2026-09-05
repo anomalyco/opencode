@@ -1041,6 +1041,233 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("drops aborted assistant messages with only step-start/reasoning/patch parts", async () => {
+    // Regression for https://github.com/anomalyco/opencode/issues/37946:
+    // aborting mid-reasoning persists patch/step-finish parts alongside
+    // reasoning; none of them serialize to model content, so the turn must be
+    // dropped or strict providers 400 the whole request.
+    const assistantID = "m-assistant"
+
+    const aborted = new SessionV1.AbortedError({
+      message: "aborted",
+    }).toObject() as SessionV1.Assistant["error"]
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent", aborted),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "step-start",
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "reasoning",
+            text: "thinking",
+            time: { start: 0 },
+          },
+          {
+            ...basePart(assistantID, "a3"),
+            type: "patch",
+            hash: "abc",
+            files: ["src/index.ts"],
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
+  })
+
+  test("keeps aborted assistant messages with text content alongside patch parts", async () => {
+    const assistantID = "m-assistant"
+
+    const aborted = new SessionV1.AbortedError({
+      message: "aborted",
+    }).toObject() as SessionV1.Assistant["error"]
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent", aborted),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "reasoning",
+            text: "thinking",
+            time: { start: 0 },
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "patch",
+            hash: "abc",
+            files: ["src/index.ts"],
+          },
+          {
+            ...basePart(assistantID, "a3"),
+            type: "text",
+            text: "partial answer",
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking", providerOptions: undefined },
+          { type: "text", text: "partial answer" },
+        ],
+      },
+    ])
+  })
+
+  test("drops empty reasoning artifacts from retried steps", async () => {
+    // Real shape captured from a bricked session: a step died mid-reasoning
+    // (rate limit), the retry started a new step, and the finished message kept
+    // the dead step's empty reasoning part. Step-start splitting isolates that
+    // empty reasoning into its own wire message -> content "" -> 400.
+    const assistantID = "m-assistant"
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "step-start",
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "reasoning",
+            text: "",
+            time: { start: 0 },
+          },
+          {
+            ...basePart(assistantID, "a3"),
+            type: "step-start",
+          },
+          {
+            ...basePart(assistantID, "a4"),
+            type: "reasoning",
+            text: "real thinking",
+            time: { start: 0 },
+          },
+          {
+            ...basePart(assistantID, "a5"),
+            type: "text",
+            text: "answer",
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "real thinking", providerOptions: undefined },
+          { type: "text", text: "answer" },
+        ],
+      },
+    ])
+  })
+
+  test("keeps empty reasoning when it carries an Anthropic signature", async () => {
+    const assistantID = "m-assistant"
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "reasoning",
+            text: "",
+            time: { start: 0 },
+            metadata: { anthropic: { signature: "sig" } },
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "text",
+            text: "answer",
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+    expect((result[0].content as any[]).find((p) => p.type === "reasoning")).toMatchObject({ text: "" })
+  })
+
+  test("drops assistant messages with only reasoning parts and no error", async () => {
+    // A crashed/disconnected turn can be persisted without an error field at
+    // all; reasoning alone still replays as an empty assistant message.
+    const assistantID = "m-assistant"
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "step-start",
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "reasoning",
+            text: "thinking",
+            time: { start: 0 },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
+  })
+
+  test("drops assistant messages with only empty text parts", async () => {
+    const assistantID = "m-assistant"
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "step-start",
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "text",
+            text: "",
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
+  })
+
+  test("drops errored assistant messages with no parts", async () => {
+    // Snowball artifact from #37946: each retry of a bricked session persists
+    // another zero-part assistant message carrying the 400 APIError.
+    const assistantID = "m-assistant"
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(
+          assistantID,
+          "m-parent",
+          new SessionV1.APIError({ message: "rate limit", isRetryable: true }).toObject() as SessionV1.APIError,
+        ),
+        parts: [],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
+  })
+
   test("preserves OpenRouter reasoning details through provider transform", async () => {
     const assistantID = "m-assistant"
     const openrouterModel: Provider.Model = {
@@ -1294,7 +1521,7 @@ describe("session.message-v2.toModelMessage", () => {
     expect((result[1].content as any[]).find((p) => p.type === "text").text).toBe("the answer")
   })
 
-  test("leaves empty text alone when reasoning signature is under 'bedrock' namespace", async () => {
+  test("drops empty text when reasoning signature is under 'bedrock' namespace", async () => {
     // Bedrock signed reasoning is preserved as reasoning metadata, but unlike the
     // direct Anthropic path we do not preserve empty text separators for Bedrock.
     const assistantID = "m-assistant-bedrock"
@@ -1318,12 +1545,12 @@ describe("session.message-v2.toModelMessage", () => {
 
     expect(result).toHaveLength(1)
     const texts = (result[0].content as any[]).filter((p) => p.type === "text")
-    expect(texts.map((t) => t.text)).toStrictEqual(["", "answer"])
+    expect(texts.map((t) => t.text)).toStrictEqual(["answer"])
   })
 
-  test("leaves empty text alone when reasoning has no Anthropic signature", async () => {
+  test("drops empty text when reasoning has no Anthropic signature", async () => {
     // Non-Anthropic providers' reasoning doesn't position-validate, so empty text
-    // should be filtered normally rather than substituted.
+    // separators serve no purpose and are dropped (#31046).
     const assistantID = "m-assistant-unsigned"
     const input: SessionV1.WithParts[] = [
       {
@@ -1340,10 +1567,10 @@ describe("session.message-v2.toModelMessage", () => {
 
     expect(result).toHaveLength(1)
     const texts = (result[0].content as any[]).filter((p) => p.type === "text")
-    expect(texts.map((t) => t.text)).toStrictEqual(["", "answer"])
+    expect(texts.map((t) => t.text)).toStrictEqual(["answer"])
   })
 
-  test("leaves empty text alone in assistant messages without reasoning", async () => {
+  test("drops empty text in assistant messages without reasoning", async () => {
     const assistantID = "m-assistant-no-reasoning"
     const input: SessionV1.WithParts[] = [
       {
@@ -1359,7 +1586,7 @@ describe("session.message-v2.toModelMessage", () => {
 
     expect(result).toHaveLength(1)
     const texts = (result[0].content as any[]).filter((p) => p.type === "text")
-    expect(texts.map((t) => t.text)).toStrictEqual(["", "hello"])
+    expect(texts.map((t) => t.text)).toStrictEqual(["hello"])
   })
 })
 

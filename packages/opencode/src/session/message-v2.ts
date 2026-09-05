@@ -277,6 +277,9 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
       for (const part of msg.parts) {
         if (part.type === "text") {
           const text = part.text === "" && hasSignedReasoning ? " " : part.text
+          // Empty text parts (text-start/text-end with no delta, #31046) produce
+          // empty content blocks that strict providers reject.
+          if (text === "") continue
           assistantMessage.parts.push({
             type: "text",
             text,
@@ -360,6 +363,13 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
             })
         }
         if (part.type === "reasoning") {
+          // Empty reasoning parts are artifacts of interrupted/retried steps
+          // (the stream died before the first reasoning delta). Step-start
+          // splitting can isolate them into their own assistant message, which
+          // replays as empty content and 400s on strict providers. Signed
+          // blocks are kept to preserve Anthropic/Bedrock thinking chains.
+          const signed = part.metadata?.anthropic?.signature != null || part.metadata?.bedrock?.signature != null
+          if (part.text === "" && !signed) continue
           if (differentModel) {
             if (part.text.trim().length > 0)
               assistantMessage.parts.push({
@@ -375,7 +385,14 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           })
         }
       }
-      if (assistantMessage.parts.length > 0) {
+      // Turns that crashed or aborted before emitting text/tool parts replay as
+      // empty assistant messages; strict providers reject the whole request
+      // (400 "assistant message must not be empty"), bricking the session.
+      const hasContent = assistantMessage.parts.some((part) => {
+        if (part.type === "text") return part.text !== ""
+        return part.type !== "step-start" && part.type !== "reasoning"
+      })
+      if (hasContent) {
         result.push(assistantMessage)
         // Inject pending media as a user message for providers that don't support
         // media (images, PDFs) in tool results
