@@ -1,8 +1,8 @@
 import { registerHooks } from "node:module"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { localSource } from "./discovery"
-import { Host } from "@opencode-ai/plugin/host"
+import { localSource } from "./source.js"
+import { Host } from "./host.js"
 
 let generation = Date.now()
 

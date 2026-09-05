@@ -16,6 +16,13 @@
     "./tui": "./src/tui/index.ts",
     "./*": "./src/*.ts"
   },
+  "imports": {
+    "#plugin-source": {
+      "bun": "./src/source.bun.ts",
+      "node": "./src/source.node.ts",
+      "default": "./src/source.node.ts"
+    }
+  },
   "files": [
     "dist"
   ],
