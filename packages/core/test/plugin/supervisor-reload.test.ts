@@ -154,7 +154,12 @@ describe("PluginSupervisor reload", () => {
           yield* plugins.awaitActivation
           const inventory = yield* plugins.list()
           if (!inventory.some((plugin) => plugin.id === "greeter" && plugin.state.status === "active")) {
-            console.error("[DEBUG-reload-ci]", inventory, yield* TestConsole.logLines)
+            console.error("[DEBUG-reload-ci]", Bun.inspect(inventory, { depth: 12 }))
+            for (const line of yield* TestConsole.logLines) {
+              if (typeof line === "object" && line !== null && "cause" in line) {
+                console.error(Bun.inspect(line, { depth: 12 }))
+              }
+            }
           }
           expect(yield* rpc.call("greeter", "status", {})).toBe(1)
           expect(yield* rpc.call("greeter", "info", {}).pipe(Effect.flip)).toMatchObject({
