@@ -95,3 +95,34 @@
 
 - [ ] 5.2 Full typecheck and test
   - Validation: `bun typecheck` zero errors; `bun test packages/opencode --timeout 60000` green
+
+## Phase 6: Backlog fan-out roster accuracy (added 2026-09-05)
+
+Reported symptom: `/backlog`'s fan-out nudge (`loop-spec-queue` §6) and local placement
+(`ctx-aware-subagent-placement`, `role-placement-policy`) suggest "free" agents that are
+frequently wrong — the caller's own current session, or a peer that is actually busy/unreachable.
+`session-peer-awareness` already excludes the caller and its descendant lineage (1.2, shipped),
+so a same-session false positive after Phase 6 lands would be a regression worth its own test, not
+expected behavior. The more likely cause is upstream of exclusion logic entirely: Phases 3 and 4
+above — the parts of *this* change that give a roster entry actual liveness — were never built,
+so anything consuming presence today (the fan-out nudge included) is reading a roster with no
+wedge/heartbeat/staleness signal at all. An entry that looks busy-and-fine may be a session that
+died 20 minutes ago.
+
+- [ ] 6.1 Once Phase 3 lands, verify the fan-out nudge in `packages/opencode/src/loop/loop.ts`
+      (queue-mode brief construction) filters candidates through the same liveness/heartbeat
+      status this change defines, not just raw presence existence.
+  - File: `packages/opencode/src/loop/loop.ts`
+  - Validation: unit test — a `stalled`/`unreachable` peer is never named in the fan-out nudge
+- [ ] 6.2 Perform the three outstanding "live check against a real fleet" verifications that were
+      left unchecked elsewhere, now that Phase 3/4 give them something real to check against:
+      `session-peer-awareness` task 4.2, `role-placement-policy` task 4.2,
+      `subagent-background-default` task 6. Record the outcome in each change's tasks.md rather
+      than only here.
+  - Validation: each of the three referenced tasks is checked with a one-line evidence note, or
+    reopened as a bug if the live check fails
+- [ ] 6.3 If 6.2 surfaces a real delegation-notification bug (parent idles after backgrounding a
+      subagent instead of being woken by the injected result), do not fix it here — file it under
+      `subagent-notification-reliability`, which exists specifically to investigate that failure
+      mode and depends on this phase's roster accuracy to rule out "stale roster" as the cause.
+  - Validation: n/a — coordination task

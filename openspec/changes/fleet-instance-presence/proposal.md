@@ -119,3 +119,12 @@ events rather than scraping conversation content.
   the cost is publication, not new bookkeeping.
 - Security: presence exposes directory paths and session titles on the local network.
   Advertisement must be disableable, and must be off by default on untrusted networks.
+
+## Addendum (2026-09-05)
+
+Phases 1-2 shipped; Phases 3-4 (wedge/heartbeat detection, the `/agents` view, Supervisor read
+path) did not. That gap turned out to matter beyond observability: `/backlog`'s fan-out nudge and
+local placement both consume presence today, with no liveness signal to filter on, which is the
+most likely root cause of reports that the "free agent" list `/backlog` suggests is frequently
+wrong (stale, busy, or unreachable entries presented as available). See Phase 6, added below, and
+`subagent-notification-reliability` for the related delegate-and-idle investigation.
