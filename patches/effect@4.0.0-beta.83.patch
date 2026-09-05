@@ -1,3 +1,68 @@
+diff --git a/dist/Scheduler.js b/dist/Scheduler.js
+index cab3d90..293a913 100644
+--- a/dist/Scheduler.js
++++ b/dist/Scheduler.js
+@@ -29,15 +29,51 @@ import * as Context from "./Context.js";
+ export const Scheduler = /*#__PURE__*/Context.Reference("effect/Scheduler", {
+   defaultValue: () => new MixedScheduler()
+ });
+-const setImmediate = "setImmediate" in globalThis ? f => {
+-  // @ts-ignore
+-  const timer = globalThis.setImmediate(f);
+-  // @ts-ignore
+-  return () => globalThis.clearImmediate(timer);
+-} : f => {
+-  const timer = setTimeout(f, 0);
+-  return () => clearTimeout(timer);
+-};
++const setImmediate = (() => {
++  // On Bun, flushing queued fiber dispatch through `globalThis.setImmediate`
++  // can be starved during the event loop's check phase under CPU load, which
++  // also strands node:http first-request dispatch (the connection is accepted
++  // and read natively, but the `request` event is never emitted, hanging the
++  // first request for tens of seconds). Delivering the flush through a
++  // `MessageChannel` — an fd-backed message serviced in the poll phase — keeps
++  // the loop cycling and avoids the stall. Same technique React's scheduler
++  // uses for its macrotask. Falls back to setImmediate/setTimeout when
++  // `MessageChannel` is unavailable.
++  try {
++    const channel = new MessageChannel();
++    const queue = new Map();
++    let nextId = 0;
++    channel.port1.onmessage = event => {
++      const run = queue.get(event.data);
++      if (run !== undefined) {
++        queue.delete(event.data);
++        run();
++      }
++    };
++    if (channel.port1.start) channel.port1.start();
++    // Do not let the channel keep the process alive (e.g. short-lived CLI runs).
++    if (channel.port1.unref) channel.port1.unref();
++    if (channel.port2.unref) channel.port2.unref();
++    return f => {
++      const id = ++nextId;
++      queue.set(id, f);
++      channel.port2.postMessage(id);
++      return () => {
++        queue.delete(id);
++      };
++    };
++  } catch {
++    return "setImmediate" in globalThis ? f => {
++      // @ts-ignore
++      const timer = globalThis.setImmediate(f);
++      // @ts-ignore
++      return () => globalThis.clearImmediate(timer);
++    } : f => {
++      const timer = setTimeout(f, 0);
++      return () => clearTimeout(timer);
++    };
++  }
++})();
+ class PriorityBuckets {
+   buckets = [];
+   scheduleTask(task, priority) {
 diff --git a/dist/unstable/httpapi/HttpApiSchema.js b/dist/unstable/httpapi/HttpApiSchema.js
 index ecb6603d1ee4e89e92174b3a1100e8c9c720b3f3..08b832b6b3e9e4d10df156eca36b16f571f67f6e 100644
 --- a/dist/unstable/httpapi/HttpApiSchema.js
