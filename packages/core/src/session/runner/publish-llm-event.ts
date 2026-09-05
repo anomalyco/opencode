@@ -39,6 +39,7 @@ export interface StepRecord {
     readonly rawFinish?: string
     readonly providerState?: SessionMessage.ProviderState
     readonly tokens: ReturnType<typeof SessionUsage.tokens>
+    readonly usageMetadata?: ProviderMetadata
   }
   readonly needsContinuation: boolean
 }
@@ -521,6 +522,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
           rawFinish: event.reason.raw,
           providerState: providerState(event.providerMetadata),
           tokens: SessionUsage.tokens(event.usage),
+          usageMetadata: event.usage?.providerMetadata,
         }
         if (event.reason.normalized === "content-filter") {
           providerFailed = true
