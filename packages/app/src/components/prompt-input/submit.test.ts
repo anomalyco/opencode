@@ -13,6 +13,7 @@ const sessionCreateInputs: Array<{
   location?: { directory: string }
 }> = []
 const enabledAutoAccept: Array<{ server: string; sessionID: string; directory: string }> = []
+const directoryAutoAccept = new Set<string>()
 const optimistic: Array<{
   directory?: string
   sessionID?: string
@@ -163,6 +164,9 @@ beforeAll(async () => {
       enableAutoAccept(sessionID: string, directory: string) {
         enabledAutoAccept.push({ server, sessionID, directory })
       },
+      isAutoAcceptingDirectory(directory: string) {
+        return directoryAutoAccept.has(directory)
+      },
     })
     return { usePermission: () => ({ currentServerState: () => state(permissionServer) }) }
   })
@@ -283,6 +287,7 @@ beforeEach(() => {
   createdSessions.length = 0
   sessionCreateInputs.length = 0
   enabledAutoAccept.length = 0
+  directoryAutoAccept.clear()
   optimistic.length = 0
   optimisticSeeded.length = 0
   promoted.length = 0
@@ -357,6 +362,33 @@ describe("prompt submit worktree selection", () => {
       { directory: "/repo/worktree-b", sessionID: "session-2" },
     ])
     expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-a", "/repo/worktree-b", "/repo/worktree-b"])
+  })
+
+  test("applies settings directory auto-accept to new sessions when the prompt toggle is off", async () => {
+    directoryAutoAccept.add("/repo/main")
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => undefined,
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "shell",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      newSessionWorktree: () => "main",
+      onNewSessionWorktreeReset: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    expect(enabledAutoAccept).toEqual([{ server: "server-a", sessionID: "session-1", directory: "/repo/main" }])
   })
 
   test("applies auto-accept to newly created sessions", async () => {
