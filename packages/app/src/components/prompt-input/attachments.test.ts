@@ -8,19 +8,19 @@ describe("attachmentMime", () => {
     expect(await attachmentMime(file)).toBe("application/pdf")
   })
 
-  test("normalizes structured text types to text/plain", async () => {
+  test("keeps structured text types for the upload", async () => {
     const file = new File(['{"ok":true}\n'], "data.json", { type: "application/json" })
-    expect(await attachmentMime(file)).toBe("text/plain")
+    expect(await attachmentMime(file)).toBe("application/json")
   })
 
   test("accepts text files even with a misleading browser mime", async () => {
     const file = new File(["export const x = 1\n"], "main.ts", { type: "video/mp2t" })
-    expect(await attachmentMime(file)).toBe("text/plain")
+    expect(await attachmentMime(file)).toBe("video/mp2t")
   })
 
-  test("rejects binary files", async () => {
+  test("accepts arbitrary binary files", async () => {
     const file = new File([Uint8Array.of(0, 255, 1, 2)], "blob.bin", { type: "application/octet-stream" })
-    expect(await attachmentMime(file)).toBeUndefined()
+    expect(await attachmentMime(file)).toBe("application/octet-stream")
   })
 })
 

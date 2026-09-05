@@ -182,6 +182,24 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("lowers PDF user content as inline data", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+        LLM.request({
+          model,
+          messages: [Message.user({ type: "media", mediaType: "application/pdf", data: "JVBERi0=" })],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "user",
+          parts: [{ inlineData: { mimeType: "application/pdf", data: "JVBERi0=" } }],
+        },
+      ])
+    }),
+  )
+
   for (const [name, media] of [
     ["mismatched data URL MIME", { mediaType: "image/png", data: "data:image/jpeg;base64,/9j/" }],
     ["malformed base64", { mediaType: "image/png", data: "%%%=" }],

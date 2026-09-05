@@ -38,9 +38,24 @@ export interface Protocol<Body, Frame, Event, State> {
   readonly id: ProtocolID
   /** Request side: schema for the provider-native body and how to build it. */
   readonly body: ProtocolBody<Body>
+  /** Whether this protocol can safely accept one bounded native media input. */
+  readonly media?: MediaAdmissionQuery
   /** Response side: streaming state machine. */
   readonly stream: ProtocolStream<Frame, Event, State>
 }
+
+export type MediaInputCapability = "image" | "pdf"
+
+export interface MediaAdmissionInput {
+  readonly mime: string
+  readonly bytes: number
+}
+
+export interface MediaAdmission {
+  readonly capability: MediaInputCapability
+}
+
+export type MediaAdmissionQuery = (input: MediaAdmissionInput) => MediaAdmission | undefined
 
 export interface ProtocolBody<Body> {
   /** Schema for the validated provider-native body sent as the JSON request. */
