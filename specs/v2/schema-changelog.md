@@ -1,5 +1,13 @@
 # V2 Schema Changelog
 
+## 2026-08-25: Session Message Total And Seek
+
+- Extend `GET /api/session/:sessionID/message` with optional `index` (dense-rank seek) and `around` (message-centered seek).
+- Add response fields `total` and optional `startIndex` so clients can size and place bounded transcript windows.
+- Keep opaque `cursor` pagination as the sequential navigation mode; reject combining `cursor` with `index`/`around`, and reject combining `index` with `around`.
+- Resolve seeks against projected `session_message` rows ordered by durable `seq`; do not expose `seq` on the wire.
+- No database migration; `session_message.seq` and its session-scoped index already exist.
+
 ## 2026-06-26: Add Finite Session History
 
 - Add `GET /api/session/:sessionID/history` and generated Promise, Effect, and legacy JavaScript client methods.
