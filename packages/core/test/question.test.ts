@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -109,6 +109,16 @@ describe("QuestionV2", () => {
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) expect(exit.cause.toString()).toContain("QuestionV2.RejectedError")
       yield* Scope.close(secondScope, Exit.void)
+    }),
+  )
+
+  it.effect("fails fast when asked with no questions instead of registering a dead request", () =>
+    Effect.gen(function* () {
+      const service = yield* QuestionV2.Service
+      const exit = yield* service.ask({ sessionID, questions: [] }).pipe(Effect.timeout("1 second"), Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain("at least one question")
+      expect(yield* service.list()).toEqual([])
     }),
   )
 })
