@@ -1758,17 +1758,32 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const data = useData()
+  const i18n = useI18n()
   const part = () => props.part as ReasoningPart
   const streaming = createMemo(
     () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
   )
   const text = () => readPartText(data.store.part_text_accum_delta, part())
+  const pending = () => streaming()
 
   return (
     <Show when={text()}>
-      <div data-component="reasoning-part" data-timeline-part-id={part().id}>
-        <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
-      </div>
+      <BasicTool
+        icon="brain"
+        status={pending() ? "running" : undefined}
+        defaultOpen={false}
+        open={props.toolOpen}
+        onOpenChange={props.onToolOpenChange}
+        allowOpenWhilePending
+        trigger={{
+          title: i18n.t("ui.sessionTurn.status.thinking"),
+          subtitle: undefined,
+        }}
+      >
+        <div data-component="reasoning-part" data-timeline-part-id={part().id}>
+          <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
+        </div>
+      </BasicTool>
     </Show>
   )
 }
@@ -1915,7 +1930,6 @@ ToolRegistry.register({
     return (
       <BasicTool
         {...props}
-        hideDetails
         icon="window-cursor"
         trigger={
           <div data-slot="basic-tool-tool-info-structured">
@@ -1943,7 +1957,19 @@ ToolRegistry.register({
             </Show>
           </div>
         }
-      />
+      >
+        <Show when={props.output}>
+          <div
+            data-component="tool-output"
+            data-scrollable
+            tabIndex={0}
+            role="region"
+            aria-label={i18n.t("ui.scrollView.ariaLabel")}
+          >
+            <Markdown text={props.output!} />
+          </div>
+        </Show>
+      </BasicTool>
     )
   },
 })
@@ -2016,7 +2042,7 @@ ToolRegistry.register({
       open()
     }
     const navigateKey = (event: KeyboardEvent) => {
-      if (!clickable() || href()) return
+      if (!clickable()) return
       if (event.key !== "Enter" && event.key !== " ") return
       event.preventDefault()
       open()
@@ -2030,7 +2056,23 @@ ToolRegistry.register({
           "--task-agent-legacy-color": tone(),
         }}
       >
-        <div data-component="task-tool-surface">
+        <div
+          data-component="task-tool-surface"
+          role={clickable() ? "button" : undefined}
+          tabIndex={clickable() ? 0 : undefined}
+          onClick={(e) => {
+            if (clickable()) {
+              e.stopPropagation()
+              navigate(e)
+            }
+          }}
+          onKeyDown={(e) => {
+            if (clickable()) {
+              e.stopPropagation()
+              navigateKey(e)
+            }
+          }}
+        >
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <Show
@@ -2059,25 +2101,43 @@ ToolRegistry.register({
           </div>
         </div>
         <Show when={clickable()}>
-          <div data-component="task-tool-action">
+          <a
+            data-component="task-tool-action"
+            href={href()}
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate(e)
+            }}
+            onKeyDown={(e) => {
+              e.stopPropagation()
+              navigateKey(e)
+            }}
+          >
             <Icon name="square-arrow-top-right" size="small" />
-          </div>
+          </a>
         </Show>
       </div>
     )
 
     return (
       <BasicTool
+        {...props}
         icon="task"
-        status={props.status}
         trigger={trigger()}
-        hideDetails
-        triggerAsLink
-        triggerHref={href()}
         clickable={clickable()}
-        onTriggerClick={navigate}
-        onTriggerKeyDown={navigateKey}
-      />
+      >
+        <Show when={props.output}>
+          <div
+            data-component="tool-output"
+            data-scrollable
+            tabIndex={0}
+            role="region"
+            aria-label={i18n.t("ui.scrollView.ariaLabel")}
+          >
+            <Markdown text={props.output!} />
+          </div>
+        </Show>
+      </BasicTool>
     )
   },
 })
@@ -2637,6 +2697,20 @@ ToolRegistry.register({
       </div>
     )
 
-    return <BasicTool icon="brain" status={props.status} trigger={trigger()} hideDetails />
+    return (
+      <BasicTool icon="brain" status={props.status} trigger={trigger()}>
+        <Show when={props.output}>
+          <div
+            data-component="tool-output"
+            data-scrollable
+            tabIndex={0}
+            role="region"
+            aria-label={i18n.t("ui.scrollView.ariaLabel")}
+          >
+            <Markdown text={props.output!} />
+          </div>
+        </Show>
+      </BasicTool>
+    )
   },
 })
