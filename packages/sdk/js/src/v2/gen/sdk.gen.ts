@@ -405,6 +405,16 @@ import type {
   V2SessionWaitResponses,
   V2SkillListErrors,
   V2SkillListResponses,
+  V2TeamjulesCancelErrors,
+  V2TeamjulesCancelResponses,
+  V2TeamjulesCreateErrors,
+  V2TeamjulesCreateResponses,
+  V2TeamjulesGetErrors,
+  V2TeamjulesGetResponses,
+  V2TeamjulesListErrors,
+  V2TeamjulesListResponses,
+  V2TeamjulesRetryErrors,
+  V2TeamjulesRetryResponses,
   VcsApplyErrors,
   VcsApplyResponses,
   VcsDiffErrors,
@@ -7343,6 +7353,136 @@ export class Automation extends HeyApiClient {
   }
 }
 
+export class Teamjules extends HeyApiClient {
+  /**
+   * List TeamJules tasks
+   *
+   * List all TeamJules tasks with optional filters.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      status?: "pending" | "queued" | "running" | "completed" | "failed" | "cancelled"
+      repo?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "status" },
+            { in: "query", key: "repo" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2TeamjulesListResponses, V2TeamjulesListErrors, ThrowOnError>({
+      url: "/api/teamjules/tasks",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create a TeamJules task
+   *
+   * Create a new async coding task.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      type?: "issue" | "pr" | "manual"
+      repo?: string
+      branch?: string
+      prompt?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "type" },
+            { in: "body", key: "repo" },
+            { in: "body", key: "branch" },
+            { in: "body", key: "prompt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2TeamjulesCreateResponses, V2TeamjulesCreateErrors, ThrowOnError>({
+      url: "/api/teamjules/tasks",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Cancel a TeamJules task
+   *
+   * Cancel a running or pending TeamJules task.
+   */
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      taskID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "taskID" }] }])
+    return (options?.client ?? this.client).delete<V2TeamjulesCancelResponses, V2TeamjulesCancelErrors, ThrowOnError>({
+      url: "/api/teamjules/tasks/{taskID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get TeamJules task
+   *
+   * Get a single TeamJules task by ID.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      taskID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "taskID" }] }])
+    return (options?.client ?? this.client).get<V2TeamjulesGetResponses, V2TeamjulesGetErrors, ThrowOnError>({
+      url: "/api/teamjules/tasks/{taskID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Retry a TeamJules task
+   *
+   * Retry a failed TeamJules task.
+   */
+  public retry<ThrowOnError extends boolean = false>(
+    parameters: {
+      taskID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "taskID" }] }])
+    return (options?.client ?? this.client).post<V2TeamjulesRetryResponses, V2TeamjulesRetryErrors, ThrowOnError>({
+      url: "/api/teamjules/tasks/{taskID}/retry",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class V2 extends HeyApiClient {
   private _health?: Health
   get health(): Health {
@@ -7432,6 +7572,11 @@ export class V2 extends HeyApiClient {
   private _automation?: Automation
   get automation(): Automation {
     return (this._automation ??= new Automation({ client: this.client }))
+  }
+
+  private _teamjules?: Teamjules
+  get teamjules(): Teamjules {
+    return (this._teamjules ??= new Teamjules({ client: this.client }))
   }
 }
 

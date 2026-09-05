@@ -34,6 +34,7 @@ export type Event =
   | EventSessionNextReasoningStarted
   | EventSessionNextReasoningDelta
   | EventSessionNextReasoningEnded
+  | EventSessionNextLogEnded
   | EventSessionNextToolInputStarted
   | EventSessionNextToolInputDelta
   | EventSessionNextToolInputEnded
@@ -49,6 +50,7 @@ export type Event =
   | EventSessionNextRevertStaged
   | EventSessionNextRevertCleared
   | EventSessionNextRevertCommitted
+  | EventSessionNextReasoningLogRecorded
   | EventMessagePartDelta
   | EventSessionDiff
   | EventSessionError
@@ -1025,6 +1027,17 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.next.log.ended"
+        properties: {
+          timestamp: number
+          sessionID: string
+          assistantMessageID: string
+          logID: string
+          text: string
+        }
+      }
+    | {
+        id: string
         type: "session.next.tool.input.started"
         properties: {
           timestamp: number
@@ -1206,6 +1219,28 @@ export type GlobalEvent = {
           timestamp: number
           sessionID: string
           messageID: string
+        }
+      }
+    | {
+        id: string
+        type: "session.next.reasoning.log.recorded"
+        properties: {
+          timestamp: number
+          sessionID: string
+          id: string
+          type:
+            | "why_loop"
+            | "then_loop"
+            | "pre_action"
+            | "hypothesis_update"
+            | "evi_score"
+            | "counterfactual"
+            | "self_consistency"
+            | "temporal_guard"
+          content: string
+          metadata: {
+            [key: string]: unknown
+          }
         }
       }
     | {
@@ -1652,6 +1687,7 @@ export type GlobalEvent = {
     | SyncEventSessionNextTextEnded
     | SyncEventSessionNextReasoningStarted
     | SyncEventSessionNextReasoningEnded
+    | SyncEventSessionNextLogEnded
     | SyncEventSessionNextToolInputStarted
     | SyncEventSessionNextToolInputEnded
     | SyncEventSessionNextToolCalled
@@ -1664,6 +1700,7 @@ export type GlobalEvent = {
     | SyncEventSessionNextRevertStaged
     | SyncEventSessionNextRevertCleared
     | SyncEventSessionNextRevertCommitted
+    | SyncEventSessionNextReasoningLogRecorded
 }
 
 /**
@@ -1914,6 +1951,28 @@ export type AttachmentConfig = {
   image?: ImageAttachmentConfig
 }
 
+export type TeamJulesConfig = {
+  enabled?: boolean
+  /**
+   * Port for GitHub webhook server (default: 3000)
+   */
+  webhook_port?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  webhook_secret?: string
+  /**
+   * Maximum number of concurrent task workers (default: 1)
+   */
+  worker_concurrency?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  /**
+   * Task execution timeout in milliseconds (default: 30 minutes)
+   */
+  task_timeout_ms?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  agent?: {
+    model?: string
+    prompt?: string
+    permission?: PermissionConfig
+  }
+}
+
 export type Config = {
   $schema?: string
   shell?: string
@@ -1962,6 +2021,7 @@ export type Config = {
   enabled_providers?: Array<string>
   model?: string
   small_model?: string
+  reflection_model?: string
   default_agent?: string
   subagent_depth?: number
   username?: string
@@ -2058,6 +2118,7 @@ export type Config = {
     mcp_timeout?: number
     policies?: Array<ConfigV2ExperimentalPolicy>
   }
+  teamjules?: TeamJulesConfig
 }
 
 export type Model = {
@@ -2790,12 +2851,14 @@ export type SessionDurableEvent =
   | SessionNextToolFailed
   | SessionNextReasoningStarted
   | SessionNextReasoningEnded
+  | SessionNextLogEnded
   | SessionNextRetried
   | SessionNextCompactionStarted
   | SessionNextCompactionEnded
   | SessionNextRevertStaged
   | SessionNextRevertCleared
   | SessionNextRevertCommitted
+  | SessionNextReasoningLogRecorded
 
 export type SessionHistory = {
   data: Array<SessionDurableEvent>
@@ -2913,6 +2976,7 @@ export type V2Event =
   | SessionNextReasoningStarted
   | SessionNextReasoningDelta
   | SessionNextReasoningEnded
+  | SessionNextLogEnded
   | SessionNextToolInputStarted
   | SessionNextToolInputDelta
   | SessionNextToolInputEnded
@@ -2928,6 +2992,7 @@ export type V2Event =
   | SessionNextRevertStaged
   | SessionNextRevertCleared
   | SessionNextRevertCommitted
+  | SessionNextReasoningLogRecorded
   | MessagePartDelta
   | SessionDiff
   | SessionError
@@ -3642,6 +3707,24 @@ export type SyncEventSessionNextReasoningEnded = {
   }
 }
 
+export type SyncEventSessionNextLogEnded = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.log.ended.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      assistantMessageID: string
+      logID: string
+      text: string
+    }
+  }
+}
+
 export type SyncEventSessionNextToolInputStarted = {
   type: "sync"
   id: string
@@ -3874,6 +3957,35 @@ export type SyncEventSessionNextRevertCommitted = {
   }
 }
 
+export type SyncEventSessionNextReasoningLogRecorded = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.reasoning.log.recorded.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      id: string
+      type:
+        | "why_loop"
+        | "then_loop"
+        | "pre_action"
+        | "hypothesis_update"
+        | "evi_score"
+        | "counterfactual"
+        | "self_consistency"
+        | "temporal_guard"
+      content: string
+      metadata: {
+        [key: string]: unknown
+      }
+    }
+  }
+}
+
 export type ConfigV2ReferenceGit = {
   repository: string
   branch?: string
@@ -4092,6 +4204,16 @@ export type SessionMessageAssistantReasoning = {
   }
 }
 
+export type SessionMessageAssistantLog = {
+  type: "log"
+  id: string
+  text: string
+  time?: {
+    created: number
+    completed?: number
+  }
+}
+
 export type SessionMessageToolStatePending = {
   status: "pending"
   input: string
@@ -4169,7 +4291,12 @@ export type SessionMessageAssistant = {
   type: "assistant"
   agent: string
   model: ModelRef
-  content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
+  content: Array<
+    | SessionMessageAssistantText
+    | SessionMessageAssistantReasoning
+    | SessionMessageAssistantLog
+    | SessionMessageAssistantTool
+  >
   snapshot?: {
     start?: string
     end?: string
@@ -4704,6 +4831,27 @@ export type SessionNextReasoningEnded = {
   }
 }
 
+export type SessionNextLogEnded = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.log.ended"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    logID: string
+    text: string
+  }
+}
+
 export type SessionNextRetried = {
   id: string
   metadata?: {
@@ -4819,6 +4967,38 @@ export type SessionNextRevertCommitted = {
     timestamp: number
     sessionID: string
     messageID: string
+  }
+}
+
+export type SessionNextReasoningLogRecorded = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.reasoning.log.recorded"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    id: string
+    type:
+      | "why_loop"
+      | "then_loop"
+      | "pre_action"
+      | "hypothesis_update"
+      | "evi_score"
+      | "counterfactual"
+      | "self_consistency"
+      | "temporal_guard"
+    content: string
+    metadata: {
+      [key: string]: unknown
+    }
   }
 }
 
@@ -6566,6 +6746,18 @@ export type EventSessionNextReasoningEnded = {
   }
 }
 
+export type EventSessionNextLogEnded = {
+  id: string
+  type: "session.next.log.ended"
+  properties: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    logID: string
+    text: string
+  }
+}
+
 export type EventSessionNextToolInputStarted = {
   id: string
   type: "session.next.tool.input.started"
@@ -6763,6 +6955,29 @@ export type EventSessionNextRevertCommitted = {
     timestamp: number
     sessionID: string
     messageID: string
+  }
+}
+
+export type EventSessionNextReasoningLogRecorded = {
+  id: string
+  type: "session.next.reasoning.log.recorded"
+  properties: {
+    timestamp: number
+    sessionID: string
+    id: string
+    type:
+      | "why_loop"
+      | "then_loop"
+      | "pre_action"
+      | "hypothesis_update"
+      | "evi_score"
+      | "counterfactual"
+      | "self_consistency"
+      | "temporal_guard"
+    content: string
+    metadata: {
+      [key: string]: unknown
+    }
   }
 }
 
@@ -14302,6 +14517,226 @@ export type V2AutomationRunsGetResponses = {
 }
 
 export type V2AutomationRunsGetResponse = V2AutomationRunsGetResponses[keyof V2AutomationRunsGetResponses]
+
+export type V2TeamjulesListData = {
+  body?: never
+  path?: never
+  query?: {
+    status?: "pending" | "queued" | "running" | "completed" | "failed" | "cancelled"
+    repo?: string
+    limit?: string
+  }
+  url: "/api/teamjules/tasks"
+}
+
+export type V2TeamjulesListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2TeamjulesListError = V2TeamjulesListErrors[keyof V2TeamjulesListErrors]
+
+export type V2TeamjulesListResponses = {
+  /**
+   * Success
+   */
+  200: Array<{
+    id: string
+    type: "issue" | "pr" | "manual"
+    status: "pending" | "queued" | "running" | "completed" | "failed" | "cancelled"
+    repo: string
+    branch: string
+    prompt: string
+    result?: {
+      pr_url?: string
+      commit_sha?: string
+      error?: string
+    }
+    session_id?: string
+    worker_id?: string
+    attempt_count: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    max_attempts: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    time_created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    time_updated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    started_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    completed_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }>
+}
+
+export type V2TeamjulesListResponse = V2TeamjulesListResponses[keyof V2TeamjulesListResponses]
+
+export type V2TeamjulesCreateData = {
+  body: {
+    type: "issue" | "pr" | "manual"
+    repo: string
+    branch: string
+    prompt: string
+  }
+  path?: never
+  query?: never
+  url: "/api/teamjules/tasks"
+}
+
+export type V2TeamjulesCreateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2TeamjulesCreateError = V2TeamjulesCreateErrors[keyof V2TeamjulesCreateErrors]
+
+export type V2TeamjulesCreateResponses = {
+  /**
+   * Success
+   */
+  200: {
+    id: string
+    type: "issue" | "pr" | "manual"
+    status: "pending" | "queued" | "running" | "completed" | "failed" | "cancelled"
+    repo: string
+    branch: string
+    prompt: string
+    result?: {
+      pr_url?: string
+      commit_sha?: string
+      error?: string
+    }
+    session_id?: string
+    worker_id?: string
+    attempt_count: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    max_attempts: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    time_created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    time_updated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    started_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    completed_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type V2TeamjulesCreateResponse = V2TeamjulesCreateResponses[keyof V2TeamjulesCreateResponses]
+
+export type V2TeamjulesCancelData = {
+  body?: never
+  path: {
+    taskID: string
+  }
+  query?: never
+  url: "/api/teamjules/tasks/{taskID}"
+}
+
+export type V2TeamjulesCancelErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2TeamjulesCancelError = V2TeamjulesCancelErrors[keyof V2TeamjulesCancelErrors]
+
+export type V2TeamjulesCancelResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2TeamjulesCancelResponse = V2TeamjulesCancelResponses[keyof V2TeamjulesCancelResponses]
+
+export type V2TeamjulesGetData = {
+  body?: never
+  path: {
+    taskID: string
+  }
+  query?: never
+  url: "/api/teamjules/tasks/{taskID}"
+}
+
+export type V2TeamjulesGetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2TeamjulesGetError = V2TeamjulesGetErrors[keyof V2TeamjulesGetErrors]
+
+export type V2TeamjulesGetResponses = {
+  /**
+   * Success
+   */
+  200: {
+    id: string
+    type: "issue" | "pr" | "manual"
+    status: "pending" | "queued" | "running" | "completed" | "failed" | "cancelled"
+    repo: string
+    branch: string
+    prompt: string
+    result?: {
+      pr_url?: string
+      commit_sha?: string
+      error?: string
+    }
+    session_id?: string
+    worker_id?: string
+    attempt_count: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    max_attempts: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    time_created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    time_updated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    started_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    completed_at?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type V2TeamjulesGetResponse = V2TeamjulesGetResponses[keyof V2TeamjulesGetResponses]
+
+export type V2TeamjulesRetryData = {
+  body?: never
+  path: {
+    taskID: string
+  }
+  query?: never
+  url: "/api/teamjules/tasks/{taskID}/retry"
+}
+
+export type V2TeamjulesRetryErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2TeamjulesRetryError = V2TeamjulesRetryErrors[keyof V2TeamjulesRetryErrors]
+
+export type V2TeamjulesRetryResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2TeamjulesRetryResponse = V2TeamjulesRetryResponses[keyof V2TeamjulesRetryResponses]
 
 export type PtyConnectData = {
   body?: never
