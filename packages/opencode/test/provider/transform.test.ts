@@ -6195,3 +6195,99 @@ describe("ProviderTransform.options - kimi family adaptive thinking", () => {
     expect(result.thinking).toBeUndefined()
   })
 })
+
+describe("LLMRequestPrep.prepare - system message coalescing", () => {
+  const sessionID = "test-session-123"
+
+  const createModel = (npm: string) =>
+    ({
+      id: npm === "@ai-sdk/anthropic" ? "anthropic/claude-3-5-sonnet" : "sglang/qwen",
+      providerID: npm === "@ai-sdk/anthropic" ? "anthropic" : "sglang",
+      api: {
+        id: npm === "@ai-sdk/anthropic" ? "claude-3-5-sonnet-20241022" : "qwen",
+        url: npm === "@ai-sdk/anthropic" ? "https://api.anthropic.com" : "http://localhost:30000/v1",
+        npm,
+      },
+      name: npm === "@ai-sdk/anthropic" ? "Claude 3.5 Sonnet" : "Qwen",
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
+      limit: { context: 128000, output: 8192 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  function prepareWithPlugin(npm: string) {
+    return Effect.runPromise(
+      LLMRequestPrep.prepare({
+        user: {
+          id: "msg_user-test",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "test",
+          model: {
+            providerID: npm === "@ai-sdk/anthropic" ? "anthropic" : "sglang",
+            modelID: npm === "@ai-sdk/anthropic" ? "claude-3-5-sonnet" : "qwen",
+          },
+        } as any,
+        sessionID,
+        model: createModel(npm),
+        agent: {
+          name: "test",
+          mode: "primary",
+          prompt: "You are a test agent.",
+          options: {},
+          permission: [],
+        } as any,
+        system: [],
+        messages: [{ role: "user", content: "Hello" }],
+        tools: {},
+        provider: {
+          id: npm === "@ai-sdk/anthropic" ? "anthropic" : "sglang",
+          options: {},
+        } as any,
+        auth: undefined,
+        plugin: {
+          trigger: (name: string, _input: unknown, output: unknown) => {
+            if (name === "experimental.chat.system.transform") {
+              const transform = output as { system: string[] }
+              transform.system.push("extra instructions")
+            }
+            return Effect.succeed(output)
+          },
+          list: () => Effect.succeed([]),
+          init: () => Effect.void,
+        } as any,
+        flags: { outputTokenMax: 32_000, client: "test" } as any,
+        isWorkflow: false,
+      }),
+    )
+  }
+
+  test("coalesces plugin system blocks for openai-compatible providers", async () => {
+    const result = await prepareWithPlugin("@ai-sdk/openai-compatible")
+    const systemMessages = result.messages.filter((message) => message.role === "system")
+
+    expect(systemMessages).toHaveLength(1)
+    expect(String(systemMessages[0]?.content)).toContain("You are a test agent.")
+    expect(String(systemMessages[0]?.content)).toContain("extra instructions")
+  })
+
+  test("preserves separate plugin system blocks for anthropic", async () => {
+    const result = await prepareWithPlugin("@ai-sdk/anthropic")
+    const systemMessages = result.messages.filter((message) => message.role === "system")
+
+    expect(systemMessages).toHaveLength(2)
+    expect(String(systemMessages[0]?.content)).toContain("You are a test agent.")
+    expect(String(systemMessages[1]?.content)).toContain("extra instructions")
+  })
+})
