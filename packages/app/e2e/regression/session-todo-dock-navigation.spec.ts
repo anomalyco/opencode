@@ -1,7 +1,7 @@
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { expect, test, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
-import { expectSessionTitle } from "../utils/waits"
+import { expectSessionTitle, switchHistorySession } from "../utils/waits"
 
 const directory = "C:/OpenCode/TodoDockNavigation"
 const projectID = "proj_todo_dock_navigation"
@@ -83,11 +83,11 @@ test("animates todo lifecycle without replaying it across session tabs", async (
   await expect(dock.locator('[data-state="in_progress"]')).toHaveCount(1)
   expect((await opening).some((sample) => sample.opacity > 0.05 && sample.opacity < 0.95)).toBe(true)
 
-  await switchSession(page, otherID, otherTitle)
+  await switchHistorySession(page, otherID, otherTitle)
   await expect(dock).toHaveCount(0)
 
   const returningOpen = sampleDock(page, 700)
-  await switchSession(page, sourceID, sourceTitle)
+  await switchHistorySession(page, sourceID, sourceTitle)
   const openSamples = (await returningOpen).filter((sample) => sample.present)
   expect(openSamples.length).toBeGreaterThan(0)
   expect(openSamples[0]!.opacity).toBeGreaterThan(0.98)
@@ -103,9 +103,9 @@ test("animates todo lifecycle without replaying it across session tabs", async (
   todos[sourceID] = []
   events.push(todoEvent(sourceID, []))
 
-  await switchSession(page, otherID, otherTitle)
+  await switchHistorySession(page, otherID, otherTitle)
   const returningEmpty = sampleDock(page, 700)
-  await switchSession(page, sourceID, sourceTitle)
+  await switchHistorySession(page, sourceID, sourceTitle)
   await expect(dock).toHaveCount(0)
   expect((await returningEmpty).every((sample) => !sample.present)).toBe(true)
 })
@@ -155,19 +155,6 @@ async function configurePage(page: Page) {
     },
     { directory, dirBase64: base64Encode(directory), server, sessionIDs: [sourceID, otherID] },
   )
-}
-
-function sessionHref(sessionID: string) {
-  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
-  return `/server/${base64Encode(server)}/session/${sessionID}`
-}
-
-async function switchSession(page: Page, sessionID: string, title: string) {
-  const href = sessionHref(sessionID)
-  const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`).first()
-  await expect(tab).toBeVisible()
-  await tab.click()
-  await expectSessionTitle(page, title)
 }
 
 function sampleDock(page: Page, duration: number) {

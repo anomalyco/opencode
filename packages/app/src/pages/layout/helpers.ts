@@ -49,6 +49,51 @@ export const childSessionOnPath = (sessions: Session[] | undefined, rootID: stri
 export const displayName = (project: { name?: string; worktree: string }) =>
   project.name || getFilename(project.worktree) || project.worktree
 
+export type HistoryTreeProject = { worktree: string; name?: string; sandboxes?: string[] }
+
+export type HistoryTreeGroup<T extends HistoryTreeProject = HistoryTreeProject> = {
+  project: T
+  projectName: string
+  sessions: Session[]
+}
+
+export function projectOwnsDirectory(project: HistoryTreeProject, directory: string) {
+  const dir = pathKey(directory)
+  const root = pathKey(project.worktree)
+  if (dir === root) return true
+  if (project.sandboxes?.some((sandbox) => pathKey(sandbox) === dir)) return true
+  return dir.startsWith(`${root}/`)
+}
+
+export function historyTreeProjectForDirectory<T extends HistoryTreeProject>(projects: T[], directory: string) {
+  return projects
+    .filter((project) => projectOwnsDirectory(project, directory))
+    .sort((left, right) => pathKey(right.worktree).length - pathKey(left.worktree).length)[0]
+}
+
+export function historyTreeGroups<T extends HistoryTreeProject>(
+  projects: T[],
+  sessions: Session[],
+): HistoryTreeGroup<T>[] {
+  const buckets = new Map(
+    projects.map((project) => [
+      pathKey(project.worktree),
+      { project, projectName: displayName(project), sessions: [] as Session[] },
+    ]),
+  )
+  for (const session of sessions) {
+    if (session.parentID) continue
+    if (session.time?.archived) continue
+    const project = historyTreeProjectForDirectory(projects, session.directory)
+    if (!project) continue
+    buckets.get(pathKey(project.worktree))?.sessions.push(session)
+  }
+  return [...buckets.values()].map((group) => ({
+    ...group,
+    sessions: group.sessions.sort(compareSessionTime),
+  }))
+}
+
 export function toggleHomeProjectSelection(
   current: HomeProjectSelection | undefined,
   server: ServerConnection.Key,

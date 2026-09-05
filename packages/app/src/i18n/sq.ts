@@ -879,6 +879,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Pastro njoftimet",
   "sidebar.empty.title": "Asnjë projekt i hapur",
   "sidebar.empty.description": "Hapni një projekt për të filluar",
+  "sidebar.history.runningChat": "Në progres: {{title}}",
   "debugBar.ariaLabel": "Diagnostifikimi i performancës së zhvillimit",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

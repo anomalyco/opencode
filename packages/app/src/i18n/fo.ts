@@ -877,6 +877,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Rudda fráboðanir",
   "sidebar.empty.title": "Ongar verkætlanir lata upp",
   "sidebar.empty.description": "Opna eina verkætlan fyri at koma í gongd",
+  "sidebar.history.runningChat": "Koyrir: {{title}}",
   "debugBar.ariaLabel": "Menningar avriksdiagnostikk",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

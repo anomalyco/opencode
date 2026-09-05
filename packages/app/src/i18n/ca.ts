@@ -886,6 +886,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Esborra les notificacions",
   "sidebar.empty.title": "No hi ha projectes oberts",
   "sidebar.empty.description": "Obriu un projecte per començar",
+  "sidebar.history.runningChat": "En execució: {{title}}",
   "debugBar.ariaLabel": "Diagnòstic de rendiment del desenvolupament",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

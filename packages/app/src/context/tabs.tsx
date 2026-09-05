@@ -13,6 +13,7 @@ import { createTabMemory } from "./tab-memory"
 import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed-tabs"
 import { createDraftPromptSession, type PromptModel } from "./prompt-state"
 import { migrateTabs } from "./tab-migration"
+import { existingUnusedDraft } from "./unused-draft"
 
 export type SessionTab = {
   type: "session"
@@ -176,6 +177,18 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       if (draftID) removeDraftPersisted(draftID)
     }
 
+    const discardUnusedDrafts = (keep?: string) => {
+      const removed = store.filter((tab) => tab.type === "draft" && tab.draftID !== keep)
+      if (removed.length === 0) return
+      setStore((tabs) => tabs.filter((tab) => tab.type !== "draft" || tab.draftID === keep))
+      if (recent.key && removed.some((tab) => tabKey(tab) === recent.key)) setRecentKey(undefined)
+      for (const tab of removed) {
+        memory.remove(tabKey(tab))
+        removeInfo(tabKey(tab))
+        if (tab.type === "draft") removeDraftPersisted(tab.draftID)
+      }
+    }
+
     const actions = {
       addSessionTab: (tab: Omit<SessionTab, "type">) => {
         const next = { type: "session" as const, ...tab }
@@ -206,7 +219,21 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         if (!tab || tab.type !== "draft") throw new Error(`Draft not found: ${draftID}`)
         return tab
       },
+      discardUnusedDrafts,
       async newDraft(draft: Omit<DraftTab, "type" | "draftID">, prompt?: string, model?: PromptModel) {
+        const existing = prompt ? undefined : existingUnusedDraft(store, draft)
+        if (existing) {
+          discardUnusedDrafts(existing.draftID)
+          await startTransition(() => {
+            setStore(
+              (tab) => tab.type === "draft" && tab.draftID === existing.draftID,
+              produce((tab) => Object.assign(tab, draft)),
+            )
+            navigate(draftHref(existing.draftID))
+          })
+          return { ...existing, ...draft }
+        }
+        discardUnusedDrafts()
         const draftID = uuid()
         const tab = { type: "draft" as const, draftID, ...draft }
         memory.ensure(tabKey(tab), "prompt", () => createDraftPromptSession(draftID, { prompt, model }))

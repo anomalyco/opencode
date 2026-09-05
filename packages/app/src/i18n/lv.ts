@@ -882,6 +882,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Notīrīt paziņojumus",
   "sidebar.empty.title": "Nav atvērts neviens projekts",
   "sidebar.empty.description": "Atveriet projektu, lai sāktu",
+  "sidebar.history.runningChat": "Darbojas: {{title}}",
   "debugBar.ariaLabel": "Izstrādes veiktspējas diagnostika",
   "debugBar.na": "nav",
   "debugBar.nav.label": "NAV",
