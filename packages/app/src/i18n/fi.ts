@@ -79,6 +79,8 @@ export const dict = {
   "command.session.redo.description": "Toista viimeisin kumottu viesti",
   "command.session.compact": "Tiivistä istunto",
   "command.session.compact.description": "Tee yhteenveto istunnosta pienentääksesi kontekstin kokoa",
+  "command.session.background": "Suorita aliagentit taustalla",
+  "command.session.background.description": "Irrota tätä istuntoa estävät aliagentit ja jatka niitä taustalla",
   "command.session.fork": "Haarauta viestistä",
   "command.session.fork.description": "Luo uusi istunto edellisestä viestistä",
   "command.session.share": "Jaa istunto",
@@ -516,6 +518,7 @@ export const dict = {
   "toast.session.export.success.description": "Istunto tallennettu tiedostoon {{filename}}",
   "toast.session.export.failed.title": "Istunnon vieminen epäonnistui",
   "toast.session.export.failed.description": "Istuntoa vietäessä tapahtui virhe",
+  "toast.session.background.failed.title": "Aliagenttien siirtäminen taustalle epäonnistui",
 
   "toast.session.listFailed.title": "Projektin {{project}} istuntojen lataaminen epäonnistui",
   "toast.project.reloadFailed.title": "Projektin {{project}} lataaminen uudelleen epäonnistui",

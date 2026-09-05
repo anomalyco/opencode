@@ -83,6 +83,9 @@ export const dict = {
   "command.session.redo.description": "Letzte rückgängig gemachte Nachricht wiederherstellen",
   "command.session.compact": "Sitzung komprimieren",
   "command.session.compact.description": "Sitzung zusammenfassen, um die Kontextgröße zu reduzieren",
+  "command.session.background": "Subagenten im Hintergrund ausführen",
+  "command.session.background.description":
+    "Die Subagenten, die diese Sitzung blockieren, ablösen und im Hintergrund weiterlaufen lassen",
   "command.session.fork": "Von Nachricht abzweigen",
   "command.session.fork.description": "Neue Sitzung aus einer früheren Nachricht erstellen",
   "command.session.share": "Sitzung teilen",
@@ -512,6 +515,7 @@ export const dict = {
   "toast.session.export.success.description": "Sitzung unter {{filename}} gespeichert",
   "toast.session.export.failed.title": "Sitzung konnte nicht exportiert werden",
   "toast.session.export.failed.description": "Beim Exportieren der Sitzung ist ein Fehler aufgetreten",
+  "toast.session.background.failed.title": "Subagenten konnten nicht in den Hintergrund verschoben werden",
 
   "toast.session.listFailed.title": "Sitzungen für {{project}} konnten nicht geladen werden",
   "toast.update.title": "Update verfügbar",

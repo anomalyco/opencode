@@ -176,6 +176,9 @@ export const dict = {
   "command.session.redo.description": "Endurtaktu síðustu afturkölluðu skilaboðin",
   "command.session.compact": "Þjappa setu",
   "command.session.compact.description": "Draga setuna saman til að minnka samhengi",
+  "command.session.background": "Keyra undiragenta í bakgrunni",
+  "command.session.background.description":
+    "Aftengdu undiragentana sem stöðva þessa lotu og láttu þá halda áfram í bakgrunni",
   "command.session.fork": "Kvíslast frá skilaboðum",
   "command.session.fork.description": "Stofna nýja setu út frá fyrri skilaboðum",
   "command.session.share": "Deila setu",
@@ -624,6 +627,7 @@ export const dict = {
   "toast.session.export.success.description": "Vistað lota í {{filename}}",
   "toast.session.export.failed.title": "Mistókst að flytja út lotu",
   "toast.session.export.failed.description": "Villa kom upp við útflutning á lotunni",
+  "toast.session.background.failed.title": "Tókst ekki að keyra undiragenta í bakgrunni",
   "toast.session.listFailed.title": "Mistókst að hlaða lotum fyrir {{project}}",
   "toast.project.reloadFailed.title": "Mistókst að endurhlaða {{project}}",
   "toast.update.title": "Uppfærsla í boði",

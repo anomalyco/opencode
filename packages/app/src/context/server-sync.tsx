@@ -18,6 +18,7 @@ import {
   bootstrapGlobal,
   clearProviderRev,
   loadAgentsQuery,
+  loadCapabilitiesQuery,
   loadCommands,
   loadGlobalConfigQuery,
   loadPathQuery,
@@ -197,6 +198,7 @@ function makeQueryOptionsApi(
     mcpResources: (directory: PathKey) =>
       loadMcpResourcesQuery(scope, directory, serverAPI.mcp, sdkFor(directory), protocol),
     lsp: (directory: PathKey) => loadLspQuery(scope, directory, sdkFor(directory)),
+    capabilities: (directory: PathKey) => loadCapabilitiesQuery(scope, directory, sdkFor(directory)),
     sessions: (directory: PathKey) => ({ queryKey: [scope, directory, "loadSessions"] as const }),
   }
 }

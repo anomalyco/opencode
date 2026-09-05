@@ -172,6 +172,9 @@ export const dict = {
   "command.session.redo.description": "გაამეორეთ ბოლო გაუქმებული შეტყობინება",
   "command.session.compact": "კომპაქტური სესია",
   "command.session.compact.description": "შეაჯამეთ სესია კონტექსტის ზომის შესამცირებლად",
+  "command.session.background": "ქვეაგენტების ფონურ რეჟიმში გაშვება",
+  "command.session.background.description":
+    "მოხსენით ამ სესიის დამბლოკავი ქვეაგენტები და გააგრძელეთ ისინი ფონურ რეჟიმში",
   "command.session.fork": "შეტყობინებიდან განშტოება",
   "command.session.fork.description": "შექმენით ახალი სესია წინა შეტყობინებისგან",
   "command.session.share": "გაზიარება სესიის",
@@ -620,6 +623,7 @@ export const dict = {
   "toast.session.export.success.description": "სესია შენახულია {{filename}}",
   "toast.session.export.failed.title": "სესიის ექსპორტი ვერ მოხერხდა",
   "toast.session.export.failed.description": "მოხდა შეცდომა სესიის ექსპორტის დროს",
+  "toast.session.background.failed.title": "ქვეაგენტების ფონურ რეჟიმში გაშვება ვერ მოხერხდა",
   "toast.session.listFailed.title": "ვერ ჩაიტვირთა სესიები {{project}}",
   "toast.project.reloadFailed.title": "ვერ ჩაიტვირთა {{project}}",
   "toast.update.title": "ხელმისაწვდომია განახლება",

@@ -173,6 +173,9 @@ export const dict: Record<string, string> = {
   "command.session.redo.description": "শেষ পূর্বাবস্থায় ফেরানো বার্তাটি আবার করুন",
   "command.session.compact": "কমপ্যাক্ট সেশন",
   "command.session.compact.description": "প্রসঙ্গ আকার কমাতে সেশনের সারসংক্ষেপ করুন",
+  "command.session.background": "সাবএজেন্ট ব্যাকগ্রাউন্ডে চালান",
+  "command.session.background.description":
+    "এই সেশনটি আটকে রাখা সাবএজেন্টগুলিকে আলাদা করুন এবং ব্যাকগ্রাউন্ডে চালিয়ে যান",
   "command.session.fork": "বার্তা থেকে ফর্ক",
   "command.session.fork.description": "একটি পূর্ববর্তী বার্তা থেকে একটি নতুন সেশন তৈরি করুন",
   "command.session.share": "সেশন শেয়ার করুন",
@@ -620,6 +623,7 @@ export const dict: Record<string, string> = {
   "toast.session.export.success.description": "{{filename}}-এ সেশন সেভ করা হয়েছে",
   "toast.session.export.failed.title": "সেশন এক্সপোর্ট করতে ব্যর্থ হয়েছে৷",
   "toast.session.export.failed.description": "সেশন এক্সপোর্ট করার সময় একটি ত্রুটি ঘটেছে৷",
+  "toast.session.background.failed.title": "সাবএজেন্ট ব্যাকগ্রাউন্ডে চালানো যায়নি",
   "toast.session.listFailed.title": "{{project}} এর জন্য সেশন লোড করতে ব্যর্থ হয়েছে৷",
   "toast.project.reloadFailed.title": "{{project}} পুনরায় লোড করতে ব্যর্থ হয়েছে৷",
   "toast.update.title": "আপডেট উপলব্ধ",

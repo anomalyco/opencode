@@ -3,6 +3,7 @@ import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import type { VcsInfo } from "@opencode-ai/sdk/v2/client"
 import {
+  CAPABILITIES_DEFAULT,
   DIR_IDLE_TTL_MS,
   MAX_DIR_STORES,
   type ChildOptions,
@@ -200,6 +201,10 @@ export function createChildStoreManager(input: {
             ...input.queryOptions.references(key),
             enabled: instanceQueriesEnabled(),
           }))
+          const capabilitiesQuery = useQuery(() => ({
+            ...input.queryOptions.capabilities(key),
+            enabled: instanceQueriesEnabled(),
+          }))
 
           const child = createStore<State>({
             project: "",
@@ -215,6 +220,9 @@ export function createChildStoreManager(input: {
               return providerQuery.data ?? EMPTY
             },
             config: {},
+            get capabilities() {
+              return capabilitiesQuery.data ?? CAPABILITIES_DEFAULT
+            },
             get path() {
               const EMPTY = { state: "", config: "", worktree: "", directory, home: "" }
               if (pathQuery.isLoading) return EMPTY

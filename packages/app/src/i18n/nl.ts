@@ -172,6 +172,9 @@ export const dict = {
   "command.session.redo.description": "Voer het laatste ongedaan gemaakte bericht opnieuw uit",
   "command.session.compact": "Sessie comprimeren",
   "command.session.compact.description": "Vat de sessie samen om de contextgrootte te verkleinen",
+  "command.session.background": "Subagents op de achtergrond uitvoeren",
+  "command.session.background.description":
+    "Koppel de subagents los die deze sessie blokkeren en laat ze op de achtergrond doorlopen",
   "command.session.fork": "Afsplitsen vanaf bericht",
   "command.session.fork.description": "Maak een nieuwe sessie op basis van een eerder bericht",
   "command.session.share": "Sessie delen",
@@ -627,6 +630,7 @@ export const dict = {
   "toast.session.export.success.description": "Sessie opgeslagen in {{filename}}",
   "toast.session.export.failed.title": "Kan sessie niet exporteren",
   "toast.session.export.failed.description": "Er is een fout opgetreden tijdens het exporteren van de sessie",
+  "toast.session.background.failed.title": "Subagents konden niet naar de achtergrond worden verplaatst",
 
   "toast.session.listFailed.title": "Kan sessies voor {{project}} niet laden",
   "toast.project.reloadFailed.title": "Kan {{project}} niet opnieuw laden",

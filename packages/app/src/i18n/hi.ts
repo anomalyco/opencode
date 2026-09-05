@@ -179,6 +179,8 @@ export const dict = {
   "command.session.redo.description": "अंतिम पूर्ववत संदेश को पुनः करें",
   "command.session.compact": "सेशन संक्षिप्त करें",
   "command.session.compact.description": "कॉन्टेक्स्ट आकार को कम करने के लिए सेशन को सारांशित करें",
+  "command.session.background": "सब-एजेंट पृष्ठभूमि में चलाएँ",
+  "command.session.background.description": "इस सत्र को रोक रहे सब-एजेंट अलग करें और उन्हें पृष्ठभूमि में जारी रखें",
   "command.session.fork": "संदेश से फ़ोर्क",
   "command.session.fork.description": "पिछले संदेश से एक नया सेशन बनाएं",
   "command.session.share": "सेशन साझा करें",
@@ -629,6 +631,7 @@ export const dict = {
   "toast.session.export.success.description": "सेशन को {{filename}} में सहेजा गया",
   "toast.session.export.failed.title": "सेशन निर्यात करने में विफल",
   "toast.session.export.failed.description": "सेशन निर्यात करते समय एक त्रुटि हुई",
+  "toast.session.background.failed.title": "सब-एजेंट पृष्ठभूमि में नहीं चलाए जा सके",
 
   "toast.session.listFailed.title": "{{project}} के लिए सेशन लोड करने में विफल",
   "toast.project.reloadFailed.title": "{{project}} को पुनः लोड करने में विफल",

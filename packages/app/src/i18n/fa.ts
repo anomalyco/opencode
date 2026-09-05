@@ -173,6 +173,9 @@ export const dict = {
   "command.session.redo.description": "آخرین پیام لغو شده را دوباره انجام دهید",
   "command.session.compact": "جلسه فشرده",
   "command.session.compact.description": "برای کاهش اندازه زمینه، جلسه را خلاصه کنید",
+  "command.session.background": "اجرای زیرعامل‌ها در پس‌زمینه",
+  "command.session.background.description":
+    "زیرعامل‌هایی را که این جلسه را مسدود کرده‌اند جدا کنید و در پس‌زمینه ادامه دهید",
   "command.session.fork": "فورک از پیام",
   "command.session.fork.description": "یک جلسه جدید از پیام قبلی ایجاد کنید",
   "command.session.share": "جلسه را به اشتراک بگذارید",
@@ -620,6 +623,7 @@ export const dict = {
   "toast.session.export.success.description": "جلسه در {{filename}} ذخیره شد",
   "toast.session.export.failed.title": "جلسه صادر نشد",
   "toast.session.export.failed.description": "هنگام صادر کردن جلسه خطایی روی داد",
+  "toast.session.background.failed.title": "اجرای زیرعامل‌ها در پس‌زمینه ناموفق بود",
   "toast.session.listFailed.title": "جلسات برای {{project}} بارگیری نشد",
   "toast.project.reloadFailed.title": "بارگیری مجدد {{project}} انجام نشد",
   "toast.update.title": "به روز رسانی موجود است",

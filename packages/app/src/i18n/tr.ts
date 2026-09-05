@@ -190,6 +190,9 @@ export const dict = {
   "command.session.redo.description": "Son geri alınan mesajı yinele",
   "command.session.compact": "Oturumu sıkıştır",
   "command.session.compact.description": "Bağlam boyutunu azaltmak için oturumu özetle",
+  "command.session.background": "Alt aracıları arka planda çalıştır",
+  "command.session.background.description":
+    "Bu oturumu engelleyen alt aracıları ayırın ve arka planda çalışmaya devam etmelerini sağlayın",
   "command.session.fork": "Mesajdan dallandır",
   "command.session.fork.description": "Önceki bir mesajdan yeni oturum oluştur",
   "command.session.share": "Oturumu paylaş",
@@ -669,6 +672,7 @@ export const dict = {
   "toast.session.export.success.description": "Oturum {{filename}} dosyasına kaydedildi",
   "toast.session.export.failed.title": "Oturum dışa aktarılamadı",
   "toast.session.export.failed.description": "Oturum dışa aktarılırken bir hata oluştu",
+  "toast.session.background.failed.title": "Alt aracılar arka plana alınamadı",
 
   "toast.session.listFailed.title": "{{project}} için oturumlar yüklenemedi",
 

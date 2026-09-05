@@ -186,6 +186,9 @@ export const dict = {
   "command.session.redo.description": "Повторити останнє скасоване повідомлення",
   "command.session.compact": "Стиснути сесію",
   "command.session.compact.description": "Підсумувати сесію, щоб зменшити розмір контексту",
+  "command.session.background": "Запустити підагентів у фоні",
+  "command.session.background.description":
+    "Від'єднайте підагентів, які блокують цю сесію, і продовжте їх у фоновому режимі",
   "command.session.fork": "Відгалузити від повідомлення",
   "command.session.fork.description": "Створити нову сесію з попереднього повідомлення",
   "command.session.share": "Поділитися сесією",
@@ -679,6 +682,7 @@ export const dict = {
   "toast.session.export.success.description": "Сесію збережено у файл {{filename}}",
   "toast.session.export.failed.title": "Не вдалося експортувати сесію",
   "toast.session.export.failed.description": "Під час експортування сесії сталася помилка",
+  "toast.session.background.failed.title": "Не вдалося перевести підагентів у фоновий режим",
 
   "toast.session.listFailed.title": "Не вдалося завантажити сесії для {{project}}",
   "toast.project.reloadFailed.title": "Не вдалося перезавантажити {{project}}",

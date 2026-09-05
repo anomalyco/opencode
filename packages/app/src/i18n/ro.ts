@@ -172,6 +172,9 @@ export const dict = {
   "command.session.redo.description": "Refă ultimul mesaj anulat",
   "command.session.compact": "Compactează sesiunea",
   "command.session.compact.description": "Rezumă sesiunea pentru a reduce dimensiunea contextului",
+  "command.session.background": "Rulează subagenții în fundal",
+  "command.session.background.description":
+    "Detașează subagenții care blochează această sesiune și continuă-i în fundal",
   "command.session.fork": "Derivează din mesaj",
   "command.session.fork.description": "Creează o sesiune nouă dintr-un mesaj anterior",
   "command.session.share": "Partajează sesiunea",
@@ -620,6 +623,7 @@ export const dict = {
   "toast.session.export.success.description": "Sesiunea a fost salvată în {{filename}}",
   "toast.session.export.failed.title": "Nu s-a putut exporta sesiunea",
   "toast.session.export.failed.description": "A apărut o eroare la exportarea sesiunii",
+  "toast.session.background.failed.title": "Nu s-au putut rula subagenții în fundal",
   "toast.session.listFailed.title": "Nu s-au putut încărca sesiunile pentru {{project}}",
   "toast.project.reloadFailed.title": "Nu s-a putut reîncărca {{project}}",
   "toast.update.title": "Actualizare disponibilă",

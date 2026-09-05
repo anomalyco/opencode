@@ -174,6 +174,9 @@ export const dict = {
   "command.session.redo.description": "နောက်ဆုံးမပြီးသော မက်ဆေ့ဂျ်ကို ပြန်လုပ်ပါ။",
   "command.session.compact": "ကျစ်လစ်သိပ်သည်းသော စက်ရှင်",
   "command.session.compact.description": "အကြောင်းအရာအရွယ်အစားကို လျှော့ချရန် စက်ရှင်ကို အကျဉ်းချုံ့ပါ။",
+  "command.session.background": "အေးဂျင့်ခွဲများကို နောက်ခံတွင် ဆက်လုပ်ရန်",
+  "command.session.background.description":
+    "ဤစက်ရှင်ကို ပိတ်ဆို့ထားသော အေးဂျင့်ခွဲများကို ခွဲထုတ်ပြီး နောက်ခံတွင် ဆက်လက်လုပ်ဆောင်ပါ",
   "command.session.fork": "မက်ဆေ့ဂျ်မှ ခက်ရင်း",
   "command.session.fork.description": "ယခင်မက်ဆေ့ဂျ်မှ ဆက်ရှင်အသစ်တစ်ခု ဖန်တီးပါ။",
   "command.session.share": "စက်ရှင်ကို မျှဝေပါ။",
@@ -626,6 +629,7 @@ export const dict = {
   "toast.session.export.success.description": "စက်ရှင်ကို {{filename}} သို့ သိမ်းထားသည်။",
   "toast.session.export.failed.title": "စက်ရှင်ကို ထုတ်ယူ၍မရပါ။",
   "toast.session.export.failed.description": "စက်ရှင်ကို ထုတ်ယူနေစဉ် အမှားအယွင်းတစ်ခု ဖြစ်ပွားခဲ့သည်။",
+  "toast.session.background.failed.title": "အေးဂျင့်ခွဲများကို နောက်ခံသို့ ပြောင်း၍မရပါ",
   "toast.session.listFailed.title": "{{project}} အတွက် ဆက်ရှင်များကို တင်ရန် မအောင်မြင်ပါ။",
   "toast.project.reloadFailed.title": "{{project}} ကို ပြန်လည်စတင်ရန် မအောင်မြင်ပါ။",
   "toast.update.title": "အပ်ဒိတ် ရနိုင်ပါသည်။",

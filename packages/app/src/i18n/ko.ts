@@ -75,6 +75,9 @@ export const dict = {
   "command.session.redo.description": "마지막 실행 취소된 메시지 다시 실행",
   "command.session.compact": "세션 압축",
   "command.session.compact.description": "컨텍스트 크기를 줄이기 위해 세션 요약",
+  "command.session.background": "서브에이전트를 백그라운드로 전환",
+  "command.session.background.description":
+    "이 세션을 막고 있는 서브에이전트를 분리하고 백그라운드에서 계속 실행합니다",
   "command.session.fork": "메시지에서 분기",
   "command.session.fork.description": "이전 메시지에서 새 세션 생성",
   "command.session.share": "세션 공유",
@@ -421,6 +424,7 @@ export const dict = {
   "toast.session.export.success.description": "세션 저장 위치: {{filename}}",
   "toast.session.export.failed.title": "세션 내보내기 실패",
   "toast.session.export.failed.description": "세션을 내보내는 동안 오류가 발생했습니다",
+  "toast.session.background.failed.title": "서브에이전트를 백그라운드로 전환하지 못했습니다",
 
   "toast.session.listFailed.title": "{{project}}에 대한 세션을 로드하지 못했습니다",
   "toast.update.title": "업데이트 가능",

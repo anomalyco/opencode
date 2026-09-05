@@ -7,6 +7,7 @@ import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/con
 import {
   bootstrapDirectory,
   loadAgentsQuery,
+  loadCapabilitiesQuery,
   loadCommands,
   loadGlobalConfigQuery,
   loadPathQuery,
@@ -14,7 +15,7 @@ import {
   loadProvidersQuery,
   loadReferencesQuery,
 } from "./bootstrap"
-import type { State, VcsCache } from "./types"
+import { CAPABILITIES_DEFAULT, type State, type VcsCache } from "./types"
 import { ServerScope } from "@/utils/server-scope"
 import type { ServerApi } from "@/utils/server"
 
@@ -50,6 +51,7 @@ function directoryState() {
     provider_ready: true,
     provider,
     config: {},
+    capabilities: CAPABILITIES_DEFAULT,
     path: { state: "", config: "", worktree: "/project", directory: "/project", home: "/home" },
     session: [],
     sessionTotal: 0,
@@ -326,5 +328,31 @@ describe("query keys", () => {
 
     expect(calls).toEqual([{ location: { directory: "/repo" } }])
     expect(result).toHaveLength(1)
+  })
+
+  test("loads experimental capabilities", async () => {
+    const sdk = {
+      experimental: { capabilities: { get: async () => ({ data: { backgroundSubagents: true } }) } },
+    } as unknown as OpencodeClient
+
+    const result = await new QueryClient().fetchQuery(loadCapabilitiesQuery(ServerScope.local, "/repo", sdk))
+
+    expect(result).toEqual({ backgroundSubagents: true })
+  })
+
+  test("treats an unsupported capabilities endpoint as no capabilities", async () => {
+    const sdk = {
+      experimental: {
+        capabilities: {
+          get: async () => {
+            throw new Error("404")
+          },
+        },
+      },
+    } as unknown as OpencodeClient
+
+    const result = await new QueryClient().fetchQuery(loadCapabilitiesQuery(ServerScope.local, "/repo", sdk))
+
+    expect(result).toEqual({ backgroundSubagents: false })
   })
 })

@@ -180,6 +180,9 @@ export const dict = {
   "command.session.redo.description": "Refazer a última mensagem desfeita",
   "command.session.compact": "Compactar sessão",
   "command.session.compact.description": "Resumir a sessão para reduzir o tamanho do contexto",
+  "command.session.background": "Executar subagentes em segundo plano",
+  "command.session.background.description":
+    "Desanexe os subagentes que estão bloqueando esta sessão e continue-os em segundo plano",
   "command.session.fork": "Bifurcar da mensagem",
   "command.session.fork.description": "Criar uma nova sessão a partir de uma mensagem anterior",
   "command.session.share": "Compartilhar sessão",
@@ -621,6 +624,7 @@ export const dict = {
   "toast.session.export.success.description": "Sessão salva em {{filename}}",
   "toast.session.export.failed.title": "Falha ao exportar sessão",
   "toast.session.export.failed.description": "Ocorreu um erro ao exportar a sessão",
+  "toast.session.background.failed.title": "Falha ao executar os subagentes em segundo plano",
 
   "toast.session.listFailed.title": "Falha ao carregar sessões para {{project}}",
   "toast.update.title": "Atualização disponível",

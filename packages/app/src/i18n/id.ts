@@ -186,6 +186,8 @@ export const dict = {
   "command.session.redo.description": "Ulangi pesan yang diurungkan",
   "command.session.compact": "Ringkas sesi",
   "command.session.compact.description": "Ringkas sesi untuk mengurangi ukuran konteks",
+  "command.session.background": "Jalankan subagen di latar belakang",
+  "command.session.background.description": "Lepaskan subagen yang memblokir sesi ini dan lanjutkan di latar belakang",
   "command.session.fork": "Fork dari pesan",
   "command.session.fork.description": "Buat sesi baru dari pesan sebelumnya",
   "command.session.share": "Bagikan sesi",
@@ -675,6 +677,7 @@ export const dict = {
   "toast.session.export.success.description": "Sesi disimpan ke {{filename}}",
   "toast.session.export.failed.title": "Gagal mengekspor sesi",
   "toast.session.export.failed.description": "Terjadi kesalahan saat mengekspor sesi",
+  "toast.session.background.failed.title": "Gagal menjalankan subagen di latar belakang",
 
   "toast.session.listFailed.title": "Gagal memuat sesi untuk {{project}}",
   "toast.project.reloadFailed.title": "Gagal memuat ulang {{project}}",

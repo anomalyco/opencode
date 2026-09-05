@@ -173,6 +173,9 @@ export const dict = {
   "command.session.redo.description": "Gör om det senaste ångrade meddelandet",
   "command.session.compact": "Komprimera session",
   "command.session.compact.description": "Sammanfatta sessionen för att minska kontextstorleken",
+  "command.session.background": "Kör underagenter i bakgrunden",
+  "command.session.background.description":
+    "Koppla loss underagenterna som blockerar den här sessionen och låt dem fortsätta i bakgrunden",
   "command.session.fork": "Förgrena från meddelande",
   "command.session.fork.description": "Skapa en ny session från ett tidigare meddelande",
   "command.session.share": "Dela session",
@@ -625,6 +628,7 @@ export const dict = {
   "toast.session.export.success.description": "Sessionen sparades i {{filename}}",
   "toast.session.export.failed.title": "Det gick inte att exportera sessionen",
   "toast.session.export.failed.description": "Ett fel uppstod när sessionen exporterades",
+  "toast.session.background.failed.title": "Det gick inte att köra underagenterna i bakgrunden",
 
   "toast.session.listFailed.title": "Det gick inte att läsa in sessioner för {{project}}",
   "toast.project.reloadFailed.title": "Det gick inte att ladda om {{project}}",

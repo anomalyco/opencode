@@ -176,6 +176,9 @@ export const dict = {
   "command.session.redo.description": "Ismételje meg az utolsó visszavont üzenetet",
   "command.session.compact": "Munkamenet tömörítése",
   "command.session.compact.description": "A kontextus méretének csökkentése érdekében foglalja össze a munkamenetet",
+  "command.session.background": "Alügynökök futtatása a háttérben",
+  "command.session.background.description":
+    "Válaszd le a munkamenetet blokkoló alügynököket, és futtasd őket tovább a háttérben",
   "command.session.fork": "Elágazás az üzenettől",
   "command.session.fork.description": "Hozzon létre új munkamenetet egy korábbi üzenetből",
   "command.session.share": "Munkamenet megosztása",
@@ -625,6 +628,7 @@ export const dict = {
   "toast.session.export.success.description": "A munkamenet elmentve ide: {{filename}}",
   "toast.session.export.failed.title": "Nem sikerült exportálni a munkamenetet",
   "toast.session.export.failed.description": "Hiba történt a munkamenet exportálása közben",
+  "toast.session.background.failed.title": "Az alügynökök háttérbe helyezése sikertelen",
   "toast.session.listFailed.title": "Nem sikerült betölteni a {{project}} munkameneteit",
   "toast.project.reloadFailed.title": "A {{project}} újratöltése nem sikerült",
   "toast.update.title": "Frissítés elérhető",

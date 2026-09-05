@@ -174,6 +174,9 @@ export const dict = {
   "command.session.redo.description": "Կրկնել վերջին չեղարկված հաղորդագրությունը",
   "command.session.compact": "Կոմպակտ նիստ",
   "command.session.compact.description": "Ամփոփեք նիստը՝ համատեքստի չափը նվազեցնելու համար",
+  "command.session.background": "Ենթագործակալները տեղափոխել ֆոն",
+  "command.session.background.description":
+    "Անջատեք այս սեսիան արգելափակող ենթագործակալները և շարունակեք դրանք ֆոնային ռեժիմում",
   "command.session.fork": "Ստեղծել ճյուղ հաղորդագրությունից",
   "command.session.fork.description": "Ստեղծել նոր նիստ նախորդ հաղորդագրությունից",
   "command.session.share": "Կիսվել նիստ",
@@ -624,6 +627,7 @@ export const dict = {
   "toast.session.export.success.description": "Նիստը պահվել է {{filename}}-ում",
   "toast.session.export.failed.title": "Չհաջողվեց արտահանել նիստը",
   "toast.session.export.failed.description": "Սխալ է տեղի ունեցել նիստը արտահանելիս",
+  "toast.session.background.failed.title": "Չհաջողվեց ենթագործակալները տեղափոխել ֆոնային ռեժիմ",
   "toast.session.listFailed.title": "Չհաջողվեց բեռնել նիստերը {{project}}",
   "toast.project.reloadFailed.title": "Չհաջողվեց վերաբեռնել {{project}}",
   "toast.update.title": "Թարմացումը հասանելի է",

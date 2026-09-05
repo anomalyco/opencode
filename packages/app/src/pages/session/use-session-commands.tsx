@@ -12,6 +12,7 @@ import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
+import { formatServerError } from "@/utils/server-errors"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
@@ -421,6 +422,35 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     )
   }
 
+  // Synchronous subagents block the parent turn until they finish, so the session sits in
+  // "thinking" for as long as the child runs. Mirrors the TUI's `session.background` command.
+  const foregroundTasks = () => {
+    if (!sync().data.capabilities.backgroundSubagents) return []
+    return messages().flatMap((message) =>
+      (sync().data.part[message.id] ?? []).filter(
+        (part) =>
+          part.type === "tool" &&
+          part.tool === "task" &&
+          part.state.status === "running" &&
+          part.state.metadata?.background !== true,
+      ),
+    )
+  }
+
+  const background = async () => {
+    const sessionID = params.id
+    if (!sessionID) return
+    await sdk()
+      .client.experimental.session.background({ sessionID })
+      .catch((err) => {
+        showToast({
+          variant: "error",
+          title: language.t("toast.session.background.failed.title"),
+          description: formatServerError(err, language.t),
+        })
+      })
+  }
+
   const shareCmds = () => {
     if (sync().data.config.share === "disabled") return []
     return [
@@ -482,6 +512,15 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       slash: "compact",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: compact,
+    }),
+    sessionCommand({
+      id: "session.background",
+      title: language.t("command.session.background"),
+      description: language.t("command.session.background.description"),
+      slash: "background",
+      disabled: foregroundTasks().length === 0,
+      hidden: foregroundTasks().length === 0,
+      onSelect: () => void background(),
     }),
     sessionCommand({
       id: "session.fork",

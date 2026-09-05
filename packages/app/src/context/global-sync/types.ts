@@ -19,6 +19,12 @@ import type { CommandInfo, McpResource, McpServer, SessionMessageInfo } from "@o
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 
+export type ExperimentalCapabilities = {
+  backgroundSubagents: boolean
+}
+
+export const CAPABILITIES_DEFAULT: ExperimentalCapabilities = { backgroundSubagents: false }
+
 export type ProjectMeta = {
   name?: string
   icon?: {
@@ -41,6 +47,7 @@ export type State = {
   provider_ready: boolean
   provider: NormalizedProviderListResponse
   config: Config
+  capabilities: ExperimentalCapabilities
   path: Path
   session: Session[]
   sessionTotal: number

@@ -173,6 +173,9 @@ export const dict = {
   "command.session.redo.description": "Повторете ја последната отповикана порака",
   "command.session.compact": "Компактна сесија",
   "command.session.compact.description": "Сумирајте ја сесијата за да ја намалите големината на контекстот",
+  "command.session.background": "Подагенти во заднина",
+  "command.session.background.description":
+    "Одвојте ги подагентите што ја блокираат оваа сесија и продолжете ги во заднина",
   "command.session.fork": "Разгранување од порака",
   "command.session.fork.description": "Креирајте нова сесија од претходната порака",
   "command.session.share": "Споделете сесија",
@@ -623,6 +626,7 @@ export const dict = {
   "toast.session.export.success.description": "Сесијата е зачувана во {{filename}}",
   "toast.session.export.failed.title": "Не успеа да се извезе сесијата",
   "toast.session.export.failed.description": "Настана грешка при извезувањето на сесијата",
+  "toast.session.background.failed.title": "Не успеа префрлањето на подагентите во заднина",
   "toast.session.listFailed.title": "Не успеа да се вчитаат сесиите за {{project}}",
   "toast.project.reloadFailed.title": "Не успеа повторно да се вчита {{project}}",
   "toast.update.title": "Достапно е ажурирање",

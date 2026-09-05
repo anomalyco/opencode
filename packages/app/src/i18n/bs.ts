@@ -186,6 +186,8 @@ export const dict = {
   "command.session.redo.description": "Vrati posljednju poništenu poruku",
   "command.session.compact": "Sažmi sesiju",
   "command.session.compact.description": "Sažmi sesiju kako bi se smanjio kontekst",
+  "command.session.background": "Podagenti u pozadini",
+  "command.session.background.description": "Odvojite podagente koji blokiraju ovu sesiju i nastavite ih u pozadini",
   "command.session.fork": "Fork iz poruke",
   "command.session.fork.description": "Kreiraj novu sesiju iz prethodne poruke",
   "command.session.share": "Podijeli sesiju",
@@ -666,6 +668,7 @@ export const dict = {
   "toast.session.export.success.description": "Sesija je sačuvana kao {{filename}}",
   "toast.session.export.failed.title": "Izvoz sesije nije uspio",
   "toast.session.export.failed.description": "Došlo je do greške prilikom izvoza sesije",
+  "toast.session.background.failed.title": "Neuspjelo prebacivanje podagenata u pozadinu",
 
   "toast.session.listFailed.title": "Neuspjelo učitavanje sesija za {{project}}",
 

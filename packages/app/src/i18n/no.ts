@@ -184,6 +184,9 @@ export const dict = {
   "command.session.redo.description": "Gjør om siste angrede melding",
   "command.session.compact": "Komprimer sesjon",
   "command.session.compact.description": "Oppsummer sesjonen for å redusere kontekststørrelsen",
+  "command.session.background": "Kjør underagenter i bakgrunnen",
+  "command.session.background.description":
+    "Koble fra underagentene som blokkerer denne økten, og la dem fortsette i bakgrunnen",
   "command.session.fork": "Forgren fra melding",
   "command.session.fork.description": "Opprett en ny sesjon fra en tidligere melding",
   "command.session.share": "Del sesjon",
@@ -570,6 +573,7 @@ export const dict = {
   "toast.session.export.success.description": "Sesjonen ble lagret i {{filename}}",
   "toast.session.export.failed.title": "Kunne ikke eksportere sesjon",
   "toast.session.export.failed.description": "Det oppstod en feil under eksport av sesjonen",
+  "toast.session.background.failed.title": "Kunne ikke kjøre underagenter i bakgrunnen",
 
   "toast.session.listFailed.title": "Kunne ikke laste sesjoner for {{project}}",
 

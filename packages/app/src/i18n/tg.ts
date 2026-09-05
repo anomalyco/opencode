@@ -173,6 +173,9 @@ export const dict = {
   "command.session.redo.description": "Паёми охирини бекоршударо такрор кунед",
   "command.session.compact": "Сеанси компакт",
   "command.session.compact.description": "Барои кам кардани андозаи контекст ҷаласаро ҷамъбаст кунед",
+  "command.session.background": "Иҷрои зерагентҳо дар замина",
+  "command.session.background.description":
+    "Зерагентҳоеро, ки ин ҷаласаро банд кардаанд, ҷудо кунед ва дар замина идома диҳед",
   "command.session.fork": "Аз паём шоха созед",
   "command.session.fork.description": "Аз паёми қаблӣ сессияи нав эҷод кунед",
   "command.session.share": "Сеанси мубодила",
@@ -623,6 +626,7 @@ export const dict = {
   "toast.session.export.success.description": "Сеанс ба {{filename}} захира карда шуд",
   "toast.session.export.failed.title": "Сеанс содир карда нашуд",
   "toast.session.export.failed.description": "Ҳангоми содироти сессия хатогӣ рӯй дод",
+  "toast.session.background.failed.title": "Иҷрои зерагентҳо дар замина ноком шуд",
   "toast.session.listFailed.title": "Сеансҳо барои {{project}} бор карда нашуд",
   "toast.project.reloadFailed.title": "Аз нав бор кардан муяссар нашуд {{project}}",
   "toast.update.title": "Навсозии дастрас",
