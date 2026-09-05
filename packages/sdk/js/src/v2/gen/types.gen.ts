@@ -10141,6 +10141,46 @@ export type SessionSummarizeResponses = {
 
 export type SessionSummarizeResponse = SessionSummarizeResponses[keyof SessionSummarizeResponses]
 
+export type SessionSideQuestionData = {
+  body?: {
+    question: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/side-question"
+}
+
+export type SessionSideQuestionErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * InternalServerError
+   */
+  500: EffectHttpApiErrorInternalServerError
+}
+
+export type SessionSideQuestionError = SessionSideQuestionErrors[keyof SessionSideQuestionErrors]
+
+export type SessionSideQuestionResponses = {
+  /**
+   * Side question answer
+   */
+  200: string
+}
+
+export type SessionSideQuestionResponse = SessionSideQuestionResponses[keyof SessionSideQuestionResponses]
+
 export type SessionPromptAsyncData = {
   body?: {
     messageID?: string
