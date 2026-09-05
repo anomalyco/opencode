@@ -7,11 +7,11 @@ import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { usePlatform } from "@/context/platform"
 import { ServerConnection } from "@/context/server"
-import { closeHomeProject, errorMessage, homeProjectDirectories } from "@/pages/layout/helpers"
+import { closeHomeProject, displayName, errorMessage, homeProjectDirectories } from "@/pages/layout/helpers"
 import { Persist, persisted } from "@/utils/persist"
 import { showToast } from "@/utils/toast"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { createResource } from "solid-js"
+import { batch, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { HomeController } from "./home-controller"
 
@@ -38,6 +38,41 @@ export function createHomeProjectsController(home: HomeController) {
 
   function canRevealProject(conn: ServerConnection.Any) {
     return platform.platform === "desktop" && !!platform.openPath && ServerConnection.local(conn)
+  }
+
+  function confirmForgetClosed(conn: ServerConnection.Any, projects: LocalProject[], onConfirm: () => void) {
+    const single = projects.length === 1 ? projects[0] : undefined
+    const title = language.t("home.recentlyClosed.remove.title")
+    const description =
+      single !== undefined
+        ? language.t("home.recentlyClosed.remove.confirm", { name: displayName(single) })
+        : language.t("home.recentlyClosed.remove.confirmMany", { count: projects.length })
+    void import("@opencode-ai/ui/v2/dialog-v2").then(({ DialogV2, DialogHeader, DialogTitleGroup, DialogFooter }) =>
+      import("@opencode-ai/ui/v2/button-v2").then(({ ButtonV2 }) =>
+        dialog.show(() => (
+          <DialogV2 fit>
+            <DialogHeader hideClose>
+              <DialogTitleGroup title={title} description={description} />
+            </DialogHeader>
+            <DialogFooter>
+              <ButtonV2 variant="ghost" onClick={() => dialog.close()}>
+                {language.t("common.cancel")}
+              </ButtonV2>
+              <ButtonV2
+                variant="danger"
+                data-action="recently-closed-confirm-remove"
+                onClick={() => {
+                  dialog.close()
+                  onConfirm()
+                }}
+              >
+                {language.t("home.recentlyClosed.remove.button")}
+              </ButtonV2>
+            </DialogFooter>
+          </DialogV2>
+        )),
+      ),
+    )
   }
 
   return {
@@ -67,10 +102,130 @@ export function createHomeProjectsController(home: HomeController) {
     project: {
       list: home.project.list,
       recentlyClosed: home.project.recentlyClosed,
+      closedForServer: home.project.closedForServer,
+      isHiddenClosed: home.project.isHiddenClosed,
+      isArchivedClosed: home.project.isArchivedClosed,
       homedir: home.project.homedir,
       select: home.project.select,
       add: home.project.add,
       openNewSession: home.project.openProjectNewSession,
+      reopenClosed: (conn: ServerConnection.Any, directory: string) => {
+        if (home.server.health(conn)?.healthy === false) return
+        home.project.add(conn, [directory])
+        showToast({ title: language.t("home.recentlyClosed.toast.reopened") })
+      },
+      archiveClosed: (conn: ServerConnection.Any, directory: string) => {
+        home.project.archiveClosed(conn, directory)
+        showToast({
+          title: language.t("home.recentlyClosed.toast.archived"),
+          actions: [
+            {
+              label: language.t("home.recentlyClosed.toast.undo"),
+              onClick: () => home.project.unarchiveClosed(conn, directory),
+            },
+          ],
+        })
+      },
+      unarchiveClosed: (conn: ServerConnection.Any, directory: string) => {
+        home.project.unarchiveClosed(conn, directory)
+        showToast({ title: language.t("home.recentlyClosed.toast.unarchived") })
+      },
+      hideClosed: (conn: ServerConnection.Any, directory: string) => {
+        home.project.hideClosed(conn, directory)
+        showToast({
+          title: language.t("home.recentlyClosed.toast.hidden"),
+          actions: [
+            {
+              label: language.t("home.recentlyClosed.toast.undo"),
+              onClick: () => home.project.unhideClosed(conn, directory),
+            },
+          ],
+        })
+      },
+      unhideClosed: (conn: ServerConnection.Any, directory: string) => {
+        home.project.unhideClosed(conn, directory)
+        showToast({ title: language.t("home.recentlyClosed.toast.unhidden") })
+      },
+      moveClosedTop: (conn: ServerConnection.Any, directory: string) => {
+        home.project.moveClosedTop(conn, directory)
+      },
+      removeClosed: (conn: ServerConnection.Any, project: LocalProject) => {
+        void confirmForgetClosed(conn, [project], () => {
+          home.project.removeClosed(conn, project.worktree)
+          showToast({
+            title: language.t("home.recentlyClosed.toast.removed"),
+            actions: [
+              {
+                label: language.t("home.recentlyClosed.toast.undo"),
+                onClick: () => home.server.context(conn).projects.close(project.worktree),
+              },
+            ],
+          })
+        })
+      },
+      batchReopen: (conn: ServerConnection.Any, directories: string[]) => {
+        if (directories.length === 0) return
+        if (home.server.health(conn)?.healthy === false) return
+        home.project.add(conn, directories)
+        showToast({ title: language.t("home.recentlyClosed.toast.reopened") })
+      },
+      batchArchive: (conn: ServerConnection.Any, directories: string[]) => {
+        if (directories.length === 0) return
+        batch(() => {
+          for (const directory of directories) home.project.archiveClosed(conn, directory)
+        })
+        showToast({
+          title: language.t("home.recentlyClosed.toast.archived"),
+          actions: [
+            {
+              label: language.t("home.recentlyClosed.toast.undo"),
+              onClick: () =>
+                batch(() => {
+                  for (const directory of directories) home.project.unarchiveClosed(conn, directory)
+                }),
+            },
+          ],
+        })
+      },
+      batchHide: (conn: ServerConnection.Any, directories: string[]) => {
+        if (directories.length === 0) return
+        batch(() => {
+          for (const directory of directories) home.project.hideClosed(conn, directory)
+        })
+        showToast({
+          title: language.t("home.recentlyClosed.toast.hidden"),
+          actions: [
+            {
+              label: language.t("home.recentlyClosed.toast.undo"),
+              onClick: () =>
+                batch(() => {
+                  for (const directory of directories) home.project.unhideClosed(conn, directory)
+                }),
+            },
+          ],
+        })
+      },
+      batchRemove: (conn: ServerConnection.Any, projects: LocalProject[]) => {
+        if (projects.length === 0) return
+        void confirmForgetClosed(conn, projects, () => {
+          const directories = projects.map((project) => project.worktree)
+          batch(() => {
+            for (const directory of directories) home.project.removeClosed(conn, directory)
+          })
+          showToast({
+            title: language.t("home.recentlyClosed.toast.removed"),
+            actions: [
+              {
+                label: language.t("home.recentlyClosed.toast.undo"),
+                onClick: () =>
+                  batch(() => {
+                    for (const directory of directories) home.server.context(conn).projects.close(directory)
+                  }),
+              },
+            ],
+          })
+        })
+      },
       edit: (conn: ServerConnection.Any, project: LocalProject) => {
         void import("@/components/dialog-edit-project-v2").then(({ DialogEditProjectV2 }) => {
           void dialog.show(() => <DialogEditProjectV2 server={conn} project={project} />)

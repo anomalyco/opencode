@@ -20,6 +20,7 @@ import { ServerRowMenuView, serverMenuLabels } from "@/components/server/server-
 import { ServerHealthIndicator } from "@/components/server/server-row"
 import { type ServerHealth } from "@/utils/server-health"
 import { fileManagerApp } from "@/utils/file-manager"
+import { HomeRecentlyClosedSection } from "./home-recently-closed-view"
 
 const HOME_PROJECT_NAV_LABEL = "min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
 
@@ -32,6 +33,9 @@ export type HomeProjectsViewProps = {
   servers: Accessor<ServerConnection.Any[]>
   projects: Accessor<LocalProject[]>
   recentlyClosed: Accessor<LocalProject[]>
+  closedForServer: (server: ServerConnection.Any) => LocalProject[]
+  isHiddenClosed: (server: ServerConnection.Any, directory: string) => boolean
+  isArchivedClosed: (server: ServerConnection.Any, directory: string) => boolean
   selection: Accessor<HomeProjectSelection>
   homedir: Accessor<string>
   serverHealth: (server: ServerConnection.Any) => ServerHealth | undefined
@@ -56,6 +60,17 @@ export type HomeProjectsViewProps = {
   onRevealProject: (server: ServerConnection.Any, project: LocalProject) => void
   onClearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
   onCloseProject: (server: ServerConnection.Any, directory: string) => void
+  onReopenClosed: (server: ServerConnection.Any, directory: string) => void
+  onArchiveClosed: (server: ServerConnection.Any, directory: string) => void
+  onUnarchiveClosed: (server: ServerConnection.Any, directory: string) => void
+  onHideClosed: (server: ServerConnection.Any, directory: string) => void
+  onUnhideClosed: (server: ServerConnection.Any, directory: string) => void
+  onRemoveClosed: (server: ServerConnection.Any, project: LocalProject) => void
+  onMoveClosedTop: (server: ServerConnection.Any, directory: string) => void
+  onBatchReopenClosed: (server: ServerConnection.Any, directories: string[]) => void
+  onBatchArchiveClosed: (server: ServerConnection.Any, directories: string[]) => void
+  onBatchHideClosed: (server: ServerConnection.Any, directories: string[]) => void
+  onBatchRemoveClosed: (server: ServerConnection.Any, projects: LocalProject[]) => void
   onOpenSettings: () => void
   onOpenHelp: () => void
 }
@@ -66,6 +81,19 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
     contextMenuOpen: (id: string) => contextMenu.open === id,
     onSetContextMenuOpen: (id: string, open: boolean) => setContextMenu("open", open ? id : undefined),
   }
+  const closedActions = () => ({
+    onReopen: props.onReopenClosed,
+    onArchive: props.onArchiveClosed,
+    onUnarchive: props.onUnarchiveClosed,
+    onHide: props.onHideClosed,
+    onUnhide: props.onUnhideClosed,
+    onRemove: props.onRemoveClosed,
+    onMoveTop: props.onMoveClosedTop,
+    onBatchReopen: props.onBatchReopenClosed,
+    onBatchArchive: props.onBatchArchiveClosed,
+    onBatchHide: props.onBatchHideClosed,
+    onBatchRemove: props.onBatchRemoveClosed,
+  })
   return (
     <aside
       class={`
@@ -80,9 +108,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
     >
       <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-1.5 pr-3">
         <div class="text-v2-text-text-muted [font-weight:530]">{props.language.t("home.projects")}</div>
-        <Show
-          when={props.servers().length === 1 && !(props.projects().length === 0 && props.recentlyClosed().length > 0)}
-        >
+        <Show when={props.servers().length === 1}>
           <TooltipV2 placement="bottom" value={props.language.t("home.project.add")}>
             <IconButtonV2
               data-action="home-add-project"
@@ -101,16 +127,33 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
         <Show
           when={props.servers().length > 1}
           fallback={
-            <div class="pr-3">
+            <div class="flex min-w-0 flex-col gap-2 pr-3">
               <Show
                 when={props.projects().length > 0}
-                fallback={<HomeProjectEmpty {...props} server={props.servers()[0]} items={props.recentlyClosed()} />}
+                fallback={
+                  <HomeProjectEmpty
+                    {...props}
+                    {...contextMenuProps}
+                    server={props.servers()[0]}
+                    closedActions={closedActions()}
+                  />
+                }
               >
                 <HomeProjectList
                   {...props}
                   {...contextMenuProps}
                   server={props.servers()[0]}
                   items={props.projects()}
+                />
+                <HomeRecentlyClosedSection
+                  language={props.language}
+                  server={props.servers()[0]}
+                  items={props.recentlyClosed()}
+                  homedir={props.homedir()}
+                  disabled={props.serverHealth(props.servers()[0])?.healthy === false}
+                  isHidden={(directory) => props.isHiddenClosed(props.servers()[0], directory)}
+                  isArchived={(directory) => props.isArchivedClosed(props.servers()[0], directory)}
+                  actions={closedActions()}
                 />
               </Show>
             </div>
@@ -120,6 +163,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
             <For each={props.servers()}>
               {(item) => {
                 const projects = () => props.projectsForServer(item)
+                const closed = () => props.closedForServer(item)
                 const healthy = () => !!props.serverHealth(item)?.healthy
                 const hasProjects = () => projects().length > 0
                 const collapsed = () => props.collapsed(item)
@@ -136,6 +180,18 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
                     <Show when={healthy() && hasProjects() && !collapsed()}>
                       <div class="mx-3 h-px bg-v2-border-border-base" />
                       <HomeProjectList {...props} {...contextMenuProps} server={item} items={projects()} />
+                    </Show>
+                    <Show when={healthy() && !collapsed() && closed().length > 0}>
+                      <HomeRecentlyClosedSection
+                        language={props.language}
+                        server={item}
+                        items={closed()}
+                        homedir={props.homedir()}
+                        disabled={!healthy()}
+                        isHidden={(directory) => props.isHiddenClosed(item, directory)}
+                        isArchived={(directory) => props.isArchivedClosed(item, directory)}
+                        actions={closedActions()}
+                      />
                     </Show>
                   </div>
                 )
@@ -386,7 +442,19 @@ function HomeProjectSlot(
 function HomeProjectEmpty(
   props: HomeProjectsViewProps & {
     server: ServerConnection.Any
-    items: LocalProject[]
+    closedActions: {
+      onReopen: HomeProjectsViewProps["onReopenClosed"]
+      onArchive: HomeProjectsViewProps["onArchiveClosed"]
+      onUnarchive: HomeProjectsViewProps["onUnarchiveClosed"]
+      onHide: HomeProjectsViewProps["onHideClosed"]
+      onUnhide: HomeProjectsViewProps["onUnhideClosed"]
+      onRemove: HomeProjectsViewProps["onRemoveClosed"]
+      onMoveTop: HomeProjectsViewProps["onMoveClosedTop"]
+      onBatchReopen: HomeProjectsViewProps["onBatchReopenClosed"]
+      onBatchArchive: HomeProjectsViewProps["onBatchArchiveClosed"]
+      onBatchHide: HomeProjectsViewProps["onBatchHideClosed"]
+      onBatchRemove: HomeProjectsViewProps["onBatchRemoveClosed"]
+    }
   },
 ) {
   const unreachable = () => props.serverHealth(props.server)?.healthy === false
@@ -402,44 +470,17 @@ function HomeProjectEmpty(
         <IconV2 name="folder-add-left" size="small" />
         <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("home.project.add")}</span>
       </HomeProjectNavButton>
-      <Show when={props.items.length > 0}>
-        <div class="mt-3 flex h-7 min-w-0 shrink-0 items-center pl-1.5 pr-3">
-          <div class="text-v2-text-text-faint [font-weight:530]">{props.language.t("home.recentlyClosed")}</div>
-        </div>
-        <For each={props.items}>
-          {(project) => <HomeRecentlyClosedRow {...props} project={project} server={props.server} />}
-        </For>
-      </Show>
-    </div>
-  )
-}
-
-function HomeRecentlyClosedRow(
-  props: HomeProjectsViewProps & {
-    project: LocalProject
-    server: ServerConnection.Any
-  },
-) {
-  const unreachable = () => props.serverHealth(props.server)?.healthy === false
-  const path = () => {
-    const home = props.homedir()
-    const worktree = props.project.worktree
-    if (home && (worktree === home || worktree.startsWith(`${home}/`))) return `~${worktree.slice(home.length)}`
-    return worktree
-  }
-  return (
-    <TooltipV2 placement="right" value={path()}>
-      <HomeProjectNavButton
-        type="button"
-        data-component="home-recently-closed-row"
-        class="disabled:opacity-60"
+      <HomeRecentlyClosedSection
+        language={props.language}
+        server={props.server}
+        items={props.recentlyClosed()}
+        homedir={props.homedir()}
         disabled={unreachable()}
-        onClick={() => props.onAddProjects(props.server, [props.project.worktree])}
-      >
-        <HomeProjectAvatar project={props.project} outline />
-        <span class={HOME_PROJECT_NAV_LABEL}>{displayName(props.project)}</span>
-      </HomeProjectNavButton>
-    </TooltipV2>
+        isHidden={(directory) => props.isHiddenClosed(props.server, directory)}
+        isArchived={(directory) => props.isArchivedClosed(props.server, directory)}
+        actions={props.closedActions}
+      />
+    </div>
   )
 }
 

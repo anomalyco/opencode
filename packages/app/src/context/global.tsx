@@ -1,7 +1,7 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createEffect, createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
+import { createServerProjects, RECENTLY_CLOSED_HISTORY_LIMIT, ServerConnection, useServer } from "./server"
 import { pathKey } from "@/utils/path-key"
 import { useServerHealth } from "@/utils/server-health"
 import { createServerSdkContext } from "./server-sdk"
@@ -133,7 +133,7 @@ function createServerCtx(
     return projects
       .recentlyClosed()
       .filter((worktree) => known.has(pathKey(worktree)))
-      .slice(0, RECENTLY_CLOSED_DISPLAY_LIMIT)
+      .slice(0, RECENTLY_CLOSED_HISTORY_LIMIT)
       .map((worktree) => enrich({ worktree, expanded: false }))
   })
 

@@ -11,13 +11,18 @@ type ServerProjectState = {
   projects: Record<string, StoredProject[]>
   lastProject: Record<string, string>
   recentlyClosed: Record<string, string[]>
+  hiddenClosed?: Record<string, string[]>
+  archivedClosed?: Record<string, string[]>
 }
 const HEALTH_POLL_INTERVAL_MS = 10_000
 // The store retains more history than is displayed. Consumers filter recently closed entries
 // against the live project list (dropping deleted projects) and then cap the visible count via
 // RECENTLY_CLOSED_DISPLAY_LIMIT. Retaining extra history ensures entries that are temporarily
 // filtered out do not evict still-visible ones from the persisted store.
-const RECENTLY_CLOSED_HISTORY_LIMIT = 16
+//
+// Hidden and archived are subsets of recentlyClosed history, stored as raw worktree strings
+// and matched via pathKey. They are pruned whenever they fall out of the history window.
+export const RECENTLY_CLOSED_HISTORY_LIMIT = 50
 export const RECENTLY_CLOSED_DISPLAY_LIMIT = 5
 
 export function normalizeServerUrl(input: string) {
@@ -47,9 +52,24 @@ export function migrateCanonicalLocalServerState(value: unknown, canonicalLocalS
   if (!isRecord(value)) return value
   const projects = isRecord(value.projects) ? value.projects : undefined
   const lastProject = isRecord(value.lastProject) ? value.lastProject : undefined
+  const recentlyClosed = isRecord(value.recentlyClosed) ? (value.recentlyClosed as Record<string, unknown>) : undefined
+  const hiddenClosed = isRecord(value.hiddenClosed) ? (value.hiddenClosed as Record<string, unknown>) : undefined
+  const archivedClosed = isRecord(value.archivedClosed)
+    ? (value.archivedClosed as Record<string, unknown>)
+    : undefined
   const previousProjects = projects?.[canonicalLocalServer]
   const previousLastProject = lastProject?.[canonicalLocalServer]
-  if (!Array.isArray(previousProjects) && typeof previousLastProject !== "string") return value
+  const previousClosed = recentlyClosed?.[canonicalLocalServer]
+  const previousHidden = hiddenClosed?.[canonicalLocalServer]
+  const previousArchived = archivedClosed?.[canonicalLocalServer]
+  if (
+    !Array.isArray(previousProjects) &&
+    typeof previousLastProject !== "string" &&
+    !Array.isArray(previousClosed) &&
+    !Array.isArray(previousHidden) &&
+    !Array.isArray(previousArchived)
+  )
+    return value
 
   const next = { ...value }
   if (projects && Array.isArray(previousProjects)) {
@@ -73,6 +93,43 @@ export function migrateCanonicalLocalServerState(value: unknown, canonicalLocalS
     delete nextLastProject[canonicalLocalServer]
     next.lastProject = nextLastProject
   }
+  const mergeStringList = (current: unknown, previous: unknown) => {
+    if (!Array.isArray(previous)) return undefined
+    const local = Array.isArray(current) ? current.filter((item): item is string => typeof item === "string") : []
+    const seen = new Set(local.map((item) => pathKey(item)))
+    const migrated = (previous as unknown[]).filter((item) => {
+      if (typeof item !== "string") return true
+      const key = pathKey(item)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    return [...local, ...migrated]
+  }
+  if (recentlyClosed && Array.isArray(previousClosed)) {
+    const merged = mergeStringList(recentlyClosed.local, previousClosed)
+    if (merged) {
+      const nextClosed: Record<string, unknown> = { ...recentlyClosed, local: merged }
+      delete nextClosed[canonicalLocalServer]
+      next.recentlyClosed = nextClosed
+    }
+  }
+  if (hiddenClosed && Array.isArray(previousHidden)) {
+    const merged = mergeStringList(hiddenClosed.local, previousHidden)
+    if (merged) {
+      const nextHidden: Record<string, unknown> = { ...hiddenClosed, local: merged }
+      delete nextHidden[canonicalLocalServer]
+      next.hiddenClosed = nextHidden
+    }
+  }
+  if (archivedClosed && Array.isArray(previousArchived)) {
+    const merged = mergeStringList(archivedClosed.local, previousArchived)
+    if (merged) {
+      const nextArchived: Record<string, unknown> = { ...archivedClosed, local: merged }
+      delete nextArchived[canonicalLocalServer]
+      next.archivedClosed = nextArchived
+    }
+  }
   return next
 }
 
@@ -84,6 +141,8 @@ export function createServerProjects<T extends ServerProjectState>(input: {
   const setStore = input.setStore as unknown as SetStoreFunction<ServerProjectState>
   const current = () => input.store.projects[input.scope()] ?? []
   const currentClosed = () => input.store.recentlyClosed?.[input.scope()] ?? []
+  const currentHidden = () => input.store.hiddenClosed?.[input.scope()] ?? []
+  const currentArchived = () => input.store.archivedClosed?.[input.scope()] ?? []
   const remove = (directory: string) => {
     setStore(
       "projects",
@@ -91,34 +150,129 @@ export function createServerProjects<T extends ServerProjectState>(input: {
       current().filter((project) => project.worktree !== directory),
     )
   }
+  const containsKey = (items: string[], directory: string) => {
+    const key = pathKey(directory)
+    return items.some((worktree) => pathKey(worktree) === key)
+  }
+  const withoutKey = (items: string[], directory: string) => {
+    const key = pathKey(directory)
+    return items.filter((worktree) => pathKey(worktree) !== key)
+  }
+  const pruneMeta = (closed: string[], scope: string) => {
+    const keys = new Set(closed.map((worktree) => pathKey(worktree)))
+    const hidden = (input.store.hiddenClosed?.[scope] ?? []).filter((worktree) => keys.has(pathKey(worktree)))
+    const archived = (input.store.archivedClosed?.[scope] ?? []).filter((worktree) => keys.has(pathKey(worktree)))
+    setStore("hiddenClosed", scope, hidden)
+    setStore("archivedClosed", scope, archived)
+  }
+  const clearMetaFor = (scope: string, directory: string) => {
+    const key = pathKey(directory)
+    const hidden = currentHidden()
+    const archived = currentArchived()
+    if (hidden.some((worktree) => pathKey(worktree) === key)) {
+      setStore(
+        "hiddenClosed",
+        scope,
+        hidden.filter((worktree) => pathKey(worktree) !== key),
+      )
+    }
+    if (archived.some((worktree) => pathKey(worktree) === key)) {
+      setStore(
+        "archivedClosed",
+        scope,
+        archived.filter((worktree) => pathKey(worktree) !== key),
+      )
+    }
+  }
   return {
     list: current,
     recentlyClosed: currentClosed,
+    hiddenClosed: currentHidden,
+    archivedClosed: currentArchived,
+    isHiddenClosed: (directory: string) => containsKey(currentHidden(), directory),
+    isArchivedClosed: (directory: string) => containsKey(currentArchived(), directory),
     remove,
     open(directory: string) {
       const scope = input.scope()
       const key = pathKey(directory)
       const closed = currentClosed()
       if (closed.some((worktree) => pathKey(worktree) === key)) {
-        setStore(
-          "recentlyClosed",
-          scope,
-          closed.filter((worktree) => pathKey(worktree) !== key),
-        )
+        const next = closed.filter((worktree) => pathKey(worktree) !== key)
+        setStore("recentlyClosed", scope, next)
+        pruneMeta(next, scope)
+      } else {
+        clearMetaFor(scope, directory)
       }
       if (current().some((project) => project.worktree === directory)) return
       setStore("projects", scope, [{ worktree: directory, expanded: true }, ...current()])
     },
     // User-initiated close: removes the project and records it in recently closed.
     // Internal, non-user removals (e.g. sandbox/worktree normalization) should use remove().
+    // Re-closing a project makes it visible again: hidden/archived flags are cleared.
     close(directory: string) {
+      const scope = input.scope()
       remove(directory)
+      clearMetaFor(scope, directory)
       const key = pathKey(directory)
       const closed = [directory, ...currentClosed().filter((worktree) => pathKey(worktree) !== key)].slice(
         0,
         RECENTLY_CLOSED_HISTORY_LIMIT,
       )
-      setStore("recentlyClosed", input.scope(), closed)
+      setStore("recentlyClosed", scope, closed)
+      pruneMeta(closed, scope)
+    },
+    hideClosed(directory: string) {
+      const scope = input.scope()
+      if (!containsKey(currentClosed(), directory)) return
+      if (containsKey(currentHidden(), directory)) return
+      setStore("hiddenClosed", scope, [...currentHidden(), directory])
+    },
+    unhideClosed(directory: string) {
+      const scope = input.scope()
+      if (!containsKey(currentHidden(), directory)) return
+      setStore("hiddenClosed", scope, withoutKey(currentHidden(), directory))
+    },
+    archiveClosed(directory: string) {
+      const scope = input.scope()
+      if (!containsKey(currentClosed(), directory)) return
+      if (containsKey(currentArchived(), directory)) return
+      setStore("archivedClosed", scope, [...currentArchived(), directory])
+    },
+    unarchiveClosed(directory: string) {
+      const scope = input.scope()
+      if (!containsKey(currentArchived(), directory)) return
+      setStore("archivedClosed", scope, withoutKey(currentArchived(), directory))
+    },
+    // Forget a closed entry entirely. This only removes local history; it never deletes files.
+    removeClosed(directory: string) {
+      const scope = input.scope()
+      const key = pathKey(directory)
+      const closed = currentClosed()
+      if (!closed.some((worktree) => pathKey(worktree) === key)) {
+        clearMetaFor(scope, directory)
+        return
+      }
+      const next = closed.filter((worktree) => pathKey(worktree) !== key)
+      setStore("recentlyClosed", scope, next)
+      pruneMeta(next, scope)
+    },
+    clearClosed() {
+      const scope = input.scope()
+      setStore("recentlyClosed", scope, [])
+      setStore("hiddenClosed", scope, [])
+      setStore("archivedClosed", scope, [])
+    },
+    moveClosed(directory: string, toIndex: number) {
+      const scope = input.scope()
+      const closed = currentClosed()
+      const fromIndex = closed.findIndex((worktree) => pathKey(worktree) === pathKey(directory))
+      if (fromIndex === -1 || fromIndex === toIndex) return
+      const clamped = Math.max(0, Math.min(toIndex, closed.length - 1))
+      if (fromIndex === clamped) return
+      const next = [...closed]
+      const [item] = next.splice(fromIndex, 1)
+      next.splice(clamped, 0, item)
+      setStore("recentlyClosed", scope, next)
     },
     expand(directory: string) {
       const index = current().findIndex((project) => project.worktree === directory)
@@ -270,6 +424,8 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
         recentlyClosed: {} as Record<string, string[]>,
+        hiddenClosed: {} as Record<string, string[]>,
+        archivedClosed: {} as Record<string, string[]>,
       }),
     )
 

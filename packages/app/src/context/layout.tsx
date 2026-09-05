@@ -5,7 +5,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useServerSync } from "./server-sync"
 import { useServerSDK } from "./server-sdk"
-import { RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
+import { RECENTLY_CLOSED_HISTORY_LIMIT, ServerConnection, useServer } from "./server"
 import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
 import { normalizeProjectInfo } from "./global-sync/utils"
@@ -637,9 +637,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           return server.projects
             .recentlyClosed()
             .filter((worktree) => known.has(pathKey(worktree)))
-            .slice(0, RECENTLY_CLOSED_DISPLAY_LIMIT)
+            .slice(0, RECENTLY_CLOSED_HISTORY_LIMIT)
             .map((worktree) => enrich({ worktree, expanded: false }))
         }),
+        isHiddenClosed: (directory: string) => server.projects.isHiddenClosed(directory),
+        isArchivedClosed: (directory: string) => server.projects.isArchivedClosed(directory),
         open(directory: string) {
           const root = rootFor(directory)
           if (server.projects.list().find((x) => x.worktree === root)) return
@@ -658,6 +660,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         move(directory: string, toIndex: number) {
           server.projects.move(directory, toIndex)
         },
+        hideClosed: (directory: string) => server.projects.hideClosed(directory),
+        unhideClosed: (directory: string) => server.projects.unhideClosed(directory),
+        archiveClosed: (directory: string) => server.projects.archiveClosed(directory),
+        unarchiveClosed: (directory: string) => server.projects.unarchiveClosed(directory),
+        removeClosed: (directory: string) => server.projects.removeClosed(directory),
+        clearClosed: () => server.projects.clearClosed(),
+        moveClosed: (directory: string, toIndex: number) => server.projects.moveClosed(directory, toIndex),
       },
       sidebar: {
         opened: createMemo(() => store.sidebar.opened),

@@ -74,6 +74,23 @@ export function createHomeController() {
       selected: selectedProject,
       newSession: newSessionProject,
       forServer: (conn: ServerConnection.Any) => global.ensureServerCtx(conn).projects.list(),
+      closedForServer: (conn: ServerConnection.Any) => global.ensureServerCtx(conn).projects.recentlyClosed(),
+      isHiddenClosed: (conn: ServerConnection.Any, directory: string) =>
+        global.ensureServerCtx(conn).projects.isHiddenClosed(directory),
+      isArchivedClosed: (conn: ServerConnection.Any, directory: string) =>
+        global.ensureServerCtx(conn).projects.isArchivedClosed(directory),
+      hideClosed: (conn: ServerConnection.Any, directory: string) =>
+        global.ensureServerCtx(conn).projects.hideClosed(directory),
+      unhideClosed: (conn: ServerConnection.Any, directory: string) =>
+        global.ensureServerCtx(conn).projects.unhideClosed(directory),
+      archiveClosed: (conn: ServerConnection.Any, directory: string) =>
+        global.ensureServerCtx(conn).projects.archiveClosed(directory),
+      unarchiveClosed: (conn: ServerConnection.Any, directory: string) =>
+        global.ensureServerCtx(conn).projects.unarchiveClosed(directory),
+      removeClosed: (conn: ServerConnection.Any, directory: string) =>
+        global.ensureServerCtx(conn).projects.removeClosed(directory),
+      moveClosedTop: (conn: ServerConnection.Any, directory: string) =>
+        global.ensureServerCtx(conn).projects.moveClosed(directory, 0),
       select: (conn: ServerConnection.Any, directory: string) => {
         const key = ServerConnection.key(conn)
         if (global.servers.health[key]?.healthy === false) return
