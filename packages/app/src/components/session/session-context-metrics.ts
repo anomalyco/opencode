@@ -23,6 +23,7 @@ type Context = {
   input: number
   total: number
   usage: number | null
+  tps: number | undefined
 }
 
 const tokenTotal = (msg: AssistantMessage) => {
@@ -47,6 +48,13 @@ const build = (messages: Message[] = [], providers: Provider[] = []): Context | 
   const limit = model?.limit.context
   const total = tokenTotal(message)
 
+  const elapsedMs =
+    message.time.completed !== undefined ? message.time.completed - message.time.created : undefined
+  const tps =
+    elapsedMs !== undefined && elapsedMs > 0 && message.tokens.output > 0
+      ? Math.round((message.tokens.output / elapsedMs) * 1000)
+      : undefined
+
   return {
     message,
     provider,
@@ -57,6 +65,7 @@ const build = (messages: Message[] = [], providers: Provider[] = []): Context | 
     input: message.tokens.input,
     total,
     usage: limit ? Math.round((total / limit) * 100) : null,
+    tps,
   }
 }
 
