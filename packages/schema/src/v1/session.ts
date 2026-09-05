@@ -580,6 +580,10 @@ const events = {
   Updated: define({
     type: "session.updated",
     ...options,
+    durable: {
+      ...options.durable,
+      compact: "$.sessionID",
+    },
     schema: {
       sessionID: SessionID,
       info: SessionInfo,
@@ -596,6 +600,10 @@ const events = {
   MessageUpdated: define({
     type: "message.updated",
     ...options,
+    durable: {
+      ...options.durable,
+      compact: "$.info.id",
+    },
     schema: {
       sessionID: SessionID,
       info: Info,
@@ -612,6 +620,10 @@ const events = {
   PartUpdated: define({
     type: "message.part.updated",
     ...options,
+    durable: {
+      ...options.durable,
+      compact: "$.part.id",
+    },
     schema: {
       sessionID: SessionID,
       part: Part,
