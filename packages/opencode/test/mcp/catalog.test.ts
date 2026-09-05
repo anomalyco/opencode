@@ -27,14 +27,17 @@ function mcpTool() {
 }
 
 describe("McpCatalog.convertTool", () => {
-  test("preserves content when structuredContent is also present", async () => {
+  test("preserves content and exposes structuredContent when both are present", async () => {
     const content = [{ type: "image" as const, mimeType: "image/png", data: "AAAA" }]
     const structuredContent = { image: { mimeType: "image/png", data: "AAAA" } }
     const converted = McpCatalog.convertTool(mcpTool(), clientReturning({ content, structuredContent }))
 
     const output = await converted.execute?.({}, options)
 
-    expect(output).toMatchObject({ content, structuredContent })
+    expect(output).toMatchObject({
+      content: [...content, { type: "text", text: JSON.stringify(structuredContent) }],
+      structuredContent,
+    })
   })
 
   test("falls back to structuredContent only when content is absent", async () => {
