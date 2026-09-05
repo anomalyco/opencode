@@ -45,6 +45,14 @@ import { DialogProvider, useDialog } from "./ui/dialog"
 import { DialogIntegration } from "./component/dialog-integration"
 import { ErrorComponent } from "./component/error-component"
 import { PluginRouteMissing } from "./component/plugin-route-missing"
+import {
+  SHIMMER_CONTROLS,
+  SHIMMER_DEFAULTS,
+  ShimmerOverlay,
+  ShimmerTuner,
+  type ShimmerOverlayRenderable,
+  type ShimmerParams,
+} from "./component/shimmer-overlay"
 import { EditorContextProvider } from "./context/editor"
 import { useEvent } from "./context/event"
 import { ClientProvider, useClient } from "./context/client"
@@ -563,6 +571,58 @@ function App(props: { pair?: DialogPairCredentials }) {
   )
   onCleanup(() => {
     offSelectionKeys()
+  })
+
+  // Shimmer keys: Ctrl+R toggles the effect itself; Ctrl+Alt+R toggles the tuner panel.
+  // While the panel is open, ↑/↓ select a control and ←/→ adjust it (shift = ×5 steps),
+  // esc closes. All other keys pass through untouched.
+  const offRippleKey = keymap.intercept(
+    "key",
+    ({ event }) => {
+      const consume = () => {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+      if (event.ctrl && (event.name === "r" || event.name === "R")) {
+        if (event.option || event.meta) {
+          setShimmerPanel((open) => !open)
+          consume()
+          return true
+        }
+        const next = { ...shimmerParams(), enabled: shimmerParams().enabled >= 0.5 ? 0 : 1 }
+        setShimmerParams(next)
+        shimmerOverlay?.setParams(next)
+        consume()
+        return true
+      }
+      if (!shimmerPanel()) return false
+      if (event.name === "escape") {
+        setShimmerPanel(false)
+        consume()
+        return true
+      }
+      if (event.name === "up" || event.name === "down") {
+        const delta = event.name === "down" ? 1 : -1
+        setShimmerSelected((index) => (index + delta + SHIMMER_CONTROLS.length) % SHIMMER_CONTROLS.length)
+        consume()
+        return true
+      }
+      if (event.name === "left" || event.name === "right") {
+        const control = SHIMMER_CONTROLS[shimmerSelected()]
+        const step = control.step * (event.shift ? 5 : 1) * (event.name === "right" ? 1 : -1)
+        const next = { ...shimmerParams() }
+        next[control.key] = Math.min(control.max, Math.max(control.min, next[control.key] + step))
+        setShimmerParams(next)
+        shimmerOverlay?.setParams(next)
+        consume()
+        return true
+      }
+      return false
+    },
+    { priority: 102 },
+  )
+  onCleanup(() => {
+    offRippleKey()
   })
 
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
@@ -1293,6 +1353,14 @@ function App(props: { pair?: DialogPairCredentials }) {
     if (reconnectTimer) clearTimeout(reconnectTimer)
   })
 
+  // Foreground shimmer: a single custom renderable that rewrites text colors already in the
+  // frame buffer through a color matrix (see component/shimmer-overlay.tsx), so only glyphs
+  // shimmer and backgrounds stay untouched. Ctrl+R opens a tuner panel whose arrows select
+  // and adjust parameters live.
+  let shimmerOverlay: ShimmerOverlayRenderable | undefined
+  const [shimmerPanel, setShimmerPanel] = createSignal(false)
+  const [shimmerSelected, setShimmerSelected] = createSignal(0)
+  const [shimmerParams, setShimmerParams] = createSignal<ShimmerParams>({ ...SHIMMER_DEFAULTS })
   return (
     <box
       width={dimensions().width}
@@ -1370,6 +1438,17 @@ function App(props: { pair?: DialogPairCredentials }) {
       </Show>
       <MigrationOverlay />
       <Toast />
+      <Show when={shimmerParams().enabled >= 0.5}>
+        <ShimmerOverlay
+          ref={(renderable) => {
+            shimmerOverlay = renderable
+            renderable.setParams(shimmerParams())
+          }}
+          width={dimensions().width}
+          height={dimensions().height}
+        />
+      </Show>
+      <ShimmerTuner open={shimmerPanel()} selected={shimmerSelected()} params={shimmerParams()} />
     </box>
   )
 }
