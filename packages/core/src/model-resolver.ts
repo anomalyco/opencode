@@ -1,7 +1,7 @@
 export * as ModelResolver from "./model-resolver.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { LanguageModel } from "@opencode-ai/ai"
+import { HttpOptions, LanguageModel, mergeHttpOptions } from "@opencode-ai/ai"
 import { Auth } from "@opencode-ai/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
@@ -128,7 +128,10 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   const resolved = prepareRuntimeModel(model, credential)
   const packageName = Provider.packageName(resolved.package)
   const configuration = credential?.type === "key" ? credential.configuration : undefined
-  const configured = { ...resolved.settings, ...credential?.metadata, ...configuration }
+  const merged = { ...resolved.settings, ...credential?.metadata, ...configuration }
+  // Timeouts are transport policy: they become route HTTP defaults rather than provider package settings.
+  const timeouts = Provider.timeouts(merged)
+  const configured = Struct.omit(merged, ["headerTimeout", "chunkTimeout"])
   const mapping = Provider.isAISDK(resolved.package)
     ? AISDKNative.map({
         packageName,
@@ -173,6 +176,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
         compatibility: resolved.compatibility
           ? Object.assign({}, runtime.compatibility, resolved.compatibility)
           : runtime.compatibility,
+        defaults: { ...runtime.defaults, http: mergeHttpOptions(runtime.defaults?.http, new HttpOptions(timeouts)) },
       })
     },
     catch: () => unsupported(resolved),
