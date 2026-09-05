@@ -6,6 +6,7 @@ import { createApiForServer, type ServerApi } from "@/runtime/server/api"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "./registry"
 import { createRefCountMap } from "@/runtime/server/refcount"
+import { createRequestQueue } from "@/runtime/server/request-queue"
 import { ServerScope } from "@/runtime/server/scope"
 import { useServer } from "./current"
 
@@ -114,8 +115,9 @@ export function createServerTransport(input: { http: ServerConnection.HttpBase; 
   readonly api: ServerApi
   readonly pty: ReturnType<typeof createPtyClient>
 } {
+  const queue = createRequestQueue({ fetch: input.fetch ?? globalThis.fetch })
   const build = (http: ServerConnection.HttpBase) => {
-    const api = createApiForServer({ server: http, fetch: input.fetch })
+    const api = createApiForServer({ server: http, fetch: queue.fetch })
     return { http, api, pty: createPtyClient(api, { url: http.url }) }
   }
   const state = { current: build(input.http) }
