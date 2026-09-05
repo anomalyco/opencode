@@ -291,13 +291,24 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan,
 })
 
 function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
-  if (process.platform === "win32" && Shell.ps(shell)) {
-    return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
-      cwd,
-      env,
-      stdin: "ignore",
-      detached: false,
-    })
+  if (process.platform === "win32") {
+    if (Shell.ps(shell)) {
+      return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
+        cwd,
+        env,
+        stdin: "ignore",
+        detached: false,
+      })
+    }
+
+    if (Shell.posix(shell)) {
+      return ChildProcess.make(shell, ["-c", command], {
+        cwd,
+        env,
+        stdin: "ignore",
+        detached: false,
+      })
+    }
   }
 
   return ChildProcess.make(command, [], {
