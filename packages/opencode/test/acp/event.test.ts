@@ -167,6 +167,21 @@ function toolUpdated(part: ToolPart): Event {
   }
 }
 
+function sessionCreated(sessionID: string, parentID: string, title: string): Event {
+  return {
+    id: `evt_${sessionID}_created`,
+    type: "session.created",
+    properties: {
+      sessionID,
+      info: {
+        id: sessionID,
+        parentID,
+        title,
+      },
+    },
+  } as Event
+}
+
 function assistantMessage(sessionID: string, messageID: string, partID: string, type: DeltaPartType) {
   return {
     info: {
@@ -319,6 +334,63 @@ async function createKnownSession(
 }
 
 describe("acp event routing", () => {
+  it("projects nested subagent messages onto the root session", async () => {
+    const harness = createHarness({
+      msg_grandchild: assistantMessage("ses_grandchild", "msg_grandchild", "part_grandchild", "text"),
+    })
+    await Effect.runPromise(harness.session.create({ id: "ses_root", cwd: "/workspace" }))
+    await harness.subscription.handle(sessionCreated("ses_child", "ses_root", "Explore"))
+    await harness.subscription.handle(sessionCreated("ses_grandchild", "ses_child", "Research"))
+
+    await harness.subscription.handle(partUpdated("ses_grandchild", "msg_grandchild", "part_grandchild", "text"))
+    await harness.subscription.handle(textDelta("ses_grandchild", "msg_grandchild", "part_grandchild", "nested result"))
+
+    expect(harness.updates).toEqual([
+      {
+        sessionId: "ses_root",
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          messageId: "msg_grandchild",
+          content: { type: "text", text: "nested result" },
+          _meta: {
+            "opencode/child-session": {
+              id: "ses_grandchild",
+              parentID: "ses_child",
+              depth: 2,
+              title: "Research",
+            },
+          },
+        },
+      },
+    ])
+  })
+
+  it("namespaces subagent tool calls without colliding with root tools", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_root", cwd: "/workspace" }))
+    await harness.subscription.handle(sessionCreated("ses_child", "ses_root", "Explore"))
+
+    await harness.subscription.handle(toolUpdated(runningTool("ses_root", "call_shared", "root")))
+    await harness.subscription.handle(toolUpdated(runningTool("ses_child", "call_shared", "child")))
+
+    const starts = toolUpdates(harness.updates).filter((item) => item.update.sessionUpdate === "tool_call")
+    expect(starts.map((item) => item.update.toolCallId)).toEqual(["call_shared", "ses_child:call_shared"])
+    expect(starts[1]).toMatchObject({
+      sessionId: "ses_root",
+      update: {
+        title: "Explore: printf hello",
+        _meta: {
+          "opencode/child-session": {
+            id: "ses_child",
+            parentID: "ses_root",
+            depth: 1,
+            title: "Explore",
+          },
+        },
+      },
+    })
+  })
+
   it("routes message.part.delta by sessionID without cross-session pollution", async () => {
     const harness = createHarness()
     await createKnownSession(harness.session, "ses_a", { messageId: "msg_a", partId: "part_a", partType: "text" })

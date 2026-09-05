@@ -122,6 +122,21 @@ function permissionAsked(
   } as PermissionEvent
 }
 
+function sessionCreated(sessionID: string, parentID: string, title: string): Event {
+  return {
+    id: `evt_${sessionID}_created`,
+    type: "session.created",
+    properties: {
+      sessionID,
+      info: {
+        id: sessionID,
+        parentID,
+        title,
+      },
+    },
+  } as Event
+}
+
 function textDelta(sessionID: string, messageID: string, partID: string, delta: string) {
   return {
     id: `evt_${sessionID}_${messageID}_${partID}`,
@@ -156,6 +171,29 @@ async function tempFile(name: string, content: string) {
 }
 
 describe("acp permissions", () => {
+  it("routes subagent permissions through the root session", async () => {
+    const harness = createHarness()
+    await createSession(harness.session, "ses_root")
+    await harness.subscription.handle(sessionCreated("ses_child", "ses_root", "Explore"))
+
+    harness.subscription.handle(
+      permissionAsked("ses_child", "perm_child", {
+        tool: { messageID: "msg_child", callID: "call_child" },
+      }),
+    )
+
+    await pollUntil(() => harness.replies.length === 1, "subagent permission was never replied")
+
+    expect(harness.requests[0]).toMatchObject({
+      sessionId: "ses_root",
+      toolCall: {
+        toolCallId: "ses_child:call_child",
+        title: "Explore: printf hello",
+      },
+    })
+    expect(harness.replies).toEqual([{ requestID: "perm_child", reply: "once", directory: "/workspace" }])
+  })
+
   it("sends requestPermission and replies with the selected outcome", async () => {
     const harness = createHarness()
     await createSession(harness.session, "ses_a")
