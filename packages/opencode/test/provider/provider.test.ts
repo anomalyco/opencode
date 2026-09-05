@@ -25,6 +25,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
 const originalEnv = new Map<string, string | undefined>()
+let modelsEndpointServer: ReturnType<typeof Bun.serve> | undefined
 
 const rememberEnv = (k: string) => {
   if (!originalEnv.has(k)) originalEnv.set(k, process.env[k])
@@ -51,6 +52,8 @@ const remove = (k: string) =>
   })
 
 afterEach(async () => {
+  await modelsEndpointServer?.stop(true)
+  modelsEndpointServer = undefined
   for (const [key, value] of originalEnv) {
     if (value === undefined) delete process.env[key]
     else process.env[key] = value
@@ -58,6 +61,28 @@ afterEach(async () => {
   originalEnv.clear()
   await disposeAllInstances()
 })
+
+function startModelsEndpoint() {
+  modelsEndpointServer = Bun.serve({
+    port: 0,
+    fetch(req) {
+      if (new URL(req.url).pathname !== "/v1/models") return new Response("not found", { status: 404 })
+      return Response.json({
+        object: "list",
+        data: [
+          {
+            id: "local-model",
+            object: "model",
+            context_length: 262_144,
+            max_context_length: 208_128,
+            native_context_length: 262_144,
+          },
+        ],
+      })
+    },
+  })
+  return `${modelsEndpointServer.url.origin}/v1`
+}
 
 const providerLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   LayerNode.compile(
@@ -1254,6 +1279,28 @@ it.instance(
         },
       },
     },
+  },
+)
+
+it.instance(
+  "openai-compatible model fills missing context limit from models endpoint",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.make("local-dynamic")].models["local-model"]
+    expect(model.limit.context).toBe(262_144)
+  }),
+  {
+    config: () => ({
+      provider: {
+        "local-dynamic": {
+          name: "Local Dynamic",
+          npm: "@ai-sdk/openai-compatible",
+          api: startModelsEndpoint(),
+          models: { "local-model": { name: "Local Model", tool_call: true } },
+          options: { apiKey: "test-api-key" },
+        },
+      },
+    }),
   },
 )
 

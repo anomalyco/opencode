@@ -1353,6 +1353,94 @@ function modeOptions(model: Model, body: Record<string, unknown> | undefined) {
   return { ...rest, reasoningMode: reasoning.mode }
 }
 
+function positiveNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined
+}
+
+function openAICompatibleModelsURL(baseURL: string) {
+  try {
+    const url = new URL(baseURL)
+    if (!isLocalOpenAICompatibleHost(url.hostname)) return undefined
+    url.pathname = `${url.pathname.replace(/\/$/, "")}/models`
+    url.search = ""
+    return url
+  } catch {
+    return undefined
+  }
+}
+
+function isLocalOpenAICompatibleHost(hostname: string) {
+  if (hostname === "localhost" || hostname === "::1") return true
+  if (/^127(?:\.\d{1,3}){3}$/.test(hostname)) return true
+  if (/^10(?:\.\d{1,3}){3}$/.test(hostname)) return true
+  if (/^192\.168(?:\.\d{1,3}){2}$/.test(hostname)) return true
+  if (/^172\.(1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2}$/.test(hostname)) return true
+  return false
+}
+
+function openAICompatibleModelContext(value: unknown) {
+  if (!isRecord(value)) return undefined
+  return (
+    positiveNumber(value.context_length) ??
+    positiveNumber(value.max_context_length) ??
+    positiveNumber(value.native_context_length)
+  )
+}
+
+function openAICompatibleDiscoveryHeaders(provider: Info) {
+  const headers = new Headers()
+  const configured = provider.options.headers
+  if (isRecord(configured)) {
+    for (const [key, value] of Object.entries(configured)) {
+      if (typeof value === "string") headers.set(key, value)
+    }
+  }
+  const apiKey = provider.key ?? provider.options.apiKey
+  if (typeof apiKey === "string" && apiKey !== "" && !headers.has("authorization")) {
+    headers.set("authorization", `Bearer ${apiKey}`)
+  }
+  return headers
+}
+
+async function discoverOpenAICompatibleModelContexts(provider: Info, baseURL: string) {
+  const url = openAICompatibleModelsURL(baseURL)
+  if (!url) return {}
+  const response = await fetch(url, {
+    headers: openAICompatibleDiscoveryHeaders(provider),
+    signal: AbortSignal.timeout(1_000),
+  }).catch(() => undefined)
+  if (!response) return {}
+  if (!response.ok) return {}
+  const body: unknown = await response.json()
+  if (!isRecord(body) || !Array.isArray(body.data)) return {}
+  return Object.fromEntries(
+    body.data.flatMap((item) => {
+      if (!isRecord(item) || typeof item.id !== "string") return []
+      const context = openAICompatibleModelContext(item)
+      return context ? [[item.id, context]] : []
+    }),
+  )
+}
+
+async function discoverMissingOpenAICompatibleContexts(provider: Info) {
+  const contextsByBaseURL = new Map<string, Promise<Record<string, number>>>()
+  const result: Record<string, number> = {}
+  for (const model of Object.values(provider.models)) {
+    if (!model.api.npm.includes("@ai-sdk/openai-compatible")) continue
+    if (model.limit.context > 0) continue
+    const baseURL =
+      typeof provider.options.baseURL === "string" && provider.options.baseURL !== ""
+        ? provider.options.baseURL
+        : model.api.url
+    if (!baseURL) continue
+    if (!contextsByBaseURL.has(baseURL)) contextsByBaseURL.set(baseURL, discoverOpenAICompatibleModelContexts(provider, baseURL))
+    const contexts = await contextsByBaseURL.get(baseURL)!
+    const context = contexts[model.api.id] ?? contexts[model.id]
+    if (context) result[model.id] = context
+  }
+  return result
+}
+
 function modelSuggestions(provider: Info | undefined, modelID: ModelV2.ID, enableExperimentalModels: boolean) {
   const available = provider
     ? Object.keys(provider.models).filter((id) => {
@@ -1573,6 +1661,18 @@ const layer = Layer.effect(
             parsed.models[modelID] = parsedModel
           }
           database[providerID] = parsed
+        }
+
+        for (const [providerID] of configProviders) {
+          const provider = database[providerID]
+          if (!provider) continue
+          const contexts = yield* Effect.promise(() => discoverMissingOpenAICompatibleContexts(provider)).pipe(
+            Effect.catch(() => Effect.succeed({})),
+          )
+          for (const [modelID, context] of Object.entries(contexts)) {
+            const model = provider.models[modelID]
+            if (model && model.limit.context === 0) model.limit = { ...model.limit, context }
+          }
         }
 
         // load env
