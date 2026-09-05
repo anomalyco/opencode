@@ -537,10 +537,13 @@ export function createServerSession(
   const fetchMessages = async (sessionID: string, limit: number, before?: string, onAttempt?: () => void) => {
     if (messageApi && (await options?.protocol) !== "v1") {
       const request = (cursor?: string) =>
-        (options?.retry ?? retry)(() => {
-          onAttempt?.()
-          return messageApi.list(cursor ? { sessionID, limit, cursor } : { sessionID, limit, order: "desc" })
-        })
+        (options?.retry ?? retry)(
+          () => {
+            onAttempt?.()
+            return messageApi.list(cursor ? { sessionID, limit, cursor } : { sessionID, limit, order: "desc" })
+          },
+          { retryOnTypeError: true },
+        )
       const first = await request(before)
       const pages = [first]
       while (pages.at(-1)?.cursor.next && needsOlderTurnRoot(pages.flatMap((page) => page.data).toReversed())) {
@@ -563,10 +566,13 @@ export function createServerSession(
         complete: response.data.length === 0,
       }
     }
-    const response = await (options?.retry ?? retry)(() => {
-      onAttempt?.()
-      return client.session.messages({ sessionID, limit, before })
-    })
+    const response = await (options?.retry ?? retry)(
+      () => {
+        onAttempt?.()
+        return client.session.messages({ sessionID, limit, before })
+      },
+      { retryOnTypeError: true },
+    )
     const items = (response.data ?? []).filter((item) => !!item?.info?.id)
     return {
       session: items.map((item) => cleanMessage(item.info)).sort(compareMessages),
@@ -583,19 +589,25 @@ export function createServerSession(
 
   const fetchMessage = async (sessionID: string, messageID: string, onAttempt?: () => void) => {
     if (sessionApi && (await options?.protocol) !== "v1") {
-      const response = await (options?.retry ?? retry)(() => {
-        onAttempt?.()
-        return sessionApi.message({ sessionID, messageID })
-      })
+      const response = await (options?.retry ?? retry)(
+        () => {
+          onAttempt?.()
+          return sessionApi.message({ sessionID, messageID })
+        },
+        { retryOnTypeError: true },
+      )
       const normalized = normalizeSessionMessages(sessionID, [response])
       const message = normalized.messages[0]
       if (!message) throw new Error(`Message not found: ${messageID}`)
       return { message, parts: normalized.parts.get(messageID) ?? [] }
     }
-    const response = await (options?.retry ?? retry)(() => {
-      onAttempt?.()
-      return client.session.message({ sessionID, messageID })
-    })
+    const response = await (options?.retry ?? retry)(
+      () => {
+        onAttempt?.()
+        return client.session.message({ sessionID, messageID })
+      },
+      { retryOnTypeError: true },
+    )
     if (!response.data?.info?.id) throw new Error(`Message not found: ${messageID}`)
     return {
       message: cleanMessage(response.data.info),
@@ -1386,10 +1398,12 @@ export function createServerSession(
       }
       return runInflight(inflightTodo, sessionID, () => {
         const active = generation(sessionID)
-        return (options?.retry ?? retry)(() => client.session.todo({ sessionID })).then((result) => {
-          if (generations.get(sessionID) !== active) return
-          setData("todo", sessionID, reconcile(result.data ?? [], { key: "id" }))
-        })
+        return (options?.retry ?? retry)(() => client.session.todo({ sessionID }), { retryOnTypeError: true }).then(
+          (result) => {
+            if (generations.get(sessionID) !== active) return
+            setData("todo", sessionID, reconcile(result.data ?? [], { key: "id" }))
+          },
+        )
       })
     },
     history: {
