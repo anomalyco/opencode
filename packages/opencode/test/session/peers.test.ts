@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { describePeer, resolvePeers, type ResolveInput } from "@/session/peers"
+import { describePeer, formatPeerMessage, resolvePeers, resolveTarget, type Peer, type ResolveInput } from "@/session/peers"
 
 const DIR = "/repo"
 const NOW = 1_000_000
@@ -151,6 +151,58 @@ describe("resolvePeers", () => {
       ]),
     })
     expect(peers.map((peer) => peer.sessionID).sort()).toEqual(["a", "b"])
+  })
+})
+
+function peer(sessionID: string, title: string, over: Partial<Peer> = {}): Peer {
+  return { sessionID, title, status: "busy", idleForMs: 0, ...over }
+}
+
+describe("resolveTarget", () => {
+  test("resolves by exact session id", () => {
+    const peers = [peer("a", "Alpha work"), peer("b", "Beta work")]
+    const result = resolveTarget(peers, "b")
+    expect(result).toEqual({ ok: true, peer: peers[1] })
+  })
+
+  test("resolves by an unambiguous title prefix", () => {
+    const peers = [peer("a", "Alpha work"), peer("b", "Beta work")]
+    const result = resolveTarget(peers, "beta")
+    expect(result).toEqual({ ok: true, peer: peers[1] })
+  })
+
+  test("refuses an ambiguous title prefix rather than guessing", () => {
+    const peers = [peer("a", "Merge worktrees into main"), peer("b", "Merge specsync worktrees")]
+    const result = resolveTarget(peers, "merge")
+    expect(result.ok).toBe(false)
+    if (!result.ok && result.reason === "ambiguous") {
+      expect(result.matches.map((p) => p.sessionID).sort()).toEqual(["a", "b"])
+    } else {
+      throw new Error("expected an ambiguous result")
+    }
+  })
+
+  test("reports not-found for no match", () => {
+    const result = resolveTarget([peer("a", "Alpha work")], "nonexistent")
+    expect(result).toEqual({ ok: false, reason: "not-found" })
+  })
+
+  test("an id that is also a title-prefix collision still resolves by id", () => {
+    // Exact session-id match short-circuits before title matching, so an id
+    // that happens to prefix-match another peer's title is not ambiguous.
+    const peers = [peer("alpha", "Alpha work"), peer("b", "alpha-adjacent task")]
+    const result = resolveTarget(peers, "alpha")
+    expect(result).toEqual({ ok: true, peer: peers[0] })
+  })
+})
+
+describe("formatPeerMessage", () => {
+  test("carries sender provenance separate from the message text", () => {
+    const text = formatPeerMessage({ sessionID: "ses_1", title: "Finishing specsync" }, "please review commit abc")
+    expect(text).toContain("ses_1")
+    expect(text).toContain("Finishing specsync")
+    expect(text).toContain("please review commit abc")
+    expect(text).toContain("not a user")
   })
 })
 
