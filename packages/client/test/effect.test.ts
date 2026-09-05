@@ -252,6 +252,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
       .log({ sessionID: Session.ID.make("ses_test"), after: Event.Seq.make(0) })
       .pipe(Stream.runCollect)
     const interrupted = yield* client.session.interrupt({ sessionID: Session.ID.make("ses_test") })
+    yield* client.session.background({ sessionID: Session.ID.make("ses_test") })
     const message = yield* client.session.message({
       sessionID: Session.ID.make("ses_test"),
       messageID: SessionMessage.ID.make("msg_model"),
@@ -275,6 +276,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   expect(result.context).toEqual([])
   expect(logQueries[0]).toEqual({ after: "0" })
   expect(requests).toContainEqual({ method: "POST", url: "http://localhost:3000/api/session/ses_test/view" })
+  expect(requests).toContainEqual({ method: "POST", url: "http://localhost:3000/api/session/ses_test/background" })
   const logged = Array.from(result.log)
   expect(logged.map((item) => item.type)).toEqual(["session.model.selected", "log.synced"])
   expect(logged[0]?.type === "session.model.selected" && logged[0].created).toBe(1_717_171_717_000)
