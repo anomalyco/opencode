@@ -117,7 +117,31 @@ export const make = <A, E = never>(
       ref,
       Effect.fnUntraced(function* (st) {
         switch (st._tag) {
-          case "Running":
+          case "Running": {
+            // A new run is requested while one is active — e.g. the user submits
+            // a new prompt while the assistant is blocked on a long-running tool
+            // like `sleep`. Interrupt the current run and start the new work so
+            // the new prompt is handled promptly instead of waiting for the tool
+            // to finish. The interrupted caller resolves through `onInterrupt`.
+            // Interrupt the old run on an independent fiber because its `finishRun`
+            // acquires this same ref. The replacement waits on a gate so its session
+            // writes cannot overlap the old run's cleanup, while cancelling the
+            // replacement cannot prevent the old caller from being completed.
+            const old = st.run
+            const stopped = yield* Deferred.make<void>()
+            const done = yield* Deferred.make<A, E | Cancelled>()
+            const run = yield* startRun(
+              Effect.uninterruptibleMask((restore) =>
+                Deferred.await(stopped).pipe(Effect.andThen(restore(Effect.yieldNow.pipe(Effect.andThen(work))))),
+              ),
+              done,
+            )
+            yield* Fiber.interrupt(old.fiber).pipe(
+              Effect.ensuring(Deferred.succeed(stopped, undefined)),
+              Effect.forkIn(scope),
+            )
+            return [awaitDone(done), { _tag: "Running", run }] as const
+          }
           case "ShellThenRun":
             return [awaitDone(st.run.done), st] as const
           case "Shell": {

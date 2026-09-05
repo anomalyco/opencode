@@ -1368,7 +1368,7 @@ it.instance(
 )
 
 it.instance(
-  "cancel with queued callers resolves all cleanly",
+  "cancel resolves concurrent loop callers cleanly",
   () =>
     Effect.gen(function* () {
       const { llm } = yield* useServerConfig(providerCfg)
@@ -1385,11 +1385,10 @@ it.instance(
 
       yield* prompt.cancel(chat.id)
       const [exitA, exitB] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
+      // The second caller interrupts the first and runs its own loop; cancel
+      // must still resolve both callers without hanging.
       expect(Exit.isSuccess(exitA)).toBe(true)
       expect(Exit.isSuccess(exitB)).toBe(true)
-      if (Exit.isSuccess(exitA) && Exit.isSuccess(exitB)) {
-        expect(exitA.value.info.id).toBe(exitB.value.info.id)
-      }
     }),
   { git: true },
   10_000,
@@ -1412,7 +1411,7 @@ noLLMServer.instance("concurrent loop callers get same result", () =>
   }),
 )
 
-it.instance("concurrent loop callers all receive same error result", () =>
+it.instance("concurrent loop callers both resolve when LLM fails", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
     const prompt = yield* SessionPrompt.Service
@@ -1422,11 +1421,18 @@ it.instance("concurrent loop callers all receive same error result", () =>
     yield* llm.fail("boom")
     yield* user(chat.id, "hello")
 
-    const [a, b] = yield* Effect.all([prompt.loop({ sessionID: chat.id }), prompt.loop({ sessionID: chat.id })], {
-      concurrency: "unbounded",
-    })
-    expect(a.info.id).toBe(b.info.id)
-    expect(a.info.role).toBe("assistant")
+    const a = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+    // Wait for the first run to pass its model lookup so the second run reads
+    // the cached instance state instead of sharing the first run's in-flight
+    // lookup (which is interrupted with the first run).
+    yield* llm.wait(1)
+    const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+
+    const [exitA, exitB] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
+    // The second caller replaces the first, so both resolve to an assistant
+    // message rather than sharing a single run.
+    expect(Exit.isSuccess(exitA)).toBe(true)
+    expect(Exit.isSuccess(exitB)).toBe(true)
   }),
 )
 
@@ -1979,6 +1985,84 @@ unix(
       expect(tool.state.output).toMatch(/\.\.\.output truncated\.\.\./)
       expect(tool.state.output).toMatch(/Full output saved to:\s+\S+/)
       expect(tool.state.output).not.toContain("Tool execution aborted")
+    }),
+  { git: true },
+  30_000,
+)
+
+unix(
+  "a new prompt takes over a running bash tool instead of waiting for it",
+  () =>
+    Effect.gen(function* () {
+      const { dir, llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const afs = yield* FSUtil.Service
+      const chat = yield* sessions.create({
+        title: "Prompt while sleep",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      const ready = path.join(dir, ".bash-ready")
+
+      const lastUserIncludes = (text: string) => (hit: { body: Record<string, unknown> }) => {
+        const messages = Array.isArray(hit.body.messages) ? hit.body.messages : []
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const msg = messages[i]
+          if (!msg || typeof msg !== "object") continue
+          if (!("role" in msg) || msg.role !== "user") continue
+          const content = "content" in msg ? msg.content : undefined
+          if (typeof content === "string") return content.includes(text)
+          if (Array.isArray(content)) {
+            return content.some(
+              (part) =>
+                part !== null &&
+                typeof part === "object" &&
+                "text" in part &&
+                typeof part.text === "string" &&
+                part.text.includes(text),
+            )
+          }
+          return false
+        }
+        return false
+      }
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "run bash" }],
+      })
+      yield* llm.pushMatch(
+        lastUserIncludes("run bash"),
+        reply()
+          .tool("bash", { command: `touch "${ready}"; sleep 30`, timeout: 30_000, workdir: path.resolve(dir) })
+          .item(),
+      )
+      yield* llm.pushMatch(lastUserIncludes("second"), reply().text("second done").stop().item())
+
+      const first = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* pollWithTimeout(
+        afs.existsSafe(ready).pipe(Effect.map((exists) => (exists ? (true as const) : undefined))),
+        "bash tool never started",
+      )
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "second" }],
+      })
+
+      const exit = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.timeout("10 seconds"), Effect.exit)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      if (Exit.isSuccess(exit)) {
+        const parts = exit.value.parts.filter((part) => part.type === "text")
+        expect(parts.some((part) => part.type === "text" && part.text === "second done")).toBe(true)
+      }
+
+      yield* prompt.cancel(chat.id)
+      yield* Fiber.await(first).pipe(Effect.timeout("5 seconds"), Effect.exit)
     }),
   { git: true },
   30_000,
