@@ -301,6 +301,20 @@ function toolUpdates(updates: SessionUpdateParams[]) {
   })
 }
 
+function sessionUpdated(sessionID: string, title?: string): Event {
+  return {
+    id: `evt_${sessionID}_session_${title ?? "untitled"}`,
+    type: "session.updated",
+    properties: {
+      sessionID,
+      info: { id: sessionID, title } as unknown as Extract<
+        Event,
+        { type: "session.updated" }
+      >["properties"]["info"],
+    },
+  }
+}
+
 async function createKnownSession(
   session: ACPSession.Interface,
   sessionId: string,
@@ -319,6 +333,48 @@ async function createKnownSession(
 }
 
 describe("acp event routing", () => {
+  it("forwards session title updates as session_info_update", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_a", cwd: "/workspace" }))
+
+    await harness.subscription.handle(sessionUpdated("ses_a", "My session title"))
+
+    expect(harness.updates).toEqual([
+      {
+        sessionId: "ses_a",
+        update: {
+          sessionUpdate: "session_info_update",
+          title: "My session title",
+        },
+      },
+    ])
+  })
+
+  it("only forwards a session title once until it changes", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_a", cwd: "/workspace" }))
+
+    await harness.subscription.handle(sessionUpdated("ses_a", "First title"))
+    await harness.subscription.handle(sessionUpdated("ses_a", "First title"))
+    await harness.subscription.handle(sessionUpdated("ses_a", "Second title"))
+
+    expect(harness.updates.map((update) => update.update)).toEqual([
+      { sessionUpdate: "session_info_update", title: "First title" },
+      { sessionUpdate: "session_info_update", title: "Second title" },
+    ])
+  })
+
+  it("ignores session updates for unknown sessions and empty titles", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_a", cwd: "/workspace" }))
+
+    await harness.subscription.handle(sessionUpdated("ses_unknown", "Title"))
+    await harness.subscription.handle(sessionUpdated("ses_a"))
+    await harness.subscription.handle(sessionUpdated("ses_a", ""))
+
+    expect(harness.updates).toEqual([])
+  })
+
   it("routes message.part.delta by sessionID without cross-session pollution", async () => {
     const harness = createHarness()
     await createKnownSession(harness.session, "ses_a", { messageId: "msg_a", partId: "part_a", partType: "text" })
