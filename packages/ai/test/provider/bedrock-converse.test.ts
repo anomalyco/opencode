@@ -1404,6 +1404,27 @@ describe("Bedrock Converse route", () => {
     ),
   )
 
+  it.effect("re-resolves rotated chain credentials on the next request without rebuilding the model", () =>
+    Effect.gen(function* () {
+      const chained = AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", region: "us-west-2" }).model(
+        "anthropic.claude-3-5-sonnet-20240620-v1:0",
+      )
+      const first = yield* captureHeaders(chained)
+      const second = yield* captureHeaders(chained).pipe(
+        withProcessEnv({ AWS_ACCESS_KEY_ID: "AKIAROTATEDEXAMPLE", AWS_SECRET_ACCESS_KEY: "rotated-secret" }),
+      )
+
+      expect(first.get("authorization")).toContain("Credential=AKIACHAINEXAMPLE/")
+      expect(second.get("authorization")).toContain("Credential=AKIAROTATEDEXAMPLE/")
+    }).pipe(
+      withProcessEnv({
+        ...noAmbientAWS,
+        AWS_ACCESS_KEY_ID: "AKIACHAINEXAMPLE",
+        AWS_SECRET_ACCESS_KEY: "chain-secret",
+      }),
+    ),
+  )
+
   it.effect("prefers AWS_BEARER_TOKEN_BEDROCK over the credential chain", () =>
     Effect.gen(function* () {
       const bearer = AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test" }).model(

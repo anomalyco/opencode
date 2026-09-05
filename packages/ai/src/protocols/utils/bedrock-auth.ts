@@ -16,11 +16,7 @@ export interface Credentials {
   readonly sessionToken?: string
 }
 
-/**
- * Static credentials or an effect resolved before every request. Effect sources
- * own caching and refresh, which is how STS, SSO, and instance credentials stay
- * valid across a long-lived model.
- */
+/** Static credentials or an effect resolved before every request. */
 export type CredentialSource = Credentials | Effect.Effect<Credentials, AIError>
 
 export interface DefaultChainOptions {
@@ -32,21 +28,16 @@ export interface DefaultChainOptions {
 /**
  * Resolve credentials through the AWS default provider chain: environment
  * variables, shared config and SSO caches, web identity tokens, process
- * credentials, and container or instance metadata. The chain is created once
- * per model and memoizes credentials internally, refreshing them before expiry.
+ * credentials, and container or instance metadata. A fresh chain runs on every
+ * request so credentials rotated on disk without an expiration (for example
+ * shared-config keys rewritten by a corporate SSO tool) are always re-read;
+ * the SDK's own memoization would otherwise pin them for the process lifetime.
  */
-export const defaultChain = (options: DefaultChainOptions): Effect.Effect<Credentials, AIError> => {
-  let chain: Promise<() => Promise<{ accessKeyId: string; secretAccessKey: string; sessionToken?: string }>> | undefined
-  const load = () => {
-    if (chain) return chain
-    chain = import("@aws-sdk/credential-providers").then(({ fromNodeProviderChain }) =>
-      fromNodeProviderChain(options.profile === undefined ? {} : { profile: options.profile }),
-    )
-    return chain
-  }
-  return Effect.tryPromise({
+export const defaultChain = (options: DefaultChainOptions): Effect.Effect<Credentials, AIError> =>
+  Effect.tryPromise({
     try: async () => {
-      const identity = await (await load())()
+      const { fromNodeProviderChain } = await import("@aws-sdk/credential-providers")
+      const identity = await fromNodeProviderChain(options.profile === undefined ? {} : { profile: options.profile })()
       return {
         region: options.region,
         accessKeyId: identity.accessKeyId,
@@ -62,7 +53,6 @@ export const defaultChain = (options: DefaultChainOptions): Effect.Effect<Creden
         }),
       }),
   })
-}
 
 const signRequest = (input: {
   readonly url: string
