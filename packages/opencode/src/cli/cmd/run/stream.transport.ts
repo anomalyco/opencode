@@ -787,6 +787,7 @@ function createLayer(input: StreamInput) {
 
           booting = false
           yield* drainBuffered()
+          yield* refreshCost().pipe(Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
 
           const sessions = [...state.subagent.tabs.keys()]
           if (sessions.length === 0) {
@@ -880,6 +881,19 @@ function createLayer(input: StreamInput) {
           })
         }
 
+        const refreshCost = Effect.fn("RunStreamTransport.refreshCost")(function* () {
+          const result = yield* Effect.promise(() =>
+            input.sdk.session.cost({ sessionID: input.sessionID }),
+          ).pipe(
+            Effect.map((response) => response.data?.cost ?? 0),
+            Effect.orElseSucceed(() => 0),
+          )
+          if (result !== state.data.totalCost) {
+            state.data.totalCost = result
+            syncFooter([])
+          }
+        })
+
         const applyEvent = Effect.fn("RunStreamTransport.applyEvent")(function* (event: Event) {
           if (event.type === "message.part.delta" && event.properties.sessionID === input.sessionID) {
             if (replayedParts.has(event.properties.partID)) {
@@ -948,6 +962,10 @@ function createLayer(input: StreamInput) {
 
           touch(event)
           yield* mark(event)
+
+          if (event.type === "message.updated" && event.properties.sessionID === input.sessionID) {
+            yield* refreshCost().pipe(Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
+          }
         })
 
         const drainBuffered = Effect.fn("RunStreamTransport.drainBuffered")(function* () {
