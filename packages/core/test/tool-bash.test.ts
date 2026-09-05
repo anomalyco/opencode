@@ -12,6 +12,7 @@ import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AppProcess } from "@opencode-ai/core/process"
+import { ShellEnvironment } from "@opencode-ai/core/shell-environment"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { BashTool } from "@opencode-ai/core/tool/bash"
@@ -28,6 +29,8 @@ const runs: Array<{
   readonly command: string
   readonly cwd?: string
   readonly shell?: string | boolean
+  readonly env?: NodeJS.ProcessEnv
+  readonly extendEnv?: boolean
   readonly options?: AppProcess.RunOptions
 }> = []
 let denyAction: string | undefined
@@ -67,7 +70,14 @@ const appProcess = Layer.succeed(
     run: (command: ChildProcess.Command, options?: AppProcess.RunOptions) =>
       Effect.suspend(() => {
         if (command._tag !== "StandardCommand") throw new Error("expected standard command")
-        runs.push({ command: command.command, cwd: command.options.cwd, shell: command.options.shell, options })
+        runs.push({
+          command: command.command,
+          cwd: command.options.cwd,
+          shell: command.options.shell,
+          env: command.options.env,
+          extendEnv: command.options.extendEnv,
+          options,
+        })
         return runFailure ? Effect.fail(runFailure) : Effect.succeed(result)
       }),
   } as unknown as AppProcess.Interface),
@@ -101,6 +111,7 @@ const withTool = <A, E, R>(
   directory: string,
   body: (registry: ToolRegistry.Interface) => Effect.Effect<A, E, R>,
   processLayer: Layer.Layer<AppProcess.Service> = appProcess,
+  environmentLayer: Layer.Layer<ShellEnvironment.Service> = ShellEnvironment.layer,
 ) => {
   const activeLocation = Layer.succeed(
     Location.Service,
@@ -117,6 +128,7 @@ const withTool = <A, E, R>(
           [PermissionV2.node, permission],
           [AppProcess.node, processLayer],
           [Config.node, config],
+          [ShellEnvironment.node, environmentLayer],
           [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
         ],
       ),
@@ -228,6 +240,37 @@ describe("BashTool", () => {
   )
 
   if (process.platform !== "win32") {
+    it.live("applies the location shell environment before spawning", () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          const environment = Layer.succeed(
+            ShellEnvironment.Service,
+            ShellEnvironment.Service.of({
+              get: (input) => Effect.succeed({ SHELL_ENV_PROBE: `${input.sessionID}:${input.callID}` }),
+            }),
+          )
+          return withTool(
+            tmp.path,
+            (registry) => settleTool(registry, call({ command: "printf core-bash" })),
+            appProcess,
+            environment,
+          ).pipe(
+            Effect.andThen(
+              Effect.sync(() => {
+                expect(runs[0]).toMatchObject({
+                  env: { SHELL_ENV_PROBE: `${sessionID}:call-bash` },
+                  extendEnv: true,
+                })
+              }),
+            ),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      ),
+    )
+
     it.live("executes a real shell command through AppProcess", () =>
       Effect.acquireUseRelease(
         Effect.promise(() => tmpdir()),
@@ -425,7 +468,6 @@ test("keeps locked deferred parity TODOs visible", async () => {
     "Port BashArity reusable command-prefix approvals.",
     "Replace token-based command-argument external-directory advisories with parser-based detection.",
     "Restore PowerShell and cmd-specific invocation/path handling on Windows.",
-    "Add plugin shell.env environment augmentation once V2 plugin hooks exist.",
     "Add durable/live progress metadata streaming for long-running commands once V2 tool invocation progress context is wired.",
     "Persist background job status and define restart recovery before exposing remote observation.",
     "Revisit process-group cleanup and platform coverage with shell-specific tests if current AppProcess semantics do not fully cover it.",

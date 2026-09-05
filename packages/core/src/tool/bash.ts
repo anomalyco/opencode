@@ -7,10 +7,12 @@ import { ChildProcess } from "effect/unstable/process"
 import { Config } from "../config"
 import { makeLocationNode } from "../effect/app-node"
 import { FSUtil } from "../fs-util"
+import { Location } from "../location"
 import { LocationMutation } from "../location-mutation"
 import { AppProcess } from "../process"
 import { PermissionV2 } from "../permission"
 import { PositiveInt } from "../schema"
+import { ShellEnvironment } from "../shell-environment"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -67,7 +69,6 @@ const isTimeout = (error: AppProcess.AppProcessError) =>
 // TODO: Port BashArity reusable command-prefix approvals.
 // TODO: Replace token-based command-argument external-directory advisories with parser-based detection.
 // TODO: Restore PowerShell and cmd-specific invocation/path handling on Windows.
-// TODO: Add plugin shell.env environment augmentation once V2 plugin hooks exist.
 // TODO: Add durable/live progress metadata streaming for long-running commands once V2 tool invocation progress context is wired.
 // TODO: Persist background job status and define restart recovery before exposing remote observation.
 // TODO: Re-add model-facing background launch only with owner-bound get/wait/cancel tools and completion delivery.
@@ -98,10 +99,12 @@ const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const mutation = yield* LocationMutation.Service
+    const location = yield* Location.Service
     const fs = yield* FSUtil.Service
     const appProcess = yield* AppProcess.Service
     const config = yield* Config.Service
     const permission = yield* PermissionV2.Service
+    const environment = yield* ShellEnvironment.Service
 
     yield* tools
       .register({
@@ -155,9 +158,17 @@ const layer = Layer.effectDiscard(
               const shell =
                 Object.assign({}, ...entries.flatMap((entry) => (entry.type === "document" ? [entry.info] : [])))
                   .shell ?? defaultShell()
+              const extra = yield* environment.get({
+                directory: location.directory,
+                cwd: target.canonical,
+                sessionID: context.sessionID,
+                callID: context.toolCallID,
+              })
               const command = ChildProcess.make(input.command, [], {
                 cwd: target.canonical,
                 shell,
+                env: extra,
+                extendEnv: true,
                 stdin: "ignore",
                 detached: process.platform !== "win32",
                 forceKillAfter: Duration.seconds(3),
@@ -203,5 +214,14 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/bash",
   layer,
-  deps: [ToolRegistry.node, LocationMutation.node, FSUtil.node, AppProcess.node, Config.node, PermissionV2.node],
+  deps: [
+    ToolRegistry.node,
+    LocationMutation.node,
+    Location.node,
+    FSUtil.node,
+    AppProcess.node,
+    Config.node,
+    PermissionV2.node,
+    ShellEnvironment.node,
+  ],
 })
