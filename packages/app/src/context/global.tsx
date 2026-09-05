@@ -1,7 +1,13 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createEffect, createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
+import {
+  createServerProjects,
+  RECENTLY_CLOSED_DISPLAY_LIMIT,
+  ServerConnection,
+  useServer,
+  visibleProjectEntries,
+} from "./server"
 import { pathKey } from "@/utils/path-key"
 import { useServerHealth } from "@/utils/server-health"
 import { createServerSdkContext } from "./server-sdk"
@@ -110,6 +116,11 @@ function createServerCtx(
   const sdk = createServerSdkContext(conn, scope)
   const sync = createServerSyncContext(sdk)
 
+  createEffect(() => {
+    if (!sync.projectsReady) return
+    projects.reconcileHidden(sync.data.project.map((project) => project.worktree))
+  })
+
   function enrich(project: { worktree: string; expanded: boolean }) {
     const [childStore] = sync.child(project.worktree, { bootstrap: false })
     const projectID = childStore.project
@@ -127,7 +138,9 @@ function createServerCtx(
     return base
   }
 
-  const projectsList = createMemo(() => projects.list().map(enrich))
+  const projectsList = createMemo(() =>
+    visibleProjectEntries(projects.list(), sync.data.project, projects.hidden()).map(enrich),
+  )
   const recentlyClosedList = createMemo(() => {
     const known = new Set(sync.data.project.map((project) => pathKey(project.worktree)))
     return projects
