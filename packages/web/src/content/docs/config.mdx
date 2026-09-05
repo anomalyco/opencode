@@ -45,12 +45,13 @@ Config sources are loaded in this order (later sources override earlier ones):
 
 1. **Remote config** (from `.well-known/opencode`) - organizational defaults
 2. **Global config** (`~/.config/opencode/opencode.json`) - user preferences
-3. **Custom config** (`OPENCODE_CONFIG` env var) - custom overrides
-4. **Project config** (`opencode.json` in project) - project-specific settings
-5. **`.opencode` directories** - agents, commands, plugins
-6. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - runtime overrides
-7. **Managed config files** (`/Library/Application Support/opencode/` on macOS) - admin-controlled
-8. **macOS managed preferences** (`.mobileconfig` via MDM) - highest priority, not user-overridable
+3. **Global config fragments** (`~/.config/opencode/config.d/*.json[c]`) - user preference overrides
+4. **Custom config** (`OPENCODE_CONFIG` env var) - custom overrides
+5. **Project config** (`opencode.json` in project) - project-specific settings
+6. **`.opencode` directories** - agents, commands, plugins, config fragments
+7. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - runtime overrides
+8. **Managed config files** (`/Library/Application Support/opencode/` on macOS) - admin-controlled
+9. **macOS managed preferences** (`.mobileconfig` via MDM) - highest priority, not user-overridable
 
 This means project configs can override global defaults, and global configs can override remote organizational defaults. Managed settings override everything.
 
@@ -148,6 +149,45 @@ opencode run "Hello world"
 ```
 
 The custom directory is loaded after the global config and `.opencode` directories, so it **can override** their settings.
+
+---
+
+### Config fragments
+
+You can split config into multiple files by creating a `config.d/` directory next to the main config file.
+
+```bash title="Directory structure"
+~/.config/opencode/
+|-- opencode.jsonc
+`-- config.d/
+    |-- 10-permissions.jsonc
+    `-- 20-overrides.json
+```
+
+Fragments are loaded alphabetically after the main config file in the same directory.
+
+- `~/.config/opencode/config.d/` extends your global config
+- `.opencode/config.d/` extends project-local `.opencode/opencode.json{,c}`
+- `OPENCODE_CONFIG_DIR/config.d/` extends a custom config directory
+
+Fragment files use the normal config schema. Later files override earlier ones for conflicting keys, while `plugin` and `instructions` continue to merge.
+
+```jsonc title=".opencode/config.d/10-permissions.jsonc"
+{
+  "permission": {
+    "bash": {
+      "git status *": "allow",
+      "git diff *": "allow"
+    },
+    "external_directory": {
+      "*": "ask",
+      "~/trusted/*": "allow"
+    }
+  }
+}
+```
+
+Fragment files also support `{env:VAR}` and `{file:path}` substitutions.
 
 ---
 
