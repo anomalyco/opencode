@@ -16,27 +16,7 @@ export function DialogStatus() {
 
   const plugins = createMemo(() => {
     const list = sync.data.config.plugin ?? []
-    const result = list.map((item) => {
-      const value = typeof item === "string" ? item : item[0]
-      if (value.startsWith("file://")) {
-        const path = fileURLToPath(value)
-        const parts = path.split("/")
-        const filename = parts.pop() || path
-        if (!filename.includes(".")) return { name: filename }
-        const basename = filename.split(".")[0]
-        if (basename === "index") {
-          const dirname = parts.pop()
-          const name = dirname || basename
-          return { name }
-        }
-        return { name: basename }
-      }
-      const index = value.lastIndexOf("@")
-      if (index <= 0) return { name: value, version: "latest" }
-      const name = value.substring(0, index)
-      const version = value.substring(index + 1)
-      return { name, version }
-    })
+    const result = list.map((item) => displayPluginName(typeof item === "string" ? item : item[0]))
     return result.toSorted((a, b) => a.name.localeCompare(b.name))
   })
 
@@ -165,4 +145,28 @@ export function DialogStatus() {
       </Show>
     </box>
   )
+}
+
+export type PluginDisplay = { name: string; version?: string }
+
+// Derive the display name shown in the /status dialog from a raw plugin spec.
+// Path-registered plugins arrive as file:// URLs; the spec may also be an npm-style `name@version`.
+export function displayPluginName(value: string): PluginDisplay {
+  if (value.startsWith("file://")) {
+    const path = fileURLToPath(value)
+    // Split on both separators: fileURLToPath returns backslash paths on Windows.
+    const parts = path.split(/[\\/]/)
+    const filename = parts.pop() || path
+    if (!filename.includes(".")) return { name: filename }
+    const basename = filename.split(".")[0]
+    if (basename === "index") {
+      const dirname = parts.pop()
+      const name = dirname || basename
+      return { name }
+    }
+    return { name: basename }
+  }
+  const index = value.lastIndexOf("@")
+  if (index <= 0) return { name: value, version: "latest" }
+  return { name: value.substring(0, index), version: value.substring(index + 1) }
 }
