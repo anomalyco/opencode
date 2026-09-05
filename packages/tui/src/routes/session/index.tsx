@@ -118,6 +118,7 @@ const sessionBindingCommands = [
   "session.timeline",
   "session.fork",
   "session.compact",
+  "session.record-notes",
   "session.unshare",
   "session.undo",
   "session.redo",
@@ -582,6 +583,44 @@ export function Session() {
           providerID: selectedModel.providerID,
         })
         dialog.clear()
+      },
+    },
+    {
+      title: "Save notebook learnings",
+      value: "session.record-notes",
+      category: "Session",
+      enabled: pending() === undefined,
+      slash: {
+        name: "record-notes",
+        aliases: ["save", "note"],
+      },
+      run: () => {
+        const selectedModel = local.model.current()
+        dialog.clear()
+        if (!selectedModel) {
+          toast.show({
+            variant: "warning",
+            message: "Connect a provider to save notebook learnings",
+            duration: 3000,
+          })
+          return
+        }
+        void sdk.client.session
+          .prompt({
+            sessionID: route.sessionID,
+            model: { providerID: selectedModel.providerID, modelID: selectedModel.modelID },
+            parts: [{
+              type: "text" as const,
+              text: "Save the durable learnings from this session to the project notebook. Use `notes_commit` with rewritten, English, source-backed folder_summaries/entries/relations, and surface the review for my approval before saving.",
+            }],
+          })
+          .catch((error) => {
+            toast.show({
+              title: "Failed to save learnings",
+              message: error instanceof Error ? error.message : "Unknown error",
+              variant: "error",
+            })
+          })
       },
     },
     {

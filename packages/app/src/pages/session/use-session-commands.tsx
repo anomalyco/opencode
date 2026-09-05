@@ -30,6 +30,12 @@ export type SessionCommandContext = {
   fileBrowser?: () => boolean
 }
 
+// Shared instruction for the `/save` command and the save-learnings button. Kept
+// in one place so a rename or gating of `notes_commit` cannot silently degrade
+// one path while the other keeps the stale tool name.
+export const RECORD_NOTES_PROMPT =
+  "Save the durable learnings from this session to the project notebook. Use `notes_commit` with rewritten, English, source-backed folder_summaries/entries/relations, and surface the review for my approval before saving."
+
 const withCategory = (category: string) => {
   return (option: Omit<CommandOption, "category">): CommandOption => ({
     ...option,
@@ -414,6 +420,26 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     })
   }
 
+  const recordNotes = async () => {
+    const sessionID = params.id
+    if (!sessionID) return
+
+    const model = local.model.current()
+    if (!model) {
+      showToast({
+        title: language.t("toast.model.none.title"),
+        description: language.t("toast.model.none.description"),
+      })
+      return
+    }
+
+    await sdk().api.session.prompt({
+      sessionID,
+      model: { providerID: model.provider.id, modelID: model.id },
+      text: RECORD_NOTES_PROMPT,
+    })
+  }
+
   const fork = () => {
     void openDialog(
       () => import("@/components/dialog-fork"),
@@ -482,6 +508,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       slash: "compact",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: compact,
+    }),
+    sessionCommand({
+      id: "session.record-notes",
+      title: language.t("command.session.record-notes"),
+      description: language.t("command.session.record-notes.description"),
+      slash: "note",
+      disabled: !params.id,
+      onSelect: recordNotes,
     }),
     sessionCommand({
       id: "session.fork",

@@ -2,6 +2,7 @@ export * as BuiltInTools from "./builtins"
 
 import { makeLocationNode } from "../effect/app-node"
 import { Layer } from "effect"
+import { NotebookTools } from "../notebook/tools"
 import { BashTool } from "./bash"
 import { ApplyPatchTool } from "./apply-patch"
 import { EditTool } from "./edit"
@@ -44,5 +45,6 @@ export const node = makeLocationNode({
     WebFetchTool.node,
     WebSearchTool.node,
     WriteTool.node,
+    NotebookTools.node,
   ],
 })

@@ -6,6 +6,7 @@ import { useRoute } from "../../context/route"
 import { useClipboard } from "../../context/clipboard"
 import type { PromptInfo } from "../../component/prompt/history"
 import { stripPromptPartIDs as strip } from "../../prompt/part"
+import { useOpencodeKeymap } from "../../keymap"
 
 export function DialogMessage(props: {
   messageID: string
@@ -17,6 +18,7 @@ export function DialogMessage(props: {
   const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
   const route = useRoute()
   const clipboard = useClipboard()
+  const keymap = useOpencodeKeymap()
 
   return (
     <DialogSelect
@@ -71,6 +73,15 @@ export function DialogMessage(props: {
 
             await clipboard.write?.(text)
             dialog.clear()
+          },
+        },
+        {
+          title: "Save notebook learnings",
+          value: "session.record-notes",
+          description: "persist this session's learnings to the project notebook",
+          onSelect: (dialog) => {
+            dialog.clear()
+            keymap.dispatchCommand("session.record-notes")
           },
         },
         {
