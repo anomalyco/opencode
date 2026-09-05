@@ -155,7 +155,6 @@ function init() {
       for (const item of store.stack) {
         if (item.onClose) item.onClose()
       }
-      setStore("size", "medium")
       setStore("stack", [
         {
           element: input,
