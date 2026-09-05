@@ -4,6 +4,7 @@ export type MathNode =
   | { type: "row"; body: MathNode[] }
   | { type: "symbol"; value: string; role?: SymbolRole }
   | { type: "text"; value: string }
+  | { type: "raw"; value: string }
   | { type: "space"; width: number }
   | {
       type: "fraction"
@@ -13,6 +14,7 @@ export type MathNode =
       numeratorAlign?: "left" | "right"
     }
   | { type: "root"; body: MathNode; index?: MathNode }
+  | { type: "boxed"; body: MathNode }
   | { type: "scripts"; base: MathNode; superscript?: MathNode; subscript?: MathNode }
   | { type: "delimited"; left: string; body: MathNode; right: string }
   | { type: "matrix"; rows: MathNode[][]; environment: MatrixEnvironment; columns?: string }
@@ -58,6 +60,8 @@ export interface ParseOptions {
   /** Maximum structural nesting depth. */
   maxDepth?: number
   strict?: boolean
+  /** Preserve unknown commands verbatim without relaxing structural validation. */
+  unknownCommands?: "error" | "preserve"
 }
 
 export class LatexParseError extends Error {
