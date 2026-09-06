@@ -9307,6 +9307,7 @@ export type ProviderListData = {
   query?: {
     directory?: string
     workspace?: string
+    connected?: boolean | "true" | "false"
   }
   url: "/provider"
 }
