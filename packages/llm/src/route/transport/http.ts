@@ -5,7 +5,7 @@ import { render as renderEndpoint } from "../endpoint"
 import { Framing, type Framing as FramingDef } from "../framing"
 import type { Transport, TransportPrepareInput } from "./index"
 import * as ProviderShared from "../../protocols/shared"
-import { mergeJsonRecords, type LLMRequest } from "../../schema"
+import { LLMError, mergeJsonRecords, type LLMRequest } from "../../schema"
 
 export type JsonRequestInput<Body> = TransportPrepareInput<Body>
 
@@ -136,11 +136,13 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
             prepared.framing.frame(
               response.stream.pipe(
                 Stream.mapError((error) =>
-                  ProviderShared.eventError(
-                    `${request.model.provider}/${request.model.route.id}`,
-                    `Failed to read ${request.model.provider}/${request.model.route.id} stream`,
-                    ProviderShared.errorText(error),
-                  ),
+                  error instanceof LLMError
+                    ? error
+                    : ProviderShared.eventError(
+                        `${request.model.provider}/${request.model.route.id}`,
+                        `Failed to read ${request.model.provider}/${request.model.route.id} stream`,
+                        ProviderShared.errorText(error),
+                      ),
                 ),
               ),
             ),

@@ -27,6 +27,8 @@ export class HttpContext extends Schema.Class<HttpContext>("LLM.HttpContext")({
   response: Schema.optional(HttpResponseDetails),
   body: Schema.optional(Schema.String),
   bodyTruncated: Schema.optional(Schema.Boolean),
+  bytesRead: Schema.optional(Schema.Number),
+  chunksRead: Schema.optional(Schema.Number),
   requestId: Schema.optional(Schema.String),
   rateLimit: Schema.optional(HttpRateLimitDetails),
 }) {}
