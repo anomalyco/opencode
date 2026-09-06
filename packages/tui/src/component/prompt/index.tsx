@@ -210,7 +210,6 @@ export function Prompt(props: PromptProps) {
   const workspace = usePromptWorkspace(props.sessionID)
   const move = usePromptMove({ projectID: project.project, sessionID: () => props.sessionID })
   const [cursorVersion, setCursorVersion] = createSignal(0)
-  const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const hasRightContent = createMemo(() => Boolean(props.right))
 
   function promptModelWarning() {
@@ -259,6 +258,32 @@ export function Prompt(props: PromptProps) {
     const messages = sync.data.message[props.sessionID]
     if (!messages) return undefined
     return messages.findLast((m): m is UserMessage => m.role === "user")
+  })
+  const promptIdentity = createMemo(() => {
+    const current = {
+      agent: local.agent.current(),
+      model: local.model.current(),
+      variant: local.model.variant.current(),
+    }
+    const session = props.sessionID ? sync.session.get(props.sessionID) : undefined
+    if (!session?.parentID) return current
+    const previous = lastUserMessage()
+    const model = session.model
+    const variant = model?.variant ?? previous?.model.variant
+    return {
+      agent: sync.data.agent.find((item) => item.name === (session.agent ?? previous?.agent)) ?? current.agent,
+      model: model ? { providerID: model.providerID, modelID: model.id } : (previous?.model ?? current.model),
+      variant: variant === "default" ? undefined : variant,
+    }
+  })
+  const modelInfo = createMemo(() => {
+    const model = promptIdentity().model
+    const provider = sync.data.provider.find((item) => item.id === model?.providerID)
+    return {
+      provider: provider?.name ?? model?.providerID ?? "Connect a provider",
+      model: (model && provider?.models[model.modelID]?.name) ?? model?.modelID ?? "No provider selected",
+      variants: (model && provider?.models[model.modelID]?.variants) ?? {},
+    }
   })
 
   const usage = createMemo(() => {
@@ -958,15 +983,15 @@ export function Prompt(props: PromptProps) {
     if (workspace.creating() || move.creating()) return false
     if (auto()?.visible) return false
     if (!store.prompt.input) return false
-    const agent = local.agent.current()
+    const agent = promptIdentity().agent
     if (!agent) return false
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       void exit()
       return true
     }
-    const selectedModel = local.model.current()
-    if (!selectedModel) {
+    const model = promptIdentity().model
+    if (!model) {
       void promptModelWarning()
       return false
     }
@@ -986,7 +1011,7 @@ export function Prompt(props: PromptProps) {
       return false
     }
 
-    const variant = local.model.variant.current()
+    const variant = promptIdentity().variant
     let sessionID = props.sessionID
     let finishMoveProgress = false
     if (sessionID == null) {
@@ -1002,8 +1027,8 @@ export function Prompt(props: PromptProps) {
         workspace: workspaceID,
         agent: agent.name,
         model: {
-          providerID: selectedModel.providerID,
-          id: selectedModel.modelID,
+          providerID: model.providerID,
+          id: model.modelID,
           variant,
         },
       })
@@ -1062,8 +1087,8 @@ export function Prompt(props: PromptProps) {
         sessionID,
         agent: agent.name,
         model: {
-          providerID: selectedModel.providerID,
-          modelID: selectedModel.modelID,
+          providerID: model.providerID,
+          modelID: model.modelID,
         },
         command: inputText,
       })
@@ -1085,7 +1110,7 @@ export function Prompt(props: PromptProps) {
         command: command.slice(1),
         arguments: args,
         agent: agent.name,
-        model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+        model: `${model.providerID}/${model.modelID}`,
         variant,
         parts: nonTextParts.filter((x) => x.type === "file"),
       })
@@ -1095,9 +1120,9 @@ export function Prompt(props: PromptProps) {
         .prompt(
           {
             sessionID,
-            ...selectedModel,
+            ...model,
             agent: agent.name,
-            model: selectedModel,
+            model,
             variant,
             parts: [
               ...editorParts,
@@ -1288,22 +1313,20 @@ export function Prompt(props: PromptProps) {
   const highlight = createMemo(() => {
     if (leader()) return theme.border
     if (store.mode === "shell") return theme.primary
-    const agent = local.agent.current()
+    const agent = promptIdentity().agent
     if (!agent) return theme.border
     return local.agent.color(agent.name)
   })
 
   const showVariant = createMemo(() => {
-    const variants = local.model.variant.list()
-    if (variants.length === 0) return false
-    const current = local.model.variant.current()
-    return !!current
+    if (Object.keys(modelInfo().variants).length === 0) return false
+    return !!promptIdentity().variant
   })
 
-  const agentMetaAlpha = createFadeIn(() => !!local.agent.current(), animationsEnabled)
-  const modelMetaAlpha = createFadeIn(() => !!local.agent.current() && store.mode === "normal", animationsEnabled)
+  const agentMetaAlpha = createFadeIn(() => !!promptIdentity().agent, animationsEnabled)
+  const modelMetaAlpha = createFadeIn(() => !!promptIdentity().agent && store.mode === "normal", animationsEnabled)
   const variantMetaAlpha = createFadeIn(
-    () => !!local.agent.current() && store.mode === "normal" && showVariant(),
+    () => !!promptIdentity().agent && store.mode === "normal" && showVariant(),
     animationsEnabled,
   )
   const borderHighlight = createMemo(() => tint(theme.border, highlight(), agentMetaAlpha()))
@@ -1322,8 +1345,8 @@ export function Prompt(props: PromptProps) {
   const spinnerDef = createMemo(() => {
     const agent =
       status().type !== "idle"
-        ? (local.agent.list().find((a) => a.name === lastUserMessage()?.agent) ?? local.agent.current())
-        : local.agent.current()
+        ? (sync.data.agent.find((item) => item.name === lastUserMessage()?.agent) ?? promptIdentity().agent)
+        : promptIdentity().agent
     const color = agent ? local.agent.color(agent.name) : theme.border
     return {
       frames: createFrames({
@@ -1443,7 +1466,7 @@ export function Prompt(props: PromptProps) {
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
               <box flexDirection="row" gap={1}>
-                <Show when={local.agent.current()} fallback={<box height={1} />}>
+                <Show when={promptIdentity().agent} fallback={<box height={1} />}>
                   {(agent) => (
                     <>
                       <text fg={fadeColor(highlight(), agentMetaAlpha())}>
@@ -1459,14 +1482,14 @@ export function Prompt(props: PromptProps) {
                             flexShrink={0}
                             fg={fadeColor(leader() ? theme.textMuted : theme.text, modelMetaAlpha())}
                           >
-                            {local.model.parsed().model}
+                            {modelInfo().model}
                           </text>
-                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
+                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{modelInfo().provider}</text>
                           <Show when={showVariant()}>
                             <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
                             <text>
                               <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
-                                {local.model.variant.current()}
+                                {promptIdentity().variant}
                               </span>
                             </text>
                           </Show>
