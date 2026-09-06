@@ -552,6 +552,90 @@ it.instance("global tmp directory children are allowed for external_directory", 
 )
 
 it.instance(
+  "legacy tools deny-all does not defeat global permission allows",
+  () =>
+    Effect.gen(function* () {
+      const agent = yield* load((svc) => svc.get("myagent"))
+      expect(agent).toBeDefined()
+      expect(Permission.evaluate("external_directory", "/tmp/some/path", agent!.permission).action).toBe("allow")
+      expect(evalPerm(agent, "bash")).toBe("deny")
+      expect(evalPerm(agent, "read")).toBe("allow")
+    }),
+  {
+    config: {
+      permission: {
+        external_directory: {
+          "/tmp/**": "allow",
+        },
+      },
+      agent: {
+        myagent: {
+          tools: {
+            "*": false,
+            read: true,
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "legacy tools deny-all does not defeat global permission allows on overridden native agents",
+  () =>
+    Effect.gen(function* () {
+      const build = yield* load((svc) => svc.get("build"))
+      expect(build).toBeDefined()
+      expect(Permission.evaluate("external_directory", "/tmp/some/path", build!.permission).action).toBe("allow")
+      expect(evalPerm(build, "bash")).toBe("deny")
+    }),
+  {
+    config: {
+      permission: {
+        external_directory: {
+          "/tmp/**": "allow",
+        },
+      },
+      agent: {
+        build: {
+          tools: {
+            "*": false,
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "explicit agent permission still ranks above global permission",
+  () =>
+    Effect.gen(function* () {
+      const agent = yield* load((svc) => svc.get("myagent"))
+      expect(agent).toBeDefined()
+      expect(Permission.evaluate("external_directory", "/tmp/locked", agent!.permission).action).toBe("deny")
+    }),
+  {
+    config: {
+      permission: {
+        external_directory: {
+          "/tmp/**": "allow",
+        },
+      },
+      agent: {
+        myagent: {
+          permission: {
+            external_directory: {
+              "/tmp/locked": "deny",
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
   "Truncate.GLOB is allowed even when user denies external_directory per-agent",
   () =>
     Effect.gen(function* () {
