@@ -72,7 +72,7 @@ describe("AmazonBedrockPlugin", () => {
         yield* addPlugin()
         const result = required(yield* catalog.provider.get(Provider.ID.amazonBedrock))
         expect(result.package).toBe(Provider.aisdk("@ai-sdk/amazon-bedrock"))
-        expect(result.settings).toEqual({ baseURL: "https://bedrock.example" })
+        expect(result.settings).toEqual({ baseURL: "https://bedrock.example", region: "us-east-1" })
       }),
     ),
   )
@@ -84,6 +84,7 @@ describe("AmazonBedrockPlugin", () => {
         yield* addPlugin()
         expect(required(yield* catalog.provider.get(Provider.ID.amazonBedrock)).settings).toEqual({
           baseURL: "https://base.example",
+          region: "us-east-1",
         })
       }),
     ),
@@ -140,7 +141,7 @@ describe("AmazonBedrockPlugin", () => {
         yield* addPlugin()
         const result = required(yield* catalog.provider.get(Provider.ID.amazonBedrock))
         expect(result.activation).toBe("enabled")
-        expect(result.settings).toEqual({ profile: "work" })
+        expect(result.settings).toEqual({ profile: "work", region: "us-east-1" })
       }),
     ),
   )
@@ -182,7 +183,7 @@ describe("AmazonBedrockPlugin", () => {
     ),
   )
 
-  it.effect("falls back to AWS_DEFAULT_REGION", () =>
+  it.effect("falls back to AWS_DEFAULT_REGION then us-east-1", () =>
     withEnv({ ...noAmbientAWS, AWS_DEFAULT_REGION: "us-west-2" }, () =>
       Effect.gen(function* () {
         const catalog = yield* seedBedrock()
@@ -190,6 +191,11 @@ describe("AmazonBedrockPlugin", () => {
         expect(required(yield* catalog.provider.get(Provider.ID.amazonBedrock)).settings).toEqual({
           region: "us-west-2",
         })
+        const fallback = yield* Effect.gen(function* () {
+          yield* catalog.reload()
+          return required(yield* catalog.provider.get(Provider.ID.amazonBedrock)).settings
+        }).pipe((fx) => withEnv({ AWS_DEFAULT_REGION: undefined }, () => fx))
+        expect(fallback).toEqual({ region: "us-east-1" })
       }),
     ),
   )

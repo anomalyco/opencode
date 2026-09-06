@@ -39,10 +39,12 @@ export const AmazonBedrockPlugin = define({
           // SigV4 authenticates through the AWS default chain rather than a key
           // credential, so ambient AWS configuration is what makes Bedrock usable.
           if (chain && provider.activation === "auto") provider.activation = "enabled"
-          const region = process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION
+          // Same default the native package uses, made explicit here so catalog
+          // `${AWS_REGION}` URLs resolve without any region configured.
+          const region = process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? "us-east-1"
           provider.settings = {
             ...settings,
-            ...(typeof settings.region !== "string" && region ? { region } : {}),
+            ...(typeof settings.region !== "string" ? { region } : {}),
             // Users configure Bedrock private/VPC endpoints as `endpoint`; move it
             // into the catalog base URL once.
             ...(typeof settings.baseURL !== "string" && typeof settings.endpoint === "string"
