@@ -634,6 +634,10 @@
 
 [data-component="collapsed-tool-group"] > [data-component="collapsible"].tool-collapsible {
   --tool-content-gap: 8px;
+
+  > [data-slot="collapsible-trigger"] [data-component="tool-trigger"] {
+    gap: 0;
+  }
 }
 
 [data-component="context-tool-group-list"] {
