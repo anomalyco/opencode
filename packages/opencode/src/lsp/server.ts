@@ -11,6 +11,7 @@ import { Process } from "@/util/process"
 import { which } from "@opencode-ai/core/util/which"
 import { Module } from "@opencode-ai/core/util/module"
 import { spawn } from "./launch"
+import { javaVersion } from "./jdtls-version"
 import { Npm } from "@opencode-ai/core/npm"
 import type { RuntimeFlags } from "@/effect/runtime-flags"
 
@@ -1190,10 +1191,7 @@ export const JDTLS: Info = {
     if (!java) {
       return
     }
-    const javaMajorVersion = await run(["java", "-version"]).then((result) => {
-      const m = /"(\d+)\.\d+\.\d+"/.exec(result.stderr.toString())
-      return !m ? undefined : parseInt(m[1])
-    })
+    const javaMajorVersion = await run(["java", "-version"]).then((result) => javaVersion(result.stderr.toString()))
     if (javaMajorVersion == null || javaMajorVersion < 21) {
       return
     }
