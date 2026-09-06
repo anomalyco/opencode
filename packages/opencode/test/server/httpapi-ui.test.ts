@@ -356,6 +356,52 @@ describe("HttpApi UI fallback", () => {
     }),
   )
 
+
+  it.live("serves OPENCODE_WEB_DIST instead of the hosted UI", () =>
+    Effect.gen(function* () {
+      const dir = yield* Effect.promise(async () => {
+        const os = await import("node:os")
+        const fs = await import("node:fs/promises")
+        const p = await import("node:path")
+        const root = await fs.mkdtemp(p.join(os.tmpdir(), "oc-web-dist-"))
+        await fs.writeFile(p.join(root, "index.html"), "<html>local-dist</html>")
+        return root
+      })
+      const prev = process.env.OPENCODE_WEB_DIST
+      process.env.OPENCODE_WEB_DIST = dir
+      let proxied = false
+      try {
+        const response = yield* Effect.gen(function* () {
+          const fs = yield* FSUtil.Service
+          const client = yield* HttpClient.HttpClient
+          return yield* serveUIEffect(HttpServerRequest.fromWeb(new Request("http://localhost/")), {
+            fs,
+            client,
+            disableEmbeddedWebUi: true,
+          })
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              Layer.succeed(
+                HttpClient.HttpClient,
+                HttpClient.make(() => {
+                  proxied = true
+                  return Effect.succeed(HttpClientResponse.fromWeb(HttpClientRequest.get("https://app.opencode.ai/"), new Response("hosted")))
+                }),
+              ),
+            ),
+          ),
+          Effect.map(HttpServerResponse.toWeb),
+        )
+        expect(response.status).toBe(200)
+        expect(yield* responseText(response)).toBe("<html>local-dist</html>")
+        expect(proxied).toBe(false)
+      } finally {
+        restoreEnv("OPENCODE_WEB_DIST", prev)
+      }
+    }),
+  )
+
   it.live("keeps matched API routes ahead of the UI fallback", () =>
     Effect.gen(function* () {
       const server = routeOrderingApp()
