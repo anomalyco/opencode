@@ -44,6 +44,9 @@ type PlatformBase = {
   /** Reveal a local path in the system file manager; false when the path does not exist (desktop only) */
   revealPath?(path: string): Promise<boolean>
 
+  /** Open a file with the OS default application (desktop only) */
+  openInApp?(path: string): Promise<boolean>
+
   /** Restart the app  */
   restart(): Promise<void>
 

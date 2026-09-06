@@ -1,7 +1,20 @@
 export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 
+export const OFFICE_FILE_TYPES = [
+  "application/msword",
+  "application/vnd.ms-excel",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.oasis.opendocument.spreadsheet",
+  "application/vnd.oasis.opendocument.presentation",
+]
+
 export const ACCEPTED_FILE_TYPES = [
   ...ACCEPTED_IMAGE_TYPES,
+  ...OFFICE_FILE_TYPES,
   "application/pdf",
   "text/*",
   "application/json",
@@ -68,6 +81,15 @@ const MIME_EXT = new Map([
   ["application/x-yaml", "yaml"],
   ["application/xml", "xml"],
   ["application/yaml", "yaml"],
+  ["application/msword", "doc"],
+  ["application/vnd.ms-excel", "xls"],
+  ["application/vnd.ms-powerpoint", "ppt"],
+  ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx"],
+  ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"],
+  ["application/vnd.openxmlformats-officedocument.presentationml.presentation", "pptx"],
+  ["application/vnd.oasis.opendocument.text", "odt"],
+  ["application/vnd.oasis.opendocument.spreadsheet", "ods"],
+  ["application/vnd.oasis.opendocument.presentation", "odp"],
 ])
 
 const TEXT_EXT = ["txt", "text", "md", "markdown", "log", "csv"]

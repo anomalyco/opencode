@@ -9,6 +9,7 @@ import {
 } from "@opencode-ai/llm"
 import { SessionMessage } from "../message"
 import type { FileAttachment } from "../prompt"
+import { Office } from "../../office"
 
 const media = (file: FileAttachment): ContentPart => ({
   type: "media",
@@ -17,6 +18,16 @@ const media = (file: FileAttachment): ContentPart => ({
   filename: file.name,
   metadata: file.description === undefined ? undefined : { description: file.description },
 })
+
+// Routes reject office media types except Bedrock Converse document blocks, so
+// office attachments are lowered to extracted text for every other provider.
+const userFile = async (file: FileAttachment, model: Model): Promise<ContentPart> => {
+  const mime = Office.officeMime(file.mime)
+  if (!mime) return media(file)
+  if (String(model.provider) === "amazon-bedrock" && Office.NATIVE_OFFICE_DOCUMENT_MIMES.has(mime)) return media(file)
+  const text = await Office.officeTextFromUri(file.uri, mime, file.name)
+  return text === undefined ? media(file) : { type: "text", text }
+}
 
 const toolInput = (tool: SessionMessage.AssistantTool) => {
   if (tool.state.status !== "pending") return tool.state.input
@@ -112,7 +123,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
   ]
 }
 
-function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] {
+async function toLLMMessage(message: SessionMessage.Message, model: Model): Promise<Message[]> {
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
@@ -122,7 +133,10 @@ function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] 
         Message.make({
           id: message.id,
           role: "user",
-          content: [{ type: "text", text: message.text }, ...(message.files ?? []).map(media)],
+          content: [
+            { type: "text", text: message.text },
+            ...(await Promise.all((message.files ?? []).map((file) => userFile(file, model)))),
+          ],
           metadata: {
             ...message.metadata,
             ...(message.agents?.length ? { agents: message.agents } : {}),
@@ -164,8 +178,9 @@ ${message.recent}
         }),
       ]
   }
+  return []
 }
 
 /** Translate projected V2 Session history into canonical @opencode-ai/llm context. */
 export const toLLMMessages = (messages: readonly SessionMessage.Message[], model: Model) =>
-  messages.flatMap((message) => toLLMMessage(message, model))
+  Promise.all(messages.map((message) => toLLMMessage(message, model))).then((translated) => translated.flat())
