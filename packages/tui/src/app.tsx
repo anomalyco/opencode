@@ -232,7 +232,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     Effect.gen(function* () {
       const options = {
         externalOutputMode: "passthrough",
-        targetFps: 60,
+        targetFps: config.targetFps ?? 60,
+        maxFps: config.maxFps ?? 60,
         gatherStats: false,
         exitOnCtrlC: false,
         useKittyKeyboard: {},
@@ -598,6 +599,8 @@ function App(props: { pair?: DialogPairCredentials }) {
 
   createEffect(() => {
     renderer.useMouse = config.data.mouse
+    renderer.targetFps = config.data.targetFps ?? 60
+    renderer.maxFps = config.data.maxFps ?? 60
   })
 
   let active: { id: string; title?: string } | undefined

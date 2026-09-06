@@ -106,6 +106,22 @@ Set scroll speed and acceleration:
 | `speed`        | number, at least `0.001` | Sets the distance per input tick. |
 | `acceleration` | boolean                  | Speeds up repeated scrolling.     |
 
+## Frame rate
+
+Set the renderer frame rates for the TUI and Mini:
+
+```json title="cli.json"
+{
+  "targetFps": 30,
+  "maxFps": 60
+}
+```
+
+- `targetFps` controls continuous rendering and animations. Defaults to `60` in the TUI and `30` in Mini.
+- `maxFps` limits requested redraws, such as those triggered by input. Defaults to `60` in both.
+
+Both accept positive finite numbers. The TUI applies edits to these settings live; removing a setting restores its default.
+
 ## Attention
 
 Configure notifications and sounds:

@@ -1,3 +1,4 @@
+import { useRenderer } from "@opentui/solid"
 import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js"
 
 type AnimatableValue = number | readonly number[]
@@ -27,11 +28,6 @@ type ValueState = {
   from: number[]
 }
 
-type AnimationTask = (now: number) => boolean
-
-const tasks = new Set<AnimationTask>()
-let timer: ReturnType<typeof setInterval> | undefined
-
 const smoothstep = (progress: number) => progress * progress * (3 - 2 * progress)
 
 export function spring(options: { visualDuration: number; restDelta?: number; restSpeed?: number }): Transition {
@@ -58,30 +54,25 @@ export function createAnimatable<T extends AnimatableTarget>(
     enabled?: Accessor<boolean>
   },
 ) {
+  const renderer = useRenderer()
   const enabled = options.enabled ?? (() => true)
   const state = new Map<string, ValueState>()
   const [value, setValue] = createSignal(clone(initial), { equals: false })
   let target = clone(initial)
-  let started = performance.now()
-  let previous = started
+  let elapsed = 0
+  let running = false
 
   rebuild(initial)
 
-  const step: AnimationTask = (now) => {
-    if (!enabled()) {
-      jump(target)
-      return false
-    }
+  const step = async (deltaTime: number) => {
+    if (!running) return
+    if (!enabled()) return jump(target)
 
-    const delta = Math.min(0.05, (now - previous) / 1_000)
-    previous = now
-    const moving = options.transition.type === "spring" ? advanceSpring(delta) : advanceTween(now)
-    if (!moving) {
-      jump(target)
-      return false
-    }
+    elapsed += deltaTime
+    const moving =
+      options.transition.type === "spring" ? advanceSpring(Math.min(0.05, deltaTime / 1_000)) : advanceTween()
+    if (!moving) return jump(target)
     setValue(() => read())
-    return true
   }
 
   function animate(next: T) {
@@ -89,25 +80,30 @@ export function createAnimatable<T extends AnimatableTarget>(
     target = clone(next)
     if (!enabled() || !sameShape(next)) return jump(next)
 
-    started = performance.now()
-    previous = started
+    elapsed = 0
     for (const [key, current] of state) {
       current.from = [...current.value]
       current.target = values(next[key]!)
     }
     if (settled()) return jump(next)
-    schedule(step)
+    if (running) return
+    running = true
+    renderer.setFrameCallback(step)
+    renderer.requestLive()
   }
 
   function jump(next: T) {
     target = clone(next)
-    unschedule(step)
+    stop()
     rebuild(next)
     setValue(() => clone(next))
   }
 
   function stop() {
-    unschedule(step)
+    if (!running) return
+    running = false
+    renderer.removeFrameCallback(step)
+    renderer.dropLive()
   }
 
   function rebuild(next: T) {
@@ -122,8 +118,7 @@ export function createAnimatable<T extends AnimatableTarget>(
         from: [...value],
       })
     }
-    started = performance.now()
-    previous = started
+    elapsed = 0
   }
 
   function sameShape(next: T) {
@@ -174,10 +169,10 @@ export function createAnimatable<T extends AnimatableTarget>(
     return moving
   }
 
-  function advanceTween(now: number) {
+  function advanceTween() {
     const transition = options.transition
     if (transition.type !== "tween") return false
-    const progress = Math.min(1, (now - started) / 1_000 / Math.max(0.001, transition.duration))
+    const progress = Math.min(1, elapsed / 1_000 / Math.max(0.001, transition.duration))
     const eased = transition.ease(progress)
     for (const current of state.values())
       current.value.forEach((_, index) => {
@@ -211,25 +206,4 @@ function clone<T extends AnimatableTarget>(target: T) {
   return Object.fromEntries(
     Object.entries(target).map(([key, value]) => [key, typeof value === "number" ? value : [...value]]),
   ) as T
-}
-
-function schedule(task: AnimationTask) {
-  tasks.add(task)
-  if (timer) return
-  timer = setInterval(tick, 16)
-}
-
-function unschedule(task: AnimationTask) {
-  tasks.delete(task)
-  if (tasks.size > 0 || !timer) return
-  clearInterval(timer)
-  timer = undefined
-}
-
-function tick() {
-  const now = performance.now()
-  for (const task of tasks) if (!task(now)) tasks.delete(task)
-  if (tasks.size > 0 || !timer) return
-  clearInterval(timer)
-  timer = undefined
 }
