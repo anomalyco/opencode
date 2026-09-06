@@ -139,26 +139,7 @@ export function SessionComposerRegion(props: {
                   onEdit={controller.followup()!.onEdit}
                 />
               </Show>
-              <Show
-                when={controller.child()}
-                fallback={<Show when={!controller.state.blocked()}>{props.promptInput}</Show>}
-              >
-                <div
-                  ref={controller.setPromptRef}
-                  class="w-full rounded-[12px] border border-border-weak-base bg-background-base p-3 text-16-regular text-text-weak"
-                >
-                  <span>{language.t("session.child.promptDisabled")} </span>
-                  <Show when={controller.parentID()}>
-                    <button
-                      type="button"
-                      class="text-text-base transition-colors hover:text-text-strong"
-                      onClick={controller.openParent}
-                    >
-                      {language.t("session.child.backToParent")}
-                    </button>
-                  </Show>
-                </div>
-              </Show>
+              <Show when={!controller.state.blocked()}>{props.promptInput}</Show>
             </div>
           </Show>
         </Show>
