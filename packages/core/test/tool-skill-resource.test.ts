@@ -152,6 +152,42 @@ describe("skill supporting files", () => {
             }),
             Effect.forkScoped({ startImmediately: true }),
           )
+          const read = (file: string) =>
+            executeTool(tools, {
+              sessionID,
+              ...toolIdentity,
+              call: { type: "tool-call", id: "read-policy", name: "read", input: { path: file } },
+            })
+          const reference = path.join(tmp.source, "release", "references", "policy.md")
+          const rules = (permissions: Permission.Ruleset) =>
+            agents.transform((editor) =>
+              editor.update(Agent.ID.make("build"), (agent) => {
+                agent.permissions = [...Agent.Info.default(Agent.ID.make("build")).permissions, ...permissions]
+              }),
+            )
+
+          // Documentation reads do not require invocation, even when invoking the skill is denied.
+          for (const effect of ["deny", "ask", "allow"] as const) {
+            yield* rules([{ action: "skill", resource: "release", effect }])
+            expect(yield* read(reference)).toMatchObject({
+              status: "completed",
+              output: { content: "Release policy fixture\n" },
+            })
+            expect(requests).toEqual([])
+            const invocation = yield* executeTool(tools, {
+              sessionID,
+              ...toolIdentity,
+              call: { type: "tool-call", id: `invoke-${effect}`, name: "skill", input: { id: "release" } },
+            })
+            expect(invocation).toMatchObject(
+              effect === "deny"
+                ? { status: "error", error: { type: "permission.rejected", message: "Permission denied: skill" } }
+                : { status: "completed" },
+            )
+            expect(requests.map((request) => request.action)).toEqual(effect === "ask" ? ["skill"] : [])
+            requests.length = 0
+          }
+          yield* rules([])
           expect(
             yield* executeTool(tools, {
               sessionID,
@@ -172,20 +208,7 @@ describe("skill supporting files", () => {
           expect(result).toMatchObject({ status: "completed", output: { content: "Release policy fixture\n" } })
           expect(requests.map(({ action, resources }) => ({ action, resources }))).toEqual([])
 
-          const read = (file: string) =>
-            executeTool(tools, {
-              sessionID,
-              ...toolIdentity,
-              call: { type: "tool-call", id: "read-policy", name: "read", input: { path: file } },
-            })
-          const reference = path.join(tmp.source, "release", "references", "policy.md")
           const boundary = path.join(path.dirname(reference), "*").replaceAll("\\", "/")
-          const rules = (permissions: Permission.Ruleset) =>
-            agents.transform((editor) =>
-              editor.update(Agent.ID.make("build"), (agent) => {
-                agent.permissions = [...Agent.Info.default(Agent.ID.make("build")).permissions, ...permissions]
-              }),
-            )
 
           // The read's allowance is not saved or reused by another external action.
           yield* permission.assert({ sessionID, action: "external_directory", resources: [boundary] })
@@ -199,14 +222,6 @@ describe("skill supporting files", () => {
               error: { type: "permission.rejected", message: `Permission denied: ${action}` },
             })
             expect(requests).toEqual([])
-          }
-
-          // A skill whose permission is ask/deny does not grant automatic resource access.
-          for (const effect of ["ask", "deny"] as const) {
-            yield* rules([{ action: "skill", resource: "release", effect }])
-            expect(yield* read(reference)).toMatchObject({ status: "completed" })
-            expect(requests.map((request) => request.action)).toEqual(["external_directory"])
-            requests.length = 0
           }
 
           yield* rules([])

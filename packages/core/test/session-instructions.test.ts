@@ -41,7 +41,6 @@ const readToolNode = makeLocationNode({
   name: "test/read-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(ReadTool.Plugin)),
   deps: [
-    Agent.node,
     Skill.node,
     Tool.node,
     ReadToolFileSystem.node,

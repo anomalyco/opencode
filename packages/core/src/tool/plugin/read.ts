@@ -12,7 +12,6 @@ import { SessionInstructions } from "../../session/instructions.js"
 import { AbsolutePath } from "../../schema.js"
 import { ReadToolFileSystem } from "../read-filesystem.js"
 import { Environment } from "../../environment/index.js"
-import { Agent } from "../../agent.js"
 import { Skill } from "../../skill.js"
 
 export const name = "read"
@@ -38,7 +37,6 @@ export const Plugin = {
     const sessionInstructions = yield* SessionInstructions.Service
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
-    const agents = yield* Agent.Service
     const skills = yield* Skill.Service
 
     yield* ctx.tool
@@ -60,17 +58,13 @@ export const Plugin = {
               const authorize = (target: LocationMutation.Target, authorizeExternal = true) =>
                 Effect.gen(function* () {
                   if (target.externalDirectory && authorizeExternal) {
-                    const agent = yield* agents.get(context.agent)
                     // Directory skills advertise supporting paths outside the project.
                     // Authorize only this read's boundary, not edits or shell access there.
-                    const supporting =
-                      agent &&
-                      (yield* skills.list()).some(
-                        (skill) =>
-                          basename(skill.location) === "SKILL.md" &&
-                          FSUtil.contains(dirname(skill.location), target.absolute) &&
-                          Permission.evaluate("skill", skill.id, agent.permissions).effect === "allow",
-                      )
+                    const supporting = (yield* skills.list()).some(
+                      (skill) =>
+                        basename(skill.location) === "SKILL.md" &&
+                        FSUtil.contains(dirname(skill.location), target.absolute),
+                    )
                     yield* permission.assert(
                       {
                         ...LocationMutation.externalDirectoryPermission(target.externalDirectory),
