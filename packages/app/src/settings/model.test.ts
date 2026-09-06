@@ -66,7 +66,7 @@ describe("settings schema", () => {
         mobileTitlebarPosition: "top",
         mobileDiffWrap: true,
         terminalPlacement: "side",
-        followUpBehavior: "steer",
+        followUpBehavior: "queue",
       },
       appearance: {
         fontSize: 14,
@@ -112,7 +112,7 @@ describe("settings schema", () => {
       autoSave: false,
       releaseNotes: true,
       timelineDetail: timelinePresets[2].value,
-      followUpBehavior: "steer",
+      followUpBehavior: "queue",
     })
     expect(settings.appearance).toEqual({
       fontSize: 14,
