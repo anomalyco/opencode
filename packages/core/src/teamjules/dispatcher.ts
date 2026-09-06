@@ -1,4 +1,4 @@
-import { TeamJulesWorker, TaskLease } from "./worker";
+import { TeamJulesWorker, type TaskLease } from "./worker";
 
 export interface TaskState {
   status: "pending" | "running" | "completed" | "failed";

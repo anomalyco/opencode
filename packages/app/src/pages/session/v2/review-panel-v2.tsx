@@ -1,6 +1,6 @@
 import { createMemo, createResource, createSignal, Show, type JSX } from "solid-js"
 import { useParams } from "@solidjs/router"
-import { TeamJulesLiveWatcher } from "@opencode-ai/session-ui/components/teamjules/live-watcher"
+import { TeamJulesLiveWatcher } from "@opencode-ai/session-ui/teamjules/live-watcher"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import {
