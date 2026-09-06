@@ -109,7 +109,11 @@ const layer = Layer.effect(
 
     const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
       const repo = yield* git.repo.discover(input)
-      if (!repo) return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
+      if (!repo) {
+        const known = yield* projectDirectories.find(input)
+        if (known) return { id: known.projectID, directory: known.directory, vcs: undefined }
+        return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
+      }
 
       const previous = yield* cached(repo.commonDirectory)
       const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
