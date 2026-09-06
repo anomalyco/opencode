@@ -1,5 +1,6 @@
 import type { BrowserWindow } from "electron"
-import { addRendererHeaders, isRendererUrl, upsertHeader } from "./protocol"
+import { addRendererHeaders } from "./headers"
+import { isRendererUrl } from "./protocol"
 
 const rendererPermissions = new Set(["clipboard-sanitized-write", "notifications"])
 
@@ -30,13 +31,9 @@ export function wireNavigationPolicy(win: BrowserWindow, openExternalURL: (url: 
 }
 
 export function wireRendererHeaders(win: BrowserWindow) {
-  win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
-    upsertHeader(details.requestHeaders, "Access-Control-Allow-Origin", ["*"])
-    callback({ requestHeaders: details.requestHeaders })
-  })
   win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = details.responseHeaders ?? {}
-    addRendererHeaders(details.url, responseHeaders)
+    addRendererHeaders(responseHeaders, { document: isRendererUrl(details.url, true) })
     callback({ responseHeaders })
   })
 }
