@@ -14,6 +14,17 @@ import DESCRIPTION from "./apply_patch.txt"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { Format } from "../format"
 import * as Bom from "@/util/bom"
+import { isBinaryFile } from "@/util/binary"
+
+const MAX_DELETE_DIFF_BYTES = 1024 * 1024
+
+function omittedDeleteDiff(filePath: string, size: number) {
+  return [
+    `Index: ${filePath}`,
+    "===================================================================",
+    `Binary or oversized file deleted (${size} bytes; content diff omitted)`,
+  ].join("\n")
+}
 
 export const Parameters = Schema.Struct({
   patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
@@ -159,23 +170,28 @@ export const ApplyPatchTool = Tool.define(
           }
 
           case "delete": {
-            const source = yield* Bom.readFile(afs, filePath).pipe(
-              Effect.catch((error) =>
-                Effect.fail(
-                  new Error(
-                    `apply_patch verification failed: ${error instanceof Error ? error.message : String(error)}`,
-                  ),
-                ),
-              ),
-            )
-            const contentToDelete = source.text
-            const deleteDiff = trimDiff(createTwoFilesPatch(filePath, filePath, contentToDelete, ""))
+            const stat = yield* afs.stat(filePath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+            if (!stat || stat.type === "Directory") {
+              return yield* Effect.fail(
+                new Error(`apply_patch verification failed: Failed to read file to delete: ${filePath}`),
+              )
+            }
+            const size = Number(stat.size)
+            const knownBinary = isBinaryFile(filePath, new Uint8Array())
+            const bytes = !knownBinary && size <= MAX_DELETE_DIFF_BYTES ? yield* afs.readFile(filePath) : undefined
+            const omit = knownBinary || size > MAX_DELETE_DIFF_BYTES || isBinaryFile(filePath, bytes ?? new Uint8Array())
+            const source = omit
+              ? { bom: false, text: "" }
+              : Bom.split(new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes))
+            const deleteDiff = omit
+              ? omittedDeleteDiff(filePath, size)
+              : trimDiff(createTwoFilesPatch(filePath, filePath, source.text, ""))
 
-            const deletions = contentToDelete.split("\n").length
+            const deletions = omit ? 0 : source.text.split("\n").length
 
             fileChanges.push({
               filePath,
-              oldContent: contentToDelete,
+              oldContent: source.text,
               newContent: "",
               type: "delete",
               diff: deleteDiff,
