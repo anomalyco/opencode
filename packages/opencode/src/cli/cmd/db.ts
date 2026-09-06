@@ -3,7 +3,8 @@ import { spawn } from "child_process"
 import { Database } from "@opencode-ai/core/database/database"
 import { Effect } from "effect"
 import { sql } from "drizzle-orm"
-import { effectCmd } from "../effect-cmd"
+import { effectCmd, fail } from "../effect-cmd"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const QueryCommand = effectCmd({
   command: "$0 [query]",
@@ -51,12 +52,43 @@ const PathCommand = effectCmd({
   }),
 })
 
+const CompactCommand = effectCmd({
+  command: "compact",
+  describe:
+    "delete duplicate snapshot events from the event log (local use only; incompatible with experimental workspaces sync)",
+  instance: false,
+  handler: Effect.fn("Cli.db.compact")(function* () {
+    const flags = yield* RuntimeFlags.Service
+    if (flags.experimentalWorkspaces) {
+      return yield* fail(
+        "db compact is not available while OPENCODE_EXPERIMENTAL_WORKSPACES is enabled: it leaves sequence gaps that break cross-instance sync history.",
+      )
+    }
+    const { db } = yield* Database.Service
+    const EventV2 = yield* Effect.promise(() => import("@opencode-ai/core/event"))
+    const result = yield* EventV2.compactSnapshotEvents(db)
+    console.log(
+      `Removed ${result.removed} redundant snapshot events (${(result.bytes / 1024 / 1024).toFixed(1)} MiB of JSON payload).`,
+    )
+    const sizeBefore = (yield* db.all(sql.raw(`PRAGMA page_count;`)).pipe(Effect.orDie)) as Array<{ page_count: number }>
+    yield* db.run(sql.raw(`VACUUM;`)).pipe(Effect.orDie)
+    const sizeAfter = (yield* db.all(sql.raw(`PRAGMA page_count;`)).pipe(Effect.orDie)) as Array<{ page_count: number }>
+    if (sizeBefore.length > 0 && sizeAfter.length > 0) {
+      const pagesBefore = Number(sizeBefore[0]?.page_count)
+      const pagesAfter = Number(sizeAfter[0]?.page_count)
+      console.log(
+        `DB pages: ${pagesBefore.toLocaleString()} -> ${pagesAfter.toLocaleString()} (-${(100 * (1 - pagesAfter / Math.max(pagesBefore, 1))).toFixed(1)}%)`,
+      )
+    }
+  }),
+})
+
 export const DbCommand = effectCmd({
   command: "db",
   describe: "database tools",
   instance: false,
   builder: (yargs: Argv) => {
-    return yargs.command(QueryCommand).command(PathCommand).demandCommand()
+    return yargs.command(QueryCommand).command(PathCommand).command(CompactCommand).demandCommand()
   },
   handler: Effect.fn("Cli.db")(function* () {}),
 })
