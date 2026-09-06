@@ -148,7 +148,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     .insert(SessionTable)
     .values({
       id: event.data.sessionID,
-      parent_id: null,
+      parent_id: event.data.child ? event.data.parentID : null,
       fork_session_id: event.data.parentID,
       fork_boundary: event.data.boundary,
       project_id: parent.project_id,
@@ -156,9 +156,9 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       slug: Slug.create(),
       directory: parent.directory,
       path: parent.path,
-      title: forkTitle(parent.title ?? undefined),
-      agent: parent.agent,
-      model: parent.model,
+      title: event.data.child?.title ?? forkTitle(parent.title ?? undefined),
+      agent: event.data.child?.agent ?? parent.agent,
+      model: event.data.child?.model ?? parent.model,
       metadata: parent.metadata,
       version: parent.version,
       cost: 0,

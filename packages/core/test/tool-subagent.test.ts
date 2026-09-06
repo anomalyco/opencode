@@ -30,11 +30,12 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Plugin } from "@opencode-ai/core/plugin"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Permission } from "@opencode-ai/core/permission"
 import { SubagentTool } from "@opencode-ai/core/tool/plugin/subagent"
 import { Tool } from "@opencode-ai/core/tool"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
 import { testEffect } from "./lib/effect"
@@ -177,6 +178,274 @@ const withSubagent = (location: Location.Ref) =>
   })
 
 describe("SubagentTool", () => {
+  for (const enabled of [undefined, false, true]) {
+    productionIt.live(`gates the fork parameter with experimental.subagent_fork=${enabled}`, () =>
+      Effect.gen(function* () {
+        const dir = yield* tmpdirScoped()
+        yield* Effect.promise(() =>
+          Bun.write(path.join(dir.path, "opencode.json"), JSON.stringify({ experimental: { subagent_fork: enabled } })),
+        )
+        const sessions = yield* Session.Service
+        const parent = yield* sessions.create({
+          location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+        })
+        yield* withSubagent(parent.location)
+        const locations = yield* LocationServiceMap.Service
+        const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+        const hooks = yield* PluginHooks.Service.pipe(Effect.provide(locations.get(parent.location)))
+        const snapshot = yield* registry.snapshot()
+        const definition = snapshot.definitions.find((tool) => tool.name === SubagentTool.name)!
+        const context = yield* hooks.trigger("session", "context", {
+          sessionID: parent.id,
+          agent: toolIdentity.agent,
+          model: parentModel,
+          system: [],
+          messages: [],
+          tools: { subagent: { description: definition.description, input: { ...definition.inputSchema } } },
+          generation: {},
+          providerOptions: {},
+        })
+        expect(Object.keys(context.tools.subagent.input.properties ?? {})).toContain("sessionID")
+        expect(Object.keys(context.tools.subagent.input.properties ?? {}).includes("fork")).toBe(enabled === true)
+        // Hiding it on this request must not mutate the registry's shared schema.
+        expect(Object.keys(definition.inputSchema.properties ?? {})).toContain("fork")
+        if (enabled === true) return
+        const result = yield* executeTool(registry, {
+          sessionID: parent.id,
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: "call-disabled-fork",
+            name: SubagentTool.name,
+            input: { agent: "reviewer", description: "review", prompt: "review", fork: true },
+          },
+        })
+        expect(result).toMatchObject({
+          status: "error",
+          error: { message: "Forking is disabled. Enable experimental.subagent_fork to use fork." },
+        })
+        expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(0)
+      }),
+    )
+  }
+
+  it.live("rejects fork together with sessionID without changing the child", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* Effect.promise(() =>
+        Bun.write(path.join(dir.path, "opencode.json"), JSON.stringify({ experimental: { subagent_fork: true } })),
+      )
+      const sessions = yield* Session.Service
+      const parent = yield* sessions.create({
+        location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+      })
+      const child = yield* sessions.create({ parentID: parent.id })
+      yield* withSubagent(parent.location)
+      const locations = yield* LocationServiceMap.Service
+      const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+      for (const fork of [false, true]) {
+        const result = yield* executeTool(registry, {
+          sessionID: parent.id,
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: `call-conflicting-fork-${fork}`,
+            name: SubagentTool.name,
+            input: { agent: "reviewer", description: "review", prompt: "review", fork, sessionID: child.id },
+          },
+        })
+        expect(result).toMatchObject({
+          status: "error",
+          error: { message: "Cannot use fork with sessionID. Omit one of them." },
+        })
+      }
+      expect(yield* sessions.get(child.id)).toEqual(child)
+      expect(yield* sessions.inbox(child.id)).toEqual([])
+      expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(1)
+    }),
+  )
+
+  completionIt.live("sends inherited history to a forked child and preserves it on continuation", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* Effect.promise(() =>
+        Bun.write(path.join(dir.path, "opencode.json"), JSON.stringify({ experimental: { subagent_fork: true } })),
+      )
+      const sessions = yield* Session.Service
+      const parent = yield* sessions.create({
+        location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+        agent: toolIdentity.agent,
+        model: parentModel,
+        metadata: { source: "fork-test" },
+      })
+      yield* withSubagent(parent.location)
+      const locations = yield* LocationServiceMap.Service
+      const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+      const hooks = yield* PluginHooks.Service.pipe(Effect.provide(locations.get(parent.location)))
+      const requests: PluginHooks.Domains["session"]["context"][] = []
+      yield* hooks.register("session", "context", (event) =>
+        Effect.sync(() => {
+          requests.push(event)
+        }),
+      )
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      yield* sessions.prompt({ sessionID: parent.id, text: "Remember the project context", resume: false })
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
+      const previous = SessionMessage.ID.create()
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID: parent.id,
+        assistantMessageID: previous,
+        agent: toolIdentity.agent,
+        model: parentModel,
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Started, {
+        sessionID: parent.id,
+        assistantMessageID: previous,
+        id: "call-parent-read",
+        name: "read",
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Ended, {
+        sessionID: parent.id,
+        assistantMessageID: previous,
+        id: "call-parent-read",
+        text: '{"filePath":"README.md"}',
+      })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID: parent.id,
+        assistantMessageID: previous,
+        id: "call-parent-read",
+        input: { filePath: "README.md" },
+        executed: false,
+      })
+      yield* bus.publish(SessionEvent.Tool.Success, {
+        sessionID: parent.id,
+        assistantMessageID: previous,
+        id: "call-parent-read",
+        content: [{ type: "text", text: "Inherited file contents" }],
+        executed: false,
+      })
+      yield* bus.publish(SessionEvent.Step.Ended, {
+        sessionID: parent.id,
+        assistantMessageID: previous,
+        finish: "tool-calls",
+        cost: Money.USD.zero,
+        tokens,
+      })
+      const spawning = SessionMessage.ID.create()
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID: parent.id,
+        assistantMessageID: spawning,
+        agent: toolIdentity.agent,
+        model: parentModel,
+      })
+      yield* bus.publish(SessionEvent.Text.Started, { sessionID: parent.id, assistantMessageID: spawning, ordinal: 0 })
+      yield* bus.publish(SessionEvent.Text.Ended, {
+        sessionID: parent.id,
+        assistantMessageID: spawning,
+        ordinal: 0,
+        text: "Spawning response must not be inherited",
+      })
+      yield* sessions.prompt({ sessionID: parent.id, text: "Later parent message", resume: false })
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
+
+      const result = yield* executeTool(registry, {
+        sessionID: parent.id,
+        ...toolIdentity,
+        messageID: spawning,
+        call: {
+          type: "tool-call",
+          id: "call-fork",
+          name: SubagentTool.name,
+          input: { agent: "reviewer", description: "fork review", prompt: "Review the file", fork: true },
+        },
+      })
+      expect(result.status).toBe("completed")
+      const child = yield* sessions.get(outputSessionID(result.metadata))
+      expect(child).toMatchObject({
+        parentID: parent.id,
+        title: "fork review",
+        agent: "reviewer",
+        model: childModel,
+        metadata: parent.metadata,
+        fork: { sessionID: parent.id, boundary: { type: "before", messageID: spawning } },
+      })
+      const request = requests.find((request) => request.sessionID === child.id)!
+      expect(request.agent).toBe(Agent.ID.make("reviewer"))
+      expect(request.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ role: "user", content: [{ type: "text", text: "Remember the project context" }] }),
+          expect.objectContaining({
+            role: "assistant",
+            content: [expect.objectContaining({ type: "tool-call", id: "call-parent-read" })],
+          }),
+          expect.objectContaining({
+            role: "tool",
+            content: [
+              expect.objectContaining({
+                type: "tool-result",
+                result: { type: "text", value: "Inherited file contents" },
+              }),
+            ],
+          }),
+          expect.objectContaining({
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "You are a forked subagent. Use the inherited history as context and perform only the task below.\nReview the file",
+              },
+            ],
+          }),
+        ]),
+      )
+      expect(JSON.stringify(request.messages)).not.toContain("Spawning response must not be inherited")
+      expect(JSON.stringify(request.messages)).not.toContain("Later parent message")
+      expect((yield* sessions.context(child.id)).map((message) => message.id)).not.toContain(previous)
+
+      const continued = yield* executeTool(registry, {
+        sessionID: parent.id,
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: "call-fork-continue",
+          name: SubagentTool.name,
+          input: { agent: "reviewer", description: "follow up", prompt: "Continue reviewing", sessionID: child.id },
+        },
+      })
+      expect(outputSessionID(continued.metadata)).toBe(child.id)
+      const latest = requests.findLast((request) => request.sessionID === child.id)!
+      expect(JSON.stringify(latest.messages)).toContain("Inherited file contents")
+      expect(JSON.stringify(latest.messages)).toContain("Continue reviewing")
+      expect(JSON.stringify(latest.messages)).not.toContain("Later parent message")
+      expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(1)
+      for (const fork of [undefined, false]) {
+        const fresh = yield* executeTool(registry, {
+          sessionID: parent.id,
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: `call-fresh-${fork}`,
+            name: SubagentTool.name,
+            input: {
+              agent: "fallback",
+              description: "fresh",
+              prompt: "Start fresh",
+              ...(fork === undefined ? {} : { fork }),
+            },
+          },
+        })
+        expect(fresh.status).toBe("completed")
+        const freshChild = yield* sessions.get(outputSessionID(fresh.metadata))
+        expect(freshChild.fork).toBeUndefined()
+        expect(freshChild.model).toMatchObject(parentModel)
+        const freshRequest = requests.find((request) => request.sessionID === freshChild.id)!
+        expect(JSON.stringify(freshRequest.messages)).not.toContain("Inherited file contents")
+        expect(JSON.stringify(freshRequest.messages)).toContain("Start fresh")
+      }
+    }),
+  )
+
   completionIt.live("admits one durable completion across live delivery and restart replay", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

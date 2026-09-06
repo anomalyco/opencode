@@ -578,40 +578,52 @@ describe("Session.create", () => {
     }),
   )
 
-  it.effect("replays a fork with stable projected identities", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-      const bus = yield* Bus.Service
-      const { db } = yield* Database.Service
-      const parent = yield* session.create({ location, title: "Parent" })
-      yield* session.prompt({ sessionID: parent.id, text: "First", resume: false })
-      yield* SessionInbox.promote(db, bus, parent.id, "steer")
-      yield* session.synthetic({ sessionID: parent.id, text: "Second", resume: false })
-      yield* SessionInbox.promote(db, bus, parent.id, "steer")
-      const forked = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
-      const original = (yield* session.context(forked.id)).map((message) => message.id)
-      const recorded = yield* db
-        .select()
-        .from(EventTable)
-        .where(eq(EventTable.aggregate_id, forked.id))
-        .get()
-        .pipe(Effect.orDie)
-      if (!recorded) return yield* Effect.die(new Error("Fork event not found"))
+  for (const child of [
+    undefined,
+    {
+      title: "Child",
+      agent: Agent.ID.make("reviewer"),
+      model: Model.Ref.make({ id: Model.ID.make("child"), providerID: Provider.ID.make("test") }),
+    },
+  ]) {
+    it.effect(`replays a ${child ? "child " : ""}fork with stable projected identities`, () =>
+      Effect.gen(function* () {
+        const session = yield* Session.Service
+        const bus = yield* Bus.Service
+        const { db } = yield* Database.Service
+        const parent = yield* session.create({ location, title: "Parent" })
+        yield* session.prompt({ sessionID: parent.id, text: "First", resume: false })
+        yield* SessionInbox.promote(db, bus, parent.id, "steer")
+        yield* session.synthetic({ sessionID: parent.id, text: "Second", resume: false })
+        yield* SessionInbox.promote(db, bus, parent.id, "steer")
+        const forked = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" }, child })
+        expect(forked.parentID).toBe(child ? parent.id : undefined)
+        if (child) expect(forked).toMatchObject(child)
+        const original = (yield* session.context(forked.id)).map((message) => message.id)
+        const recorded = yield* db
+          .select()
+          .from(EventTable)
+          .where(eq(EventTable.aggregate_id, forked.id))
+          .get()
+          .pipe(Effect.orDie)
+        if (!recorded) return yield* Effect.die(new Error("Fork event not found"))
 
-      yield* bus.remove(forked.id)
-      yield* db.delete(SessionTable).where(eq(SessionTable.id, forked.id)).run().pipe(Effect.orDie)
-      yield* bus.replay({
-        id: recorded.id,
-        created: recorded.created,
-        aggregateID: recorded.aggregate_id,
-        seq: recorded.seq,
-        type: recorded.type,
-        data: recorded.data,
-      })
+        yield* bus.remove(forked.id)
+        yield* db.delete(SessionTable).where(eq(SessionTable.id, forked.id)).run().pipe(Effect.orDie)
+        yield* bus.replay({
+          id: recorded.id,
+          created: recorded.created,
+          aggregateID: recorded.aggregate_id,
+          seq: recorded.seq,
+          type: recorded.type,
+          data: recorded.data,
+        })
 
-      expect((yield* session.context(forked.id)).map((message) => message.id)).toEqual(original)
-    }),
-  )
+        expect((yield* session.context(forked.id)).map((message) => message.id)).toEqual(original)
+        expect(yield* session.get(forked.id)).toEqual(forked)
+      }),
+    )
+  }
 
   it.effect("inherits instruction entries when forking", () =>
     Effect.gen(function* () {
