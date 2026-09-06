@@ -426,6 +426,15 @@ function normalizeExperimental(
         )
         if (value !== undefined) result.subagent_depth = value
       }
+      if (own(experimental, "subagent_fork")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.subagent_fork,
+          experimental.subagent_fork,
+          ["experimental", "subagent_fork"],
+          diagnostics,
+        )
+        if (value !== undefined) result.subagent_fork = value
+      }
       native.push(
         ...decodeList(
           experimental.policies,
