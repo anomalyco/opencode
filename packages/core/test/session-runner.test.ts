@@ -11,6 +11,7 @@ import {
   TransportError,
   InvalidProviderOutputError,
   InvalidRequestError,
+  ContentPolicyError,
   RateLimitError,
   UnknownProviderError,
 } from "@opencode-ai/ai"
@@ -193,12 +194,14 @@ test("does not apply an ineligible tier without base pricing", () => {
 })
 
 const makeRunnerState = () => {
+  const steer: SessionModelTransport.Interface["steer"] = () => Effect.succeed(false)
   let toolBarrier: ToolBarrier | undefined
   const releaseTools = (barrier: ToolBarrier) =>
     Effect.sync(() => {
       if (toolBarrier === barrier) toolBarrier = undefined
     }).pipe(Effect.andThen(Deferred.succeed(barrier.release, undefined)), Effect.asVoid)
   return {
+    steer,
     currentModel: model,
     modelResolveHook: Effect.void,
     systemBaseline: "Initial context",
@@ -269,6 +272,8 @@ const layer = Layer.unwrap(
         bind: () => ({ execute: () => Effect.die("Unexpected WebSocket execution") }),
         close: (sessionID) => Effect.sync(() => state.closedTransports.push(sessionID)),
         closeAll: Effect.void,
+        steer: (sessionID, text, admit) => state.steer(sessionID, text, admit),
+        hasPendingInput: () => false,
       }),
     )
     const echo = Layer.effectDiscard(
@@ -315,7 +320,12 @@ const layer = Layer.unwrap(
           Effect.map(() => {
             const selected = session.model?.id === "replacement" ? replacementModel : state.currentModel
             return SessionRunnerModel.resolved(selected, {
-              capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+              capabilities: {
+                tools: true,
+                input: ["text", "image"],
+                output: ["text"],
+                responsesWebsockets: selected.route.id === "openai-responses" && selected.id === "gpt-6-astra",
+              },
               cost: [],
               limit: modelLimits.get(String(selected.id)) ?? defaultModelLimit,
               variant: session.model?.variant,
@@ -3587,6 +3597,67 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(2)
     expect(userTexts(s.requests[0])).toEqual(["Interrupt current work"])
     expect(userTexts(s.requests[1])).toEqual(["Interrupt current work", "Run after interrupt"])
+  })
+
+  scenario("durably delivers live Astra steering once and resets the step allowance", function* (s) {
+    s.currentModel = LanguageModel.make({ id: "gpt-6-astra", provider: "fake", route: OpenAIResponses.route })
+    const agents = yield* Agent.Service
+    yield* agents.transform((editor) =>
+      editor.update(Agent.ID.make("build"), (agent) => {
+        agent.steps = 2
+      }),
+    )
+    const delivered = yield* Deferred.make<void>()
+    s.steer = (_sessionID, text, admit) =>
+      Effect.gen(function* () {
+        expect(text).toBe("Be brief")
+        yield* admit
+        expect(yield* SessionInbox.has(s.db, sessionID, "steer")).toBe(false)
+        yield* Deferred.succeed(delivered, undefined)
+        return true
+      })
+    yield* s.admit("Start")
+    yield* s.llm.push(TestLLM.text("Working", "text-working"), TestLLM.text("Brief", "text-brief"))
+    const paused = yield* s.resumePaused
+    yield* s.admit("Be brief")
+    yield* Deferred.await(delivered)
+    yield* paused.finish
+    expect(s.requests).toHaveLength(2)
+    expect(s.requests[1].toolChoice).toBeUndefined()
+    expect(userTexts(s.requests[1])).toEqual(["Start", "Be brief"])
+    expect(s.requests[0].providerOptions?.asyncTools).toContain("echo")
+    expect((yield* s.context).map((message) => message.type)).toEqual(["user", "assistant", "user", "assistant"])
+    expect((yield* recordedEventTypes(sessionID)).filter((type) => type === "session.inbox.delivered.1")).toHaveLength(
+      2,
+    )
+  })
+
+  scenario("stops pending tools without retrying a monitoring block", function* (s) {
+    const tools = yield* s.blockTools()
+    yield* s.llm.push(
+      Stream.concat(
+        Stream.make(LLMEvent.toolCall({ id: "call-blocked", name: "echo", input: { text: "pending" } })),
+        Stream.fromEffect(tools.started).pipe(
+          Stream.flatMap(() =>
+            Stream.fail(
+              new AIError({
+                reason: new ContentPolicyError({ message: "misalignment_policy_violation: Review required" }),
+              }),
+            ),
+          ),
+        ),
+      ),
+    )
+    yield* s.admit("Start")
+    const exit = yield* s.resume.pipe(Effect.exit)
+    expect(exit._tag).toBe("Failure")
+    expect(s.requests).toHaveLength(1)
+    expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+    expect(
+      (yield* s.context).some(
+        (message) => message.type === "assistant" && message.error?.type === "provider.content-filter",
+      ),
+    ).toBe(true)
   })
 
   scenario("preserves durable steering input for a later resume after interruption", function* (s) {
