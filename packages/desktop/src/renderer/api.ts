@@ -100,7 +100,10 @@ export const api: ElectronAPI = {
   saveFile: (opts, content) => invoke("FilesSaveFile", { options: opts, content }),
   openExternal: (url) => send("FilesOpenExternal", { url }),
   openLocalFile: (url) => send("FilesOpenLocalFile", { url }),
-  openPath: (path, app) => invoke("FilesOpenPath", { path, application: app }).then((value) => value ?? undefined),
+  openPath: (path, app) =>
+    invoke("FilesOpenPath", { path, ...(app === undefined ? {} : { application: app }) }).then(
+      (value) => value ?? undefined,
+    ),
   revealPath: (path) => invoke("FilesRevealPath", { path }),
   readClipboardImage: () =>
     invoke("FilesReadClipboardImage").then((image) =>
