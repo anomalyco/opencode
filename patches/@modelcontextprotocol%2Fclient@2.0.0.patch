@@ -1,0 +1,804 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 635f1c0..1245600 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -1250,8 +1250,12 @@ async function exchangeAuthorization(authorizationServerUrl, { metadata, clientI
+ * @returns Promise resolving to OAuth tokens (preserves original `refresh_token` if not replaced)
+ * @throws {Error} When token refresh fails or authentication is invalid
+ */
++const refreshes = new Map();
+ async function refreshAuthorization(authorizationServerUrl, { metadata, clientInformation, refreshToken, resource, addClientAuthentication, fetchFn }) {
+-	return {
++	const key = `${authorizationServerUrl}\0${clientInformation.client_id}\0${refreshToken}`;
++	const current = refreshes.get(key);
++	if (current) return current;
++	const refresh = (async () => ({
+ 		refresh_token: refreshToken,
+ 		...await executeTokenRequest(authorizationServerUrl, {
+ 			metadata,
+@@ -1264,7 +1268,13 @@ async function refreshAuthorization(authorizationServerUrl, { metadata, clientIn
+ 			resource,
+ 			fetchFn
+ 		})
+-	};
++	}))();
++	refreshes.set(key, refresh);
++	try {
++		return await refresh;
++	} finally {
++		if (refreshes.get(key) === refresh) refreshes.delete(key);
++	}
+ }
+ /**
+ * Unified token fetching that works with any grant type via {@linkcode OAuthClientProvider.prepareTokenRequest | prepareTokenRequest()}.
+@@ -2288,17 +2298,20 @@ function isAuthSeamEscape(error) {
+ //#region src/client/probeClassifier.ts
+ /** The `-32022` UnsupportedProtocolVersion protocol error code (negotiation-phase recognition). */
+ const UNSUPPORTED_PROTOCOL_VERSION = -32022;
++// Only completed malformed discovery replies carry this marker, never network/auth failures.
++var DiscoveryReplyError = class extends Error {
++	constructor(body) {
++		super("Invalid server/discover response");
++		this.body = body;
++	}
++};
+ /**
+ * Deliberately not probe-recognized in either direction: deployed servers
+ * overload `-32001` (the SDK-conventional `Session not found` body on a 2025
+-* stateful server), and the spec-assigned `-32020` (`HeaderMismatch`) /
+-* `-32021` (`MissingRequiredClientCapability`) are not era evidence — all
+-* fall into the conservative legacy default.
++* stateful server), so it falls into the conservative legacy default.
+ */
+ const NOT_PROBE_RECOGNIZED = new Set([
+-	-32001,
+-	-32020,
+-	-32021
++	-32001
+ ]);
+ /**
+ * Classify a single probe outcome. Pure: no I/O, no state — loop-guard and
+@@ -2335,7 +2348,7 @@ function classifyResult(result, context) {
+ 		version: overlap,
+ 		discover: parsed.value
+ 	};
+-	if (context.fallbackAvailable) return { kind: "legacy" };
++	if (context.fallbackAvailable && supportedVersions.some((version) => !require_src.isModernProtocolVersion(version))) return { kind: "legacy" };
+ 	return {
+ 		kind: "error",
+ 		error: new require_src.UnsupportedProtocolVersionError({
+@@ -2369,6 +2382,10 @@ function classifyRpcError(outcome, context) {
+ 			error
+ 		};
+ 	}
++	if (code === require_src.HEADER_MISMATCH_ERROR_CODE || code === require_src.ProtocolErrorCode.MissingRequiredClientCapability) return {
++		kind: "error",
++		error: require_src.ProtocolError.fromError(code, message, data)
++	};
+ 	if (NOT_PROBE_RECOGNIZED.has(code)) return { kind: "legacy" };
+ 	return { kind: "legacy" };
+ }
+@@ -2484,7 +2501,7 @@ function detectProbeEnvironment() {
+ * across bundles); everything else is treated like HTTP.
+ */
+ function detectProbeTransportKind(transport) {
+-	return "stderr" in transport && "pid" in transport ? "stdio" : "http";
++	return transport.hasPerRequestStream === false || "stderr" in transport && "pid" in transport ? "stdio" : "http";
+ }
+ /**
+ * Temporary ownership of a raw transport for the negotiation exchange, before
+@@ -2557,23 +2574,32 @@ var ProbeWindow = class ProbeWindow {
+ 	* Send one probe request and await its reply. Probe ids are strings, so they
+ 	* never collide with Protocol's numeric ids (e.g. on a shared stdio pipe).
+ 	*/
+-	async exchange(buildRequest, timeoutMs) {
++	async exchange(buildRequest, timeoutMs, signal) {
+ 		const id = `server-discover-probe-${++this._probeCounter}`;
+ 		return new Promise((resolve) => {
++			const requestAbort = new AbortController();
+ 			let settled = false;
+ 			const settle = (reply) => {
+ 				if (settled) return;
+ 				settled = true;
+ 				clearTimeout(timer);
++				signal?.removeEventListener("abort", abort);
++				requestAbort.abort();
+ 				if (this._pending?.id === id) this._pending = void 0;
+ 				resolve(reply);
+ 			};
+ 			const timer = setTimeout(() => settle({ kind: "timeout" }), timeoutMs);
++			const abort = () => settle({ kind: "send-error", error: signal.reason });
++			signal?.addEventListener("abort", abort, { once: true });
++			if (signal?.aborted) return abort();
+ 			this._pending = {
+ 				id,
+ 				resolve: settle
+ 			};
+-			this._transport.send(buildRequest(id)).catch((error) => settle({
++			this._transport.send(buildRequest(id), {
++				requestSignal: requestAbort.signal,
++				onDiscoveryReplyError: (error) => settle({ kind: "send-error", error })
++			}).catch((error) => settle({
+ 				kind: "send-error",
+ 				error
+ 			}));
+@@ -2658,6 +2684,10 @@ function normalizeReply(reply, timeoutMs) {
+ 		};
+ 		case "send-error": {
+ 			const error = reply.error;
++			if (error instanceof DiscoveryReplyError) {
++				const rpc = parseJsonRpcErrorBody(error.body);
++				return rpc ? { kind: "rpc-error", ...rpc } : { kind: "result", result: null };
++			}
+ 			if (isAuthSeamEscape(error) || error instanceof UnauthorizedError || error instanceof Error && error.name === "UnauthorizedError") return {
+ 				kind: "auth-required",
+ 				error
+@@ -2691,6 +2721,7 @@ function normalizeReply(reply, timeoutMs) {
+ * window is detached and the transport's `start` is left untouched.
+ */
+ async function negotiateEra(negotiation, deps) {
++	deps.signal?.throwIfAborted();
+ 	const timeoutMs = negotiation.probe.timeoutMs ?? deps.defaultTimeoutMs;
+ 	const maxRetries = Math.max(0, negotiation.probe.maxRetries ?? 0);
+ 	const clientModernVersions = negotiation.kind === "pin" ? [negotiation.version] : negotiation.modernVersions;
+@@ -2701,7 +2732,8 @@ async function negotiateEra(negotiation, deps) {
+ 		let correctiveUsed = false;
+ 		let timeoutRetriesRemaining = maxRetries;
+ 		for (;;) {
+-			const reply = await window.exchange((id) => buildProbeRequest(id, requestedVersion, deps.clientInfo, deps.capabilities), timeoutMs);
++			const reply = await window.exchange((id) => buildProbeRequest(id, requestedVersion, deps.clientInfo, deps.capabilities), timeoutMs, deps.signal);
++			deps.signal?.throwIfAborted();
+ 			if (reply.kind === "timeout" && timeoutRetriesRemaining > 0) {
+ 				timeoutRetriesRemaining--;
+ 				continue;
+@@ -3200,6 +3232,7 @@ var Client = class extends require_src.Protocol {
+ 	* ```
+ 	*/
+ 	async connect(transport, options) {
++		transport.onsessionexpired = () => this._legacyHandshake(transport);
+ 		if (options?.prior != null) return this._connectFromPrior(transport, validatePrior(options.prior), options);
+ 		const negotiation = resolveVersionNegotiation(this._versionNegotiation, this._supportedProtocolVersionsOption);
+ 		if (negotiation.kind !== "legacy") return this._connectNegotiated(transport, negotiation, options);
+@@ -3275,10 +3308,20 @@ var Client = class extends require_src.Protocol {
+ 				clientInfo: this._clientInfo,
+ 				capabilities: this._capabilities,
+ 				environment: detectProbeEnvironment(),
+-				defaultTimeoutMs: options?.timeout ?? require_src.DEFAULT_REQUEST_TIMEOUT_MSEC
++				defaultTimeoutMs: options?.timeout ?? require_src.DEFAULT_REQUEST_TIMEOUT_MSEC,
++				signal: options?.signal
+ 			};
+ 			const stdioParams = transportKind === "stdio" ? readStdioServerParams(transport) : void 0;
+-			result = stdioParams === void 0 ? await negotiateEra(negotiation, {
++			// The caller supplies a disposable probe on the same execution plane as its live transport.
++			if (options?.probeTransport) {
++				const sibling = options.probeTransport;
++				try {
++					result = await negotiateEra(negotiation, { ...baseDeps, transport: sibling, transportKind: "stdio", disposableProbe: true });
++				} finally {
++					await sibling.close();
++				}
++				options?.signal?.throwIfAborted();
++			} else result = stdioParams === void 0 ? await negotiateEra(negotiation, {
+ 				...baseDeps,
+ 				transport,
+ 				transportKind
+@@ -3875,6 +3918,8 @@ var Client = class extends require_src.Protocol {
+ 			resolveOpening = resolve;
+ 			rejectOpening = reject;
+ 		});
++		// Cancellation can reject the ack waiter while transport.send is still opening HTTP.
++		opening.catch(() => {});
+ 		let resolveClosed;
+ 		const closed = new Promise((resolve) => {
+ 			resolveClosed = resolve;
+@@ -3900,6 +3945,7 @@ var Client = class extends require_src.Protocol {
+ 		};
+ 		const wireTeardown = async () => {
+ 			requestAbort.abort();
++			if (this.transport?.hasPerRequestStream === true) return;
+ 			await this.notification({
+ 				method: "notifications/cancelled",
+ 				params: { requestId: listenId }
+@@ -3985,6 +4031,10 @@ var Client = class extends require_src.Protocol {
+ 	* being silently swallowed.
+ 	*/
+ 	_onnotification(raw, extra) {
++		if (this.getProtocolEra() === "modern" && (Object.hasOwn(LIST_CHANGED_EVICTIONS, raw.method) || raw.method === "notifications/resources/updated")) {
++			const id = raw.params?._meta?.[_modelcontextprotocol_core_internal.SUBSCRIPTION_ID_META_KEY];
++			if (typeof id !== "string" || !this._listenState.has(id)) return;
++		}
+ 		const evicted = Object.hasOwn(LIST_CHANGED_EVICTIONS, raw.method) ? LIST_CHANGED_EVICTIONS[raw.method] : void 0;
+ 		if (raw.method === "notifications/resources/updated") {
+ 			const uri = raw.params?.uri;
+@@ -5227,16 +5277,22 @@ var StreamableHTTPClientTransport = class {
+ 					if (!event.data) continue;
+ 					if (!event.event || event.event === "message") try {
+ 						const message = _modelcontextprotocol_core_internal.JSONRPCMessageSchema.parse(JSON.parse(event.data));
++						if (options.onDiscoveryReplyError && (!(require_src.isJSONRPCResultResponse(message) || require_src.isJSONRPCErrorResponse(message)) || message.id !== options.discoveryRequestId)) throw new DiscoveryReplyError(event.data);
+ 						if (require_src.isJSONRPCResultResponse(message) || require_src.isJSONRPCErrorResponse(message)) {
+ 							receivedResponse = true;
+ 							if (replayMessageId !== void 0) message.id = replayMessageId;
+ 						}
+ 						this.onmessage?.(message);
+ 					} catch (error) {
++						if (options.onDiscoveryReplyError) {
++							options.onDiscoveryReplyError(new DiscoveryReplyError(event.data));
++							return;
++						}
+ 						this.onerror?.(error);
+ 					}
+ 				}
+-				if ((isReconnectable || hasPrimingEvent) && !receivedResponse && this._abortController && !isIntentionalAbort()) this._scheduleReconnection({
++				if (options.onDiscoveryReplyError && !receivedResponse && !isIntentionalAbort()) options.onDiscoveryReplyError(new DiscoveryReplyError());
++				if (!options.modern && (isReconnectable || hasPrimingEvent) && !receivedResponse && this._abortController && !isIntentionalAbort()) this._scheduleReconnection({
+ 					resumptionToken: lastEventId,
+ 					onresumptiontoken,
+ 					replayMessageId,
+@@ -5246,8 +5302,9 @@ var StreamableHTTPClientTransport = class {
+ 				else if (!isIntentionalAbort()) onRequestStreamEnd?.();
+ 			} catch (error) {
+ 				if (isIntentionalAbort()) return;
++				options.onDiscoveryReplyError?.(error);
+ 				this.onerror?.(/* @__PURE__ */ new Error(`SSE stream disconnected: ${error}`));
+-				if ((isReconnectable || hasPrimingEvent) && !receivedResponse && this._abortController && !isIntentionalAbort()) try {
++				if (!options.modern && (isReconnectable || hasPrimingEvent) && !receivedResponse && this._abortController && !isIntentionalAbort()) try {
+ 					this._scheduleReconnection({
+ 						resumptionToken: lastEventId,
+ 						onresumptiontoken,
+@@ -5296,8 +5353,26 @@ var StreamableHTTPClientTransport = class {
+ 	async send(message, options) {
+ 		return this._send(message, options, false);
+ 	}
+-	async _send(message, options, isAuthRetry, stepUpRetries = 0) {
++	async _recoverSession(expiredSessionId) {
++		if (this._sessionRecovery) return this._sessionRecovery;
++		if (this._sessionId !== expiredSessionId) return;
++		this._sessionId = void 0;
++		this._sessionRecovery = Promise.resolve().then(() => this.onsessionexpired?.());
+ 		try {
++			await this._sessionRecovery;
++		} catch (error) {
++			this._sessionId = void 0;
++			await this.close();
++			throw error;
++		} finally {
++			this._sessionRecovery = void 0;
++		}
++	}
++	async _send(message, options, isAuthRetry, stepUpRetries = 0, isSessionRetry = false) {
++		try {
++			if (this._sessionRecovery && !require_src.isInitializeRequest(message) && !require_src.isInitializedNotification(message)) await this._sessionRecovery;
++			options?.requestSignal?.throwIfAborted();
++			if (options?.isRequestActive?.() === false) throw new Error("Request is no longer active");
+ 			const { resumptionToken, onresumptiontoken } = options || {};
+ 			if (resumptionToken) {
+ 				this._startOrAuthSse({
+@@ -5310,7 +5385,8 @@ var StreamableHTTPClientTransport = class {
+ 			const headers = await this._commonHeaders();
+ 			this._applyBodyDerivedHeaders(headers, message);
+ 			const isHandshake = Array.isArray(message) ? message.some((m) => require_src.isInitializeRequest(m)) : require_src.isInitializeRequest(message);
+-			if (isHandshake) headers.delete("mcp-session-id");
++			if (isHandshake || this._isModernEnvelopedRequest(message)) headers.delete("mcp-session-id");
++			const requestSessionId = headers.get("mcp-session-id") ?? void 0;
+ 			if (options?.headers !== void 0) for (const [name, value] of Object.entries(options.headers)) {
+ 				if (RESERVED_REQUEST_HEADER_NAMES.has(name.toLowerCase())) continue;
+ 				headers.set(name, value);
+@@ -5351,7 +5427,7 @@ var StreamableHTTPClientTransport = class {
+ 							throw markAuthSeamEscape(error);
+ 						}
+ 						await response.text?.().catch(() => {});
+-						return this._send(message, options, true, stepUpRetries);
++						return this._send(message, options, true, stepUpRetries, isSessionRetry);
+ 					}
+ 					await response.text?.().catch(() => {});
+ 					if (isAuthRetry) throw markAuthSeamEscape(new require_src.SdkHttpError(require_src.SdkErrorCode.ClientHttpAuthentication, "Server returned 401 after re-authentication", {
+@@ -5361,6 +5437,10 @@ var StreamableHTTPClientTransport = class {
+ 					throw markAuthSeamEscape(new UnauthorizedError());
+ 				}
+ 				const text = await response.text?.().catch(() => null);
++				if (response.status === 404 && requestSessionId && !isSessionRetry && !require_src.isInitializedNotification(message)) {
++					await this._recoverSession(requestSessionId);
++					return this._send(message, options, isAuthRetry, stepUpRetries, true);
++				}
+ 				if (response.status === 403) {
+ 					const { resourceMetadataUrl, scope, error, errorDescription } = extractWWWAuthenticateParams(response);
+ 					if (error === "insufficient_scope") {
+@@ -5371,7 +5451,7 @@ var StreamableHTTPClientTransport = class {
+ 							statusText: response.statusText,
+ 							text
+ 						}, stepUpRetries) !== "AUTHORIZED") throw markAuthSeamEscape(new UnauthorizedError());
+-						return this._send(message, options, isAuthRetry, stepUpRetries + 1);
++						return this._send(message, options, isAuthRetry, stepUpRetries + 1, isSessionRetry);
+ 					}
+ 				}
+ 				if (response.status === 400 && typeof text === "string" && this._isModernEnvelopedRequest(message)) try {
+@@ -5388,8 +5468,10 @@ var StreamableHTTPClientTransport = class {
+ 					text
+ 				});
+ 			}
++			const discovery = !Array.isArray(message) && message.method === "server/discover" && this._protocolVersion === void 0;
+ 			if (response.status === 202) {
+ 				await response.text?.().catch(() => {});
++				if (discovery) throw new DiscoveryReplyError();
+ 				if (require_src.isInitializedNotification(message)) this._startOrAuthSse({ resumptionToken: void 0 }).catch((error) => this.onerror?.(error));
+ 				return;
+ 			}
+@@ -5397,16 +5479,27 @@ var StreamableHTTPClientTransport = class {
+ 			const contentType = response.headers.get("content-type");
+ 			const responseMediaType = require_src.mediaTypeEssence(contentType);
+ 			if (hasRequests) if (responseMediaType === "text/event-stream") this._handleSseStream(response.body, {
++				modern: this._isModernEnvelopedRequest(message),
++				...(discovery && { onDiscoveryReplyError: options?.onDiscoveryReplyError, discoveryRequestId: message.id }),
+ 				onresumptiontoken,
+ 				requestSignal: options?.requestSignal,
+ 				onRequestStreamEnd: options?.onRequestStreamEnd
+ 			}, false);
+ 			else if (responseMediaType === "application/json") {
++				if (discovery) {
++					const text = await response.text();
++					let parsed;
++					try { parsed = _modelcontextprotocol_core_internal.JSONRPCMessageSchema.parse(JSON.parse(text)); } catch { throw new DiscoveryReplyError(text); }
++					if (!(require_src.isJSONRPCResultResponse(parsed) || require_src.isJSONRPCErrorResponse(parsed)) || parsed.id !== message.id) throw new DiscoveryReplyError(text);
++					this.onmessage?.(parsed);
++					return;
++				}
+ 				const data = await response.json();
+ 				const responseMessages = Array.isArray(data) ? data.map((msg) => _modelcontextprotocol_core_internal.JSONRPCMessageSchema.parse(msg)) : [_modelcontextprotocol_core_internal.JSONRPCMessageSchema.parse(data)];
+ 				for (const msg of responseMessages) this.onmessage?.(msg);
+ 			} else {
+-				await response.text?.().catch(() => {});
++				const text = await response.text();
++				if (discovery) throw new DiscoveryReplyError(text);
+ 				throw new require_src.SdkError(require_src.SdkErrorCode.ClientHttpUnexpectedContent, `Unexpected content type: ${contentType}`, { contentType });
+ 			}
+ 			else await response.text?.().catch(() => {});
+diff --git a/dist/index.d.cts b/dist/index.d.cts
+index 2d74180..6fde6de 100644
+--- a/dist/index.d.cts
++++ b/dist/index.d.cts
+@@ -1777,6 +1777,8 @@ type ClientOptions = ProtocolOptions & {
+  * cached-era-verdict knob.
+  */
+ type ConnectOptions = RequestOptions & {
++  /** Optional unstarted stdio probe. Negotiation closes it before starting the live transport. */
++  probeTransport?: Transport;
+   /**
+    * A cached era verdict, taking precedence over `versionNegotiation`:
+    * `{ kind: 'modern', discover }` adopts a prior {@linkcode DiscoverResult}
+diff --git a/dist/index.d.mts b/dist/index.d.mts
+index d54447a..9b9ff7a 100644
+--- a/dist/index.d.mts
++++ b/dist/index.d.mts
+@@ -1777,6 +1777,8 @@ type ClientOptions = ProtocolOptions & {
+  * cached-era-verdict knob.
+  */
+ type ConnectOptions = RequestOptions & {
++  /** Optional unstarted stdio probe. Negotiation closes it before starting the live transport. */
++  probeTransport?: Transport;
+   /**
+    * A cached era verdict, taking precedence over `versionNegotiation`:
+    * `{ kind: 'modern', discover }` adopts a prior {@linkcode DiscoverResult}
+diff --git a/dist/index.mjs b/dist/index.mjs
+index f02ce3c..c3a4c3f 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -1247,8 +1247,12 @@ async function exchangeAuthorization(authorizationServerUrl, { metadata, clientI
+ * @returns Promise resolving to OAuth tokens (preserves original `refresh_token` if not replaced)
+ * @throws {Error} When token refresh fails or authentication is invalid
+ */
++const refreshes = new Map();
+ async function refreshAuthorization(authorizationServerUrl, { metadata, clientInformation, refreshToken, resource, addClientAuthentication, fetchFn }) {
+-	return {
++	const key = `${authorizationServerUrl}\0${clientInformation.client_id}\0${refreshToken}`;
++	const current = refreshes.get(key);
++	if (current) return current;
++	const refresh = (async () => ({
+ 		refresh_token: refreshToken,
+ 		...await executeTokenRequest(authorizationServerUrl, {
+ 			metadata,
+@@ -1261,7 +1265,13 @@ async function refreshAuthorization(authorizationServerUrl, { metadata, clientIn
+ 			resource,
+ 			fetchFn
+ 		})
+-	};
++	}))();
++	refreshes.set(key, refresh);
++	try {
++		return await refresh;
++	} finally {
++		if (refreshes.get(key) === refresh) refreshes.delete(key);
++	}
+ }
+ /**
+ * Unified token fetching that works with any grant type via {@linkcode OAuthClientProvider.prepareTokenRequest | prepareTokenRequest()}.
+@@ -2285,17 +2295,20 @@ function isAuthSeamEscape(error) {
+ //#region src/client/probeClassifier.ts
+ /** The `-32022` UnsupportedProtocolVersion protocol error code (negotiation-phase recognition). */
+ const UNSUPPORTED_PROTOCOL_VERSION = -32022;
++// Only completed malformed discovery replies carry this marker, never network/auth failures.
++var DiscoveryReplyError = class extends Error {
++	constructor(body) {
++		super("Invalid server/discover response");
++		this.body = body;
++	}
++};
+ /**
+ * Deliberately not probe-recognized in either direction: deployed servers
+ * overload `-32001` (the SDK-conventional `Session not found` body on a 2025
+-* stateful server), and the spec-assigned `-32020` (`HeaderMismatch`) /
+-* `-32021` (`MissingRequiredClientCapability`) are not era evidence — all
+-* fall into the conservative legacy default.
++* stateful server), so it falls into the conservative legacy default.
+ */
+ const NOT_PROBE_RECOGNIZED = new Set([
+-	-32001,
+-	-32020,
+-	-32021
++	-32001
+ ]);
+ /**
+ * Classify a single probe outcome. Pure: no I/O, no state — loop-guard and
+@@ -2332,7 +2345,7 @@ function classifyResult(result, context) {
+ 		version: overlap,
+ 		discover: parsed.value
+ 	};
+-	if (context.fallbackAvailable) return { kind: "legacy" };
++	if (context.fallbackAvailable && supportedVersions.some((version) => !isModernProtocolVersion(version))) return { kind: "legacy" };
+ 	return {
+ 		kind: "error",
+ 		error: new UnsupportedProtocolVersionError({
+@@ -2366,6 +2379,10 @@ function classifyRpcError(outcome, context) {
+ 			error
+ 		};
+ 	}
++	if (code === HEADER_MISMATCH_ERROR_CODE || code === ProtocolErrorCode.MissingRequiredClientCapability) return {
++		kind: "error",
++		error: ProtocolError.fromError(code, message, data)
++	};
+ 	if (NOT_PROBE_RECOGNIZED.has(code)) return { kind: "legacy" };
+ 	return { kind: "legacy" };
+ }
+@@ -2481,7 +2498,7 @@ function detectProbeEnvironment() {
+ * across bundles); everything else is treated like HTTP.
+ */
+ function detectProbeTransportKind(transport) {
+-	return "stderr" in transport && "pid" in transport ? "stdio" : "http";
++	return transport.hasPerRequestStream === false || "stderr" in transport && "pid" in transport ? "stdio" : "http";
+ }
+ /**
+ * Temporary ownership of a raw transport for the negotiation exchange, before
+@@ -2554,23 +2571,32 @@ var ProbeWindow = class ProbeWindow {
+ 	* Send one probe request and await its reply. Probe ids are strings, so they
+ 	* never collide with Protocol's numeric ids (e.g. on a shared stdio pipe).
+ 	*/
+-	async exchange(buildRequest, timeoutMs) {
++	async exchange(buildRequest, timeoutMs, signal) {
+ 		const id = `server-discover-probe-${++this._probeCounter}`;
+ 		return new Promise((resolve) => {
++			const requestAbort = new AbortController();
+ 			let settled = false;
+ 			const settle = (reply) => {
+ 				if (settled) return;
+ 				settled = true;
+ 				clearTimeout(timer);
++				signal?.removeEventListener("abort", abort);
++				requestAbort.abort();
+ 				if (this._pending?.id === id) this._pending = void 0;
+ 				resolve(reply);
+ 			};
+ 			const timer = setTimeout(() => settle({ kind: "timeout" }), timeoutMs);
++			const abort = () => settle({ kind: "send-error", error: signal.reason });
++			signal?.addEventListener("abort", abort, { once: true });
++			if (signal?.aborted) return abort();
+ 			this._pending = {
+ 				id,
+ 				resolve: settle
+ 			};
+-			this._transport.send(buildRequest(id)).catch((error) => settle({
++			this._transport.send(buildRequest(id), {
++				requestSignal: requestAbort.signal,
++				onDiscoveryReplyError: (error) => settle({ kind: "send-error", error })
++			}).catch((error) => settle({
+ 				kind: "send-error",
+ 				error
+ 			}));
+@@ -2655,6 +2681,10 @@ function normalizeReply(reply, timeoutMs) {
+ 		};
+ 		case "send-error": {
+ 			const error = reply.error;
++			if (error instanceof DiscoveryReplyError) {
++				const rpc = parseJsonRpcErrorBody(error.body);
++				return rpc ? { kind: "rpc-error", ...rpc } : { kind: "result", result: null };
++			}
+ 			if (isAuthSeamEscape(error) || error instanceof UnauthorizedError || error instanceof Error && error.name === "UnauthorizedError") return {
+ 				kind: "auth-required",
+ 				error
+@@ -2688,6 +2718,7 @@ function normalizeReply(reply, timeoutMs) {
+ * window is detached and the transport's `start` is left untouched.
+ */
+ async function negotiateEra(negotiation, deps) {
++	deps.signal?.throwIfAborted();
+ 	const timeoutMs = negotiation.probe.timeoutMs ?? deps.defaultTimeoutMs;
+ 	const maxRetries = Math.max(0, negotiation.probe.maxRetries ?? 0);
+ 	const clientModernVersions = negotiation.kind === "pin" ? [negotiation.version] : negotiation.modernVersions;
+@@ -2698,7 +2729,8 @@ async function negotiateEra(negotiation, deps) {
+ 		let correctiveUsed = false;
+ 		let timeoutRetriesRemaining = maxRetries;
+ 		for (;;) {
+-			const reply = await window.exchange((id) => buildProbeRequest(id, requestedVersion, deps.clientInfo, deps.capabilities), timeoutMs);
++			const reply = await window.exchange((id) => buildProbeRequest(id, requestedVersion, deps.clientInfo, deps.capabilities), timeoutMs, deps.signal);
++			deps.signal?.throwIfAborted();
+ 			if (reply.kind === "timeout" && timeoutRetriesRemaining > 0) {
+ 				timeoutRetriesRemaining--;
+ 				continue;
+@@ -3197,6 +3229,7 @@ var Client = class extends Protocol {
+ 	* ```
+ 	*/
+ 	async connect(transport, options) {
++		transport.onsessionexpired = () => this._legacyHandshake(transport);
+ 		if (options?.prior != null) return this._connectFromPrior(transport, validatePrior(options.prior), options);
+ 		const negotiation = resolveVersionNegotiation(this._versionNegotiation, this._supportedProtocolVersionsOption);
+ 		if (negotiation.kind !== "legacy") return this._connectNegotiated(transport, negotiation, options);
+@@ -3272,10 +3305,20 @@ var Client = class extends Protocol {
+ 				clientInfo: this._clientInfo,
+ 				capabilities: this._capabilities,
+ 				environment: detectProbeEnvironment(),
+-				defaultTimeoutMs: options?.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC
++				defaultTimeoutMs: options?.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC,
++				signal: options?.signal
+ 			};
+ 			const stdioParams = transportKind === "stdio" ? readStdioServerParams(transport) : void 0;
+-			result = stdioParams === void 0 ? await negotiateEra(negotiation, {
++			// The caller supplies a disposable probe on the same execution plane as its live transport.
++			if (options?.probeTransport) {
++				const sibling = options.probeTransport;
++				try {
++					result = await negotiateEra(negotiation, { ...baseDeps, transport: sibling, transportKind: "stdio", disposableProbe: true });
++				} finally {
++					await sibling.close();
++				}
++				options?.signal?.throwIfAborted();
++			} else result = stdioParams === void 0 ? await negotiateEra(negotiation, {
+ 				...baseDeps,
+ 				transport,
+ 				transportKind
+@@ -3872,6 +3915,8 @@ var Client = class extends Protocol {
+ 			resolveOpening = resolve;
+ 			rejectOpening = reject;
+ 		});
++		// Cancellation can reject the ack waiter while transport.send is still opening HTTP.
++		opening.catch(() => {});
+ 		let resolveClosed;
+ 		const closed = new Promise((resolve) => {
+ 			resolveClosed = resolve;
+@@ -3897,6 +3942,7 @@ var Client = class extends Protocol {
+ 		};
+ 		const wireTeardown = async () => {
+ 			requestAbort.abort();
++			if (this.transport?.hasPerRequestStream === true) return;
+ 			await this.notification({
+ 				method: "notifications/cancelled",
+ 				params: { requestId: listenId }
+@@ -3982,6 +4028,10 @@ var Client = class extends Protocol {
+ 	* being silently swallowed.
+ 	*/
+ 	_onnotification(raw, extra) {
++		if (this.getProtocolEra() === "modern" && (Object.hasOwn(LIST_CHANGED_EVICTIONS, raw.method) || raw.method === "notifications/resources/updated")) {
++			const id = raw.params?._meta?.[SUBSCRIPTION_ID_META_KEY];
++			if (typeof id !== "string" || !this._listenState.has(id)) return;
++		}
+ 		const evicted = Object.hasOwn(LIST_CHANGED_EVICTIONS, raw.method) ? LIST_CHANGED_EVICTIONS[raw.method] : void 0;
+ 		if (raw.method === "notifications/resources/updated") {
+ 			const uri = raw.params?.uri;
+@@ -5224,16 +5274,22 @@ var StreamableHTTPClientTransport = class {
+ 					if (!event.data) continue;
+ 					if (!event.event || event.event === "message") try {
+ 						const message = JSONRPCMessageSchema.parse(JSON.parse(event.data));
++						if (options.onDiscoveryReplyError && (!(isJSONRPCResultResponse(message) || isJSONRPCErrorResponse(message)) || message.id !== options.discoveryRequestId)) throw new DiscoveryReplyError(event.data);
+ 						if (isJSONRPCResultResponse(message) || isJSONRPCErrorResponse(message)) {
+ 							receivedResponse = true;
+ 							if (replayMessageId !== void 0) message.id = replayMessageId;
+ 						}
+ 						this.onmessage?.(message);
+ 					} catch (error) {
++						if (options.onDiscoveryReplyError) {
++							options.onDiscoveryReplyError(new DiscoveryReplyError(event.data));
++							return;
++						}
+ 						this.onerror?.(error);
+ 					}
+ 				}
+-				if ((isReconnectable || hasPrimingEvent) && !receivedResponse && this._abortController && !isIntentionalAbort()) this._scheduleReconnection({
++				if (options.onDiscoveryReplyError && !receivedResponse && !isIntentionalAbort()) options.onDiscoveryReplyError(new DiscoveryReplyError());
++				if (!options.modern && (isReconnectable || hasPrimingEvent) && !receivedResponse && this._abortController && !isIntentionalAbort()) this._scheduleReconnection({
+ 					resumptionToken: lastEventId,
+ 					onresumptiontoken,
+ 					replayMessageId,
+@@ -5243,8 +5299,9 @@ var StreamableHTTPClientTransport = class {
+ 				else if (!isIntentionalAbort()) onRequestStreamEnd?.();
+ 			} catch (error) {
+ 				if (isIntentionalAbort()) return;
++				options.onDiscoveryReplyError?.(error);
+ 				this.onerror?.(/* @__PURE__ */ new Error(`SSE stream disconnected: ${error}`));
+-				if ((isReconnectable || hasPrimingEvent) && !receivedResponse && this._abortController && !isIntentionalAbort()) try {
++				if (!options.modern && (isReconnectable || hasPrimingEvent) && !receivedResponse && this._abortController && !isIntentionalAbort()) try {
+ 					this._scheduleReconnection({
+ 						resumptionToken: lastEventId,
+ 						onresumptiontoken,
+@@ -5293,8 +5350,26 @@ var StreamableHTTPClientTransport = class {
+ 	async send(message, options) {
+ 		return this._send(message, options, false);
+ 	}
+-	async _send(message, options, isAuthRetry, stepUpRetries = 0) {
++	async _recoverSession(expiredSessionId) {
++		if (this._sessionRecovery) return this._sessionRecovery;
++		if (this._sessionId !== expiredSessionId) return;
++		this._sessionId = void 0;
++		this._sessionRecovery = Promise.resolve().then(() => this.onsessionexpired?.());
+ 		try {
++			await this._sessionRecovery;
++		} catch (error) {
++			this._sessionId = void 0;
++			await this.close();
++			throw error;
++		} finally {
++			this._sessionRecovery = void 0;
++		}
++	}
++	async _send(message, options, isAuthRetry, stepUpRetries = 0, isSessionRetry = false) {
++		try {
++			if (this._sessionRecovery && !isInitializeRequest(message) && !isInitializedNotification(message)) await this._sessionRecovery;
++			options?.requestSignal?.throwIfAborted();
++			if (options?.isRequestActive?.() === false) throw new Error("Request is no longer active");
+ 			const { resumptionToken, onresumptiontoken } = options || {};
+ 			if (resumptionToken) {
+ 				this._startOrAuthSse({
+@@ -5307,7 +5382,8 @@ var StreamableHTTPClientTransport = class {
+ 			const headers = await this._commonHeaders();
+ 			this._applyBodyDerivedHeaders(headers, message);
+ 			const isHandshake = Array.isArray(message) ? message.some((m) => isInitializeRequest(m)) : isInitializeRequest(message);
+-			if (isHandshake) headers.delete("mcp-session-id");
++			if (isHandshake || this._isModernEnvelopedRequest(message)) headers.delete("mcp-session-id");
++			const requestSessionId = headers.get("mcp-session-id") ?? void 0;
+ 			if (options?.headers !== void 0) for (const [name, value] of Object.entries(options.headers)) {
+ 				if (RESERVED_REQUEST_HEADER_NAMES.has(name.toLowerCase())) continue;
+ 				headers.set(name, value);
+@@ -5348,7 +5424,7 @@ var StreamableHTTPClientTransport = class {
+ 							throw markAuthSeamEscape(error);
+ 						}
+ 						await response.text?.().catch(() => {});
+-						return this._send(message, options, true, stepUpRetries);
++						return this._send(message, options, true, stepUpRetries, isSessionRetry);
+ 					}
+ 					await response.text?.().catch(() => {});
+ 					if (isAuthRetry) throw markAuthSeamEscape(new SdkHttpError(SdkErrorCode.ClientHttpAuthentication, "Server returned 401 after re-authentication", {
+@@ -5358,6 +5434,10 @@ var StreamableHTTPClientTransport = class {
+ 					throw markAuthSeamEscape(new UnauthorizedError());
+ 				}
+ 				const text = await response.text?.().catch(() => null);
++				if (response.status === 404 && requestSessionId && !isSessionRetry && !isInitializedNotification(message)) {
++					await this._recoverSession(requestSessionId);
++					return this._send(message, options, isAuthRetry, stepUpRetries, true);
++				}
+ 				if (response.status === 403) {
+ 					const { resourceMetadataUrl, scope, error, errorDescription } = extractWWWAuthenticateParams(response);
+ 					if (error === "insufficient_scope") {
+@@ -5368,7 +5448,7 @@ var StreamableHTTPClientTransport = class {
+ 							statusText: response.statusText,
+ 							text
+ 						}, stepUpRetries) !== "AUTHORIZED") throw markAuthSeamEscape(new UnauthorizedError());
+-						return this._send(message, options, isAuthRetry, stepUpRetries + 1);
++						return this._send(message, options, isAuthRetry, stepUpRetries + 1, isSessionRetry);
+ 					}
+ 				}
+ 				if (response.status === 400 && typeof text === "string" && this._isModernEnvelopedRequest(message)) try {
+@@ -5385,8 +5465,10 @@ var StreamableHTTPClientTransport = class {
+ 					text
+ 				});
+ 			}
++			const discovery = !Array.isArray(message) && message.method === "server/discover" && this._protocolVersion === void 0;
+ 			if (response.status === 202) {
+ 				await response.text?.().catch(() => {});
++				if (discovery) throw new DiscoveryReplyError();
+ 				if (isInitializedNotification(message)) this._startOrAuthSse({ resumptionToken: void 0 }).catch((error) => this.onerror?.(error));
+ 				return;
+ 			}
+@@ -5394,16 +5476,27 @@ var StreamableHTTPClientTransport = class {
+ 			const contentType = response.headers.get("content-type");
+ 			const responseMediaType = mediaTypeEssence(contentType);
+ 			if (hasRequests) if (responseMediaType === "text/event-stream") this._handleSseStream(response.body, {
++				modern: this._isModernEnvelopedRequest(message),
++				...(discovery && { onDiscoveryReplyError: options?.onDiscoveryReplyError, discoveryRequestId: message.id }),
+ 				onresumptiontoken,
+ 				requestSignal: options?.requestSignal,
+ 				onRequestStreamEnd: options?.onRequestStreamEnd
+ 			}, false);
+ 			else if (responseMediaType === "application/json") {
++				if (discovery) {
++					const text = await response.text();
++					let parsed;
++					try { parsed = JSONRPCMessageSchema.parse(JSON.parse(text)); } catch { throw new DiscoveryReplyError(text); }
++					if (!(isJSONRPCResultResponse(parsed) || isJSONRPCErrorResponse(parsed)) || parsed.id !== message.id) throw new DiscoveryReplyError(text);
++					this.onmessage?.(parsed);
++					return;
++				}
+ 				const data = await response.json();
+ 				const responseMessages = Array.isArray(data) ? data.map((msg) => JSONRPCMessageSchema.parse(msg)) : [JSONRPCMessageSchema.parse(data)];
+ 				for (const msg of responseMessages) this.onmessage?.(msg);
+ 			} else {
+-				await response.text?.().catch(() => {});
++				const text = await response.text();
++				if (discovery) throw new DiscoveryReplyError(text);
+ 				throw new SdkError(SdkErrorCode.ClientHttpUnexpectedContent, `Unexpected content type: ${contentType}`, { contentType });
+ 			}
+ 			else await response.text?.().catch(() => {});
+diff --git a/dist/src-D_zzAWoS.mjs b/dist/src-D_zzAWoS.mjs
+index 6ac3d53..9bc225a 100644
+--- a/dist/src-D_zzAWoS.mjs
++++ b/dist/src-D_zzAWoS.mjs
+@@ -6096,7 +6096,7 @@ var Protocol = class {
+ 			const cancel = (reason) => {
+ 				if (responseReceived) return;
+ 				this._progressHandlers.delete(messageId);
+-				if (requestAbort === void 0) this._transport?.send(this._envelopeOutbound({
++				if (requestAbort === void 0 && request.method !== "initialize") this._transport?.send(this._envelopeOutbound({
+ 					jsonrpc: "2.0",
+ 					method: "notifications/cancelled",
+ 					params: {
+@@ -6108,7 +6108,7 @@ var Protocol = class {
+ 					resumptionToken,
+ 					onresumptiontoken
+ 				}).catch((error) => this._onerror(/* @__PURE__ */ new Error(`Failed to send cancellation: ${error}`)));
+-				else requestAbort.abort();
++				else requestAbort?.abort();
+ 				reject(reason instanceof SdkError ? reason : new SdkError(SdkErrorCode.RequestTimeout, String(reason)));
+ 			};
+ 			this._responseHandlers.set(messageId, (response) => {
+@@ -6153,7 +6153,11 @@ var Protocol = class {
+ 				resumptionToken,
+ 				onresumptiontoken,
+ 				headers,
+-				requestSignal: requestAbort?.signal
++				requestSignal: requestAbort?.signal,
++				onRequestStreamEnd: requestAbort === void 0 ? void 0 : () => {
++					if (!responseReceived) reject(new SdkError(SdkErrorCode.ConnectionClosed, "MCP response stream ended before a result"));
++				},
++				isRequestActive: () => this._responseHandlers.has(messageId)
+ 			}).catch((error) => {
+ 				this._progressHandlers.delete(messageId);
+ 				reject(error);
+diff --git a/dist/src-NAgB4Mp8.cjs b/dist/src-NAgB4Mp8.cjs
+index e8f2499..4efefe5 100644
+--- a/dist/src-NAgB4Mp8.cjs
++++ b/dist/src-NAgB4Mp8.cjs
+@@ -6097,7 +6097,7 @@ var Protocol = class {
+ 			const cancel = (reason) => {
+ 				if (responseReceived) return;
+ 				this._progressHandlers.delete(messageId);
+-				if (requestAbort === void 0) this._transport?.send(this._envelopeOutbound({
++				if (requestAbort === void 0 && request.method !== "initialize") this._transport?.send(this._envelopeOutbound({
+ 					jsonrpc: "2.0",
+ 					method: "notifications/cancelled",
+ 					params: {
+@@ -6109,7 +6109,7 @@ var Protocol = class {
+ 					resumptionToken,
+ 					onresumptiontoken
+ 				}).catch((error) => this._onerror(/* @__PURE__ */ new Error(`Failed to send cancellation: ${error}`)));
+-				else requestAbort.abort();
++				else requestAbort?.abort();
+ 				reject(reason instanceof SdkError ? reason : new SdkError(SdkErrorCode.RequestTimeout, String(reason)));
+ 			};
+ 			this._responseHandlers.set(messageId, (response) => {
+@@ -6154,7 +6154,11 @@ var Protocol = class {
+ 				resumptionToken,
+ 				onresumptiontoken,
+ 				headers,
+-				requestSignal: requestAbort?.signal
++				requestSignal: requestAbort?.signal,
++				onRequestStreamEnd: requestAbort === void 0 ? void 0 : () => {
++					if (!responseReceived) reject(new SdkError(SdkErrorCode.ConnectionClosed, "MCP response stream ended before a result"));
++				},
++				isRequestActive: () => this._responseHandlers.has(messageId)
+ 			}).catch((error) => {
+ 				this._progressHandlers.delete(messageId);
+ 				reject(error);

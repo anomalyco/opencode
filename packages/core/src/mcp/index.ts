@@ -358,7 +358,15 @@ export const layer = (options?: Options) =>
               const oauth = await readOAuthCredential()
               return oauth ? McpOAuth.clientFromCredential(oauth) : undefined
             },
-            saveClientInformation: async () => {},
+            saveClientInformation: async (client) => {
+              const oauth = await readOAuthCredential()
+              if (!oauth) return
+              await run(
+                credentials.update(credentialID, {
+                  value: Credential.OAuth.make({ ...oauth, metadata: { ...oauth.metadata, client } }),
+                }),
+              )
+            },
             codeVerifier: async () => undefined,
             saveCodeVerifier: async () => {},
           },
@@ -374,8 +382,11 @@ export const layer = (options?: Options) =>
           Effect.gen(function* () {
             if (input.params.mode === "url") {
               const formID = Form.ID.create()
-              const key = input.server + "\u0000" + input.params.elicitationId
-              urlElicitations.set(key, formID)
+              const key =
+                input.params.elicitationId === undefined
+                  ? undefined
+                  : input.server + "\u0000" + input.params.elicitationId
+              if (key !== undefined) urlElicitations.set(key, formID)
               return yield* forms
                 .ask({
                   id: formID,
@@ -384,14 +395,18 @@ export const layer = (options?: Options) =>
                   metadata: {
                     kind: "mcp-elicitation",
                     server: input.server,
-                    elicitationID: input.params.elicitationId,
+                    ...(input.params.elicitationId === undefined ? {} : { elicitationID: input.params.elicitationId }),
                     message: input.params.message,
                   },
                   fields: [{ key: URL_ELICITATION_FIELD_KEY, type: "external", url: input.params.url }],
                 })
                 .pipe(
                   Effect.raceFirst(waitForAbort(input.signal)),
-                  Effect.ensuring(Effect.sync(() => urlElicitations.delete(key))),
+                  Effect.ensuring(
+                    Effect.sync(() => {
+                      if (key !== undefined) urlElicitations.delete(key)
+                    }),
+                  ),
                   Effect.map(
                     (state): McpClient.ElicitationResult => ({
                       action: state.status === "answered" ? "accept" : "cancel",
