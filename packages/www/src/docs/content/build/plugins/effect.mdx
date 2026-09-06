@@ -1089,7 +1089,9 @@ effect: (ctx) =>
 
 ### Sessions
 
-Modify assembled system instructions, messages, or tools immediately before model dispatch.
+Modify assembled system instructions, messages, tools, or request options immediately before model dispatch. Typed
+`options` keys are the protocol-neutral generation settings; any other key is passed to the protocol as a provider
+option.
 
 ```ts
 effect: (ctx) =>
@@ -1099,6 +1101,21 @@ effect: (ctx) =>
       Effect.sync(() => {
         event.system.push({ text: "Keep the review focused on correctness." })
         delete event.tools.write
+        event.options.maxTokens = 8_000
+      }),
+    )
+  }),
+```
+
+Title generation has its own hook with the same shape minus the agent and tools.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook("title", (event) =>
+      Effect.sync(() => {
+        event.system.push({ text: "Titles are at most five words." })
+        event.options.maxTokens = 32
       }),
     )
   }),
@@ -1178,6 +1195,7 @@ Context-overflow recovery remains separate because it compacts the conversation 
 ```ts
 interface SessionHooks {
   readonly context: SessionContext
+  readonly title: SessionTitle
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse
@@ -1194,6 +1212,32 @@ interface SessionRetry {
   readonly attempt: number
   decision: RetryDecision
 }
+
+type SessionRequestOptions = {
+  maxTokens?: number
+  temperature?: number
+  topP?: number
+  topK?: number
+  frequencyPenalty?: number
+  presencePenalty?: number
+  seed?: number
+  stop?: string[]
+} & Record<string, unknown>
+
+interface SessionRequest {
+  readonly sessionID: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  system: SystemPart[]
+  messages: Message[]
+  options: SessionRequestOptions
+}
+
+interface SessionContext extends SessionRequest {
+  readonly agent: string
+  tools: Record<string, { description: string; input: JsonSchema }>
+}
+
+interface SessionTitle extends SessionRequest {}
 
 interface SessionHookDomain {
   readonly hook: ModelHooks<SessionHooks>

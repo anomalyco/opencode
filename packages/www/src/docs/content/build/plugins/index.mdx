@@ -1195,28 +1195,30 @@ Keep prompt hooks retry-safe. They are not an exactly-once side-effect boundary:
 
 #### Model context
 
-Modify assembled system instructions, messages, tools, generation settings, or provider options immediately before model
-dispatch.
+Modify assembled system instructions, messages, tools, or request options immediately before model dispatch.
 
 ```ts
 await ctx.session.hook("context", (event) => {
   event.system.push({ text: "Keep the review focused on correctness." })
   delete event.tools.write
-  event.generation.temperature = 0.2
-  event.generation.maxTokens = 8_000
+  event.options.temperature = 0.2
+  event.options.maxTokens = 8_000
 })
 ```
 
 Context changes affect only the outgoing model call, not persisted history or
 configuration. The hook runs again for subsequent calls such as tool-driven
-continuations, transient session generation, and compaction, but not for title requests.
+continuations, transient session generation, and compaction. Title generation
+has its own hook.
 
 Compaction context hooks receive the selected session agent. Its model-request
 and HTTP hooks retain the `compaction` agent identity for provider-specific handling.
 
-Request overrides follow these rules:
+Request options follow these rules:
 
-- `generation` and `providerOptions` start empty for each model call; they do not contain resolved model settings.
+- `options` starts empty for each model call; it does not contain resolved model settings.
+- Typed keys (`maxTokens`, `temperature`, `topP`, `topK`, `frequencyPenalty`, `presencePenalty`, `seed`, `stop`) are the
+  protocol-neutral generation settings. Any other key is passed to the selected protocol as a provider option.
 - Hooks run in registration order and see overrides made by earlier hooks.
 - Request overrides take precedence over model defaults, which take precedence over route defaults.
 - Provider option objects merge recursively; arrays and scalar values replace earlier values.
@@ -1232,7 +1234,7 @@ settings to the matching provider. For example, OpenAI Responses uses `reasoning
 await ctx.session.hook(
   "context",
   (event) => {
-    event.providerOptions.reasoningEffort = "high"
+    event.options.reasoningEffort = "high"
   },
   { providerID: "openai" },
 )
@@ -1242,6 +1244,19 @@ Generation options depend on the selected protocol and model:
 
 - `maxTokens` is the semantic output-token limit.
 - Gemini supports `topK`; OpenAI Responses does not expose it.
+
+#### Title generation
+
+Modify the title request before dispatch. Title generation is not an agent conversation: the event carries the system
+prompt, the source message, and request options, but no agent or tools. A configured `title` agent still supplies the
+default system prompt and model.
+
+```ts
+await ctx.session.hook("title", (event) => {
+  event.system.push({ text: "Titles are at most five words." })
+  event.options.maxTokens = 32
+})
+```
 
 #### Model request
 
@@ -1320,6 +1335,7 @@ import type { SessionPrompt } from "@opencode-ai/plugin/promise/session"
 interface SessionHooks {
   prompt: SessionPrompt
   context: SessionContextHook
+  title: SessionTitleHook
   "model.request": SessionModelRequestHook
   "http.request": SessionHttpRequestHook
   "http.response": SessionHttpResponseHook
@@ -1337,25 +1353,31 @@ interface SessionRetryHook {
   decision: RetryDecision
 }
 
-interface SessionContextHook {
+type SessionRequestOptions = {
+  maxTokens?: number
+  temperature?: number
+  topP?: number
+  topK?: number
+  frequencyPenalty?: number
+  presencePenalty?: number
+  seed?: number
+  stop?: string[]
+} & Record<string, unknown>
+
+interface SessionRequestHook {
   readonly sessionID: string
-  readonly agent: string
   readonly model: { providerID: string; id: string; variant?: string }
   system: SystemPart[]
   messages: Message[]
-  tools: Record<string, { description: string; input: JsonSchema }>
-  generation: {
-    maxTokens?: number
-    temperature?: number
-    topP?: number
-    topK?: number
-    frequencyPenalty?: number
-    presencePenalty?: number
-    seed?: number
-    stop?: string[]
-  }
-  providerOptions: Record<string, unknown>
+  options: SessionRequestOptions
 }
+
+interface SessionContextHook extends SessionRequestHook {
+  readonly agent: string
+  tools: Record<string, { description: string; input: JsonSchema }>
+}
+
+interface SessionTitleHook extends SessionRequestHook {}
 
 interface SessionHookContext {
   hook<Name extends keyof SessionHooks>(

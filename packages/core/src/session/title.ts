@@ -70,7 +70,6 @@ export const layer = Layer.effect(
           system: input.agent.system ? [SystemPart.make(input.agent.system)] : [],
           messages: [Message.user(input.text)],
         },
-        contextHooks: false,
       })
       yield* llm.stream(prepared.request, prepared.options).pipe(
         Stream.runForEach((event) => {

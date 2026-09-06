@@ -18,17 +18,31 @@ export interface SessionPrompt {
   delivery: SessionInbox.Delivery
 }
 
-export interface SessionContext {
+/**
+ * Request overrides. Typed keys are the protocol-neutral generation settings;
+ * any other key is passed to the selected protocol as a provider option under its
+ * semantic name, such as `reasoningEffort` for OpenAI Responses. Unset fields
+ * retain route and model defaults.
+ */
+export type SessionRequestOptions = Types.DeepMutable<GenerationOptionsFields> & Record<string, unknown>
+
+/** The parts of an outbound model request every Session request hook exposes. */
+export interface SessionRequest {
   readonly sessionID: Session.ID
-  readonly agent: Agent.ID
   readonly model: Model.Ref
   system: Array<SystemPart>
   messages: Array<Message>
-  tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>
-  /** Request overrides; unset fields retain route and model defaults. */
-  generation: Types.DeepMutable<GenerationOptionsFields>
-  providerOptions: Record<string, unknown>
+  options: SessionRequestOptions
 }
+
+/** The agent conversation: loop steps, compaction summaries, and transient generation. */
+export interface SessionContext extends SessionRequest {
+  readonly agent: Agent.ID
+  tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>
+}
+
+/** Title generation. It is not an agent conversation and carries no tools. */
+export interface SessionTitle extends SessionRequest {}
 
 /**
  * Why a Session request is being made. Auxiliary requests share the Session's
@@ -76,6 +90,7 @@ export interface SessionRetry {
 export interface SessionHooks {
   readonly prompt: SessionPrompt
   readonly context: SessionContext
+  readonly title: SessionTitle
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse
