@@ -16,8 +16,8 @@ export const lazyCommand = <T, U>(
     readonly command: string
     readonly aliases?: readonly string[]
     readonly describe?: string | false
-    readonly load: () => Promise<{ [K in string]: any }>,
-    readonly resolve: (mod: { [K in string]: any }) => CommandModule<T, U>,
+    readonly load: () => Promise<Record<string, unknown>>
+    readonly resolve: (mod: Record<string, unknown>) => CommandModule<T, U>
   },
 ): CommandModule<T, U> => {
   const command = input.command
@@ -25,7 +25,7 @@ export const lazyCommand = <T, U>(
   const describe = input.describe
   const handle = async (args: unknown) => {
     const mod = await input.load()
-    return input.resolve(mod).handler?.(args as never)
+    return input.resolve(mod).handler?.(args as U)
   }
   const build = async (args: Argv<T>) => {
     const mod = await input.load()
