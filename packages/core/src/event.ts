@@ -3,7 +3,7 @@ export * as EventV2 from "./event"
 import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
-import { and, asc, eq, gt, inArray } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, lt, sql } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
@@ -17,6 +17,21 @@ export type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 
 export type Subscriber<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
 export type Unsubscribe = Effect.Effect<void>
+
+/**
+ * Extract the compaction key from an encoded event payload using a JSON path
+ * like `$.sessionID` or `$.info.id`. Returns undefined if the path cannot be
+ * resolved (the event then simply won't be compacted).
+ */
+function compactKey(encoded: Record<string, unknown>, path: string): string | undefined {
+  if (!path.startsWith("$.")) return undefined
+  let current: unknown = encoded
+  for (const segment of path.slice(2).split(".")) {
+    if (current === null || typeof current !== "object") return undefined
+    current = (current as Record<string, unknown>)[segment]
+  }
+  return typeof current === "string" ? current : undefined
+}
 
 export const latestSequence = Effect.fn("EventV2.latestSequence")(function* (
   db: Database.Interface["db"],
@@ -281,6 +296,27 @@ export const layerWith = (options?: LayerOptions) =>
                               }
                               return
                             }
+                            if (!stored && durable.compact) {
+                              // Tolerate a row only if a newer snapshot of the same compact entity
+                              // superseded it; a bare gap could equally be a lost or fabricated row.
+                              const key = compactKey(encoded, durable.compact)
+                              const superseded =
+                                key !== undefined &&
+                                (yield* db
+                                  .select({ id: EventTable.id })
+                                  .from(EventTable)
+                                  .where(
+                                    and(
+                                      eq(EventTable.aggregate_id, aggregateID),
+                                      eq(EventTable.type, versionedType(definition.type, durable.version)),
+                                      gt(EventTable.seq, input.seq),
+                                      sql`json_extract(${EventTable.data}, ${durable.compact}) = ${key}`,
+                                    ),
+                                  )
+                                  .get()
+                                  .pipe(Effect.orDie))
+                              if (superseded) return
+                            }
                             yield* Effect.die(
                               new InvalidDurableEventError({
                                 type: event.type,
@@ -292,14 +328,6 @@ export const layerWith = (options?: LayerOptions) =>
                             return
                           }
                           const seq = input?.seq ?? latest + 1
-                          if (input && seq !== latest + 1) {
-                            yield* Effect.die(
-                              new InvalidDurableEventError({
-                                type: event.type,
-                                message: `Sequence mismatch for aggregate ${aggregateID}: expected ${latest + 1}, got ${seq}`,
-                              }),
-                            )
-                          }
                           const stored = yield* db
                             .select({ aggregateID: EventTable.aggregate_id, seq: EventTable.seq })
                             .from(EventTable)
@@ -346,6 +374,23 @@ export const layerWith = (options?: LayerOptions) =>
                             ])
                             .run()
                             .pipe(Effect.orDie)
+                          if (durable.compact) {
+                            const key = compactKey(encoded, durable.compact)
+                            if (key !== undefined) {
+                              yield* db
+                                .delete(EventTable)
+                                .where(
+                                  and(
+                                    eq(EventTable.aggregate_id, aggregateID),
+                                    eq(EventTable.type, versionedType(definition.type, durable.version)),
+                                    lt(EventTable.seq, seq),
+                                    sql`json_extract(${EventTable.data}, ${durable.compact}) = ${key}`,
+                                  ),
+                                )
+                                .run()
+                                .pipe(Effect.orDie)
+                            }
+                          }
                           return { aggregateID, seq }
                         }),
                       { behavior: "immediate" },
@@ -493,16 +538,17 @@ export const layerWith = (options?: LayerOptions) =>
             )
           }
           const start = events[0]?.seq ?? 0
+          let previous = start - 1
           for (const [index, event] of events.entries()) {
-            const seq = start + index
-            if (event.seq !== seq) {
+            if (event.seq <= previous) {
               yield* Effect.die(
                 new InvalidDurableEventError({
                   type: event.type,
-                  message: `Replay sequence mismatch at index ${index}: expected ${seq}, got ${event.seq}`,
+                  message: `Replay sequence mismatch at index ${index}: expected a sequence above ${previous}, got ${event.seq}`,
                 }),
               )
             }
+            previous = event.seq
           }
           for (const event of events) {
             yield* replay(event, options)
