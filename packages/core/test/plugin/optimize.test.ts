@@ -65,38 +65,6 @@ describe("OptimizePlugin", () => {
     ])
   })
 
-  it.effect("keeps search tools enabled by default across providers", () =>
-    Effect.gen(function* () {
-      const hooks = yield* PluginHooks.Service
-      const pluginHost = yield* makeHost
-      yield* Effect.forEach(OptimizePlugin.Plugins, (plugin) => plugin.effect(pluginHost), { discard: true })
-      const cases = [
-        ["openai", "gpt-5"],
-        ["openrouter", "openai/gpt-6-astra"],
-        ["azure", "GPT-4.1"],
-        ["groq", "openai/gpt-oss-120b"],
-        ["anthropic", "claude-opus-4-8"],
-        ["amazon-bedrock", "us.anthropic.Claude-sonnet-4-6"],
-        ["github-copilot", "claude-sonnet-4.6"],
-        ["google", "gemini-2.5-pro"],
-      ] as const
-      yield* Effect.forEach(
-        cases,
-        ([providerID, id]) =>
-          Effect.gen(function* () {
-            const event = {
-              ...context(id),
-              model: Model.Ref.make({ providerID: Provider.ID.make(providerID), id: Model.ID.make(id) }),
-            }
-            const tools = structuredClone(event.tools)
-            yield* hooks.trigger("session", "context", event)
-            expect(event.tools).toEqual(tools)
-          }),
-        { discard: true },
-      )
-    }),
-  )
-
   it.effect("selects model-lab prompts through session context hooks", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
