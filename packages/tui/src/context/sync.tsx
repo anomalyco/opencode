@@ -283,6 +283,11 @@ export const {
           break
         }
         case "session.updated": {
+          // The TUI subscribes to the control-plane global event stream, so
+          // events from every attached workspace arrive here. Only sessions
+          // that belong to this TUI's directory may enter the local session
+          // list; everything else is foreign state from another workspace.
+          if (event.properties.info.directory !== project.instance.directory()) break
           const result = search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
             setStore("session", result.index, reconcile(event.properties.info))
@@ -437,7 +442,11 @@ export const {
         }
 
         case "vcs.branch.updated": {
-          if (workspace === project.workspace.current()) {
+          // Global event stream: the branch belongs to whichever directory
+          // published it. Only apply it when it matches this TUI's own
+          // instance directory, otherwise every attached TUI would display
+          // the most recently switched branch of any workspace.
+          if (directory === project.instance.directory() && workspace === project.workspace.current()) {
             setStore("vcs", { branch: event.properties.branch })
           }
           break

@@ -1,18 +1,40 @@
 /** @jsxImportSource @opentui/solid */
 import { describe, expect, test } from "bun:test"
 import { tmpdir } from "../../../fixture/fixture"
-import { mount, wait } from "./sync-fixture"
-import type { GlobalEvent } from "@opencode-ai/sdk/v2"
+import { directory, mount, wait } from "./sync-fixture"
+import type { GlobalEvent, Session } from "@opencode-ai/sdk/v2"
 
-function branchEvent(branch: string, workspace?: string): GlobalEvent {
+function branchEvent(branch: string, opts?: { workspace?: string; directory?: string }): GlobalEvent {
   return {
-    directory: "/tmp/other",
+    directory: opts?.directory ?? "/tmp/other",
     project: "proj_test",
-    workspace,
+    workspace: opts?.workspace,
     payload: {
       id: `evt_vcs_${branch}`,
       type: "vcs.branch.updated",
       properties: { branch },
+    },
+  }
+}
+
+function sessionEvent(id: string, sessionDirectory: string): GlobalEvent {
+  const info = {
+    id,
+    slug: "test-session",
+    directory: sessionDirectory,
+    path: "",
+    title: `session ${id}`,
+    projectID: "proj_test",
+    time: { created: 1, updated: 1 },
+  } satisfies Partial<Session> as Session
+  return {
+    directory: sessionDirectory,
+    project: "proj_test",
+    workspace: undefined,
+    payload: {
+      id: `evt_ses_${id}`,
+      type: "session.updated",
+      properties: { sessionID: id, info },
     },
   }
 }
@@ -40,7 +62,7 @@ describe("tui sync", () => {
     }
   })
 
-  test("vcs branch updates only apply for the active workspace", async () => {
+  test("vcs branch updates only apply for the active workspace and directory", async () => {
     await using tmp = await tmpdir()
     await Bun.write(`${tmp.path}/kv.json`, "{}")
     const { app, emit, project, sync } = await mount(undefined, tmp.path)
@@ -49,15 +71,41 @@ describe("tui sync", () => {
       expect(sync.data.vcs?.branch).toBe("main")
 
       project.workspace.set("ws_a")
-      emit(branchEvent("other", "ws_b"))
-      await Bun.sleep(30)
 
+      // foreign directory + foreign workspace -> dropped
+      emit(branchEvent("other", { workspace: "ws_b" }))
+      await Bun.sleep(30)
       expect(sync.data.vcs?.branch).toBe("main")
 
-      emit(branchEvent("feature", "ws_a"))
+      // foreign directory + active workspace -> dropped (the branch belongs
+      // to another workspace's repository)
+      emit(branchEvent("other-dir", { workspace: "ws_a" }))
+      await Bun.sleep(30)
+      expect(sync.data.vcs?.branch).toBe("main")
+
+      // own directory + active workspace -> applied
+      emit(branchEvent("feature", { workspace: "ws_a", directory }))
       await wait(() => sync.data.vcs?.branch === "feature")
 
       expect(sync.data.vcs?.branch).toBe("feature")
+    } finally {
+      app.renderer.destroy()
+    }
+  })
+
+  test("session updates from other directories do not enter the local session list", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(`${tmp.path}/kv.json`, "{}")
+    const { app, emit, sync } = await mount(undefined, tmp.path)
+
+    try {
+      emit(sessionEvent("ses_foreign", "/tmp/other"))
+      await Bun.sleep(30)
+      expect(sync.session.get("ses_foreign")).toBeUndefined()
+
+      emit(sessionEvent("ses_own", directory))
+      await wait(() => sync.session.get("ses_own") !== undefined)
+      expect(sync.session.get("ses_own")?.directory).toBe(directory)
     } finally {
       app.renderer.destroy()
     }
