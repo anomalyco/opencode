@@ -87,6 +87,12 @@ describe("ConfigProviderOptionsV1", () => {
     })
   })
 
+  test("lowers Bedrock Mantle Anthropic with the Anthropic lowerer", () => {
+    const lowerer = ConfigProviderOptionsV1.get("@ai-sdk/amazon-bedrock/mantle-anthropic")
+
+    expect(lowerer.request({ effort: "high" })).toEqual({ output_config: { effort: "high" } })
+  })
+
   test("lowers Google provider and request options", () => {
     const lowerer = ConfigProviderOptionsV1.get("@ai-sdk/google")
 

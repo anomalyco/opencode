@@ -143,6 +143,7 @@ const lowerers: Readonly<Record<string, Lowerer>> = {
   "@ai-sdk/openai": openai,
   "@ai-sdk/anthropic": anthropic,
   "@ai-sdk/google-vertex/anthropic": anthropic,
+  "@ai-sdk/amazon-bedrock/mantle-anthropic": anthropic,
   "@ai-sdk/google": google,
   "@ai-sdk/google-vertex": google,
   "@ai-sdk/azure": azure,

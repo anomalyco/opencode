@@ -102,6 +102,7 @@
     "@silvia-odwyer/photon-node": "0.3.4",
     "@openrouter/ai-sdk-provider": "2.9.0",
     "ai-gateway-provider": "3.2.0",
+    "aws4fetch": "1.0.20",
     "bun-pty": "0.4.8",
     "cross-spawn": "catalog:",
     "diff": "catalog:",

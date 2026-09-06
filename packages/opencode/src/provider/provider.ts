@@ -113,6 +113,8 @@ type BundledSDK = {
 const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>> = {
   "@ai-sdk/amazon-bedrock": () => import("@ai-sdk/amazon-bedrock").then((m) => m.createAmazonBedrock),
   "@ai-sdk/amazon-bedrock/mantle": () => import("@ai-sdk/amazon-bedrock/mantle").then((m) => m.createBedrockMantle),
+  "@ai-sdk/amazon-bedrock/mantle-anthropic": () =>
+    import("@opencode-ai/core/amazon-bedrock/mantle-anthropic").then((m) => m.createBedrockMantleAnthropic),
   "@ai-sdk/anthropic": () => import("@ai-sdk/anthropic").then((m) => m.createAnthropic),
   "@ai-sdk/azure": () => import("@ai-sdk/azure").then((m) => m.createAzure),
   "@ai-sdk/google": () => import("@ai-sdk/google").then((m) => m.createGoogleGenerativeAI),
@@ -373,6 +375,8 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
         async getModel(sdk: any, modelID: string, options?: Record<string, any>, model?: Model) {
           if (model?.api.npm === "@ai-sdk/amazon-bedrock/mantle") return selectBedrockMantleLanguageModel(sdk, modelID)
+          // Mantle has no cross-region inference profiles, so the model ID is used as-is.
+          if (model?.api.npm === "@ai-sdk/amazon-bedrock/mantle-anthropic") return sdk.languageModel(modelID)
 
           // Skip region prefixing if model already has a cross-region inference profile prefix
           // Models from models.dev may already include prefixes like us., eu., global., etc.

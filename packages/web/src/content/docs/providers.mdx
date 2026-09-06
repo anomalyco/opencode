@@ -327,6 +327,47 @@ For custom inference profiles, use the model and provider name in the key and se
 }
 ```
 
+#### Claude on the Bedrock Mantle endpoint
+
+Mantle serves Claude models through the Anthropic Messages API at `/anthropic/v1/messages`; its
+OpenAI-compatible surfaces reject Anthropic model IDs. Set the model's `npm` to
+`@ai-sdk/amazon-bedrock/mantle-anthropic` to route it there. The endpoint URL is derived from the
+configured `region`, so no `api` override is needed. AWS credentials are signed with SigV4, so
+profiles, SSO, and IRSA work as they do elsewhere in Bedrock. A Bedrock API key is also accepted.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "my-aws-profile"
+      },
+      "models": {
+        "anthropic.claude-opus-4-8": {
+          "provider": {
+            "npm": "@ai-sdk/amazon-bedrock/mantle-anthropic"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+:::note
+Mantle has no cross-region inference profiles, so these model IDs are sent unprefixed — do not use
+`us.`, `eu.`, or `global.` variants here.
+:::
+
+:::caution
+Reasoning on this endpoint uses adaptive thinking with `output_config.effort`. Mantle rejects the
+fixed-budget form (`thinking.type: "enabled"`) on Opus 4.8, Opus 5 and Sonnet 5, and structured
+outputs (`output_config.format`) are rejected outright, so they are routed through a JSON tool
+instead.
+:::
+
 ---
 
 ### Anthropic
