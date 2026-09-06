@@ -2,7 +2,7 @@ import { Duration, Effect, Equal, Schema, Semaphore, Stream } from "effect"
 import type { Scope } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
@@ -245,6 +245,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
             const response = yield* HttpClient.filterStatusOk(http)
               .execute(request)
               .pipe(
+                Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
                 Effect.flatMap(HttpClientResponse.schemaBodyJson(WebSearch.Response)),
                 Effect.timeoutOrElse({
                   duration: Duration.seconds(25),
