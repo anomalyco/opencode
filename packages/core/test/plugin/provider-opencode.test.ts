@@ -13,6 +13,7 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { OpencodePlugin } from "@opencode-ai/core/plugin/provider/opencode"
 import { Provider } from "@opencode-ai/core/provider"
+import { WebSearch } from "@opencode-ai/core/websearch"
 import { withEnv } from "../fixture/env"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -375,6 +376,220 @@ describe("OpencodePlugin", () => {
           yield* Effect.yieldNow
           expect(authorization).toEqual(["Bearer secret", "Bearer replacement"])
           expect((yield* credentials.list(Integration.ID.make("opencode"))).at(-1)?.id).toBe(replacement.id)
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.live("loads and executes hosted web search from the connected OpenCode server", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const requests: Array<{
+          method: string
+          path: string
+          authorization: string | null
+          orgID: string | null
+          body?: unknown
+        }> = []
+        const gate = Promise.withResolvers<void>()
+        const state = { advertised: true, providerID: "opencode", waitForConfig: false }
+        const server = Bun.serve({
+          port: 0,
+          fetch: async (request) => {
+            const path = new URL(request.url).pathname
+            const body = request.method === "POST" ? await request.json() : undefined
+            requests.push({
+              method: request.method,
+              path,
+              authorization: request.headers.get("authorization"),
+              orgID: request.headers.get("x-org-id"),
+              ...(body === undefined ? {} : { body }),
+            })
+            if (path === "/api/v2/config") {
+              if (state.waitForConfig) await gate.promise
+              return Response.json({
+                providers: {},
+                ...(state.advertised
+                  ? {
+                      websearch: {
+                        providerID: "opencode",
+                        name: "OpenCode",
+                        url: `${new URL(request.url).origin}/api/websearch`,
+                      },
+                    }
+                  : {}),
+              })
+            }
+            if (path === "/api/websearch") {
+              return Response.json({
+                providerID: state.providerID,
+                results: [
+                  {
+                    url: "https://github.com/anomalyco/opencode",
+                    title: "OpenCode",
+                    content: "Open source AI coding agent.",
+                    time: { published: 1_700_000_000_000 },
+                  },
+                ],
+              })
+            }
+            return new Response("Not found", { status: 404 })
+          },
+        })
+        return { gate, requests, server, state }
+      }),
+      ({ gate, requests, server, state }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const websearch = yield* WebSearch.Service
+          const account = (access: string, serverURL = server.url.origin, orgID = "org_test") =>
+            Credential.OAuth.make({
+              type: "oauth",
+              methodID: Integration.MethodID.make("device"),
+              access,
+              refresh: "refresh",
+              expires: Date.now() + 600_000,
+              metadata: { server: serverURL, orgID },
+            })
+          const initial = yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: account("secret"),
+          })
+
+          yield* addPlugin()
+          expect(yield* websearch.providers()).toContainEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode" })
+          expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode" })
+          expect(yield* websearch.query({ query: "effect code search" })).toEqual(
+            new WebSearch.Response({
+              providerID: WebSearch.ID.make("opencode"),
+              results: [
+                {
+                  url: "https://github.com/anomalyco/opencode",
+                  title: "OpenCode",
+                  content: "Open source AI coding agent.",
+                  time: { published: 1_700_000_000_000 },
+                },
+              ],
+            }),
+          )
+          expect(requests).toEqual([
+            {
+              method: "GET",
+              path: "/api/v2/config",
+              authorization: "Bearer secret",
+              orgID: "org_test",
+            },
+            {
+              method: "POST",
+              path: "/api/websearch",
+              authorization: "Bearer secret",
+              orgID: "org_test",
+              body: { query: "effect code search", providerID: "opencode" },
+            },
+          ])
+
+          yield* credentials.update(initial.id, {
+            value: account("replacement"),
+          })
+          yield* websearch.query({ query: "fresh credential" })
+          expect(requests.at(-1)).toMatchObject({
+            method: "POST",
+            authorization: "Bearer replacement",
+            body: { query: "fresh credential", providerID: "opencode" },
+          })
+
+          const requestCount = requests.length
+          yield* credentials.update(initial.id, {
+            value: account("moved", `${server.url.origin}/other`),
+          })
+          expect((yield* websearch.query({ query: "stale server" }).pipe(Effect.flip))._tag).toBe("WebSearch.Request")
+          expect(requests).toHaveLength(requestCount)
+          yield* credentials.update(initial.id, {
+            value: account("replacement"),
+          })
+
+          state.providerID = "unexpected"
+          expect((yield* websearch.query({ query: "wrong provider" }).pipe(Effect.flip))._tag).toBe("WebSearch.Request")
+
+          state.advertised = false
+          state.waitForConfig = true
+          const searchCount = requests.filter((request) => request.path === "/api/websearch").length
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: account("switched", server.url.origin, "org_switched"),
+          })
+          yield* eventually(
+            Effect.sync(() => requests),
+            (requests) => requests.some((request) => request.authorization === "Bearer switched"),
+          )
+          expect((yield* websearch.query({ query: "switch race" }).pipe(Effect.flip))._tag).toBe("WebSearch.Request")
+          expect(requests.filter((request) => request.path === "/api/websearch")).toHaveLength(searchCount)
+          gate.resolve()
+          yield* eventually(websearch.providers(), (providers) =>
+            providers.every((provider) => provider.id !== WebSearch.ID.make("opencode")),
+          )
+          expect(yield* websearch.default()).toBeUndefined()
+          expect(requests.at(-1)).toMatchObject({
+            method: "GET",
+            path: "/api/v2/config",
+            authorization: "Bearer switched",
+            orgID: "org_switched",
+          })
+        }),
+      ({ gate, server }) =>
+        Effect.sync(() => gate.resolve()).pipe(Effect.andThen(Effect.promise(() => server.stop(true)))),
+    ),
+  )
+
+  it.live("does not forward hosted search credentials through redirects", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const requests: string[] = []
+        const state = { crossOrigin: false }
+        const server = Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            const url = new URL(request.url)
+            requests.push(url.pathname)
+            if (url.pathname === "/console/api/v2/config") {
+              return Response.json({
+                providers: {},
+                websearch: {
+                  providerID: "opencode",
+                  name: "OpenCode",
+                  url: `${url.origin}/console/api/websearch`,
+                },
+              })
+            }
+            if (url.pathname === "/console/api/websearch") {
+              if (state.crossOrigin) url.hostname = "127.0.0.1"
+              return Response.redirect(`${url.origin}/outside-console`, 307)
+            }
+            return Response.json({ providerID: "opencode", results: [] })
+          },
+        })
+        return { requests, server, state }
+      }),
+      ({ requests, server, state }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const websearch = yield* WebSearch.Service
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({
+              type: "key",
+              key: "secret",
+              metadata: { server: `${server.url.origin}/console`, orgID: "org_test" },
+            }),
+          })
+          yield* addPlugin()
+
+          expect((yield* websearch.query({ query: "private search" }).pipe(Effect.flip))._tag).toBe("WebSearch.Request")
+          expect(requests).toEqual(["/console/api/v2/config", "/console/api/websearch"])
+
+          state.crossOrigin = true
+          expect((yield* websearch.query({ query: "private search" }).pipe(Effect.flip))._tag).toBe("WebSearch.Request")
+          expect(requests).toEqual(["/console/api/v2/config", "/console/api/websearch", "/console/api/websearch"])
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
