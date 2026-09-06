@@ -8,6 +8,8 @@ import { ToastRegion } from "@/shell/notifications/toast"
 import { TitlebarRightProvider } from "@/shell/titlebar/right-slot"
 import { useSettingsSurface } from "@/settings/surface"
 import { useSettings } from "@/settings/model"
+import { useCurrentRoute } from "@/shell/state/layout"
+import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 
 const DebugBar = lazy(() => import("@/shell/debug/debug-bar").then((module) => ({ default: module.DebugBar })))
 
@@ -15,6 +17,7 @@ export default function Layout(props: ParentProps) {
   const platform = usePlatform()
   const settings = useSettingsSurface()
   const preferences = useSettings()
+  const route = useCurrentRoute()
   const mobile = createMediaQuery("(max-width: 767px)")
   const [state, setState] = createStore({
     debugTools: false,
@@ -91,7 +94,18 @@ export default function Layout(props: ParentProps) {
             }}
           >
             <div class="flex size-full min-h-0 min-w-0 flex-col">
-              <Suspense>{props.children}</Suspense>
+              {/* Retain the previous page during navigation; only show the empty shell on initial load. */}
+              <Suspense
+                fallback={
+                  <Show when={route().type === "session"}>
+                    <SessionRouteFrame padded>
+                      <SessionPanelFrame raised />
+                    </SessionRouteFrame>
+                  </Show>
+                }
+              >
+                {props.children}
+              </Suspense>
             </div>
           </main>
         </div>
