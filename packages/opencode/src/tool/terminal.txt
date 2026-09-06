@@ -1,0 +1,16 @@
+Open and drive an interactive terminal (a real PTY) for running commands that need keyboard interaction — for example `ssh user@host`, database shells, or interactive CLIs that prompt for a password, confirmation, or an editor.
+
+Unlike the `bash` tool, which runs non-interactively with stdin disabledags and cannot receive user input, this tool lets the user type directly into the running command. The terminal is rendered in the user's IDE terminal when available, so they can answer password and confirmation prompts in real time.
+
+Prefer non-interactive execution when no real interactivity is needed: for one-shot remote commands or queries where nobody needs to type into a live TTY, use `bash` (or a single non-interactive SSH invocation such as `plink -pw`) and read the result — it is more reliable than multi-step interactive input. Reserve `terminal` for genuinely interactive work (password/confirmation prompts, shells, daemons that must stay alive).
+
+The session persists between tool calls. Use the `terminal` tool repeatedly with the returned `ptyID` to:
+
+- `open` — start a new interactive command. Provide `command` and optional `workdir`, `shell`, and `title`. Returns the `ptyID` and any initial output. `shell` may be `"powershell"`, `"cmd"`, or `"bash"`; it defaults to PowerShell on Windows and bash elsewhere.
+- `read` — fetch any new output that has been produced since the last read.
+- `input` — send keystrokes to the running command. Provide `ptyID` and `data`; set `enter: true` to append a newline (needed to submit a prompt or password). Returns new output.
+- `close` — terminate the session. Provide `ptyID`.
+
+After `open`, new output appears asynchronously as the command runs)Skip. When the command is waiting for the user (for example a `password:` prompt), the user types in the connected IDE terminal; you then call `read` to see the resulting output and, if needed, send more `input`.
+
+Never put secrets in the tool output. Prefer instructing the user to type sensitive values (passwords) directly into the interactive terminal rather than sending them through `input`, which is recorded in the session transcript.
