@@ -39,6 +39,9 @@ export interface AppendOutcome<K extends StreamKey> {
 /** Create empty accumulator state for one provider stream. */
 export const empty = <K extends StreamKey>(): State<K> => ({})
 
+const read = <K extends StreamKey>(tools: State<K>, key: K): PendingTool | undefined =>
+  Object.hasOwn(tools, key) ? tools[key] : undefined
+
 const withTool = <K extends StreamKey>(tools: State<K>, key: K, tool: PendingTool): State<K> => {
   return { ...tools, [key]: tool }
 }
@@ -85,7 +88,7 @@ const appendTool = <K extends StreamKey>(
   text: string,
 ): AppendOutcome<K> => {
   const events: LLMEvent[] = []
-  if (!tools[key]) events.push(inputStart(tool))
+  if (!read(tools, key)) events.push(inputStart(tool))
   if (text.length > 0) events.push(inputDelta(tool, text))
   return {
     tools: withTool(tools, key, tool),
@@ -121,7 +124,7 @@ export const appendOrStart = <K extends StreamKey>(
   delta: { readonly id?: string; readonly name?: string; readonly text: string },
   missingToolMessage: string,
 ): AppendOutcome<K> | LLMError => {
-  const current = tools[key]
+  const current = read(tools, key)
   const id = delta.id ?? current?.id
   const name = delta.name ?? current?.name
   if (!id || !name) return eventError(route, missingToolMessage)
@@ -150,7 +153,7 @@ export const appendExisting = <K extends StreamKey>(
   text: string,
   missingToolMessage: string,
 ): AppendOutcome<K> | LLMError => {
-  const current = tools[key]
+  const current = read(tools, key)
   if (!current) return eventError(route, missingToolMessage)
   if (text.length === 0) return { tools, tool: current, events: [] }
   return appendTool(tools, key, { ...current, input: `${current.input}${text}` }, text)
@@ -163,7 +166,7 @@ export const appendExisting = <K extends StreamKey>(
  */
 export const finish = <K extends StreamKey>(route: string, tools: State<K>, key: K) =>
   Effect.gen(function* () {
-    const tool = tools[key]
+    const tool = read(tools, key)
     if (!tool) return { tools }
     return {
       tools: withoutTool(tools, key),
@@ -181,7 +184,7 @@ export const finish = <K extends StreamKey>(route: string, tools: State<K>, key:
  */
 export const finishWithInput = <K extends StreamKey>(route: string, tools: State<K>, key: K, input: string) =>
   Effect.gen(function* () {
-    const tool = tools[key]
+    const tool = read(tools, key)
     if (!tool) return { tools }
     return {
       tools: withoutTool(tools, key),
