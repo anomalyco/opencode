@@ -10,6 +10,7 @@ import { Spinner } from "./spinner"
 export function DialogUpdate(props: {
   check?: (signal: AbortSignal) => Promise<string | undefined>
   state: () => UpdateState | undefined
+  skip: () => void
   install: () => Promise<void>
   restart: () => void
 }) {
@@ -47,7 +48,16 @@ export function DialogUpdate(props: {
         : type === "installed"
           ? { label: "Restart", run: props.restart }
           : undefined
-    return [{ label: "Skip", run: () => dialog.clear() }, ...(confirm ? [confirm] : [])]
+    return [
+      {
+        label: "Skip",
+        run: () => {
+          props.skip()
+          dialog.clear()
+        },
+      },
+      ...(confirm ? [confirm] : []),
+    ]
   })
 
   createEffect(() => setActive(Math.max(0, buttons().length - 1)))

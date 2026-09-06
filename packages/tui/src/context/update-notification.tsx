@@ -95,14 +95,12 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
       // The notification can predate an installation through /update.
       if (known && active?.type !== "installing" && !(active?.type === "installed" && active.version === known.version))
         setState({ type: known.type, version: known.version })
-      // Manual checks hide the current notice without marking the version as seen.
-      if (origin === "manual") setNotification(undefined)
-      if (origin === "notification") dismiss()
       const status = state()?.type
       dialog.replace(() => (
         <DialogUpdate
           check={status === undefined || status === "failed" ? check : undefined}
           state={state}
+          skip={dismiss}
           install={install}
           restart={restart}
         />
