@@ -484,6 +484,19 @@ export function createTimelineVirtualizer(input: Input) {
           <div
             ref={(value) => {
               element = value
+              if (row()._tag !== "UserMessage" || !addedKeys.has(rowProps.rowKey) || !input.pinned() || coldPending)
+                return
+              // The optimistic row can paint before ResizeObserver corrects the tail estimates.
+              // Measure the mounted tail and pin it in this render's microtask instead.
+              queueMicrotask(() => {
+                if (!input.pinned() || !virtualContent?.isConnected) return
+                virtualizer.elementsCache.forEach((item) => {
+                  if (item.isConnected) virtualizer.resizeItem(virtualizer.indexFromElement(item), item.offsetHeight)
+                })
+                virtualizer.resizeItem(item().index, element.offsetHeight)
+                virtualContent.style.height = `${virtualizer.getTotalSize()}px`
+                virtualizer.scrollToEnd()
+              })
             }}
             data-index={item().index}
             style={{ "min-height": ready() ? undefined : `${initialItem.size}px` }}
