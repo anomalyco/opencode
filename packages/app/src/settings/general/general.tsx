@@ -27,6 +27,7 @@ import {
 } from "./controllers"
 import "@/settings/settings.css"
 import { ServerConnection } from "@/runtime/server/registry"
+import { KeepAwakeSetting } from "./keep-awake"
 
 const schemeOptions: ("system" | "light" | "dark")[] = ["system", "light", "dark"]
 const fontSettings = {
@@ -331,6 +332,10 @@ export const SettingsGeneral: Component<{
         <ShellSetting controller={shell} />
         <TerminalPlacementSetting />
         <FollowUpBehaviorSetting />
+
+        <Show when={desktop()}>
+          <KeepAwakeSetting />
+        </Show>
 
         <SettingsRow
           title={language.t("session.review.wrapLines")}

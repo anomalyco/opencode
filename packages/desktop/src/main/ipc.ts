@@ -15,6 +15,7 @@ import { updaterHandlers } from "./ipc-handlers/updater"
 import { windowHandlers } from "./ipc-handlers/window"
 import { wslHandlers } from "./ipc-handlers/wsl"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
+import { KeepAwakeLive } from "./keep-awake/live"
 import { ApplicationLifecycle } from "./lifecycle"
 import { showCliInstaller } from "./native/install-cli"
 import { createMenu, sendMenuCommand } from "./native/menu"
@@ -24,7 +25,7 @@ import { Updater } from "./updater"
 import { getLastFocusedWindow } from "./windows"
 import { Wsl } from "./wsl/start"
 
-const services = Layer.mergeAll(DesktopFiles.layer, DesktopStorage.layer, Wsl.layer)
+const services = Layer.mergeAll(DesktopFiles.layer, DesktopStorage.layer, Wsl.layer, KeepAwakeLive)
 const handlers = Layer.mergeAll(
   appHandlers,
   storageHandlers,

@@ -1085,6 +1085,10 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.description":
     "Show edit, write, and patch tool parts expanded by default in the timeline",
   "settings.general.row.pinchZoom.title": "Pinch to zoom",
+  "settings.general.row.keepAwake.title": "Keep computer awake",
+  "settings.general.row.keepAwake.description":
+    "Prevent sleep while open tabs have running sessions, even in the background. The screen can still turn off.",
+  "settings.general.row.keepAwake.error": "Could not access the keep-awake setting. Try again.",
   "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
 
   "settings.general.row.wayland.title": "Use native Wayland",
