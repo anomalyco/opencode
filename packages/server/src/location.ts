@@ -17,13 +17,8 @@ export class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddle
 
 export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {
-    const location = yield* Location.Service
     return {
-      location: new Location.Info({
-        directory: location.directory,
-        workspaceID: location.workspaceID,
-        project: location.project,
-      }),
+      location: yield* Location.current,
       data: yield* data,
     }
   })
