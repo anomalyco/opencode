@@ -961,6 +961,7 @@ describe("Session.prompt", () => {
           text: "Background work completed",
           description: "shell completion",
           metadata: { job: "shell" },
+          resume: false,
         },
       })
 

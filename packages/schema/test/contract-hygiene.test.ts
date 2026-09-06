@@ -53,8 +53,13 @@ describe("contract hygiene", () => {
         text: "completed",
         description: undefined,
         metadata: undefined,
+        resume: undefined,
       }),
     ).toEqual({ text: "completed" })
+    expect(Schema.encodeSync(SessionInbox.SyntheticPayload)({ text: "parked", resume: false })).toEqual({
+      text: "parked",
+      resume: false,
+    })
 
     const info = Session.Info.make({
       id: Session.ID.make("ses_untitled"),
