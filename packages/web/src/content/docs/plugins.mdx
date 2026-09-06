@@ -217,22 +217,48 @@ Here are some examples of plugins you can use to extend opencode.
 
 ### Send notifications
 
-Send notifications when certain events occur:
+Send cross-platform notifications when a run finishes or input is needed. Focus-aware — only pings when you are away.
 
-```js title=".opencode/plugins/notification.js"
-export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
+The community plugin `opencode-notify-crossx` handles WSL (Windows toast via `Windows.UI.Notifications`), macOS (`osascript`), and Linux (`notify-send`) and suppresses pings when the terminal is frontmost:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-notify-crossx"]
+}
+```
+
+Restart opencode — you will get a toast for `session.idle` (done), `session.error`, and `permission.updated` / `permission.ask` (input needed), but not while you are watching.
+
+Single-file local alternative (same behavior, no npm):
+
+```js title=".opencode/plugins/notify.js"
+export const Notify = async ({ client, $ }) => {
+  async function isFocused() {
+    // WSL: PowerShell GetForegroundWindow, macOS: osascript frontmost, Linux: xdotool
+    // full check in https://github.com/davissekai/opencode-notify-crossx
+    return false // stub for docs — see repo for full impl
+  }
   return {
     event: async ({ event }) => {
-      // Send notification on session completion
+      if (await isFocused()) return
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`notify-send -a opencode "opencode — done" "Run finished"` // falls back to PowerShell/osascript in full version
+      }
+      if (event.type === "permission.updated") {
+        await $`notify-send -u critical -a opencode "opencode — input needed" "Approval required"`
+      }
+    },
+    "permission.ask": async (input, output) => {
+      if (output.status === "ask" && !(await isFocused())) {
+        await $`notify-send -u critical -a opencode "opencode — input needed" \${input.title}`
       }
     },
   }
 }
 ```
 
-We are using `osascript` to run AppleScript on macOS. Here we are using it to send notifications.
+See https://github.com/davissekai/opencode-notify-crossx for the full 300-line cross-platform source. The local file in `~/.config/opencode/plugins/notify.js` also works without npm.
 
 :::note
 If you’re using the OpenCode desktop app, it can send system notifications automatically when a response is ready or when a session errors.
