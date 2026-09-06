@@ -165,7 +165,7 @@ export const layoutSchema = Persistence.struct({
   sessionView: Persistence.record(Persistence.fallback(sessionViewSchema, () => ({ scroll: {} }))),
   home: Persistence.struct({
     selection: Persistence.struct({
-      server: TabStorage.ServerKey,
+      server: Schema.optional(TabStorage.ServerKey),
       directory: Schema.optional(Schema.String),
     }),
   }),
@@ -223,7 +223,7 @@ export const layoutPersistence = Persistence.migrate(
   ),
 )
 
-export function initialLayout(server: ServerConnection.Key): typeof layoutSchema.Type {
+export function initialLayout(server?: ServerConnection.Key): typeof layoutSchema.Type {
   return {
     sidebar: { opened: false, width: DEFAULT_SIDEBAR_WIDTH, workspaces: {}, workspacesDefault: false },
     terminal: { height: DEFAULT_TERMINAL_HEIGHT, opened: false },
@@ -247,7 +247,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const [store, setStore, _, ready] = persisted(
       { ...Persist.global("layout"), previousKey: "layout.v6" },
       layoutPersistence,
-      initialLayout(ServerConnection.key(servers.list[0])),
+      initialLayout(servers.list[0] ? ServerConnection.key(servers.list[0]) : undefined),
     )
     const [ephemeral, setEphemeral] = createStore({
       reviewPanelSource: "other" as ReviewPanelSource,
