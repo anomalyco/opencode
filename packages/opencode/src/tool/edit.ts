@@ -245,7 +245,7 @@ export function levenshtein(a: string, b: string): number {
 
   const bLen = b.length
   let prev = Array.from({ length: bLen + 1 }, (_, j) => j)
-  let curr = new Array<number>(bLen + 1)
+  let curr = Array.from<number>({ length: bLen + 1 })
 
   for (let i = 1; i <= a.length; i++) {
     curr[0] = i
