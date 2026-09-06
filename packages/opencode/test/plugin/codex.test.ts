@@ -286,16 +286,43 @@ describe("plugin.codex", () => {
   test("filters unsupported modes and uses Codex context limits for OAuth GPT models", async () => {
     const hooks = await CodexAuthPlugin({} as never)
     const limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+    const targets = ["sol", "terra", "luna"].flatMap((tier) => [
+      {
+        id: `gpt-5.6-${tier}`,
+        apiID: `gpt-5.6-${tier}`,
+        options: {},
+      },
+      {
+        id: `gpt-5.6-${tier}-fast`,
+        apiID: `gpt-5.6-${tier}`,
+        options: { serviceTier: "priority" },
+      },
+    ])
     const provider = {
       models: {
         ...Object.fromEntries(
-          ["gpt-5.4", "gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.7-pro"].map((id) => [
+          ["gpt-5.4", "gpt-5.5", "gpt-5.7-pro"].map((id) => [
             id,
-            { id, api: { id }, limit, cost: {}, options: {} },
+            { id, name: id, api: { id }, limit, cost: {}, options: {} },
+          ]),
+        ),
+        ...Object.fromEntries(
+          targets.map((model) => [
+            model.id,
+            {
+              id: model.id,
+              name: model.id,
+              api: { id: model.apiID },
+              limit,
+              cost: {},
+              options: model.options,
+              variants: { high: { reasoningEffort: "high" } },
+            },
           ]),
         ),
         "gpt-5.4-pro": {
           id: "gpt-5.4-pro",
+          name: "gpt-5.4-pro",
           api: { id: "gpt-5.4" },
           limit,
           cost: {},
@@ -303,6 +330,7 @@ describe("plugin.codex", () => {
         },
         "gpt-5.6-sol-high": {
           id: "gpt-5.6-sol-high",
+          name: "gpt-5.6-sol-high",
           api: { id: "gpt-5.6-sol" },
           limit,
           cost: {},
@@ -315,12 +343,19 @@ describe("plugin.codex", () => {
 
     expect(models["gpt-5.4"]?.limit).toEqual(limit)
     expect(models["gpt-5.5"]?.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
-    expect(models["gpt-5.6-sol"]?.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
-    expect(models["gpt-5.6-terra"]?.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
-    expect(models["gpt-5.6-luna"]?.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
+    expect(models["gpt-5.5-1m"]).toBeUndefined()
+    targets.forEach((target) => {
+      expect(models[target.id]?.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
+      expect(models[`${target.id}-1m`]?.limit).toEqual({ context: 1_000_000, input: 872_000, output: 128_000 })
+      expect(models[`${target.id}-1m`]?.api.id).toBe(target.apiID)
+      expect(models[`${target.id}-1m`]?.name).toBe(`${target.id} 1M`)
+      expect(models[`${target.id}-1m`]?.options).toEqual(target.options)
+      expect(models[`${target.id}-1m`]?.variants).toEqual({ high: { reasoningEffort: "high" } })
+    })
     expect(models["gpt-5.4-pro"]).toBeUndefined()
     expect(models["gpt-5.7-pro"]).toBeDefined()
     expect(models["gpt-5.6-sol-high"]).toBeDefined()
+    expect(models["gpt-5.6-sol-high-1m"]).toBeUndefined()
     expect(await hooks.provider!.models!(provider as never, { auth: { type: "api" } } as never)).toBe(
       provider.models as never,
     )
