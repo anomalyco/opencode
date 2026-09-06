@@ -33,6 +33,7 @@ import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./compos
 import { SessionIdentityHeader } from "./session-identity-header"
 import { SessionReviewToggle } from "./header/session-header-actions"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
+import { createSessionBrowser } from "./browser/model"
 
 const SessionMobileFiles = lazy(async () => {
   const { SessionMobileFiles } = await import("./files/session-mobile-files")
@@ -47,6 +48,7 @@ export function SessionScreen(props: { session: SessionModel }) {
     return info ? projectForSession(info, server.ctx.sync.data.project) : undefined
   })
   const isDesktop = session.isDesktop
+  const browser = createSessionBrowser(session)
   const screen = createSessionScreenLayout(session)
   const timeline = createSessionTimelineInteraction(session)
   const timelineSearch = createTimelineSearchController({
@@ -377,7 +379,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                         setStore("sideReviewPresent", false)
                       }}
                     >
-                      <SessionDesktopReview review={review} present={store.sideReviewPresent} />
+                      <SessionDesktopReview review={review} browser={browser} present={store.sideReviewPresent} />
                     </div>
                   </Show>
                 </div>

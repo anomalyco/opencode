@@ -1,7 +1,13 @@
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/unstable/rpc"
+import { BrowserPaneEventSchema, BrowserPaneRpc } from "./browser"
 import { UpdaterStateSchema } from "./updater"
 import { WslServersEventSchema } from "./wsl"
+
+export class BrowserPaneEvent extends Schema.TaggedClass<BrowserPaneEvent>()("BrowserPaneEvent", {
+  bindingID: Schema.String,
+  event: BrowserPaneEventSchema,
+}) {}
 
 export class DeepLinksOpened extends Schema.TaggedClass<DeepLinksOpened>()("DeepLinksOpened", {
   urls: Schema.Array(Schema.String),
@@ -32,6 +38,7 @@ export class WindowZoomChanged extends Schema.TaggedClass<WindowZoomChanged>()("
 }) {}
 
 export const DesktopEvent = Schema.Union([
+  BrowserPaneEvent,
   DeepLinksOpened,
   MenuCommandTriggered,
   UpdaterStateChanged,
@@ -43,4 +50,4 @@ export const DesktopEvent = Schema.Union([
 export type DesktopEvent = Schema.Schema.Type<typeof DesktopEvent>
 
 export const DesktopEvents = Rpc.make("DesktopEvents", { success: DesktopEvent, stream: true })
-export const EventRpcs = RpcGroup.make(DesktopEvents)
+export const EventRpcs = RpcGroup.make(DesktopEvents, BrowserPaneRpc)
