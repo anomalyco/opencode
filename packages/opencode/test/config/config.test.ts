@@ -953,6 +953,87 @@ Test agent prompt`,
   }),
 )
 
+it.instance("uses an agent markdown frontmatter prompt when the body is empty", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".opencode", "agent", "frontmatter.md"),
+      `---
+prompt: Frontmatter prompt
+---`,
+    )
+
+    const config = yield* Config.use.get()
+    expect(config.agent?.frontmatter?.prompt).toBe("Frontmatter prompt")
+  }),
+)
+
+it.instance("prefers an agent markdown body over its frontmatter prompt", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".opencode", "agent", "precedence.md"),
+      `---
+prompt: Frontmatter prompt
+---
+Body prompt`,
+    )
+
+    const config = yield* Config.use.get()
+    expect(config.agent?.precedence?.prompt).toBe("Body prompt")
+  }),
+)
+
+it.instance("resolves environment variables in an agent markdown prompt", () =>
+  withProcessEnv(
+    "TEST_AGENT_PROMPT",
+    "Environment prompt",
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* FSUtil.use.writeWithDirs(
+        path.join(test.directory, ".opencode", "agent", "environment.md"),
+        `---
+---
+{env:TEST_AGENT_PROMPT}`,
+      )
+
+      const config = yield* Config.use.get()
+      expect(config.agent?.environment?.prompt).toBe("Environment prompt")
+    }),
+  ),
+)
+
+it.instance("resolves agent markdown prompt files relative to the config directory", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.writeWithDirs(path.join(test.directory, ".opencode", "prompts", "agent.txt"), "File prompt")
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".opencode", "agent", "file.md"),
+      `---
+prompt: "{file:./prompts/agent.txt}"
+---`,
+    )
+
+    const config = yield* Config.use.get()
+    expect(config.agent?.file?.prompt).toBe("File prompt")
+  }),
+)
+
+it.instance("uses a mode markdown frontmatter prompt when the body is empty", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".opencode", "mode", "frontmatter.md"),
+      `---
+prompt: Mode frontmatter prompt
+---`,
+    )
+
+    const config = yield* Config.use.get()
+    expect(config.agent?.frontmatter?.prompt).toBe("Mode frontmatter prompt")
+  }),
+)
+
 it.instance("agent markdown permission config preserves user key order", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
