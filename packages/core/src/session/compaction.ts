@@ -25,6 +25,7 @@ import { SessionProviderContext } from "./provider-context.js"
 import type { SessionRunnerModel } from "./runner/model.js"
 import { SessionRunnerRetry } from "./runner/retry.js"
 import { SessionSchema } from "./schema.js"
+import { SessionStore } from "./store.js"
 import { toSessionError } from "./to-session-error.js"
 import { Token } from "../util/token.js"
 import { SessionUsage } from "./usage.js"
@@ -95,6 +96,8 @@ export type Editor = {
 export type AutoInput = {
   readonly context: SessionContext.Loaded
   readonly prepare: SessionModelRequest.Interface["prepare"]
+  /** Known overflow must recover from durable history, not submit the overflowing native window again. */
+  readonly overflow?: boolean
 }
 
 type RequiredInput = {
@@ -126,7 +129,10 @@ type ExecuteInput = AutoInput & {
 }
 
 export type Outcome =
-  | Pick<SessionMessage.CompactionCompleted, "status">
+  | (Pick<SessionMessage.CompactionCompleted, "status"> & {
+      /** Consumes the logical step's one overflow rebuild even when the native attempt overflowed first. */
+      readonly recoveredOverflow?: boolean
+    })
   | Pick<SessionMessage.CompactionFailed, "status" | "error">
 
 export interface Interface extends State.Transformable<Editor> {
@@ -138,14 +144,14 @@ export interface Interface extends State.Transformable<Editor> {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
 
+const hasInputUsage = (message: SessionMessage.Info) =>
+  message.type === "assistant" &&
+  !message.error &&
+  message.tokens !== undefined &&
+  message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0
+
 export const estimateTokens = (input: RequiredInput) => {
-  const index = input.messages.findLastIndex(
-    (message) =>
-      message.type === "assistant" &&
-      !message.error &&
-      message.tokens !== undefined &&
-      message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0,
-  )
+  const index = input.messages.findLastIndex(hasInputUsage)
   const last = input.messages[index]
   // Keep the anchor's local tool results: they are not covered by its provider usage.
   const added = SessionModelRequest.unsupportedParts(
@@ -366,6 +372,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const llm = yield* LLMClient.Service
+    const store = yield* SessionStore.Service
 
     const state = State.create<Settings, Editor>({
       name: "session-compaction",
@@ -446,7 +453,7 @@ export const layer = Layer.effect(
         })
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
-          // One physical attempt, with no local-summary fallback or provider-error retry.
+          // One native physical attempt; only a known automatic overflow permits local recovery.
           const result = yield* restore(
             Effect.gen(function* () {
               if (LLMClient.canCompact(request, { mechanism: "trigger" })) {
@@ -482,13 +489,31 @@ export const layer = Layer.effect(
           return { status: "completed" as const }
         }),
       ).pipe(
-        Effect.catchTag("AI.Error", (cause) =>
-          failed({
-            sessionID: context.session.id,
-            reason: input.reason,
-            inputID: input.inputID,
-            error: toSessionError(cause),
-          }),
+        Effect.onInterrupt(() =>
+          input.reason === "auto"
+            ? failed({
+                sessionID: context.session.id,
+                reason: input.reason,
+                error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
+              }).pipe(Effect.asVoid)
+            : Effect.void,
+        ),
+        Effect.catchTag(
+          "AI.Error",
+          (cause): Effect.Effect<Outcome> =>
+            input.reason === "auto" && isContextOverflowFailure(cause)
+              ? retained.pipe(
+                  Effect.flatMap((messages) => execute({ ...input, context: { ...context, messages }, started: true })),
+                  Effect.map((result) =>
+                    result.status === "completed" ? { ...result, recoveredOverflow: true } : result,
+                  ),
+                )
+              : failed({
+                  sessionID: context.session.id,
+                  reason: input.reason,
+                  inputID: input.inputID,
+                  error: toSessionError(cause),
+                }),
         ),
       )
     })
@@ -680,22 +705,43 @@ export const layer = Layer.effect(
       })
       return { status: "completed" as const }
     })
-    const compact = (input: AutoInput) => execute({ ...input, reason: "auto" })
+    const compact = Effect.fn("SessionCompaction.compact")(function* (input: AutoInput): Effect.fn.Return<Outcome> {
+      const request = { ...input, reason: "auto" as const }
+      if (input.overflow) {
+        const messages = yield* store.context(input.context.session.id).pipe(Effect.orDie)
+        return yield* execute({ ...request, context: { ...input.context, messages } })
+      }
+      if (input.context.model.compaction?.mode !== "provider") return yield* execute(request)
+      const retained = store.context(input.context.session.id).pipe(Effect.orDie)
+      return yield* executeProvider(request, retained)
+    })
     const required = (input: RequiredInput) => {
       const config = state.get()
       if (!config.auto) return false
       // Run the completed checkpoint before considering another automatic compaction.
       const last = input.messages.at(-1)
       if (last?.type === "compaction" && last.status === "completed") return false
+      const native = input.messages.findLastIndex(
+        (message) => message.type === "compaction" && message.status === "completed" && message.providerContext,
+      )
+      // Native usage describes the compaction operation, not the replacement's size. Wait for
+      // a primary response to anchor the new window, including after restart or new admission.
+      if (native >= 0 && !input.messages.some((message, index) => index > native && hasInputUsage(message)))
+        return false
       const limit = input.resolved.limit
       const context = limit.context
-      if (context <= 0) return false
+      const policy = input.resolved.compaction
+      // Preserve local behavior. Provider policies can use a known input limit or an
+      // explicit threshold when the catalog has no context limit; no universal default.
+      if (context <= 0 && policy?.mode !== "provider") return false
       const output = Math.min(limit.output, OUTPUT_TOKEN_MAX)
       const promptCeiling = Math.min(
         limit.input === undefined ? Number.POSITIVE_INFINITY : limit.input - config.buffer,
-        context - Math.max(output, config.buffer),
+        context <= 0 ? Number.POSITIVE_INFINITY : context - Math.max(output, config.buffer),
       )
-      return estimateTokens(input) >= promptCeiling
+      const threshold =
+        policy?.mode === "provider" ? Math.min(policy.threshold ?? Infinity, promptCeiling) : promptCeiling
+      return Number.isFinite(threshold) && estimateTokens(input) >= threshold
     }
     const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: ManualInput) {
       if (
@@ -750,5 +796,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, llmClient],
+  deps: [Bus.node, llmClient, SessionStore.node],
 })
