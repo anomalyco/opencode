@@ -29,6 +29,18 @@ export function initialize(acp: AcpClient) {
   })
 }
 
+export function initializeV2(acp: AcpClient) {
+  return Effect.gen(function* () {
+    return expectOk(
+      yield* acp.request<InitializeResponse>("initialize", {
+        protocolVersion: 2,
+        info: { name: "opencode-local-acp", version: "0.1.0" },
+        capabilities: {},
+      }),
+    )
+  })
+}
+
 export function newSession(acp: AcpClient, cwd: string) {
   return Effect.gen(function* () {
     return expectOk(yield* acp.request<NewSessionResponse>("session/new", { cwd, mcpServers: [] }))

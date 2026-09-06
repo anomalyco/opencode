@@ -46,6 +46,7 @@ function makeSessionService() {
 function createHarness(
   requestPermission: (params: RequestPermissionRequest) => Promise<RequestPermissionResponse> = () =>
     Promise.resolve({ outcome: { outcome: "selected", optionId: "once" } }),
+  options: { v2?: boolean } = {},
 ) {
   const replies: PermissionReplyParams[] = []
   const requests: RequestPermissionRequest[] = []
@@ -72,7 +73,12 @@ function createHarness(
       return Promise.resolve()
     },
   } satisfies Pick<AgentSideConnection, "requestPermission" | "sessionUpdate">
-  const subscription = new ACPEvent.Subscription({ sdk, connection, session })
+  const subscription = new ACPEvent.Subscription({
+    sdk,
+    connection,
+    session,
+    ...(options.v2 ? { isV2: () => true } : {}),
+  })
 
   return { connection, replies, requests, sdk, session, subscription, updates }
 }
@@ -397,5 +403,58 @@ describe("acp permissions", () => {
       ["perm_1", "once"],
       ["perm_2", "always"],
     ])
+  })
+})
+
+describe("acp v2 permissions", () => {
+  it("emits requires_action before permission request and running after resolution", async () => {
+    const harness = createHarness(undefined, { v2: true })
+    await createSession(harness.session, "ses_v2_perm")
+
+    harness.subscription.handle(permissionAsked("ses_v2_perm", "perm_v2_1"))
+
+    await pollUntil(() => harness.replies.length === 1, "v2 permission was never replied")
+
+    const stateUpdates = harness.updates
+      .map((u) => u.update as unknown as { sessionUpdate: string; state?: string })
+      .filter((u) => u.sessionUpdate === "state_update")
+
+    // Should have requires_action (before) and running (after)
+    expect(stateUpdates.map((u) => u.state)).toEqual(["requires_action", "running"])
+  })
+
+  it("emits requires_action even when permission is rejected", async () => {
+    const harness = createHarness(() => Promise.resolve({ outcome: { outcome: "cancelled" } }), { v2: true })
+    await createSession(harness.session, "ses_v2_reject")
+
+    harness.subscription.handle(permissionAsked("ses_v2_reject", "perm_v2_rej"))
+
+    await pollUntil(() => harness.replies.length === 1, "v2 rejected permission was never replied")
+
+    const stateUpdates = harness.updates
+      .map((u) => u.update as unknown as { sessionUpdate: string; state?: string })
+      .filter((u) => u.sessionUpdate === "state_update")
+
+    expect(stateUpdates.map((u) => u.state)).toEqual(["requires_action", "running"])
+  })
+
+  it("uses v2 permission request structure with title and subject", async () => {
+    const harness = createHarness(undefined, { v2: true })
+    await createSession(harness.session, "ses_v2_struct")
+
+    harness.subscription.handle(permissionAsked("ses_v2_struct", "perm_v2_struct"))
+
+    await pollUntil(() => harness.requests.length === 1, "v2 permission was never requested")
+
+    expect(harness.requests[0]).toMatchObject({
+      sessionId: "ses_v2_struct",
+      title: "bash",
+      subject: {
+        type: "tool_call",
+        toolCall: { toolCallId: "perm_v2_struct", status: "pending" },
+      },
+    })
+    // v1 toolCall field should not be present at top level in v2 mode
+    expect("toolCall" in harness.requests[0]).toBe(false)
   })
 })

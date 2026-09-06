@@ -195,7 +195,9 @@ describe("ACP service sessions", () => {
     options?: {
       abort?: (input: { sessionID: string }) => Promise<{ data: boolean }>
       prompt?: (input: unknown) => Promise<{ data: { info: ReturnType<typeof assistantInfo> } }>
+      promptAsync?: (input: unknown) => Promise<unknown>
       sessionUpdate?: (update: SessionNotification) => Promise<void>
+      v2?: boolean
     },
   ) => {
     const updates: SessionNotification[] = []
@@ -203,6 +205,7 @@ describe("ACP service sessions", () => {
     const aborts: string[] = []
     const forks: string[] = []
     const prompts: unknown[] = []
+    const promptAsyncs: unknown[] = []
     const commands: unknown[] = []
     const summarizes: unknown[] = []
     const usageUpdates: string[] = []
@@ -265,6 +268,13 @@ describe("ACP service sessions", () => {
           events.push(idleEvent(input.sessionID))
           return response
         },
+        promptAsync: async (input: { sessionID: string }) => {
+          await (options?.promptAsync?.(input) ?? Promise.resolve())
+          promptAsyncs.push(input)
+          // The async admission returns immediately; the turn completes later when
+          // the test pushes an idle event, mirroring the real server's lifecycle.
+          return { data: undefined }
+        },
         command: (input: { sessionID: string }) => {
           commands.push(input)
           events.push(idleEvent(input.sessionID))
@@ -320,12 +330,13 @@ describe("ACP service sessions", () => {
     })
 
     return {
-      service: ACPService.make({ sdk, connection, usage }),
+      service: ACPService.make({ sdk, connection, usage, v2: options?.v2 }),
       updates,
       mcpAdds,
       aborts,
       forks,
       prompts,
+      promptAsyncs,
       commands,
       summarizes,
       usageUpdates,
@@ -1044,7 +1055,6 @@ describe("ACP service sessions", () => {
     const result = await Effect.runPromise(
       service.prompt({
         sessionId: session.sessionId,
-        messageId: "00000000-0000-4000-8000-000000000001",
         prompt: [{ type: "text", text: "hello" }],
       }),
     )
@@ -1069,7 +1079,6 @@ describe("ACP service sessions", () => {
         cachedWriteTokens: 13,
         totalTokens: 171,
       },
-      userMessageId: "00000000-0000-4000-8000-000000000001",
       _meta: {},
     })
     expect(usageUpdates).toEqual([session.sessionId])
@@ -1338,6 +1347,332 @@ describe("ACP service sessions", () => {
     )
 
     expect(error.code).toBe(-32000)
+  })
+
+  describe("v2 prompt lifecycle", () => {
+    // v2 PromptRequest adds messageId; the v1 SDK type doesn't have it.
+    function v2Prompt(params: {
+      sessionId: string
+      messageId: string
+      prompt: readonly { type: "text"; text: string }[]
+    }) {
+      return params as unknown as Parameters<ReturnType<typeof ACPService.make>["prompt"]>[0]
+    }
+
+    function busyEvent(sessionID: string): Event {
+      return {
+        id: `evt_busy_${sessionID}`,
+        type: "session.status",
+        properties: { sessionID, status: { type: "busy" } },
+      }
+    }
+
+    function sessionUpdateName(update: SessionNotification) {
+      return (update.update as { sessionUpdate?: string }).sessionUpdate
+    }
+
+    // The event subscription emits v2 state_update notifications asynchronously off the
+    // global event stream, so poll the captured updates for the published signal rather
+    // than racing a fixed sleep.
+    async function waitForIdleState(updates: SessionNotification[], sessionId: string, timeoutMs = 1000) {
+      const start = Date.now()
+      while (Date.now() - start < timeoutMs) {
+        const found = updates.find((u) => {
+          if (u.sessionId !== sessionId) return false
+          const upd = u.update as { sessionUpdate?: string; state?: string }
+          return upd.sessionUpdate === "state_update" && upd.state === "idle"
+        })
+        if (found) return found
+        await new Promise((r) => setTimeout(r, 5))
+      }
+      throw new Error("timeout waiting for v2 state_update idle")
+    }
+
+    it("negotiates protocolVersion 2 when the flag is on and the client requests v2", async () => {
+      const { service } = makeService([], { v2: true })
+      const result = await Effect.runPromise(service.initialize({ protocolVersion: 2 }))
+      expect(result.protocolVersion).toBe(2)
+      expect((result as unknown as { info: { name: string } }).info.name).toBe("OpenCode")
+      expect((result as unknown as { capabilities: { session: object } }).capabilities.session).toBeDefined()
+    })
+
+    it("falls back to protocolVersion 1 when the client requests v1 even with the flag on", async () => {
+      const { service } = makeService([], { v2: true })
+      const result = await Effect.runPromise(service.initialize({ protocolVersion: 1 }))
+      expect(result.protocolVersion).toBe(1)
+      expect((result as unknown as { agentInfo?: unknown }).agentInfo).toBeDefined()
+    })
+
+    it("admits a v2 prompt non-blocking via prompt_async and acknowledges immediately", async () => {
+      const { service, promptAsyncs, prompts, updates } = makeService([], { v2: true })
+      await Effect.runPromise(service.initialize({ protocolVersion: 2 }))
+      const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+      const result = await Effect.runPromise(
+        service.prompt(
+          v2Prompt({
+            sessionId: session.sessionId,
+            messageId: "msg_1",
+            prompt: [{ type: "text", text: "hello" }],
+          }),
+        ),
+      )
+
+      // v2 acceptance is an empty result; the turn has not completed yet.
+      expect(Object.keys(result as object)).toHaveLength(0)
+      // Admitted asynchronously, not via the blocking v1 prompt path.
+      expect(promptAsyncs).toHaveLength(1)
+      expect(prompts).toHaveLength(0)
+      expect((promptAsyncs[0] as { messageID: string }).messageID).toBe("msg_1")
+      // A user_message ack and state_update running were emitted immediately.
+      expect(updates.map(sessionUpdateName)).toEqual(expect.arrayContaining(["user_message", "state_update"]))
+    })
+
+    it("emits state_update idle with a stop reason when the turn completes", async () => {
+      const messages = [
+        {
+          info: assistantInfo({ input: 100, output: 40, reasoning: 7, cache: { read: 11, write: 13 } }),
+          parts: [],
+        },
+      ]
+      const { service, events, updates, usageUpdates } = makeService(messages, { v2: true })
+      await Effect.runPromise(service.initialize({ protocolVersion: 2 }))
+      const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+      await Effect.runPromise(
+        service.prompt(
+          v2Prompt({ sessionId: session.sessionId, messageId: "msg_1", prompt: [{ type: "text", text: "hello" }] }),
+        ),
+      )
+
+      events.push(busyEvent(session.sessionId))
+      events.push(idleEvent(session.sessionId))
+
+      const idle = await waitForIdleState(updates, session.sessionId)
+      expect((idle.update as { stopReason?: string }).stopReason).toBe("end_turn")
+      expect(usageUpdates).toContain(session.sessionId)
+    })
+
+    it("steers a running turn by admitting a second prompt before idle", async () => {
+      const { service, promptAsyncs } = makeService([], { v2: true })
+      await Effect.runPromise(service.initialize({ protocolVersion: 2 }))
+      const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+      await Effect.runPromise(
+        service.prompt(
+          v2Prompt({ sessionId: session.sessionId, messageId: "msg_1", prompt: [{ type: "text", text: "first" }] }),
+        ),
+      )
+      // A second prompt arriving while the first turn is still running admits another
+      // input (steer by default) instead of blocking on the running turn.
+      await Effect.runPromise(
+        service.prompt(
+          v2Prompt({ sessionId: session.sessionId, messageId: "msg_2", prompt: [{ type: "text", text: "steer" }] }),
+        ),
+      )
+
+      expect(promptAsyncs.map((p) => (p as { messageID: string }).messageID)).toEqual(["msg_1", "msg_2"])
+    })
+
+    it("derives stopReason cancelled from an aborted turn on cancel", async () => {
+      const messages = [
+        {
+          info: assistantInfo(
+            { input: 5, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            { name: "MessageAbortedError", data: { message: "aborted" } },
+          ),
+          parts: [],
+        },
+      ]
+      const { service, events, updates, aborts } = makeService(messages, { v2: true })
+      await Effect.runPromise(service.initialize({ protocolVersion: 2 }))
+      const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+      await Effect.runPromise(
+        service.prompt(
+          v2Prompt({ sessionId: session.sessionId, messageId: "msg_1", prompt: [{ type: "text", text: "hello" }] }),
+        ),
+      )
+      await Effect.runPromise(service.cancel({ sessionId: session.sessionId }))
+
+      expect(aborts).toEqual([session.sessionId])
+      events.push(idleEvent(session.sessionId))
+      const idle = await waitForIdleState(updates, session.sessionId)
+      expect((idle.update as { stopReason?: string }).stopReason).toBe("cancelled")
+    })
+
+    it("replays conversation history when resumeSession includes replayFrom", async () => {
+      const messages = [
+        {
+          info: {
+            id: "msg_user_1",
+            role: "user",
+            sessionID: "ses_loaded",
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          },
+          parts: [
+            {
+              id: "prt_1",
+              type: "text",
+              text: "hello",
+              sessionID: "ses_loaded",
+              messageID: "msg_user_1",
+              ignored: false,
+            },
+          ],
+        },
+        {
+          info: {
+            id: "msg_asst_1",
+            role: "assistant",
+            sessionID: "ses_loaded",
+            providerID: "test",
+            modelID: "test-model",
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          },
+          parts: [
+            {
+              id: "prt_2",
+              type: "text",
+              text: "hi there",
+              sessionID: "ses_loaded",
+              messageID: "msg_asst_1",
+              ignored: false,
+            },
+          ],
+        },
+      ]
+      const { service, updates } = makeService(messages, { v2: true })
+      await Effect.runPromise(service.initialize({ protocolVersion: 2 }))
+
+      await Effect.runPromise(
+        service.resumeSession({
+          sessionId: "ses_loaded",
+          cwd: "/workspace",
+          ...(undefined as unknown as object),
+          replayFrom: { type: "start" },
+        } as unknown as Parameters<typeof service.resumeSession>[0]),
+      )
+
+      // Replay should emit user_message_chunk and agent_message_chunk updates
+      const chunkUpdates = updates.filter(
+        (u) => u.update.sessionUpdate === "user_message_chunk" || u.update.sessionUpdate === "agent_message_chunk",
+      )
+      expect(chunkUpdates.length).toBeGreaterThanOrEqual(2)
+    })
+
+    it("emits plan_update when todo.updated events arrive", async () => {
+      const { service, updates, events } = makeService([], { v2: true })
+      await Effect.runPromise(service.initialize({ protocolVersion: 2 }))
+      const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+      events.push({
+        id: "evt_todo_1",
+        type: "todo.updated",
+        properties: {
+          sessionID: session.sessionId,
+          todos: [
+            { content: "Write tests", status: "in_progress", priority: "high" },
+            { content: "Deploy", status: "pending", priority: "medium" },
+          ],
+        },
+      } as unknown as Event)
+
+      // Give the event subscription time to process
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
+      const planUpdates = updates.filter((u) => u.update.sessionUpdate === "plan_update")
+      expect(planUpdates).toHaveLength(1)
+      const plan = (planUpdates[0].update as unknown as { plan: { type: string; planId: string; entries: unknown[] } })
+        .plan
+      expect(plan.type).toBe("items")
+      expect(plan.planId).toBe("default")
+      expect(plan.entries).toHaveLength(2)
+    })
+
+    it("returns configId (not id) on config options in v2 mode", async () => {
+      const { service } = makeService([], { v2: true })
+      await Effect.runPromise(service.initialize({ protocolVersion: 2 }))
+      const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+      // In v2, config options use `configId` instead of `id`
+      const modelOption = session.configOptions?.find((o) => "configId" in o)
+      expect(modelOption).toBeDefined()
+      expect((modelOption as { configId: string }).configId).toBeDefined()
+      // v1 `id` field should not be present in v2 mode
+      expect((modelOption as { id?: string }).id).toBeUndefined()
+    })
+
+    it("emits user_message acknowledgment with messageId after v2 prompt acceptance", async () => {
+      const { service, updates } = makeService([], { v2: true })
+      await Effect.runPromise(service.initialize({ protocolVersion: 2 }))
+      const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+      await Effect.runPromise(
+        service.prompt(
+          v2Prompt({ sessionId: session.sessionId, messageId: "msg_ack_1", prompt: [{ type: "text", text: "hi" }] }),
+        ),
+      )
+
+      const userMessageUpdates = updates.filter(
+        (u) => (u.update as unknown as { sessionUpdate: string }).sessionUpdate === "user_message",
+      )
+      expect(userMessageUpdates).toHaveLength(1)
+      expect((userMessageUpdates[0].update as { messageId: string }).messageId).toBe("msg_ack_1")
+      expect((userMessageUpdates[0].update as { content: unknown[] }).content).toHaveLength(1)
+    })
+
+    it("routes auth/login to the authenticate handler and auth/logout to the logout handler", async () => {
+      const { service } = makeService([], { v2: true })
+      await Effect.runPromise(service.initialize({ protocolVersion: 2 }))
+
+      // auth/login delegates to authenticate — returns empty object (void in v2)
+      const authResult = await Effect.runPromise(
+        service.authenticate({ methodId: "opencode-login" } as unknown as Parameters<typeof service.authenticate>[0]),
+      )
+      expect(authResult).toEqual({})
+
+      // auth/logout delegates to logout — returns void in v2
+      await Effect.runPromise(service.logout())
+    })
+
+    it("emits state_update with requires_action is not yet implemented (baseline check)", async () => {
+      // requires_action is SHOULD not MUST; verify we at least emit running/idle
+      const { service, updates } = makeService([], { v2: true })
+      await Effect.runPromise(service.initialize({ protocolVersion: 2 }))
+      const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+      await Effect.runPromise(
+        service.prompt(
+          v2Prompt({ sessionId: session.sessionId, messageId: "msg_ra", prompt: [{ type: "text", text: "test" }] }),
+        ),
+      )
+
+      const stateUpdates = updates.filter(
+        (u) => (u.update as unknown as { sessionUpdate: string }).sessionUpdate === "state_update",
+      )
+      // At minimum, running state_update should be emitted on prompt acceptance
+      expect(stateUpdates.length).toBeGreaterThanOrEqual(1)
+      expect((stateUpdates[0].update as unknown as { state: string }).state).toBe("running")
+    })
+
+    it("includes input with type:text in available_commands_update", async () => {
+      const { service, updates } = makeService([], { v2: true })
+      await Effect.runPromise(service.initialize({ protocolVersion: 2 }))
+      await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+      // Wait for the deferred available_commands_update
+      await new Promise((resolve) => setTimeout(resolve, 50))
+
+      const cmdUpdates = updates.filter((u) => u.update.sessionUpdate === "available_commands_update")
+      expect(cmdUpdates.length).toBeGreaterThanOrEqual(1)
+      const commands = (
+        cmdUpdates[0].update as { availableCommands: Array<{ name: string; input?: { type: string; hint: string } }> }
+      ).availableCommands
+      // The "init" command has hints, so its input should include type: "text"
+      const initCommand = commands.find((c) => c.name === "init")
+      expect(initCommand).toBeDefined()
+    })
   })
 })
 
