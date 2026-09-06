@@ -24,6 +24,12 @@ export function createPromptInputV2Store(input: PromptInputV2StoreInput) {
     return typeof value === "function" ? value() : value
   }
   const setStore = () => tuple()[1]
+  const replace = (start: number, end: number, content: string) => {
+    batch(() => {
+      setStore()("prompt", (prompt) => replaceRange(prompt, start, end, content))
+      setStore()("cursor", Math.min(start, end) + content.length)
+    })
+  }
 
   return {
     get state() {
@@ -49,11 +55,11 @@ export function createPromptInputV2Store(input: PromptInputV2StoreInput) {
     },
     addText(content: string) {
       const cursor = store().cursor ?? promptLength(store().prompt)
-      batch(() => {
-        setStore()("prompt", (prompt) => insertText(prompt, cursor, content))
-        setStore()("cursor", cursor + content.length)
-      })
+      replace(cursor, cursor, content)
     },
+    // Replaces the selected range in a single transaction. Large pastes go through here
+    // instead of the DOM, so the editor re-renders from the model as one text node.
+    replaceText: replace,
     reset() {
       batch(() => {
         setStore()("prompt", [{ type: "text", content: "", start: 0, end: 0 }])
@@ -74,13 +80,11 @@ export function createPromptInputV2Store(input: PromptInputV2StoreInput) {
       setStore()("context", "items", (items) => items.filter((item) => item.key !== key))
     },
     addMention(mention: PromptInputV2FilePart | PromptInputV2AgentPart) {
-      const text = store()
-        .prompt.map((part) => ("content" in part ? part.content : ""))
-        .join("")
-      const end = store().cursor ?? text.length
-      const start = text.slice(0, end).lastIndexOf("@")
-      setStore()("prompt", insertMention(store().prompt, start < 0 ? end : start, end, mention))
-      setStore()("cursor", (start < 0 ? end : start) + mention.content.length + 1)
+      const end = store().cursor ?? promptLength(store().prompt)
+      const trigger = mentionStart(store().prompt, end)
+      const start = trigger < 0 ? end : trigger
+      setStore()("prompt", insertMention(store().prompt, start, end, mention))
+      setStore()("cursor", start + mention.content.length + 1)
     },
     addAttachment(attachment: PromptInputV2Attachment) {
       setStore()("prompt", (prompt) => [...prompt, attachment])
@@ -93,25 +97,54 @@ export function createPromptInputV2Store(input: PromptInputV2StoreInput) {
 
 export type PromptInputV2Store = ReturnType<typeof createPromptInputV2Store>
 
-function insertText(prompt: PromptInputV2Prompt, cursor: number, content: string): PromptInputV2Prompt {
+function replaceRange(prompt: PromptInputV2Prompt, start: number, end: number, content: string): PromptInputV2Prompt {
+  const from = Math.max(0, Math.min(start, end))
+  const to = Math.max(0, Math.max(start, end))
   let position = 0
   let inserted = false
   const parts = prompt.flatMap<PromptInputV2Prompt[number]>((part) => {
     if (part.type === "image") return [part]
-    const start = position
-    position += part.content.length
-    if (inserted) return [part]
-    if (part.type === "text" && cursor >= start && cursor <= position) {
+    const partStart = position
+    const partEnd = partStart + part.content.length
+    position = partEnd
+    if (part.type !== "text") {
+      // Mentions are atomic, so a selection that reaches into one removes all of it. The
+      // first one removed takes the replacement's place, or a selection that starts inside a
+      // mention would push the pasted text behind the parts that follow it.
+      if (partStart < to && partEnd > from) {
+        if (inserted) return []
+        inserted = true
+        return [{ type: "text", content, start: 0, end: 0 }]
+      }
+      if (inserted || from > partStart) return [part]
       inserted = true
-      const offset = cursor - start
-      return [{ ...part, content: part.content.slice(0, offset) + content + part.content.slice(offset) }]
+      return [{ type: "text", content, start: 0, end: 0 }, part]
     }
-    if (cursor > start) return [part]
+    const head = part.content.slice(0, Math.max(0, Math.min(part.content.length, from - partStart)))
+    const tail = part.content.slice(Math.max(0, Math.min(part.content.length, to - partStart)))
+    if (inserted) return [{ ...part, content: head + tail }]
+    if (partEnd < from || partStart > to) return [part]
     inserted = true
-    return [{ type: "text", content, start: 0, end: 0 }, part]
+    return [{ ...part, content: head + content + tail }]
   })
   if (!inserted) parts.push({ type: "text", content, start: 0, end: 0 })
   return withOffsets(parts)
+}
+
+// Finds the "@" that opened the current mention without joining the prompt into one
+// string, which would copy the whole draft on every suggestion.
+function mentionStart(prompt: PromptInputV2Prompt, end: number) {
+  let position = 0
+  let found = -1
+  for (const part of prompt) {
+    if (!("content" in part)) continue
+    const start = position
+    position += part.content.length
+    if (start >= end) break
+    const index = part.content.lastIndexOf("@", end - start - 1)
+    if (index >= 0) found = start + index
+  }
+  return found
 }
 
 function insertMention(

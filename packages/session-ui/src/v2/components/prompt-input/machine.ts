@@ -81,6 +81,20 @@ export function transitionPromptInputV2(
   return changed({ ...state, focus: "external" })
 }
 
+// Mentions and commands are single tokens, so only the text right before the cursor can
+// match. Bounding the scan keeps a draft holding a pasted document off the hot path,
+// where the whole thing used to be copied on every keystroke.
+const SUGGESTION_SCAN = 1024
+
+function mentionQuery(value: string, cursor: number | undefined) {
+  const at = Math.min(cursor ?? value.length, value.length)
+  const from = Math.max(0, at - SUGGESTION_SCAN)
+  const tail = from === 0 && at === value.length ? value : value.slice(from, at)
+  // Without the start of the string in view, "@" only opens a mention after whitespace.
+  const match = tail.match(from === 0 ? /(?:^|\s)@([^\s@]*)$/ : /\s@([^\s@]*)$/)
+  return match?.[1] ?? undefined
+}
+
 function inputChanged(
   state: PromptInputV2InteractionState,
   value: string,
@@ -93,16 +107,15 @@ function inputChanged(
       { type: "draft.setText", value: "" },
     ])
   }
-  const context = value.slice(0, cursor ?? value.length).match(/(?:^|\s)@([^\s@]*)$/)
-  if (context) {
-    const query = context[1] ?? ""
-    return changed({ ...state, popover: { type: "context", query }, focus: "editor" }, [
+  const mention = mentionQuery(value, cursor)
+  if (mention !== undefined) {
+    return changed({ ...state, popover: { type: "context", query: mention }, focus: "editor" }, [
       ...setText,
-      { type: "popover.filter", popover: "context", query },
+      { type: "popover.filter", popover: "context", query: mention },
     ])
   }
 
-  const command = value.match(/^\/(\S*)$/)
+  const command = value.length <= SUGGESTION_SCAN ? value.match(/^\/(\S*)$/) : null
   if (command) {
     const query = command[1] ?? ""
     return changed({ ...state, popover: { type: "command-inline", query }, focus: "editor" }, [

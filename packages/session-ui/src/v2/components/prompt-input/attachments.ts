@@ -1,5 +1,6 @@
 import { onMount } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { promptInputV2Offset } from "./editor"
 import type { PromptInputV2Attachment, PromptInputV2Prompt } from "./types"
 
 const accepted = [
@@ -156,24 +157,12 @@ export function createPromptInputV2Attachments(
       await addAttachments(files, true, target)
       return
     }
-    const plainText = clipboardData.getData("text/plain") ?? ""
-    if (input.readClipboardImage && !plainText) {
+    // Text is handled by the controller, which owns the caret and the selection. This is only
+    // reached when the clipboard carries no text at all, so a native image can still be read.
+    if (input.readClipboardImage && !clipboardData.getData("text/plain")) {
       const file = await input.readClipboardImage()
-      if (file && (await add(file, true, target, true))) return
+      if (file) await add(file, true, target, true)
     }
-    if (!plainText) return
-    const text = plainText.includes("\r") ? plainText.replace(/\r\n?/g, "\n") : plainText
-    const put = () => {
-      if (input.addPart({ type: "text", content: text, start: 0, end: 0 })) return true
-      input.focusEditor()
-      return input.addPart({ type: "text", content: text, start: 0, end: 0 })
-    }
-    if (text.includes("\n") || largePaste(text)) {
-      put()
-      return
-    }
-    if (typeof document.execCommand === "function" && document.execCommand("insertText", false, text)) return
-    put()
   }
   const handleDrop = async (event: DragEvent) => {
     if (input.isDialogActive()) return
@@ -265,14 +254,6 @@ function cursorPosition(editor: HTMLElement) {
   const selection = window.getSelection()
   if (!selection || selection.rangeCount === 0) return 0
   const range = selection.getRangeAt(0)
-  if (!editor.contains(range.startContainer)) return 0
-  const before = range.cloneRange()
-  before.selectNodeContents(editor)
-  before.setEnd(range.startContainer, range.startOffset)
-  return before.toString().replace(/\u200B/g, "").length
-}
-
-function largePaste(text: string) {
-  if (text.length >= 8000) return true
-  return text.split("\n").length - 1 >= 120
+  const offset = promptInputV2Offset(editor, range.startContainer, range.startOffset)
+  return offset < 0 ? 0 : offset
 }

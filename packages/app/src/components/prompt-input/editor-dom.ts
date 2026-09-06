@@ -27,13 +27,23 @@ export function createTextFragment(content: string): DocumentFragment {
   return fragment
 }
 
+// U+200B is a rendering aid the editor inserts around pills, so it never counts towards a
+// prompt offset. Counting in place avoids allocating a stripped copy of every node.
+function visibleLength(value: string, limit = value.length): number {
+  let length = 0
+  for (let index = 0; index < Math.min(limit, value.length); index += 1) {
+    if (value.charCodeAt(index) !== 0x200b) length += 1
+  }
+  return length
+}
+
 export function getNodeLength(node: Node): number {
   if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR") return 1
-  return (node.textContent ?? "").replace(/\u200B/g, "").length
+  return visibleLength(node.textContent ?? "")
 }
 
 export function getTextLength(node: Node): number {
-  if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? "").replace(/\u200B/g, "").length
+  if (node.nodeType === Node.TEXT_NODE) return visibleLength(node.textContent ?? "")
   if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR") return 1
   let length = 0
   for (const child of Array.from(node.childNodes)) {
@@ -47,10 +57,37 @@ export function getCursorPosition(parent: HTMLElement): number {
   if (!selection || selection.rangeCount === 0) return 0
   const range = selection.getRangeAt(0)
   if (!parent.contains(range.startContainer)) return 0
-  const preCaretRange = range.cloneRange()
-  preCaretRange.selectNodeContents(parent)
-  preCaretRange.setEnd(range.startContainer, range.startOffset)
-  return getTextLength(preCaretRange.cloneContents())
+  return getRangeOffset(parent, range.startContainer, range.startOffset)
+}
+
+// Walks the live tree and stops at the caret. Cloning the range contents instead copied
+// the entire pasted document on every keystroke.
+function getRangeOffset(parent: HTMLElement, container: Node, offset: number): number {
+  let total = 0
+
+  const visit = (node: Node): boolean => {
+    if (node === container && node.nodeType === Node.TEXT_NODE) {
+      total += visibleLength(node.textContent ?? "", offset)
+      return true
+    }
+    if (node.nodeType === Node.TEXT_NODE) {
+      total += visibleLength(node.textContent ?? "")
+      return false
+    }
+    if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR") {
+      total += 1
+      return false
+    }
+    const children = Array.from(node.childNodes)
+    const limit = node === container ? Math.min(offset, children.length) : children.length
+    for (let index = 0; index < limit; index += 1) {
+      if (visit(children[index]!)) return true
+    }
+    return node === container
+  }
+
+  visit(parent)
+  return total
 }
 
 export function setCursorPosition(parent: HTMLElement, position: number) {

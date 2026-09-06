@@ -19,21 +19,32 @@ export function createDesktopDraftStore(filename: string) {
     "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS document (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS blob (id TEXT PRIMARY KEY, data BLOB NOT NULL);",
   )
   const db = drizzle({ client: native })
-  const used = new Set<string>()
-  db.select({ value: documents.value })
-    .from(documents)
-    .all()
-    .forEach(({ value }) =>
-      JSON.parse(value, (_key, item) => {
-        if (item?.blob && typeof item.blob.id === "string") used.add(item.blob.id)
-        return item
-      }),
-    )
-  db.select({ id: blobs.id })
-    .from(blobs)
-    .all()
-    .filter(({ id }) => !used.has(id))
-    .forEach(({ id }) => db.delete(blobs).where(eq(blobs.id, id)).run())
+  // Reclaiming unreferenced blobs means looking through the drafts for the ids they mention,
+  // so its cost follows how much text the profile has saved. Opening the store used to read
+  // every draft back and JSON.parse it, which put megabytes of text in front of the first
+  // window. Nothing about it is needed for the app to start, so it runs on a timer instead,
+  // and a profile with no blobs never looks at a draft at all.
+  const collectBlobs = () => {
+    try {
+      // A draft still sitting in the write buffer already references its attachment, so the
+      // sweep has to see it before deciding the blob is unused.
+      flush()
+      const stored = native.prepare("SELECT id FROM blob").all() as { id: string }[]
+      if (stored.length === 0) return
+      // LIKE stops at the first draft that mentions the blob, so a blob still in use costs
+      // far less than a full pass. Binding the pattern keeps SQLite from rebuilding it per row.
+      const referenced = native.prepare("SELECT 1 FROM document WHERE value LIKE ? LIMIT 1")
+      const remove = native.prepare("DELETE FROM blob WHERE id = ?")
+      stored.forEach(({ id }) => {
+        if (referenced.get(`%"id":"${id}"%`)) return
+        remove.run(id)
+      })
+    } catch {
+      // Keeping an orphaned blob costs disk space; failing to open the store costs the app.
+    }
+  }
+  let collector: ReturnType<typeof setTimeout> | undefined = setTimeout(collectBlobs, 10_000)
+  collector.unref?.()
   const pending = new Map<string, string | null>()
   let timer: ReturnType<typeof setTimeout> | undefined
   const flush = () => {
@@ -74,7 +85,10 @@ export function createDesktopDraftStore(filename: string) {
     },
     getBlob: (id: string) => db.select({ data: blobs.data }).from(blobs).where(eq(blobs.id, id)).get()?.data ?? null,
     flush,
+    collectBlobs,
     close() {
+      if (collector) clearTimeout(collector)
+      collector = undefined
       flush()
       native.close()
     },
