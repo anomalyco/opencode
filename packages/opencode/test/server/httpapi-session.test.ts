@@ -474,10 +474,17 @@ describe("session HttpApi", () => {
         })
 
         const messagePage = yield* request(`/api/session/${session.id}/message?limit=1`, { headers })
-        const messageBody = yield* json<{ data: SessionMessage.Message[]; cursor: { next?: string } }>(messagePage)
+        const messageBody = yield* json<{
+          data: SessionMessage.Message[]
+          cursor: { next?: string }
+          total: number
+          startIndex?: number
+        }>(messagePage)
         const messageCursor = messageBody.cursor.next
         expect(messageCursor).toBeTruthy()
         expect(messageBody.data.map((message) => message.id)).toEqual([secondMessage.id])
+        expect(messageBody.total).toBe(2)
+        expect(messageBody.startIndex).toBe(0)
         expect(JSON.parse(Buffer.from(messageCursor!, "base64url").toString("utf8"))).toEqual({
           id: secondMessage.id,
           order: "desc",
@@ -487,9 +494,57 @@ describe("session HttpApi", () => {
         const nextMessagePage = yield* request(`/api/session/${session.id}/message?cursor=${messageCursor}`, {
           headers,
         })
-        expect(
-          (yield* json<{ data: SessionMessage.Message[] }>(nextMessagePage)).data.map((message) => message.id),
-        ).toEqual([firstMessage.id])
+        const nextMessageBody = yield* json<{
+          data: SessionMessage.Message[]
+          total: number
+          startIndex?: number
+        }>(nextMessagePage)
+        expect(nextMessageBody.data.map((message) => message.id)).toEqual([firstMessage.id])
+        expect(nextMessageBody.total).toBe(2)
+        expect(nextMessageBody.startIndex).toBe(1)
+
+        const aroundPage = yield* request(
+          `/api/session/${session.id}/message?limit=1&order=asc&around=${firstMessage.id}`,
+          { headers },
+        )
+        const aroundBody = yield* json<{
+          data: SessionMessage.Message[]
+          total: number
+          startIndex?: number
+        }>(aroundPage)
+        expect(aroundBody.data.map((message) => message.id)).toEqual([firstMessage.id])
+        expect(aroundBody.total).toBe(2)
+        expect(aroundBody.startIndex).toBe(0)
+
+        const indexPage = yield* request(`/api/session/${session.id}/message?limit=1&order=asc&index=1`, { headers })
+        const indexBody = yield* json<{
+          data: SessionMessage.Message[]
+          total: number
+          startIndex?: number
+        }>(indexPage)
+        expect(indexBody.data.map((message) => message.id)).toEqual([secondMessage.id])
+        expect(indexBody.total).toBe(2)
+        expect(indexBody.startIndex).toBe(1)
+
+        const cursorWithIndex = yield* request(
+          `/api/session/${session.id}/message?cursor=${messageCursor}&index=0`,
+          { headers },
+        )
+        expect(cursorWithIndex.status).toBe(400)
+        expect(yield* responseJson(cursorWithIndex)).toMatchObject({
+          _tag: "InvalidRequestError",
+          message: "Cursor cannot be combined with index or around",
+        })
+
+        const indexWithAround = yield* request(
+          `/api/session/${session.id}/message?index=0&around=${firstMessage.id}`,
+          { headers },
+        )
+        expect(indexWithAround.status).toBe(400)
+        expect(yield* responseJson(indexWithAround)).toMatchObject({
+          _tag: "InvalidRequestError",
+          message: "Index cannot be combined with around",
+        })
 
         const legacyMessageCursor = Buffer.from(
           JSON.stringify({ id: secondMessage.id, time: 1, order: "desc", direction: "next" }),
