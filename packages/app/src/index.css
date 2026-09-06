@@ -24,6 +24,14 @@
   }
 }
 
+::highlight(opencode-find) {
+  background-color: var(--surface-warning-base);
+}
+
+::highlight(opencode-find-current) {
+  background-color: var(--surface-warning-strong);
+}
+
 @layer components {
   [data-component="getting-started"] {
     container-type: inline-size;

@@ -40,6 +40,8 @@ import { DialogFooter, DialogHeader, DialogTitleGroup, DialogV2 } from "@opencod
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SessionRetry } from "@opencode-ai/session-ui/session-retry"
+import { FileSearchBar } from "@opencode-ai/session-ui/file-search"
+import { createFileFind } from "@opencode-ai/session-ui/pierre/file-find"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode-ai/ui/scroll-view"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { TextField } from "@opencode-ai/ui/text-field"
@@ -274,6 +276,13 @@ export function MessageTimeline(props: {
   const platform = usePlatform()
 
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
+  let searchOverlay: HTMLDivElement | undefined
+  const find = createFileFind({
+    wrapper: listRoot,
+    overlay: () => searchOverlay,
+    getRoot: listRoot,
+    selector: "[data-timeline-row]",
+  })
   const sessionID = createMemo(() => params.id)
   const sessionStatus = createMemo(() => {
     const id = sessionID()
@@ -498,6 +507,11 @@ export function MessageTimeline(props: {
   )
   const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => item.key as string))
   createEffect(() => {
+    if (!find.open()) return
+    virtualRowKeys()
+    requestAnimationFrame(() => find.refresh())
+  })
+  createEffect(() => {
     props.setRevealMessage?.((id) => {
       const index = messageRowIndex().get(id)
       if (index === undefined) return
@@ -509,6 +523,7 @@ export function MessageTimeline(props: {
 
   let overscanFrame: number | undefined
   onMount(() => {
+    find.onFocus()
     overscanFrame = requestAnimationFrame(() => {
       if (props.shouldAnchorBottom()) virtualizer.scrollToEnd()
       overscanFrame = requestAnimationFrame(() => {
@@ -613,6 +628,7 @@ export function MessageTimeline(props: {
   const handleListPointerDown = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
     if (!prependLoading) clearPrependAnchor()
     props.onMarkScrollGesture(event.target)
+    find.onPointerDown()
   }
 
   const handleListPointerMove = (event: PointerEvent) => {
@@ -1350,6 +1366,20 @@ export function MessageTimeline(props: {
           </button>
         </Show>
       </div>
+      <Show when={find.open()}>
+        <FileSearchBar
+          pos={find.pos}
+          query={find.query}
+          count={find.count}
+          index={find.index}
+          setInput={find.setInput}
+          onInput={find.setQuery}
+          onKeyDown={find.onInputKeyDown}
+          onClose={find.close}
+          onPrev={() => find.next(-1)}
+          onNext={() => find.next(1)}
+        />
+      </Show>
       <ScrollView
         viewportRef={bindListRoot}
         onWheel={handleListWheel}
@@ -1359,6 +1389,7 @@ export function MessageTimeline(props: {
         onTouchCancel={handleListTouchEnd}
         onPointerDown={handleListPointerDown}
         onPointerMove={handleListPointerMove}
+        onFocus={find.onFocus}
         onKeyDown={handleListKeyDown}
         onScroll={handleListScroll}
         onClick={props.onAutoScrollInteraction}
@@ -1842,6 +1873,7 @@ export function MessageTimeline(props: {
           </Show>
         </div>
       </ScrollView>
+      <div ref={(el) => (searchOverlay = el)} class="pointer-events-none absolute inset-0 z-20" />
     </div>
   )
 }
