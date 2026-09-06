@@ -63,10 +63,13 @@ test("creates a session in a new project, connects OpenCode Go, and selects its 
       path ? [] : [{ name: "NewProject", path: "NewProject", absolute: directory, type: "directory", ignored: false }],
     findFiles: () => ["NewProject"],
   })
-  await page.addInitScript(() => {
+  await page.addInitScript((directory) => {
     localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
-    localStorage.setItem("opencode.global.dat:server", JSON.stringify({ projects: { local: [] } }))
-  })
+    localStorage.setItem(
+      "opencode.global.dat:server",
+      JSON.stringify({ projects: { local: [] }, hiddenProjects: { local: [directory] } }),
+    )
+  }, directory)
 
   await page.goto("/")
   const addProject = page.locator('[data-action="home-add-project-row"]')

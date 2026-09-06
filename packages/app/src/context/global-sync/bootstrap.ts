@@ -89,6 +89,10 @@ function runAll(list: Array<() => Promise<unknown>>) {
   return Promise.allSettled(list.map((item) => item()))
 }
 
+export function bootstrapGlobalResult(results: PromiseSettledResult<unknown>[]) {
+  return { projects: results[3]?.status === "fulfilled" }
+}
+
 function showErrors(input: {
   errors: unknown[]
   title: string
@@ -163,7 +167,7 @@ export async function bootstrapGlobal(input: {
         .fetchQuery(loadProjectsQuery(input.scope, input.serverAPI.project))
         .then((data) => input.setGlobalStore("project", data)),
   ]
-  await runAll(slow)
+  return bootstrapGlobalResult(await runAll(slow))
   // showErrors({
   //   errors: errors(),
   //   title: input.requestFailedTitle,
