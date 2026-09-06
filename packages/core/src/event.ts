@@ -248,7 +248,12 @@ export const layerWith = (options?: LayerOptions) =>
                 // do not append to the durable event log or advance the
                 // aggregate sequence. Returning undefined signals the caller to
                 // notify listeners with no `durable` envelope, so cross-instance
-                // sync never observes this event.
+                // sync never observes this event. The `commit` hook is not
+                // invoked either: it is documented as requiring a committed seq,
+                // and no caller combines `commit` with `persist:false`. The
+                // projector receives `durable.seq = -1` as a placeholder; none
+                // of the current projectors read seq (they upsert by entity id),
+                // so the value is inert — kept only to satisfy the Payload type.
                 return yield* Effect.uninterruptible(
                   Effect.gen(function* () {
                     yield* db

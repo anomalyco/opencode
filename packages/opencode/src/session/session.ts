@@ -626,6 +626,11 @@ const layer: Layer.Layer<
       }
     })
 
+    // Only persist message/part updates to the durable event log when
+    // workspaces (cross-instance sync) are enabled. Locally the projected
+    // tables are the sole reader (UI/SSE/LLM); the event rows are dead weight
+    // that grew the log superlinearly for long streaming turns. Workspaces ON
+    // keeps them, preserving byte-identical sync behavior.
     const updateMessage = <T extends SessionV1.Info>(msg: T): Effect.Effect<T> =>
       Effect.gen(function* () {
         yield* events.publish(
