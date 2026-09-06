@@ -444,6 +444,134 @@ const boot = Effect.fn("test.boot")(function* (input?: { title?: string }) {
 
 // Loop semantics
 
+it.instance("reuses the ordinary wire prefix for opt-in compaction", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => ({
+      ...providerCfg(url),
+      compaction: { preserve_prefix_cache: true, tail_turns: 1 },
+    }))
+    const { prompt, sessions, chat } = yield* boot()
+
+    yield* user(chat.id, "earlier request")
+    yield* llm.text("earlier response")
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const latest = yield* sessions.updateMessage({
+      id: MessageID.ascending(),
+      role: "user",
+      sessionID: chat.id,
+      agent: "build",
+      model: ref,
+      system: "trigger system",
+      tools: { bash: false },
+      time: { created: Date.now() },
+    })
+    yield* sessions.updatePart({
+      id: PartID.ascending(),
+      messageID: latest.id,
+      sessionID: chat.id,
+      type: "text",
+      text: "latest request",
+    })
+    yield* llm.text("latest response")
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const compact = yield* SessionCompaction.Service
+    yield* compact.create({ sessionID: chat.id, agent: "build", model: ref, auto: false })
+    yield* llm.text("compacted summary")
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const inputs = yield* llm.inputs
+    expect(inputs).toHaveLength(3)
+    const normal = inputs[1]
+    const compaction = inputs[2]
+    expect(compaction.tools).toEqual(normal.tools)
+    expect(compaction.tool_choice).toBe("none")
+    const normalMessages = Array.isArray(normal.messages) ? normal.messages : []
+    const compactionMessages = Array.isArray(compaction.messages) ? compaction.messages : []
+    expect(compactionMessages.slice(0, -1)).toEqual(normalMessages.slice(0, compactionMessages.length - 1))
+    expect(JSON.stringify(compactionMessages)).toContain("Create a new anchored summary")
+    expect(JSON.stringify(compactionMessages)).not.toContain("[User]: earlier request")
+  }),
+)
+
+it.instance("does not execute tools if the provider ignores tool choice during compaction", () =>
+  Effect.gen(function* () {
+    const { dir, llm } = yield* useServerConfig((url) => ({
+      ...providerCfg(url),
+      compaction: { preserve_prefix_cache: true, tail_turns: 1 },
+    }))
+    const { prompt, chat } = yield* boot()
+
+    yield* user(chat.id, "earlier request")
+    yield* llm.text("earlier response")
+    yield* prompt.loop({ sessionID: chat.id })
+    yield* user(chat.id, "latest request")
+    yield* llm.text("latest response")
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const compact = yield* SessionCompaction.Service
+    yield* compact.create({ sessionID: chat.id, agent: "build", model: ref, auto: false })
+    const marker = path.join(dir, "compaction-tool-ran")
+    yield* llm.tool("bash", { command: `touch ${JSON.stringify(marker)}` })
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const fs = yield* FSUtil.Service
+    expect(yield* fs.existsSafe(marker)).toBe(false)
+  }),
+)
+
+it.instance("uses serialized compaction if prefix replay overflows", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => ({
+      ...providerCfg(url),
+      compaction: { preserve_prefix_cache: true, tail_turns: 1 },
+    }))
+    const { prompt, chat } = yield* boot()
+
+    yield* user(chat.id, "earlier request")
+    yield* llm.text("earlier response")
+    yield* prompt.loop({ sessionID: chat.id })
+    yield* user(chat.id, "latest request")
+    yield* llm.text("latest response")
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const compact = yield* SessionCompaction.Service
+    yield* compact.create({ sessionID: chat.id, agent: "build", model: ref, auto: false })
+    yield* llm.error(400, { type: "error", error: { code: "context_length_exceeded" } })
+    yield* llm.text("compacted summary")
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const inputs = yield* llm.inputs
+    expect(inputs).toHaveLength(4)
+    expect(inputs[2]?.tool_choice).toBe("none")
+    expect(inputs[3]?.tools).toBeUndefined()
+    expect(JSON.stringify(inputs[3]?.messages)).toContain("[User]: earlier request")
+  }),
+)
+
+it.instance("keeps serialized compaction as the default", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const { prompt, chat } = yield* boot()
+    yield* user(chat.id, "default request")
+    yield* llm.text("default response")
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const compact = yield* SessionCompaction.Service
+    yield* compact.create({ sessionID: chat.id, agent: "build", model: ref, auto: false })
+    yield* llm.text("compacted summary")
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const inputs = yield* llm.inputs
+    expect(inputs).toHaveLength(2)
+    const compaction = inputs[1]
+    expect(compaction.tools).toBeUndefined()
+    expect(compaction.tool_choice).toBeUndefined()
+    expect(JSON.stringify(compaction.messages)).toContain("[User]: default request")
+  }),
+)
+
 noLLMServer.instance(
   "loop exits immediately when last assistant has stop finish",
   () =>

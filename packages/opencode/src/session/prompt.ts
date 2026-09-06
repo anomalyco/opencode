@@ -149,6 +149,46 @@ const layer = Layer.effect(
       } satisfies TaskPromptOps
     })
 
+    const resolveTools = Effect.fn("SessionPrompt.resolveTools")(function* (input: {
+      agent: Agent.Info
+      session: Session.Info
+      model: Provider.Model
+      processor: SessionProcessor.Handle
+      messages: SessionV1.WithParts[]
+      bypassAgentCheck: boolean
+    }) {
+      return yield* SessionTools.resolve({
+        ...input,
+        promptOps: yield* ops(),
+      }).pipe(
+        Effect.provideService(Plugin.Service, plugin),
+        Effect.provideService(Permission.Service, permission),
+        Effect.provideService(ToolRegistry.Service, registry),
+        Effect.provideService(MCP.Service, mcp),
+        Effect.provideService(Truncate.Service, truncate),
+        Effect.provideService(RuntimeFlags.Service, flags),
+      )
+    })
+
+    const prepareMessages = Effect.fn("SessionPrompt.prepareMessages")(function* (input: {
+      agent: Agent.Info
+      session: Session.Info
+      model: Provider.Model
+      messages: SessionV1.WithParts[]
+    }) {
+      const [skills, env, instructions, mcpInstructions, modelMessages] = yield* Effect.all([
+        sys.skills(input.agent),
+        sys.environment(input.model),
+        instruction.system().pipe(Effect.orDie),
+        sys.mcp(input.agent, input.session.permission),
+        MessageV2.toModelMessagesEffect(input.messages, input.model),
+      ])
+      return {
+        modelMessages,
+        system: [...env, ...instructions, ...(mcpInstructions ? [mcpInstructions] : []), ...(skills ? [skills] : [])],
+      }
+    })
+
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
       yield* Effect.logInfo("cancel", { "session.id": sessionID })
       yield* state.cancel(sessionID)
@@ -1153,6 +1193,36 @@ const layer = Layer.effect(
               sessionID,
               auto: task.auto,
               overflow: task.overflow,
+              run: ({ user, agent, model, processor, messages, prompt, bypassAgentCheck }) =>
+                Effect.gen(function* () {
+                  // Keep tool definitions in the cached prefix, but never let a provider
+                  // execute them if it ignores toolChoice: "none".
+                  const tools = Object.fromEntries(
+                    Object.entries(
+                      yield* resolveTools({
+                        agent,
+                        session,
+                        model,
+                        processor,
+                        messages,
+                        bypassAgentCheck,
+                      }),
+                    ).map(([name, item]) => [name, { ...item, execute: undefined }]),
+                  )
+                  const prepared = yield* prepareMessages({ agent, session, model, messages })
+                  return yield* processor.process({
+                    user,
+                    agent,
+                    permission: session.permission,
+                    sessionID,
+                    parentSessionID: session.parentID,
+                    system: prepared.system,
+                    messages: [...prepared.modelMessages, { role: "user", content: prompt }],
+                    tools,
+                    model,
+                    toolChoice: "none",
+                  })
+                }),
             })
             if (result === "stop") break
             continue
@@ -1221,24 +1291,14 @@ const layer = Layer.effect(
           const outcome: "break" | "continue" = yield* Effect.gen(function* () {
             const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
             const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
-            const promptOps = yield* ops()
-
-            const tools = yield* SessionTools.resolve({
+            const tools = yield* resolveTools({
               agent,
               session,
               model,
               processor: handle,
               bypassAgentCheck,
               messages: msgs,
-              promptOps,
-            }).pipe(
-              Effect.provideService(Plugin.Service, plugin),
-              Effect.provideService(Permission.Service, permission),
-              Effect.provideService(ToolRegistry.Service, registry),
-              Effect.provideService(MCP.Service, mcp),
-              Effect.provideService(Truncate.Service, truncate),
-              Effect.provideService(RuntimeFlags.Service, flags),
-            )
+            })
 
             if (lastUser.format?.type === "json_schema") {
               tools["StructuredOutput"] = createStructuredOutputTool({
@@ -1254,30 +1314,18 @@ const layer = Layer.effect(
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-            const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
-              sys.skills(agent),
-              sys.environment(model),
-              instruction.system().pipe(Effect.orDie),
-              sys.mcp(agent, session.permission),
-              MessageV2.toModelMessagesEffect(msgs, model),
-            ])
-            const system = [
-              ...env,
-              ...instructions,
-              ...(mcpInstructions ? [mcpInstructions] : []),
-              ...(skills ? [skills] : []),
-            ]
+            const prepared = yield* prepareMessages({ agent, session, model, messages: msgs })
             const format = lastUser.format ?? { type: "text" as const }
-            if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+            if (format.type === "json_schema") prepared.system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
               user: lastUser,
               agent,
               permission: session.permission,
               sessionID,
               parentSessionID: session.parentID,
-              system,
+              system: prepared.system,
               messages: [
-                ...modelMsgs,
+                ...prepared.modelMessages,
                 ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }] : []),
               ],
               tools,
