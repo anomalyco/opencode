@@ -88,4 +88,13 @@ describe("window registry", () => {
     expect(app.state.stored).toEqual(["b"])
     expect(app.cleaned).toEqual(["a"])
   })
+
+  test("reports the quit flag for close interception", () => {
+    const app = setup()
+    expect(app.registry.isQuitting()).toBe(false)
+    app.registry.setQuitting()
+    expect(app.registry.isQuitting()).toBe(true)
+    app.registry.setQuitting(false)
+    expect(app.registry.isQuitting()).toBe(false)
+  })
 })
