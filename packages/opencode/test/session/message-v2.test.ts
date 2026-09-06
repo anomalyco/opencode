@@ -890,6 +890,87 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("replays only the first part recorded for a duplicated tool call id", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-1",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "x.json" },
+              output: "contents",
+              title: "read",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+          // Phantom part recorded by older builds: same call ID, no tool name.
+          {
+            ...basePart(assistantID, "a2"),
+            type: "tool",
+            callID: "call-1",
+            tool: "unknown",
+            state: {
+              status: "error",
+              input: {},
+              error: "Tool execution aborted",
+              time: { start: 0, end: 1 },
+              metadata: { interrupted: true },
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "read",
+            input: { filePath: "x.json" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "read",
+            output: { type: "text", value: "contents" },
+          },
+        ],
+      },
+    ])
+  })
+
   test("forwards partial bash output for aborted tool calls", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
