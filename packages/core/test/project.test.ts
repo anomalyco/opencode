@@ -2,15 +2,20 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
+import { eq } from "drizzle-orm"
 import { Effect, Schema } from "effect"
+import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectDirectories } from "@opencode-ai/core/project/directories"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(ProjectV2.node))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, ProjectDirectories.node, ProjectV2.node])))
 
 function remoteID(remote: string) {
   return ProjectV2.ID.make(Hash.fast(`git-remote:${remote}`))
@@ -36,6 +41,21 @@ async function initRepo(dir: string, opts?: { commit?: boolean; remote?: string 
 
 async function rootCommit(dir: string) {
   return (await $`git rev-list --max-parents=0 HEAD`.cwd(dir).text()).trim()
+}
+
+function seedProject(id: ProjectV2.ID, worktree: string) {
+  return Database.Service.use(({ db }) =>
+    db
+      .insert(ProjectTable)
+      .values({ id, worktree: abs(worktree), sandboxes: [], time_created: 1, time_updated: 1 })
+      .onConflictDoNothing()
+      .run()
+      .pipe(Effect.orDie),
+  )
+}
+
+function unseedProject(id: ProjectV2.ID) {
+  return Database.Service.use(({ db }) => db.delete(ProjectTable).where(eq(ProjectTable.id, id)).run().pipe(Effect.orDie))
 }
 
 describe("ProjectV2.resolve", () => {
@@ -216,6 +236,93 @@ describe("ProjectV2.resolve", () => {
       expect(result.previous).toBe(ProjectV2.ID.make("old-id"))
       expect(result.id).toBe(remoteID("github.com/owner/repo"))
       expect(result.vcs?.type).toBe("git")
+    }),
+  )
+})
+
+describe("ProjectV2.resolve with the git repository removed", () => {
+  it.live("recovers the project from a project_directory row", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const id = ProjectV2.ID.make(`recover-root-${Date.now()}`)
+      yield* Effect.addFinalizer(() => unseedProject(id))
+      yield* seedProject(id, tmp.path)
+      const directories = yield* ProjectDirectories.Service
+      yield* directories.create({ projectID: id, directory: abs(tmp.path) })
+      const project = yield* ProjectV2.Service
+
+      const result = yield* project.resolve(abs(tmp.path))
+
+      expect(result.id).toBe(id)
+      expect(result.directory).toBe(abs(tmp.path))
+      expect(result.previous).toBeUndefined()
+      expect(result.vcs).toBeUndefined()
+    }),
+  )
+
+  it.live("recovers the project when opened in a subdirectory", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const id = ProjectV2.ID.make(`recover-sub-${Date.now()}`)
+      yield* Effect.addFinalizer(() => unseedProject(id))
+      yield* seedProject(id, tmp.path)
+      const directories = yield* ProjectDirectories.Service
+      yield* directories.create({ projectID: id, directory: abs(tmp.path) })
+      const project = yield* ProjectV2.Service
+
+      const result = yield* project.resolve(abs(path.join(tmp.path, "packages", "core")))
+
+      expect(result.id).toBe(id)
+      expect(result.directory).toBe(abs(tmp.path))
+      expect(result.vcs).toBeUndefined()
+    }),
+  )
+
+  it.live("prefers the deepest recovered project", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const outer = ProjectV2.ID.make(`recover-outer-${Date.now()}`)
+      const inner = ProjectV2.ID.make(`recover-inner-${Date.now()}`)
+      yield* Effect.addFinalizer(() => unseedProject(outer))
+      yield* Effect.addFinalizer(() => unseedProject(inner))
+      yield* seedProject(outer, tmp.path)
+      yield* seedProject(inner, path.join(tmp.path, "inner"))
+      const directories = yield* ProjectDirectories.Service
+      yield* directories.create({ projectID: outer, directory: abs(tmp.path) })
+      yield* directories.create({ projectID: inner, directory: abs(path.join(tmp.path, "inner")) })
+      const project = yield* ProjectV2.Service
+
+      const result = yield* project.resolve(abs(path.join(tmp.path, "inner", "sub")))
+
+      expect(result.id).toBe(inner)
+      expect(result.directory).toBe(abs(path.join(tmp.path, "inner")))
+    }),
+  )
+
+  it.live("recovers the project from the project table when no directory rows exist", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const id = ProjectV2.ID.make(`recover-legacy-${Date.now()}`)
+      yield* Effect.addFinalizer(() => unseedProject(id))
+      yield* seedProject(id, tmp.path)
+      const project = yield* ProjectV2.Service
+
+      const result = yield* project.resolve(abs(tmp.path))
+
+      expect(result.id).toBe(id)
+      expect(result.directory).toBe(abs(tmp.path))
     }),
   )
 })
