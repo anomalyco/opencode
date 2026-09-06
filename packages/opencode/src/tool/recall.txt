@@ -1,0 +1,72 @@
+Search past conversation transcripts semantically to retrieve facts, decisions, and context from previous sessions.
+
+## When to use
+
+Use proactively when:
+- The user references something discussed before ("what did we decide about X?", "find where we fixed Y")
+- The user asks about a command, config, or pattern from a past session
+- A subagent starts work and relevant context exists in another session
+- The user asks "how did we configure Z?" or "what was the command I ran last week?"
+- Earlier project context (compaction summaries, session titles) would shorten onboarding time
+
+## When NOT to use
+
+Skip when:
+- The answer is clearly in the current session's recent messages
+- The user is asking about files/code that exist in the workspace (use read/grep instead)
+- The question is about a future action or plan (not historical)
+- The user explicitly says "don't search past sessions"
+- The query is too vague ("anything about git") — prefer specific phrases
+
+## Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `query` | string | Natural language query. Prefer specific phrases over single keywords. |
+| `limit` | number | Maximum results to return (default: 5, max: 50) |
+
+## Returns
+
+An array of recall hits, sorted by relevance score (descending):
+
+```typescript
+{
+  sessionID: string   // which session this came from
+  messageID: string // which message within that session
+  partID: string    // which part of the message
+  text: string      // the actual transcript text that matched
+  score: number     // cosine similarity (0–1, higher = more relevant)
+}
+```
+
+Results come from **local sessions only** — no cloud sync. Sessions from other projects on the same machine are included.
+
+## Examples
+
+**Good queries:**
+- "how did we configure the git hooks"
+- "what database did we use in the api project"
+- "find the fix for the memory leak in session runner"
+- "what model was selected for production"
+
+**Bad queries:**
+- "git" (too broad — returns many unrelated hits)
+- "the thing" (non-specific — low relevance scores)
+- "weather in Tokyo" (not in session history)
+
+## How it works
+
+The index has two layers:
+
+1. **Per-part chunks**: each text part is chunked (~1200 chars) and embedded using a deterministic bag-of-character-trigrams hash (256 dimensions). Chunks are indexed asynchronously via durable event subscriptions — no impact on the LLM turn hot path.
+
+2. **Per-session anchors**: session title + compaction summaries are indexed as a single anchor chunk, giving aggregate queries a fast high-precision entry point.
+
+The index persists across restarts. On startup it backfills from the part table.
+
+## Tips
+
+- Use specific phrases: `"configure git hooks"` beats `"git hooks"`
+- Mention the project or context if known: `"database migration in the api project"`
+- If results are unexpected, try rephrasing with different keywords
+- Check the `sessionID` field to know which session the result came from
