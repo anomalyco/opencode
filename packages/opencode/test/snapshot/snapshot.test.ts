@@ -3,6 +3,8 @@ import { $ } from "bun"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Global } from "@opencode-ai/core/global"
+import { Hash } from "@opencode-ai/core/util/hash"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Fiber, Layer } from "effect"
@@ -10,6 +12,7 @@ import { Snapshot } from "../../src/snapshot"
 import {
   disposeAllInstances,
   provideInstance,
+  requireInstance,
   testInstanceStoreLayer,
   TestInstance,
   tmpdirScoped,
@@ -1213,6 +1216,66 @@ it.instance(
     yield* snapshot.revert([patch])
     for (let i = 0; i < base.length; i++) expect(yield* readText(base[i])).toBe(`base-${i}`)
     for (const file of fresh) expect(yield* exists(file)).toBe(false)
+  }),
+  { git: true },
+)
+
+const snapshotGitdir = Effect.gen(function* () {
+  const instance = yield* requireInstance
+  return path.join(Global.Path.data, "snapshot", instance.project.id, Hash.fast(instance.worktree))
+})
+
+const trackedBlob = (gitdir: string) =>
+  Effect.promise(async () => {
+    const proc = Bun.spawn(["git", "--git-dir", gitdir, "ls-files", "--stage", "a.txt"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
+    const code = await proc.exited
+    if (code !== 0) throw new Error(`git ls-files failed: ${err}`)
+    const blob = out.trim().split(/\s+/)[1]
+    if (!blob) throw new Error("no tracked blob found")
+    return blob
+  })
+
+it.instance(
+  "cleanup removes stale tmp pack files",
+  Effect.gen(function* () {
+    yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    yield* snapshot.track()
+    const gitdir = yield* snapshotGitdir
+    const pack = path.join(gitdir, "objects", "pack")
+    yield* mkdirp(pack)
+    yield* write(`${pack}/tmp_pack_stale`, "stale")
+    yield* write(`${pack}/tmp_pack_recent`, "recent")
+    yield* write(`${pack}/pack-keep.pack`, "keep")
+    const old = new Date(Date.now() - 2 * 60 * 60 * 1000)
+    yield* Effect.promise(() => fs.utimes(`${pack}/tmp_pack_stale`, old, old))
+    yield* snapshot.cleanup()
+    expect(yield* exists(`${pack}/tmp_pack_stale`)).toBe(false)
+    expect(yield* exists(`${pack}/tmp_pack_recent`)).toBe(true)
+    expect(yield* exists(`${pack}/pack-keep.pack`)).toBe(true)
+  }),
+  { git: true },
+)
+
+it.instance(
+  "cleanup rebuilds snapshot store when gc fails on missing objects",
+  Effect.gen(function* () {
+    yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    expect(yield* snapshot.track()).toBeTruthy()
+    const gitdir = yield* snapshotGitdir
+    const blob = yield* trackedBlob(gitdir)
+    yield* Effect.promise(() => fs.rm(path.join(gitdir, "objects", blob.slice(0, 2), blob.slice(2)), { force: true }))
+    yield* snapshot.cleanup()
+    expect(yield* exists(gitdir)).toBe(false)
+    expect(yield* snapshot.track()).toBeTruthy()
+    expect(yield* exists(gitdir)).toBe(true)
+    yield* snapshot.cleanup()
+    expect(yield* exists(gitdir)).toBe(true)
   }),
   { git: true },
 )
