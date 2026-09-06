@@ -31,19 +31,19 @@ export async function openEditor(input: { value: string; renderer: CliRenderer; 
   input.renderer.suspend()
   input.renderer.currentRenderBuffer.clear()
   try {
-    await new Promise<void>((resolve, reject) => {
+    const success = await new Promise<boolean>((resolve) => {
       const parts = editor.split(" ")
-      const child = spawn(parts[0]!, [...parts.slice(1), file], {
+      const child = spawn(parts[0], [...parts.slice(1), file], {
         cwd: input.cwd && existsSync(input.cwd) ? input.cwd : process.cwd(),
         stdio: [input.stdin ?? "inherit", "inherit", "inherit"],
         shell: process.platform === "win32",
       })
-      child.on("error", reject)
-      child.on("exit", (code, signal) => {
-        if (code === 0) return resolve()
-        reject(new Error(`Editor exited with ${signal ? `signal ${signal}` : `code ${code}`}`))
+      child.on("error", () => resolve(false))
+      child.on("exit", (code) => {
+        resolve(code === 0)
       })
     })
+    if (!success) return undefined
     return (await readFile(file, "utf8")) || undefined
   } finally {
     await rm(file, { force: true }).catch(() => {})
