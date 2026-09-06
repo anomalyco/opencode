@@ -850,9 +850,9 @@ export class Session extends HeyApiClient {
   }
 
   /**
-   * Background subagents
+   * Make Task subagents async
    *
-   * Detach any synchronous subagents currently blocking the session and continue them in the background.
+   * Stop waiting for any Task subagents whose synchronous calls are currently blocking the session; the same running tasks continue asynchronously.
    */
   public background<ThrowOnError extends boolean = false>(
     parameters: {
@@ -3908,7 +3908,7 @@ export class Session2 extends HeyApiClient {
   /**
    * Abort session
    *
-   * Abort an active session and stop any ongoing AI processing or command execution.
+   * Cancel a session's Task branch. Stops this session's AI processing or command execution together with any nested Task work below it, records the outcome in each affected transcript, and returns true only after the branch is closed and released. A missing session, or one with no work in progress, succeeds with no effect.
    */
   public abort<ThrowOnError extends boolean = false>(
     parameters: {

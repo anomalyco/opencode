@@ -1,6 +1,8 @@
 import { Workspace } from "@/control-plane/workspace"
 import * as InstanceState from "@/effect/instance-state"
 import { Session } from "@/session/session"
+import { SessionClosure } from "@/session/closure/coordinator"
+import { SessionMutation } from "@/session/closure/mutation"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -22,6 +24,7 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
     const session = yield* Session.Service
     const scope = yield* Scope.Scope
     const events = yield* EventV2Bridge.Service
+    const closure = yield* SessionClosure.Service
     const { db } = yield* Database.Service
 
     const start = Effect.fn("SyncHttpApi.start")(function* () {
@@ -48,7 +51,19 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
         directory: ctx.payload.directory,
       })
       const ownerID = yield* InstanceState.workspaceID
-      yield* events.replayAll(payload, { ownerID, strictOwner: true })
+      // Reserved before core replay is entered at all. Once the durable commit opens its
+      // uninterruptible transaction the projector deletes commit with it, so a refusal inside that
+      // window would arrive too late to prevent anything.
+      //
+      // The refusal terminates here rather than being mapped. Unlike the session endpoints, this
+      // route's consumer is a peer instance rather than a user, it declares a single error, and
+      // adding to it changes a peer transport contract and the generated SDK that no test here
+      // exercises. Deliberate, and the one seam in this change where a refusal is not reported.
+      yield* SessionMutation.replayLeased(
+        closure,
+        payload.map((event) => event.aggregateID),
+        events.replayAll(payload, { ownerID, strictOwner: true }),
+      ).pipe(Effect.catchTag("SessionClosureMutationRefused", Effect.die))
       yield* Effect.logInfo("sync replay complete", {
         sessionID: source,
         events: payload.length,

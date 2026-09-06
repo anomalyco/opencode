@@ -41,6 +41,9 @@ import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
+import { abortSessionBranch } from "../../util/session-abort"
+import { decideInterrupt, INTERRUPT_WINDOW_MS } from "../../util/session-interrupt"
+import { isHumanUserMessage } from "../../util/closure-record"
 import { createColors, createFrames } from "../../ui/spinner"
 import { useDialog } from "../../ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
@@ -57,6 +60,7 @@ import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useLocation } from "../../context/location"
+import { countActiveDescendants } from "../../util/session-tree"
 
 registerOpencodeSpinner()
 
@@ -112,6 +116,15 @@ function fadeColor(color: RGBA, alpha: number) {
   return RGBA.fromValues(color.r, color.g, color.b, color.a * alpha)
 }
 
+function ActiveIndicator(props: { count: number }) {
+  const theme = useTheme().theme
+  return (
+    <Spinner color={theme.primary}>
+      {props.count} active task{props.count === 1 ? "" : "s"}
+    </Spinner>
+  )
+}
+
 function hasEditorRangeSelection(selection: EditorSelection["ranges"][number]) {
   return (
     selection.selection.start.line !== selection.selection.end.line ||
@@ -161,6 +174,9 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  const activeDescendants = createMemo(() =>
+    countActiveDescendants(sync.data.session, sync.data.session_status, props.sessionID ?? ""),
+  )
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
@@ -258,7 +274,7 @@ export function Prompt(props: PromptProps) {
     if (!props.sessionID) return undefined
     const messages = sync.data.message[props.sessionID]
     if (!messages) return undefined
-    return messages.findLast((m): m is UserMessage => m.role === "user")
+    return messages.findLast((m): m is UserMessage => isHumanUserMessage(m, sync.data.part[m.id] ?? []))
   })
 
   const usage = createMemo(() => {
@@ -286,6 +302,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal" | "shell"
     extmarkToPartIndex: Map<number, number>
     interrupt: number
+    interruptAt: number
     placeholder: number
   }>({
     placeholder: randomIndex(list().length),
@@ -296,6 +313,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    interruptAt: 0,
   })
 
   createEffect(
@@ -394,29 +412,54 @@ export function Prompt(props: PromptProps) {
         name: "session.interrupt",
         category: "Session",
         hidden: true,
-        enabled: status().type !== "idle",
+        // Not keyed to this session's own status: a session reads idle while delegated work
+        // still runs beneath it, and that case is the defect, not a fast path. Scanning the
+        // subtree instead would not fix it - `session_status` is an event-fed projection, so
+        // it lags the work it would have to detect and carries nothing at all for a job whose
+        // child session does not exist yet. Ask rather than predict: `abort` answers success
+        // when a session has no work, so a request with nothing to close costs one round trip.
+        enabled: Boolean(props.sessionID),
         run: () => {
-          if (auto()?.visible) return
-          if (!input.focused) return
-          // TODO: this should be its own command
-          if (store.mode === "shell") {
+          const outcome = decideInterrupt({
+            sessionID: props.sessionID,
+            autocompleteVisible: Boolean(auto()?.visible),
+            focused: input.focused,
+            mode: store.mode,
+            armed: store.interrupt,
+            armedAt: store.interruptAt,
+            now: Date.now(),
+          })
+
+          if (outcome.kind === "blocked") return
+          if (outcome.kind === "exit_shell") {
             setStore("mode", "normal")
             return
           }
-          if (!props.sessionID) return
-
-          setStore("interrupt", store.interrupt + 1)
-
-          setTimeout(() => {
-            setStore("interrupt", 0)
-          }, 5000)
-
-          if (store.interrupt >= 2) {
-            void sdk.client.session.abort({
-              sessionID: props.sessionID,
-            })
-            setStore("interrupt", 0)
+          if (outcome.kind === "arm") {
+            setStore("interrupt", outcome.armed)
+            setStore("interruptAt", outcome.armedAt)
+            // The timer clears only the sequence that scheduled it. The decision itself
+            // expires the window from `armedAt`, so a stale timer cannot cancel a later
+            // sequence and a delayed timer cannot keep an expired press alive.
+            setTimeout(() => {
+              if (store.interruptAt !== outcome.armedAt) return
+              setStore("interrupt", 0)
+            }, INTERRUPT_WINDOW_MS)
+            dialog.clear()
+            return
           }
+
+          setStore("interrupt", 0)
+          void abortSessionBranch({
+            client: sdk.client,
+            sessionID: outcome.sessionID,
+            onFailure: (error) =>
+              toast.show({
+                title: "Interrupt failed",
+                message: errorMessage(error),
+                variant: "error",
+              }),
+          })
           dialog.clear()
         },
       },
@@ -1058,15 +1101,20 @@ export function Prompt(props: PromptProps) {
 
     if (store.mode === "shell") {
       move.startSubmit()
-      void sdk.client.session.shell({
-        sessionID,
-        agent: agent.name,
-        model: {
-          providerID: selectedModel.providerID,
-          modelID: selectedModel.modelID,
-        },
-        command: inputText,
-      })
+      void sdk.client.session
+        .shell(
+          {
+            sessionID,
+            agent: agent.name,
+            model: {
+              providerID: selectedModel.providerID,
+              modelID: selectedModel.modelID,
+            },
+            command: inputText,
+          },
+          { throwOnError: true },
+        )
+        .catch((error) => toast.show({ message: errorMessage(error), variant: "error" }))
       setStore("mode", "normal")
     } else if (
       inputText.startsWith("/") &&
@@ -1080,19 +1128,24 @@ export function Prompt(props: PromptProps) {
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
-      void sdk.client.session.command({
-        sessionID,
-        command: command.slice(1),
-        arguments: args,
-        agent: agent.name,
-        model: `${selectedModel.providerID}/${selectedModel.modelID}`,
-        variant,
-        parts: nonTextParts.filter((x) => x.type === "file"),
-      })
+      void sdk.client.session
+        .command(
+          {
+            sessionID,
+            command: command.slice(1),
+            arguments: args,
+            agent: agent.name,
+            model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+            variant,
+            parts: nonTextParts.filter((x) => x.type === "file"),
+          },
+          { throwOnError: true },
+        )
+        .catch((error) => toast.show({ message: errorMessage(error), variant: "error" }))
     } else {
       move.startSubmit()
-      sdk.client.session
-        .prompt(
+      try {
+        await sdk.client.session.promptAsync(
           {
             sessionID,
             ...selectedModel,
@@ -1110,13 +1163,15 @@ export function Prompt(props: PromptProps) {
           },
           { throwOnError: true },
         )
-        .catch((error) => {
-          toast.show({
-            title: "Failed to send prompt",
-            message: errorMessage(error),
-            variant: "error",
-          })
+      } catch (error) {
+        toast.show({
+          title: "Failed to send prompt",
+          message: errorMessage(error),
+          variant: "error",
         })
+        if (finishMoveProgress) move.finishSubmit()
+        return false
+      }
       if (editorParts.length > 0) editor.markSelectionSent()
     }
     history.append({
@@ -1590,6 +1645,9 @@ export function Prompt(props: PromptProps) {
                     {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
                   </span>
                 </text>
+                <Show when={activeDescendants() > 0}>
+                  <ActiveIndicator count={activeDescendants()} />
+                </Show>
               </box>
             </Match>
             <Match when={workspace.notice()}>
@@ -1640,6 +1698,11 @@ export function Prompt(props: PromptProps) {
             <Match when={move.pendingNew()}>
               <box paddingLeft={3}>
                 <text fg={theme.accent}>(new working copy)</text>
+              </box>
+            </Match>
+            <Match when={activeDescendants() > 0}>
+              <box paddingLeft={1}>
+                <ActiveIndicator count={activeDescendants()} />
               </box>
             </Match>
             <Match when={true}>

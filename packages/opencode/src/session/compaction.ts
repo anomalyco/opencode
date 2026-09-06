@@ -10,6 +10,8 @@ import { SessionProcessor } from "./processor"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
+import { SessionClosure } from "./closure/coordinator"
+import { SessionMutation } from "./closure/mutation"
 import { NotFoundError } from "@/storage/storage"
 
 import { Effect, Layer, Context } from "effect"
@@ -22,6 +24,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { buildPrompt } from "@opencode-ai/core/session/compaction"
 import { SessionCompactionEvent } from "@opencode-ai/schema/session-compaction-event"
+import { CLOSURE_RECORD_METADATA_KEY, isCompleteClosurePair } from "@opencode-ai/core/session/closure-record"
 
 export const Event = SessionCompactionEvent
 
@@ -31,6 +34,24 @@ const TOOL_OUTPUT_MAX_CHARS = 2_000
 const PRUNE_PROTECTED_TOOLS = ["skill"]
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
 const MAX_PRESERVE_RECENT_TOKENS = 15_000
+
+/**
+ * Overflow replay reshapes parts rather than copying them: it mints fresh coordinates in the same
+ * session, drops compaction parts, and rewrites media files as text. A part that merely carried the
+ * reserved closure key would therefore acquire the session and message bindings the closure-record
+ * classifier requires, and replay would turn ordinary data into a record of a cancellation that
+ * never happened. Only the reserved key is removed; the rest of the metadata is conversational data
+ * and is preserved. Genuine closure pairs never reach this path — the replay selector excludes
+ * them and leaves their original message in canonical history.
+ */
+function stripReservedClosureMetadata<T extends object>(part: T): T {
+  const value = "metadata" in part ? part.metadata : undefined
+  if (typeof value !== "object" || value === null || !Object.hasOwn(value, CLOSURE_RECORD_METADATA_KEY)) return part
+  const metadata: Record<string, unknown> = { ...value }
+  delete metadata[CLOSURE_RECORD_METADATA_KEY]
+  return { ...part, metadata } as T
+}
+
 type Turn = {
   start: number
   end: number
@@ -124,6 +145,9 @@ function turns(messages: SessionV1.WithParts[]) {
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i]
     if (msg.info.role !== "user") continue
+    // A branch-closure record occupies a user message but is not a turn: counting it would start a
+    // turn boundary at synthetic evidence and split the conversation at a point the user never sent.
+    if (isCompleteClosurePair(msg)) continue
     if (msg.parts.some((part) => part.type === "compaction")) continue
     result.push({
       start: i,
@@ -199,6 +223,7 @@ const layer = Layer.effect(
     const provider = yield* Provider.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const closure = yield* SessionClosure.Service
 
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: SessionV1.Assistant["tokens"]
@@ -287,7 +312,7 @@ const layer = Layer.effect(
 
       loop: for (let msgIndex = msgs.length - 1; msgIndex >= 0; msgIndex--) {
         const msg = msgs[msgIndex]
-        if (msg.info.role === "user") turns++
+        if (msg.info.role === "user" && !isCompleteClosurePair(msg)) turns++
         if (turns < 2) continue
         if (msg.info.role === "assistant" && msg.info.summary) break loop
         for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
@@ -305,14 +330,46 @@ const layer = Layer.effect(
       }
 
       yield* Effect.logInfo("found", { pruned, total })
+      // Marking a completed part compacted and writing it back replaces persisted part content, so
+      // it is ordered against cancellation like the other destructive writes.
+      //
+      // The reservation is here rather than in `Session.updatePart`, which is called once per
+      // streamed token; reserving that writer would take a reservation per token. It covers the
+      // whole batch and never one part at a time, because a refusal landing mid-loop would leave
+      // some parts marked compacted and others not, with nothing accounting for the difference.
+      //
+      // The `pruned > PRUNE_MINIMUM` gate stays ahead of it: below that nothing is written, so
+      // there is nothing to protect and reserving anyway would take a reservation on every
+      // ordinary prompt. Same ordering as `revert.cleanup`'s `if (!session.revert) return`.
       if (pruned > PRUNE_MINIMUM) {
-        for (const part of toPrune) {
-          if (part.state.status === "completed") {
-            part.state.time.compacted = Date.now()
-            yield* session.updatePart(part)
-          }
-        }
-        yield* Effect.logInfo("pruned", { count: toPrune.length })
+        yield* SessionMutation.leased(
+          closure,
+          { sessions: [input.sessionID], kind: "replace_part" },
+          Effect.gen(function* () {
+            for (const part of toPrune) {
+              if (part.state.status === "completed") {
+                part.state.time.compacted = Date.now()
+                yield* session.updatePart(part)
+              }
+            }
+            yield* Effect.logInfo("pruned", { count: toPrune.length })
+          }),
+        ).pipe(
+          // The refusal is logged, not propagated, and `prune` stays infallible. Pruning is a
+          // best-effort optimisation whose caller forks it and discards the outcome, so it has no
+          // error path to reject through; widening its signature would imply a decision that caller
+          // does not have. Skipping is correct on its own terms: prune runs at the end of every
+          // loop, so the next prompt after release prunes normally and nothing is queued behind the
+          // refusal. Recording `reason` is what keeps a genuine guard defect distinguishable from
+          // ordinary fencing rather than silently disabling pruning.
+          Effect.catchTag("SessionClosureMutationRefused", (refused) =>
+            Effect.logInfo("prune refused", {
+              sessionID: input.sessionID,
+              reason: refused.reason,
+              count: toPrune.length,
+            }),
+          ),
+        )
       }
     })
 
@@ -324,7 +381,7 @@ const layer = Layer.effect(
       overflow?: boolean
     }) {
       const parent = input.messages.findLast((m) => m.info.id === input.parentID)
-      if (!parent || parent.info.role !== "user") {
+      if (!parent || parent.info.role !== "user" || isCompleteClosurePair(parent)) {
         throw new Error(`Compaction parent must be a user message: ${input.parentID}`)
       }
       const userMessage = parent.info
@@ -341,14 +398,28 @@ const layer = Layer.effect(
         const idx = input.messages.findIndex((m) => m.info.id === input.parentID)
         for (let i = idx - 1; i >= 0; i--) {
           const msg = input.messages[i]
-          if (msg.info.role === "user" && !msg.parts.some((p) => p.type === "compaction")) {
+          if (
+            msg.info.role === "user" &&
+            !isCompleteClosurePair(msg) &&
+            !msg.parts.some((p) => p.type === "compaction")
+          ) {
             replay = { info: msg.info, parts: msg.parts }
-            messages = input.messages.slice(0, i)
+            // Closure records inside the replayed span are carried across rather than dropped with
+            // it. They account for work that was stopped, and the turn being replayed is re-sent,
+            // so discarding them would lose the only record of a cancellation while the history it
+            // describes survives.
+            messages = [
+              ...input.messages.slice(0, i),
+              ...input.messages.slice(i + 1, idx).filter(isCompleteClosurePair),
+            ]
             break
           }
         }
         const hasContent =
-          replay && messages.some((m) => m.info.role === "user" && !m.parts.some((p) => p.type === "compaction"))
+          replay &&
+          messages.some(
+            (m) => m.info.role === "user" && !isCompleteClosurePair(m) && !m.parts.some((p) => p.type === "compaction"),
+          )
         if (!hasContent) {
           replay = undefined
           messages = input.messages
@@ -486,7 +557,7 @@ const layer = Layer.effect(
                 ? { type: "text" as const, text: `[Attached ${part.mime}: ${part.filename ?? "file"}]` }
                 : part
             yield* session.updatePart({
-              ...replayPart,
+              ...stripReservedClosureMetadata(replayPart),
               id: PartID.ascending(),
               messageID: replayMsg.id,
               sessionID: input.sessionID,
@@ -581,11 +652,16 @@ const layer = Layer.effect(
       })
     })
 
+    // Compaction only reshapes service-owned or already-persisted Parts. A reserved-key failure here
+    // is an invariant defect (and still occurs before persistence), not a caller-facing typed refusal.
+    const internal = <A, R>(effect: Effect.Effect<A, Session.ReservedMetadataError, R>) =>
+      effect.pipe(Effect.catchTag("SessionReservedMetadataError", Effect.die))
+
     return Service.of({
       isOverflow,
-      prune,
-      process: processCompaction,
-      create,
+      prune: (input) => internal(prune(input)),
+      process: (input) => internal(processCompaction(input)),
+      create: (input) => internal(create(input)),
     })
   }),
 )
@@ -602,6 +678,7 @@ export const node = LayerNode.make({
     Provider.node,
     EventV2Bridge.node,
     RuntimeFlags.node,
+    SessionClosure.node,
   ],
 })
 

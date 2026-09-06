@@ -1,5 +1,7 @@
 import { describe, expect, mock, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { Part, UserMessage } from "@opencode-ai/sdk/v2"
+import { CLOSURE_RECORD_METADATA_KEY } from "@opencode-ai/core/session/closure-record"
 import { normalizeSessionMessages } from "@/utils/session-message"
 
 mock.module("@opencode-ai/session-ui/message-part", () => ({
@@ -89,6 +91,70 @@ describe("current session timeline rows", () => {
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_shell",
       "assistant-part:msg_shell:msg_shell:tool",
+    ])
+  })
+
+  test("projects closure evidence chronologically without making it the active human turn", () => {
+    const sessionID = "ses_closure_rows"
+    const human = {
+      id: "msg_human",
+      sessionID,
+      role: "user",
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+      time: { created: 1 },
+    } as UserMessage
+    const closure = {
+      ...human,
+      id: "msg_closure",
+      time: { created: 2 },
+    } as UserMessage
+    const parts = new Map<string, Part[]>([
+      [human.id, [{ id: "part_human", sessionID, messageID: human.id, type: "text", text: "human" }]],
+      [
+        closure.id,
+        [
+          {
+            id: "part_closure",
+            sessionID,
+            messageID: closure.id,
+            type: "text",
+            text: "[Branch closure] This Session's prior Task execution: Cancellation won physical closure.",
+            synthetic: true,
+            metadata: {
+              [CLOSURE_RECORD_METADATA_KEY]: {
+                version: 1,
+                freeze_owner_operation_id: "op_rows",
+                generation: 1,
+                fact_key: `self:${sessionID}`,
+                identity_source: "session_identity",
+                record_kind: "self",
+                subject_session_id: sessionID,
+                terminal_outcome: "cancelled",
+              },
+            },
+          },
+        ],
+      ],
+    ])
+    const messages = new Map([human, closure].map((message) => [message.id, message]))
+
+    const result = Timeline.constructSessionMessageRows(
+      [],
+      (messageID) => messages.get(messageID),
+      (messageID) => parts.get(messageID) ?? [],
+      true,
+      "busy",
+      true,
+      [human, closure],
+      human.id,
+    )
+
+    expect(result.activeMessageID).toBe(human.id)
+    expect(result.rows.map(TimelineRow.key)).toEqual([
+      "user-message:msg_human",
+      "thinking:msg_human",
+      "closure-evidence:msg_closure",
     ])
   })
 

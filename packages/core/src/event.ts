@@ -1,6 +1,6 @@
 export * as EventV2 from "./event"
 
-import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Fiber, Layer, Option, PubSub, Queue, Schema, Semaphore, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
@@ -10,6 +10,7 @@ import { Location } from "./location"
 import { makeGlobalNode } from "./effect/app-node"
 import { isDeepStrictEqual } from "node:util"
 import { Durable } from "@opencode-ai/schema/durable-event-manifest"
+import { EventExact } from "./event-exact"
 
 export const ID = Event.ID
 export type ID = import("@opencode-ai/schema/event").ID
@@ -165,11 +166,14 @@ export const allBounded = (events: Interface, capacity: number) =>
 
 export interface LayerOptions {
   readonly beforeAggregateRead?: (aggregateID: string) => Effect.Effect<void>
+  /** Instrumentation seam when a committed event enters durable aggregate-wake dispatch. */
+  readonly beforeDurableWake?: (aggregateID: string) => Effect.Effect<void>
+  /** Instrumentation seam after an exact commit/wake and before its Instance-owned notification attempt. */
+  readonly beforeExactNotification?: (event: Payload) => Effect.Effect<void>
 }
 
 export const layerWith = (options?: LayerOptions) =>
-  Layer.effect(
-    Service,
+  Layer.effectContext(
     Effect.gen(function* () {
       const pubsub = {
         all: yield* PubSub.unbounded<Payload>(),
@@ -180,6 +184,25 @@ export const layerWith = (options?: LayerOptions) =>
       // TODO: Bind durable projectors to exact type+version before supporting incompatible historical payloads.
       const listeners = new Array<Subscriber>()
       const { db } = yield* Database.Service
+      const scope = yield* Effect.scope
+      const exactLock = yield* Semaphore.make(1)
+      const exactNotifications = new Map<ID, Fiber.Fiber<void, unknown>>()
+
+      type ExactBinding = {
+        readonly token: EventExact.Token
+        readonly definition: Definition
+        readonly event: Payload
+        readonly aggregateID: string
+        readonly encoded: Record<string, unknown>
+        readonly type: string
+        readonly authority: EventExact.Authority
+        readonly expectedRow: unknown
+        readonly retained?: EventExact.Coordinate
+        readonly projector: Subscriber
+        readonly commit?: PublishOptions["commit"]
+      }
+
+      const exactBindings = new WeakMap<object, ExactBinding>()
 
       const getOrCreate = (definition: Definition) =>
         Effect.gen(function* () {
@@ -212,6 +235,7 @@ export const layerWith = (options?: LayerOptions) =>
           readonly strictOwner?: boolean
         },
         commit?: (seq: number) => Effect.Effect<void>,
+        exact?: ExactBinding,
       ) {
         return Effect.gen(function* () {
           const durable = definition?.durable
@@ -291,6 +315,80 @@ export const layerWith = (options?: LayerOptions) =>
                           if (input && row?.ownerID && row.ownerID !== input.ownerID) {
                             return
                           }
+
+                          /**
+                           * Exact publication is selected by an identity-checked object capability, not a replay
+                           * sequence. Existing exact events cause no projector, commit, allocation, wake, or
+                           * notification effect; collisions fail before mutation.
+                           */
+                          if (exact) {
+                            if (
+                              exact.aggregateID !== aggregateID ||
+                              exact.type !== versionedType(definition.type, durable.version) ||
+                              !isDeepStrictEqual(exact.encoded, encoded)
+                            ) {
+                              yield* Effect.die(
+                                new InvalidDurableEventError({
+                                  type: event.type,
+                                  message: `Exact capability binding diverged for event ${event.id}`,
+                                }),
+                              )
+                            }
+                            const stored = yield* db
+                              .select()
+                              .from(EventTable)
+                              .where(eq(EventTable.id, event.id))
+                              .get()
+                              .pipe(Effect.orDie)
+                            if (stored) {
+                              const retained = exact.retained
+                              const same =
+                                stored.aggregate_id === aggregateID &&
+                                stored.type === exact.type &&
+                                isDeepStrictEqual(stored.data, encoded) &&
+                                (!retained ||
+                                  (retained.aggregateID === stored.aggregate_id && retained.seq === stored.seq))
+                              if (!same)
+                                yield* Effect.die(
+                                  new InvalidDurableEventError({
+                                    type: event.type,
+                                    message: `Event ${event.id} already exists at aggregate ${stored.aggregate_id} sequence ${stored.seq}`,
+                                  }),
+                                )
+                              return {
+                                status: "existing_exact" as const,
+                                aggregateID: stored.aggregate_id,
+                                seq: stored.seq,
+                              }
+                            }
+                            const seq = latest + 1
+                            const committed = {
+                              ...event,
+                              durable: { aggregateID, seq, version: durable.version },
+                            } as Payload
+                            yield* exact.projector(committed)
+                            if (exact.commit) yield* exact.commit(seq)
+                            yield* db
+                              .insert(EventSequenceTable)
+                              .values([{ aggregate_id: aggregateID, seq }])
+                              .onConflictDoUpdate({ target: EventSequenceTable.aggregate_id, set: { seq } })
+                              .run()
+                              .pipe(Effect.orDie)
+                            yield* db
+                              .insert(EventTable)
+                              .values([
+                                {
+                                  id: event.id,
+                                  aggregate_id: aggregateID,
+                                  seq,
+                                  type: exact.type,
+                                  data: encoded,
+                                },
+                              ])
+                              .run()
+                              .pipe(Effect.orDie)
+                            return { status: "committed_new" as const, aggregateID, seq }
+                          }
                           const seq = input?.seq ?? latest + 1
                           if (input && seq !== latest + 1) {
                             yield* Effect.die(
@@ -351,7 +449,8 @@ export const layerWith = (options?: LayerOptions) =>
                       { behavior: "immediate" },
                     )
                     .pipe(Effect.orDie)
-                  if (committed) {
+                  if (committed && (!("status" in committed) || committed.status === "committed_new")) {
+                    yield* options?.beforeDurableWake?.(committed.aggregateID) ?? Effect.void
                     yield* Effect.forEach(
                       pubsub.durable.get(committed.aggregateID) ?? [],
                       (wake) => PubSub.publish(wake, undefined),
@@ -413,6 +512,125 @@ export const layerWith = (options?: LayerOptions) =>
           const typed = pubsub.typed.get(event.type)
           if (typed) yield* PubSub.publish(typed, event)
           yield* PubSub.publish(pubsub.all, event)
+        })
+      }
+
+      function issueExact<D extends Definition>(input: EventExact.IssueInput<D>) {
+        return Effect.gen(function* () {
+          const durable = input.definition.durable
+          if (!durable)
+            return yield* Effect.die(
+              new InvalidDurableEventError({
+                type: input.definition.type,
+                message: "Exact capabilities require a durable event",
+              }),
+            )
+          const aggregateID = (input.data as Record<string, unknown>)[durable.aggregate]
+          if (typeof aggregateID !== "string")
+            return yield* Effect.die(
+              new InvalidDurableEventError({
+                type: input.definition.type,
+                message: `Expected string aggregate field ${durable.aggregate}`,
+              }),
+            )
+          const serviceLocation = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
+          const location = serviceLocation
+            ? { directory: serviceLocation.directory, workspaceID: serviceLocation.workspaceID }
+            : undefined
+          const event = {
+            id: input.id,
+            type: input.definition.type,
+            ...(location ? { location } : {}),
+            data: input.data,
+          } as Payload<D>
+          const encoded = Schema.encodeUnknownSync(input.definition.data)(input.data) as Record<string, unknown>
+          const token = Object.freeze({}) as EventExact.Token
+          const binding: ExactBinding = Object.freeze({
+            token,
+            definition: input.definition,
+            event,
+            aggregateID,
+            encoded,
+            type: versionedType(input.definition.type, durable.version),
+            authority: input.authority,
+            expectedRow: input.expectedRow,
+            retained: input.retained,
+            projector: (committed) => input.projector(committed as Payload<D>),
+            commit: input.commit,
+          })
+          exactBindings.set(token, binding)
+          return token
+        })
+      }
+
+      function publishExact<D extends Definition>(token: EventExact.Token) {
+        return Effect.gen(function* () {
+          const binding = exactBindings.get(token)
+          if (!binding)
+            return yield* Effect.die(
+              new InvalidDurableEventError({ type: "unknown", message: "Invalid exact event capability" }),
+            )
+
+          /**
+           * Commit and notification registration form one interruption-masked handoff under a private
+           * semaphore.  A retry cannot observe the committed row until the Instance-owned notification
+           * fiber is registered.  The listener work itself runs interruptibly in the layer scope; only
+           * the registration window is masked.  Once the lock is released, caller interruption detaches
+           * only this join and cannot cancel the retained fiber.
+           */
+          const prepared = yield* exactLock.withPermits(1)(
+            Effect.uninterruptible(
+              Effect.gen(function* () {
+                const committed = yield* commitDurableEvent(
+                  binding.definition,
+                  binding.event,
+                  undefined,
+                  undefined,
+                  binding,
+                )
+                if (!committed || !("status" in committed))
+                  return yield* Effect.die(
+                    new InvalidDurableEventError({
+                      type: binding.event.type,
+                      message: `Exact event ${binding.event.id} did not produce an exact commit result`,
+                    }),
+                  )
+                const event = {
+                  ...binding.event,
+                  durable: {
+                    aggregateID: committed.aggregateID,
+                    seq: committed.seq,
+                    version: binding.definition.durable!.version,
+                  },
+                } as Payload
+                let notification = exactNotifications.get(binding.event.id)
+                if (committed.status === "committed_new") {
+                  if (notification)
+                    return yield* Effect.die(
+                      new InvalidDurableEventError({
+                        type: binding.event.type,
+                        message: `Exact notification already registered for new event ${binding.event.id}`,
+                      }),
+                    )
+                  notification = yield* (options?.beforeExactNotification?.(event) ?? Effect.void).pipe(
+                    Effect.andThen(notify(event, true)),
+                    Effect.forkIn(scope, { startImmediately: true }),
+                  )
+                  exactNotifications.set(binding.event.id, notification)
+                }
+                return {
+                  result: {
+                    status: committed.status,
+                    coordinate: { aggregateID: committed.aggregateID, seq: committed.seq },
+                    event,
+                  },
+                  notification,
+                }
+              }),
+            ),
+          )
+          if (prepared.notification) yield* Fiber.join(prepared.notification)
+          return prepared.result as EventExact.PublishResult<D>
         })
       }
 
@@ -619,7 +837,7 @@ export const layerWith = (options?: LayerOptions) =>
           projectors.set(definition.type, list)
         })
 
-      return Service.of({
+      const service = Service.of({
         publish,
         subscribe,
         all: streamAll,
@@ -631,8 +849,11 @@ export const layerWith = (options?: LayerOptions) =>
         remove,
         claim,
       })
+      const exact = EventExact.Service.of({ issue: issueExact, publish: publishExact })
+      return Context.make(Service, service).pipe(Context.add(EventExact.Service, exact))
     }),
   )
 
 const layer = layerWith()
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [Database.node] })
+

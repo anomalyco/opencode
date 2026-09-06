@@ -22,7 +22,9 @@ import { getAdapter, registeredAdapters } from "./adapters"
 import { type Target, type WorkspaceInfo, WorkspaceInfo as WorkspaceInfoSchema } from "./types"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Session } from "@/session/session"
-import { SessionPrompt } from "@/session/prompt"
+import { SessionClosure } from "@/session/closure/coordinator"
+import { SessionClosureRunState } from "@/session/closure/run-state"
+import { SessionMutation } from "@/session/closure/mutation"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionID } from "@/session/schema"
 import { NotFoundError } from "@/storage/storage"
@@ -118,11 +120,23 @@ export class SyncAbortedError extends Schema.TaggedErrorClass<SyncAbortedError>(
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
+export class SessionWarpRemoteClosureProofError extends Schema.TaggedErrorClass<SessionWarpRemoteClosureProofError>()(
+  "WorkspaceSessionWarpRemoteClosureProofError",
+  {
+    message: Schema.String,
+    workspaceID: WorkspaceV2.ID,
+    sessionID: SessionID,
+  },
+) {}
+
 type CreateError = Auth.AuthError
 type SessionWarpError =
   | WorkspaceNotFoundError
   | SessionEventsNotFoundError
   | SessionWarpHttpError
+  | SessionWarpRemoteClosureProofError
+  | SessionClosure.Failure
+  | SessionClosure.LocationError
   | Vcs.PatchApplyError
   | HttpClientError.HttpClientError
 type WaitForSyncError = SyncTimeoutError | SyncAbortedError
@@ -155,7 +169,8 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const auth = yield* Auth.Service
     const session = yield* Session.Service
-    const prompt = yield* SessionPrompt.Service
+    const closure = yield* SessionClosure.Service
+    const closureRunState = yield* SessionClosureRunState.Service
     const http = yield* HttpClient.HttpClient
     const events = yield* EventV2Bridge.Service
     const vcs = yield* Vcs.Service
@@ -200,9 +215,13 @@ const layer = Layer.effect(
       return response.stream
     })
 
+    // The handler contract admits exactly one failure: a replay refusal. With an infallible
+    // contract a refusal had nowhere to go but a log, which would mark the event consumed when it
+    // was not. Naming the one permitted failure rather than making this generic keeps the contract
+    // self-documenting — transport and decode failures are still handled inside the handler.
     const parseSSE = Effect.fn("Workspace.parseSSE")(function* (
       stream: Stream.Stream<Uint8Array, unknown>,
-      onEvent: (event: unknown) => Effect.Effect<void>,
+      onEvent: (event: unknown) => Effect.Effect<void, SessionMutation.MutationRefused>,
     ) {
       yield* stream.pipe(
         Stream.decodeText(),
@@ -343,23 +362,32 @@ const layer = Layer.effect(
       }
 
       const history = (yield* response.json) as HistoryEvent[]
+      if (history.length === 0) return
 
-      yield* Effect.forEach(
-        history,
-        (event) =>
-          events
-            .replay(
-              {
-                id: EventV2.ID.make(event.id),
-                aggregateID: event.aggregate_id,
-                seq: event.seq,
-                type: event.type,
-                data: event.data,
-              },
-              { publish: true, ownerID: space.id },
-            )
-            .pipe(Effect.provideService(WorkspaceRef, space.id)),
-        { discard: true },
+      // One reservation covering every aggregate this history touches, taken before replay begins.
+      // A history batch can span aggregates, so scoping to all of them makes the decision atomic:
+      // any aggregate whose branch is being cancelled refuses the whole replay, rather than leaving
+      // a partially applied history whose projection disagrees with the event store.
+      yield* SessionMutation.replayLeased(
+        closure,
+        history.map((event) => event.aggregate_id),
+        Effect.forEach(
+          history,
+          (event) =>
+            events
+              .replay(
+                {
+                  id: EventV2.ID.make(event.id),
+                  aggregateID: event.aggregate_id,
+                  seq: event.seq,
+                  type: event.type,
+                  data: event.data,
+                },
+                { publish: true, ownerID: space.id },
+              )
+              .pipe(Effect.provideService(WorkspaceRef, space.id)),
+          { discard: true },
+        ),
       )
     })
 
@@ -399,12 +427,24 @@ const layer = Layer.effect(
               if (payload.type === "server.heartbeat") return
 
               if (payload.type === "sync" && payload.syncEvent) {
-                const failed = yield* events.replay(payload.syncEvent, { publish: true, ownerID: space.id }).pipe(
-                  Effect.as(false),
-                  Effect.catchCause((error) =>
-                    Effect.logWarning("failed to replay global event", error).pipe(
-                      Effect.annotateLogs({ workspaceID: space.id }),
-                      Effect.as(true),
+                const syncEvent = payload.syncEvent
+                // Live sync must not log-and-continue past a refused event as though it had been
+                // consumed. The separation is structural rather than a tag filter: the reservation
+                // sits OUTSIDE the catch and the existing transport handling stays INSIDE it, so a
+                // genuine replay or transport failure logs and skips exactly as before, while a
+                // refusal — raised before replay is entered at all — escapes this handler instead
+                // of marking the event consumed. The enclosing loop re-runs syncHistory on every
+                // reconnect, so the refused event is picked up again there.
+                const failed = yield* SessionMutation.replayLeased(
+                  closure,
+                  [syncEvent.aggregateID],
+                  events.replay(syncEvent, { publish: true, ownerID: space.id }).pipe(
+                    Effect.as(false),
+                    Effect.catchCause((error) =>
+                      Effect.logWarning("failed to replay global event", error).pipe(
+                        Effect.annotateLogs({ workspaceID: space.id }),
+                        Effect.as(true),
+                      ),
                     ),
                   ),
                 )
@@ -571,18 +611,23 @@ const layer = Layer.effect(
             const target = yield* WorkspaceAdapterRuntime.target(previous)
 
             if (target.type === "remote") {
-              yield* syncHistory(previous, target.url, target.headers).pipe(
-                Effect.catch((error) =>
-                  Effect.logWarning("session warp final source sync failed", {
-                    workspaceID: previous.id,
-                    sessionID: input.sessionID,
-                    error: errorData(error),
-                  }),
-                ),
-              )
-            } else {
-              yield* prompt.cancel(input.sessionID)
+              return yield* new SessionWarpRemoteClosureProofError({
+                message:
+                  "Session warp from a remote owner requires authenticated owner-runtime closure proof, which is unavailable.",
+                workspaceID: previous.id,
+                sessionID: input.sessionID,
+              })
             }
+
+            // Scoped to the session's current owner rather than to whatever workspace the caller
+            // routed this request to. Closure validates that the named session belongs to the
+            // location asking, by comparing the session's stored workspace against the ambient
+            // one; during a warp the session still belongs to `previous`, so an unscoped call
+            // would be refused whenever the caller routed anywhere else. `previous` was resolved
+            // from the session's own row above, so this names the location that actually owns it.
+            yield* closureRunState
+              .request(input.sessionID)
+              .pipe(Effect.provideService(WorkspaceRef, previous.id))
 
             // "claim" this session so any future events coming from
             // the old workspace are ignored
@@ -794,7 +839,13 @@ const layer = Layer.effect(
       yield* Effect.forEach(
         sessions.filter((sessionInfo) => !sessionInfo.parentID || !sessionIDs.has(sessionInfo.parentID)),
         (sessionInfo) =>
-          session.remove(sessionInfo.id).pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.void)),
+          session.remove(sessionInfo.id).pipe(
+            Effect.catchIf(NotFoundError.isInstance, () => Effect.void),
+            // Deliberately not joined to the NotFound swallow above. An already-gone session is
+            // benign; a session refusing removal because its branch is being cancelled is not, and
+            // treating that as success would orphan it behind a deleted workspace.
+            Effect.catchTag("SessionClosureMutationRefused", Effect.die),
+          ),
         { discard: true },
       )
 
@@ -953,9 +1004,10 @@ export const node = LayerNode.make({
   deps: [
     Auth.node,
     Session.node,
-    SessionPrompt.node,
     httpClient,
     EventV2Bridge.node,
+    SessionClosure.node,
+    SessionClosureRunState.node,
     Vcs.node,
     RuntimeFlags.node,
     FSUtil.node,

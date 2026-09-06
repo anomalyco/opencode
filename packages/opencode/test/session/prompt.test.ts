@@ -6,7 +6,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { eq } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -37,6 +37,8 @@ import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
+import { SessionClosure } from "../../src/session/closure/coordinator"
+import { SessionClosureModel as ClosureModel } from "../../src/session/closure/model"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionV2 } from "@opencode-ai/core/session"
@@ -57,6 +59,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
+import { LLMEvent, Usage } from "@opencode-ai/llm"
+import { MAX_STEPS_PROMPT } from "@opencode-ai/core/session/runner/max-steps"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -239,9 +243,128 @@ function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[
   return makePrompt(input)
 }
 
+const requestOnlyInputs: LLM.StreamInput[] = []
+const requestOnlyPlugin = Layer.mock(Plugin.Service)({
+  trigger: <Name extends string, Input, Output>(name: Name, _input: Input, output: Output) => {
+    if (name !== "experimental.chat.messages.transform") return Effect.succeed(output)
+    return Effect.sync(() => {
+      const messages = (output as { messages: SessionV1.WithParts[] }).messages
+      const sessionID = messages.at(-1)!.info.sessionID
+      for (const text of ["request-only status", "request-only policy"]) {
+        const messageID = MessageID.ascending()
+        messages.push({
+          info: {
+            id: messageID,
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: "build",
+            model: ref,
+            tools: {},
+            mode: "",
+          } as unknown as SessionV1.User,
+          parts: [
+            {
+              id: PartID.ascending(),
+              sessionID,
+              messageID,
+              type: "text",
+              text,
+            },
+          ],
+        })
+      }
+      return output
+    })
+  },
+  list: () => Effect.succeed([]),
+  init: () => Effect.void,
+})
+const requestOnlyLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: (input) => {
+      requestOnlyInputs.push(input)
+      const usage = new Usage({ inputTokens: 1, outputTokens: 1, totalTokens: 2 })
+      return Stream.make(
+        LLMEvent.textStart({ id: "txt-request-only" }),
+        LLMEvent.textDelta({ id: "txt-request-only", text: "done" }),
+        LLMEvent.textEnd({ id: "txt-request-only" }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop", usage }),
+        LLMEvent.finish({ reason: "stop", usage }),
+      )
+    },
+  }),
+)
+const requestOnlyPrompt = testEffect(
+  LayerNode.compile(promptRoot, [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, makeMcp()],
+    [RuntimeFlags.node, runtimeFlags],
+    [Plugin.node, requestOnlyPlugin],
+    [LLM.node, requestOnlyLLM],
+  ]),
+)
+
 const it = testEffect(makeHttp())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
 const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
+const refusalLog: Array<{ readonly session: string; readonly origin: string; readonly source: string }> = []
+const refusingClosure = Layer.mock(SessionClosure.Service)({
+  acquire: (input) =>
+    Effect.sync(() => {
+      refusalLog.push({ session: input.session, origin: input.origin, source: input.source })
+      return {
+        type: "fenced" as const,
+        state: "closing" as const,
+        operation: ClosureModel.id("operation", "operation_cp033_prompt"),
+        epoch: 0n,
+      }
+    }),
+})
+const refusedLoopNoLLMServer = testEffect(
+  LayerNode.compile(promptRoot, [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, makeMcp()],
+    [RuntimeFlags.node, runtimeFlags],
+    [SessionClosure.node, refusingClosure],
+    [SessionProcessor.node, blockingProcessor],
+  ]),
+)
+const wiringLog: string[] = []
+const wiringResult: { value: SessionV1.WithParts | undefined } = { value: undefined }
+const wiringValue = (): Effect.Effect<SessionV1.WithParts> =>
+  Effect.suspend(() => {
+    const value = wiringResult.value
+    return value ? Effect.succeed(value) : Effect.die(new Error("missing CP-033 wiring result"))
+  })
+const wiringState = Layer.mock(SessionRunState.Service)({
+  publish: () =>
+    Effect.gen(function* () {
+      wiringLog.push("publish")
+      return { type: "completed" as const, value: yield* wiringValue() }
+    }),
+  awaitPublished: (published) =>
+    Effect.sync(() => wiringLog.push("await")).pipe(
+      Effect.andThen(published.type === "completed" ? Effect.succeed(published.value) : published.await),
+    ),
+  ensureRunning: () =>
+    Effect.gen(function* () {
+      wiringLog.push("ensureRunning")
+      return yield* wiringValue()
+    }),
+})
+const wiringNoLLMServer = testEffect(
+  LayerNode.compile(promptRoot, [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, makeMcp()],
+    [RuntimeFlags.node, runtimeFlags],
+    [SessionRunState.node, wiringState],
+  ]),
+)
 const withMcpInstructions = testEffect(
   makeHttp({
     mcpInstructions: [
@@ -444,6 +567,76 @@ const boot = Effect.fn("test.boot")(function* (input?: { title?: string }) {
 
 // Loop semantics
 
+refusedLoopNoLLMServer.instance(
+  "a standing fence refuses direct SessionPrompt.loop as internal before F publication (CP-033)",
+  () =>
+    Effect.gen(function* () {
+      refusalLog.length = 0
+      processorCreateStarted.length = 0
+      const created = { value: 0 }
+      processorCreateStarted.push(() => {
+        created.value += 1
+      })
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          refusalLog.length = 0
+          processorCreateStarted.length = 0
+        }),
+      )
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const run = yield* SessionRunState.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+
+      const refused = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.flip)
+      expect(refused._tag).toBe("SessionClosureAdmissionRefused")
+      expect(refusalLog).toEqual([{ session: chat.id, origin: "internal", source: "SessionPrompt.loop" }])
+      expect(created.value).toBe(0)
+      expect((yield* run.listActive()).some((entry) => entry.session === chat.id)).toBe(false)
+    }),
+)
+
+wiringNoLLMServer.instance("routes reply-required loop through F publication, never legacy J (CP-033 T-02/M-01)", () =>
+  Effect.gen(function* () {
+    wiringLog.length = 0
+    wiringResult.value = undefined
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        wiringLog.length = 0
+        wiringResult.value = undefined
+      }),
+    )
+
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const initial = yield* seed(chat.id, { finish: "stop" })
+    wiringResult.value = { info: initial.assistant, parts: [] }
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.id).toBe(initial.assistant.id)
+    expect(wiringLog).toEqual(["publish", "await"])
+  }),
+)
+
+noLLMServer.instance("noReply persists without publishing an F entry (CP-033)", () =>
+  Effect.gen(function* () {
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const run = yield* SessionRunState.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    const result = yield* prompt.prompt({
+      sessionID: chat.id,
+      noReply: true,
+      parts: [{ type: "text", text: "no FIFO publication" }],
+    })
+    expect(result.info.role).toBe("user")
+    expect((yield* run.listActive()).some((entry) => entry.session === chat.id)).toBe(false)
+  }),
+)
+
 noLLMServer.instance(
   "loop exits immediately when last assistant has stop finish",
   () =>
@@ -552,6 +745,54 @@ it.instance("loop calls LLM and returns assistant message", () =>
     expect(parts.some((p) => p.type === "text" && p.text === "world")).toBe(true)
     expect(yield* llm.hits).toHaveLength(1)
   }),
+)
+
+requestOnlyPrompt.instance(
+  "loop separates plugin and max-step request-only messages",
+  () =>
+    Effect.gen(function* () {
+      requestOnlyInputs.length = 0
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Appended messages",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "durable prompt" }],
+      })
+
+      yield* prompt.loop({ sessionID: chat.id })
+
+      expect(requestOnlyInputs).toHaveLength(1)
+      const input = requestOnlyInputs[0]!
+      const messages = JSON.stringify(input.messages)
+      const suffix = JSON.stringify(input.messageSuffix)
+      const suffixText = input.messageSuffix?.map((message) =>
+        typeof message.content === "string"
+          ? message.content
+          : message.content.find((part) => part.type === "text")?.text,
+      )
+      expect(messages).toContain("durable prompt")
+      expect(messages).not.toContain("request-only status")
+      expect(messages).not.toContain("request-only policy")
+      expect(suffix).toContain("request-only status")
+      expect(suffix).toContain("request-only policy")
+      expect(suffixText).toEqual(["request-only status", "request-only policy", MAX_STEPS_PROMPT])
+      expect(input.messageSuffix?.at(-1)).toEqual({
+        role: "assistant",
+        content: [{ type: "text", text: MAX_STEPS_PROMPT }],
+      })
+      expect(input.messages).not.toContainEqual({
+        role: "assistant",
+        content: [{ type: "text", text: MAX_STEPS_PROMPT }],
+      })
+      expect(suffix.indexOf("request-only status")).toBeLessThan(suffix.indexOf("request-only policy"))
+    }),
+  { config: { agent: { build: { steps: 1 } } } },
 )
 
 withMcpInstructions.instance(
@@ -1430,7 +1671,7 @@ it.instance("concurrent loop callers all receive same error result", () =>
   }),
 )
 
-it.instance("prompt submitted during an active run is included in the next LLM input", () =>
+it.instance("prompt submitted before the next history read shares the B-causal result (CP-033 T-03)", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
     const gate = yield* Deferred.make<void>()
@@ -1478,6 +1719,7 @@ it.instance("prompt submitted during an active run is included in the next LLM i
     const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
     expect(Exit.isSuccess(ea)).toBe(true)
     expect(Exit.isSuccess(eb)).toBe(true)
+    if (Exit.isSuccess(ea) && Exit.isSuccess(eb)) expect(ea.value.info.id).toBe(eb.value.info.id)
     expect(yield* llm.calls).toBe(2)
 
     const msgs = yield* sessions.messages({ sessionID: chat.id })

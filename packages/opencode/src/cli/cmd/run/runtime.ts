@@ -155,6 +155,18 @@ function variantsFor(providers: RunProvider[], model: RunInput["model"]) {
 const RESIZE_DELAY = 250
 const LOCAL_REPLAY_ROW_LIMIT = 100
 
+function formatInterruptError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message || error.name
+  }
+
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
+    return error.message
+  }
+
+  return "unknown cancellation error"
+}
+
 async function resolveExitTitle(
   ctx: BootContext,
   input: RunRuntimeInput,
@@ -343,11 +355,25 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
 
       state.aborting = true
+      // A failed cancellation is shown rather than swallowed. Success now means the branch is
+      // actually closed, so silently discarding a failure would leave the user believing work had
+      // stopped when it had not. An incomplete stop stays repairable, and a repeated interrupt
+      // joins that repair instead of starting a second one, which is what the message says to do.
       void ctx.sdk.session
-        .abort({
-          sessionID: state.sessionID,
+        .abort(
+          {
+            sessionID: state.sessionID,
+          },
+          { throwOnError: true },
+        )
+        .catch((error) => {
+          footer.append({
+            kind: "error",
+            text: `cancellation failed; retry interrupt to join repair: ${formatInterruptError(error)}`,
+            phase: "final",
+            source: "system",
+          })
         })
-        .catch(() => {})
         .finally(() => {
           state.aborting = false
         })

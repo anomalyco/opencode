@@ -11,12 +11,15 @@ import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
+import { SessionClosure } from "@/session/closure/coordinator"
+import { SessionClosureRunState } from "@/session/closure/run-state"
+import { SessionAdmission } from "@/session/closure/admission"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { NamedError } from "@opencode-ai/core/util/error"
-import { Cause, Effect, Option, Schema, Scope } from "effect"
+import { Cause, Deferred, Effect, Option, Schema, Scope } from "effect"
 import * as Stream from "effect/Stream"
 import { InstanceState } from "@/effect/instance-state"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -38,6 +41,7 @@ import {
 } from "../groups/session"
 import { PermissionNotFoundError } from "../errors"
 import * as SessionError from "./session-errors"
+import { isCompleteClosurePair } from "@opencode-ai/core/session/closure-record"
 
 const tryParseJson = (text: string) =>
   Effect.try({
@@ -53,6 +57,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const revertSvc = yield* SessionRevert.Service
     const compactSvc = yield* SessionCompaction.Service
     const runState = yield* SessionRunState.Service
+    const closureSvc = yield* SessionClosure.Service
+    const closureRunState = yield* SessionClosureRunState.Service
     const agentSvc = yield* Agent.Service
     const permissionSvc = yield* Permission.Service
     const statusSvc = yield* SessionStatus.Service
@@ -176,7 +182,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     })
 
     const remove = Effect.fn("SessionHttpApi.remove")(function* (ctx: { params: { sessionID: SessionID } }) {
-      yield* SessionError.mapStorageNotFound(session.remove(ctx.params.sessionID))
+      yield* SessionError.mapAdmission(SessionError.mapStorageNotFound(session.remove(ctx.params.sessionID)))
       return true
     })
 
@@ -230,7 +236,18 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     })
 
     const abort = Effect.fn("SessionHttpApi.abort")(function* (ctx: { params: { sessionID: SessionID } }) {
-      yield* promptSvc.cancel(ctx.params.sessionID)
+      // A missing session and a session with no work both answer `true`, preserving the previous
+      // abort contract. The no-work half is the coordinator's own success. The missing half has to
+      // be answered before the request is made, because the Location gate is fail-closed by design
+      // and would refuse a session it cannot validate — turning what should be a plain success into
+      // a typed error, along with a ticket, a fence and a durable record for work that never
+      // existed.
+      const present = yield* session.get(ctx.params.sessionID).pipe(
+        Effect.as(true),
+        Effect.catchTag("NotFoundError", () => Effect.succeed(false)),
+      )
+      if (!present) return true
+      yield* SessionError.mapClosure(closureRunState.request(ctx.params.sessionID))
       return true
     })
 
@@ -270,14 +287,20 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* requireSession(ctx.params.sessionID)
     })
 
-    const summarize = Effect.fn("SessionHttpApi.summarize")(function* (ctx: {
-      params: { sessionID: SessionID }
-      payload: typeof SummarizePayload.Type
-    }) {
-      yield* revertSvc.cleanup(yield* requireSession(ctx.params.sessionID))
+    const summarizeAdmitted = Effect.fn("SessionHttpApi.summarizeAdmitted")(function* (
+      ctx: {
+        params: { sessionID: SessionID }
+        payload: typeof SummarizePayload.Type
+      },
+      release: Deferred.Deferred<void>,
+    ) {
+      const current = yield* requireSession(ctx.params.sessionID)
+      yield* revertSvc.cleanup(current)
       const messages = yield* SessionError.mapStorageNotFound(session.messages({ sessionID: ctx.params.sessionID }))
       const defaultAgent = yield* agentSvc.defaultAgent()
-      const currentAgent = messages.findLast((message) => message.info.role === "user")?.info.agent ?? defaultAgent
+      const currentAgent =
+        messages.findLast((message) => message.info.role === "user" && !isCompleteClosurePair(message))?.info.agent ??
+        defaultAgent
 
       yield* compactSvc.create({
         sessionID: ctx.params.sessionID,
@@ -288,7 +311,37 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         },
         auto: ctx.payload.auto ?? false,
       })
-      yield* promptSvc.loop({ sessionID: ctx.params.sessionID })
+      return yield* promptSvc.admitLoop({ sessionID: ctx.params.sessionID }, release).pipe(SessionError.mapAdmission)
+    })
+
+    const summarize = Effect.fn("SessionHttpApi.summarize")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof SummarizePayload.Type
+    }) {
+      // §7.3's summarize row and audit IR-5. The lease is acquired at handler entry, *before*
+      // `revertSvc.cleanup` deletes rows — previously the only refusal point was the `loop` call,
+      // by which time the destruction had already happened. `summarizeAdmitted` now returns after
+      // FIFO publication; only after this wrapper retires does the selected fiber take its fresh
+      // execution admission and run the loop.
+      //
+      // Slice J narrows what reaches the terminator below. This seam is external and does not opt
+      // out of §7.2's retry, so an admission arriving after a fence now JOINS the intersecting
+      // operation, waits for release, and runs exactly once — the ordinary fenced case no longer
+      // produces a refusal here at all. `Effect.die` is retained for the residual refusals that
+      // survive the join: a second closure conflict, and a wrong-Instance answer.
+      //
+      // It is still `die` rather than a typed error only because this endpoint's declared errors
+      // cannot change yet; §12.6 declares its typed 500 for `abort` alone. That mapping remains a
+      // Gate 6 item, now scoped to those residual cases rather than to every fenced summarize.
+      const release = yield* Deferred.make<void>()
+      const published = yield* SessionError.mapAdmission(
+        SessionAdmission.admitted(
+          closureSvc,
+          { session: ctx.params.sessionID, origin: "external", source: "SessionHttpApi.summarize" },
+          () => summarizeAdmitted(ctx, release),
+        ).pipe(Effect.ensuring(Deferred.succeed(release, undefined).pipe(Effect.asVoid))),
+      )
+      yield* SessionError.mapAdmission(promptSvc.awaitPublished(published))
       return true
     })
 
@@ -343,7 +396,9 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof ShellPayload.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      return yield* SessionError.mapBusy(promptSvc.shell({ ...ctx.payload, sessionID: ctx.params.sessionID }))
+      return yield* SessionError.mapBusy(
+        SessionError.mapAdmission(promptSvc.shell({ ...ctx.payload, sessionID: ctx.params.sessionID })),
+      )
     })
 
     const revert = Effect.fn("SessionHttpApi.revert")(function* (ctx: {
@@ -351,12 +406,18 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof RevertPayload.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      return yield* SessionError.mapBusy(revertSvc.revert({ sessionID: ctx.params.sessionID, ...ctx.payload }))
+      return yield* SessionError.mapBoundary(
+        SessionError.mapAdmission(
+          SessionError.mapBusy(revertSvc.revert({ sessionID: ctx.params.sessionID, ...ctx.payload })),
+        ),
+      )
     })
 
     const unrevert = Effect.fn("SessionHttpApi.unrevert")(function* (ctx: { params: { sessionID: SessionID } }) {
       yield* requireSession(ctx.params.sessionID)
-      return yield* SessionError.mapBusy(revertSvc.unrevert({ sessionID: ctx.params.sessionID }))
+      return yield* SessionError.mapAdmission(
+        SessionError.mapBusy(revertSvc.unrevert({ sessionID: ctx.params.sessionID })),
+      )
     })
 
     const permissionRespond = Effect.fn("SessionHttpApi.permissionRespond")(function* (ctx: {
@@ -364,13 +425,17 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof PermissionResponsePayload.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      yield* permissionSvc.reply({ requestID: ctx.params.permissionID, reply: ctx.payload.response }).pipe(
-        Effect.catchTag("Permission.NotFoundError", (error) =>
-          Effect.fail(
-            new PermissionNotFoundError({
-              requestID: String(error.requestID),
-              message: `Permission request not found: ${error.requestID}`,
-            }),
+      // The session-scoped compatibility route converges on the same `Permission.reply` as the
+      // root one, so the guard inside the service covers both and no second authority exists here.
+      yield* SessionError.mapAdmission(
+        permissionSvc.reply({ requestID: ctx.params.permissionID, reply: ctx.payload.response }).pipe(
+          Effect.catchTag("Permission.NotFoundError", (error) =>
+            Effect.fail(
+              new PermissionNotFoundError({
+                requestID: String(error.requestID),
+                message: `Permission request not found: ${error.requestID}`,
+              }),
+            ),
           ),
         ),
       )
@@ -382,7 +447,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     }) {
       yield* requireSession(ctx.params.sessionID)
       yield* SessionError.mapBusy(runState.assertNotBusy(ctx.params.sessionID))
-      yield* session.removeMessage(ctx.params)
+      yield* SessionError.mapAdmission(session.removeMessage(ctx.params))
       return true
     })
 
@@ -390,7 +455,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID; messageID: MessageID; partID: PartID }
     }) {
       yield* requireSession(ctx.params.sessionID)
-      yield* session.removePart(ctx.params)
+      yield* SessionError.mapAdmission(session.removePart(ctx.params))
       return true
     })
 
@@ -407,7 +472,15 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       ) {
         return yield* new HttpApiError.BadRequest({})
       }
-      return yield* session.updatePart(payload)
+      // The coordinate validation stays ahead of the call: it is a read-only precondition, so
+      // deciding it first keeps the existing 400 for a malformed request rather than turning it
+      // into a refusal.
+      //
+      // A payload claiming the reserved branch-closure key is malformed in the same way, so it
+      // answers 400 like the coordinate check above rather than adding an error to this endpoint.
+      return yield* SessionError.mapAdmission(session.replacePart(payload)).pipe(
+        Effect.catchTag("SessionReservedMetadataError", () => new HttpApiError.BadRequest({})),
+      )
     })
 
     return handlers

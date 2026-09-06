@@ -18,6 +18,9 @@ type OpenApiResponse = {
   readonly content?: Record<string, { readonly schema?: OpenApiSchema }>
 }
 type OpenApiOperation = {
+  readonly operationId?: string
+  readonly summary?: string
+  readonly description?: string
   readonly parameters?: ReadonlyArray<{
     readonly name: string
     readonly in: string
@@ -70,6 +73,19 @@ function isBuiltInEndpointError(name: string) {
 }
 
 describe("PublicApi OpenAPI v2 errors", () => {
+  test("describes stable Task promotion endpoint with async vocabulary", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+    const operation = spec.paths["/experimental/session/{sessionID}/background"]?.post
+
+    expect(operation?.operationId).toBe("experimental.session.background")
+    expect(operation?.summary).toBe("Make Task subagents async")
+    expect(operation?.description).toBe(
+      "Stop waiting for any Task subagents whose synchronous calls are currently blocking the session; the same running tasks continue asynchronously.",
+    )
+    expect(operation?.responses?.["200"]?.description).toBe("Task subagents promoted to async")
+    expect(operation?.responses?.["200"]?.content?.["application/json"]?.schema?.type).toBe("boolean")
+  })
+
   test("includes plugin-facing core schemas", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 

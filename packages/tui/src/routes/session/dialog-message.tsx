@@ -1,11 +1,12 @@
 import { createMemo } from "solid-js"
 import { useSync } from "../../context/sync"
-import { DialogSelect } from "../../ui/dialog-select"
+import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { useSDK } from "../../context/sdk"
 import { useRoute } from "../../context/route"
 import { useClipboard } from "../../context/clipboard"
 import type { PromptInfo } from "../../component/prompt/history"
 import { stripPromptPartIDs as strip } from "../../prompt/part"
+import { isHumanUserMessage } from "../../util/closure-record"
 
 export function DialogMessage(props: {
   messageID: string
@@ -15,13 +16,18 @@ export function DialogMessage(props: {
   const sync = useSync()
   const sdk = useSDK()
   const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
+  const actionable = createMemo(() => {
+    const value = message()
+    if (!value) return false
+    return isHumanUserMessage(value, sync.data.part[value.id] ?? [])
+  })
   const route = useRoute()
   const clipboard = useClipboard()
 
   return (
     <DialogSelect
       title="Message Actions"
-      options={[
+      options={([
         {
           title: "Revert",
           value: "session.revert",
@@ -103,7 +109,7 @@ export function DialogMessage(props: {
             dialog.clear()
           },
         },
-      ]}
+      ] satisfies DialogSelectOption<string>[]).filter(() => actionable())}
     />
   )
 }

@@ -28,6 +28,7 @@ import { Vcs } from "@/project/vcs"
 import { ProviderAuth } from "@/provider/auth"
 import { Provider } from "@/provider/provider"
 import { Question } from "@/question"
+import { AttachmentCoordinator } from "@/session/attachment/coordinator"
 import { SessionCompaction } from "@/session/compaction"
 import { Instruction } from "@/session/instruction"
 import { LLM } from "@/session/llm"
@@ -35,6 +36,8 @@ import { SessionProcessor } from "@/session/processor"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
+import { SessionClosure } from "@/session/closure/coordinator"
+import { SessionClosureRunState } from "@/session/closure/run-state"
 import { Session } from "@/session/session"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
@@ -209,7 +212,7 @@ type RouteRequirements =
   | HttpRouter.Request<"Requires", unknown>
   | HttpRouter.Request<"GlobalRequires", never>
 
-const app = LayerNode.group([
+export const app = LayerNode.group([
   Npm.node,
   FSUtil.node,
   Database.node,
@@ -239,6 +242,19 @@ const app = LayerNode.group([
   RuntimeFlags.node,
   EventV2Bridge.node,
   SessionRunState.node,
+  // Published, not merely reached. `SessionClosureRunState` depends on the coordinator, but a
+  // dependency is provided inward and not re-exported, and the sync handler reserves against the
+  // coordinator directly.
+  SessionClosure.node,
+  SessionClosureRunState.node,
+  // THE SERVED GRAPH IS THE PRODUCTION PROMPT PATH — `AppRuntime` serves the TUI worker bootstrap,
+  // CLI, upgrade and worktree adapters, not Session prompts. Its absence here left `SessionPrompt`
+  // resolving `None` and building a private, process-wide coordinator, so the declared node surface
+  // was dead on the path that actually runs. List it alongside its dependents rather than leaving it
+  // implicit in `SessionPrompt.node.dependencies`, matching how
+  // `SessionClosure` and `SessionRunState` are carried. `AppNodeBuilderV1.build` memoizes by node
+  // identity, so appearing in both places still yields one instance and one per-Instance registry.
+  AttachmentCoordinator.node,
   SessionProcessor.node,
   SessionCompaction.node,
   SessionRevert.node,
@@ -270,6 +286,7 @@ const app = LayerNode.group([
 
 export function createRoutes(
   corsOptions?: CorsOptions,
+  replacements?: LayerNode.Replacements,
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
   const locationServiceMapV2 = buildLocationServiceMap()
 
@@ -303,7 +320,15 @@ export function createRoutes(
     ),
     Layer.provide(locationServiceMapV2),
 
-    Layer.provide(AppNodeBuilderV1.build(app)),
+    // A substituted graph must never be served from a SHARED MemoMap. Effect memoizes on layer
+    // identity, and `Session.node` / `SessionClosure.node` are module-level constants, so a caller
+    // that builds this graph through the process-wide `memoMap` (imported above, used by `webHandler`)
+    // would reuse layers already built WITHOUT the replacements. The substitution would then be
+    // silently ignored — the original service runs while the test still passes, which is the
+    // dangerous shape of failure. `Layer.fresh` attaches that guarantee to the layer itself, so it
+    // holds whichever builder or memo map the caller uses, rather than relying on each caller to
+    // remember. The unsubstituted production path is deliberately left untouched: it SHOULD share.
+    Layer.provide(replacements ? Layer.fresh(AppNodeBuilderV1.build(app, replacements)) : AppNodeBuilderV1.build(app)),
     // Must stay last: layers provided later in this pipe build beneath earlier ones,
     // so Observability must come after every service graph. Otherwise eagerly forked
     // fibers (e.g. the ModelsDev background refresh) capture Effect's default stdout

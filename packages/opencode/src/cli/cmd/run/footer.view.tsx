@@ -461,7 +461,7 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     const items: Array<{ kind: string; key: string; label: string }> = []
     if (foregroundSubagents() && backgroundShortcut()) {
-      items.push({ kind: "background", key: backgroundShortcut(), label: "background" })
+      items.push({ kind: "background", key: backgroundShortcut(), label: "async" })
     }
     if (queuedPrompts().length > 0 && queuedShortcut()) {
       items.push({ kind: "queued", key: queuedShortcut(), label: `${queue()} queued` })
@@ -527,7 +527,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     commands: [
       {
         name: "session.background",
-        title: "Background subagents",
+        title: "Make subagents async",
         category: "Session",
         run: () => props.onBackground?.(),
       },

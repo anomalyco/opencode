@@ -18,6 +18,7 @@ import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
+import { SessionToolPart } from "./toolpart-closure"
 import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
@@ -588,20 +589,32 @@ const layer = Layer.effect(
           { concurrency: "unbounded" },
         )
 
+        // This loop ends parts that its own execution created, so it holds cancellation-owned
+        // authority and needs no permit. It goes through the shared terminalizer for the guard it
+        // never had: a re-read at the exact coordinate, so a tool call that completed between the
+        // read above and the write here is left as completed instead of being overwritten as
+        // aborted. Previously that guard was supplied externally, by settled calls being deleted
+        // from `ctx.toolcalls` — an invariant held elsewhere rather than checked here.
+        //
+        // The payload is unchanged and stays a product contract: consumers branch on both
+        // `interrupted === true` and the exact text "Tool execution aborted".
         for (const toolCallID of Object.keys(ctx.toolcalls)) {
           const match = yield* readToolCall(toolCallID)
           if (!match) continue
           const part = match.part
-          const end = Date.now()
-          const metadata = "metadata" in part.state && isRecord(part.state.metadata) ? part.state.metadata : {}
-          yield* session.updatePart({
-            ...part,
-            state: {
-              ...part.state,
-              status: "error",
-              error: "Tool execution aborted",
-              metadata: { ...metadata, interrupted: true },
-              time: { start: "time" in part.state ? part.state.time.start : end, end },
+          yield* SessionToolPart.terminalizeExact({
+            session,
+            target: { session: part.sessionID, message: part.messageID, part: part.id },
+            terminal: (observed) => {
+              const end = Date.now()
+              const metadata = "metadata" in observed && isRecord(observed.metadata) ? observed.metadata : {}
+              return {
+                ...observed,
+                status: "error",
+                error: "Tool execution aborted",
+                metadata: { ...metadata, interrupted: true },
+                time: { start: "time" in observed ? observed.time.start : end, end },
+              }
             },
           })
         }
@@ -687,7 +700,7 @@ const layer = Layer.effect(
               }),
             ),
             Effect.catch(halt),
-            Effect.ensuring(cleanup()),
+            Effect.ensuring(cleanup().pipe(Effect.catchTag("SessionReservedMetadataError", Effect.die))),
           )
 
           if (ctx.needsCompaction) return "compact"
@@ -700,8 +713,10 @@ const layer = Layer.effect(
         get message() {
           return ctx.assistantMessage
         },
-        updateToolCall,
-        completeToolCall,
+        updateToolCall: (toolCallID, update) =>
+          updateToolCall(toolCallID, update).pipe(Effect.catchTag("SessionReservedMetadataError", Effect.die)),
+        completeToolCall: (toolCallID, output) =>
+          completeToolCall(toolCallID, output).pipe(Effect.catchTag("SessionReservedMetadataError", Effect.die)),
         process,
       } satisfies Handle
     })

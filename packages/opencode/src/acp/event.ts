@@ -20,6 +20,7 @@ import {
   shellOutputSnapshot,
   completedToolUpdate,
 } from "./tool"
+import { isCompleteClosurePair } from "@opencode-ai/core/session/closure-record"
 
 type Connection = Pick<AgentSideConnection, "sessionUpdate"> &
   Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
@@ -109,8 +110,13 @@ export class Subscription {
     if (message.info.role !== "assistant" && message.info.role !== "user") return
 
     const cwd = message.info.role === "assistant" ? message.info.path?.cwd : undefined
+    // A branch-closure record is recorded like any other part so history stays complete, but its
+    // parts describe work that was stopped rather than work to act on: replaying them as tool
+    // updates or permission requests would ask the client to act on a cancelled branch.
+    const closure = isCompleteClosurePair(message)
     for (const part of message.parts) {
       await this.recordFetchedPart(message.info.sessionID, message, part)
+      if (closure) continue
       if (part.type === "tool") {
         await this.handleToolPart(message.info.sessionID, part, cwd ?? process.cwd())
         continue

@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { PermissionNotFoundError } from "../errors"
+import * as SessionError from "./session-errors"
 
 export const permissionHandlers = HttpApiBuilder.group(InstanceHttpApi, "permission", (handlers) =>
   Effect.gen(function* () {
@@ -17,22 +18,27 @@ export const permissionHandlers = HttpApiBuilder.group(InstanceHttpApi, "permiss
       params: { requestID: PermissionV1.ID }
       payload: PermissionV1.ReplyBody
     }) {
-      yield* svc
-        .reply({
-          requestID: ctx.params.requestID,
-          reply: ctx.payload.reply,
-          message: ctx.payload.message,
-        })
-        .pipe(
-          Effect.catchTag("Permission.NotFoundError", (error) =>
-            Effect.fail(
-              new PermissionNotFoundError({
-                requestID: String(error.requestID),
-                message: `Permission request not found: ${error.requestID}`,
-              }),
+      // A reply arriving while the session's branch is being cancelled is refused. That is an
+      // expected, recoverable outcome of the user's own concurrent stop, so it is reported as a
+      // conflict rather than raised as a server defect.
+      yield* SessionError.mapAdmission(
+        svc
+          .reply({
+            requestID: ctx.params.requestID,
+            reply: ctx.payload.reply,
+            message: ctx.payload.message,
+          })
+          .pipe(
+            Effect.catchTag("Permission.NotFoundError", (error) =>
+              Effect.fail(
+                new PermissionNotFoundError({
+                  requestID: String(error.requestID),
+                  message: `Permission request not found: ${error.requestID}`,
+                }),
+              ),
             ),
           ),
-        )
+      )
       return true
     })
 
