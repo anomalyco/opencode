@@ -607,6 +607,109 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    requesty: Effect.fnUntraced(function* (input: Info) {
+      const env = yield* dep.env()
+      const auth = yield* dep.auth(input.id)
+      const apiKey = iife(() => {
+        if (auth?.type === "api") return auth.key
+        const envKey = env["REQUESTY_API_KEY"]
+        if (envKey) return envKey
+        return undefined
+      })
+
+      return {
+        autoload: true,
+        async discoverModels(): Promise<Record<string, Model>> {
+          const baseURL = (input.options?.baseURL as string) || "https://router.requesty.ai/v1"
+          try {
+            const headers: Record<string, string> = {}
+            if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`
+
+            const res = await fetch(`${baseURL}/models`, {
+              headers,
+              signal: AbortSignal.timeout(5_000),
+            })
+            if (!res.ok) {
+              log.warn("requesty model discovery failed", { status: res.status })
+              return {}
+            }
+
+            const json = (await res.json()) as {
+              data?: Array<{
+                id?: string
+                input_price?: number
+                output_price?: number
+                cached_price?: number
+                context_window?: number
+                max_output_tokens?: number
+                supports_reasoning?: boolean
+                supports_vision?: boolean
+                supports_tool_calling?: boolean
+                supports_image_generation?: boolean
+              }>
+            }
+            if (!json?.data || !Array.isArray(json.data)) return {}
+
+            const models: Record<string, Model> = {}
+            for (const m of json.data) {
+              if (!m.id) continue
+              models[m.id] = {
+                id: ModelID.make(m.id),
+                providerID: ProviderID.make("requesty"),
+                name: m.id,
+                family: "",
+                api: {
+                  id: m.id,
+                  url: baseURL,
+                  npm: "@ai-sdk/openai-compatible",
+                },
+                status: "active",
+                headers: {},
+                options: {},
+                cost: {
+                  input: m.input_price ?? 0,
+                  output: m.output_price ?? 0,
+                  cache: { read: m.cached_price ?? 0, write: 0 },
+                },
+                limit: {
+                  context: m.context_window ?? 128000,
+                  output: m.max_output_tokens ?? 4096,
+                },
+                capabilities: {
+                  temperature: true,
+                  reasoning: m.supports_reasoning ?? false,
+                  attachment: m.supports_vision ?? false,
+                  toolcall: m.supports_tool_calling ?? false,
+                  input: {
+                    text: true,
+                    audio: false,
+                    image: m.supports_vision ?? false,
+                    video: false,
+                    pdf: false,
+                  },
+                  output: {
+                    text: true,
+                    audio: false,
+                    image: m.supports_image_generation ?? false,
+                    video: false,
+                    pdf: false,
+                  },
+                  interleaved: false,
+                },
+                release_date: "",
+                variants: {},
+              }
+            }
+
+            log.info("requesty model discovery complete", { count: Object.keys(models).length })
+            return models
+          } catch (e) {
+            log.warn("requesty model discovery failed", { error: e })
+            return {}
+          }
+        },
+      }
+    }),
     gitlab: Effect.fnUntraced(function* (input: Info) {
       const {
         VERSION: GITLAB_PROVIDER_VERSION,
@@ -1661,6 +1764,20 @@ const layer = Layer.effect(
                 }
               }
             } catch (e) {}
+          })
+        }
+
+        const requesty = ProviderID.make("requesty")
+        if (discoveryLoaders[requesty] && providers[requesty] && isProviderAllowed(requesty)) {
+          yield* Effect.promise(async () => {
+            try {
+              const discovered = await discoveryLoaders[requesty]()
+              if (Object.keys(discovered).length > 0) {
+                providers[requesty].models = discovered
+              }
+            } catch (e) {
+              log.warn("state discovery error", { id: "requesty", error: e })
+            }
           })
         }
 
