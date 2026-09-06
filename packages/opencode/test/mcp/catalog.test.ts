@@ -27,6 +27,44 @@ function mcpTool() {
 }
 
 describe("McpCatalog.convertTool", () => {
+  test("adds an empty required array when the server omitted it", () => {
+    const converted = McpCatalog.convertTool(
+      {
+        name: "probe",
+        description: "x",
+        inputSchema: {
+          type: "object",
+          properties: { server: { type: "string" } },
+        },
+      } as any,
+      clientReturning({ content: [] }),
+    )
+    expect((converted.inputSchema as { jsonSchema: object }).jsonSchema).toMatchObject({
+      type: "object",
+      properties: { server: { type: "string" } },
+      additionalProperties: false,
+      required: [],
+    })
+  })
+
+  test("keeps a server-provided required array", () => {
+    const converted = McpCatalog.convertTool(
+      {
+        name: "probe",
+        description: "x",
+        inputSchema: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+        },
+      } as any,
+      clientReturning({ content: [] }),
+    )
+    expect((converted.inputSchema as { jsonSchema: object }).jsonSchema).toMatchObject({
+      required: ["query"],
+    })
+  })
+
   test("preserves content when structuredContent is also present", async () => {
     const content = [{ type: "image" as const, mimeType: "image/png", data: "AAAA" }]
     const structuredContent = { image: { mimeType: "image/png", data: "AAAA" } }
