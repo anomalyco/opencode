@@ -49,7 +49,7 @@ const splitBom = (text: string) =>
 const joinBom = (text: string, bom: boolean) => (bom ? `\uFEFF${text}` : text)
 const decodeUtf8 = (content: Uint8Array) => {
   const bom = content[0] === 0xef && content[1] === 0xbb && content[2] === 0xbf
-  return { bom, content, text: new TextDecoder().decode(bom ? content.slice(3) : content) }
+  return { bom, content, text: new TextDecoder("utf-8", { fatal: true }).decode(bom ? content.slice(3) : content) }
 }
 
 const countOccurrences = (content: string, search: string) => {
@@ -158,7 +158,13 @@ const layer = Layer.effectDiscard(
                     source: permissionSource,
                   }),
                 )
-                const source = decodeUtf8(yield* unableToEdit(fs.readFile(target.canonical)))
+                const fileContent = yield* unableToEdit(fs.readFile(target.canonical))
+                let source: ReturnType<typeof decodeUtf8>
+                try {
+                  source = decodeUtf8(fileContent)
+                } catch {
+                  return yield* new ToolFailure({ message: `Unable to edit ${input.path}: file is not valid UTF-8` })
+                }
                 const ending = detectLineEnding(source.text)
                 const oldString = convertToLineEnding(input.oldString, ending)
                 const newString = convertToLineEnding(input.newString, ending)

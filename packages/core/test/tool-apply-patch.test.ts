@@ -202,6 +202,38 @@ describe("ApplyPatchTool", () => {
     ),
   )
 
+  it.live("rejects a non-UTF-8 update target instead of corrupting it", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const update = path.join(tmp.path, "legacy.txt")
+        const bytes = new Uint8Array([...new TextEncoder().encode("before\n"), 0xd6, 0xd0, 0xce, 0xc4, 0x0a])
+        return Effect.promise(() => fs.writeFile(update, bytes)).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              executeTool(
+                registry,
+                call("*** Begin Patch\n*** Update File: legacy.txt\n@@\n-before\n+after\n*** End Patch"),
+              ),
+            ),
+          ),
+          Effect.andThen((result) =>
+            Effect.sync(() =>
+              expect(result).toEqual({
+                type: "error",
+                value: "Unable to apply patch at legacy.txt: file is not valid UTF-8",
+              }),
+            ),
+          ),
+          Effect.andThen(() => Effect.promise(() => fs.readFile(update))),
+          Effect.tap((after) => Effect.sync(() => expect(new Uint8Array(after)).toEqual(bytes))),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("rejects moves before applying any hunk", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
