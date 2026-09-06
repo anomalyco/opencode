@@ -32,6 +32,7 @@ test("validates config constraints", () => {
       scroll_speed: 0.001,
       diff_style: "stacked",
       cursor: { blinking: false },
+      linux_clipboard_selection: "primary",
       plugin: ["example-plugin"],
     }),
   ).toMatchObject({
@@ -39,12 +40,14 @@ test("validates config constraints", () => {
     attention: { volume: 1 },
     diff_style: "stacked",
     cursor: { blinking: false },
+    linux_clipboard_selection: "primary",
   })
   expect(() => decodeInfo({ leader_timeout: 0 })).toThrow()
   expect(() => decodeInfo({ attention: { volume: 1.1 } })).toThrow()
   expect(() => decodeInfo({ prompt: { max_width: 0 } })).toThrow()
   expect(() => decodeInfo({ scroll_speed: 0 })).toThrow()
   expect(() => decodeInfo({ cursor: { style: "beam" } })).toThrow()
+  expect(() => decodeInfo({ linux_clipboard_selection: "middle" })).toThrow()
   expect(decodeInfo({ attention: { sounds: { unknown: "sound.wav" } } })).toEqual({ attention: { sounds: {} } })
 })
 
@@ -61,6 +64,7 @@ test("resolves host-neutral defaults", () => {
   })
   expect(config.leader_timeout).toBe(LeaderTimeoutDefault)
   expect(config.mouse).toBe(true)
+  expect(config.linux_clipboard_selection).toBe("both")
   expect(config.keybinds.has("terminal.suspend")).toBe(true)
   expect(config.keybinds.has("session.list")).toBe(true)
   expect(config.cursor).toBeUndefined()
@@ -71,6 +75,7 @@ test("resolves overrides without mutating input", () => {
     theme: "custom",
     mouse: false,
     leader_timeout: 750,
+    linux_clipboard_selection: "primary",
     attention: {
       enabled: true,
       notifications: false,
@@ -88,6 +93,7 @@ test("resolves overrides without mutating input", () => {
     theme: "custom",
     mouse: false,
     leader_timeout: 750,
+    linux_clipboard_selection: "primary",
     attention: input.attention,
     cursor: { style: "block", blinking: false },
   })
