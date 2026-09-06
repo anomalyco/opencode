@@ -298,9 +298,10 @@ export const layer = Layer.effect(
       const registry = new Map(tools.definitions.map((tool) => [tool.name, tool]))
       // The definition objects we hand to hooks, mapped back to their tools. Hooks rename a
       // tool by moving its definition to a new key; recognizing the object recovers the tool.
+      // Nested schema edits must stay request-local, even when registrations share a schema.
       const given = new Map(
         tools.definitions.map(
-          (tool) => [{ description: tool.description, input: { ...tool.inputSchema } }, tool] as const,
+          (tool) => [{ description: tool.description, input: structuredClone(tool.inputSchema) }, tool] as const,
         ),
       )
       // Hooks mutate this record in place: edit descriptions and schemas, rename, or remove.
