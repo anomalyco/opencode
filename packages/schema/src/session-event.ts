@@ -176,8 +176,6 @@ export const Forked = Event.durable({
     boundary: SessionFork.Boundary,
     instructions: Instruction.Values.pipe(optional),
     instructionEntries: InstructionEntry.Snapshot.pipe(optional),
-    /** Unsettled messages omitted at fork admission, frozen for deterministic replay. */
-    excluded: Schema.Array(SessionMessage.ID).pipe(optional),
   },
 })
 export type Forked = typeof Forked.Type

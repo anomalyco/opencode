@@ -1,6 +1,6 @@
 export * as SessionProjector from "./projector.js"
 
-import { and, desc, eq, gt, gte, inArray, isNull, lt, lte, notInArray, or, sql } from "drizzle-orm"
+import { and, desc, eq, gt, gte, inArray, isNull, lt, lte, not, or, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema, Stream } from "effect"
 import path from "path"
 import { Database } from "../database/database.js"
@@ -14,7 +14,7 @@ import { SessionMessageUpdater } from "./message-updater.js"
 import { SessionInbox } from "./inbox.js"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { InstructionState } from "./instruction-state.js"
-import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
+import { SessionInboxTable, SessionMessageTable, SessionTable, unsettled } from "./sql.js"
 import { InstructionEntry } from "./instruction-entry.js"
 import { Slug } from "../util/slug.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -127,15 +127,12 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
   const end = boundary.seq + (event.data.boundary.type === "through" ? 1 : 0)
   const [copied] = yield* Timeline.rows(db, ranges, { where: lt(SessionMessageTable.seq, end), limit: 1 })
   const copiedSeq = copied?.seq
-  const excluded = event.data.excluded ?? []
-  const [unsettled] = excluded.length
-    ? yield* Timeline.rows(db, ranges, {
-        where: inArray(SessionMessageTable.id, [...excluded]),
-        order: "asc",
-        limit: 1,
-      })
-    : []
-  const base = yield* Timeline.prefix(db, ranges, Math.min(end, unsettled?.seq ?? end))
+  const [active] = yield* Timeline.rows(db, ranges, {
+    where: and(lt(SessionMessageTable.seq, end), unsettled(SessionMessageTable)),
+    order: "asc",
+    limit: 1,
+  })
+  const base = yield* Timeline.prefix(db, ranges, active?.seq ?? end)
   const timelineID = yield* Timeline.create(db, Timeline.root(event.data.sessionID), base)
 
   const stored = yield* db
@@ -176,13 +173,13 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
 
   // Active forks only copy the settled suffix after the first omitted message;
   // the preceding immutable prefix is shared.
-  let cursor = (unsettled?.seq ?? end) - 1
+  let cursor = (active?.seq ?? end) - 1
   while (cursor < (copiedSeq ?? -1)) {
     const rows = yield* Timeline.rows(db, ranges, {
       where: and(
         gt(SessionMessageTable.seq, cursor),
         lt(SessionMessageTable.seq, end),
-        excluded.length ? notInArray(SessionMessageTable.id, [...excluded]) : undefined,
+        not(unsettled(SessionMessageTable)),
       ),
       order: "asc",
       limit: ForkBatchSize,

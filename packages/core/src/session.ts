@@ -4,7 +4,7 @@ export * from "./session/schema.js"
 import { Effect, Layer, Schema, Context, Stream } from "effect"
 import { LLMClient } from "@opencode-ai/ai"
 import { ListAnchor } from "@opencode-ai/schema/session"
-import { and, eq, lte } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 import { Project } from "./project.js"
 import { Model } from "@opencode-ai/schema/model"
 import { Location } from "./location.js"
@@ -14,7 +14,7 @@ import { Bus } from "./bus.js"
 import { Instance } from "./instance/service.js"
 import { Database } from "./database/database.js"
 import { SessionProjector } from "./session/projector.js"
-import { SessionMessageTable, unsettled } from "./session/sql.js"
+import { SessionMessageTable } from "./session/sql.js"
 import { SessionSchema } from "./session/schema.js"
 import { RelativePath } from "./schema.js"
 import { Agent } from "@opencode-ai/schema/agent"
@@ -304,9 +304,6 @@ const layer = Layer.effect(
             messageID: input.boundary.messageID,
           })
         if (!boundary) return yield* new ForkEmptyError({ sessionID: input.sessionID })
-        const excluded = yield* Timeline.rows(db, ranges, {
-          where: and(lte(SessionMessageTable.seq, boundary.seq), unsettled(SessionMessageTable)),
-        })
         const sessionID = SessionSchema.ID.create()
         const inherited = yield* db
           .transaction(() =>
@@ -323,7 +320,6 @@ const layer = Layer.effect(
           sessionID,
           parentID: parent.id,
           boundary: { ...input.boundary, messageID: boundary.id },
-          ...(excluded.length ? { excluded: excluded.map((row) => row.id) } : {}),
           ...inherited,
         })
         return yield* result.get(sessionID).pipe(Effect.orDie)

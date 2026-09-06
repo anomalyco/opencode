@@ -522,7 +522,6 @@ export type SessionLogOutput =
               | { readonly [x: string & Brand.Brand<"Instruction.Key">]: string & Brand.Brand<"Instruction.Hash"> }
               | undefined
             readonly instructionEntries?: InstructionEntry.Snapshot | undefined
-            readonly excluded?: ReadonlyArray<SessionMessage.ID> | undefined
           }
         }
       | {
