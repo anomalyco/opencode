@@ -1,3 +1,4 @@
+import { Timeline } from "@opencode-ai/core/session/timeline"
 import { HttpRecorder } from "@opencode-ai/http-recorder"
 import { OpenAIChat } from "@opencode-ai/ai/protocols/openai-chat"
 import { Auth, LLMClient, type LLMClientService, RequestExecutor } from "@opencode-ai/ai/route"
@@ -204,6 +205,7 @@ describe("SessionRunnerLLM recorded", () => {
       yield* db
         .insert(SessionTable)
         .values({
+          timeline_id: yield* Timeline.create(db),
           id: sessionID,
           project_id: Project.ID.global,
           slug: "test",

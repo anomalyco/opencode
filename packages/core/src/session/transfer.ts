@@ -3,7 +3,7 @@ export * as SessionTransfer from "./transfer.js"
 import { SessionTransfer } from "@opencode-ai/schema/session-transfer"
 import { Tool } from "@opencode-ai/schema/tool"
 import { Skill } from "@opencode-ai/schema/skill"
-import { eq } from "drizzle-orm"
+import { eq, inArray } from "drizzle-orm"
 import { Clock, Context, DateTime, Effect, Layer, Schema } from "effect"
 import { map } from "effect/Array"
 import path from "path"
@@ -21,6 +21,7 @@ import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 import { SessionProjector } from "./projector.js"
 import { SessionMessageTable, SessionTable } from "./sql.js"
+import { Timeline } from "./timeline.js"
 
 export const Data = SessionTransfer.Data
 export type Data = SessionTransfer.Data
@@ -74,12 +75,31 @@ const layer = Layer.effect(
         const project = yield* projects.resolve(input.location.directory)
         yield* upsertProject(db, project).pipe(Effect.orDie)
         const importedAt = yield* Clock.currentTimeMillis
+        // Related exports may share message IDs. Imports materialize independent
+        // snapshots, so give colliding rows fresh identities instead of stealing ownership.
+        const ids = input.data.messages.map((message) => message.id)
+        const batches = Array.from({ length: Math.ceil(ids.length / 500) }, (_, index) =>
+          ids.slice(index * 500, (index + 1) * 500),
+        )
+        const existing = new Set(
+          (yield* Effect.forEach(batches, (batch) =>
+            db
+              .select({ id: SessionMessageTable.id })
+              .from(SessionMessageTable)
+              .where(inArray(SessionMessageTable.id, batch))
+              .all()
+              .pipe(Effect.orDie),
+          ))
+            .flat()
+            .map((row) => row.id),
+        )
         const messages = input.data.messages.filter(isSettled).map((message, index) => {
           const encoded = encodeMessage(message)
           const { id: _, type, ...data } = encoded
           return {
-            id: message.id,
+            id: existing.has(message.id) ? SessionMessage.ID.create() : message.id,
             session_id: sessionID,
+            timeline_id: Timeline.current(sessionID),
             type,
             seq: index + 1,
             time_created: DateTime.toEpochMillis(message.time.created),

@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "be60f352-8da1-40e1-8d70-dc41121cfbc5",
-  "prevIds": ["3fb67508-0196-4bae-b2bd-c08ece7583fd"],
+  "id": "685a01ff-9b49-4789-a8a6-f1b5779a866c",
+  "prevIds": ["be60f352-8da1-40e1-8d70-dc41121cfbc5"],
   "ddl": [
     {
       "name": "account_state",
@@ -70,6 +70,10 @@
     },
     {
       "name": "session_v2",
+      "entityType": "tables"
+    },
+    {
+      "name": "timeline",
       "entityType": "tables"
     },
     {
@@ -946,6 +950,16 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
+      "name": "timeline_id",
+      "entityType": "columns",
+      "table": "session_message"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
       "name": "type",
       "entityType": "columns",
       "table": "session_message"
@@ -1067,6 +1081,16 @@
       "default": null,
       "generated": null,
       "name": "id",
+      "entityType": "columns",
+      "table": "session_v2"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "timeline_id",
       "entityType": "columns",
       "table": "session_v2"
     },
@@ -1428,6 +1452,36 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
+      "table": "timeline"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "base_id",
+      "entityType": "columns",
+      "table": "timeline"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "base_seq",
+      "entityType": "columns",
+      "table": "timeline"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
       "table": "workspace"
     },
     {
@@ -1588,13 +1642,13 @@
       "table": "session_inbox"
     },
     {
-      "columns": ["session_id"],
-      "tableTo": "session_v2",
+      "columns": ["timeline_id"],
+      "tableTo": "timeline",
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "fk_session_message_session_id_session_v2_id_fk",
+      "name": "fk_session_message_timeline_id_timeline_id_fk",
       "entityType": "fks",
       "table": "session_message"
     },
@@ -1610,6 +1664,17 @@
       "table": "session_pending"
     },
     {
+      "columns": ["timeline_id"],
+      "tableTo": "timeline",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_session_v2_timeline_id_timeline_id_fk",
+      "entityType": "fks",
+      "table": "session_v2"
+    },
+    {
       "columns": ["project_id"],
       "tableTo": "project",
       "columnsTo": ["id"],
@@ -1619,6 +1684,17 @@
       "name": "fk_session_v2_project_id_project_id_fk",
       "entityType": "fks",
       "table": "session_v2"
+    },
+    {
+      "columns": ["base_id"],
+      "tableTo": "timeline",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_timeline_base_id_timeline_id_fk",
+      "entityType": "fks",
+      "table": "timeline"
     },
     {
       "columns": ["project_id"],
@@ -1760,6 +1836,13 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
+      "name": "timeline_pk",
+      "table": "timeline",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
       "name": "workspace_pk",
       "table": "workspace",
       "entityType": "pks"
@@ -1877,10 +1960,68 @@
           "isExpression": false
         }
       ],
-      "isUnique": true,
+      "isUnique": false,
       "where": null,
       "origin": "manual",
       "name": "session_message_session_seq_idx",
+      "entityType": "indexes",
+      "table": "session_message"
+    },
+    {
+      "columns": [
+        {
+          "value": "timeline_id",
+          "isExpression": false
+        },
+        {
+          "value": "seq",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "session_message_timeline_seq_idx",
+      "entityType": "indexes",
+      "table": "session_message"
+    },
+    {
+      "columns": [
+        {
+          "value": "timeline_id",
+          "isExpression": false
+        },
+        {
+          "value": "type",
+          "isExpression": false
+        },
+        {
+          "value": "seq",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_message_timeline_type_seq_idx",
+      "entityType": "indexes",
+      "table": "session_message"
+    },
+    {
+      "columns": [
+        {
+          "value": "timeline_id",
+          "isExpression": false
+        },
+        {
+          "value": "seq",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": "((\"session_message\".\"type\" = 'assistant' AND json_extract(\"session_message\".\"data\", '$.time.completed') IS NULL)\n    OR (\"session_message\".\"type\" IN ('shell', 'compaction') AND json_extract(\"session_message\".\"data\", '$.status') = 'running'))",
+      "origin": "manual",
+      "name": "session_message_unsettled_idx",
       "entityType": "indexes",
       "table": "session_message"
     },

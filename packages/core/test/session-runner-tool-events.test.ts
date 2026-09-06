@@ -1,3 +1,4 @@
+import { Timeline } from "@opencode-ai/core/session/timeline"
 import { expect, test } from "bun:test"
 import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect"
 import { eq } from "drizzle-orm"
@@ -148,7 +149,14 @@ testEffect(
       .run()
     yield* database.db
       .insert(SessionTable)
-      .values({ id: sessionID, project_id: Project.ID.global, slug: "publish", directory: "/project", version: "test" })
+      .values({
+        timeline_id: yield* Timeline.create(database.db),
+        id: sessionID,
+        project_id: Project.ID.global,
+        slug: "publish",
+        directory: "/project",
+        version: "test",
+      })
       .run()
     const publisher = createLLMEventPublisher(
       {

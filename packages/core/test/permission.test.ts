@@ -1,3 +1,4 @@
+import { Timeline } from "@opencode-ai/core/session/timeline"
 import { describe, expect } from "bun:test"
 import { Cause, Deferred, Effect, Fiber, Layer } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
@@ -43,6 +44,7 @@ function setup(rules: Permission.Ruleset = [], sessionID = Session.ID.make("ses_
     yield* db
       .insert(SessionTable)
       .values({
+        timeline_id: yield* Timeline.create(db),
         id: sessionID,
         project_id: Project.ID.global,
         slug: "test",

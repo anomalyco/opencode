@@ -58,7 +58,7 @@ export const make = Effect.fn("Session.make")(function* () {
     return session
   })
   const message = Effect.fn("Session.message")(function* (sessionID: SessionSchema.ID, messageID: SessionMessage.ID) {
-    const stored = yield* store.message(messageID)
+    const stored = yield* store.message(messageID, sessionID)
     return stored?.sessionID === sessionID ? stored.message : undefined
   })
   const updateMessage = Effect.fn("Session.updateMessage")(function* (

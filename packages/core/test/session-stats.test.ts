@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { Timeline } from "@opencode-ai/core/session/timeline"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Event } from "@opencode-ai/schema/event"
 import { Model } from "@opencode-ai/schema/model"
@@ -44,9 +45,17 @@ describe("SessionStats", () => {
       yield* db
         .insert(SessionTable)
         .values([
-          { id: sessionID, project_id: projectID, slug: "root", directory: "/stats", version: "test" },
+          {
+            id: sessionID,
+            timeline_id: yield* Timeline.create(db),
+            project_id: projectID,
+            slug: "root",
+            directory: "/stats",
+            version: "test",
+          },
           {
             id: childID,
+            timeline_id: yield* Timeline.create(db),
             project_id: projectID,
             parent_id: sessionID,
             slug: "child",
@@ -55,6 +64,7 @@ describe("SessionStats", () => {
           },
           {
             id: forkID,
+            timeline_id: yield* Timeline.create(db),
             project_id: projectID,
             fork_session_id: sessionID,
             slug: "fork",
@@ -62,8 +72,22 @@ describe("SessionStats", () => {
             version: "test",
             time_created: Date.UTC(2026, 0, 4),
           },
-          { id: usageOnlyID, project_id: projectID, slug: "usage", directory: "/stats", version: "test" },
-          { id: otherSessionID, project_id: otherProjectID, slug: "other", directory: "/other", version: "test" },
+          {
+            id: usageOnlyID,
+            timeline_id: yield* Timeline.create(db),
+            project_id: projectID,
+            slug: "usage",
+            directory: "/stats",
+            version: "test",
+          },
+          {
+            id: otherSessionID,
+            timeline_id: yield* Timeline.create(db),
+            project_id: otherProjectID,
+            slug: "other",
+            directory: "/other",
+            version: "test",
+          },
         ])
         .run()
         .pipe(Effect.orDie)
@@ -288,12 +312,16 @@ function assistant(
   })
 }
 
-function messageRow(
-  sessionID: Session.ID,
-  seq: number,
-  message: SessionMessage.Info,
-): typeof SessionMessageTable.$inferInsert {
+function messageRow(sessionID: Session.ID, seq: number, message: SessionMessage.Info) {
   const encoded = encodeMessage(message)
   const { id, type, ...data } = encoded
-  return { id: SessionMessage.ID.make(id), session_id: sessionID, type, seq, time_created: encoded.time.created, data }
+  return {
+    id: SessionMessage.ID.make(id),
+    session_id: sessionID,
+    timeline_id: Timeline.current(sessionID),
+    type,
+    seq,
+    time_created: encoded.time.created,
+    data,
+  }
 }
