@@ -103,7 +103,7 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
     })
 
     allowRendererPermissions(win)
-    wireWindowRecovery(win, id, () => relaunchHandler())
+    wireWindowRecovery(win, id, () => relaunchHandler(), registry.isQuitting)
     wireNavigationPolicy(win, (url) => runFork(openExternalURL(url)))
     wireRendererHeaders(win)
     state.manage(win)

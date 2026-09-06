@@ -274,6 +274,13 @@ function initConsoleTransport() {
     return
   }
 
+  for (const stream of [process.stdout, process.stderr]) {
+    stream.on("error", (error) => {
+      if (!isBrokenPipe(error)) throw error
+      log.transports.console.level = false
+    })
+  }
+
   const writeConsole = log.transports.console.writeFn.bind(log.transports.console)
   log.transports.console.writeFn = (options) => {
     try {

@@ -3,6 +3,7 @@ import type { BrowserWindow } from "electron"
 import { Effect } from "effect"
 import { DesktopLogging, scoped } from "../native/logging"
 import { nativeT } from "../native/translations"
+import { isRendererUrl } from "./protocol"
 import { safeWindowURL } from "./state"
 import { makeUnresponsiveSampler } from "./unresponsive"
 
@@ -13,7 +14,7 @@ export const makeWindowRecovery = Effect.gen(function* () {
   const logging = yield* DesktopLogging.Service
   const createUnresponsiveSampler = yield* makeUnresponsiveSampler
 
-  function wireWindowRecovery(win: BrowserWindow, name: string, relaunch: () => void) {
+  function wireWindowRecovery(win: BrowserWindow, name: string, relaunch: () => void, isQuitting: () => boolean) {
     let showing = false
     const sampler = createUnresponsiveSampler(win, name)
 
@@ -40,10 +41,10 @@ export const makeWindowRecovery = Effect.gen(function* () {
     }
 
     const show = async (message: string, detail: string, wait: boolean) => {
-      if (showing || win.isDestroyed()) return
+      if (showing || win.isDestroyed() || isQuitting()) return
       showing = true
       try {
-        while (!win.isDestroyed()) {
+        while (!win.isDestroyed() && !isQuitting()) {
           const actions: { id: RecoveryAction; label: string }[] = wait
             ? [
                 { id: "relaunch", label: nativeT("desktop.recovery.action.relaunch") },
@@ -78,6 +79,11 @@ export const makeWindowRecovery = Effect.gen(function* () {
       validatedURL: string,
       isMainFrame: boolean,
     ) => {
+      if (isQuitting()) return
+      if (isMainFrame && errorCode === -102 && process.env.ELECTRON_RENDERER_URL && isRendererUrl(validatedURL)) {
+        app.quit()
+        return
+      }
       runFork(
         scoped(
           "window",
@@ -113,6 +119,7 @@ export const makeWindowRecovery = Effect.gen(function* () {
     })
     win.webContents.on("render-process-gone", (_event, details) => {
       sampler.stopAndFlush()
+      if (isQuitting()) return
       runFork(
         scoped(
           "window",
@@ -130,6 +137,7 @@ export const makeWindowRecovery = Effect.gen(function* () {
       )
     })
     win.on("unresponsive", () => {
+      if (isQuitting()) return
       runFork(
         scoped("window", Effect.logError("renderer unresponsive", { window: name, currentURL: safeWindowURL(win) })),
       )
