@@ -33,11 +33,19 @@ function convertToLineEnding(text: string, ending: "\n" | "\r\n"): string {
 }
 
 const locks = new Map<string, Semaphore.Semaphore>()
+const MAX_LOCKS = 512
 
 function lock(filePath: string) {
   const resolvedFilePath = FSUtil.resolve(filePath)
   const hit = locks.get(resolvedFilePath)
   if (hit) return hit
+
+  // Evict oldest entry when the map reaches its cap to prevent unbounded growth
+  // in long-running sessions that edit many distinct files.
+  if (locks.size >= MAX_LOCKS) {
+    const oldest = locks.keys().next().value
+    if (oldest) locks.delete(oldest)
+  }
 
   const next = Semaphore.makeUnsafe(1)
   locks.set(resolvedFilePath, next)
@@ -221,24 +229,36 @@ const SINGLE_CANDIDATE_SIMILARITY_THRESHOLD = 0.65
 const MULTIPLE_CANDIDATES_SIMILARITY_THRESHOLD = 0.65
 
 /**
- * Levenshtein distance algorithm implementation
+ * Levenshtein distance using two-row optimization.
+ * Memory: O(min(n, m)) instead of the full O(n × m) matrix.
+ * Called per-line in BlockAnchorReplacer, so allocation pressure matters.
  */
-function levenshtein(a: string, b: string): number {
-  // Handle empty strings
-  if (a === "" || b === "") {
-    return Math.max(a.length, b.length)
+export function levenshtein(a: string, b: string): number {
+  if (a === "" || b === "") return Math.max(a.length, b.length)
+
+  // Work along the shorter string to minimise the row allocation.
+  if (a.length < b.length) {
+    const tmp = a
+    a = b
+    b = tmp
   }
-  const matrix = Array.from({ length: a.length + 1 }, (_, i) =>
-    Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)),
-  )
+
+  const bLen = b.length
+  let prev = Array.from({ length: bLen + 1 }, (_, j) => j)
+  let curr = new Array<number>(bLen + 1)
 
   for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) {
+    curr[0] = i
+    for (let j = 1; j <= bLen; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1
-      matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost)
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
     }
+    const swap = prev
+    prev = curr
+    curr = swap
   }
-  return matrix[a.length][b.length]
+
+  return prev[bLen]
 }
 
 export const SimpleReplacer: Replacer = function* (_content, find) {
