@@ -42,7 +42,7 @@ export const externalDirectoryPermission = (input: ExternalDirectoryAuthorizatio
 
 export interface Target {
   /** Absolute lexical path. */
-  readonly absolute: string
+  readonly absolute: AbsolutePath
   /** Permission resource: Location-relative for internal paths, absolute for external paths. */
   readonly resource: string
   readonly externalDirectory?: ExternalDirectoryAuthorization
@@ -82,7 +82,7 @@ const layer = Layer.effect(
     const location = yield* Location.Service
 
     const resolve = Effect.fnUntraced(function* (input: ResolveInput) {
-      const absolute = resolvePath(location.directory, input.path)
+      const absolute = AbsolutePath.make(resolvePath(location.directory, input.path))
       const worktree = path.resolve(location.project.directory)
       const internal =
         FSUtil.contains(location.directory, absolute) ||
@@ -110,10 +110,7 @@ const layer = Layer.effect(
           directory: externalDirectory,
           resource: externalResource,
           save: slash(
-            path.join(
-              (yield* Project.root(fs, AbsolutePath.make(externalDirectory))) ?? externalDirectory,
-              "*",
-            ),
+            path.join((yield* Project.root(fs, AbsolutePath.make(externalDirectory))) ?? externalDirectory, "*"),
           ),
         },
       } satisfies Target

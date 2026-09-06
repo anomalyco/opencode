@@ -31,6 +31,7 @@ import { ConfigWorktreePlugin } from "../config/plugin/worktree.js"
 import { Worktree } from "../worktree.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
+import { FileAccess } from "../file-access.js"
 import { FileMutation } from "../file-mutation.js"
 import { Formatter } from "../formatter.js"
 import { Form } from "../form.js"
@@ -102,6 +103,7 @@ const services = [
   Credential.Service,
   Bus.Service,
   Environment.Service,
+  FileAccess.Service,
   FileMutation.Service,
   Formatter.Service,
   LocationWatcherPolicy.Service,
@@ -151,6 +153,7 @@ export const requirements = LayerNode.group([
   Credential.node,
   Bus.node,
   Environment.node,
+  FileAccess.node,
   FileMutation.node,
   Formatter.node,
   LocationWatcherPolicy.node,

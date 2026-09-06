@@ -13,6 +13,7 @@ import { Session } from "@opencode-ai/core/session"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/util/global"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
+import { FileAccess } from "@opencode-ai/core/file-access"
 import { location } from "./fixture/location"
 import { Tool } from "@opencode-ai/core/tool"
 import { ReadTool } from "@opencode-ai/core/tool/plugin/read"
@@ -30,6 +31,7 @@ const readToolNode = makeLocationNode({
   deps: [
     Tool.node,
     ReadToolFileSystem.node,
+    FileAccess.node,
     LocationMutation.node,
     Image.node,
     Permission.node,
@@ -116,7 +118,7 @@ const mutation = Layer.succeed(
   LocationMutation.Service,
   LocationMutation.Service.of({
     resolve: (input) => {
-      const absolute = path.resolve(process.cwd(), input.path)
+      const absolute = AbsolutePath.make(path.resolve(process.cwd(), input.path))
       const external = path.isAbsolute(input.path) && !FSUtil.contains(process.cwd(), absolute)
       const resource = external ? absolute.replaceAll("\\", "/") : path.relative(process.cwd(), absolute) || "."
       const directory = path.dirname(absolute)
@@ -718,6 +720,32 @@ describe("ReadTool", () => {
         AbsolutePath.make(recoveredAbsolute),
       ])
       expect(listCalls).toEqual([AbsolutePath.make(process.cwd())])
+    }),
+  )
+
+  it.effect("recovers an external filename without repeating directory approval", () =>
+    Effect.gen(function* () {
+      const directory = path.join(path.parse(process.cwd()).root, "external-read")
+      const requested = path.join(directory, "report final.txt")
+      const recovered = path.join(directory, "report\u202ffinal.txt")
+      directoryEntryDetails = [{ name: path.basename(recovered), type: "file" }]
+      readOverride = (input) =>
+        input === requested ? Effect.fail(new Environment.NotFound({ path: requested })) : Effect.succeed(readResult)
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-external-recovery", name: "read", input: { path: requested } },
+        }),
+      ).toMatchObject({ status: "completed" })
+      expect(assertions).toMatchObject([
+        { action: "external_directory", resources: [path.join(directory, "*").replaceAll("\\", "/")] },
+        { action: "read", resources: [requested.replaceAll("\\", "/")] },
+        { action: "read", resources: [recovered.replaceAll("\\", "/")] },
+      ])
+      expect(readCalls.map((call) => call.input)).toEqual([AbsolutePath.make(requested), AbsolutePath.make(recovered)])
     }),
   )
 
