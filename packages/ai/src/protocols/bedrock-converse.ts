@@ -235,7 +235,7 @@ const lowerTools = (
   const result: BedrockTool[] = []
   for (const tool of tools) {
     result.push(lowerToolSpec(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, compatibility)))
-    const cachePoint = BedrockCache.block(breakpoints, tool.cache)
+    const cachePoint = BedrockCache.block(breakpoints, tool.cache, "tools")
     if (cachePoint) result.push(cachePoint)
   }
   return result
@@ -415,10 +415,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
 
 // System prompts share the cache-point convention: emit the text block, then
 // optionally a positional `cachePoint` marker.
-const lowerSystem = (
-  breakpoints: BedrockCache.Breakpoints,
-  system: ReadonlyArray<LLMRequest["system"][number]>,
-) => {
+const lowerSystem = (breakpoints: BedrockCache.Breakpoints, system: ReadonlyArray<LLMRequest["system"][number]>) => {
   const content = system
     .filter((part) => part.text.length > 0)
     .flatMap((part) => textWithCache(breakpoints, part.text, part.cache))
@@ -429,9 +426,9 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
   const flattened = ProviderShared.flattenToolRequest(request)
   const generation = request.generation
-  // Bedrock-Claude shares Anthropic's 4-breakpoint cap. Spend the budget in
+  // Supported models share a 4-breakpoint cap. Spend the budget in
   // tools → system → messages order to favour the highest-impact prefixes.
-  const breakpoints = BedrockCache.breakpoints()
+  const breakpoints = BedrockCache.breakpoints(request.model.id)
   const toolConfig = (() => {
     if (flattened.tools.length === 0) return undefined
     return {
