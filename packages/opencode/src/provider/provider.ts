@@ -31,8 +31,27 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { OpenAIChat } from "@opencode-ai/llm/protocols/openai-chat"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
+const OPENAI_CHAT_PACKAGES = new Set(["@ai-sdk/openai", "@ai-sdk/azure", "@ai-sdk/openai-compatible"])
+
+export function normalizeOpenAIChatTokenLimit(npm: string, init: BunFetchRequestInit) {
+  if (!OPENAI_CHAT_PACKAGES.has(npm) || typeof init.body !== "string") return init
+  const body = JSON.parse(init.body)
+  if (
+    !isRecord(body) ||
+    typeof body.model !== "string" ||
+    !OpenAIChat.usesMaxCompletionTokens(body.model) ||
+    typeof body.max_tokens !== "number" ||
+    body.max_completion_tokens !== undefined
+  )
+    return init
+
+  const normalized: Record<string, unknown> = { ...body, max_completion_tokens: body.max_tokens }
+  delete normalized.max_tokens
+  return { ...init, body: JSON.stringify(normalized) }
+}
 
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
@@ -1799,7 +1818,7 @@ const layer = Layer.effect(
 
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
-          const opts = init ?? {}
+          const opts = normalizeOpenAIChatTokenLimit(model.api.npm, init ?? {})
           const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
           const headerTimeoutMs = headerTimeout === false ? undefined : headerTimeout
           const headerTimeoutCtl = typeof headerTimeoutMs === "number" ? timeoutController(headerTimeoutMs) : undefined
