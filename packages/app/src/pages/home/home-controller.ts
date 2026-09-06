@@ -74,6 +74,7 @@ export function createHomeController() {
       selected: selectedProject,
       newSession: newSessionProject,
       forServer: (conn: ServerConnection.Any) => global.ensureServerCtx(conn).projects.list(),
+      closedForServer: (conn: ServerConnection.Any) => global.ensureServerCtx(conn).projects.recentlyClosed(),
       select: (conn: ServerConnection.Any, directory: string) => {
         const key = ServerConnection.key(conn)
         if (global.servers.health[key]?.healthy === false) return

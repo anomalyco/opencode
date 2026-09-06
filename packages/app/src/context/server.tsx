@@ -7,17 +7,20 @@ import { ServerScope } from "@/utils/server-scope"
 
 type StoredProject = { worktree: string; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
+type ClosedFlag = "hiddenClosed" | "archivedClosed"
 type ServerProjectState = {
   projects: Record<string, StoredProject[]>
   lastProject: Record<string, string>
   recentlyClosed: Record<string, string[]>
-}
+} & Partial<Record<ClosedFlag, Record<string, string[]>>>
+const CLOSED_FLAGS: ClosedFlag[] = ["hiddenClosed", "archivedClosed"]
 const HEALTH_POLL_INTERVAL_MS = 10_000
-// The store retains more history than is displayed. Consumers filter recently closed entries
-// against the live project list (dropping deleted projects) and then cap the visible count via
-// RECENTLY_CLOSED_DISPLAY_LIMIT. Retaining extra history ensures entries that are temporarily
-// filtered out do not evict still-visible ones from the persisted store.
-const RECENTLY_CLOSED_HISTORY_LIMIT = 16
+// Recently closed history is stored most recent first. Consumers drop entries whose project no
+// longer exists and show RECENTLY_CLOSED_DISPLAY_LIMIT rows until the list is expanded, so the
+// store keeps more than is displayed and entries that are temporarily filtered out never evict
+// visible ones. Hidden and archived flags are subsets of that history, stored as raw worktree
+// strings and matched via pathKey; they are pruned whenever an entry leaves history.
+export const RECENTLY_CLOSED_HISTORY_LIMIT = 50
 export const RECENTLY_CLOSED_DISPLAY_LIMIT = 5
 
 export function normalizeServerUrl(input: string) {
@@ -49,7 +52,11 @@ export function migrateCanonicalLocalServerState(value: unknown, canonicalLocalS
   const lastProject = isRecord(value.lastProject) ? value.lastProject : undefined
   const previousProjects = projects?.[canonicalLocalServer]
   const previousLastProject = lastProject?.[canonicalLocalServer]
-  if (!Array.isArray(previousProjects) && typeof previousLastProject !== "string") return value
+  const closed = (["recentlyClosed", ...CLOSED_FLAGS] as const).flatMap((key) => {
+    const bucket = value[key]
+    return isRecord(bucket) && Array.isArray(bucket[canonicalLocalServer]) ? [{ key, bucket }] : []
+  })
+  if (!Array.isArray(previousProjects) && typeof previousLastProject !== "string" && closed.length === 0) return value
 
   const next = { ...value }
   if (projects && Array.isArray(previousProjects)) {
@@ -73,6 +80,21 @@ export function migrateCanonicalLocalServerState(value: unknown, canonicalLocalS
     delete nextLastProject[canonicalLocalServer]
     next.lastProject = nextLastProject
   }
+  // Closed-project buckets are worktree lists keyed by scope. Local entries win, duplicates are
+  // matched via pathKey and anything that is not a string is dropped because consumers key on it.
+  for (const { key, bucket } of closed) {
+    const strings = (items: unknown) =>
+      Array.isArray(items) ? items.filter((item): item is string => typeof item === "string") : []
+    const seen = new Set<string>()
+    const local = [...strings(bucket.local), ...strings(bucket[canonicalLocalServer])].filter((item) => {
+      if (seen.has(pathKey(item))) return false
+      seen.add(pathKey(item))
+      return true
+    })
+    const nextBucket: Record<string, unknown> = { ...bucket, local }
+    delete nextBucket[canonicalLocalServer]
+    next[key] = nextBucket
+  }
   return next
 }
 
@@ -84,6 +106,7 @@ export function createServerProjects<T extends ServerProjectState>(input: {
   const setStore = input.setStore as unknown as SetStoreFunction<ServerProjectState>
   const current = () => input.store.projects[input.scope()] ?? []
   const currentClosed = () => input.store.recentlyClosed?.[input.scope()] ?? []
+  const flagged = (flag: ClosedFlag) => input.store[flag]?.[input.scope()] ?? []
   const remove = (directory: string) => {
     setStore(
       "projects",
@@ -91,34 +114,65 @@ export function createServerProjects<T extends ServerProjectState>(input: {
       current().filter((project) => project.worktree !== directory),
     )
   }
+  const has = (items: string[], directory: string) => {
+    const key = pathKey(directory)
+    return items.some((worktree) => pathKey(worktree) === key)
+  }
+  const without = (items: string[], directory: string) => {
+    const key = pathKey(directory)
+    return items.filter((worktree) => pathKey(worktree) !== key)
+  }
+  // Flags only make sense for entries that are still in history, so every history write prunes them.
+  const setClosed = (closed: string[]) => {
+    const scope = input.scope()
+    const keys = new Set(closed.map((worktree) => pathKey(worktree)))
+    batch(() => {
+      setStore("recentlyClosed", scope, closed)
+      for (const flag of CLOSED_FLAGS) {
+        setStore(
+          flag,
+          scope,
+          flagged(flag).filter((worktree) => keys.has(pathKey(worktree))),
+        )
+      }
+    })
+  }
+  const setFlag = (flag: ClosedFlag, directory: string, value: boolean) => {
+    const items = flagged(flag)
+    if (has(items, directory) === value) return
+    if (value && !has(currentClosed(), directory)) return
+    setStore(flag, input.scope(), value ? [...items, directory] : without(items, directory))
+  }
   return {
     list: current,
     recentlyClosed: currentClosed,
+    hiddenClosed: () => flagged("hiddenClosed"),
+    archivedClosed: () => flagged("archivedClosed"),
+    isHiddenClosed: (directory: string) => has(flagged("hiddenClosed"), directory),
+    isArchivedClosed: (directory: string) => has(flagged("archivedClosed"), directory),
     remove,
     open(directory: string) {
-      const scope = input.scope()
-      const key = pathKey(directory)
-      const closed = currentClosed()
-      if (closed.some((worktree) => pathKey(worktree) === key)) {
-        setStore(
-          "recentlyClosed",
-          scope,
-          closed.filter((worktree) => pathKey(worktree) !== key),
-        )
-      }
+      if (has(currentClosed(), directory)) setClosed(without(currentClosed(), directory))
       if (current().some((project) => project.worktree === directory)) return
-      setStore("projects", scope, [{ worktree: directory, expanded: true }, ...current()])
+      setStore("projects", input.scope(), [{ worktree: directory, expanded: true }, ...current()])
     },
     // User-initiated close: removes the project and records it in recently closed.
     // Internal, non-user removals (e.g. sandbox/worktree normalization) should use remove().
+    // Re-closing a project surfaces it again as a fresh, unflagged entry at the top of history.
     close(directory: string) {
-      remove(directory)
-      const key = pathKey(directory)
-      const closed = [directory, ...currentClosed().filter((worktree) => pathKey(worktree) !== key)].slice(
-        0,
-        RECENTLY_CLOSED_HISTORY_LIMIT,
-      )
-      setStore("recentlyClosed", input.scope(), closed)
+      batch(() => {
+        remove(directory)
+        for (const flag of CLOSED_FLAGS) setFlag(flag, directory, false)
+        setClosed([directory, ...without(currentClosed(), directory)].slice(0, RECENTLY_CLOSED_HISTORY_LIMIT))
+      })
+    },
+    hideClosed: (directory: string) => setFlag("hiddenClosed", directory, true),
+    unhideClosed: (directory: string) => setFlag("hiddenClosed", directory, false),
+    archiveClosed: (directory: string) => setFlag("archivedClosed", directory, true),
+    unarchiveClosed: (directory: string) => setFlag("archivedClosed", directory, false),
+    // Forget a closed entry. This only edits local history; nothing on disk is touched.
+    removeClosed(directory: string) {
+      setClosed(without(currentClosed(), directory))
     },
     expand(directory: string) {
       const index = current().findIndex((project) => project.worktree === directory)
@@ -270,6 +324,8 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
         recentlyClosed: {} as Record<string, string[]>,
+        hiddenClosed: {} as Record<string, string[]>,
+        archivedClosed: {} as Record<string, string[]>,
       }),
     )
 
