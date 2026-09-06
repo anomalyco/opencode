@@ -182,6 +182,7 @@ export function makeACPFixture(options: FixtureOptions = {}) {
       if (request.path === "/api/skill") {
         return Response.json({ location, data: options.skills ?? [verifySkill] })
       }
+      if (request.path === "/api/preferences") return Response.json([])
       return new Response(null, { status: 404 })
     },
   })

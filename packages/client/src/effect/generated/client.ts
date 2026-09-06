@@ -250,6 +250,13 @@ import type {
   WorkspaceCreateOutput,
   WorkspaceDestroyInput,
   WorkspaceDestroyOutput,
+  PreferencesListOutput,
+  PreferencesGetInput,
+  PreferencesGetOutput,
+  PreferencesSetInput,
+  PreferencesSetOutput,
+  PreferencesResetInput,
+  PreferencesResetOutput,
   VcsGetInput,
   VcsGetOutput,
   VcsBaseInput,
@@ -1508,6 +1515,36 @@ const adaptGroupWorkspace = (raw: RawClient["server.workspace"]) => ({
   destroy: EndpointWorkspaceDestroy(raw),
 })
 
+const EndpointPreferencesList = (raw: RawClient["server.preferences"]) => () =>
+  preserveEffect<PreferencesListOutput>()(raw["preferences.list"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointPreferencesGet = (raw: RawClient["server.preferences"]) => (input: PreferencesGetInput) =>
+  preserveEffect<PreferencesGetOutput>()(
+    raw["preferences.get"]({ params: { kind: input["kind"], id: input["id"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointPreferencesSet = (raw: RawClient["server.preferences"]) => (input: PreferencesSetInput) =>
+  preserveEffect<PreferencesSetOutput>()(
+    raw["preferences.set"]({
+      params: { kind: input["kind"], id: input["id"] },
+      payload: { state: input["state"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointPreferencesReset = (raw: RawClient["server.preferences"]) => (input: PreferencesResetInput) =>
+  preserveEffect<PreferencesResetOutput>()(
+    raw["preferences.reset"]({ params: { kind: input["kind"], id: input["id"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const adaptGroupPreferences = (raw: RawClient["server.preferences"]) => ({
+  list: EndpointPreferencesList(raw),
+  get: EndpointPreferencesGet(raw),
+  set: EndpointPreferencesSet(raw),
+  reset: EndpointPreferencesReset(raw),
+})
+
 const EndpointVcsGet = (raw: RawClient["server.vcs"]) => (input?: VcsGetInput) =>
   preserveEffect<VcsGetOutput>()(
     raw["vcs.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1615,6 +1652,7 @@ const adaptClient = (raw: RawClient) => ({
   reference: adaptGroupReference(raw["server.reference"]),
   worktree: adaptGroupWorktree(raw["server.worktree"]),
   workspace: adaptGroupWorkspace(raw["server.workspace"]),
+  preferences: adaptGroupPreferences(raw["server.preferences"]),
   vcs: adaptGroupVcs(raw["server.vcs"]),
   debug: adaptGroupDebug(raw["server.debug"]),
   migration: adaptGroupMigration(raw["server.migration"]),

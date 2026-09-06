@@ -8,6 +8,7 @@ import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { Skill } from "@opencode-ai/core/skill"
+import { Preferences } from "@opencode-ai/core/preferences"
 import { SkillTool } from "@opencode-ai/core/tool/plugin/skill"
 import { Tool } from "@opencode-ai/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
@@ -28,6 +29,45 @@ const skillToolNode = makeLocationNode({
 const sessionID = Session.ID.make("ses_skill_tool_test")
 
 describe("SkillTool", () => {
+  it.effect("the registered skill tool observes preference changes at execution", () =>
+    Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const skills = yield* Skill.Service
+      const preferences = yield* Preferences.Service
+      const info = Skill.Info.make({
+        id: Skill.ID.make("effect"),
+        name: Skill.Name.make("Effect"),
+        content: "Use Effect",
+        location: AbsolutePath.make("/skills/effect.md"),
+      })
+      yield* skills.transform((editor) => editor.add(info))
+      const target = { kind: "skill", id: info.id } as const
+      yield* preferences.set(target, "disabled")
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-disabled", name: "skill", input: { id: info.id } },
+        }),
+      ).toMatchObject({ status: "error", error: { message: expect.stringContaining("is disabled") } })
+      yield* preferences.set(target, "enabled")
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-enabled", name: "skill", input: { id: info.id } },
+        }),
+      ).toMatchObject({ status: "completed", output: { name: "Effect" } })
+    }).pipe(
+      Effect.provide(
+        AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode, Skill.node, Preferences.node]), [
+          Permission.node.replace(permissionLayer({ assert: () => Effect.void })),
+          Image.node.replace(imagePassthrough),
+        ]),
+      ),
+    ),
+  )
+
   it.live("lists available skills, authorizes the selected ID, and loads model-facing content", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

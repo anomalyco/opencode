@@ -25,6 +25,7 @@ describe("acp service", () => {
         if (url.pathname === "/api/command")
           return Response.json({ location, data: [{ name: "review", template: "" }] })
         if (url.pathname === "/api/skill") return Response.json({ location, data: [skill] })
+        if (url.pathname === "/api/preferences") return Response.json([])
         if (url.pathname === "/api/session" && request.method === "POST") return Response.json({ data: session })
         if (url.pathname === "/api/mcp/docs" && request.method === "PUT") return new Response(null, { status: 204 })
         return new Response(null, { status: 404 })

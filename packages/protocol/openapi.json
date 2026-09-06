@@ -2150,11 +2150,18 @@
             }
           },
           "409": {
-            "description": "ConflictError",
+            "description": "ConflictError | SkillDisabledError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConflictErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SkillDisabledErrorEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -2412,6 +2419,16 @@
                       "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SkillDisabledError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillDisabledErrorEncoded"
                 }
               }
             }
@@ -9262,7 +9279,7 @@
             }
           }
         },
-        "description": "Retrieve currently registered skills.",
+        "description": "Retrieve all registered skill definitions. Activation overrides are available through the preferences API.",
         "summary": "List skills"
       }
     },
@@ -12517,6 +12534,237 @@
         },
         "description": "Make a workspace not exist. This operation is idempotent: an already-missing workspace succeeds with `destroyed: false`, while a workspace removed by this request returns `destroyed: true`.",
         "summary": "Destroy workspace"
+      }
+    },
+    "/api/preferences": {
+      "get": {
+        "tags": ["preferences"],
+        "operationId": "preferences.list",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Preferences.Entry"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List explicit global activation preferences. Domains own their defaults and availability rules.",
+        "summary": "List preference overrides"
+      }
+    },
+    "/api/preferences/{kind}/{id}": {
+      "get": {
+        "tags": ["preferences"],
+        "operationId": "preferences.get",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "enum": ["skill"]
+            },
+            "required": true
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Preferences.Entry"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read one explicit activation override, or null when the domain default applies.",
+        "summary": "Get preference override"
+      },
+      "put": {
+        "tags": ["preferences"],
+        "operationId": "preferences.set",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "enum": ["skill"]
+            },
+            "required": true
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Persist an explicit activation preference across all projects and sessions on this server.",
+        "summary": "Set preference override",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "$ref": "#/components/schemas/Preferences.State"
+                  }
+                },
+                "required": ["state"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["preferences"],
+        "operationId": "preferences.reset",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "enum": ["skill"]
+            },
+            "required": true
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Remove the explicit preference so the target follows its domain default again.",
+        "summary": "Reset preference override"
       }
     },
     "/api/vcs": {
@@ -17108,6 +17356,37 @@
           }
         ]
       },
+      "Preferences.Entry": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "$ref": "#/components/schemas/Preferences.Target"
+          },
+          "state": {
+            "$ref": "#/components/schemas/Preferences.State"
+          }
+        },
+        "required": ["target", "state"],
+        "additionalProperties": false
+      },
+      "Preferences.State": {
+        "type": "string",
+        "enum": ["enabled", "disabled"]
+      },
+      "Preferences.Target": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["skill"]
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "id"],
+        "additionalProperties": false
+      },
       "Project": {
         "type": "object",
         "properties": {
@@ -19419,6 +19698,23 @@
         "required": ["id", "name", "location", "content"],
         "additionalProperties": false
       },
+      "SkillDisabledErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["SkillDisabledError"]
+          },
+          "skill": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "skill", "message"],
+        "additionalProperties": false
+      },
       "SkillNotFoundErrorEncoded": {
         "type": "object",
         "properties": {
@@ -19896,6 +20192,9 @@
     {
       "name": "workspace",
       "description": "Workspace lifecycle routes."
+    },
+    {
+      "name": "preferences"
     },
     {
       "name": "vcs",

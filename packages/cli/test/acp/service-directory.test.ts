@@ -4,6 +4,22 @@ import { makeACPFixture, makeSession, secondModel, testModel } from "./service-f
 import { flattenSelectOptions, requireSelectOption } from "./subprocess"
 
 describe("acp service directory behavior", () => {
+  test("filters disabled skills from the full skill catalog using global preferences", async () => {
+    await using fixture = makeACPFixture({
+      fetch(request) {
+        if (request.path === "/api/preferences")
+          return Response.json([{ target: { kind: "skill", id: "verify" }, state: "disabled" }])
+        if (request.path === "/api/session" && request.method === "POST")
+          return Response.json({ data: makeSession("ses_preferences") })
+        return undefined
+      },
+    })
+    await fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
+    expect(fixture.updates.at(-1)).toMatchObject({
+      update: { sessionUpdate: "available_commands_update", availableCommands: [{ name: "review" }] },
+    })
+  })
+
   test("does not cache an available model before plugin activation settles", async () => {
     const requested = Promise.withResolvers<void>()
     const release = Promise.withResolvers<void>()

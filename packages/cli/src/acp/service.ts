@@ -405,12 +405,13 @@ async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog
   const deadline = Date.now() + 5_000
   let missing = "No models are available"
   while (Date.now() < deadline) {
-    const [modelResult, defaultResult, agentResult, commandResult, skillResult] = await Promise.all([
+    const [modelResult, defaultResult, agentResult, commandResult, skillResult, preferences] = await Promise.all([
       client.model.list({ location }),
       client.model.default({ location }),
       client.agent.list({ location }),
       client.command.list({ location }),
       client.skill.list({ location }),
+      client.preferences.list(),
     ])
     const models = modelResult.data.filter((model) => model.enabled)
     const preferred = defaultResult.data
@@ -421,6 +422,11 @@ async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog
     const agents = agentResult.data.filter((agent) => agent.mode !== "subagent" && !agent.hidden)
     const defaultAgent = agents.find((agent) => agent.mode === "primary") ?? agents[0]
     if (defaultModel && defaultAgent) {
+      const disabled = new Set(
+        preferences
+          .filter((entry) => entry.target.kind === "skill" && entry.state === "disabled")
+          .map((entry) => entry.target.id),
+      )
       return {
         providers: providers(models),
         models,
@@ -432,7 +438,7 @@ async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog
         modes: agents.map((agent) => ({ id: agent.id, name: agent.name, description: agent.description })),
         defaultModeID: defaultAgent.id,
         commands: commandResult.data,
-        skills: skillResult.data.filter((skill) => skill.slash !== false),
+        skills: skillResult.data.filter((skill) => !disabled.has(skill.id) && skill.slash !== false),
       }
     }
     missing = defaultModel ? "No primary agents are available" : "No models are available"

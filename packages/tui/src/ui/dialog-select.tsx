@@ -180,7 +180,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const filtered = createMemo(() => {
     if (props.skipFilter || props.renderFilter === false) return props.options.filter((x) => x.disabled !== true)
-    const needle = store.filter.toLowerCase()
+    const needle = store.filter.trim().toLowerCase()
     const options = pipe(
       props.options,
       filter((x) => x.disabled !== true),

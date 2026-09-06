@@ -15,6 +15,7 @@ export type {
   IntegrationApi,
   ModelApi,
   PluginApi,
+  PreferencesApi,
   ProviderApi,
   ReferenceApi,
   RpcApi,
@@ -35,6 +36,7 @@ export { Integration } from "@opencode-ai/schema/integration"
 export { Location } from "@opencode-ai/schema/location"
 export { Model } from "@opencode-ai/schema/model"
 export { Permission } from "@opencode-ai/schema/permission"
+export { Preferences } from "@opencode-ai/schema/preferences"
 export { PermissionSaved } from "@opencode-ai/schema/permission-saved"
 export { Project } from "@opencode-ai/schema/project"
 export { Worktree } from "@opencode-ai/schema/worktree"

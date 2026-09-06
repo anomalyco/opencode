@@ -22,6 +22,7 @@ import {
   SessionBusyError,
   SessionNotFoundError,
   SkillNotFoundError,
+  SkillDisabledError,
   UnknownError,
 } from "../errors.js"
 import { Agent } from "@opencode-ai/schema/agent"
@@ -345,7 +346,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: SessionInbox.User }),
-        error: [ConflictError, InvalidRequestError, SessionNotFoundError],
+        error: [ConflictError, InvalidRequestError, SessionNotFoundError, SkillDisabledError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
@@ -385,7 +386,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
         success: HttpApiSchema.NoContent,
-        error: [SessionNotFoundError, SkillNotFoundError],
+        error: [SessionNotFoundError, SkillNotFoundError, SkillDisabledError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
