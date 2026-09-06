@@ -17,7 +17,7 @@ import type { ServerScope } from "@/runtime/server/scope"
 import { persisted } from "@/runtime/persistence/storage"
 import type { ServerApi } from "@/runtime/server/api"
 import { toggleMcp } from "./global-sync/mcp"
-import { createConnectionSync } from "./server-sync/connection"
+import { createConnectionSync, reconnectOrder } from "./server-sync/connection"
 import { usePlatform } from "@/runtime/platform/platform"
 import type { Data } from "@opencode-ai/client/solid"
 import { createWorktreeInventory, withWorktreeInventory } from "@/workspaces/inventory"
@@ -162,12 +162,11 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     },
     connected: (info) => {
       if (bootstrap.data !== undefined && !bootstrap.isFetching) void bootstrap.refetch()
-      Object.keys(children.children)
-        .filter(children.active)
-        .forEach((directory) => {
-          queue.push(directory)
-          void data.location.sync({ directory }).catch(() => undefined)
-        })
+      // The refresh queue re-syncs two directories at a time, held ones first. Syncing every active
+      // directory here as well sent the whole catalog fan-out for all of them at once.
+      reconnectOrder(Object.keys(children.children).filter(children.active), children.pinned).forEach(
+        (directory) => queue.push(directory),
+      )
     },
   })
 
