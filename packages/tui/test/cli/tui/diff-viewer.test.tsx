@@ -69,6 +69,28 @@ test("closing the diff viewer returns to the route it opened from", async () => 
   }
 })
 
+test.each([80, 160])("standalone full-screen diff does not expose panel-only toggling at %i columns", async (width) => {
+  const viewer = await renderDiffViewer([], {
+    width,
+    initialRoute: {
+      type: "plugin",
+      id: "opencode.diffs",
+      name: "diff",
+      data: { sessionID: "session-1", returnRoute: startRoute, split: true },
+    },
+  })
+  try {
+    const command = viewer.commands.get("diff.toggle_fullscreen")
+    expect(typeof command?.enabled === "function" ? command.enabled() : command?.enabled).toBe(false)
+    const route = viewer.current()
+    viewer.app.mockInput.pressKey("f")
+    await viewer.app.flush()
+    expect(viewer.current()).toEqual(route)
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
 test("ctrl+c closes the diff viewer without exiting the application", async () => {
   const viewer = await renderDiffViewer([])
 
@@ -1918,6 +1940,7 @@ async function renderDiffViewer(
         },
         ui: {
           dialog: createDialogApi(dialog, (render) => render()),
+          panel: { open: () => false, close: () => {}, current: () => undefined },
           router: {
             register(page: Page) {
               if (page.name === "diff") renderDiff = page.render
