@@ -1,11 +1,20 @@
-import { Effect } from "effect"
+import { Duration, Effect, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { Auth } from "../auth.js"
 import { render as renderEndpoint } from "../endpoint.js"
 import { Framing } from "../framing.js"
 import type { HttpMiddleware, Transport, TransportPrepareInput } from "./index.js"
 import * as ProviderShared from "../../protocols/shared.js"
-import { mergeJsonRecords, type LLMRequest } from "../../schema/index.js"
+import {
+  AIError,
+  DEFAULT_HTTP_TIMEOUT_MS,
+  mergeJsonRecords,
+  TransportError,
+  type HttpContext,
+  type HttpTimeout,
+  type LLMRequest,
+  type TransportOperation,
+} from "../../schema/index.js"
 import { RequestExecutor } from "../executor.js"
 
 export type JsonRequestInput<Body> = TransportPrepareInput<Body>
@@ -87,16 +96,44 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
         middleware: prepareInput.middleware,
       }
     }),
-  execute: (prepared, _request, runtime) =>
+  execute: (prepared, request, runtime) =>
     Effect.gen(function* () {
-      const response = yield* runtime.http.execute(prepared.request, prepared.middleware)
+      const timeout = (operation: TransportOperation, message: string, http?: HttpContext) =>
+        new AIError({
+          reason: new TransportError({
+            message,
+            transport: "http",
+            operation,
+            code: "Timeout",
+            url: prepared.request.url,
+            http,
+          }),
+        })
+      const response = yield* runtime.http.execute(prepared.request, prepared.middleware).pipe(
+        Effect.timeoutOrElse({
+          duration: timeoutDuration(request.http?.headerTimeout),
+          orElse: () => Effect.fail(timeout("request", "Timed out waiting for response headers")),
+        }),
+      )
+      const http = RequestExecutor.responseHttp(response)
       return {
-        frames: prepared.framing.frame(RequestExecutor.responseStream(response)),
-        http: RequestExecutor.responseHttp(response),
+        frames: prepared.framing.frame(
+          RequestExecutor.responseStream(response).pipe(
+            Stream.timeoutOrElse({
+              duration: timeoutDuration(request.http?.chunkTimeout),
+              orElse: () => Stream.fail(timeout("read", "Timed out waiting for response data", http)),
+            }),
+          ),
+        ),
+        http,
         body: prepared.framing.body,
       }
     }),
 })
+
+// `false` disables a timer; an unset value uses the shared default.
+const timeoutDuration = (value: HttpTimeout | undefined) =>
+  value === false ? Duration.infinity : Duration.millis(value ?? DEFAULT_HTTP_TIMEOUT_MS)
 
 export const sseJson = {
   id: "http-json/sse",
