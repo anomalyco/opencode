@@ -454,6 +454,14 @@ const layer = Layer.effect(
               usage: value.usage ?? new Usage({}),
               metadata: value.providerMetadata,
             })
+            const cacheWarning = Session.cacheBustWarning({
+              providerID: ctx.model.providerID,
+              modelID: ctx.model.id,
+              sessionID: ctx.sessionID,
+              finish: value.reason,
+              usage,
+            })
+            if (cacheWarning) yield* Effect.logWarning("possible Anthropic prompt cache bust", cacheWarning)
             ctx.assistantMessage.finish = value.reason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
