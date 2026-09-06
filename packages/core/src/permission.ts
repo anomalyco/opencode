@@ -1,7 +1,7 @@
 export * as PermissionV2 from "./permission"
 
 import { makeLocationNode } from "./effect/app-node"
-import { Context, Deferred, Effect as EffectRuntime, Layer, Schema } from "effect"
+import { Context, Deferred, Effect as EffectRuntime, Layer, Option, Schema } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
 import { EventV2 } from "./event"
 import { Location } from "./location"
@@ -100,6 +100,25 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Permission") {}
 
+export interface GateInput {
+  readonly action: string
+  readonly resources: ReadonlyArray<string>
+  readonly sessionID: string
+  readonly metadata: Record<string, unknown>
+}
+
+/**
+ * Optional gate: lets a plugin adjust a resolved permission effect before it is
+ * enforced — e.g. downgrade a would-auto-approve `allow` to `ask` (prompt the
+ * human) or `deny`, or upgrade an `ask` to `allow`. Hard `deny` rules are not
+ * routed through it. Consumed via `Effect.serviceOption`, so it is a no-op
+ * unless an implementation is provided (PermissionV2 keeps no hard dependency).
+ */
+export class Gate extends Context.Service<
+  Gate,
+  { readonly adjust: (input: GateInput, effect: Permission.Effect) => EffectRuntime.Effect<Permission.Effect> }
+>()("@opencode/v2/Permission/Gate") {}
+
 interface Pending {
   readonly request: Request
   readonly agent?: AgentV2.ID
@@ -158,7 +177,15 @@ const layer = Layer.effect(
       const all = [...rules, ...(yield* savedRules())]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
       const effect: Permission.Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
-      return { effect, rules: all }
+      // optional plugin gate: may tighten an allow→ask/deny or loosen an ask→allow
+      const gate = yield* EffectRuntime.serviceOption(Gate)
+      const adjusted = Option.isSome(gate)
+        ? yield* gate.value.adjust(
+            { action: input.action, resources: input.resources, sessionID: input.sessionID, metadata: input.metadata ?? {} },
+            effect,
+          )
+        : effect
+      return { effect: adjusted, rules: all }
     })
 
     function request(input: AssertInput): Request {
