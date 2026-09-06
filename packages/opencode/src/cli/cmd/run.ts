@@ -22,7 +22,7 @@ import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
-import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient, type Event, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 
@@ -690,12 +690,14 @@ export const RunCommand = effectCmd({
           return false
         }
 
+        const toggles = new Map<string, boolean>()
+        const printed = new Set<string>()
+
         // Consume one subscribed event stream for the active session and mirror it
         // to stdout/UI. `client` is passed explicitly because attach mode may
         // rebind the SDK to the session's directory after the subscription is
         // created, and replies issued from inside the loop must use that client.
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
-          const toggles = new Map<string, boolean>()
           const sessions = new Set([sessionID])
           let error: string | undefined
 
@@ -720,6 +722,16 @@ export const RunCommand = effectCmd({
             if (event.type === "message.part.updated") {
               const part = event.properties.part
               if (part.sessionID !== sessionID) continue
+              if (
+                args.attach &&
+                (part.type === "step-start" ||
+                  part.type === "step-finish" ||
+                  ((part.type === "text" || part.type === "reasoning") && part.time?.end) ||
+                  (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")))
+              ) {
+                if (printed.has(part.id)) continue
+                printed.add(part.id)
+              }
 
               if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
                 if (emit("tool_use", { part })) continue
@@ -831,15 +843,41 @@ export const RunCommand = effectCmd({
         await share(client, sessionID)
 
         if (!interactive) {
-          const events = await client.event.subscribe()
+          const controller = new AbortController()
+          const events = await client.event.subscribe(undefined, { signal: controller.signal })
           const completed = loop(client, events).catch((e) => {
             console.error(e)
             process.exitCode = 1
           })
-          async function finish() {
-            if (args.attach) return
+          async function finish(parentID?: string) {
+            if (args.attach) controller.abort()
             const error = await completed
             if (error) process.exitCode = 1
+            if (!args.attach || !parentID) return
+
+            // The request has completed, but remote events may still be buffered
+            // or missing. Recover this prompt's output without waiting for idle.
+            const messages = await client.session.messages({ sessionID }, { throwOnError: true })
+            async function* replay(): AsyncGenerator<Event> {
+              for (const message of messages.data) {
+                if (message.info.role !== "assistant" || message.info.parentID !== parentID) continue
+                yield { id: message.info.id, type: "message.updated", properties: { sessionID, info: message.info } }
+                for (const part of message.parts)
+                  yield {
+                    id: part.id,
+                    type: "message.part.updated",
+                    properties: { sessionID, part, time: message.info.time.completed ?? message.info.time.created },
+                  }
+                if (message.info.error && !error)
+                  yield {
+                    id: message.info.id,
+                    type: "session.error",
+                    properties: { sessionID, error: message.info.error },
+                  }
+              }
+            }
+            const replayError = await loop(client, { stream: replay() })
+            if (replayError) process.exitCode = 1
           }
 
           if (args.command) {
@@ -856,7 +894,7 @@ export const RunCommand = effectCmd({
               process.exitCode = 1
               return
             }
-            await finish()
+            await finish(result.data?.info.parentID)
             return
           }
 
@@ -873,7 +911,7 @@ export const RunCommand = effectCmd({
             process.exitCode = 1
             return
           }
-          await finish()
+          await finish(result.data?.info.parentID)
           return
         }
 
