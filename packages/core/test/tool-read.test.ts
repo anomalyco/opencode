@@ -2,6 +2,8 @@ import { beforeEach, describe, expect } from "bun:test"
 import path from "path"
 import { Effect, Exit, Layer } from "effect"
 import { Config } from "@opencode-ai/core/config"
+import { Agent } from "@opencode-ai/core/agent"
+import { Skill } from "@opencode-ai/core/skill"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FileSystem } from "@opencode-ai/core/filesystem"
@@ -28,6 +30,8 @@ const readToolNode = makeLocationNode({
   name: "test/read-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(ReadTool.Plugin)),
   deps: [
+    Agent.node,
+    Skill.node,
     Tool.node,
     ReadToolFileSystem.node,
     LocationMutation.node,
