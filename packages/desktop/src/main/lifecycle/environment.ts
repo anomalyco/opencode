@@ -7,7 +7,7 @@ import contextMenu from "electron-context-menu"
 import { Effect, FileSystem, Path } from "effect"
 import { CHANNEL } from "../constants"
 import { DesktopPaths } from "../paths"
-import { getUserShell, loadShellEnv } from "../service/shell-env"
+import { getUserShell, loadShellEnv, loadWindowsPath } from "../service/shell-env"
 import { cleanupStoreFiles } from "../storage/cleanup"
 import { registerRendererProtocol, setDockIcon } from "../windows"
 
@@ -58,8 +58,8 @@ export const prepareApplicationEnvironment = Effect.gen(function* () {
 })
 
 export const preferApplicationEnvironment = Effect.gen(function* () {
-  const shell = process.platform === "win32" ? null : getUserShell()
-  const shellEnv = shell ? yield* loadShellEnv(shell) : null
+  const shellEnv: Record<string, string> | null =
+    process.platform === "win32" ? yield* loadWindowsPath() : yield* loadShellEnv(getUserShell())
   yield* Effect.sync(() => {
     if (!shellEnv?.XDG_STATE_HOME) delete process.env.XDG_STATE_HOME
     Object.assign(process.env, {
