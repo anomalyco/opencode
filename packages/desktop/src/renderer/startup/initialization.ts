@@ -7,8 +7,8 @@ export function initializationData<A>(state: (() => A | undefined) & { error: un
   return state()
 }
 
-// No password: the main process adds Authorization to sidecar requests (`wireRendererHeaders`), so
-// the renderer's GETs carry only CORS-safelisted headers and skip the preflight round trip.
+// The main process adds Authorization to sidecar requests (`wireRendererHeaders`); the renderer never
+// holds the password, and its GETs carry only CORS-safelisted headers so they skip the preflight.
 export function sidecarHttp(data: SidecarData) {
   return { url: data.url }
 }
@@ -28,7 +28,7 @@ export function createSidecarResolver(input: {
 }
 
 function sameSidecar(current: SidecarData | undefined, next: SidecarData) {
-  return current?.url === next.url && current.password === next.password
+  return current?.url === next.url
 }
 
 function markLocalServerStartup(error: unknown) {

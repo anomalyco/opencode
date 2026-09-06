@@ -35,10 +35,16 @@ export function wireRendererHeaders(win: BrowserWindow) {
   // The renderer sends sidecar requests without credentials, so its GETs are CORS-simple and need no
   // preflight. Electron applies these listeners in Chromium's extraHeaders mode, after the CORS
   // decision, so adding Authorization here does not reintroduce one.
+  //
+  // Only the renderer's own top-level frame is credentialed. Other content in this session (web views,
+  // embedded pages) can reach the same loopback origin and must not inherit its access. Requests with
+  // no frame, such as from a service worker, are not credentialed either; the renderer registers none.
   win.webContents.session.webRequest.onBeforeSendHeaders(
     { urls: ["http://127.0.0.1/*", "http://localhost/*"] },
     (details, callback) => {
-      const authorization = SidecarCredentials.authorization(SidecarCredentials.get(), details.url)
+      const frame = details.frame
+      const renderer = !!frame && frame.parent === null && isRendererUrl(frame.url)
+      const authorization = renderer && SidecarCredentials.authorization(SidecarCredentials.get(), details.url)
       if (authorization && !hasHeader(details.requestHeaders, "Authorization")) {
         upsertHeader(details.requestHeaders, "Authorization", authorization)
       }
