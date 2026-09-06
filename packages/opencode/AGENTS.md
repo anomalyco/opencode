@@ -129,3 +129,9 @@ Use `Effect.cached` when multiple concurrent callers should share a single in-fl
 Use `EffectBridge` for native or external callbacks (`@parcel/watcher`, `node-pty`, native `fs.watch`, plugin callbacks, etc.) that need to re-enter Effect services with instance/workspace context.
 
 Plain async code should pass explicit context or stay inside an Effect fiber; do not add ambient instance context shims.
+
+## Compiled binary networking
+
+The compiled OpenCode binary is a Bun executable. `NODE_OPTIONS=--dns-result-order=ipv4first` is a Node.js flag and is ignored. Prefer Happy Eyeballs / `family: 0` in fetch, or run via `bun`/`node` if IPv4-first DNS is required.
+
+Loopback URLs are not sent through `HTTP_PROXY`/`ALL_PROXY` (`packages/opencode/src/util/proxy-env.ts`). Compiled `fetch` may still honor Bun's env proxy independently of that helper.

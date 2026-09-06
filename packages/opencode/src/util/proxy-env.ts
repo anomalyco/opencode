@@ -47,7 +47,13 @@ export function getProxyForUrl(input: string | URL) {
   return proxy.includes("://") ? proxy : `${protocol}://${proxy}`
 }
 
+function isLoopbackHostname(hostname: string) {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "")
+  return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0"
+}
+
 function shouldProxy(hostname: string, port: number) {
+  if (isLoopbackHostname(hostname)) return false
   const noProxy = env("no_proxy").toLowerCase()
   if (!noProxy) return true
   if (noProxy === "*") return false
