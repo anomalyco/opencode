@@ -43,6 +43,13 @@ describe("layout deep links", () => {
     expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
   })
 
+  test("accepts case-insensitive deep-link schemes", () => {
+    expect(parseDeepLink("OPENCODE://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
+    expect(parseNewSessionDeepLink("OpenCode://new-session?directory=/tmp/demo")).toEqual({
+      directory: "/tmp/demo",
+    })
+  })
+
   test("ignores non-project deep links", () => {
     expect(parseDeepLink("opencode://other?directory=/tmp/demo")).toBeUndefined()
     expect(parseDeepLink("https://example.com")).toBeUndefined()
