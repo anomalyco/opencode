@@ -96,6 +96,40 @@ export const node = makeLocationNode({
   deps: [FSUtil.node, Global.node, Location.node, SystemContextRegistry.node],
 })
 
+const STRIP_SECTION = [
+  "Feature Flags & Gate Validation",
+  "Smart Tool Calling & Agent Use",
+  "Which gate to run",
+  "Running a gate",
+  "Gate stamps",
+  "Feature flag registry",
+].map((s) => s.toLowerCase())
+
+function filterAgentsMd(content: string): string {
+  const lines = content.split("\n")
+  const out: string[] = []
+  let skipDepth = 0
+  for (const line of lines) {
+    const heading = line.match(/^(#{1,3})\s+(.+)/)
+    if (heading) {
+      const level = heading[1].length
+      const title = heading[2].trim().toLowerCase()
+      if (level <= 2 && STRIP_SECTION.some((s) => title.startsWith(s) || title.includes(s))) {
+        skipDepth = level
+        continue
+      }
+      if (skipDepth > 0 && level <= skipDepth) skipDepth = 0
+    }
+    if (skipDepth > 0) continue
+    const trimmed = line.trimEnd()
+    if (trimmed === "---" || trimmed === "___") continue
+    out.push(line)
+  }
+  return out.join("\n").replace(/\n{4,}/g, "\n\n\n")
+}
+
 function render(files: ReadonlyArray<File>) {
-  return files.map((file) => `Instructions from: ${file.path}\n${file.content}`).join("\n\n")
+  return files
+    .map((file) => `Instructions from: ${file.path}\n${filterAgentsMd(file.content)}`)
+    .join("\n\n")
 }

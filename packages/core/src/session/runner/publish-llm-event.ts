@@ -69,6 +69,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   let assistantActive = false
   let assistantFailed = false
   let providerFailed = false
+  let producedText = false
   let stepSettlement: { readonly finish: string; readonly tokens: ReturnType<typeof tokens> } | undefined
 
   const startAssistant = Effect.fnUntraced(function* () {
@@ -196,12 +197,24 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     yield* flushFragments()
   })
 
+  const appendLog = Effect.fn("SessionRunner.appendLog")(function* (text: string) {
+    const assistantMessageID = yield* startAssistant()
+    yield* events.publish(SessionEvent.Log.Ended, {
+      sessionID: input.sessionID,
+      timestamp: yield* timestamp,
+      assistantMessageID,
+      logID: SessionMessage.ID.create(),
+      text,
+    })
+  })
+
   const failAssistant = Effect.fnUntraced(function* (message: string) {
     if (assistantFailed) return
     yield* flush()
     const assistantMessageID = yield* startAssistant()
     assistantActive = false
     assistantFailed = true
+    yield* appendLog(message)
     yield* events.publish(SessionEvent.Step.Failed, {
       sessionID: input.sessionID,
       timestamp: yield* timestamp,
@@ -244,6 +257,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       case "step-start":
         return
       case "text-start":
+        producedText = true
         yield* text.start(event.id)
         yield* events.publish(SessionEvent.Text.Started, {
           sessionID: input.sessionID,
@@ -413,9 +427,12 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     flush,
     failAssistant,
     failUnsettledTools,
+    appendLog,
     hasActiveAssistant: () => assistantActive,
     hasAssistantStarted: () => assistantMessageID !== undefined,
+    hasProducedText: () => producedText,
     hasProviderError: () => providerFailed,
+    hasStepFinish: () => stepSettlement !== undefined,
     stepSettlement: () => stepSettlement,
     startAssistant,
     assistantMessageID: assistantMessageIDForTool,

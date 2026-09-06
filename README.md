@@ -124,6 +124,9 @@ If you're interested in contributing to OpenCode, please read our [contributing 
 
 If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
 
+
+#not build by the opencode team but rather the teamopti team! 
+
 ---
 
 **Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)

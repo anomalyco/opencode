@@ -317,6 +317,45 @@
   }
 }
 
+[data-component="log-part"] {
+  width: 100%;
+
+  [data-slot="log-trigger-content"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  [data-slot="log-label"] {
+    color: var(--v2-text-text-muted);
+    font-weight: var(--font-weight-medium);
+    text-transform: uppercase;
+    letter-spacing: -0.5px;
+    flex-shrink: 0;
+  }
+
+  [data-slot="log-heading"] {
+    color: var(--v2-text-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  [data-slot="log-text"] {
+    margin: 0;
+    padding: 8px 12px;
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-small);
+    line-height: var(--line-height-normal);
+    color: var(--v2-text-text-muted);
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--v2-background-background);
+    border-radius: var(--radius-sm);
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   [data-component="reasoning-part"] [data-component="markdown"] :not(pre) > code {
     opacity: 0.6;

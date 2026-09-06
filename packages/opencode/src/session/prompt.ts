@@ -17,6 +17,10 @@ import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
 import { MAX_STEPS_PROMPT } from "@opencode-ai/core/session/runner/max-steps"
+import { SessionRunner } from "@opencode-ai/core/session/runner"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { ReflectionState } from "@opencode-ai/core/session/runner/reflection-state"
+import { containsHedge } from "@opencode-ai/core/session/runner/hedge"
 import { ToolRegistry } from "@/tool/registry"
 import { MCP } from "../mcp"
 import { LSP } from "@/lsp/lsp"
@@ -42,7 +46,7 @@ import { Truncate } from "@/tool/truncate"
 import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
-import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
+import { Cause, Effect, Exit, Latch, Layer, Option, Scope, SynchronizedRef, Context, Schema, Types } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
@@ -99,6 +103,39 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   return part.state.status === "error" && part.state.metadata?.interrupted === true
 }
 
+export const parseReflectionModel = (
+  raw: Option.Option<string> | string | undefined,
+): { providerID: string; modelID: string } | undefined => {
+  const value = typeof raw === "string" ? raw : Option.isOption(raw) ? Option.getOrUndefined(raw) : undefined
+  if (value === undefined) return undefined
+  const slash = value.indexOf("/")
+  if (slash <= 0 || slash === value.length - 1) return undefined
+  return { providerID: value.slice(0, slash), modelID: value.slice(slash + 1) }
+}
+
+export const resolveReflectionModelOverride = (
+  session: SessionV1.SessionInfo | undefined,
+  configInfo: Config.Info | undefined,
+  flags: RuntimeFlags.Info,
+): { providerID: string; modelID: string } | undefined => {
+  if (session?.metadata && typeof session.metadata === "object") {
+    const fromMeta = (session.metadata as Record<string, unknown>).reflection_model
+    if (typeof fromMeta === "string") {
+      const parsed = parseReflectionModel(fromMeta)
+      if (parsed) return parsed
+    }
+  }
+  const fromFlag = parseReflectionModel(flags.experimentalReflectionModel)
+  if (fromFlag) return fromFlag
+  if (configInfo?.reflection_model) {
+    const fromConfig = parseReflectionModel(configInfo.reflection_model)
+    if (fromConfig) return fromConfig
+  }
+  return undefined
+}
+
+type StuckSignal = "doom-loop" | "step-limit" | "idle" | "tokens"
+
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
@@ -113,6 +150,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const stuckSignals = yield* SynchronizedRef.make<Set<StuckSignal>>(new Set())
     const status = yield* SessionStatus.Service
     const sessions = yield* Session.Service
     const agents = yield* Agent.Service
@@ -139,6 +177,7 @@ const layer = Layer.effect(
     const llm = yield* LLM.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const sessionExecution = yield* SessionExecution.Service
     const database = yield* Database.Service
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
@@ -1049,11 +1088,32 @@ const layer = Layer.effect(
       return { info, parts }
     }, Effect.scoped)
 
+    const maybeReflect = Effect.fnUntraced(function* (sessionID: SessionID) {
+      const signals = yield* SynchronizedRef.get(stuckSignals)
+      const session = yield* sessions.get(sessionID).pipe(Effect.option)
+      const cfg = yield* config.get().pipe(Effect.orDie)
+      const modelOverride = resolveReflectionModelOverride(Option.getOrUndefined(session), cfg, flags)
+      yield* sessionExecution
+        .reflect(sessionID, modelOverride === undefined ? undefined : { model: modelOverride })
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.logError("reflection failed", {
+              cause,
+              "session.id": sessionID,
+              signals: [...signals],
+            }),
+          ),
+          Effect.forkIn(scope),
+        )
+      yield* SynchronizedRef.set(stuckSignals, new Set())
+    })
+
     const prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error> = Effect.fn(
       "SessionPrompt.prompt",
     )(function* (input: PromptInput) {
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       yield* revert.cleanup(session)
+      ReflectionState.clearDirection(input.sessionID)
       const message = yield* createUserMessage(input)
       yield* sessions.touch(input.sessionID)
 
@@ -1067,7 +1127,9 @@ const layer = Layer.effect(
       }
 
       if (input.noReply === true) return message
-      return yield* loop({ sessionID: input.sessionID })
+      const result = yield* loop({ sessionID: input.sessionID })
+      yield* maybeReflect(input.sessionID)
+      return result
     })
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
@@ -1083,6 +1145,7 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        let maxSteps = Infinity
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1114,6 +1177,25 @@ const layer = Layer.effect(
             !hasToolCalls &&
             lastAssistant.parentID === lastUser.id
           ) {
+            const state = ReflectionState.get(sessionID)
+            if (!state.directionConfirmed) {
+              const cfg = yield* config.get().pipe(Effect.orDie)
+              const modelOverride = resolveReflectionModelOverride(session, cfg, flags)
+              const thenResult = yield* sessionExecution
+                .thenLoop(sessionID, modelOverride === undefined ? undefined : { model: modelOverride })
+                .pipe(
+                  Effect.map(Option.some),
+                  Effect.catchCause((cause) =>
+                    Effect.logError("thenLoop reflection failed", { cause, "session.id": sessionID }).pipe(
+                      Effect.as(Option.none()),
+                    ),
+                  ),
+                )
+              if (Option.isSome(thenResult) && thenResult.value.steered) {
+                yield* Effect.logInfo("thenLoop produced steer, continuing loop", { "session.id": sessionID })
+                continue
+              }
+            }
             const orphan = lastAssistantMsg?.parts.find(
               (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
             )
@@ -1130,6 +1212,35 @@ const layer = Layer.effect(
           }
 
           step++
+          const toolParts = lastAssistantMsg?.parts.filter((p): p is SessionV1.ToolPart => p.type === "tool") ?? []
+          const hasSettlementFailure = toolParts.some(
+            (p) =>
+              p.state.status === "error" ||
+              (p.state.status === "completed" &&
+                typeof p.state.output === "string" &&
+                /\b(error|fail|failed|failure|exception|fatal|unhandled)\b/i.test(p.state.output)),
+          )
+          const assistantText =
+            lastAssistantMsg?.parts
+              .filter(
+                (p): p is SessionV1.TextPart | SessionV1.ReasoningPart =>
+                  p.type === "text" || p.type === "reasoning",
+              )
+              .map((p) => p.text)
+              .join(" ") ?? ""
+          const hasHedge = containsHedge(assistantText)
+
+          if (hasSettlementFailure || hasHedge) {
+            const cfg = yield* config.get().pipe(Effect.orDie)
+            const modelOverride = resolveReflectionModelOverride(session, cfg, flags)
+            yield* sessionExecution
+              .whyLoop(sessionID, modelOverride === undefined ? undefined : { model: modelOverride })
+              .pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logError("whyLoop execution failed", { cause, "session.id": sessionID }),
+                ),
+              )
+          }
           if (step === 1)
             yield* title({
               session,
@@ -1175,7 +1286,7 @@ const layer = Layer.effect(
             yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
             throw error
           }
-          const maxSteps = agent.steps ?? Infinity
+          maxSteps = agent.steps ?? Infinity
           const isLastStep = step >= maxSteps
           msgs = yield* SessionReminders.apply({ messages: msgs, agent, session }).pipe(
             Effect.provideService(RuntimeFlags.Service, flags),
@@ -1261,11 +1372,15 @@ const layer = Layer.effect(
               sys.mcp(agent, session.permission),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
+            const reflectionText = ReflectionState.getReflectionText(sessionID)
+            const steerGuidance = ReflectionState.consumeSteerGuidanceText(sessionID)
             const system = [
               ...env,
               ...instructions,
               ...(mcpInstructions ? [mcpInstructions] : []),
               ...(skills ? [skills] : []),
+              ...(reflectionText ? [reflectionText] : []),
+              ...(steerGuidance ? [steerGuidance] : []),
             ]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
@@ -1336,9 +1451,43 @@ const layer = Layer.effect(
         }
 
         yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
-        return yield* lastAssistant(sessionID)
+        const finalAssistant = yield* lastAssistant(sessionID)
+        yield* detectStuckSignals(sessionID, finalAssistant, step, maxSteps)
+        return finalAssistant
       },
     )
+
+    const detectStuckSignals = Effect.fnUntraced(function* (
+      sessionID: SessionID,
+      finalAssistant: SessionV1.WithParts,
+      step: number,
+      maxSteps: number,
+    ) {
+      const signals = new Set<StuckSignal>()
+      const parts = finalAssistant.parts
+      const toolParts = parts.filter(
+        (p): p is SessionV1.ToolPart => p.type === "tool" && !isOrphanedInterruptedTool(p),
+      )
+      const last3 = toolParts.slice(-3)
+      if (
+        last3.length === 3 &&
+        last3.every(
+          (p, i) =>
+            i === 0 ||
+            (p.tool === last3[i - 1].tool && JSON.stringify(p.state.input) === JSON.stringify(last3[i - 1].state.input)),
+        )
+      ) {
+        signals.add("doom-loop")
+      }
+      if (step >= maxSteps && Number.isFinite(maxSteps)) signals.add("step-limit")
+      const assistant = finalAssistant.info as SessionV1.Assistant
+      const noConclusion =
+        assistant.finish &&
+        !["tool-calls", "stop"].includes(assistant.finish) &&
+        toolParts.length === 0
+      if (noConclusion) signals.add("idle")
+      if (signals.size > 0) yield* SynchronizedRef.set(stuckSignals, signals)
+    })
 
     const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
       input: LoopInput,
@@ -1625,6 +1774,7 @@ export const node = LayerNode.make({
     EventV2Bridge.node,
     RuntimeFlags.node,
     Database.node,
+    SessionExecution.node,
   ],
 })
 

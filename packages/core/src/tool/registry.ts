@@ -81,6 +81,31 @@ const registryLayer = Layer.effect(
         : { result, output: bounded.output }
     })
 
+    let cacheToken = {}
+    let cached: { defs: ReadonlyArray<ToolDefinition>; regs: Map<string, Registration> } | undefined
+
+    const invalidate = () => { cacheToken = {}; cached = undefined }
+
+    const buildRegs = () => {
+      const registrations = new Map(applications.entries())
+      for (const [name, entries] of local) {
+        const registration = entries.at(-1)?.registration
+        if (registration) registrations.set(name, registration)
+      }
+      return registrations
+    }
+
+    // Reference-compare two registration maps. Entry objects are captured at
+    // registration and reused across ApplicationTools reloads, so identity
+    // equality signals an unchanged effective set.
+    const sameRegs = (a: Map<string, Registration>, b: Map<string, Registration>) => {
+      if (a.size !== b.size) return false
+      for (const [name, registration] of a) {
+        if (b.get(name) !== registration) return false
+      }
+      return true
+    }
+
     return Service.of({
       register: Effect.fn("ToolRegistry.register")(function* (tools) {
         const entries = Object.entries(tools)
@@ -91,6 +116,7 @@ const registryLayer = Layer.effect(
             const token = {}
             for (const [name, tool] of entries)
               local.set(name, [...(local.get(name) ?? []), { token, registration: { identity: {}, tool } }])
+            invalidate()
             yield* Effect.addFinalizer(() =>
               Effect.sync(() => {
                 for (const [name] of entries) {
@@ -98,24 +124,34 @@ const registryLayer = Layer.effect(
                   if (registrations.length > 0) local.set(name, registrations)
                   else local.delete(name)
                 }
+                invalidate()
               }),
             )
           }),
         )
       }),
       materialize: Effect.fn("ToolRegistry.materialize")(function* (permissions = []) {
-        const registrations = new Map(applications.entries())
-        for (const [name, entries] of local) {
-          const registration = entries.at(-1)?.registration
-          if (registration) registrations.set(name, registration)
+        // Rebuild the effective registrations each call. ApplicationTools registers
+        // through its own State, which does not invalidate this cache; comparing the
+        // registrations (cheap, reference-based) against the cached snapshot lets us
+        // detect additions/removals while still skipping regenerated JSON schemas.
+        const regs = buildRegs()
+        if (!cached || !sameRegs(cached.regs, regs)) {
+          const defs = Array.from(regs, ([name, registration]) => definition(name, registration.tool))
+          cached = { defs, regs }
         }
-        for (const [name, registration] of registrations)
-          if (whollyDisabled(permission(registration.tool, name), permissions)) registrations.delete(name)
+        const { defs } = cached
+        const filtered = permissions.length > 0
+          ? defs.filter((d) => {
+              const reg = regs.get(d.name)
+              return reg ? !whollyDisabled(permission(reg.tool, d.name), permissions) : true
+            })
+          : defs
         return {
-          definitions: Array.from(registrations, ([name, registration]) => definition(name, registration.tool)),
+          definitions: filtered,
           settle: (input) => {
-            const registration = registrations.get(input.call.name)
-            if (registration) return settleWith(input, registration.identity)
+            const reg = regs.get(input.call.name)
+            if (reg) return settleWith(input, reg.identity)
             return Effect.succeed({ result: { type: "error", value: `Unknown tool: ${input.call.name}` } })
           },
         }

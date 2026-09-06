@@ -73,12 +73,17 @@ export type Error =
 
 export interface Interface {
   readonly resolve: (session: SessionSchema.Info) => Effect.Effect<Model, Error>
+  readonly resolveReflection: (
+    session: SessionSchema.Info,
+    override?: { readonly providerID: string; readonly modelID: string },
+  ) => Effect.Effect<Model, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRunnerModel") {}
 
 /** Test or embedding seam for supplying a model resolver directly. */
-export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Service, Service.of({ resolve }))
+export const layerWith = (resolve: Interface["resolve"]) =>
+  Layer.succeed(Service, Service.of({ resolve, resolveReflection: resolve }))
 
 const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {
   if (credential?.type === "key") return Auth.value(credential.key)
@@ -184,23 +189,44 @@ export const locationLayer = Layer.effect(
   Effect.gen(function* () {
     const catalog = yield* Catalog.Service
     const integrations = yield* Integration.Service
-    return Service.of({
-      resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session) {
-        // Location plugins populate and filter the catalog asynchronously during layer startup.
-        const defaultModel = session.model ? undefined : yield* catalog.model.default()
-        const selected = session.model
-          ? (yield* catalog.model.available()).find(
-              (model) => model.providerID === session.model?.providerID && model.id === session.model.id,
-            )
-          : defaultModel && supported(defaultModel)
-            ? defaultModel
-            : (yield* catalog.model.available()).find(supported)
-        if (!selected && session.model)
+    const resolveEffect = Effect.fn("SessionRunnerModel.resolve")(function* (session: SessionSchema.Info) {
+      // Location plugins populate and filter the catalog asynchronously during layer startup.
+      const defaultModel = session.model ? undefined : yield* catalog.model.default()
+      const selected = session.model
+        ? (yield* catalog.model.available()).find(
+            (model) => model.providerID === session.model?.providerID && model.id === session.model.id,
+          )
+        : defaultModel && supported(defaultModel)
+          ? defaultModel
+          : (yield* catalog.model.available()).find(supported)
+      if (!selected && session.model)
+        return yield* new ModelUnavailableError({
+          providerID: session.model.providerID,
+          modelID: session.model.id,
+        })
+      if (!selected) return yield* new ModelNotSelectedError({ sessionID: session.id })
+      const provider = yield* catalog.provider.get(selected.providerID)
+      const connection = yield* integrations.connection.active(
+        provider?.integrationID ?? Integration.ID.make(selected.providerID),
+      )
+      return yield* resolve(
+        session,
+        selected,
+        connection ? yield* integrations.connection.resolve(connection) : undefined,
+      )
+    })
+    const resolveReflectionEffect = Effect.fn("SessionRunnerModel.resolveReflection")(
+      function* (session: SessionSchema.Info, override?: { providerID: string; modelID: string }) {
+        if (!override) return yield* resolveEffect(session)
+        const available = yield* catalog.model.available()
+        const selected = available.find(
+          (m) => m.providerID === override.providerID && m.id === override.modelID,
+        )
+        if (!selected)
           return yield* new ModelUnavailableError({
-            providerID: session.model.providerID,
-            modelID: session.model.id,
+            providerID: ProviderV2.ID.make(override.providerID),
+            modelID: ModelV2.ID.make(override.modelID),
           })
-        if (!selected) return yield* new ModelNotSelectedError({ sessionID: session.id })
         const provider = yield* catalog.provider.get(selected.providerID)
         const connection = yield* integrations.connection.active(
           provider?.integrationID ?? Integration.ID.make(selected.providerID),
@@ -210,9 +236,17 @@ export const locationLayer = Layer.effect(
           selected,
           connection ? yield* integrations.connection.resolve(connection) : undefined,
         )
-      }),
+      },
+    )
+    return Service.of({
+      resolve: resolveEffect,
+      resolveReflection: resolveReflectionEffect,
     })
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [Catalog.node, Integration.node] })
+export const node = makeLocationNode({
+  service: Service,
+  layer: locationLayer,
+  deps: [Catalog.node, Integration.node],
+})

@@ -5,3 +5,6 @@ bun.lock
 .gitignore
 package-lock.json
 references/
+
+# Local workspace MCP config (contains JULES_API_KEY)
+opencode.jsonc

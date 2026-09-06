@@ -238,6 +238,62 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         ),
     )
     .add(
+      HttpApiEndpoint.post("session.reflect", "/api/session/:sessionID/reflect", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({
+          model: Model.Ref.pipe(Schema.optional),
+        }),
+        success: Schema.Struct({
+          data: Schema.Struct({
+            why: Schema.Struct({
+              steered: Schema.Boolean,
+              iterates: Schema.Number,
+              converged: Schema.Boolean,
+              epsilon: Schema.Number,
+              approximationGap: Schema.Number.pipe(Schema.optional),
+              text: Schema.String,
+              extensionsDetected: Schema.Number,
+            }),
+            // eslint-disable-next-line unicorn/no-thenable
+            then: Schema.Struct({
+              steered: Schema.Boolean,
+              iterates: Schema.Number,
+              converged: Schema.Boolean,
+              epsilon: Schema.Number,
+              approximationGap: Schema.Number.pipe(Schema.optional),
+              text: Schema.String,
+              extensionsDetected: Schema.Number,
+            }),
+            diagnostic: Schema.Struct({
+              muR: Schema.String,
+              tauR: Schema.String,
+              state: Schema.String,
+              initialPrompt: Schema.String,
+              rhoMuR: Schema.Number,
+              rhoTauR: Schema.Number,
+              rhoState: Schema.Number,
+              forwardMisalignment: Schema.Number,
+              backwardMisalignment: Schema.Number,
+              totalMisalignment: Schema.Number,
+              objectiveGap: Schema.Number,
+              cofinality: Schema.Union([Schema.Literal("omega"), Schema.Literal("transfinite")]),
+              extensionsDetected: Schema.Number,
+            }),
+          }),
+        }),
+        error: [SessionNotFoundError, ServiceUnavailableError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.reflect",
+            summary: "Reflect on session",
+            description:
+              "Run the Why and Then reflective fixed-point loops against the session's last assistant message. Optionally override the reflection model. Returns per-loop results and a forward-backward misalignment diagnostic (paper Theorem 23.5). No provider turn is run.",
+          }),
+        ),
+    )
+    .add(
       HttpApiEndpoint.post("session.wait", "/api/session/:sessionID/wait", {
         params: { sessionID: Session.ID },
         success: HttpApiSchema.NoContent,

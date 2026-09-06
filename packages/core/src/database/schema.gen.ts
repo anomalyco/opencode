@@ -57,6 +57,41 @@ export default {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`automation_run\` (
+          \`id\` text PRIMARY KEY,
+          \`trigger_id\` text NOT NULL,
+          \`session_id\` text NOT NULL,
+          \`status\` text NOT NULL,
+          \`prompt\` text NOT NULL,
+          \`agent\` text,
+          \`error\` text,
+          \`payload\` text,
+          \`time_started\` integer NOT NULL,
+          \`time_completed\` integer,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`fk_automation_run_trigger_id_automation_trigger_id_fk\` FOREIGN KEY (\`trigger_id\`) REFERENCES \`automation_trigger\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`automation_trigger\` (
+          \`id\` text PRIMARY KEY,
+          \`session_id\` text NOT NULL,
+          \`name\` text NOT NULL,
+          \`prompt\` text NOT NULL,
+          \`schedule\` text NOT NULL,
+          \`enabled\` integer DEFAULT true NOT NULL,
+          \`agent\` text,
+          \`last_fired\` integer,
+          \`locked\` integer DEFAULT false NOT NULL,
+          \`lock_owner\` text,
+          \`lock_expires\` integer,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`fk_automation_trigger_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`credential\` (
           \`id\` text PRIMARY KEY,
           \`integration_id\` text,
@@ -236,6 +271,39 @@ export default {
           CONSTRAINT \`fk_session_share_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
         );
       `)
+      yield* tx.run(`
+        CREATE TABLE \`teamjules_task\` (
+          \`id\` text PRIMARY KEY,
+          \`type\` text DEFAULT 'manual' NOT NULL CHECK (\`type\` IN ('issue', 'pr', 'manual')),
+          \`status\` text DEFAULT 'pending' NOT NULL CHECK (\`status\` IN ('pending', 'queued', 'running', 'completed', 'failed', 'cancelled')),
+          \`repo\` text NOT NULL,
+          \`branch\` text NOT NULL,
+          \`prompt\` text NOT NULL,
+          \`result\` text,
+          \`session_id\` text,
+          \`worker_id\` text,
+          \`attempt_count\` integer DEFAULT 0 NOT NULL,
+          \`max_attempts\` integer DEFAULT 3 NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`teamjules_worker\` (
+          \`id\` text PRIMARY KEY,
+          \`status\` text DEFAULT 'idle' NOT NULL CHECK (\`status\` IN ('idle', 'busy', 'offline')),
+          \`last_heartbeat\` integer NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`CREATE INDEX \`automation_run_trigger_idx\` ON \`automation_run\` (\`trigger_id\`);`)
+      yield* tx.run(`CREATE INDEX \`automation_run_session_idx\` ON \`automation_run\` (\`session_id\`);`)
+      yield* tx.run(`CREATE INDEX \`automation_run_status_idx\` ON \`automation_run\` (\`status\`);`)
+      yield* tx.run(`CREATE INDEX \`automation_run_time_idx\` ON \`automation_run\` (\`time_started\`);`)
+      yield* tx.run(`CREATE INDEX \`automation_trigger_session_idx\` ON \`automation_trigger\` (\`session_id\`);`)
+      yield* tx.run(`CREATE INDEX \`automation_trigger_enabled_idx\` ON \`automation_trigger\` (\`enabled\`);`)
+      yield* tx.run(`CREATE INDEX \`automation_trigger_locked_idx\` ON \`automation_trigger\` (\`locked\`);`)
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)
       yield* tx.run(
@@ -269,6 +337,10 @@ export default {
       yield* tx.run(`CREATE INDEX \`session_workspace_idx\` ON \`session\` (\`workspace_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_parent_idx\` ON \`session\` (\`parent_id\`);`)
       yield* tx.run(`CREATE INDEX \`todo_session_idx\` ON \`todo\` (\`session_id\`);`)
+      yield* tx.run(`CREATE INDEX \`teamjules_task_status_created_idx\` ON \`teamjules_task\` (\`status\`, \`time_created\`);`)
+      yield* tx.run(`CREATE INDEX \`teamjules_task_repo_idx\` ON \`teamjules_task\` (\`repo\`);`)
+      yield* tx.run(`CREATE INDEX \`teamjules_task_worker_idx\` ON \`teamjules_task\` (\`worker_id\`);`)
+      yield* tx.run(`CREATE INDEX \`teamjules_worker_status_heartbeat_idx\` ON \`teamjules_worker\` (\`status\`, \`last_heartbeat\`);`)
     })
   },
 } satisfies Omit<DatabaseMigration.Migration, "id">

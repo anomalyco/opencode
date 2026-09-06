@@ -265,6 +265,24 @@ import type {
   TuiSubmitPromptResponses,
   V2AgentListErrors,
   V2AgentListResponses,
+  V2AutomationCreateErrors,
+  V2AutomationCreateResponses,
+  V2AutomationFireErrors,
+  V2AutomationFireResponses,
+  V2AutomationGetErrors,
+  V2AutomationGetResponses,
+  V2AutomationListErrors,
+  V2AutomationListResponses,
+  V2AutomationRemoveErrors,
+  V2AutomationRemoveResponses,
+  V2AutomationRunsGetErrors,
+  V2AutomationRunsGetResponses,
+  V2AutomationRunsListErrors,
+  V2AutomationRunsListResponses,
+  V2AutomationUpdateErrors,
+  V2AutomationUpdateResponses,
+  V2AutomationWebhookErrors,
+  V2AutomationWebhookResponses,
   V2CommandListErrors,
   V2CommandListResponses,
   V2CredentialRemoveErrors,
@@ -371,6 +389,8 @@ import type {
   V2SessionQuestionRejectResponses,
   V2SessionQuestionReplyErrors,
   V2SessionQuestionReplyResponses,
+  V2SessionReflectErrors,
+  V2SessionReflectResponses,
   V2SessionRevertClearErrors,
   V2SessionRevertClearResponses,
   V2SessionRevertCommitErrors,
@@ -385,6 +405,16 @@ import type {
   V2SessionWaitResponses,
   V2SkillListErrors,
   V2SkillListResponses,
+  V2TeamjulesCancelErrors,
+  V2TeamjulesCancelResponses,
+  V2TeamjulesCreateErrors,
+  V2TeamjulesCreateResponses,
+  V2TeamjulesGetErrors,
+  V2TeamjulesGetResponses,
+  V2TeamjulesListErrors,
+  V2TeamjulesListResponses,
+  V2TeamjulesRetryErrors,
+  V2TeamjulesRetryResponses,
   VcsApplyErrors,
   VcsApplyResponses,
   VcsDiffErrors,
@@ -5675,6 +5705,41 @@ export class Session3 extends HeyApiClient {
   }
 
   /**
+   * Reflect on session
+   *
+   * Run the Why and Then reflective fixed-point loops against the session's last assistant message. Optionally override the reflection model. Returns per-loop results and a forward-backward misalignment diagnostic (paper Theorem 23.5). No provider turn is run.
+   */
+  public reflect<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      model?: ModelRef
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "model" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionReflectResponses, V2SessionReflectErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/reflect",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * Wait for session
    *
    * Wait for a session agent loop to become idle.
@@ -6987,6 +7052,437 @@ export class ProjectCopy2 extends HeyApiClient {
   }
 }
 
+export class Runs extends HeyApiClient {
+  /**
+   * List automation runs
+   *
+   * List all automation runs, optionally filtered by trigger, session, or status.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      triggerID?: string
+      sessionID?: string
+      status?: "pending" | "running" | "completed" | "failed" | "cancelled"
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { in: "query", key: "triggerID" },
+            { in: "query", key: "sessionID" },
+            { in: "query", key: "status" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      V2AutomationRunsListResponses,
+      V2AutomationRunsListErrors,
+      ThrowOnError
+    >({
+      url: "/api/automation/runs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get automation run
+   *
+   * Get an automation run by ID.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).get<V2AutomationRunsGetResponses, V2AutomationRunsGetErrors, ThrowOnError>({
+      url: "/api/automation/runs/{id}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Automation extends HeyApiClient {
+  /**
+   * List automation triggers
+   *
+   * List all automation triggers for the location.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { in: "query", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2AutomationListResponses, V2AutomationListErrors, ThrowOnError>({
+      url: "/api/automation",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create automation trigger
+   *
+   * Create a new automation trigger that fires a prompt into a session.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      id?: string
+      sessionID?: string
+      name?: string
+      prompt?: string
+      schedule?:
+        | {
+            type: "cron"
+            /**
+             * Cron expression (e.g. '0 9 * * 1-5')
+             */
+            expression: string
+          }
+        | {
+            type: "webhook"
+            /**
+             * Webhook path (e.g. '/github/push')
+             */
+            path: string
+            secret?: string
+          }
+      enabled?: boolean
+      agent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "id" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "name" },
+            { in: "body", key: "prompt" },
+            { in: "body", key: "schedule" },
+            { in: "body", key: "enabled" },
+            { in: "body", key: "agent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2AutomationCreateResponses, V2AutomationCreateErrors, ThrowOnError>({
+      url: "/api/automation",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Remove automation trigger
+   *
+   * Delete an automation trigger.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).delete<V2AutomationRemoveResponses, V2AutomationRemoveErrors, ThrowOnError>(
+      {
+        url: "/api/automation/{id}",
+        ...options,
+        ...params,
+      },
+    )
+  }
+
+  /**
+   * Get automation trigger
+   *
+   * Get an automation trigger by ID.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).get<V2AutomationGetResponses, V2AutomationGetErrors, ThrowOnError>({
+      url: "/api/automation/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update automation trigger
+   *
+   * Update an existing automation trigger.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      name?: string
+      prompt?: string
+      enabled?: boolean
+      agent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "body", key: "name" },
+            { in: "body", key: "prompt" },
+            { in: "body", key: "enabled" },
+            { in: "body", key: "agent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<V2AutomationUpdateResponses, V2AutomationUpdateErrors, ThrowOnError>({
+      url: "/api/automation/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Fire automation trigger
+   *
+   * Manually fire an automation trigger, sending its prompt to the session. Returns the run record.
+   */
+  public fire<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      payload?: unknown
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "body", key: "payload" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2AutomationFireResponses, V2AutomationFireErrors, ThrowOnError>({
+      url: "/api/automation/{id}/fire",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Receive webhook for automation trigger
+   *
+   * Raw webhook endpoint. If the trigger has a secret, the request must include an X-Hub-Signature-256 header (sha256=<hex>) that HMAC-SHA256-verifies against the raw body using the stored secret. Used by external services like GitHub. The webhook body is passed as payload to the prompt.
+   */
+  public webhook<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).post<V2AutomationWebhookResponses, V2AutomationWebhookErrors, ThrowOnError>(
+      {
+        url: "/api/automation/{id}/webhook",
+        ...options,
+        ...params,
+      },
+    )
+  }
+
+  private _runs?: Runs
+  get runs(): Runs {
+    return (this._runs ??= new Runs({ client: this.client }))
+  }
+}
+
+export class Teamjules extends HeyApiClient {
+  /**
+   * List TeamJules tasks
+   *
+   * List all TeamJules tasks with optional filters.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      status?: "pending" | "queued" | "running" | "completed" | "failed" | "cancelled"
+      repo?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "status" },
+            { in: "query", key: "repo" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2TeamjulesListResponses, V2TeamjulesListErrors, ThrowOnError>({
+      url: "/api/teamjules/tasks",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create a TeamJules task
+   *
+   * Create a new async coding task.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      type?: "issue" | "pr" | "manual"
+      repo?: string
+      branch?: string
+      prompt?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "type" },
+            { in: "body", key: "repo" },
+            { in: "body", key: "branch" },
+            { in: "body", key: "prompt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2TeamjulesCreateResponses, V2TeamjulesCreateErrors, ThrowOnError>({
+      url: "/api/teamjules/tasks",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Cancel a TeamJules task
+   *
+   * Cancel a running or pending TeamJules task.
+   */
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      taskID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "taskID" }] }])
+    return (options?.client ?? this.client).delete<V2TeamjulesCancelResponses, V2TeamjulesCancelErrors, ThrowOnError>({
+      url: "/api/teamjules/tasks/{taskID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get TeamJules task
+   *
+   * Get a single TeamJules task by ID.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      taskID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "taskID" }] }])
+    return (options?.client ?? this.client).get<V2TeamjulesGetResponses, V2TeamjulesGetErrors, ThrowOnError>({
+      url: "/api/teamjules/tasks/{taskID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Retry a TeamJules task
+   *
+   * Retry a failed TeamJules task.
+   */
+  public retry<ThrowOnError extends boolean = false>(
+    parameters: {
+      taskID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "taskID" }] }])
+    return (options?.client ?? this.client).post<V2TeamjulesRetryResponses, V2TeamjulesRetryErrors, ThrowOnError>({
+      url: "/api/teamjules/tasks/{taskID}/retry",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class V2 extends HeyApiClient {
   private _health?: Health
   get health(): Health {
@@ -7071,6 +7567,16 @@ export class V2 extends HeyApiClient {
   private _projectCopy?: ProjectCopy2
   get projectCopy(): ProjectCopy2 {
     return (this._projectCopy ??= new ProjectCopy2({ client: this.client }))
+  }
+
+  private _automation?: Automation
+  get automation(): Automation {
+    return (this._automation ??= new Automation({ client: this.client }))
+  }
+
+  private _teamjules?: Teamjules
+  get teamjules(): Teamjules {
+    return (this._teamjules ??= new Teamjules({ client: this.client }))
   }
 }
 

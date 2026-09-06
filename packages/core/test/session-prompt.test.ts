@@ -40,6 +40,46 @@ const execution = Layer.succeed(
       Effect.sync(() => {
         wakeCalls.push(sessionID)
       }),
+      reflect: () =>
+        Effect.succeed({
+          why: { steered: false, iterates: 0, converged: true, certificate: { epsilon: 0 }, text: "", extensionsDetected: 0 },
+          // eslint-disable-next-line unicorn/no-thenable
+          then: { steered: false, iterates: 0, converged: true, certificate: { epsilon: 0 }, text: "", extensionsDetected: 0 },
+          diagnostic: {
+            muR: "",
+            tauR: "",
+            state: "",
+            initialPrompt: "",
+            rhoMuR: 0,
+            rhoTauR: 0,
+            rhoState: 0,
+            forwardMisalignment: 0,
+            backwardMisalignment: 0,
+            totalMisalignment: 0,
+            objectiveGap: 0,
+            cofinality: "omega" as const,
+            extensionsDetected: 0,
+          },
+        }),
+      whyLoop: () =>
+        Effect.succeed({
+          steered: false,
+          iterates: 0,
+          converged: true,
+          certificate: { epsilon: 0 },
+          text: "",
+          extensionsDetected: 0,
+        }),
+      thenLoop: () =>
+        Effect.succeed({
+          steered: false,
+          iterates: 0,
+          converged: true,
+          certificate: { epsilon: 0 },
+          text: "",
+          extensionsDetected: 0,
+        }),
+      escalate: () => Effect.succeed({ escalated: true, message: "mock escalation" }),
   }),
 )
 const it = testEffect(

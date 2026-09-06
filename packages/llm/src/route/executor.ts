@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Layer, Random } from "effect"
+import { Cause, Context, Effect, Layer, Random, Semaphore } from "effect"
 import {
   FetchHttpClient,
   Headers,
@@ -32,10 +32,37 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLM/RequestExecutor") {}
 
+// Provider-specific concurrency limits (can be overridden via env)
+const PROVIDER_CONCURRENCY_LIMITS: Record<string, number> = {
+  "nvidia": parseInt(process.env.OPENCODE_NVIDIA_MAX_CONCURRENCY || "32", 10),
+  "nim": parseInt(process.env.OPENCODE_NVIDIA_MAX_CONCURRENCY || "32", 10),
+}
+
+const getConcurrencyLimit = (url: string): number => {
+  for (const [provider, limit] of Object.entries(PROVIDER_CONCURRENCY_LIMITS)) {
+    if (url.includes(provider)) return limit
+  }
+  // Allow global override
+  if (process.env.OPENCODE_MAX_CONCURRENCY) {
+    return parseInt(process.env.OPENCODE_MAX_CONCURRENCY, 10)
+  }
+  return 100 // default unlimited
+}
+
+const semaphores = new Map<string, Semaphore.Semaphore>()
+
+const getSemaphore = (url: string): Semaphore.Semaphore => {
+  const provider = Object.keys(PROVIDER_CONCURRENCY_LIMITS).find(p => url.includes(p)) || "default"
+  if (!semaphores.has(provider)) {
+    semaphores.set(provider, Semaphore.makeUnsafe(getConcurrencyLimit(url)))
+  }
+  return semaphores.get(provider)!
+}
+
 const BODY_LIMIT = 16_384
-const MAX_RETRIES = 2
-const BASE_DELAY_MS = 500
-const MAX_DELAY_MS = 10_000
+const MAX_RETRIES = 3
+const BASE_DELAY_MS = 1000
+const MAX_DELAY_MS = 30_000
 const REDACTED = "<redacted>"
 
 // One source of truth for what counts as a sensitive name across headers,
@@ -239,6 +266,15 @@ const statusReason = (input: {
   if (input.status === 403) {
     return new AuthenticationReason({ message: input.message, kind: "insufficient-permissions", http: input.http })
   }
+  // NVIDIA NIM "Worker local total request limit reached" - treat as rate limit regardless of status code
+  if (/worker.*local.*total.*request.*limit.*reached/i.test(body)) {
+    return new RateLimitReason({
+      message: input.message,
+      retryAfterMs: input.retryAfterMs ?? 5000,
+      rateLimit: input.rateLimit,
+      http: input.http,
+    })
+  }
   if (input.status === 429) {
     if (/insufficient[-_\s]?quota|quota[-_\s]?exceeded/i.test(body)) {
       return new QuotaExceededReason({ message: input.message, http: input.http })
@@ -370,9 +406,12 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
     const executeOnce = (request: HttpClientRequest.HttpClientRequest) =>
       Effect.gen(function* () {
         const redactedNames = yield* Headers.CurrentRedactedNames
-        return yield* http
-          .execute(request)
-          .pipe(Effect.mapError(toHttpError(redactedNames)), Effect.flatMap(statusError(request, redactedNames)))
+        const semaphore = getSemaphore(request.url)
+        return yield* Semaphore.withPermit(semaphore)(
+          http
+            .execute(request)
+            .pipe(Effect.mapError(toHttpError(redactedNames)), Effect.flatMap(statusError(request, redactedNames)))
+        )
       })
     return Service.of({
       execute: (request) => retryStatusFailures(executeOnce(request)),

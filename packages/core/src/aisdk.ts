@@ -2,10 +2,85 @@ export * as AISDK from "./aisdk"
 
 import { makeLocationNode } from "./effect/app-node"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
-import { Cause, Context, Effect, Layer, Schema, Scope } from "effect"
+import { Cause, Context, Effect, Layer, Schema, Scope, Semaphore } from "effect"
 import { ModelV2 } from "./model"
 import { ProviderV2 } from "./provider"
 import { State } from "./state"
+
+const NIM_BACKEND_KEYWORDS = ["nvidia", "nim", "integrate.api.nvidia.com"]
+
+interface BackendState {
+  maxConcurrent: number
+  inFlight: number
+  successWindow: number[]
+  errorWindow: number[]
+  lastErrorTime: number
+}
+
+const backends = new Map<string, BackendState>()
+let backendWarned = false
+
+function getBackendKey(url: string): string {
+  const match = NIM_BACKEND_KEYWORDS.find((k) => url.toLowerCase().includes(k.toLowerCase()))
+  if (match) return match
+  const host = getHost(url)
+  return host || "default"
+}
+
+function getHost(url: string): string {
+  try { return new URL(url).host } catch { return "" }
+}
+
+function getBackendState(url: string): BackendState {
+  const key = getBackendKey(url)
+  let state = backends.get(key)
+  if (!state) {
+    state = { maxConcurrent: 32, inFlight: 0, successWindow: [], errorWindow: [], lastErrorTime: 0 }
+    backends.set(key, state)
+  }
+  return state
+}
+
+function getAdjustedPermits(state: BackendState): number {
+  if (state.errorWindow.length === 0) return state.maxConcurrent
+  const now = Date.now()
+  const recent = state.errorWindow.filter(t => now - t < 60000).length
+  if (recent === 0) return state.maxConcurrent
+  if (recent <= 1) return Math.max(4, state.maxConcurrent - 4)
+  if (recent <= 3) return Math.max(2, Math.floor(state.maxConcurrent / 2))
+  return Math.max(1, Math.floor(state.maxConcurrent / 4))
+}
+
+const semaphoreMap = new Map<string, Semaphore.Semaphore>()
+
+function getSemaphore(url: string): Semaphore.Semaphore | undefined {
+  const key = NIM_BACKEND_KEYWORDS.find((k) => url.toLowerCase().includes(k.toLowerCase()))
+  if (!key) return
+  const state = getBackendState(url)
+  const permits = getAdjustedPermits(state)
+  const existing = semaphoreMap.get(key)
+  if (existing) return existing
+  const semaphore = Semaphore.makeUnsafe(permits)
+  semaphoreMap.set(key, semaphore)
+  return semaphore
+}
+
+function rebuildSemaphore(key: string, permits: number) {
+  semaphoreMap.set(key, Semaphore.makeUnsafe(permits))
+}
+
+function reportResponse(url: string, ok: boolean) {
+  const state = getBackendState(url)
+  const now = Date.now()
+  if (ok) {
+    state.successWindow.push(now)
+    if (state.successWindow.length > 100) state.successWindow.shift()
+    return
+  }
+  state.errorWindow.push(now)
+  state.lastErrorTime = now
+  if (state.errorWindow.length > 50) state.errorWindow.shift()
+}
 
 type SDK = any
 
@@ -82,40 +157,88 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
   const customFetch = options.fetch
   const chunkTimeout = options.chunkTimeout
   delete options.chunkTimeout
-  options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-    const opts = { ...(init ?? {}) }
-    const signals = [
-      opts.signal,
-      typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined,
-      options.timeout !== undefined && options.timeout !== null && options.timeout !== false
-        ? AbortSignal.timeout(options.timeout)
-        : undefined,
-    ].filter((item): item is AbortSignal | AbortController => Boolean(item))
-    const chunkAbortCtl = signals.find((item): item is AbortController => item instanceof AbortController)
-    const abortSignals = signals.map((item) => (item instanceof AbortController ? item.signal : item))
-    if (abortSignals.length === 1) opts.signal = abortSignals[0]
-    if (abortSignals.length > 1) opts.signal = AbortSignal.any(abortSignals)
+  const isKnownBackend = (url: string) => NIM_BACKEND_KEYWORDS.some((k) => url.toLowerCase().includes(k.toLowerCase()))
 
-    if (
-      (pkg === "@ai-sdk/openai" || pkg === "@ai-sdk/azure" || pkg === "@ai-sdk/amazon-bedrock/mantle") &&
-      opts.body &&
-      opts.method === "POST"
-    ) {
-      const body = JSON.parse(opts.body as string)
-      if (body.store !== true && Array.isArray(body.input)) {
-        for (const item of body.input) {
-          if ("id" in item) delete item.id
-        }
-        opts.body = JSON.stringify(body)
-      }
+  options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+    const base = init?.signal
+
+    const doFetch = async (opts: RequestInit): Promise<Response> => {
+      return (typeof customFetch === "function" ? customFetch : fetch)(input, { ...opts, timeout: false })
     }
 
-    const res = await (typeof customFetch === "function" ? customFetch : fetch)(input, {
-      ...opts,
-      timeout: false,
-    })
-    if (!chunkAbortCtl || typeof chunkTimeout !== "number") return res
-    return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+    const attemptFetch = async (tryNum: number): Promise<Response> => {
+      const opts: RequestInit = { ...(init ?? {}) }
+      const signals: (AbortSignal | AbortController)[] = [
+        opts.signal as AbortSignal | undefined,
+        typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined,
+        options.timeout !== undefined && options.timeout !== null && options.timeout !== false
+          ? AbortSignal.timeout(options.timeout)
+          : undefined,
+      ].filter((item): item is AbortSignal | AbortController => Boolean(item))
+      const chunkAbortCtl = signals.find((item): item is AbortController => item instanceof AbortController)
+      const abortSignals = signals.map((item) => (item instanceof AbortController ? item.signal : item))
+      if (abortSignals.length === 1) opts.signal = abortSignals[0]
+      if (abortSignals.length > 1) opts.signal = AbortSignal.any(abortSignals)
+
+      if (
+        (pkg === "@ai-sdk/openai" || pkg === "@ai-sdk/azure" || pkg === "@ai-sdk/amazon-bedrock/mantle") &&
+        opts.body &&
+        opts.method === "POST"
+      ) {
+        const body = JSON.parse(opts.body as string)
+        if (body.store !== true && Array.isArray(body.input)) {
+          for (const item of body.input) {
+            if ("id" in item) delete item.id
+          }
+          opts.body = JSON.stringify(body)
+        }
+      }
+
+      const state = isKnownBackend(url) ? getBackendState(url) : undefined
+      if (state) state.inFlight++
+
+      let res: Response
+      try {
+        res = await doFetch(opts)
+      } finally {
+        if (state) state.inFlight--
+      }
+
+      if (res.ok) {
+        if (state) reportResponse(url, true)
+        if (!chunkAbortCtl || typeof chunkTimeout !== "number") return res
+        return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+      }
+
+      const isRateLimited = res.status === 429 || res.status === 503
+      let isNimLimit = false
+      if (isRateLimited && tryNum < 3) {
+        const body = await res.clone().text().catch(() => "")
+        isNimLimit = /worker.*local.*total.*request.*limit.*reached/i.test(body)
+      }
+
+      if (isNimLimit || (isRateLimited && isKnownBackend(url) && tryNum < 3)) {
+        if (state) reportResponse(url, false)
+        const delay = isNimLimit
+          ? Math.min(2000 * Math.pow(3, tryNum) + Math.random() * 2000, 45000)
+          : Math.min(1000 * Math.pow(2, tryNum) + Math.random() * 1000, 30000)
+        await new Promise<void>((resolve) => {
+          if (base?.aborted) { resolve(); return }
+          const timer = setTimeout(resolve, delay)
+          base?.addEventListener("abort", () => { clearTimeout(timer); resolve() }, { once: true })
+        })
+        return attemptFetch(tryNum + 1)
+      }
+
+      return res
+    }
+
+    const semaphore = isKnownBackend(url) ? getSemaphore(url) : undefined
+    if (semaphore) {
+      return Effect.runPromise(Semaphore.withPermit(semaphore)(Effect.promise(() => attemptFetch(0))))
+    }
+    return attemptFetch(0)
   }
 
   return options

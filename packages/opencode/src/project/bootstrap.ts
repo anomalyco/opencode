@@ -7,6 +7,7 @@ import * as Project from "./project"
 import * as Vcs from "./vcs"
 import { InstanceState } from "@/effect/instance-state"
 import { ShareNext } from "@/share/share-next"
+import { AutomationScheduler } from "@opencode-ai/core/automation/scheduler"
 import { Effect, Layer } from "effect"
 import { Config } from "@/config/config"
 import { Service } from "./bootstrap-service"
@@ -28,6 +29,7 @@ const layer = Layer.effect(
     const shareNext = yield* ShareNext.Service
     const snapshot = yield* Snapshot.Service
     const vcs = yield* Vcs.Service
+    const automationScheduler = yield* AutomationScheduler.Service
 
     const run = Effect.gen(function* () {
       const ctx = yield* InstanceState.context
@@ -36,6 +38,8 @@ const layer = Layer.effect(
       yield* config.get()
       // Plugin can mutate config so it has to be initialized before anything else.
       yield* plugin.init()
+      // Start the automation scheduler so cron triggers fire while the server runs
+      yield* Effect.scoped(automationScheduler.init())
       // Each service self-manages its own slow work via Effect.forkScoped against
       // its per-instance state scope. We just await materialization here.
       yield* Effect.forEach(
@@ -52,7 +56,17 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,
-  deps: [Config.node, Format.node, LSP.node, Plugin.node, Project.node, ShareNext.node, Snapshot.node, Vcs.node],
+  deps: [
+    Config.node,
+    Format.node,
+    LSP.node,
+    Plugin.node,
+    Project.node,
+    ShareNext.node,
+    Snapshot.node,
+    Vcs.node,
+    AutomationScheduler.node,
+  ],
 })
 
 export * as InstanceBootstrap from "./bootstrap"

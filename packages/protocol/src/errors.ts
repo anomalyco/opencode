@@ -109,3 +109,39 @@ export class PtyNotFoundError extends Schema.TaggedErrorClass<PtyNotFoundError>(
   },
   { httpApiStatus: 404 },
 ) {}
+
+export class AutomationNotFoundError extends Schema.TaggedErrorClass<AutomationNotFoundError>()(
+  "AutomationNotFoundError",
+  {
+    id: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class AutomationLockError extends Schema.TaggedErrorClass<AutomationLockError>()(
+  "AutomationLockError",
+  {
+    id: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 409 },
+) {}
+
+export class AutomationPromptConflictError extends Schema.TaggedErrorClass<AutomationPromptConflictError>()(
+  "AutomationPromptConflictError",
+  {
+    sessionID: Schema.String,
+    messageID: Schema.String,
+  },
+  { httpApiStatus: 409 },
+) {}
+
+export class TeamJulesNotFoundError extends Schema.TaggedErrorClass<TeamJulesNotFoundError>()(
+  "TeamJulesNotFoundError",
+  {
+    taskID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}

@@ -1,0 +1,5 @@
+export * as Automation from "./automation/automation"
+export * from "./automation/automation"
+export { AutomationQueue } from "./automation/queue"
+export { AgentSwarm } from "./automation/swarm"
+export { NLAutomationBuilder } from "./automation/nl-builder"

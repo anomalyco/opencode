@@ -16,6 +16,7 @@ import { ConfigPluginV1 } from "./plugin"
 import { ConfigProviderV1 } from "./provider"
 import { ConfigServerV1 } from "./server"
 import { ConfigSkillsV1 } from "./skills"
+import { ConfigTeamJulesV1 } from "./teamjules"
 
 export type Layout = ConfigLayoutV1.Layout
 
@@ -76,6 +77,9 @@ export const Info = Schema.Struct({
   }),
   small_model: Schema.optional(Schema.String).annotate({
     description: "Small model to use for tasks like title generation in the format of provider/model",
+  }),
+  reflection_model: Schema.optional(Schema.String).annotate({
+    description: "Model to use for reflective reasoning loops (whyLoop / thenLoop) in the format of provider/model",
   }),
   default_agent: Schema.optional(Schema.String).annotate({
     description:
@@ -187,6 +191,7 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  teamjules: Schema.optional(ConfigTeamJulesV1.TeamJulesConfig),
 }).annotate({ identifier: "Config" })
 
 export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>

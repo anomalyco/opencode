@@ -12,6 +12,7 @@ import { ReadToolFileSystem } from "./read-filesystem"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
+import { SpeculativeExecution } from "./speculative"
 
 export const name = "read"
 const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
@@ -79,6 +80,15 @@ const layer = Layer.effectDiscard(
               })
               if (type === "directory")
                 return yield* reader.list(absolute, { offset: input.offset, limit: input.limit })
+
+              const cachedParams: Record<string, unknown> = { path: absolute }
+              if (input.offset !== undefined) cachedParams.offset = input.offset
+              if (input.limit !== undefined) cachedParams.limit = input.limit
+              const cached = SpeculativeExecution.getCached<FileSystem.Content>(
+                SpeculativeExecution.cacheKey(name, cachedParams),
+              )
+              if (cached) return cached
+
               const content = yield* reader.read(absolute, resource, {
                 offset: input.offset,
                 limit: input.limit,

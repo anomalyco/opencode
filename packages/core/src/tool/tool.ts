@@ -68,6 +68,25 @@ type Runtime = {
 
 const runtimes = new WeakMap<AnyTool, Runtime>()
 
+export function minifyDesc(desc: string): string {
+  return desc
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\. Defaults to (.+?)\./g, " (default: $1)")
+    .replace(/\. Must be (.+?)\./g, " ($1)")
+    .replace(/\. Cannot exceed (.+?)\./g, " (max $1)")
+    .replace(/Shell command string to execute/g, "Shell command")
+    .replace(/Working directory/g, "Working dir")
+    .replace(/Timeout in milliseconds/g, "Timeout")
+    .replace(/The content to write to the file/g, "Content to write")
+    .replace(/The absolute path to the file/g, "File path")
+    .replace(/The glob pattern to match/g, "Glob pattern")
+    .replace(/The regex pattern to search/g, "Pattern")
+    .replace(/Number of search results/g, "Max results")
+    .replace(/Fetches content from a specified URL/g, "Fetch a URL")
+    .replace(/Search the web/g, "Web search")
+}
+
 export function make<
   Input extends SchemaType<any>,
   Output extends SchemaType<any>,
@@ -75,13 +94,14 @@ export function make<
 >(config: Config<Input, Output, Structured>): Definition<Input, Structured> {
   const tool = Object.freeze({}) as Definition<Input, Structured>
   const definitions = new Map<string, ToolDefinition>()
+  const minified = minifyDesc(config.description)
   runtimes.set(tool, {
     definition: (name) => {
       const cached = definitions.get(name)
       if (cached) return cached
       const definition = new ToolDefinition({
         name,
-        description: config.description,
+        description: minified,
         inputSchema: toJsonSchema(config.input),
         outputSchema: toJsonSchema(config.structured ?? config.output),
       })

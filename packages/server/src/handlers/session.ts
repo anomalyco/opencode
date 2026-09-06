@@ -194,6 +194,71 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.reflect",
+        Effect.fn(function* (ctx) {
+          const outcome = yield* session.reflect({ sessionID: ctx.params.sessionID, ...(ctx.payload.model === undefined ? {} : { model: ctx.payload.model }) }).pipe(
+            Effect.catchTag("Session.NotFoundError", (error) =>
+              Effect.fail(
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+            Effect.catchCause(() =>
+              Effect.fail(
+                new ServiceUnavailableError({
+                  message: "Reflection failed",
+                  service: "session.reflect",
+                }),
+              ),
+            ),
+          )
+          return {
+            data: {
+              why: {
+                steered: outcome.why.steered,
+                iterates: outcome.why.iterates,
+                converged: outcome.why.converged,
+                epsilon: outcome.why.certificate.epsilon,
+                ...(outcome.why.certificate.approximationGap === undefined
+                  ? {}
+                  : { approximationGap: outcome.why.certificate.approximationGap }),
+                text: outcome.why.text,
+                extensionsDetected: outcome.why.extensionsDetected,
+              },
+              // eslint-disable-next-line unicorn/no-thenable
+              then: {
+                steered: outcome.then.steered,
+                iterates: outcome.then.iterates,
+                converged: outcome.then.converged,
+                epsilon: outcome.then.certificate.epsilon,
+                ...(outcome.then.certificate.approximationGap === undefined
+                  ? {}
+                  : { approximationGap: outcome.then.certificate.approximationGap }),
+                text: outcome.then.text,
+                extensionsDetected: outcome.then.extensionsDetected,
+              },
+              diagnostic: {
+                muR: outcome.diagnostic.muR,
+                tauR: outcome.diagnostic.tauR,
+                state: outcome.diagnostic.state,
+                initialPrompt: outcome.diagnostic.initialPrompt,
+                rhoMuR: outcome.diagnostic.rhoMuR,
+                rhoTauR: outcome.diagnostic.rhoTauR,
+                rhoState: outcome.diagnostic.rhoState,
+                forwardMisalignment: outcome.diagnostic.forwardMisalignment,
+                backwardMisalignment: outcome.diagnostic.backwardMisalignment,
+                totalMisalignment: outcome.diagnostic.totalMisalignment,
+                objectiveGap: outcome.diagnostic.objectiveGap,
+                cofinality: outcome.diagnostic.cofinality,
+                extensionsDetected: outcome.diagnostic.extensionsDetected,
+              },
+            },
+          }
+        }),
+      )
+      .handle(
         "session.wait",
         Effect.fn(function* (ctx) {
           yield* session.wait(ctx.params.sessionID).pipe(

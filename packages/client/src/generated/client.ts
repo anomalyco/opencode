@@ -19,6 +19,8 @@ import type {
   SessionsPromptOutput,
   SessionsCompactInput,
   SessionsCompactOutput,
+  SessionsReflectInput,
+  SessionsReflectOutput,
   SessionsWaitInput,
   SessionsWaitOutput,
   SessionsStageInput,
@@ -112,6 +114,34 @@ import type {
   ProjectCopiesRemoveOutput,
   ProjectCopiesRefreshInput,
   ProjectCopiesRefreshOutput,
+  ServerAutomationListInput,
+  ServerAutomationListOutput,
+  ServerAutomationGetInput,
+  ServerAutomationGetOutput,
+  ServerAutomationCreateInput,
+  ServerAutomationCreateOutput,
+  ServerAutomationUpdateInput,
+  ServerAutomationUpdateOutput,
+  ServerAutomationRemoveInput,
+  ServerAutomationRemoveOutput,
+  ServerAutomationFireInput,
+  ServerAutomationFireOutput,
+  ServerAutomationWebhookInput,
+  ServerAutomationWebhookOutput,
+  ServerAutomationRunListInput,
+  ServerAutomationRunListOutput,
+  ServerAutomationRunGetInput,
+  ServerAutomationRunGetOutput,
+  ServerTeamjulesListInput,
+  ServerTeamjulesListOutput,
+  ServerTeamjulesCreateInput,
+  ServerTeamjulesCreateOutput,
+  ServerTeamjulesGetInput,
+  ServerTeamjulesGetOutput,
+  ServerTeamjulesCancelInput,
+  ServerTeamjulesCancelOutput,
+  ServerTeamjulesRetryInput,
+  ServerTeamjulesRetryOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -390,6 +420,18 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+      reflect: (input: SessionsReflectInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsReflectOutput }>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/reflect`,
+            body: { model: input["model"] },
+            successStatus: 200,
+            declaredStatuses: [404, 503, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
       wait: (input: SessionsWaitInput, requestOptions?: RequestOptions) =>
         request<SessionsWaitOutput>(
           {
@@ -982,6 +1024,185 @@ export function make(options: ClientOptions) {
             query: { location: input["location"] },
             successStatus: 204,
             declaredStatuses: [400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+    },
+    "server.automation": {
+      list: (input?: ServerAutomationListInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationListOutput>(
+          {
+            method: "GET",
+            path: `/api/automation`,
+            query: { location: input?.["location"], sessionID: input?.["sessionID"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      get: (input: ServerAutomationGetInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationGetOutput>(
+          {
+            method: "GET",
+            path: `/api/automation/${encodeURIComponent(input.id)}`,
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      create: (input: ServerAutomationCreateInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationCreateOutput>(
+          {
+            method: "POST",
+            path: `/api/automation`,
+            body: {
+              id: input["id"],
+              sessionID: input["sessionID"],
+              name: input["name"],
+              prompt: input["prompt"],
+              schedule: input["schedule"],
+              enabled: input["enabled"],
+              agent: input["agent"],
+            },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      update: (input: ServerAutomationUpdateInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationUpdateOutput>(
+          {
+            method: "PATCH",
+            path: `/api/automation/${encodeURIComponent(input.id)}`,
+            body: { name: input["name"], prompt: input["prompt"], enabled: input["enabled"], agent: input["agent"] },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      remove: (input: ServerAutomationRemoveInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationRemoveOutput>(
+          {
+            method: "DELETE",
+            path: `/api/automation/${encodeURIComponent(input.id)}`,
+            successStatus: 204,
+            declaredStatuses: [401, 400],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      fire: (input: ServerAutomationFireInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationFireOutput>(
+          {
+            method: "POST",
+            path: `/api/automation/${encodeURIComponent(input.id)}/fire`,
+            body: { payload: input["payload"] },
+            successStatus: 200,
+            declaredStatuses: [404, 409, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      webhook: (input: ServerAutomationWebhookInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationWebhookOutput>(
+          {
+            method: "POST",
+            path: `/api/automation/${encodeURIComponent(input.id)}/webhook`,
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      runList: (input?: ServerAutomationRunListInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationRunListOutput>(
+          {
+            method: "GET",
+            path: `/api/automation/runs`,
+            query: {
+              location: input?.["location"],
+              triggerID: input?.["triggerID"],
+              sessionID: input?.["sessionID"],
+              status: input?.["status"],
+              limit: input?.["limit"],
+            },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      runGet: (input: ServerAutomationRunGetInput, requestOptions?: RequestOptions) =>
+        request<ServerAutomationRunGetOutput>(
+          {
+            method: "GET",
+            path: `/api/automation/runs/${encodeURIComponent(input.id)}`,
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    "server.teamjules": {
+      list: (input?: ServerTeamjulesListInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamjulesListOutput>(
+          {
+            method: "GET",
+            path: `/api/teamjules/tasks`,
+            query: { status: input?.["status"], repo: input?.["repo"], limit: input?.["limit"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      create: (input: ServerTeamjulesCreateInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamjulesCreateOutput>(
+          {
+            method: "POST",
+            path: `/api/teamjules/tasks`,
+            body: { type: input["type"], repo: input["repo"], branch: input["branch"], prompt: input["prompt"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      get: (input: ServerTeamjulesGetInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamjulesGetOutput>(
+          {
+            method: "GET",
+            path: `/api/teamjules/tasks/${encodeURIComponent(input.taskID)}`,
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      cancel: (input: ServerTeamjulesCancelInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamjulesCancelOutput>(
+          {
+            method: "DELETE",
+            path: `/api/teamjules/tasks/${encodeURIComponent(input.taskID)}`,
+            successStatus: 204,
+            declaredStatuses: [401, 400],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      retry: (input: ServerTeamjulesRetryInput, requestOptions?: RequestOptions) =>
+        request<ServerTeamjulesRetryOutput>(
+          {
+            method: "POST",
+            path: `/api/teamjules/tasks/${encodeURIComponent(input.taskID)}/retry`,
+            successStatus: 204,
+            declaredStatuses: [401, 400],
             empty: true,
           },
           requestOptions,

@@ -39,6 +39,31 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   default_agent: Schema.String.pipe(Schema.optional).annotate({
     description: "Default primary agent to use when no session agent is selected",
   }),
+  reflective_reasoning: Schema.Struct({
+    hedgeThreshold: Schema.Number.pipe(Schema.optional).annotate({
+      description: "Threshold for hedge density before entering fallback mode",
+    }),
+    maxReflectionBudget: Schema.Number.pipe(Schema.optional).annotate({
+      description: "Maximum reflection budget per turn",
+    }),
+    approxTcaTolerance: Schema.Number.pipe(Schema.optional).annotate({
+      description: "TCA approximation tolerance for bounded reflection",
+    }),
+    preActionProjection: Schema.Boolean.pipe(Schema.optional).annotate({
+      description:
+        "Run lightweight projection before the model acts to catch wrong approaches early. Adds one LLM call per turn but can save tokens by preventing wasted tool execution.",
+    }),
+    reflectionTimeoutMs: Schema.Number.pipe(Schema.optional).annotate({
+      description:
+        "Timeout in milliseconds for each reflection stream call (why/then/pre-action loops). Bounds a stalled provider so the drain cannot hang forever. Defaults to 120000.",
+    }),
+  }).pipe(Schema.optional).annotate({
+    description: "Reflective reasoning and stabilization configuration",
+  }),
+  stream_idle_timeout_ms: Schema.Number.pipe(Schema.optional).annotate({
+    description:
+      "Idle timeout in milliseconds for the main agent provider stream. Ends the turn if the provider stops emitting events mid-response, so a silent provider cannot hang the session forever. Defaults to 300000.",
+  }),
   autoupdate: Schema.Union([Schema.Boolean, Schema.Literal("notify")])
     .pipe(Schema.optional)
     .annotate({

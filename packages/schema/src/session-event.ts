@@ -431,6 +431,43 @@ export namespace Compaction {
   export type Ended = typeof Ended.Type
 }
 
+export namespace Log {
+  export const Ended = Event.define({
+    type: "session.next.log.ended",
+    ...options,
+    schema: {
+      ...Base,
+      assistantMessageID: SessionMessage.ID,
+      logID: Schema.String,
+      text: Schema.String,
+    },
+  })
+  export type Ended = typeof Ended.Type
+}
+
+export namespace ReasoningCycle {
+  export const Fired = Event.define({
+    // Diagnostic bookkeeping published per reflection-loop pass and dismissed by
+    // projectors. It is never read back from durable history, so it is not durable:
+    // it broadcasts to in-memory subscribers only and must not be committed to the
+    // durable aggregate (which would require a replayable DurableDefinitions entry
+    // and duplicate the variant across the session-event OpenAPI surface).
+    type: "session.next.reasoning.cycle.fired",
+    schema: {
+      ...Base,
+      loop: Schema.Literals(["why", "then", "redteam"]),
+      gated: Schema.Boolean,
+      steered: Schema.Boolean,
+      messageID: SessionMessage.ID.pipe(optional),
+      reason: Schema.String.pipe(optional),
+      iterates: Schema.Number.pipe(optional),
+      epsilon: Schema.Number.pipe(optional),
+      approximationGap: Schema.Number.pipe(optional),
+    },
+  })
+  export type Fired = typeof Fired.Type
+}
+
 export namespace RevertEvent {
   export const Staged = Event.define({
     type: "session.next.revert.staged",
@@ -443,6 +480,21 @@ export namespace RevertEvent {
     ...options,
     schema: { ...Base, messageID: SessionMessage.ID },
   })
+}
+
+export namespace ReasoningLog {
+  export const Recorded = Event.define({
+    type: "session.next.reasoning.log.recorded",
+    ...options,
+    schema: {
+      ...Base,
+      id: Schema.String,
+      type: Schema.Literals(["why_loop", "then_loop", "pre_action", "hypothesis_update", "evi_score", "counterfactual", "self_consistency", "temporal_guard"]),
+      content: Schema.String,
+      metadata: Schema.Record(Schema.String, Schema.Unknown),
+    },
+  })
+  export type Recorded = typeof Recorded.Type
 }
 
 export const DurableDefinitions = Event.inventory(
@@ -468,12 +520,14 @@ export const DurableDefinitions = Event.inventory(
   Tool.Failed,
   Reasoning.Started,
   Reasoning.Ended,
+  Log.Ended,
   Retried,
   Compaction.Started,
   Compaction.Ended,
   RevertEvent.Staged,
   RevertEvent.Cleared,
   RevertEvent.Committed,
+  ReasoningLog.Recorded,
 )
 
 export const Definitions = Event.inventory(
@@ -495,6 +549,7 @@ export const Definitions = Event.inventory(
   Reasoning.Started,
   Reasoning.Delta,
   Reasoning.Ended,
+  Log.Ended,
   Tool.Input.Started,
   Tool.Input.Delta,
   Tool.Input.Ended,
@@ -506,9 +561,11 @@ export const Definitions = Event.inventory(
   Compaction.Started,
   Compaction.Delta,
   Compaction.Ended,
+  ReasoningCycle.Fired,
   RevertEvent.Staged,
   RevertEvent.Cleared,
   RevertEvent.Committed,
+  ReasoningLog.Recorded,
 )
 
 export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" })

@@ -40,6 +40,7 @@ import { showToast } from "@/utils/toast"
 import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
 import { useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
+import { SessionReasoningPanel } from "@/pages/session/SessionReasoningPanel"
 import { ErrorPage } from "@/pages/error"
 import { CommentsProvider, useComments } from "@/context/comments"
 import { useCommand } from "@/context/command"
@@ -2316,6 +2317,8 @@ export default function Page() {
               focusReviewDiff={focusReviewDiff}
               reviewSnap={ui.reviewSnap}
               size={size}
+              reasoningPanel={SessionReasoningPanel}
+              hasReasoning={() => true}
             />
           </Suspense>
         </Show>
@@ -2347,6 +2350,8 @@ export default function Page() {
                       reviewSnap={ui.reviewSnap}
                       size={size}
                       stacked={desktopV2PanelLayout().stacked}
+                      reasoningPanel={SessionReasoningPanel}
+                      hasReasoning={() => true}
                     />
                   </Suspense>
                 </div>

@@ -54,9 +54,17 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilderV1 } from "./app-node-builder-v1"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { JulesDiagnostic } from "@opencode-ai/core/session/jules-diagnostic"
+import { SessionExecutionLocal } from "@opencode-ai/core/session/execution/local"
+import { SessionStore } from "@opencode-ai/core/session/store"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { TeamJules } from "@opencode-ai/core/teamjules"
+import { Automation } from "@opencode-ai/core/automation/automation"
 
 export const AppLayer = AppNodeBuilderV1.build(
   LayerNode.group([
+    TeamJules.node,
+    Automation.node,
     Npm.node,
     FSUtil.node,
     Database.node,
@@ -78,12 +86,15 @@ export const AppLayer = AppNodeBuilderV1.build(
     Todo.node,
     Session.node,
     SessionProjector.node,
+    JulesDiagnostic.node,
     SessionStatus.node,
     BackgroundJob.node,
     RuntimeFlags.node,
     EventV2Bridge.node,
     SessionRunState.node,
     SessionProcessor.node,
+    SessionStore.node,
+    SessionExecutionLocal.node,
     SessionCompaction.node,
     SessionRevert.node,
     SessionSummary.node,
@@ -106,6 +117,7 @@ export const AppLayer = AppNodeBuilderV1.build(
     ShareNext.node,
     SessionShare.node,
   ]),
+  [[SessionExecution.node, SessionExecutionLocal.node]],
 ).pipe(Layer.provideMerge(AppNodeBuilderV1.build(Ripgrep.node)), Layer.provideMerge(Observability.layer))
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })

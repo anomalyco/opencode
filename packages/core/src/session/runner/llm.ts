@@ -6,9 +6,10 @@ import {
   Message,
   SystemPart,
   isContextOverflowFailure,
+  type Model,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
-import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
+import { Cause, DateTime, Duration, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
 import { Database } from "../../database/database"
@@ -27,15 +28,26 @@ import { ToolOutputStore } from "../../tool-output-store"
 import { SessionContextEpoch } from "../context-epoch"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
+import { ReasoningLog } from "@opencode-ai/schema/session-event"
 import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
+import { SessionMessage } from "../message"
+import { Prompt } from "../prompt"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
-import { type RunError, Service } from "./index"
+import { type ReflectionResult, type RunError, Service } from "./index"
 import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { MAX_STEPS_PROMPT } from "./max-steps"
+import { containsHedge, shouldRedTeam, heuristicAttack, hedgeScore } from "./hedge"
+import { ReflectionState } from "./reflection-state"
+import { ReflectionMetric } from "./reflection-metric"
+import { EVI } from "./evi"
+import { TurnCheckpoint } from "./checkpoint"
+import { SpeculativeExecution } from "../../tool/speculative"
+import { SessionBudget } from "./budget"
+import { DecisionTree } from "../decision-tree"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
@@ -90,6 +102,34 @@ import { llmClient } from "../../effect/app-node-platform"
  * explicit loop starts the next provider turn after local settlement. Configured agent step limits bound the loop.
  */
 
+export const lastAssistantText = (entries: ReadonlyArray<{ message: SessionMessage.Message }>): string => {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const message = entries[i].message
+    if (message.type !== "assistant") continue
+    const text = message.content
+      .filter(
+        (part): part is SessionMessage.AssistantText | SessionMessage.AssistantReasoning =>
+          part.type === "text" || part.type === "reasoning",
+      )
+      .map((part) => part.text)
+      .join(" ")
+    if (text.trim().length > 0) return text
+  }
+  return ""
+}
+
+export const isSettlementFailure = (settlement: ToolRegistry.Settlement): boolean => {
+  if (settlement.result.type === "error") return true
+  const failurePattern = /\b(error|fail|failed|failure|exception|fatal|unhandled)\b/i
+  if (typeof settlement.result.value === "string" && failurePattern.test(settlement.result.value)) return true
+  if (settlement.output?.content) {
+    return settlement.output.content.some(
+      (part) => part.type === "text" && failurePattern.test(part.text),
+    )
+  }
+  return false
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -106,7 +146,15 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
-    const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
+    const configEntries = yield* config.entries()
+    const compaction = SessionCompaction.make({ events, llm, config: configEntries })
+    const reflectiveReasoning = Config.latest(configEntries, "reflective_reasoning")
+    const maxReflectionBudget = Math.max(0, reflectiveReasoning?.maxReflectionBudget ?? 1)
+    const approxTcaTolerance = Math.max(0, reflectiveReasoning?.approxTcaTolerance ?? 0)
+    const preActionProjection = reflectiveReasoning?.preActionProjection ?? true
+    const reflectionTimeout = Duration.millis(reflectiveReasoning?.reflectionTimeoutMs ?? 120_000)
+    const streamIdleTimeout = Duration.millis(Config.latest(configEntries, "stream_idle_timeout_ms") ?? 300_000)
+    const streamIdleGapThreshold = 5_000
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -165,6 +213,45 @@ const layer = Layer.effect(
     const continueAfterOverflowCompaction = (step: number) =>
       new TurnTransitionError({ _tag: "ContinueAfterOverflowCompaction", step })
 
+
+    const readLastAssistantText = Effect.fn("SessionRunner.readLastAssistantText")(function* (
+      sessionID: SessionSchema.ID,
+    ) {
+      const session = yield* getSession(sessionID).pipe(Effect.option)
+      if (Option.isNone(session)) return ""
+      const agent = yield* agents.select(session.value.agent)
+      const system = yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.value.id).pipe(
+        Effect.option,
+      )
+      if (Option.isNone(system)) return ""
+      const entries = yield* SessionHistory.entriesForRunner(db, session.value.id, system.value.baselineSeq).pipe(
+        Effect.option,
+      )
+      if (Option.isNone(entries)) return ""
+      return lastAssistantText(entries.value)
+    })
+
+    const publishCycle = Effect.fn("SessionRunner.publishCycle")(function* (
+      loop: "why" | "then" | "redteam",
+      sessionID: SessionSchema.ID,
+      gated: boolean,
+      steered: boolean,
+      messageID?: SessionMessage.ID,
+      diagnostics?: { readonly iterates: number; readonly epsilon: number; readonly approximationGap?: number },
+    ) {
+      yield* events
+        .publish(SessionEvent.ReasoningCycle.Fired, {
+          loop,
+          gated,
+          steered,
+          ...(messageID === undefined ? {} : { messageID }),
+          ...(diagnostics === undefined ? {} : diagnostics),
+          timestamp: yield* DateTime.now,
+          sessionID,
+        })
+        .pipe(Effect.ignore, Effect.asVoid)
+    })
+
     const loadSystemContext = (agent: AgentV2.Selection) =>
       Effect.all([systemContext.load(), skillGuidance.load(agent), referenceGuidance.load()], {
         concurrency: "unbounded",
@@ -183,7 +270,18 @@ const layer = Layer.effect(
       const initialized = yield* SessionContextEpoch.initialize(db, loadSystemContext(agent), session.id)
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
       let needsContinuation = false
+      let whyLoopBudget = maxReflectionBudget
       let currentStep = step
+      if (TurnCheckpoint.canResumeFromCheckpoint(session.id, currentStep)) {
+        const resumedCalls = TurnCheckpoint.resumeCheckpoint(session.id, currentStep)
+        if (resumedCalls && resumedCalls.length > 0) {
+          ReflectionState.addReasoningLog(session.id, {
+            type: "why_loop",
+            content: `Mid-turn checkpoint resumed: replaying ${resumedCalls.length} settled tool call(s) from step ${currentStep}`,
+            metadata: { resumedCount: resumedCalls.length, calls: resumedCalls.map((c) => c.name) },
+          })
+        }
+      }
       if (promotion) {
         const cutoff = yield* EventV2.latestSequence(db, session.id)
         let promoted = 0
@@ -192,11 +290,38 @@ const layer = Layer.effect(
           promoted += Number(yield* SessionInput.promoteNextQueued(db, events, session.id))
           promoted += yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
         }
-        if (promoted > 0) currentStep = 1
+        if (promoted > 0) {
+          currentStep = 1
+          ReflectionState.clear(session.id)
+        }
       }
       const system =
         initialized ?? (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
-      const model = yield* models.resolve(session)
+      let model = yield* models.resolve(session)
+      const budgetStatus = SessionBudget.getBudgetStatus(session.id)
+      if (budgetStatus.shouldDowngrade) {
+        const cheaperModelId = SessionBudget.getDowngradedModelFallback(model.id)
+        if (cheaperModelId !== model.id) {
+          const cheapOverride = yield* models
+            .resolveReflection(session, {
+              providerID: model.provider,
+              modelID: cheaperModelId,
+            })
+            .pipe(Effect.option)
+          if (Option.isSome(cheapOverride)) {
+            model = cheapOverride.value
+            ReflectionState.addReasoningLog(session.id, {
+              type: "why_loop",
+              content: `[Budget Depleted]: Spent $${budgetStatus.spentUsd} of $${budgetStatus.budgetLimitUsd} (${budgetStatus.percentageSpent}%). Auto-swapped model to economical '${cheaperModelId}'.`,
+              metadata: {
+                spentUsd: budgetStatus.spentUsd,
+                limitUsd: budgetStatus.budgetLimitUsd,
+                model: cheaperModelId,
+              },
+            })
+          }
+        }
+      }
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
@@ -212,7 +337,12 @@ const layer = Layer.effect(
           },
         },
         providerOptions: { openai: { promptCacheKey } },
-        system: [agent.info?.system, system.baseline]
+        system: [
+          agent.info?.system,
+          system.baseline,
+          ReflectionState.getReflectionText(session.id),
+          ReflectionState.consumeSteerGuidanceText(session.id),
+        ]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
         messages: [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])],
@@ -235,10 +365,74 @@ const layer = Layer.effect(
       const withPublication = Semaphore.makeUnsafe(1).withPermit
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
+
+      if (
+        preActionProjection &&
+        step === 1 &&
+        promotion === undefined &&
+        !ReflectionState.get(session.id).directionConfirmed
+      ) {
+        const recentMsgs = entries.slice(-6).map((e) => e.message)
+        const hasDecision = recentMsgs.some(
+          (m) =>
+            m.type === "assistant" &&
+            m.content.some((p) => p.type === "text" || p.type === "reasoning"),
+        )
+        if (hasDecision && entries.length >= 2) {
+          const projectionModel = yield* models.resolveReflection(session).pipe(Effect.option)
+          if (Option.isSome(projectionModel)) {
+            const projectionMsgs = [
+              ...toLLMMessages(recentMsgs, projectionModel.value),
+              Message.user(
+                "You are about to act. In 1-2 sentences, evaluate the deductive soundness of your next action: verify that all preconditions hold, necessary files have been checked, and no contradictions exist with past observations or tool errors. If sound, output exactly 'Proceed.' Otherwise, state the missing premise or risk.",
+              ),
+            ]
+            const preReq = LLM.request({
+              model: projectionModel.value,
+              messages: projectionMsgs,
+              tools: [],
+              generation: { maxTokens: 256 },
+            })
+            const preChunks: string[] = []
+            let preFailed = false
+            yield* llm.stream(preReq).pipe(
+              Stream.runForEach((event) => {
+                if (LLMEvent.is.providerError(event)) preFailed = true
+                if (LLMEvent.is.textDelta(event)) preChunks.push(event.text)
+                return Effect.void
+              }),
+              Effect.timeout(reflectionTimeout),
+              Effect.option,
+            )
+            if (!preFailed && preChunks.length > 0) {
+              const projection = preChunks.join("").trim()
+              const cleanProceed = /^proceed\.?$/i.test(projection)
+              const hasAdversarialRisk = /\b(however|but|risk|caution|warning|contradiction|missing|error|broken|fail)\b/i.test(projection)
+              if ((!cleanProceed || hasAdversarialRisk) && projection.length > 20) {
+                ReflectionState.addSteer(session.id, `[Pre-action check]\n${projection}`)
+                return yield* Effect.die(continueAfterCompaction(currentStep))
+              }
+            }
+          }
+        }
+      }
+
       let overflowFailure: ProviderErrorEvent | undefined
+      let lastProviderEventAt = 0
       const providerStream = llm.stream(request).pipe(
+        Stream.timeout(streamIdleTimeout),
         Stream.runForEach((event) =>
           Effect.gen(function* () {
+            const now = DateTime.toEpochMillis(yield* DateTime.now)
+            if (lastProviderEventAt !== 0) {
+              const gap = now - lastProviderEventAt
+              if (gap > streamIdleGapThreshold) {
+                const message = `Provider stream gap of ${Math.round(gap / 1000)}s between events; possible dropped packet or network delay`
+                yield* Effect.logWarning(message)
+                yield* withPublication(publisher.appendLog(message))
+              }
+            }
+            lastProviderEventAt = now
             if (overflowFailure || publisher.hasProviderError()) return
             if (LLMEvent.is.providerError(event)) {
               if (isContextOverflowFailure(event) && !publisher.hasAssistantStarted()) {
@@ -247,6 +441,17 @@ const layer = Layer.effect(
               }
             }
             yield* publish(event)
+            if (LLMEvent.is.reasoningDelta(event)) {
+              const paths = SpeculativeExecution.extractSpeculativeReadPaths(event.text, location.directory)
+              if (paths.length > 0) {
+                yield* SpeculativeExecution.prefetchPaths(paths).pipe(Effect.ignore)
+              }
+            } else if (LLMEvent.is.textDelta(event)) {
+              const paths = SpeculativeExecution.extractSpeculativeReadPaths(event.text, location.directory)
+              if (paths.length > 0) {
+                yield* SpeculativeExecution.prefetchPaths(paths).pipe(Effect.ignore)
+              }
+            }
             if (event.type !== "tool-call" || event.providerExecuted) return
             if (!toolMaterialization) {
               yield* withPublication(publisher.failUnsettledTools("Tools are disabled after the maximum agent steps"))
@@ -255,26 +460,165 @@ const layer = Layer.effect(
             needsContinuation = true
             const assistantMessageID = yield* publisher.assistantMessageID(event.id)
             yield* Effect.uninterruptibleMask((restore) =>
-              restore(
-                toolMaterialization.settle({
-                  sessionID: session.id,
-                  agent: agent.id,
+              Effect.gen(function* () {
+                let callToExecute = { name: event.name, input: event.input }
+
+                if (ReflectionState.isDistributionFlat(session.id)) {
+                  const sampledCandidates: Array<{ name: string; input: unknown }> = []
+                  const cheapModel = yield* models.resolveReflection(session).pipe(Effect.option)
+                  if (Option.isSome(cheapModel)) {
+                    const sampleMsgs = [
+                      ...toLLMMessages(context.slice(-4), cheapModel.value),
+                      Message.user(
+                        "Identify the immediate next tool call to execute. Respond strictly with the tool call invocation.",
+                      ),
+                    ]
+                    const sampleReq = LLM.request({
+                      model: cheapModel.value,
+                      messages: sampleMsgs,
+                      tools: toolMaterialization.definitions,
+                      generation: { temperature: 0.7, maxTokens: 256 },
+                    })
+                    yield* llm.stream(sampleReq).pipe(
+                      Stream.runForEach((ev) => {
+                        if (ev.type === "tool-call") {
+                          sampledCandidates.push({ name: ev.name, input: ev.input })
+                        }
+                        return Effect.void
+                      }),
+                      Effect.timeout("4 seconds"),
+                      Effect.ignore,
+                    )
+                  }
+                  const candidates = [callToExecute, ...sampledCandidates]
+                  const vote = ReflectionState.computeMajorityVote(candidates)
+                  if (vote) {
+                    callToExecute = { name: vote.winner.name, input: vote.winner.input }
+                    const logContent = `Self-consistency voting selected '${vote.winner.name}' with ${vote.votes}/${vote.totalCandidates} votes (consensus ${Math.round(vote.consensusRatio * 100)}%)`
+                    ReflectionState.addReasoningLog(session.id, {
+                      type: "self_consistency",
+                      content: logContent,
+                      metadata: {
+                        winner: vote.winner.name,
+                        votes: vote.votes,
+                        totalCandidates: vote.totalCandidates,
+                        consensusRatio: vote.consensusRatio,
+                        hadTie: vote.hadTie,
+                      },
+                    })
+                    yield* events.publish(SessionEvent.ReasoningLog.Recorded, {
+                      id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+                      type: "self_consistency",
+                      content: logContent,
+                      metadata: {
+                        winner: vote.winner.name,
+                        votes: vote.votes,
+                        totalCandidates: vote.totalCandidates,
+                        consensusRatio: vote.consensusRatio,
+                        hadTie: vote.hadTie,
+                      },
+                      sessionID: session.id,
+                      timestamp: yield* DateTime.now,
+                    }).pipe(Effect.ignore)
+                  }
+                }
+
+                const preHistory = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq).pipe(
+                  Effect.option,
+                )
+                const preAssistantText = Option.isSome(preHistory) ? lastAssistantText(preHistory.value) : ""
+                const mustRedTeam = shouldRedTeam(callToExecute.name, callToExecute.input, preAssistantText)
+
+                if (mustRedTeam) {
+                  const attack = yield* redTeamPass(session.id, { name: callToExecute.name, input: callToExecute.input }).pipe(
+                    Effect.option,
+                  )
+                  if (Option.isSome(attack) && attack.value.text.startsWith("REJECT:")) {
+                    const critique = attack.value.text.replace(/^REJECT:\s*/, "")
+                    const rejectionMsg = `[Red-Team Rejected]: Action '${callToExecute.name}' was rejected by adversarial verification: ${critique}`
+                    const failureResult = { type: "error" as const, value: rejectionMsg }
+                    yield* publish(
+                      LLMEvent.toolResult({
+                        id: event.id,
+                        name: callToExecute.name,
+                        result: failureResult,
+                      }),
+                      [],
+                    )
+                    ReflectionState.addReasoningLog(session.id, {
+                      type: "pre_action",
+                      content: rejectionMsg,
+                      metadata: { tool: callToExecute.name, survived: false, critique },
+                    })
+                    ReflectionState.addSteer(session.id, rejectionMsg)
+                    return
+                  }
+                  ReflectionState.addReasoningLog(session.id, {
+                    type: "pre_action",
+                    content: `Red-team verification survived for '${callToExecute.name}'`,
+                    metadata: { tool: callToExecute.name, survived: true },
+                  })
+                }
+
+                const settlement = yield* restore(
+                  toolMaterialization.settle({
+                    sessionID: session.id,
+                    agent: agent.id,
+                    assistantMessageID,
+                    call: { ...event, name: callToExecute.name, input: callToExecute.input },
+                  }),
+                )
+                yield* publish(
+                  LLMEvent.toolResult({
+                    id: event.id,
+                    name: callToExecute.name,
+                    result: settlement.result,
+                    output: settlement.output,
+                  }),
+                  settlement.outputPaths ?? [],
+                )
+                TurnCheckpoint.recordSettledTool(session.id, {
+                  step: currentStep,
                   assistantMessageID,
-                  call: event,
-                }),
-              ).pipe(
-                Effect.flatMap((settlement) =>
-                  publish(
-                    LLMEvent.toolResult({
-                      id: event.id,
-                      name: event.name,
-                      result: settlement.result,
-                      output: settlement.output,
-                    }),
-                    settlement.outputPaths ?? [],
-                  ),
-                ),
-              ),
+                  call: {
+                    callID: event.id,
+                    name: callToExecute.name,
+                    input: callToExecute.input,
+                    result: settlement.result,
+                    output: settlement.output,
+                    outputPaths: settlement.outputPaths,
+                    timestamp: Date.now(),
+                  },
+                })
+                if (whyLoopBudget <= 0) return
+                const refreshed = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq).pipe(
+                  Effect.option,
+                )
+                if (Option.isNone(refreshed)) return
+                const hasFailure = isSettlementFailure(settlement)
+                const refreshedAssistantText = lastAssistantText(refreshed.value)
+                const score = hedgeScore(refreshedAssistantText)
+                const hasLearnedHedge = ReflectionMetric.shouldTriggerLearnedHedge(agent.id, model.id, score)
+                const hasHedge = containsHedge(refreshedAssistantText) || hasLearnedHedge
+                if (!hasFailure && !hasHedge) {
+                  yield* publishCycle("why", session.id, true, false)
+                  return
+                }
+                whyLoopBudget--
+                const whyResult = yield* whyLoop(session.id).pipe(Effect.option)
+                if (Option.isNone(whyResult)) return
+                if (whyResult.value.steered) {
+                  needsContinuation = true
+                  ReflectionState.clearDirection(session.id)
+                } else if (whyResult.value.converged) {
+                  const prev = ReflectionState.get(session.id)
+                  ReflectionState.set(session.id, {
+                    ...prev,
+                    lastWhyConverged: true,
+                    directionConfirmed: false,
+                  })
+                }
+              }),
             ).pipe(FiberSet.run(toolFibers))
           }),
         ),
@@ -294,10 +638,17 @@ const layer = Layer.effect(
           )
             return yield* Effect.die(continueAfterOverflowCompaction(currentStep))
           if (overflowFailure) yield* publish(overflowFailure)
-          const llmFailure = failure instanceof LLMError ? failure : undefined
-          if (llmFailure && !publisher.hasProviderError()) {
+          if (stream._tag === "Failure" && !Cause.hasInterrupts(stream.cause) && !publisher.hasProviderError()) {
+            const raw = failure ?? Cause.squash(stream.cause)
+            const message =
+              raw instanceof LLMError
+                ? raw.reason.message
+                : raw instanceof Error
+                  ? raw.message
+                  : String(raw)
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
-            yield* withPublication(publisher.failAssistant(llmFailure.reason.message))
+            yield* withPublication(publisher.failAssistant(message))
+            TurnCheckpoint.markTurnCrashed(session.id)
           }
           if (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) yield* FiberSet.clear(toolFibers)
           const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
@@ -322,6 +673,7 @@ const layer = Layer.effect(
           }
           const stepSettlement = publisher.stepSettlement()
           if (stepSettlement && !publisher.hasProviderError()) {
+            TurnCheckpoint.clearCheckpoint(session.id)
             const endSnapshot = yield* snapshots.capture()
             const files =
               startSnapshot && endSnapshot
@@ -329,13 +681,15 @@ const layer = Layer.effect(
                     .files({ from: startSnapshot, to: endSnapshot })
                     .pipe(Effect.catch(() => Effect.succeed(undefined)))
                 : undefined
+            const calculatedCost = SessionBudget.calculateTokenCost(model.id, stepSettlement.tokens)
+            SessionBudget.recordStepCost(session.id, calculatedCost)
             yield* withPublication(
               events.publish(SessionEvent.Step.Ended, {
                 sessionID: session.id,
                 timestamp: yield* DateTime.now,
                 assistantMessageID: yield* publisher.startAssistant(),
                 finish: stepSettlement.finish,
-                cost: 0,
+                cost: calculatedCost,
                 tokens: stepSettlement.tokens,
                 snapshot: endSnapshot,
                 files,
@@ -344,8 +698,14 @@ const layer = Layer.effect(
           }
           if (publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
-          if (stream._tag === "Success" && !publisher.hasProviderError())
+          if (stream._tag === "Success" && !publisher.hasProviderError()) {
+            if (!publisher.hasStepFinish() && publisher.hasProducedText()) {
+              const message = "Provider stream ended without a step-finish event; the response was truncated (dropped packets)"
+              yield* Effect.logWarning(message)
+              yield* withPublication(publisher.failAssistant(message))
+            }
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
+          }
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
             return yield* Effect.failCause(settled.cause)
@@ -387,16 +747,678 @@ const layer = Layer.effect(
       )
     })
 
+    const escalationArbiter = Effect.fn("SessionRunner.escalationArbiter")(function* (
+      sessionID: SessionSchema.ID,
+      loop: "why" | "then",
+      recentText: string,
+    ) {
+      const hypotheses = ReflectionState.getHypotheses(sessionID)
+      if (hypotheses.length < 2) return undefined
+
+      const session = yield* getSession(sessionID).pipe(Effect.option)
+      if (Option.isNone(session)) return undefined
+      const cheapModel = yield* models.resolveReflection(session.value).pipe(Effect.option)
+      if (Option.isNone(cheapModel)) return undefined
+
+      const sorted = [...hypotheses].sort((a, b) => b.probability - a.probability)
+      const h1 = sorted[0]!
+      const h2 = sorted[1]!
+
+      // Judge 1 (Cheap Model): Formulates contrast & critique between competing hypotheses
+      const judge1Msgs = [
+        Message.user(
+          `[Dilemma in ${loop} loop stall]
+Two competing hypotheses are deadlocked:
+Option A: [${Math.round(h1.probability * 100)}%] ${h1.description}
+Option B: [${Math.round(h2.probability * 100)}%] ${h2.description}
+Context/State: ${recentText.slice(0, 300)}
+
+In 2 sentences, explain why these two contradict and identify the decisive distinguishing factor.`,
+        ),
+      ]
+      const judge1Req = LLM.request({
+        model: cheapModel.value,
+        messages: judge1Msgs,
+        tools: [],
+        generation: { maxTokens: 150 },
+      })
+      const critiqueChunks: string[] = []
+      yield* llm.stream(judge1Req).pipe(
+        Stream.runForEach((ev) => {
+          if (LLMEvent.is.textDelta(ev)) critiqueChunks.push(ev.text)
+          return Effect.void
+        }),
+        Effect.timeout("6 seconds"),
+        Effect.ignore,
+      )
+      const critique = critiqueChunks.join("").trim()
+
+      // Judge 2 (Strong Model): Decides surviving hypothesis
+      const strongModel = yield* models.resolve(session.value).pipe(Effect.option)
+      if (Option.isNone(strongModel)) return undefined
+
+      const judge2Msgs = [
+        Message.user(
+          `[Escalation Arbiter Panel]
+The ${loop} loop has stalled. The initial judge identified this contradiction:
+"${critique}"
+
+Hypothesis A: ${h1.description}
+Hypothesis B: ${h2.description}
+
+Act as the final arbiter. Pick the surviving hypothesis. Output exactly:
+SURVIVOR: A or SURVIVOR: B
+JUSTIFICATION: 1 sentence.`,
+        ),
+      ]
+      const judge2Req = LLM.request({
+        model: strongModel.value,
+        messages: judge2Msgs,
+        tools: [],
+        generation: { maxTokens: 150 },
+      })
+      const decisionChunks: string[] = []
+      yield* llm.stream(judge2Req).pipe(
+        Stream.runForEach((ev) => {
+          if (LLMEvent.is.textDelta(ev)) decisionChunks.push(ev.text)
+          return Effect.void
+        }),
+        Effect.timeout("8 seconds"),
+        Effect.ignore,
+      )
+      const decision = decisionChunks.join("").trim()
+      const picksB = /\bSURVIVOR:\s*B\b/i.test(decision)
+      const survivor = picksB ? h2 : h1
+      const discarded = picksB ? h1 : h2
+
+      ReflectionState.updateHypothesis(sessionID, survivor.id, { probability: 0.85 })
+      ReflectionState.updateHypothesis(sessionID, discarded.id, { probability: 0.15 })
+      ReflectionState.normalizeHypotheses(sessionID)
+
+      DecisionTree.verifyNode(sessionID, survivor.id)
+      DecisionTree.pruneNode(sessionID, discarded.id, critique)
+
+      const steerNotice = `[Escalation Arbiter Selected]: "${survivor.description}" (discarded: "${discarded.description}"). Proceed under this resolved hypothesis.`
+      ReflectionState.addSteer(sessionID, steerNotice)
+      ReflectionState.addReasoningLog(sessionID, {
+        type: "hypothesis_update",
+        content: steerNotice,
+        metadata: { arbiter: true, survivorId: survivor.id, critique, decision },
+      })
+      return survivor
+    })
+
+    const thenLoop = Effect.fn("SessionRunner.thenLoop")(function* (
+      sessionID: SessionSchema.ID,
+      modelOverride?: { providerID: string; modelID: string },
+    ) {
+      const converge = (
+        steered: boolean,
+        iterates: number,
+        text: string,
+        extensionsDetected: number,
+        approximationGap?: number,
+      ): ReflectionResult => ({
+        steered,
+        iterates,
+        converged: !steered,
+        certificate:
+          approximationGap === undefined
+            ? { epsilon: approxTcaTolerance }
+            : { epsilon: approxTcaTolerance, approximationGap },
+        text,
+        extensionsDetected,
+      })
+      const session = yield* getSession(sessionID).pipe(Effect.option)
+      if (Option.isNone(session)) return converge(false, 0, "", 0)
+      const agent = yield* agents.select(session.value.agent)
+      const model = yield* models.resolveReflection(session.value, modelOverride).pipe(Effect.option)
+      if (Option.isNone(model)) return converge(false, 0, "", 0)
+      const system = yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.value.id).pipe(
+        Effect.option,
+      )
+      if (Option.isNone(system)) return converge(false, 0, "", 0)
+      const startBaselineSeq = system.value.baselineSeq
+      const entries = yield* SessionHistory.entriesForRunner(db, session.value.id, system.value.baselineSeq).pipe(
+        Effect.option,
+      )
+      if (Option.isNone(entries)) return converge(false, 0, "", 0)
+      const assistantText = lastAssistantText(entries.value)
+      const agentId = agent.id
+      const modelId = model.value.id
+      const score = hedgeScore(assistantText)
+      const hasLearnedHedge = ReflectionMetric.shouldTriggerLearnedHedge(agentId, modelId, score)
+      if (!hasLearnedHedge && !containsHedge(assistantText)) {
+        yield* publishCycle("then", sessionID, true, false)
+        return converge(false, 0, "", 0)
+      }
+      let iterates = 0
+      let steered = false
+      let projection = ""
+      let extensionsDetected = 0
+      let currentBaselineSeq = startBaselineSeq
+      while (iterates < maxReflectionBudget) {
+        iterates++
+        const nextSystem = yield* SessionContextEpoch.prepare(
+          db,
+          events,
+          loadSystemContext(agent),
+          session.value.id,
+        ).pipe(Effect.option)
+        if (Option.isNone(nextSystem)) break
+        if (nextSystem.value.baselineSeq !== currentBaselineSeq) {
+          extensionsDetected++
+          currentBaselineSeq = nextSystem.value.baselineSeq
+        }
+        const currentEntries = yield* SessionHistory.entriesForRunner(
+          db,
+          session.value.id,
+          nextSystem.value.baselineSeq,
+        ).pipe(Effect.option)
+        if (Option.isNone(currentEntries)) break
+        const lastMsgs = currentEntries.value.slice(-6).map((e) => e.message)
+        const hasDecision = lastMsgs.some(
+          (m) =>
+            m.type === "assistant" &&
+            m.content.some((p) => p.type === "text" || p.type === "reasoning"),
+        )
+        if (!hasDecision || currentEntries.value.length < 2) break
+        const projectionMsgs = [
+          ...toLLMMessages(lastMsgs, model.value),
+          Message.user(
+            `Forward-project 3-5 steps from the reasoning above to test for logical validity and safety. Act as an adversarial verifier: attempt to construct a minimal counter-model or failure scenario (e.g. unhandled command failure, invalid state transition, or broken invariant). If a failure scenario exists, describe it in 1-2 sentences. If no contradiction or risk exists, output exactly "No issues projected."`,
+          ),
+        ]
+        const req = LLM.request({
+          model: model.value,
+          messages: projectionMsgs,
+          tools: [],
+          generation: { maxTokens: 1024 },
+        })
+        const chunks: string[] = []
+        let failed = false
+        yield* llm.stream(req).pipe(
+          Stream.runForEach((event) => {
+            if (LLMEvent.is.providerError(event)) failed = true
+            if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+            return Effect.void
+          }),
+          Effect.timeout(reflectionTimeout),
+          Effect.option,
+        )
+        if (failed || chunks.length === 0) break
+        projection = chunks.join("").trim()
+        const claimsNoIssues = /no issues?|no negative/i.test(projection)
+        const hasAdversarialRisk = /\b(however|but|except|risk|contradiction|failure|warning|error|broken|flaw)\b/i.test(projection)
+        const converged = (claimsNoIssues && !hasAdversarialRisk) || (projection.length < 40 && !hasAdversarialRisk)
+        if (converged) {
+          ReflectionMetric.updateLearnedHedgeThreshold(agentId, modelId, { steered: false })
+          yield* publishCycle(
+            "then",
+            sessionID,
+            false,
+            false,
+            undefined,
+            approxTcaTolerance > 0 ? { iterates, epsilon: approxTcaTolerance, approximationGap: 0 } : undefined,
+          )
+          return converge(false, iterates, projection, extensionsDetected, approxTcaTolerance > 0 ? 0 : undefined)
+        }
+        ReflectionState.addSteer(sessionID, `[Then Loop forward check]\n${projection}`)
+        steered = true
+        break
+      }
+      if (iterates >= maxReflectionBudget && steered) {
+        yield* escalationArbiter(sessionID, "then", projection).pipe(Effect.ignore)
+      }
+      ReflectionMetric.updateLearnedHedgeThreshold(agentId, modelId, { steered })
+      yield* publishCycle("then", sessionID, false, true, undefined, { iterates, epsilon: approxTcaTolerance })
+      return converge(steered, iterates, projection, extensionsDetected)
+    })
+
+    const redTeamPass = Effect.fn("SessionRunner.redTeamPass")(function* (
+      sessionID: SessionSchema.ID,
+      call?: { readonly name: string; readonly input: unknown },
+      modelOverride?: { readonly providerID: string; readonly modelID: string },
+    ) {
+      const converge = (steered: boolean, critique: string) => ({
+        steered,
+        iterates: 1,
+        converged: true,
+        certificate: { epsilon: 0 },
+        text: critique,
+        extensionsDetected: 0,
+      })
+
+      const session = yield* getSession(sessionID).pipe(Effect.option)
+      if (Option.isNone(session)) return converge(false, "SURVIVE")
+      const agent = yield* agents.select(session.value.agent)
+      const system = yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.value.id).pipe(
+        Effect.option,
+      )
+      if (Option.isNone(system)) return converge(false, "SURVIVE")
+      const entries = yield* SessionHistory.entriesForRunner(db, session.value.id, system.value.baselineSeq).pipe(
+        Effect.option,
+      )
+      if (Option.isNone(entries)) return converge(false, "SURVIVE")
+
+      const assistantText = lastAssistantText(entries.value)
+
+      // Heuristic fast-path
+      if (call) {
+        const heuristic = heuristicAttack(call.name, call.input, assistantText)
+        if (!heuristic.survives) {
+          const critiqueText = `REJECT: ${heuristic.critique ?? "Fatal invariant violation in proposed action"}`
+          yield* publishCycle("redteam", sessionID, false, true)
+          return converge(true, critiqueText)
+        }
+      }
+
+      // Cheap model pass
+      const model = yield* models.resolveReflection(session.value, modelOverride).pipe(Effect.option)
+      if (Option.isNone(model)) return converge(false, "SURVIVE")
+
+      const lastMsgs = entries.value.slice(-4).map((e) => e.message)
+      const actionDesc = call
+        ? `Tool: ${call.name}\nArguments: ${JSON.stringify(call.input)}`
+        : "Plan proposed in preceding assistant response"
+      const reflectionText = ReflectionState.getReflectionText(sessionID) ?? "None"
+
+      const redTeamMsgs = [
+        ...toLLMMessages(lastMsgs, model.value),
+        Message.user(
+          `[Red-Team Adversarial Pass]
+The agent has proposed executing this action/plan:
+${actionDesc}
+
+Active Invariants and Hypotheses:
+${reflectionText}
+
+Act as an adversarial verifier attacking this proposed action and its underlying plan/hedges.
+Test for:
+1. Flawed or ungrounded assumptions (especially where hedges like "maybe", "probably", "I think" were used).
+2. High-risk, destructive, or irreversible state transitions.
+3. Logical contradictions with the user's explicit instructions.
+
+If a fatal flaw, critical unverified assumption, or unsafe side effect exists, respond starting with "REJECT: " followed by a concise 1-2 sentence explanation of the counter-model or risk.
+If the action is justified, safe to settle, or observational, respond with exactly "SURVIVE".`,
+        ),
+      ]
+
+      const req = LLM.request({
+        model: model.value,
+        messages: redTeamMsgs,
+        tools: [],
+        generation: { maxTokens: 256 },
+      })
+
+      const chunks: string[] = []
+      let failed = false
+      yield* llm.stream(req).pipe(
+        Stream.runForEach((event) => {
+          if (LLMEvent.is.providerError(event)) failed = true
+          if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+          return Effect.void
+        }),
+        Effect.timeout(reflectionTimeout),
+        Effect.option,
+      )
+
+      if (failed || chunks.length === 0) return converge(false, "SURVIVE")
+
+      const response = chunks.join("").trim()
+      const isRejection =
+        /^REJECT:/i.test(response) || (/\bREJECT\b/i.test(response) && !/\bSURVIVE\b/i.test(response))
+
+      if (isRejection) {
+        const critique = response.startsWith("REJECT:") ? response : `REJECT: ${response}`
+        yield* publishCycle("redteam", sessionID, false, true)
+        return converge(true, critique)
+      }
+
+      yield* publishCycle("redteam", sessionID, false, false)
+      return converge(false, "SURVIVE")
+    })
+
+    const parseHypotheses = (
+      raw: string,
+      evidence: string,
+    ): Array<{ description: string; probability: number; evidence: readonly string[] }> => {
+      const results: Array<{ description: string; probability: number; evidence: readonly string[] }> = []
+      const lines = raw.split(/\r?\n|\|/).map((l) => l.trim()).filter(Boolean)
+
+      for (const line of lines) {
+        if (/^none\b/i.test(line)) continue
+
+        let prob: number | undefined
+        let desc: string = line
+
+        const bracketMatch = line.match(/^\[([0-9.]+)%?\]\s*(.*)/)
+        if (bracketMatch) {
+          prob = parseFloat(bracketMatch[1])
+          if (bracketMatch[0].includes("%") || prob > 1) prob /= 100
+          desc = bracketMatch[2].trim()
+        }
+
+        if (prob === undefined) {
+          const parenMatch = line.match(/^\(?H?\d*[:.)]?\s*\(?([0-9.]+)%?\)?[:\-]\s*(.*)/i)
+          if (parenMatch) {
+            prob = parseFloat(parenMatch[1])
+            if (parenMatch[0].includes("%") || prob > 1) prob /= 100
+            desc = parenMatch[2].trim()
+          }
+        }
+
+        if (prob === undefined) {
+          const tailMatch = line.match(/^(.*?)\s*[\(\[]\s*(?:p(?:rob)?|conf(?:idence)?\s*[:=]\s*)?([0-9.]+)%?\s*[\)\]]$/i)
+          if (tailMatch) {
+            prob = parseFloat(tailMatch[2])
+            if (tailMatch[0].includes("%") || prob > 1) prob /= 100
+            desc = tailMatch[1].trim()
+          }
+        }
+
+        desc = desc.replace(/^[-*•]\s*/, "").replace(/^H\d+[:.]\s*/i, "").replace(/^\d+[:.)]\s*/, "").trim()
+
+        if (prob !== undefined && !isNaN(prob) && desc.length > 0) {
+          prob = Math.max(0.01, Math.min(1.0, prob))
+          results.push({ description: desc, probability: prob, evidence: [evidence] })
+        }
+      }
+
+      if (results.length === 0) {
+        const regex = /\[([0-9.]+)%?\]\s*([^|;\n]+)/g
+        let match: RegExpExecArray | null
+        while ((match = regex.exec(raw)) !== null) {
+          let prob = parseFloat(match[1])
+          if (match[0].includes("%") || prob > 1) prob /= 100
+          const desc = match[2].trim()
+          if (!isNaN(prob) && desc.length > 0) {
+            prob = Math.max(0.01, Math.min(1.0, prob))
+            results.push({ description: desc, probability: prob, evidence: [evidence] })
+          }
+        }
+      }
+
+      const total = results.reduce((sum, h) => sum + h.probability, 0)
+      if (total > 0 && results.length > 0) {
+        return results.map((h) => ({
+          ...h,
+          probability: Math.round((h.probability / total) * 1000) / 1000,
+        }))
+      }
+
+      return results
+    }
+
+    const whyLoop = Effect.fn("SessionRunner.whyLoop")(function* (
+      sessionID: SessionSchema.ID,
+      modelOverride?: { providerID: string; modelID: string },
+    ) {
+      const converge = (
+        steered: boolean,
+        iterates: number,
+        text: string,
+        extensionsDetected: number,
+        approximationGap?: number,
+      ): ReflectionResult => ({
+        steered,
+        iterates,
+        converged: !steered,
+        certificate:
+          approximationGap === undefined
+            ? { epsilon: approxTcaTolerance }
+            : { epsilon: approxTcaTolerance, approximationGap },
+        text,
+        extensionsDetected,
+      })
+      const session = yield* getSession(sessionID).pipe(Effect.option)
+      if (Option.isNone(session)) return converge(false, 0, "", 0)
+      const agent = yield* agents.select(session.value.agent)
+      const model = yield* models.resolveReflection(session.value, modelOverride).pipe(Effect.option)
+      if (Option.isNone(model)) return converge(false, 0, "", 0)
+      const system = yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.value.id).pipe(
+        Effect.option,
+      )
+      if (Option.isNone(system)) return converge(false, 0, "", 0)
+      const startBaselineSeq = system.value.baselineSeq
+      const entries = yield* SessionHistory.entriesForRunner(db, session.value.id, system.value.baselineSeq).pipe(
+        Effect.option,
+      )
+      if (Option.isNone(entries)) return converge(false, 0, "", 0)
+      const initialHasDecision = entries.value
+        .slice(-6)
+        .some(
+          (e) =>
+            e.message.type === "assistant" &&
+            e.message.content.some((p) => p.type === "text" || p.type === "reasoning"),
+        )
+      if (!initialHasDecision || entries.value.length < 2) return converge(false, 0, "", 0)
+      let iterates = 0
+      let steered = false
+      let reflection = ""
+      let extensionsDetected = 0
+      let currentBaselineSeq = startBaselineSeq
+      while (iterates < maxReflectionBudget) {
+        iterates++
+        const nextSystem = yield* SessionContextEpoch.prepare(
+          db,
+          events,
+          loadSystemContext(agent),
+          session.value.id,
+        ).pipe(Effect.option)
+        if (Option.isNone(nextSystem)) break
+        if (nextSystem.value.baselineSeq !== currentBaselineSeq) {
+          extensionsDetected++
+          currentBaselineSeq = nextSystem.value.baselineSeq
+        }
+        const currentEntries = yield* SessionHistory.entriesForRunner(
+          db,
+          session.value.id,
+          nextSystem.value.baselineSeq,
+        ).pipe(Effect.option)
+        if (Option.isNone(currentEntries)) break
+        const lastMsgs = currentEntries.value.slice(-6).map((e) => e.message)
+        const reflectionMsgs = [
+          ...toLLMMessages(lastMsgs, model.value),
+          Message.user(
+            [
+              "Reflect on the most recent tool result against the active goal premises. Conduct an integrated epistemics check:",
+              "1. SOUNDNESS: Did the result refute assumptions, fail unexpectedly, or require a sub-goal shift?",
+              "2. PRE-MORTEM: What catastrophic failure mode could occur if the next action proceeds unchecked?",
+              "3. INVARIANTS: Were any preconditions, temporal guards, or safety invariants violated?",
+              "4. HYPOTHESES: If ambiguous or failed, list 1-3 competing explanations with probabilities summing to 1.0.",
+              "",
+              "Respond strictly in this structured format:",
+              "VERDICT: CONVERGED | GOAL_SHIFT: <summary of shifted goal>",
+              "PREMORTEM: SAFE | RISK: <catastrophic failure risk to prevent>",
+              "INVARIANTS: SATISFIED | VIOLATED: <violated invariant>",
+              "HYPOTHESES: NONE | [0.7] explanation 1 | [0.3] explanation 2",
+              "STEER: <concise actionable instruction for next step, or NONE>",
+            ].join("\n"),
+          ),
+        ]
+        const req = LLM.request({
+          model: model.value,
+          messages: reflectionMsgs,
+          tools: [],
+          generation: { maxTokens: 1024 },
+        })
+        const chunks: string[] = []
+        let failed = false
+        yield* llm.stream(req).pipe(
+          Stream.runForEach((event) => {
+            if (LLMEvent.is.providerError(event)) failed = true
+            if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+            return Effect.void
+          }),
+          Effect.timeout(reflectionTimeout),
+          Effect.option,
+        )
+        if (failed || chunks.length === 0) break
+        reflection = chunks.join("").trim()
+
+        const lines = reflection.split("\n").map((l) => l.trim())
+        const getField = (prefix: string) => lines.find((l) => l.startsWith(prefix))?.slice(prefix.length).trim() ?? ""
+
+        const verdict = getField("VERDICT:")
+        const premortem = getField("PREMORTEM:")
+        const invariants = getField("INVARIANTS:")
+        const rawHypotheses = getField("HYPOTHESES:")
+        const steerText = getField("STEER:")
+
+        const isConverged =
+          (verdict.toUpperCase().includes("CONVERGED") || (!verdict && /goal unchanged/i.test(reflection))) &&
+          !premortem.toUpperCase().startsWith("RISK:") &&
+          !invariants.toUpperCase().startsWith("VIOLATED:")
+
+        if (isConverged) {
+          ReflectionMetric.updateLearnedHedgeThreshold(agent.id, model.value.id, { steered: false })
+          const whyLoopEntry = {
+            type: "why_loop" as const,
+            content: "Soundness verified. Goal and assumptions hold.",
+            metadata: { iterates, converged: true },
+          }
+          ReflectionState.addReasoningLog(sessionID, whyLoopEntry)
+          yield* events.publish(SessionEvent.ReasoningLog.Recorded, {
+            ...whyLoopEntry,
+            sessionID,
+            id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+            timestamp: yield* DateTime.now,
+          })
+          yield* publishCycle(
+            "why",
+            sessionID,
+            false,
+            false,
+            undefined,
+            approxTcaTolerance > 0 ? { iterates, epsilon: approxTcaTolerance, approximationGap: 0 } : undefined,
+          )
+          return converge(false, iterates, reflection, extensionsDetected, approxTcaTolerance > 0 ? 0 : undefined)
+        }
+
+        const nowTime = yield* DateTime.now
+        const whyLoopEntry = {
+          type: "why_loop" as const,
+          content: verdict || reflection,
+          metadata: { iterates, converged: false },
+        }
+        ReflectionState.addReasoningLog(sessionID, whyLoopEntry)
+        yield* events.publish(SessionEvent.ReasoningLog.Recorded, {
+          ...whyLoopEntry,
+          sessionID,
+          id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+          timestamp: nowTime,
+        })
+
+        if (premortem.toUpperCase().startsWith("RISK:")) {
+          const riskDesc = premortem.slice(5).trim()
+          const counterfactualEntry = {
+            type: "counterfactual" as const,
+            content: riskDesc,
+            metadata: { trigger: "why_loop" },
+          }
+          ReflectionState.addReasoningLog(sessionID, counterfactualEntry)
+          yield* events.publish(SessionEvent.ReasoningLog.Recorded, {
+            ...counterfactualEntry,
+            sessionID,
+            id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+            timestamp: yield* DateTime.now,
+          })
+        }
+
+        if (invariants.toUpperCase().startsWith("VIOLATED:")) {
+          const violation = invariants.slice(9).trim()
+          const guardEntry = {
+            type: "temporal_guard" as const,
+            content: `Temporal guard violated: ${violation}`,
+            metadata: { guard: violation },
+          }
+          ReflectionState.addReasoningLog(sessionID, guardEntry)
+          yield* events.publish(SessionEvent.ReasoningLog.Recorded, {
+            ...guardEntry,
+            sessionID,
+            id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+            timestamp: yield* DateTime.now,
+          })
+          ReflectionState.updateTemporalGuard(sessionID, violation, "violated")
+        }
+
+        if (rawHypotheses && !rawHypotheses.toUpperCase().includes("NONE")) {
+          const parsedHypotheses = parseHypotheses(rawHypotheses, reflection)
+          if (parsedHypotheses.length > 0) {
+            ReflectionState.setHypotheses(sessionID, parsedHypotheses)
+            DecisionTree.branchHypotheses(sessionID, "root", iterates, parsedHypotheses)
+            const hypSummary = parsedHypotheses.map((h) => `[${Math.round(h.probability * 100)}%] ${h.description}`).join("; ")
+            const hypEntry = {
+              type: "hypothesis_update" as const,
+              content: hypSummary,
+              metadata: { count: parsedHypotheses.length },
+            }
+            ReflectionState.addReasoningLog(sessionID, hypEntry)
+            yield* events.publish(SessionEvent.ReasoningLog.Recorded, {
+              ...hypEntry,
+              sessionID,
+              id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+              timestamp: yield* DateTime.now,
+            })
+
+            const eviGuidance = EVI.guidanceTextForEVI(parsedHypotheses)
+            if (eviGuidance) {
+              const eviEntry = {
+                type: "evi_score" as const,
+                content: eviGuidance,
+                metadata: { entropy: EVI.entropy(parsedHypotheses.map((h) => h.probability)) },
+              }
+              ReflectionState.addReasoningLog(sessionID, eviEntry)
+              yield* events.publish(SessionEvent.ReasoningLog.Recorded, {
+                ...eviEntry,
+                sessionID,
+                id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+                timestamp: yield* DateTime.now,
+              })
+              ReflectionState.addSteer(sessionID, eviGuidance)
+            }
+          }
+        }
+
+        const steerItems: string[] = []
+        if (verdict && !verdict.toUpperCase().includes("CONVERGED")) {
+          steerItems.push(verdict.startsWith("GOAL_SHIFT:") ? verdict.slice(11).trim() : verdict)
+        }
+        if (premortem.toUpperCase().startsWith("RISK:")) {
+          steerItems.push(`[Pre-mortem Risk] ${premortem.slice(5).trim()}`)
+        }
+        if (invariants.toUpperCase().startsWith("VIOLATED:")) {
+          steerItems.push(`[Invariant Violation] ${invariants.slice(9).trim()}`)
+        }
+        if (steerText && steerText !== "NONE" && steerText.length > 0) {
+          steerItems.push(steerText)
+        }
+        const finalSteer = steerItems.join("\n") || reflection
+        ReflectionState.addSteer(sessionID, `[Why Loop reflection]\n${finalSteer}`)
+        steered = true
+        break
+      }
+      if (iterates >= maxReflectionBudget && steered) {
+        yield* escalationArbiter(sessionID, "why", reflection).pipe(Effect.ignore)
+      }
+      ReflectionMetric.updateLearnedHedgeThreshold(agent.id, model.value.id, { steered })
+      yield* publishCycle("why", sessionID, false, true, undefined, { iterates, epsilon: approxTcaTolerance })
+      return converge(steered, iterates, reflection, extensionsDetected)
+    })
+
     const run = Effect.fn("SessionRunner.run")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
     }) {
-      const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+      const hasSteer =
+        (yield* SessionInput.hasPending(db, input.sessionID, "steer")) || ReflectionState.hasSteers(input.sessionID)
       const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
       if (!input.force && !hasSteer && !hasQueue) return
       yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
+      let thenLoopBudget = maxReflectionBudget
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
@@ -405,15 +1427,60 @@ const layer = Layer.effect(
           needsContinuation = result.needsContinuation
           step = result.step + 1
           promotion = "steer"
-          if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+          if (!needsContinuation) {
+            if (thenLoopBudget > 0) {
+              const thenResult = yield* thenLoop(input.sessionID)
+              if (thenResult.steered) {
+                thenLoopBudget--
+                needsContinuation = true
+                step = 1
+                ReflectionState.clearDirection(input.sessionID)
+                if (thenResult.extensionsDetected > 0) {
+                  const extendedWhy = yield* whyLoop(input.sessionID)
+                  if (extendedWhy.steered) {
+                    needsContinuation = true
+                    step = 1
+                    ReflectionState.clearDirection(input.sessionID)
+                  } else if (extendedWhy.converged) {
+                    const prev = ReflectionState.get(input.sessionID)
+                    ReflectionState.set(input.sessionID, {
+                      ...prev,
+                      lastWhyConverged: true,
+                      directionConfirmed: false,
+                    })
+                  }
+                }
+              } else if (thenResult.converged) {
+                const prev = ReflectionState.get(input.sessionID)
+                ReflectionState.set(input.sessionID, {
+                  ...prev,
+                  lastThenConverged: true,
+                  directionConfirmed: true,
+                  confirmedAt: new Date(),
+                })
+              }
+            }
+            if (!needsContinuation)
+              needsContinuation =
+                (yield* SessionInput.hasPending(db, input.sessionID, "steer")) ||
+                ReflectionState.hasSteers(input.sessionID)
+          }
         }
-        shouldRun = yield* SessionInput.hasPending(db, input.sessionID, "queue")
-        promotion = shouldRun ? "queue" : undefined
+        const hasPendingSteers =
+          (yield* SessionInput.hasPending(db, input.sessionID, "steer")) ||
+          ReflectionState.hasSteers(input.sessionID)
+        const hasPendingQueue = yield* SessionInput.hasPending(db, input.sessionID, "queue")
+        shouldRun = hasPendingSteers || hasPendingQueue
+        promotion = hasPendingSteers ? "steer" : hasPendingQueue ? "queue" : undefined
       }
     })
 
     return Service.of({
       run,
+      whyLoop,
+      thenLoop,
+      redTeamPass,
+      lastAssistantText: readLastAssistantText,
     })
   }),
 )

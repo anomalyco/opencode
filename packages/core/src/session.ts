@@ -41,6 +41,12 @@ import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
 export const RevertState = Revert.State
 export type RevertState = Revert.State
 
+export { DecisionTree } from "./session/decision-tree"
+export { TimeTravel } from "./session/time-travel"
+export { FailurePattern } from "./session/failure-pattern"
+export { TurnCheckpoint } from "./session/runner/checkpoint"
+export { SessionBudget } from "./session/runner/budget"
+
 // get project -> project.locations
 //
 // get all sessions
@@ -150,6 +156,7 @@ export interface Interface {
     prompt: PromptInput.Prompt
     delivery?: SessionInput.Delivery
     resume?: boolean
+    reflect?: { readonly model?: ModelV2.Ref }
   }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError>
   readonly shell: (input: {
     id?: EventV2.ID
@@ -168,6 +175,10 @@ export interface Interface {
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  readonly reflect: (input: {
+    readonly sessionID: SessionSchema.ID
+    readonly model?: ModelV2.Ref
+  }) => Effect.Effect<SessionRunner.ReflectionOutcome, NotFoundError | SessionRunner.RunError>
   readonly revert: {
     readonly stage: (input: {
       sessionID: SessionSchema.ID
@@ -380,6 +391,22 @@ const layer = Layer.effect(
             if (!SessionInput.equivalent(admitted, expected))
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
             if (input.resume !== false) yield* execution.wake(admitted.sessionID)
+            if (input.reflect !== undefined) {
+              const modelOverride =
+                input.reflect.model === undefined
+                  ? undefined
+                  : { providerID: input.reflect.model.providerID, modelID: input.reflect.model.id }
+              yield* execution
+                .reflect(admitted.sessionID, modelOverride === undefined ? undefined : { model: modelOverride })
+                .pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.logError("V2 boundary reflection failed", {
+                      cause,
+                      "session.id": admitted.sessionID,
+                    }),
+                  ),
+                )
+            }
             return admitted
           }),
         ),
@@ -430,6 +457,11 @@ const layer = Layer.effect(
       interrupt: Effect.fn("V2Session.interrupt")((sessionID) =>
         Effect.uninterruptible(execution.interrupt(sessionID)),
       ),
+      reflect: Effect.fn("V2Session.reflect")(function* (input) {
+        yield* result.get(input.sessionID)
+        const model = input.model === undefined ? undefined : { providerID: input.model.providerID, modelID: input.model.id }
+        return yield* execution.reflect(input.sessionID, model === undefined ? undefined : { model })
+      }),
       revert: {
         stage: Effect.fn("V2Session.revert.stage")(function* (input) {
           const session = yield* result.get(input.sessionID)

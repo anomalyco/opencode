@@ -44,6 +44,8 @@ interface SqliteConnection extends Connection {
   readonly loadExtension: (path: string) => Effect.Effect<void, SqlError>
 }
 
+type BunSQLBindings = string | number | bigint | null | Uint8Array | boolean
+
 const make = (options: Config) =>
   Effect.gen(function* () {
     const native = (yield* Sqlite.Native) as Database
@@ -59,7 +61,7 @@ const make = (options: Config) =>
         // @ts-ignore bun-types missing safeIntegers method, fixed in https://github.com/oven-sh/bun/pull/26627
         statement.safeIntegers(Context.get(fiber.context, Client.SafeIntegers))
         try {
-          return Effect.succeed((statement.all(...(params as any)) ?? []) as Array<Record<string, unknown>>)
+          return Effect.succeed((statement.all(...(params as BunSQLBindings[])) ?? []) as Array<Record<string, unknown>>)
         } catch (cause) {
           return Effect.fail(
             new SqlError({
@@ -75,7 +77,7 @@ const make = (options: Config) =>
         // @ts-ignore bun-types missing safeIntegers method, fixed in https://github.com/oven-sh/bun/pull/26627
         statement.safeIntegers(Context.get(fiber.context, Client.SafeIntegers))
         try {
-          return Effect.succeed((statement.values(...(params as any)) ?? []) as Array<unknown[]>)
+          return Effect.succeed((statement.values(...(params as BunSQLBindings[])) ?? []) as Array<unknown[]>)
         } catch (cause) {
           return Effect.fail(
             new SqlError({

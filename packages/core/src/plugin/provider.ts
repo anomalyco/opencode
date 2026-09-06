@@ -10,6 +10,7 @@ import { DeepInfraPlugin } from "./provider/deepinfra"
 import { DynamicProviderPlugin } from "./provider/dynamic"
 import { GatewayPlugin } from "./provider/gateway"
 import { GithubCopilotPlugin } from "./provider/github-copilot"
+import { GitHubAuthPlugin } from "./provider/github-auth"
 import { GitLabPlugin } from "./provider/gitlab"
 import { GooglePlugin } from "./provider/google"
 import { GoogleVertexAnthropicPlugin, GoogleVertexPlugin } from "./provider/google-vertex"
@@ -46,6 +47,7 @@ export const ProviderPlugins: PluginInternal.Plugin<PluginInternal.Requirements 
   DeepInfraPlugin,
   GatewayPlugin,
   GithubCopilotPlugin,
+  GitHubAuthPlugin,
   GitLabPlugin,
   GooglePlugin,
   GoogleVertexAnthropicPlugin,

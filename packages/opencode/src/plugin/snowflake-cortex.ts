@@ -313,8 +313,12 @@ export async function SnowflakeCortexAuthPlugin(_input: PluginInput): Promise<Ho
                   ...(oauth.accountId && { accountId: oauth.accountId }),
                 },
               })
-              .catch(() => {})
-          } catch {}
+              .catch(() => {
+                /* Ignore background fetch failure */
+              })
+          } catch {
+            // Ignore token refresh failure
+          }
         }
 
         return {
@@ -391,7 +395,9 @@ export async function SnowflakeCortexAuthPlugin(_input: PluginInput): Promise<Ho
                     delete parsed.max_tokens
                     body = JSON.stringify(parsed)
                   }
-                } catch {}
+                } catch {
+                  // Ignore payload mutation error
+                }
               }
 
               return { ...init, headers, body }
@@ -410,7 +416,9 @@ export async function SnowflakeCortexAuthPlugin(_input: PluginInput): Promise<Ho
                       { status: 200, headers: new Headers({ "content-type": "application/json" }) },
                     )
                   }
-                } catch {}
+                } catch {
+                  // Ignore error parsing response
+                }
               }
 
               if (response.body && response.headers.get("content-type")?.includes("text/event-stream")) {

@@ -10,6 +10,7 @@
     "@types/semver": "^7.5.8"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./check-update": "./src/check-update.ts"
   }
 }

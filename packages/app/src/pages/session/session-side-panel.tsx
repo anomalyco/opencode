@@ -34,6 +34,8 @@ import { SessionContextUsage } from "@/components/session-context-usage"
 
 const reviewTabID = "session-side-panel-review-tab"
 const reviewTabPanelID = "session-side-panel-review-tabpanel"
+const reasoningTabID = "session-side-panel-reasoning-tab"
+const reasoningTabPanelID = "session-side-panel-reasoning-tabpanel"
 const fileBrowserTabPanelID = "session-side-panel-file-browser-tabpanel"
 import { SessionContextTab, SortableTab, SortableTabV2, FileVisual } from "@/components/session"
 import { OpenInAppV2 } from "@/components/session/open-in-app-v2"
@@ -81,6 +83,8 @@ export function SessionSidePanel(props: {
   reviewSnap: boolean
   size: Sizing
   stacked?: boolean
+  reasoningPanel: () => JSX.Element
+  hasReasoning: () => boolean
 }) {
   const layout = useLayout()
   const settings = useSettings()
@@ -180,6 +184,7 @@ export function SessionSidePanel(props: {
     review: reviewTab,
     hasReview: props.canReview,
     fileBrowser: () => !!props.fileBrowserState,
+    reasoning: () => true,
   })
   const contextOpen = tabState.contextOpen
   const openFileOpen = tabState.openFileOpen
@@ -391,6 +396,18 @@ export function SessionSidePanel(props: {
                                   </div>
                                 </Tabs.Trigger>
                               </Show>
+                              <Show when={props.hasReasoning()}>
+                                <Tabs.Trigger
+                                  value="reasoning"
+                                  id={reasoningTabID}
+                                  aria-controls={activeTab() === "reasoning" ? reasoningTabPanelID : undefined}
+                                >
+                                  <div class="flex items-center gap-1.5">
+                                    <Icon name="brain" size="small" />
+                                    <div>{language.t("session.tab.reasoning")}</div>
+                                  </div>
+                                </Tabs.Trigger>
+                              </Show>
                               <SortableProvider ids={openedTabs()}>
                                 <For each={panelTabs()}>
                                   {(tab) => (
@@ -494,6 +511,14 @@ export function SessionSidePanel(props: {
                             <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
                               <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                                 <SessionContextTab />
+                              </div>
+                            </Tabs.Content>
+                          </Show>
+
+                          <Show when={props.hasReasoning() && activeTab() === "reasoning"}>
+                            <Tabs.Content value="reasoning" class="flex flex-col h-full overflow-hidden contain-strict">
+                              <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                                {props.reasoningPanel()}
                               </div>
                             </Tabs.Content>
                           </Show>
@@ -602,6 +627,18 @@ export function SessionSidePanel(props: {
                                 <div class="flex items-center gap-2">
                                   <SessionContextUsage variant="indicator" />
                                   <div>{language.t("session.tab.context")}</div>
+                                </div>
+                              </Tabs.Trigger>
+                            </Show>
+                            <Show when={props.hasReasoning()}>
+                              <Tabs.Trigger
+                                value="reasoning"
+                                id={reasoningTabID}
+                                aria-controls={activeTab() === "reasoning" ? reasoningTabPanelID : undefined}
+                              >
+                                <div class="flex items-center gap-1.5">
+                                  <Icon name="brain" size="small" />
+                                  <div>{language.t("session.tab.reasoning")}</div>
                                 </div>
                               </Tabs.Trigger>
                             </Show>
@@ -722,6 +759,14 @@ export function SessionSidePanel(props: {
                           <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
                             <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                               <SessionContextTab />
+                            </div>
+                          </Tabs.Content>
+                        </Show>
+
+                        <Show when={props.hasReasoning() && activeTab() === "reasoning"}>
+                          <Tabs.Content value="reasoning" class="flex flex-col h-full overflow-hidden contain-strict">
+                            <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                              {props.reasoningPanel()}
                             </div>
                           </Tabs.Content>
                         </Show>

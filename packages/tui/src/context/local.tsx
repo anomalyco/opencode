@@ -153,12 +153,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           modelID: string
         }[]
         variant: Record<string, string | undefined>
+        reflection: { providerID: string; modelID: string } | undefined
       }>({
         ready: false,
         model: {},
         recent: [],
         favorite: [],
         variant: {},
+        reflection: undefined,
       })
 
       const filePath = path.join(paths.state, "model.json")
@@ -176,6 +178,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           recent: modelStore.recent,
           favorite: modelStore.favorite,
           variant: modelStore.variant,
+          reflection: modelStore.reflection,
         })
       }
 
@@ -187,6 +190,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (Array.isArray(value.favorite)) setModelStore("favorite", value.favorite)
           if (typeof value.variant === "object" && value.variant !== null)
             setModelStore("variant", value.variant as Record<string, string | undefined>)
+          if (typeof value.reflection === "object" && value.reflection !== null) {
+            const r = value.reflection as Record<string, unknown>
+            if (typeof r.providerID === "string" && typeof r.modelID === "string") {
+              setModelStore("reflection", { providerID: r.providerID, modelID: r.modelID })
+            }
+          }
+          if (args.reflectionModel) {
+            const parsed = parseModel(args.reflectionModel)
+            if (isModelValid(parsed)) {
+              setModelStore("reflection", parsed)
+            }
+          }
         })
         .catch(() => {})
         .finally(() => {
@@ -356,6 +371,31 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               "favorite",
               next.map((x) => ({ providerID: x.providerID, modelID: x.modelID })),
             )
+            save()
+          })
+        },
+        reflection() {
+          if (modelStore.reflection && isModelValid(modelStore.reflection)) {
+            return modelStore.reflection
+          }
+          const cfgModel = (sync.data.config as Record<string, unknown>).reflection_model
+          if (typeof cfgModel === "string") {
+            const parsed = parseModel(cfgModel)
+            if (isModelValid(parsed)) return parsed
+          }
+          return undefined
+        },
+        setReflection(model: { providerID: string; modelID: string } | undefined) {
+          batch(() => {
+            if (model && !isModelValid(model)) {
+              toast.show({
+                message: `Model ${model.providerID}/${model.modelID} is not valid`,
+                variant: "warning",
+                duration: 3000,
+              })
+              return
+            }
+            setModelStore("reflection", model)
             save()
           })
         },

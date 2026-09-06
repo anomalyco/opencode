@@ -73,6 +73,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
   const reuseProviderMetadata = sameModel && message.error === undefined
   const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text") return [{ type: "text", text: item.text }]
+    if (item.type === "log") return []
     if (item.type === "reasoning")
       return sameModel
         ? [

@@ -112,12 +112,14 @@ describe("LocationServiceMap", () => {
             "grep",
             "question",
             "read",
+            "reflect",
             "skill",
             "todowrite",
             "webfetch",
             "websearch",
             "write",
           ])
+
           const allowedState = yield* update(allowed.path)
           expect(allowedState.providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(true)
           expect(allowedState.tools.map((tool) => tool.name).sort()).toEqual([
@@ -129,6 +131,7 @@ describe("LocationServiceMap", () => {
             "grep",
             "question",
             "read",
+            "reflect",
             "skill",
             "todowrite",
             "webfetch",

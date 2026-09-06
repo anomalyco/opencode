@@ -389,8 +389,41 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Tool.Failed, (event) => run(db, event))
     yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Log.Ended, (event) => run(db, event))
     // yield* events.project(SessionEvent.Retried, (event) => run(db, event))
     yield* events.project(SessionEvent.Compaction.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.ReasoningCycle.Fired, () => Effect.void)
+    yield* events.project(SessionEvent.ReasoningLog.Recorded, (event) =>
+      Effect.gen(function* () {
+        const row = yield* db
+          .select({ metadata: SessionTable.metadata })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        const metadata = (row?.metadata ?? {}) as Record<string, unknown>
+        const logs = (Array.isArray(metadata.reasoningLog) ? metadata.reasoningLog : []) as unknown[]
+        const nextLogs = [
+          ...logs.slice(-49),
+          {
+            id: event.data.id,
+            type: event.data.type,
+            content: event.data.content,
+            metadata: event.data.metadata,
+            timestamp: DateTime.toEpochMillis(event.data.timestamp),
+          },
+        ]
+        yield* db
+          .update(SessionTable)
+          .set({
+            metadata: { ...metadata, reasoningLog: nextLogs },
+            time_updated: DateTime.toEpochMillis(event.data.timestamp),
+          })
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .run()
+          .pipe(Effect.orDie)
+      }),
+    )
     yield* events.project(SessionEvent.RevertEvent.Staged, (event) =>
       db
         .update(SessionTable)

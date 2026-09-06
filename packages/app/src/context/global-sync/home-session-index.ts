@@ -68,9 +68,22 @@ export function trimHomeSessionEvents(current: HomeSessionEvents | undefined, se
 
 export function homeSessionIndexSessions(index: HomeSessionIndex | undefined, events: HomeSessionEvents | undefined) {
   if (!index) return []
-  return (events?.entries ?? [])
-    .filter((entry) => entry.sequence > index.eventSequence)
-    .reduce((sessions, entry) => applyHomeSessionEvent(sessions, entry.event), index.sessions)
+  const pending = (events?.entries ?? []).filter((entry) => entry.sequence > index.eventSequence)
+  if (pending.length === 0) return index.sessions
+
+  // perf: use a Map to apply events in O(N) instead of O(N^2) caused by reducing with Array.findIndex and spreading
+  const map = new Map(index.sessions.map((session) => [session.id, session]))
+  for (const entry of pending) {
+    const event = entry.event
+    const info = event.properties.info
+    if (event.type === "session.deleted" || info.parentID || typeof info.time?.archived === "number") {
+      map.delete(info.id)
+    } else if (event.type === "session.created" || event.type === "session.updated") {
+      map.set(info.id, info)
+    }
+  }
+
+  return Array.from(map.values())
 }
 
 export function homeSessionIndexRefresh(event: Event["type"], connected: boolean) {
