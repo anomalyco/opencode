@@ -1,8 +1,14 @@
 export * as McpOAuth from "./oauth.js"
 
-import { auth, parseErrorResponse, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
+import {
+  auth,
+  extractWWWAuthenticateParams,
+  parseErrorResponse,
+  type OAuthClientProvider,
+} from "@modelcontextprotocol/sdk/client/auth.js"
 import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js"
 import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js"
+import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Deferred, Effect } from "effect"
 import { Credential } from "@opencode-ai/schema/credential"
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
@@ -277,8 +283,37 @@ export const authorize = (input: {
       return toCredential({ methodID: input.methodID, serverUrl: input.config.url, tokens, client })
     })
 
+    // RFC 9728 §5.1: the 401 challenge names the exact protected-resource metadata URL (path and query
+    // included). Without it the SDK derives well-known URLs from the origin and, when those 404, treats
+    // the resource host itself as the authorization server. Transport-driven connects read the
+    // challenge inside the SDK; this interactive flow has to probe for it. Uses the global fetch so
+    // the expected 401 is not logged as a rejected authentication.
+    const challenge = yield* Effect.tryPromise(async () => {
+      const response = await fetch(input.config.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream",
+          ...input.config.headers,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: LATEST_PROTOCOL_VERSION,
+            capabilities: {},
+            clientInfo: { name: "opencode", version: "unknown" },
+          },
+        }),
+      })
+      await response.body?.cancel()
+      return extractWWWAuthenticateParams(response)
+    }).pipe(Effect.orElseSucceed(() => ({}) as ReturnType<typeof extractWWWAuthenticateParams>))
+    const discovery = { resourceMetadataUrl: challenge.resourceMetadataUrl, scope: oauth?.scope ?? challenge.scope }
+
     yield* Effect.tryPromise({
-      try: () => auth(oauthProvider, { serverUrl: input.config.url, scope: oauth?.scope, fetchFn }),
+      try: () => auth(oauthProvider, { serverUrl: input.config.url, ...discovery, fetchFn }),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     })
 
@@ -296,7 +331,7 @@ export const authorize = (input: {
               auth(oauthProvider, {
                 serverUrl: input.config.url,
                 authorizationCode: value,
-                scope: oauth?.scope,
+                ...discovery,
                 fetchFn,
               }),
             catch: (error) => (error instanceof Error ? error : new Error(String(error))),

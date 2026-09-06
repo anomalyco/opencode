@@ -149,6 +149,72 @@ describe("MCP OAuth", () => {
     ])
   })
 
+  test("follows the resource_metadata URL from the WWW-Authenticate challenge", async () => {
+    const issuer = Bun.serve({
+      port: 0,
+      fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname !== "/.well-known/oauth-authorization-server") return new Response(null, { status: 404 })
+        return Response.json({
+          issuer: url.origin,
+          authorization_endpoint: `${url.origin}/authorize`,
+          token_endpoint: `${url.origin}/token`,
+          response_types_supported: ["code"],
+          code_challenge_methods_supported: ["S256"],
+        })
+      },
+    })
+    const metadataRequests: string[] = []
+    // Bedrock AgentCore shape: metadata lives under the resource path with a query string, the domain
+    // root well-known 404s, and the authorization server is a different host.
+    const resource = Bun.serve({
+      port: 0,
+      fetch(request) {
+        const url = new URL(request.url)
+        const metadata = `${url.origin}/runtimes/example/invocations/.well-known/oauth-protected-resource?qualifier=dev`
+        if (request.method === "POST" && url.pathname === "/runtimes/example/invocations")
+          return new Response(null, {
+            status: 401,
+            headers: { "WWW-Authenticate": `Bearer resource_metadata="${metadata}", scope="mcp:read"` },
+          })
+        if (url.href === metadata) {
+          metadataRequests.push(url.href)
+          return Response.json({
+            resource: `${url.origin}/runtimes/example/invocations`,
+            authorization_servers: [issuer.url.origin],
+          })
+        }
+        return new Response(null, { status: 404 })
+      },
+    })
+
+    try {
+      const authorization = await Effect.runPromise(
+        Effect.scoped(
+          McpOAuth.authorize({
+            name: "agentcore",
+            config: new ConfigMCP.Remote({
+              type: "remote",
+              url: `${resource.url.origin}/runtimes/example/invocations?qualifier=dev`,
+              oauth: { client_id: "client" },
+            }),
+            methodID: Integration.MethodID.make("oauth"),
+          }),
+        ),
+      )
+      const url = new URL(authorization.url)
+      expect(url.origin).toBe(issuer.url.origin)
+      expect(url.pathname).toBe("/authorize")
+      expect(url.searchParams.get("scope")).toBe("mcp:read")
+      expect(metadataRequests).toEqual([
+        `${resource.url.origin}/runtimes/example/invocations/.well-known/oauth-protected-resource?qualifier=dev`,
+      ])
+    } finally {
+      resource.stop(true)
+      issuer.stop(true)
+    }
+  })
+
   test("generates a loopback redirect URL when none is configured", async () => {
     expect(await authorize()).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/callback$/)
   })
