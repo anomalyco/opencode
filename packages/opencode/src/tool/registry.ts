@@ -148,6 +148,12 @@ const layer = Layer.effect(
                 const pluginCtx: PluginToolContext = {
                   ...toolCtx,
                   ask: (req) => bridge.promise(toolCtx.ask(req)),
+                  // `metadata` is void in the plugin API but Effect-backed on the
+                  // host, so spreading it would hand plugins an Effect nobody runs
+                  // and silently drop every live update (#37877).
+                  metadata: (input) => {
+                    bridge.fork(toolCtx.metadata(input))
+                  },
                   directory: ctx.directory,
                   worktree: ctx.worktree,
                 }
