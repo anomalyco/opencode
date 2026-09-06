@@ -1,4 +1,6 @@
 import { createMemo, createResource, createSignal, Show, type JSX } from "solid-js"
+import { useParams } from "@solidjs/router"
+import { TeamJulesLiveWatcher } from "@opencode-ai/session-ui/components/teamjules/live-watcher"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import {
@@ -180,6 +182,7 @@ function ReviewPanelV2Sidebar(props: {
   activeDiff: () => string | undefined
 }) {
   const language = useLanguage()
+  const params = useParams()
   const [explicitHighlight, setExplicitHighlight] = createSignal<string | undefined>()
   const highlightedPath = createMemo(() => {
     if (!props.searching()) return undefined
@@ -250,6 +253,9 @@ function ReviewPanelV2Sidebar(props: {
           </Show>
         </Show>
       </Show>
+      
+      {/* TeamJules GitPigeon Live Sync Watcher */}
+      <TeamJulesLiveWatcher taskId={params.id || params.sessionId || "active-task"} />
     </SessionReviewV2Sidebar>
   )
 }
