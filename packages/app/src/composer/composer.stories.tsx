@@ -55,6 +55,8 @@ function ComposerStory(props: {
   label?: string
   inspectRequest?: boolean
   continueOnStop?: boolean
+  longLabels?: boolean
+  alternate?: "queue" | "steer"
 }) {
   const [draft, setDraft] = createStore<ComposerPersistedState>({
     prompt: props.prompt ?? [{ type: "text", content: "", start: 0, end: 0 }],
@@ -66,11 +68,15 @@ function ComposerStory(props: {
     activity: props.label ?? "Ready",
     variant: STORY_MODEL.variant,
   })
+  const modelOption = createMemo(() => ({
+    ...selectedModel,
+    name: props.longLabels ? "Claude Sonnet with an unusually long model name" : selectedModel.name,
+  }))
   const modelSelection = {
     ready: Object.assign(() => true, { promise: undefined }),
-    current: () => selectedModel,
-    recent: () => [selectedModel],
-    list: () => [selectedModel],
+    current: () => modelOption(),
+    recent: () => [modelOption()],
+    list: () => [modelOption()],
     cycle() {},
     set() {},
     visible: () => true,
@@ -126,7 +132,7 @@ function ComposerStory(props: {
       placeholder: () => "Ask anything, / for commands, @ for context...",
       agent: {
         options: () => [
-          { id: "build", label: "build" },
+          { id: "build", label: props.longLabels ? "Build agent with an unusually long name" : "build" },
           { id: "review", label: "review" },
         ],
         current: () => "build",
@@ -135,7 +141,7 @@ function ComposerStory(props: {
       variant: {
         options: () => [
           { id: "default", label: "default" },
-          { id: "balanced", label: "balanced" },
+          { id: "balanced", label: props.longLabels ? "Balanced reasoning with an extended label" : "balanced" },
           { id: "high", label: "high" },
         ],
         current: () => story.variant,
@@ -144,6 +150,17 @@ function ComposerStory(props: {
       submit: {
         stopping: () => !!props.stopping,
         working: () => !!props.working,
+        queue: props.alternate
+          ? {
+              count: () => 0,
+              delivery: () => (props.alternate === "queue" ? "steer" : "queue"),
+              alternate: () => props.alternate,
+              editing: () => undefined,
+              confirmEdit() {},
+              cancelEdit() {},
+              editFirst: () => false,
+            }
+          : undefined,
         onSubmit: () => {
           const value = draft.prompt.map((part) => ("content" in part ? part.content : `[${part.filename}]`)).join("")
           const request = props.inspectRequest
@@ -286,6 +303,21 @@ export const NarrowLayout = {
   render: () => (
     <div class="w-[340px]">
       <ComposerStory prompt={text("Verify the narrow Composer")} />
+    </div>
+  ),
+}
+
+export const ToolbarOverflow = {
+  args: { alternate: "queue" },
+  argTypes: { alternate: { control: "select", options: ["none", "queue", "steer"] } },
+  render: (args: { alternate: "none" | "queue" | "steer" }) => (
+    <div class="w-[min(420px,calc(100vw-80px))]">
+      <ComposerStory
+        longLabels
+        working
+        prompt={text("Keep all controls reachable when the toolbar overflows")}
+        alternate={args.alternate === "none" ? undefined : args.alternate}
+      />
     </div>
   ),
 }
