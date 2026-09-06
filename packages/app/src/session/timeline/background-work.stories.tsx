@@ -1,3 +1,4 @@
+import { DataProvider } from "@opencode-ai/session-ui/context"
 import { BackgroundMoveHint, BackgroundWorkSummary } from "./message-timeline"
 
 const tasks = [
@@ -30,7 +31,13 @@ export const InlineMoveHint = {
 export const SummaryPanelEntry = {
   render: () => (
     <div class="w-[280px] rounded-[6px] bg-v2-background-bg-base px-0.5 py-1.5 shadow-[var(--v2-elevation-raised)]">
-      <BackgroundWorkSummary tasks={tasks} />
+      <DataProvider
+        data={{ session: [], session_status: {}, session_diff: {} }}
+        directory="/project"
+        onSessionHref={(id) => `#${id}`}
+      >
+        <BackgroundWorkSummary tasks={tasks} />
+      </DataProvider>
     </div>
   ),
 }
