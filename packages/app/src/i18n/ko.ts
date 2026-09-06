@@ -1,4 +1,11 @@
 export const dict = {
+  "command.thinking.toggle": "Toggle reasoning display",
+  "command.thinking.toggle.description": "Show or hide the model's reasoning (thinking) in the timeline",
+  "prompt.toast.thinkingOn.title": "Reasoning shown",
+  "prompt.toast.thinkingOn.description": "Model reasoning is now displayed in the timeline. Toggle with /thinking.",
+  "prompt.toast.thinkingOff.title": "Reasoning hidden",
+  "prompt.toast.thinkingOff.description": "Model reasoning is hidden. Toggle with /thinking.",
+
   "command.category.suggested": "추천",
   "command.category.view": "보기",
   "command.category.project": "프로젝트",
