@@ -1018,7 +1018,7 @@ const EndpointProjectUpdate = (raw: RawClient["server.project"]) => (input: Proj
   preserveEffect<ProjectUpdateOutput>()(
     raw["project.update"]({
       params: { projectID: input["projectID"] },
-      payload: { name: input["name"], icon: input["icon"], commands: input["commands"] },
+      payload: { canonical: input["canonical"], name: input["name"], icon: input["icon"], commands: input["commands"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 

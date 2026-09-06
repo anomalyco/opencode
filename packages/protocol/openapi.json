@@ -7407,7 +7407,7 @@
             }
           }
         },
-        "description": "Update project display metadata and workspace commands.",
+        "description": "Update the project canonical directory, display metadata, and workspace commands.",
         "summary": "Update project",
         "requestBody": {
           "content": {
@@ -7415,6 +7415,9 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "canonical": {
+                    "type": "string"
+                  },
                   "name": {
                     "type": "string"
                   },
