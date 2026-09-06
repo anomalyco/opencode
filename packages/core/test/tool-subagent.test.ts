@@ -299,38 +299,29 @@ describe("SubagentTool", () => {
         agent: toolIdentity.agent,
         model: parentModel,
       })
-      yield* bus.publish(SessionEvent.Tool.Input.Started, {
-        sessionID: parent.id,
-        assistantMessageID: previous,
-        id: "call-parent-read",
-        name: "read",
-      })
-      yield* bus.publish(SessionEvent.Tool.Input.Ended, {
-        sessionID: parent.id,
-        assistantMessageID: previous,
-        id: "call-parent-read",
-        text: '{"filePath":"README.md"}',
-      })
-      yield* bus.publish(SessionEvent.Tool.Called, {
-        sessionID: parent.id,
-        assistantMessageID: previous,
-        id: "call-parent-read",
-        input: { filePath: "README.md" },
-        executed: false,
-      })
-      yield* bus.publish(SessionEvent.Tool.Success, {
-        sessionID: parent.id,
-        assistantMessageID: previous,
-        id: "call-parent-read",
-        content: [{ type: "text", text: "Inherited file contents" }],
-        executed: false,
-      })
       yield* bus.publish(SessionEvent.Step.Ended, {
         sessionID: parent.id,
         assistantMessageID: previous,
         finish: "tool-calls",
         cost: Money.USD.zero,
         tokens,
+      })
+      yield* sessions.updateMessage({
+        sessionID: parent.id,
+        messageID: previous,
+        content: [
+          {
+            type: "tool",
+            id: "call-parent-read",
+            name: "read",
+            time: { created: parent.time.created },
+            state: {
+              status: "completed",
+              input: { filePath: "README.md" },
+              content: [{ type: "text", text: "Inherited file contents" }],
+            },
+          },
+        ],
       })
       const spawning = SessionMessage.ID.create()
       yield* bus.publish(SessionEvent.Step.Started, {

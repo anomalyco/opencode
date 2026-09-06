@@ -93,7 +93,7 @@ type CompactInput = Parameters<Session.Handle["compact"]>[0] & { sessionID: Sess
 type ForkInput = {
   sessionID: SessionSchema.ID
   boundary: SessionSchema.ForkRequestBoundary
-  child?: SessionEvent.Forked["data"]["child"]
+  child?: Pick<CreateBaseInput, "title" | "agent" | "model">
 }
 
 export {
@@ -312,7 +312,9 @@ const layer = Layer.effect(
             messageID: input.boundary.messageID,
           })
         if (!boundary) return yield* new ForkEmptyError({ sessionID: input.sessionID })
-        const sessionID = SessionSchema.ID.create()
+        const sessionID = input.child
+          ? (yield* result.create({ parentID: parent.id, ...input.child })).id
+          : SessionSchema.ID.create()
         const inherited = yield* db
           .transaction(() =>
             Effect.all({
@@ -328,7 +330,6 @@ const layer = Layer.effect(
           sessionID,
           parentID: parent.id,
           boundary: { ...input.boundary, messageID: boundary.id },
-          child: input.child,
           ...inherited,
         })
         return yield* result.get(sessionID).pipe(Effect.orDie)

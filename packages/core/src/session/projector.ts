@@ -148,7 +148,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     .insert(SessionTable)
     .values({
       id: event.data.sessionID,
-      parent_id: event.data.child ? event.data.parentID : null,
+      parent_id: null,
       fork_session_id: event.data.parentID,
       fork_boundary: event.data.boundary,
       project_id: parent.project_id,
@@ -156,9 +156,9 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       slug: Slug.create(),
       directory: parent.directory,
       path: parent.path,
-      title: event.data.child?.title ?? forkTitle(parent.title ?? undefined),
-      agent: event.data.child?.agent ?? parent.agent,
-      model: event.data.child?.model ?? parent.model,
+      title: forkTitle(parent.title ?? undefined),
+      agent: parent.agent,
+      model: parent.model,
       metadata: parent.metadata,
       version: parent.version,
       cost: 0,
@@ -170,7 +170,12 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       time_created: event.created,
       time_updated: event.created,
     })
-    .onConflictDoNothing()
+    // Subagents already have a Created event owning their identity and configuration.
+    .onConflictDoUpdate({
+      target: SessionTable.id,
+      set: { fork_session_id: event.data.parentID, fork_boundary: event.data.boundary, time_updated: event.created },
+      setWhere: and(eq(SessionTable.parent_id, event.data.parentID), isNull(SessionTable.fork_session_id)),
+    })
     .returning({ sessionID: SessionTable.id })
     .get()
     .pipe(Effect.orDie)

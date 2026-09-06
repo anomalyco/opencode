@@ -1758,7 +1758,6 @@ export type SessionForked = {
     sessionID: string
     parentID: string
     boundary: SessionForkBoundary
-    child?: { title: string; agent: string; model?: ModelRef }
     instructions?: { [x: string]: string }
     instructionEntries?: InstructionEntrySnapshot
   }

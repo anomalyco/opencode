@@ -604,20 +604,25 @@ describe("Session.create", () => {
           .select()
           .from(EventTable)
           .where(eq(EventTable.aggregate_id, forked.id))
-          .get()
+          .orderBy(asc(EventTable.seq))
+          .all()
           .pipe(Effect.orDie)
-        if (!recorded) return yield* Effect.die(new Error("Fork event not found"))
+        expect(recorded.map((event) => event.type)).toEqual(
+          child ? ["session.created.1", "session.forked.2"] : ["session.forked.2"],
+        )
 
         yield* bus.remove(forked.id)
         yield* db.delete(SessionTable).where(eq(SessionTable.id, forked.id)).run().pipe(Effect.orDie)
-        yield* bus.replay({
-          id: recorded.id,
-          created: recorded.created,
-          aggregateID: recorded.aggregate_id,
-          seq: recorded.seq,
-          type: recorded.type,
-          data: recorded.data,
-        })
+        yield* Effect.forEach(recorded, (event) =>
+          bus.replay({
+            id: event.id,
+            created: event.created,
+            aggregateID: event.aggregate_id,
+            seq: event.seq,
+            type: event.type,
+            data: event.data,
+          }),
+        )
 
         expect((yield* session.context(forked.id)).map((message) => message.id)).toEqual(original)
         expect(yield* session.get(forked.id)).toEqual(forked)
