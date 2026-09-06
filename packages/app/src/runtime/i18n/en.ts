@@ -147,6 +147,7 @@ export const dict = {
   "provider.connect.status.inProgress": "Authorization in progress…",
   "provider.connect.status.waiting": "Waiting for authorization…",
   "provider.connect.status.failed": "Authorization failed: {{error}}",
+  "provider.connect.error.unsupportedFields": "This authentication form contains unsupported fields",
   "provider.connect.apiKey.description":
     "Enter your {{provider}} API key to connect your account and use {{provider}} models in OpenCode.",
   "provider.connect.apiKey.label": "{{provider}} API key",
@@ -215,6 +216,8 @@ export const dict = {
 
   "provider.disconnect.toast.disconnected.title": "{{provider}} disconnected",
   "provider.disconnect.toast.disconnected.description": "{{provider}} models are no longer available.",
+  "provider.disconnect.toast.noCredentials.description": "No removable credentials found for {{provider}}.",
+  "provider.disconnect.toast.failed.description": "Failed to disconnect {{provider}}.",
 
   "model.tag.free": "Free",
   "model.tag.latest": "Latest",
@@ -570,6 +573,8 @@ export const dict = {
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
   "toast.project.reloadFailed.title": "Failed to reload {{project}}",
   "toast.migration.failed.title": "Data migration failed",
+  "toast.migration.progress.clearingOldEvents": "Clearing old events",
+  "toast.migration.progress.migratingSessions": "Migrating sessions",
 
   "toast.update.title": "Update available",
   "toast.update.description": "A new version of OpenCode ({{version}}) is now available to install.",
@@ -704,6 +709,8 @@ export const dict = {
   "session.timeline.notice.cancelled": "{{actor}} cancelled",
   "session.error.serverConnection": "Can't connect to this server",
   "session.review.filesChanged": "Files Changed {{count}}",
+  "session.review.filesChangedCount.one": "{{count}} file changed",
+  "session.review.filesChangedCount.other": "{{count}} files changed",
   "session.review.change.one": "Change",
   "session.review.change.other": "Changes",
   "session.review.loadingChanges": "Loading changes…",
@@ -764,6 +771,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Local",
   "session.new.workspace.local": "Local repository",
   "session.new.workspace.existing": "Worktree…",
+  "session.new.workspace.existingLabel": "Worktree",
   "session.new.git.none": "No Git",
   "session.new.lastModified": "Last modified",
 
@@ -933,6 +941,8 @@ export const dict = {
   "settings.about.writtenBy": "Written by",
   "settings.about.illustratedBy": "Illustrated by",
   "settings.about.and": "and",
+  "settings.about.writtenByNames": "Written by {{names}}",
+  "settings.about.illustratedByNames": "Illustrated by {{names}}",
   "settings.about.otherContributor.one": "{{count}} other",
   "settings.about.otherContributor.other": "{{count}} others",
   "settings.about.firstPublished": "First published in Missouri, USA",

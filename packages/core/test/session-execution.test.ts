@@ -278,6 +278,7 @@ describe("SessionExecution lifecycle", () => {
           sessionID,
           text: "The server restarted while you were working. Continue from where you left off without repeating completed work.",
           description: "Continuing after restart",
+          metadata: { notice: "restart" },
         })),
       )
       // Drains completed naturally, so claims are released and counters reset.

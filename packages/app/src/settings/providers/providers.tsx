@@ -109,7 +109,13 @@ export const SettingsProviders: Component<{
       .get({ integrationID: providerID, location })
       .then(async (integration) => {
         const credentials = integration.data?.connections.filter((item) => item.type === "credential") ?? []
-        if (credentials.length === 0) throw new Error(`No removable credentials found for ${name}`)
+        if (credentials.length === 0) {
+          showToast({
+            title: language.t("common.requestFailed"),
+            description: language.t("provider.disconnect.toast.noCredentials.description", { provider: name }),
+          })
+          return
+        }
         await Promise.all(
           credentials.map((credential) => serverSdk.api.credential.remove({ credentialID: credential.id, location })),
         )
@@ -120,9 +126,11 @@ export const SettingsProviders: Component<{
           description: language.t("provider.disconnect.toast.disconnected.description", { provider: name }),
         })
       })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err)
-        showToast({ title: language.t("common.requestFailed"), description: message })
+      .catch(() => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: language.t("provider.disconnect.toast.failed.description", { provider: name }),
+        })
       })
   }
 

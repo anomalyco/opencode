@@ -171,9 +171,7 @@ export function PromptWorkspaceSelector(props: {
                     }}
                   >
                     <Icon name="workspace-isolated" />
-                    <span class="min-w-0 flex-1 truncate">
-                      {language.t("session.new.workspace.existing").replace(/(…|\.{3})$/, "")}
-                    </span>
+                    <span class="min-w-0 flex-1 truncate">{language.t("session.new.workspace.existingLabel")}</span>
                   </Menu.SubTrigger>
                   <Menu.Portal>
                     <Menu.SubContent class="max-h-[calc(100dvh-16px)] w-[200px] overflow-y-auto">

@@ -14,6 +14,19 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
   let toastID: number | undefined
   let disposeToast: (() => void) | undefined
 
+  const format = (progress: Progress | undefined) => {
+    if (!progress) return ""
+    const label =
+      progress.label === "Clearing old events"
+        ? language.t("toast.migration.progress.clearingOldEvents")
+        : progress.label === "Migrating sessions"
+          ? language.t("toast.migration.progress.migratingSessions")
+          : progress.label
+    if (progress.numerator === undefined) return label
+    if (progress.denominator === undefined) return `${label} ${progress.numerator}`
+    return `${label} ${progress.numerator}/${progress.denominator}`
+  }
+
   const hide = () => {
     if (toastID !== undefined) toaster.dismiss(toastID)
     toastID = undefined
@@ -80,13 +93,6 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
   })
 
   return null
-}
-
-function format(progress: Progress | undefined) {
-  if (!progress) return ""
-  if (progress.numerator === undefined) return progress.label
-  if (progress.denominator === undefined) return `${progress.label} ${progress.numerator}`
-  return `${progress.label} ${progress.numerator}/${progress.denominator}`
 }
 
 function wait(delay: number, signal: AbortSignal) {

@@ -308,7 +308,7 @@ export function SessionSidePanel(props: {
                               aria-controls={activeTab() === "review" ? reviewTabPanelID : undefined}
                             >
                               {props.hasReview
-                                ? language.t("session.review.filesChanged", { count: props.reviewCount })
+                                ? language.plural("session.review.filesChangedCount", props.reviewCount)
                                 : language.t("session.tab.review")}
                             </Tabs.Trigger>
                           </Show>
@@ -526,7 +526,7 @@ export function SessionSidePanel(props: {
                   >
                     <Tabs.List>
                       <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
-                        {language.t("session.review.filesChanged", { count: props.reviewCount })}
+                        {language.plural("session.review.filesChangedCount", props.reviewCount)}
                       </Tabs.Trigger>
                       <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
                         {language.t("session.files.all")}
