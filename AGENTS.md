@@ -159,3 +159,35 @@ const table = sqliteTable("session", {
 - Keep delivery vocabulary explicit. Prompts steer by default and promote at the next safe provider-turn boundary while the current drain requires continuation. An explicit `queue` input remains pending until the Session would otherwise become idle; promote one queued input at that boundary, then reevaluate continuation before promoting another. Promoting any new user input resets the selected agent's provider-turn allowance; a batch of steers resets it once.
 - Keep EventV2 replay owner claims separate from clustered Session execution ownership.
 - Keep the System Context algebra, registry, and built-ins in `src/system-context`; keep Context Source producers with their observed domains, and keep Session History selection plus Context Epoch persistence Session-owned.
+
+## Pull Request Template
+
+### Issue for this PR
+
+Closes #
+
+### Type of change
+
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Refactor / code improvement
+- [ ] Documentation
+
+### What does this PR do?
+
+Please provide a description of the issue, the changes you made to fix it, and why they work. It is expected that you understand why your changes work and if you do not understand why at least say as much so a maintainer knows how much to value the PR.
+
+**If you paste a large clearly AI generated description here your PR may be IGNORED or CLOSED!**
+
+### How did you verify your code works?
+
+### Screenshots / recordings
+
+_If this is a UI change, please include a screenshot or recording._
+
+### Checklist
+
+- [ ] I have tested my changes locally
+- [ ] I have not included unrelated changes in this PR
+
+_If you do not follow this template your PR will be automatically rejected._
