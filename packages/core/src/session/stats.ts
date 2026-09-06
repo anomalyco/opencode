@@ -119,7 +119,8 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
   const dateKey = makeDateKey(input.timezone)
 
   yield* Effect.forEach(
-    ranges,
+    // Yield between daily message batches; SQLite and the row fold are synchronous.
+    windows(from, to, 24 * 60 * 60 * 1_000),
     (range) =>
       db
         .all<MessageRow>(
@@ -184,6 +185,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
               })
             }),
           ),
+          Effect.andThen(Effect.yieldNow),
         ),
     { concurrency: 1, discard: true },
   )
@@ -347,10 +349,10 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
   }
 })
 
-function windows(from: number, to: number) {
-  return Array.from({ length: Math.ceil((to - from) / Window) }, (_, index) => ({
-    from: from + index * Window,
-    to: Math.min(to, from + (index + 1) * Window),
+function windows(from: number, to: number, size = Window) {
+  return Array.from({ length: Math.ceil((to - from) / size) }, (_, index) => ({
+    from: from + index * size,
+    to: Math.min(to, from + (index + 1) * size),
   }))
 }
 
@@ -396,6 +398,8 @@ function addToolStatus(
 }
 
 function makeDateKey(timezone = "UTC") {
+  const zone = DateTime.zoneMakeNamedUnsafe(timezone)
+  const cached = { from: 0, to: 0, key: "" }
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
     year: "numeric",
@@ -403,8 +407,14 @@ function makeDateKey(timezone = "UTC") {
     day: "2-digit",
   })
   return (time: number) => {
+    if (time >= cached.from && time < cached.to) return cached.key
+    // Reuse the local date, not a fixed 24-hour bucket: DST changes day length.
+    const date = DateTime.makeZonedUnsafe(time, { timeZone: zone })
+    cached.from = DateTime.toEpochMillis(DateTime.startOf(date, "day"))
+    cached.to = DateTime.toEpochMillis(DateTime.endOf(date, "day")) + 1
     const parts = Object.fromEntries(formatter.formatToParts(time).map((part) => [part.type, part.value]))
-    return `${parts.year}-${parts.month}-${parts.day}`
+    cached.key = `${parts.year}-${parts.month}-${parts.day}`
+    return cached.key
   }
 }
 
