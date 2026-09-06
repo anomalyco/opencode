@@ -188,6 +188,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           () => config.tabs.scope,
         ],
         ([routed]) => {
+          if (route.data.type === "home") setPreview(undefined)
           if (!routed || routed === "dummy") return
           const sessionID = root(routed)
           const permanent = promotedSession === sessionID

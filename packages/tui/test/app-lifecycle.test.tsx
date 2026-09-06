@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { EmbeddedTerminalRenderable } from "@opentui/core"
+import { EmbeddedTerminalRenderable, TextAttributes } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -798,6 +798,54 @@ test("session startup prompt is submitted exactly once", async () => {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
   }
+})
+
+test.each(["/new", "/clear", "shortcut"])("%s makes the temporary session tab permanent", async (command) => {
+  await using state = await tmpdir()
+  const session = {
+    id: "ses_preview",
+    title: "Keep me",
+    projectID: "project",
+    location: { directory },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0 },
+  }
+  await using setup = await createAppFixture({
+    state: state.path,
+    args: { sessionID: session.id },
+    config: { animations: false, tabs: { enabled: true }, keybinds: { "session.new": "f6" } },
+    fetch: (url) => {
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (/^\/api\/session\/ses_preview\/(message|inbox|permission)$/.test(url.pathname))
+        return json({ data: [], cursor: {} })
+      return undefined
+    },
+  })
+  const title = () =>
+    setup
+      .captureSpans()
+      .lines.flatMap((line) => line.spans)
+      .find((span) => span.text.includes(session.title))
+  await setup.waitForFrame((frame) => frame.includes(session.title))
+  expect(title()!.attributes & TextAttributes.ITALIC).toBe(TextAttributes.ITALIC)
+
+  if (command === "shortcut") setup.mockInput.pressKey("F6")
+  if (command !== "shortcut") {
+    await setup.mockInput.typeText(command)
+    await setup.waitForFrame((frame) => frame.includes("New session"))
+    setup.mockInput.pressEnter()
+  }
+
+  await setup.waitForFrame(
+    (frame) => frame.includes("New session") && !frame.includes(command) && frame.includes(session.title),
+  )
+  expect(title()).toBeDefined()
+  expect(title()!.attributes & TextAttributes.ITALIC).toBe(0)
+  await setup.mockInput.typeText("New draft")
+  await setup.waitForFrame((frame) => frame.includes("New draft"))
+  setup.mockInput.pressKey("u", { ctrl: true })
+  await setup.waitForFrame((frame) => !frame.includes("New draft"))
 })
 
 test.each([false, true])("uses the resolved launch directory for new prompts (fallback: %s)", async (fallback) => {
