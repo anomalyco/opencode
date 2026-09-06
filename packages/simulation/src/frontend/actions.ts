@@ -233,7 +233,10 @@ export const execute = Effect.fn("SimulationActions.execute")(function* (harness
       )
         return yield* Effect.fail(new Error("click position must be within the target element"))
       SimulationRenderer.recordPointer(harness.renderer, "click", target.screenX + action.x, target.screenY + action.y)
-      yield* Effect.tryPromise(() => harness.mockMouse.click(target.screenX + action.x, target.screenY + action.y))
+      // Opt out of test-helper pacing; retain its down/up ordering and the render below.
+      yield* Effect.tryPromise(() =>
+        harness.mockMouse.click(target.screenX + action.x, target.screenY + action.y, undefined, { delayMs: 0 }),
+      )
       break
     }
     case "ui.resize":
