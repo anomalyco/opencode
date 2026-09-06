@@ -9,6 +9,7 @@ import { DesktopLogging, scoped } from "../native/logging"
 import { safeWebContentsURL } from "../windows/state"
 import { getLastFocusedWindow, makeMainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
 import { acquireApplicationLock, configureApplication } from "./environment"
+import { deepLinksFromArgv } from "./deep-links"
 import { Shutdown } from "./shutdown"
 
 export interface Interface {
@@ -29,7 +30,7 @@ const runtime = Layer.effect(
     const windows = yield* makeMainWindows()
     const createWindow = windows.create
     const restoreWindows = windows.restore
-    const pendingDeepLinks: string[] = []
+    const pendingDeepLinks = process.platform === "darwin" ? [] : deepLinksFromArgv(process.argv)
     let shutdownReady = false
     const prepareToRestart = shutdown.run.pipe(Effect.ensuring(Effect.sync(() => (shutdownReady = true))))
     const emitDeepLinks = (urls: string[]) => {
@@ -52,7 +53,7 @@ const runtime = Layer.effect(
       )
     }
     const secondInstance = (_event: Event, argv: string[]) => {
-      const urls = argv.filter((arg) => arg.startsWith("opencode://"))
+      const urls = deepLinksFromArgv(argv)
       if (urls.length) {
         runFork(Effect.logInfo("deep link received via second-instance", { urls }))
         emitDeepLinks(urls)
