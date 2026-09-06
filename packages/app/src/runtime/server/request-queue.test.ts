@@ -1,19 +1,22 @@
 import { describe, expect, test } from "bun:test"
 import { createRequestQueue } from "./request-queue"
 
-function setup(input?: { limit?: number; stallMs?: number }) {
-  const pending: Array<{ url: string; resolve: () => void }> = []
+function setup(input?: { limit?: number; stallMs?: number; headersTimeoutMs?: number }) {
+  const pending: Array<{ url: string; signal: AbortSignal; resolve: () => void }> = []
   const logs: Array<{ message: string; data: Record<string, unknown> }> = []
   let clock = 0
   const queue = createRequestQueue({
     limit: input?.limit ?? 2,
     stallMs: input?.stallMs,
+    headersTimeoutMs: input?.headersTimeoutMs,
     now: () => clock,
     log: (message, data) => logs.push({ message, data }),
     fetch: Object.assign(
       (resource: RequestInfo | URL) =>
-        new Promise<Response>((resolve) => {
-          pending.push({ url: new Request(resource).url, resolve: () => resolve(new Response("ok")) })
+        new Promise<Response>((resolve, reject) => {
+          const request = new Request(resource)
+          request.signal.addEventListener("abort", () => reject(request.signal.reason), { once: true })
+          pending.push({ url: request.url, signal: request.signal, resolve: () => resolve(new Response("ok")) })
         }),
       { preconnect() {} },
     ),
@@ -56,6 +59,34 @@ describe("createRequestQueue", () => {
     input.pending[0]!.resolve()
     await expect(aborted).rejects.toBeInstanceOf(DOMException)
     expect(input.pending.map((item) => new URL(item.url).pathname)).toEqual(["/api/first"])
+    expect(input.queue.inflight()).toBe(0)
+  })
+
+  test("a request the server never answers times out and frees its slot", async () => {
+    const input = setup({ limit: 1, headersTimeoutMs: 10 })
+    const dead = input.queue.fetch("http://server/api/dead")
+    const next = input.queue.fetch("http://server/api/next")
+    await input.settle()
+    expect(input.queue.queued()).toBe(1)
+    const error = await dead.catch((cause: unknown) => cause)
+    expect(error).toBeInstanceOf(DOMException)
+    expect((error as DOMException).name).toBe("TimeoutError")
+    await input.settle()
+    expect(input.pending.map((item) => new URL(item.url).pathname)).toEqual(["/api/dead", "/api/next"])
+    input.pending[1]!.resolve()
+    await expect(next).resolves.toBeInstanceOf(Response)
+    expect(input.queue.inflight()).toBe(0)
+  })
+
+  test("caller aborts still reach the underlying request", async () => {
+    const input = setup({ limit: 1 })
+    const controller = new AbortController()
+    const request = input.queue.fetch("http://server/api/slow", { signal: controller.signal })
+    await input.settle()
+    expect(input.pending[0]!.signal.aborted).toBe(false)
+    controller.abort()
+    expect(input.pending[0]!.signal.aborted).toBe(true)
+    await expect(request).rejects.toBeInstanceOf(DOMException)
     expect(input.queue.inflight()).toBe(0)
   })
 

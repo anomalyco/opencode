@@ -9,15 +9,22 @@ export const requestQueueLimit = 4
 // for a slot indicates the server is not keeping up.
 export const requestStallMs = 2_000
 
+// A socket that dies while the device sleeps can leave fetch waiting for response headers until the
+// OS gives up on TCP retransmits, which takes minutes. Bound that so a dead request frees its slot
+// instead of wedging every later API call; the body may still stream for as long as it needs.
+export const requestHeadersTimeoutMs = 60_000
+
 export function createRequestQueue(input: {
   fetch: typeof globalThis.fetch
   limit?: number
   stallMs?: number
+  headersTimeoutMs?: number
   log?: (message: string, data: Record<string, unknown>) => void
   now?: () => number
 }) {
   const limit = input.limit ?? requestQueueLimit
   const stallMs = input.stallMs ?? requestStallMs
+  const headersTimeoutMs = input.headersTimeoutMs ?? requestHeadersTimeoutMs
   // Call the browser fetch unbound; `input.fetch(...)` would make `this` the options object.
   const base = input.fetch
   const now = input.now ?? Date.now
@@ -70,7 +77,16 @@ export function createRequestQueue(input: {
         release(entry)
         throw request.signal.reason ?? new DOMException("The operation was aborted.", "AbortError")
       }
-      return base(request).finally(() => release(entry))
+      const controller = new AbortController()
+      request.signal.addEventListener("abort", () => controller.abort(request.signal.reason), { once: true })
+      const timer = setTimeout(
+        () => controller.abort(new DOMException("Timed out waiting for the server to respond", "TimeoutError")),
+        headersTimeoutMs,
+      )
+      return base(new Request(request, { signal: controller.signal })).finally(() => {
+        clearTimeout(timer)
+        release(entry)
+      })
     },
     // Bun's fetch type carries preconnect; the browser never calls it.
     { preconnect: () => {} },
