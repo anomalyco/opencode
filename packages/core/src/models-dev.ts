@@ -20,7 +20,9 @@ const InterleavedField = Schema.Union([
   Schema.String,
 ])
 
-const USER_AGENT = `opencode/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
+// Derived per request, not at import time: OPENCODE_CLIENT can be set at
+// runtime (e.g. acp entrypoint) and must be reflected in the header.
+const userAgent = () => `opencode/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
 
 const CostTier = Schema.Struct({
   input: Schema.Finite,
@@ -174,7 +176,7 @@ const layer = Layer.effect(
 
     const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* () {
       return yield* HttpClientRequest.get(`${source}/api.json`).pipe(
-        HttpClientRequest.setHeader("User-Agent", USER_AGENT),
+        HttpClientRequest.setHeader("User-Agent", userAgent()),
         http.execute,
         Effect.flatMap((res) => res.text),
         Effect.timeout("10 seconds"),

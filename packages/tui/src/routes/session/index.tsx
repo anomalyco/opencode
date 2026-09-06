@@ -285,6 +285,9 @@ export function Session() {
 
   createEffect(() => {
     const sessionID = route.sessionID
+    // Empty id is the --continue placeholder before the real id resolves from
+    // the session list; skip fetch and let the navigation re-trigger this.
+    if (!sessionID) return
     void (async () => {
       const previousWorkspace = untrack(() => project.workspace.current())
       const result = await sdk.client.session.get({ sessionID }, { throwOnError: true })

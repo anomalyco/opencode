@@ -288,7 +288,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                       input.args.continue
                                         ? {
                                             type: "session",
-                                            sessionID: "dummy",
+                                            // Placeholder until the continue effect resolves the
+                                            // real id from the session list. Empty, not "dummy",
+                                            // so no session API call fires for an invalid id.
+                                            sessionID: "",
                                           }
                                         : undefined
                                     }
@@ -501,23 +504,34 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   let continued = false
   createEffect(() => {
     // When using -c, session list is loaded in blocking phase, so we can navigate at "partial"
-    if (continued || sync.status === "loading" || !args.continue) return
+    // An explicit --session wins over -c; onMount already navigated to it.
+    if (continued || sync.status === "loading" || !args.continue || args.sessionID) return
     const match = sync.data.session
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .find((x) => x.parentID === undefined)?.id
-    if (match) {
-      continued = true
-      if (args.fork) {
-        void sdk.client.session.fork({ sessionID: match }).then((result) => {
-          if (result.data?.id) {
-            route.navigate({ type: "session", sessionID: result.data.id })
-          } else {
-            toast.show({ message: "Failed to fork session", variant: "error" })
-          }
-        })
-      } else {
-        route.navigate({ type: "session", sessionID: match })
-      }
+    if (!match) return
+    continued = true
+    if (args.fork) {
+      void sdk.client.session.fork({ sessionID: match }).then((result) => {
+        if (result.data?.id) {
+          route.navigate({ type: "session", sessionID: result.data.id })
+        } else {
+          toast.show({ message: "Failed to fork session", variant: "error" })
+        }
+      })
+    } else {
+      route.navigate({ type: "session", sessionID: match })
+    }
+  })
+
+  // No resumable session exists: leave the placeholder route so the home
+  // screen renders instead of a blank session view.
+  let drained = false
+  createEffect(() => {
+    if (drained || sync.status !== "complete" || !args.continue) return
+    drained = true
+    if (route.data.type === "session" && !route.data.sessionID && !args.sessionID) {
+      route.navigate({ type: "home" })
     }
   })
 

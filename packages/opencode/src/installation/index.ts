@@ -42,8 +42,6 @@ export function userAgent(client = "cli") {
   return `opencode/${InstallationChannel}/${InstallationVersion}/${client}`
 }
 
-export const USER_AGENT = userAgent()
-
 export function isPreview() {
   return InstallationChannel !== "latest"
 }
