@@ -319,6 +319,35 @@ async function createKnownSession(
 }
 
 describe("acp event routing", () => {
+  it("routes todo.updated events to ACP plan updates", async () => {
+    const harness = createHarness()
+
+    await harness.subscription.handle({
+      id: "evt_todo_updated",
+      type: "todo.updated",
+      properties: {
+        sessionID: "ses_plan",
+        todos: [
+          { content: "Inspect failing path", priority: "high", status: "completed" },
+          { content: "Patch event adapter", priority: "medium", status: "in_progress" },
+        ],
+      },
+    } as Event)
+
+    expect(harness.updates).toEqual([
+      {
+        sessionId: "ses_plan",
+        update: {
+          sessionUpdate: "plan",
+          entries: [
+            { content: "Inspect failing path", priority: "high", status: "completed" },
+            { content: "Patch event adapter", priority: "medium", status: "in_progress" },
+          ],
+        },
+      },
+    ])
+  })
+
   it("routes message.part.delta by sessionID without cross-session pollution", async () => {
     const harness = createHarness()
     await createKnownSession(harness.session, "ses_a", { messageId: "msg_a", partId: "part_a", partType: "text" })
