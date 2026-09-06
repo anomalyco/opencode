@@ -223,4 +223,24 @@ export const dict: Record<string, string> = {
   "ui.tool.shell.cancelled": "ކޮމާންޑް ކެންސަލްކުރެވުނެވެ",
   "ui.message.thought": "ވިސްނުން",
   "ui.sessionTimeline.notice.modelSwitched": "\u2068{{model}}\u2069 އަށް ބަދަލުވެއްޖެއެވެ",
+
+  "ui.sessionTurn.retry.attemptLabel": "ފަހަރު \u2068{{attempt}}\u2069",
+  "ui.sessionTurn.retry.attemptRetrying": "ފަހަރު \u2068{{attempt}}\u2069 - \u2068{{line}}\u2069",
+  "ui.messagePart.context.details": "ތަފްޞީލް",
+  "ui.messagePart.context.notice.one": "\u2068{{count}}\u2069 ނޯޓިސް",
+  "ui.messagePart.context.notice.other": "\u2068{{count}}\u2069 ނޯޓިސްތައް",
+  "ui.messagePart.context.thought.one": "\u2068{{count}}\u2069 ވިސްނުން",
+  "ui.messagePart.context.thought.other": "\u2068{{count}}\u2069 ވިސްނުންތައް",
+  "ui.promptInput.dropFiles.image": "އިތުރުކުރުމަށް ފޮޓޯ ނުވަތަ ފައިލްތައް ދޫކޮށްލާ",
+  "ui.promptInput.dropFiles.pdf": "އިތުރުކުރުމަށް PDF ނުވަތަ ފައިލްތައް ދޫކޮށްލާ",
+  "ui.promptInput.dropFiles.imagePdf": "އިތުރުކުރުމަށް ފޮޓޯ، PDF، ނުވަތަ ފައިލްތައް ދޫކޮށްލާ",
+  "ui.promptInput.exitShell": "ނުކުމެލާ",
+  "ui.sessionTimeline.notice.agentChanged": "އޭޖެންޓް ބަދަލުވެއްޖެއެވެ",
+
+  "ui.sessionTurn.retry.attemptRetryingNow": "ފަހަރު \u2068{{attempt}}\u2069 - އަލުން ޖައްސަނީ",
+
+  "ui.sessionTurn.retry.attemptWaiting.one":
+    "ފަހަރު \u2068{{attempt}}\u2069 - \u2068{{count}}\u2069 ސިކުންތުން އަލުން ޖައްސަނީ",
+  "ui.sessionTurn.retry.attemptWaiting.other":
+    "ފަހަރު \u2068{{attempt}}\u2069 - \u2068{{count}}\u2069 ސިކުންތުން އަލުން ޖައްސަނީ",
 }

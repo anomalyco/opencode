@@ -223,4 +223,24 @@ export const dict: Record<string, string> = {
   "ui.tool.shell.cancelled": "کمانڈ منسوخ کر دی گئی",
   "ui.message.thought": "خیال",
   "ui.sessionTimeline.notice.modelSwitched": "\u2068{{model}}\u2069 پر سوئچ کیا گیا",
+
+  "ui.sessionTurn.retry.attemptLabel": "کوشش \u2068{{attempt}}\u2069",
+  "ui.sessionTurn.retry.attemptRetrying": "کوشش \u2068{{attempt}}\u2069 - \u2068{{line}}\u2069",
+  "ui.messagePart.context.details": "تفصیلات",
+  "ui.messagePart.context.notice.one": "\u2068{{count}}\u2069 اطلاع",
+  "ui.messagePart.context.notice.other": "\u2068{{count}}\u2069 اطلاعات",
+  "ui.messagePart.context.thought.one": "\u2068{{count}}\u2069 خیال",
+  "ui.messagePart.context.thought.other": "\u2068{{count}}\u2069 خیالات",
+  "ui.promptInput.dropFiles.image": "شامل کرنے کے لیے تصاویر یا فائلیں چھوڑیں",
+  "ui.promptInput.dropFiles.pdf": "شامل کرنے کے لیے PDF یا فائلیں چھوڑیں",
+  "ui.promptInput.dropFiles.imagePdf": "شامل کرنے کے لیے تصاویر، PDF یا فائلیں چھوڑیں",
+  "ui.promptInput.exitShell": "باہر نکلیں",
+  "ui.sessionTimeline.notice.agentChanged": "ایجنٹ تبدیل ہو گیا",
+
+  "ui.sessionTurn.retry.attemptRetryingNow": "کوشش \u2068{{attempt}}\u2069 - دوبارہ کوشش جاری ہے",
+
+  "ui.sessionTurn.retry.attemptWaiting.one":
+    "کوشش \u2068{{attempt}}\u2069 - \u2068{{count}}\u2069 سیکنڈ میں دوبارہ کوشش",
+  "ui.sessionTurn.retry.attemptWaiting.other":
+    "کوشش \u2068{{attempt}}\u2069 - \u2068{{count}}\u2069 سیکنڈ میں دوبارہ کوشش",
 }

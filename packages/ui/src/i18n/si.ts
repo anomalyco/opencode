@@ -221,4 +221,22 @@ export const dict: Record<string, string> = {
   "ui.tool.shell.cancelled": "විධානය අවලංගු කරන ලදී",
   "ui.message.thought": "සිතුවිල්ල",
   "ui.sessionTimeline.notice.modelSwitched": "{{model}} වෙත මාරු විය",
+
+  "ui.sessionTurn.retry.attemptLabel": "උත්සාහය {{attempt}}",
+  "ui.sessionTurn.retry.attemptRetrying": "උත්සාහය {{attempt}} - {{line}}",
+  "ui.messagePart.context.details": "විස්තර",
+  "ui.messagePart.context.notice.one": "දැනුම්දීම {{count}}",
+  "ui.messagePart.context.notice.other": "දැනුම්දීම් {{count}}",
+  "ui.messagePart.context.thought.one": "සිතුවිල්ල {{count}}",
+  "ui.messagePart.context.thought.other": "සිතුවිලි {{count}}",
+  "ui.promptInput.dropFiles.image": "එක් කිරීමට රූප හෝ ගොනු අතහරින්න",
+  "ui.promptInput.dropFiles.pdf": "එක් කිරීමට PDF හෝ ගොනු අතහරින්න",
+  "ui.promptInput.dropFiles.imagePdf": "එක් කිරීමට රූප, PDF හෝ ගොනු අතහරින්න",
+  "ui.promptInput.exitShell": "පිටවන්න",
+  "ui.sessionTimeline.notice.agentChanged": "නියෝජිතයා වෙනස් විය",
+
+  "ui.sessionTurn.retry.attemptRetryingNow": "උත්සාහය {{attempt}} - නැවත උත්සාහ කරයි",
+
+  "ui.sessionTurn.retry.attemptWaiting.one": "උත්සාහය {{attempt}} - තත්පර {{count}}කින් නැවත උත්සාහ කරයි",
+  "ui.sessionTurn.retry.attemptWaiting.other": "උත්සාහය {{attempt}} - තත්පර {{count}}කින් නැවත උත්සාහ කරයි",
 }

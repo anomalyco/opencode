@@ -223,4 +223,22 @@ export const dict: Record<string, string> = {
   "ui.tool.shell.cancelled": "কমান্ড বাতিল করা হয়েছে",
   "ui.message.thought": "চিন্তা",
   "ui.sessionTimeline.notice.modelSwitched": "{{model}}-এ পরিবর্তন করা হয়েছে",
+
+  "ui.sessionTurn.retry.attemptLabel": "প্রচেষ্টা {{attempt}}",
+  "ui.sessionTurn.retry.attemptRetrying": "প্রচেষ্টা {{attempt}} - {{line}}",
+  "ui.messagePart.context.details": "বিস্তারিত",
+  "ui.messagePart.context.notice.one": "{{count}}টি বিজ্ঞপ্তি",
+  "ui.messagePart.context.notice.other": "{{count}}টি বিজ্ঞপ্তি",
+  "ui.messagePart.context.thought.one": "{{count}}টি চিন্তা",
+  "ui.messagePart.context.thought.other": "{{count}}টি চিন্তা",
+  "ui.promptInput.dropFiles.image": "যোগ করতে ছবি বা ফাইল ছাড়ুন",
+  "ui.promptInput.dropFiles.pdf": "যোগ করতে PDF বা ফাইল ছাড়ুন",
+  "ui.promptInput.dropFiles.imagePdf": "যোগ করতে ছবি, PDF বা ফাইল ছাড়ুন",
+  "ui.promptInput.exitShell": "প্রস্থান করুন",
+  "ui.sessionTimeline.notice.agentChanged": "এজেন্ট পরিবর্তিত হয়েছে",
+
+  "ui.sessionTurn.retry.attemptRetryingNow": "প্রচেষ্টা {{attempt}} - আবার চেষ্টা করা হচ্ছে",
+
+  "ui.sessionTurn.retry.attemptWaiting.one": "প্রচেষ্টা {{attempt}} - {{count}} সেকেন্ড পরে আবার চেষ্টা করা হচ্ছে",
+  "ui.sessionTurn.retry.attemptWaiting.other": "প্রচেষ্টা {{attempt}} - {{count}} সেকেন্ড পরে আবার চেষ্টা করা হচ্ছে",
 }

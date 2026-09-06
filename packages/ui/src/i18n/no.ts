@@ -2,6 +2,21 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict: Record<Keys, string> = {
+  "ui.sessionTurn.retry.attemptWaiting.one": "Forsøk {{attempt}} gjentas om {{count}} sekund",
+  "ui.sessionTurn.retry.attemptWaiting.other": "Forsøk {{attempt}} gjentas om {{count}} sekunder",
+  "ui.sessionTurn.retry.attemptRetryingNow": "Forsøk {{attempt}} – prøver igjen",
+  "ui.sessionTurn.retry.attemptLabel": "Forsøk {{attempt}}",
+  "ui.sessionTurn.retry.attemptRetrying": "Forsøk {{attempt}} - {{line}}",
+  "ui.messagePart.context.details": "Detaljer",
+  "ui.messagePart.context.notice.one": "{{count}} merknad",
+  "ui.messagePart.context.notice.other": "{{count}} merknader",
+  "ui.messagePart.context.thought.one": "{{count}} tanke",
+  "ui.messagePart.context.thought.other": "{{count}} tanker",
+  "ui.promptInput.dropFiles.image": "Slipp bilder eller filer for å legge dem til",
+  "ui.promptInput.dropFiles.pdf": "Slipp PDF-er eller filer for å legge dem til",
+  "ui.promptInput.dropFiles.imagePdf": "Slipp bilder, PDF-er eller filer for å legge dem til",
+  "ui.promptInput.exitShell": "Avslutt",
+  "ui.sessionTimeline.notice.agentChanged": "Agent endret",
   "ui.messagePart.tools.used": "Brukte {{tools}}",
   "ui.promptInput.placeholder.followUp": "Legg til oppfølging, {{slash}} for kommandoer, {{at}} for kontekst…",
   "ui.promptInput.steer": "Styr",

@@ -3,6 +3,21 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict = {
+  "ui.sessionTurn.retry.attemptWaiting.one": "Versuch {{attempt}} wird in {{count}} Sekunde wiederholt",
+  "ui.sessionTurn.retry.attemptWaiting.other": "Versuch {{attempt}} wird in {{count}} Sekunden wiederholt",
+  "ui.sessionTurn.retry.attemptRetryingNow": "Versuch {{attempt}} – erneuter Versuch",
+  "ui.sessionTurn.retry.attemptLabel": "Versuch {{attempt}}",
+  "ui.sessionTurn.retry.attemptRetrying": "Versuch {{attempt}} - {{line}}",
+  "ui.messagePart.context.details": "Details",
+  "ui.messagePart.context.notice.one": "{{count}} Hinweis",
+  "ui.messagePart.context.notice.other": "{{count}} Hinweise",
+  "ui.messagePart.context.thought.one": "{{count}} Gedanke",
+  "ui.messagePart.context.thought.other": "{{count}} Gedanken",
+  "ui.promptInput.dropFiles.image": "Bilder oder Dateien zum Hinzufügen ablegen",
+  "ui.promptInput.dropFiles.pdf": "PDFs oder Dateien zum Hinzufügen ablegen",
+  "ui.promptInput.dropFiles.imagePdf": "Bilder, PDFs oder Dateien zum Hinzufügen ablegen",
+  "ui.promptInput.exitShell": "Beenden",
+  "ui.sessionTimeline.notice.agentChanged": "Agent gewechselt",
   "ui.messagePart.tools.used": "{{tools}} verwendet",
   "ui.promptInput.placeholder.followUp": "Folgenachricht hinzufügen, {{slash}} für Befehle, {{at}} für Kontext…",
   "ui.promptInput.steer": "Steuern",

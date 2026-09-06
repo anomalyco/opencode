@@ -223,4 +223,23 @@ export const dict: Record<string, string> = {
   "ui.tool.shell.cancelled": "کمانڈ منسوخ ہو گئی",
   "ui.message.thought": "خیال",
   "ui.sessionTimeline.notice.modelSwitched": "\u2068{{model}}\u2069 تے سوئچ کیتا گیا",
+
+  "ui.sessionTurn.retry.attemptLabel": "کوشش \u2068{{attempt}}\u2069",
+  "ui.sessionTurn.retry.attemptRetrying": "کوشش \u2068{{attempt}}\u2069 - \u2068{{line}}\u2069",
+  "ui.messagePart.context.details": "تفصیل",
+  "ui.messagePart.context.notice.one": "\u2068{{count}}\u2069 اطلاع",
+  "ui.messagePart.context.notice.other": "\u2068{{count}}\u2069 اطلاعاں",
+  "ui.messagePart.context.thought.one": "\u2068{{count}}\u2069 خیال",
+  "ui.messagePart.context.thought.other": "\u2068{{count}}\u2069 خیال",
+  "ui.promptInput.dropFiles.image": "شامل کرن لئی تصویراں یا فائلاں سُٹو",
+  "ui.promptInput.dropFiles.pdf": "شامل کرن لئی PDF یا فائلاں سُٹو",
+  "ui.promptInput.dropFiles.imagePdf": "شامل کرن لئی تصویراں، PDF یا فائلاں سُٹو",
+  "ui.promptInput.exitShell": "باہر نکلو",
+  "ui.sessionTimeline.notice.agentChanged": "ایجنٹ بدل گیا",
+
+  "ui.sessionTurn.retry.attemptRetryingNow": "کوشش \u2068{{attempt}}\u2069 - فیر کوشش ہو رہی اے",
+
+  "ui.sessionTurn.retry.attemptWaiting.one": "کوشش \u2068{{attempt}}\u2069 - \u2068{{count}}\u2069 سیکنڈ وچ فیر کوشش",
+  "ui.sessionTurn.retry.attemptWaiting.other":
+    "کوشش \u2068{{attempt}}\u2069 - \u2068{{count}}\u2069 سیکنڈاں وچ فیر کوشش",
 }
