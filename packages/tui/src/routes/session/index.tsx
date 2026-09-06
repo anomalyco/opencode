@@ -25,6 +25,7 @@ import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
+import { overlayDim } from "../../ui/overlay-dim"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   AssistantMessage,
@@ -1348,7 +1349,7 @@ export function Session() {
                   right={0}
                   bottom={0}
                   alignItems="flex-end"
-                  backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
+                  renderAfter={overlayDim(70)}
                 >
                   <Sidebar sessionID={route.sessionID} />
                 </box>

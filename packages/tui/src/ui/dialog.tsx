@@ -1,12 +1,15 @@
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createContext, createEffect, onCleanup, Show, useContext, type JSX, type ParentProps } from "solid-js"
 import { useTheme } from "../context/theme"
-import { MouseButton, Renderable, RGBA } from "@opentui/core"
+import { MouseButton, Renderable } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { useBindings, useOpencodeModeStack } from "../keymap"
 import { useClipboard } from "../context/clipboard"
+import { overlayDim } from "./overlay-dim"
+
+const dimBackdrop = overlayDim(150)
 
 export function Dialog(
   props: ParentProps<{
@@ -45,7 +48,7 @@ export function Dialog(
       paddingTop={dimensions().height / 4}
       left={0}
       top={0}
-      backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
+      renderAfter={dimBackdrop}
     >
       <box
         onMouseUp={(e: { stopPropagation(): void }) => {
