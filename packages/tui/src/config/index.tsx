@@ -39,6 +39,12 @@ export const Cursor = Schema.Struct({
   }),
 }).annotate({ description: "Terminal cursor settings" })
 
+export const KittyKeyboard = Schema.Struct({
+  events: Schema.optional(Schema.Boolean).annotate({
+    description: "Request Kitty keyboard press, repeat, and release events. Enable only in terminals that support it.",
+  }),
+}).annotate({ description: "Kitty keyboard protocol settings" })
+
 export const AttentionSounds = Schema.Record(AttentionSoundName, Schema.optionalKey(Schema.String))
 export type AttentionSoundPaths = Schema.Schema.Type<typeof AttentionSounds>
 export const Attention = Schema.Struct({
@@ -72,10 +78,14 @@ export const Info = Schema.Struct({
   diff_style: Schema.optional(DiffStyle),
   cursor: Schema.optional(Cursor),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  kitty_keyboard: Schema.optional(KittyKeyboard),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse" | "cursor"> & {
+export type Resolved = Omit<
+  Info,
+  "attention" | "keybinds" | "leader_timeout" | "mouse" | "cursor" | "kitty_keyboard"
+> & {
   attention: {
     enabled: boolean
     notifications: boolean
@@ -90,6 +100,9 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | 
   cursor?: {
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
+  }
+  kitty_keyboard: {
+    events: boolean
   }
 }
 
@@ -126,6 +139,9 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
     }),
     leader_timeout: input.leader_timeout ?? LeaderTimeoutDefault,
     mouse: input.mouse ?? true,
+    kitty_keyboard: {
+      events: input.kitty_keyboard?.events ?? false,
+    },
     cursor: input.cursor
       ? {
           style: input.cursor.style ?? "block",
