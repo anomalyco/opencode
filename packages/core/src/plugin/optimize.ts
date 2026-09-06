@@ -12,39 +12,39 @@ import PROMPT_KIMI from "./system-prompt/kimi.txt"
 import PROMPT_META from "./system-prompt/meta.txt"
 import PROMPT_TRINITY from "./system-prompt/trinity.txt"
 
-export const OpenAIPlugin = make("openai", (model, tools) => {
-  const ids = [model.id, model.modelID, model.family].join(" ").toLowerCase()
-  if (!ids.includes("gpt")) return undefined
-  delete tools.grep
-  delete tools.glob
-  return ids.includes("gpt-6") ? PROMPT_ASTRA : PROMPT_GPT
+export const OpenAIPlugin = make("opencode.prompt.openai", (model) => {
+  const id = model.id.toLowerCase()
+  if (!id.includes("gpt")) return undefined
+  return id.includes("gpt-6") ? PROMPT_ASTRA : PROMPT_GPT
 })
 
-export const AnthropicPlugin = make("anthropic", (model, tools) => {
+export const ToolsPlugin = make("opencode.optimize.tools", (model, tools) => {
   const ids = [model.id, model.modelID, model.family].join(" ").toLowerCase()
-  if (!ids.includes("claude")) return undefined
+  if (!ids.includes("gpt") && !ids.includes("claude")) return undefined
   delete tools.grep
   delete tools.glob
   return undefined
 })
 
-export const KimiPlugin = make("kimi", (model) => (model.id.toLowerCase().includes("kimi") ? PROMPT_KIMI : undefined))
-export const ArceePlugin = make("arcee", (model) =>
+export const KimiPlugin = make("opencode.prompt.kimi", (model) =>
+  model.id.toLowerCase().includes("kimi") ? PROMPT_KIMI : undefined,
+)
+export const ArceePlugin = make("opencode.prompt.arcee", (model) =>
   model.id.toLowerCase().includes("trinity") ? PROMPT_TRINITY : undefined,
 )
-export const MetaPlugin = make("meta", (model) => {
+export const MetaPlugin = make("opencode.prompt.meta", (model) => {
   if (!model.id.toLowerCase().includes("muse")) return undefined
   return PROMPT_META.replaceAll("{{MODEL_NAME}}", model.name)
 })
 
-export const Plugins = [OpenAIPlugin, AnthropicPlugin, KimiPlugin, ArceePlugin, MetaPlugin] as const
+export const Plugins = [ToolsPlugin, OpenAIPlugin, KimiPlugin, ArceePlugin, MetaPlugin] as const
 
 function make(
   id: string,
   optimize: (model: Model.Info, tools: SessionHooks["context"]["tools"]) => string | undefined,
 ) {
   return define({
-    id: `opencode.optimize.${id}`,
+    id,
     effect: Effect.fn(`OptimizePlugin.${id}`)(function* (ctx) {
       yield* ctx.session.hook("context", (event) =>
         Effect.gen(function* () {

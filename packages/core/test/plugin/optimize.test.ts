@@ -56,13 +56,13 @@ describe("OptimizePlugin", () => {
     )
   })
 
-  test("uses granular IDs with a common prefix", () => {
+  test("preserves prompt plugin IDs and exposes a separate tool optimization", () => {
     expect(OptimizePlugin.Plugins.map((plugin) => plugin.id)).toEqual([
-      "opencode.optimize.openai",
-      "opencode.optimize.anthropic",
-      "opencode.optimize.kimi",
-      "opencode.optimize.arcee",
-      "opencode.optimize.meta",
+      "opencode.optimize.tools",
+      "opencode.prompt.openai",
+      "opencode.prompt.kimi",
+      "opencode.prompt.arcee",
+      "opencode.prompt.meta",
     ])
   })
 
@@ -112,7 +112,7 @@ describe("OptimizePlugin", () => {
     }),
   )
 
-  it.effect("renders the OpenAI prompt and preserves project instructions", () =>
+  it.effect("renders the OpenAI prompt without changing tools or project instructions", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
@@ -136,7 +136,7 @@ describe("OptimizePlugin", () => {
       expect(event.system[0]?.text).not.toContain("${OPENCODE_TOOL_GUIDANCE}")
       expect(event.system[0]?.text).toContain("Use the write tool")
       expect(event.system[0]?.text).toContain("Use the edit tool")
-      expect(Object.keys(event.tools).sort()).toEqual(["edit", "patch", "read", "shell", "write"])
+      expect(Object.keys(event.tools).sort()).toEqual(["edit", "glob", "grep", "patch", "read", "shell", "write"])
     }),
   )
 
@@ -144,9 +144,7 @@ describe("OptimizePlugin", () => {
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
-      yield* Effect.forEach(OptimizePlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
-        discard: true,
-      })
+      yield* OptimizePlugin.ToolsPlugin.effect(pluginHost)
       const cases = [
         ["openai", "gpt-5", ["edit", "patch", "read", "shell", "write"]],
         ["openrouter", "openai/gpt-6-astra", ["edit", "patch", "read", "shell", "write"]],
@@ -171,27 +169,32 @@ describe("OptimizePlugin", () => {
             }
             yield* hooks.trigger("session", "context", event)
             expect(Object.keys(event.tools).sort()).toEqual([...tools])
+            expect(event.system.map((part) => part.text)).toEqual([fallback])
           }),
         { discard: true },
       )
     }),
   )
 
-  it.effect("allows Anthropic tool optimizations without a prompt replacement or another lab's policy", () =>
+  it.effect("can disable tool optimization while retaining the OpenAI prompt", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
-      yield* OptimizePlugin.AnthropicPlugin.effect(pluginHost)
-      const claude = context("claude-sonnet-4-6")
-      const gpt = context("gpt-5")
+      yield* OptimizePlugin.OpenAIPlugin.effect(pluginHost)
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* OptimizePlugin.ToolsPlugin.effect(pluginHost)
+          const event = context("gpt-5")
+          yield* hooks.trigger("session", "context", event)
+          expect(event.system[0]?.text).toContain("# Delegation")
+          expect(Object.keys(event.tools).sort()).toEqual(["edit", "patch", "read", "shell", "write"])
+        }),
+      )
 
-      yield* hooks.trigger("session", "context", claude)
-      yield* hooks.trigger("session", "context", gpt)
-
-      expect(claude.system.map((part) => part.text)).toEqual([fallback])
-      expect(Object.keys(claude.tools).sort()).toEqual(["edit", "patch", "read", "shell", "write"])
-      expect(gpt.system.map((part) => part.text)).toEqual([fallback])
-      expect(Object.keys(gpt.tools).sort()).toEqual(["edit", "glob", "grep", "patch", "read", "shell", "write"])
+      const event = context("gpt-5")
+      yield* hooks.trigger("session", "context", event)
+      expect(event.system[0]?.text).toContain("# Delegation")
+      expect(Object.keys(event.tools).sort()).toEqual(["edit", "glob", "grep", "patch", "read", "shell", "write"])
     }),
   )
 
@@ -261,6 +264,7 @@ describe("OptimizePlugin", () => {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       yield* OptimizePlugin.OpenAIPlugin.effect(pluginHost)
+      yield* OptimizePlugin.ToolsPlugin.effect(pluginHost)
       yield* agents.transform((editor) => editor.remove(Agent.ID.make("build")))
       const event = context("gpt-5")
 
@@ -287,17 +291,18 @@ describe("OptimizePlugin", () => {
     }),
   )
 
-  it.effect("selects GPT and Claude optimizations by catalog ID, API model ID, or family", () =>
+  it.effect("filters tools by model metadata while preserving catalog-ID prompt selection", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       const cases = [
         ["gpt-5-alias", "custom-model", undefined, "# Delegation"],
-        ["openai-alias", "GPT-5", undefined, "# Delegation"],
-        ["codex-family-alias", "custom-deployment", "GPT-CODEX", "# Delegation"],
-        ["astra-api-alias", "gpt-6-astra", undefined, "Do not settle for a partial"],
-        ["astra-family-alias", "custom-deployment", "gpt-6", "Do not settle for a partial"],
+        ["gpt-6-alias", "custom-model", undefined, "Do not settle for a partial"],
+        ["openai-alias", "GPT-5", undefined, fallback],
+        ["codex-family-alias", "custom-deployment", "GPT-CODEX", fallback],
+        ["astra-api-alias", "gpt-6-astra", undefined, fallback],
+        ["astra-family-alias", "custom-deployment", "gpt-6", fallback],
         ["claude-catalog-alias", "custom-model", undefined, fallback],
         ["anthropic-api-alias", "Claude-Opus-4-8", undefined, fallback],
         ["anthropic-family-alias", "custom-deployment", "CLAUDE-SONNET", fallback],
