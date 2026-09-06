@@ -457,3 +457,95 @@ lifecycle.live("pending question rejects on instance reload", () =>
     if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Question.RejectedError)
   }),
 )
+
+it.instance(
+  "ask - publishes question.rejected and removes from pending on fiber interrupt",
+  () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2Bridge.Service
+      const rejectedQueue = yield* Queue.unbounded<typeof Question.Event.Rejected.Type>()
+      const off = yield* events.listen((event) => {
+        if (event.type === Question.Event.Rejected.type) Queue.offerUnsafe(rejectedQueue, event.data as any)
+        return Effect.void
+      })
+      yield* Effect.addFinalizer(() => off)
+
+      const fiber = yield* askEffect({
+        sessionID: SessionID.make("ses_interrupt"),
+        questions: [
+          {
+            question: "Interrupt me?",
+            header: "Interrupt",
+            options: [{ label: "Option 1", description: "First" }],
+          },
+        ],
+      }).pipe(Effect.forkScoped)
+
+      expect(yield* waitForPending(1)).toHaveLength(1)
+
+      yield* Fiber.interrupt(fiber)
+
+      const rejectedEvent = yield* Queue.take(rejectedQueue).pipe(Effect.timeout("2 seconds"))
+      expect(rejectedEvent.sessionID).toBe(SessionID.make("ses_interrupt"))
+
+      const pending = yield* listEffect
+      expect(pending.length).toBe(0)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "cancel - rejects pending questions for specific session and publishes question.rejected",
+  () =>
+    Effect.gen(function* () {
+      const question = yield* Question.Service
+      const events = yield* EventV2Bridge.Service
+      const rejectedQueue = yield* Queue.unbounded<typeof Question.Event.Rejected.Type>()
+      const off = yield* events.listen((event) => {
+        if (event.type === Question.Event.Rejected.type) Queue.offerUnsafe(rejectedQueue, event.data as any)
+        return Effect.void
+      })
+      yield* Effect.addFinalizer(() => off)
+
+      const fiber1 = yield* askEffect({
+        sessionID: SessionID.make("ses_cancel_target"),
+        questions: [
+          {
+            question: "Target session question?",
+            header: "Target",
+            options: [{ label: "A", description: "A" }],
+          },
+        ],
+      }).pipe(Effect.forkScoped)
+
+      const fiber2 = yield* askEffect({
+        sessionID: SessionID.make("ses_cancel_other"),
+        questions: [
+          {
+            question: "Other session question?",
+            header: "Other",
+            options: [{ label: "B", description: "B" }],
+          },
+        ],
+      }).pipe(Effect.forkScoped)
+
+      expect(yield* waitForPending(2)).toHaveLength(2)
+
+      yield* question.cancel(SessionID.make("ses_cancel_target"))
+
+      const rejectedEvent = yield* Queue.take(rejectedQueue).pipe(Effect.timeout("2 seconds"))
+      expect(rejectedEvent.sessionID).toBe(SessionID.make("ses_cancel_target"))
+
+      const exit1 = yield* Fiber.await(fiber1)
+      expect(Exit.isFailure(exit1)).toBe(true)
+      if (Exit.isFailure(exit1)) expect(Cause.squash(exit1.cause)).toBeInstanceOf(Question.RejectedError)
+
+      const remaining = yield* listEffect
+      expect(remaining.length).toBe(1)
+      expect(remaining[0].sessionID).toBe(SessionID.make("ses_cancel_other"))
+
+      yield* rejectAll
+      expect((yield* Fiber.await(fiber2))._tag).toBe("Failure")
+    }),
+  { git: true },
+)
