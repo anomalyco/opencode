@@ -35,6 +35,7 @@ import { ConfigPlugin } from "./plugin"
 import { ConfigVariable } from "./variable"
 import { ConfigV2Compat } from "./v2-compat"
 import { Npm } from "@opencode-ai/core/npm"
+import { Glob } from "@opencode-ai/core/util/glob"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 
 // Custom merge function that concatenates array fields instead of replacing them
@@ -257,6 +258,19 @@ const layer = Layer.effect(
       return yield* loadConfig(text, { path: filepath }, env)
     })
 
+    const loadConfigDir = Effect.fnUntraced(function* (dir: string) {
+      const cfg = path.join(dir, "config.d")
+      if (!existsSync(cfg)) return [] as string[]
+      return (
+        yield* Effect.promise(() =>
+          Glob.scan("*.{json,jsonc}", {
+            cwd: cfg,
+            absolute: true,
+          }),
+        )
+      ).sort()
+    })
+
     const loadGlobal = Effect.fnUntraced(function* (env?: Record<string, string>) {
       let result: Info = {}
       // Seed the default global config with the schema for editor completion, but avoid writing when the user
@@ -411,6 +425,9 @@ const layer = Layer.effect(
 
         const global = Object.keys(authEnv).length ? yield* loadGlobal(authEnv) : yield* getGlobal()
         yield* merge(Global.Path.config, global, "global")
+        for (const file of yield* loadConfigDir(Global.Path.config)) {
+          yield* merge(file, yield* loadFile(file, authEnv), "global")
+        }
 
         if (Flag.OPENCODE_CONFIG) {
           yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG, authEnv))
@@ -441,6 +458,12 @@ const layer = Layer.effect(
               const source = path.join(dir, file)
               yield* Effect.logDebug(`loading config from ${source}`)
               yield* merge(source, yield* loadFile(source, authEnv))
+              result.agent ??= {}
+              result.mode ??= {}
+              result.plugin ??= []
+            }
+            for (const file of yield* loadConfigDir(dir)) {
+              yield* merge(file, yield* loadFile(file, authEnv))
               result.agent ??= {}
               result.mode ??= {}
               result.plugin ??= []
