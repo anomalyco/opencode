@@ -52,6 +52,11 @@ export function isNewCommand(input: string): boolean {
   return input.trim().toLowerCase() === "/new"
 }
 
+export function isTelegramCommand(input: string): boolean {
+  const text = input.trim().toLowerCase()
+  return text === "/telegram" || text.startsWith("/telegram ") || text === "/tg" || text.startsWith("/tg ")
+}
+
 export function createPromptHistory(items?: RunPrompt[]): PromptHistoryState {
   const list = (items ?? []).filter((item) => item.text.trim().length > 0).map(promptCopy)
   const next: RunPrompt[] = []
