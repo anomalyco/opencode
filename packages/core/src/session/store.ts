@@ -51,6 +51,8 @@ export type MessagesInput = {
 
 export interface Interface {
   readonly get: (sessionID: Session.ID) => Effect.Effect<Session.Info | undefined>
+  /** Recovery preparation is deliberately absent from public Session.Info. */
+  readonly hasPendingRevert: (sessionID: Session.ID) => Effect.Effect<boolean>
   readonly list: (input?: ListInput) => Effect.Effect<Session.Info[]>
   readonly messages: (input: MessagesInput) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   readonly context: (sessionID: Session.ID) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
@@ -95,6 +97,17 @@ const layer = Layer.effect(
         const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
         return row ? fromRow(row) : undefined
       }),
+      hasPendingRevert: Effect.fn("SessionStore.hasPendingRevert")((sessionID) =>
+        db
+          .select({ id: SessionTable.id })
+          .from(SessionTable)
+          .where(and(eq(SessionTable.id, sessionID), isNotNull(SessionTable.revert_pending)))
+          .get()
+          .pipe(
+            Effect.orDie,
+            Effect.map((row) => row !== undefined),
+          ),
+      ),
       list: Effect.fn("SessionStore.list")(function* (input = {}) {
         const direction = input.anchor?.direction ?? "next"
         const requestedOrder = input.order ?? "desc"
