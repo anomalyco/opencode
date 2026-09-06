@@ -58,7 +58,7 @@
     "@ai-sdk/alibaba": "1.0.17",
     "@ai-sdk/amazon-bedrock": "4.0.166",
     "@ai-sdk/anthropic": "3.0.111",
-    "@ai-sdk/azure": "3.0.88",
+    "@ai-sdk/azure": "3.0.93",
     "@ai-sdk/cerebras": "2.0.60",
     "@ai-sdk/cohere": "3.0.27",
     "@ai-sdk/deepinfra": "2.0.41",
