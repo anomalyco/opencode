@@ -265,6 +265,13 @@ export function toLLMEvents(
       })
 
     case "error":
+      if (event.error instanceof Error && event.error.name === "AI_TypeValidationError") {
+        return Effect.succeed([
+          LLMEvent.providerError({
+            message: `Provider returned an invalid response format: ${errorMessage(event.error)}`,
+          }),
+        ])
+      }
       return Effect.fail(event.error)
 
     case "abort":
