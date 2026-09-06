@@ -34,6 +34,10 @@
       "dependsOn": [],
       "outputs": ["dist/**"]
     },
+    "@opencode-ai/ai#test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
     "@opencode-ai/codemode#test": {
       "dependsOn": ["^build"],
       "outputs": []
@@ -43,6 +47,17 @@
       "outputs": []
     },
     "@opencode-ai/function#test": {
+      "outputs": []
+    },
+    "@opencode-ai/desktop#test": {
+      "outputs": [],
+      "cache": false
+    },
+    "@opencode-ai/httpapi-codegen#test": {
+      "outputs": []
+    },
+    "@opencode-ai/server#test": {
+      "dependsOn": ["^build"],
       "outputs": []
     },
     "@opencode-ai/cli#test": {

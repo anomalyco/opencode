@@ -36,7 +36,7 @@
         user-select: none;
 
         background-color: var(--v2-background-bg-base);
-        border: 0.5px solid var(--v2-border-border-base);
+        border: 1px solid var(--v2-border-border-base);
         border-radius: 0;
         box-shadow: none;
         overflow: clip;
@@ -50,11 +50,10 @@
         line-height: var(--line-height-large);
         letter-spacing: var(--letter-spacing-normal);
 
-        &:hover:not([data-disabled]) {
-          background-color: var(--v2-overlay-simple-overlay-hover);
-        }
-        &:active:not([data-disabled]) {
-          background-color: var(--v2-overlay-simple-overlay-pressed);
+        @media (hover: hover) {
+          &:hover:not([data-disabled]) {
+            background-color: var(--v2-overlay-simple-overlay-hover);
+          }
         }
         &:focus-visible {
           outline: none;
@@ -81,7 +80,7 @@
 
     &[data-expanded] {
       [data-slot="accordion-content"] {
-        border: 0.5px solid var(--v2-border-border-base);
+        border: 1px solid var(--v2-border-border-base);
         border-top: 0;
         background-color: var(--v2-background-bg-layer-01);
       }

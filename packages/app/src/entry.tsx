@@ -6,6 +6,7 @@ import { AppBaseProviders, AppInterface } from "@/app"
 import { loadInitialLocale } from "@/runtime/i18n/language"
 import { PlatformProvider } from "@/runtime/platform/platform"
 import { createWebPlatform } from "@/runtime/platform/web"
+import { isStandalone, PwaRoutePersistence, restorePwaRoute } from "@/runtime/platform/pwa"
 import en from "@/runtime/i18n/en"
 import zh from "@/runtime/i18n/zh"
 import { authFromToken } from "@/runtime/server/api"
@@ -71,6 +72,9 @@ if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
   void loadInitialLocale().then((locale) => {
     const auth = authFromToken(new URLSearchParams(location.search).get("auth_token"))
     clearAuthToken()
+    const standalone = isStandalone()
+    root.dataset.standalone = String(standalone)
+    if (standalone) restorePwaRoute()
     const server: ServerConnection.Http = {
       type: "http",
       authToken: !!auth,
@@ -87,7 +91,9 @@ if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
               defaultServer={ServerConnection.Key.make(web.defaultServerUrl)}
               canonicalLocalServer={ServerConnection.key(server)}
               servers={[server]}
-            />
+            >
+              {standalone && <PwaRoutePersistence />}
+            </AppInterface>
           </AppBaseProviders>
         </PlatformProvider>
       ),

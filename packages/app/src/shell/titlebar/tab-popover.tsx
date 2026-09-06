@@ -1,6 +1,7 @@
 import { HoverCard } from "@kobalte/core/hover-card"
 import { createSignal, Show, type JSXElement } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
+import { createMediaQuery } from "@solid-primitives/media"
 import "./tab-popover.css"
 
 // Initial hover delay before the preview appears, per design.
@@ -28,6 +29,7 @@ export function TabPreviewPopover(props: {
   orientation?: "horizontal" | "vertical"
 }) {
   const language = useLanguage()
+  const mobile = createMediaQuery("(max-width: 767px)")
   let triggerEl: HTMLDivElement | undefined
   // When opened during a rapid tab-hopping streak, this preview appears and
   // disappears instantly (no repeated enter/exit animation) — only the first,
@@ -46,7 +48,7 @@ export function TabPreviewPopover(props: {
 
   return (
     <HoverCard
-      open={props.open}
+      open={props.open && !mobile()}
       onOpenChange={handleOpenChange}
       openDelay={resolveOpenDelay()}
       closeDelay={CLOSE_DELAY}

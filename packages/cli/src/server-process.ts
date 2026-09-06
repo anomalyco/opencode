@@ -4,7 +4,7 @@ import { NodeServices } from "@effect/platform-node"
 import { Service, type DiscoverOptions } from "@opencode-ai/client/effect/service"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
-import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
+import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
 import { AppProcess } from "@opencode-ai/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
 import { Effect, Option, Redacted, Schedule, Schema } from "effect"
@@ -22,19 +22,20 @@ export type Options = {
   readonly mode: Mode
   readonly hostname?: string
   readonly port?: number
+  readonly cors?: readonly string[]
 }
 
 // The process effect lives until server shutdown; tracing it would parent every request to one process-lifetime trace.
 export const run = Effect.fnUntraced(function* (options: Options) {
   return yield* processEffect(options).pipe(
-    Effect.provide(Updater.layer),
     Effect.provide(
-      LayerNode.compile(LayerNode.group([Global.node, AppProcess.node]), [
-        [
-          Global.node,
-          Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
+      LayerNode.compile(LayerNode.group([Global.node, AppProcess.node]), {
+        replacements: [
+          Global.node.replace(
+            Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
+          ),
         ],
-      ]),
+      }),
     ),
     Effect.provide(NodeServices.layer),
   )
@@ -82,12 +83,13 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const server = yield* start(
         {
           app: {
-            name: process.env.OPENCODE_CLIENT ?? "cli",
+            name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
             version: OPENCODE_VERSION,
             channel: OPENCODE_CHANNEL,
           },
           hostname,
           port,
+          cors: options.cors ?? config.cors,
           password,
           pty: { handoff },
           simulation: truthy(process.env.OPENCODE_SIMULATE),
@@ -162,8 +164,21 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const url = HttpServer.formatAddress(server.address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
       if (foreground && !environmentPassword) console.log(`server password ${password}`)
-      const updater = yield* Updater.Service
-      yield* updater.check().pipe(Effect.schedule(Schedule.spaced("10 minutes")), Effect.forkScoped)
+      yield* Updater.Service.pipe(
+        Effect.flatMap((updater) =>
+          Updater.pollUpdates({
+            check: updater.run().pipe(
+              Effect.flatMap((result) => {
+                if (!result) return Effect.void
+                if (result.type === "available") return server.updateAvailable(result.version)
+                return server.updated(result.version)
+              }),
+            ),
+          }),
+        ),
+        Effect.provide(Updater.layer),
+        Effect.forkScoped,
+      )
       return yield* options.mode === "service"
         ? server.shutdown
         : options.mode === "stdio"

@@ -16,10 +16,9 @@ const PROBE = "original"
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
-// Terminals are workspace-scoped: switching between session tabs in the same
-// workspace must keep the terminal mounted and its PTY connection open instead
-// of tearing it down and reconnecting.
-test("keeps the terminal session alive when switching session tabs in a workspace", async ({ page }) => {
+// Terminal processes are workspace-scoped, but panel visibility belongs to each
+// session tab. Switching tabs must keep the PTY alive without opening its panel.
+test("keeps terminal visibility per tab and the PTY alive across tab switches", async ({ page }) => {
   const connections = await setup(page)
 
   await page.goto(sessionHref(sessionA))
@@ -27,7 +26,10 @@ test("keeps the terminal session alive when switching session tabs in a workspac
 
   await page.keyboard.press("Control+Backquote")
   const terminal = page.locator('[data-component="terminal"]')
+  const terminalPanel = page.locator('[data-component="terminal-panel"]')
   await expect(terminal).toBeVisible()
+  await expect(terminalPanel).toHaveAttribute("data-size-animated", "true")
+  await expect(terminalPanel).toHaveCSS("height", "300px")
   await expect.poll(() => connections.length).toBe(1)
   const connection = new URL(connections[0]!)
   expect(connection.pathname).toBe(`/api/pty/${ptyID}/connect`)
@@ -37,15 +39,26 @@ test("keeps the terminal session alive when switching session tabs in a workspac
 
   await switchTab(page, titleB)
   await expectSessionTitle(page, titleB)
-  await expect(terminal).toBeVisible()
+  await expect(terminal).toBeHidden()
+  await expect(terminalPanel).toHaveAttribute("data-size-animated", "false")
   expect(await readProbe(page)).toBe(PROBE)
   expect(connections.length).toBe(1)
+
+  await page.keyboard.press("Control+Backquote")
+  await expect(terminal).toBeVisible()
+  await expect(terminalPanel).toHaveCSS("height", "180px")
 
   await switchTab(page, titleA)
   await expectSessionTitle(page, titleA)
   await expect(terminal).toBeVisible()
+  await expect(terminalPanel).toHaveCSS("height", "300px")
   expect(await readProbe(page)).toBe(PROBE)
   expect(connections.length).toBe(1)
+
+  await page.reload()
+  await expectSessionTitle(page, titleA)
+  await expect(terminal).toBeVisible()
+  await expect(terminalPanel).toHaveCSS("height", "300px")
 })
 
 type Probed = HTMLElement & { __e2eProbe?: string }
@@ -120,7 +133,7 @@ async function setup(page: Page) {
   })
 
   await page.addInitScript(
-    ({ directory, server, sessions }) => {
+    ({ directory, server, sessions, panes }) => {
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({
@@ -132,8 +145,20 @@ async function setup(page: Page) {
         "opencode.window.browser.dat:tabs",
         JSON.stringify(sessions.map((sessionId: string) => ({ type: "session", server, sessionId }))),
       )
+      if (!localStorage.getItem("opencode.window.browser.dat:tabs.panes")) {
+        localStorage.setItem("opencode.window.browser.dat:tabs.panes", JSON.stringify(panes))
+      }
+      localStorage.setItem("settings.v3", JSON.stringify({ general: { terminalPlacement: "bottom" } }))
     },
-    { directory, server, sessions: [sessionA, sessionB] },
+    {
+      directory,
+      server,
+      sessions: [sessionA, sessionB],
+      panes: {
+        [`${server}\n${sessionHref(sessionA)}`]: { terminalHeight: 300 },
+        [`${server}\n${sessionHref(sessionB)}`]: { terminalHeight: 180 },
+      },
+    },
   )
   return connections
 }

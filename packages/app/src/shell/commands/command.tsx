@@ -2,6 +2,8 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { type Accessor, createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Schema } from "effect"
+import { Persistence } from "@/runtime/persistence/schema"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
@@ -100,14 +102,17 @@ export function resolveKeybindOption(candidates: CommandOption[] | undefined, ev
 
 type CommandSource = "palette" | "keybind" | "slash"
 
-export type CommandCatalogItem = {
-  title: string
-  description?: string
-  category?: string
-  keybind?: KeybindConfig
-  slash?: string
-  hidden?: boolean
-}
+export const CommandCatalogItem = Persistence.struct({
+  title: Schema.String,
+  description: Schema.optional(Schema.String),
+  category: Schema.optional(Schema.String),
+  keybind: Schema.optional(Schema.String),
+  slash: Schema.optional(Schema.String),
+  hidden: Schema.optional(Schema.Boolean),
+})
+export type CommandCatalogItem = typeof CommandCatalogItem.Type
+export const CommandCatalog = Schema.Record(Schema.String, Schema.mutableKey(CommandCatalogItem))
+export type CommandCatalog = typeof CommandCatalog.Type
 
 export type CommandRegistration = {
   key?: string
@@ -268,11 +273,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     })
     const warnedDuplicates = new Set<string>()
 
-    type CommandCatalog = Record<string, CommandCatalogItem>
-    const [catalog, setCatalog, _, catalogReady] = persisted(
-      Persist.global("command.catalog.v1"),
-      createStore<CommandCatalog>({}),
-    )
+    const [catalog, setCatalog, _, catalogReady] = persisted(Persist.global("command.catalog.v1"), CommandCatalog, {})
 
     const bind = (id: string, def: KeybindConfig | undefined) => {
       const custom = settings.keybinds.get(actionId(id))
@@ -429,7 +430,9 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
         key: id,
         options,
       }
-      setStore("registrations", (arr) => addCommandRegistration(arr, entry))
+      // Register only committed owners. Updating the registry during a transition
+      // can restore its pending snapshot after the outgoing owner's cleanup.
+      onMount(() => setStore("registrations", (arr) => addCommandRegistration(arr, entry)))
       onCleanup(() => {
         setStore("registrations", (arr) => arr.filter((x) => x !== entry))
       })

@@ -1,6 +1,3 @@
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
 import { Clock, Effect, Schema, Semaphore, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { define } from "@opencode-ai/plugin/effect/plugin"
@@ -20,9 +17,6 @@ const cognitiveScope = "https://cognitiveservices.azure.com/.default"
 const foundryScope = "https://ai.azure.com/.default"
 const methodID = Integration.MethodID.make("azure-cli")
 const decodeJSON = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))
-const decodeProfile = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(Schema.Struct({ subscriptions: Schema.Array(Schema.Unknown) })),
-)
 const decodeToken = Schema.decodeUnknownEffect(
   Schema.Struct({
     accessToken: Schema.NonEmptyString,
@@ -30,20 +24,6 @@ const decodeToken = Schema.decodeUnknownEffect(
     expiresOn: Schema.optional(Schema.NonEmptyString),
   }),
 )
-const decodeAccounts = Schema.decodeUnknownEffect(
-  Schema.Array(Schema.Struct({ name: Schema.NonEmptyString, resourceGroup: Schema.NonEmptyString })),
-)
-const Deployments = Schema.Array(
-  Schema.Struct({
-    name: Schema.NonEmptyString,
-    properties: Schema.Struct({
-      model: Schema.Struct({ name: Schema.NonEmptyString }),
-      provisioningState: Schema.NonEmptyString,
-    }),
-  }),
-)
-const decodeDeployments = Schema.decodeUnknownEffect(Deployments)
-
 function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
   if (useChat && sdk.chat) return sdk.chat(modelID)
   if (sdk.responses) return sdk.responses(modelID)
@@ -60,7 +40,7 @@ export const AzurePlugin = define({
     const bus = yield* Bus.Service
     const tokens = new Map<string, { access: string; expires: number }>()
     const loading = Semaphore.makeUnsafe(1)
-    const loaded: { resource?: string; deployments?: typeof Deployments.Type } = {}
+    const loaded: { resource?: string } = {}
 
     const command = (args: string[]) =>
       processes
@@ -86,28 +66,7 @@ export const AzurePlugin = define({
     })
 
     const available = Boolean(which("az"))
-    // Installing Azure CLI does not mean the user has signed in. Avoid spawning it for unrelated CLI commands.
-    const signedIn = available
-      ? yield* Effect.tryPromise(() =>
-          readFile(join(process.env.AZURE_CONFIG_DIR ?? join(homedir(), ".azure"), "azureProfile.json"), "utf8"),
-        ).pipe(
-          Effect.flatMap((text) => decodeProfile(text.replace(/^\uFEFF/, ""))),
-          Effect.map((profile) => profile.subscriptions.length > 0),
-          Effect.orElseSucceed(() => false),
-        )
-      : false
-    const accounts =
-      !resolveResourceName(configured) &&
-      typeof configured?.baseURL !== "string" &&
-      !process.env.AZURE_RESOURCE_GROUP &&
-      signedIn
-        ? yield* command(["cognitiveservices", "account", "list", "--output", "json", "--only-show-errors"]).pipe(
-            Effect.flatMap(decodeAccounts),
-            Effect.orElseSucceed(() => []),
-          )
-        : []
-
-    const form = (select = false) =>
+    const form = () =>
       iife(() => {
         if (resolveResourceName(configured) || typeof configured?.baseURL === "string") return
         return Form.Fields.make([
@@ -117,33 +76,23 @@ export const AzurePlugin = define({
             title: "Enter Azure Resource Name",
             placeholder: "e.g. my-models",
             required: true,
-            ...(select && accounts.length > 0
-              ? {
-                  options: accounts.map((account) => ({
-                    value: account.name,
-                    label: account.name,
-                    description: account.resourceGroup,
-                  })),
-                  custom: true,
-                }
-              : {}),
           },
         ])
       })
 
-    yield* ctx.integration.transform((draft) => {
-      draft.method.update({
+    yield* ctx.integration.transform((editor) => {
+      editor.method.update({
         integrationID: Provider.ID.azure,
         method: { type: "key", label: "API key", form: form() },
       })
       if (!available) return
-      draft.method.update({
+      editor.method.update({
         integrationID: Provider.ID.azure,
         method: {
           id: methodID,
           type: "oauth",
           label: "Microsoft Entra ID (Azure CLI)",
-          form: form(true),
+          form: form(),
         },
         authorize: (answer) =>
           Effect.succeed({
@@ -156,7 +105,6 @@ export const AzurePlugin = define({
               if (!resourceName) return yield* Effect.fail(new Error("Azure resource name is required"))
               const current = yield* token(cognitiveScope)
               loaded.resource = resourceName
-              loaded.deployments = yield* discover(resourceName)
               yield* ctx.catalog.reload()
               return Credential.OAuth.make({
                 type: "oauth",
@@ -177,42 +125,6 @@ export const AzurePlugin = define({
       })
     })
 
-    const discover = Effect.fn("AzurePlugin.discover")(function* (resource: string) {
-      return yield* Effect.gen(function* () {
-        const group = process.env.AZURE_RESOURCE_GROUP
-        const account = group
-          ? { name: resource, resourceGroup: group }
-          : (accounts.length > 0
-              ? accounts
-              : yield* command(["cognitiveservices", "account", "list", "--output", "json", "--only-show-errors"]).pipe(
-                  Effect.flatMap(decodeAccounts),
-                )
-            ).find((item) => item.name.toLowerCase() === resource.toLowerCase())
-        if (!account)
-          return yield* Effect.fail(new Error(`Azure resource "${resource}" was not found in the active subscription`))
-        return yield* command([
-          "cognitiveservices",
-          "account",
-          "deployment",
-          "list",
-          "--name",
-          account.name,
-          "--resource-group",
-          account.resourceGroup,
-          "--output",
-          "json",
-          "--only-show-errors",
-        ]).pipe(Effect.flatMap(decodeDeployments))
-      }).pipe(
-        Effect.catch((error) =>
-          Effect.logWarning("Azure model discovery failed", {
-            resource,
-            error: error instanceof Error ? error.message : String(error),
-          }).pipe(Effect.as(undefined)),
-        ),
-      )
-    })
-
     const load = Effect.fn("AzurePlugin.load")(function* () {
       const connection = yield* ctx.integration.connection.active(Provider.ID.azure)
       const credential = connection
@@ -220,13 +132,11 @@ export const AzurePlugin = define({
         : undefined
       if (credential?.type !== "oauth" || credential.methodID !== methodID) {
         loaded.resource = undefined
-        loaded.deployments = undefined
         return
       }
       const resource =
         typeof credential.metadata?.resourceName === "string" ? credential.metadata.resourceName : undefined
       loaded.resource = resource
-      loaded.deployments = resource ? yield* discover(resource) : undefined
     })
 
     yield* load()
@@ -245,31 +155,6 @@ export const AzurePlugin = define({
                 : {}),
             }
           })
-        if (item.provider.id === Provider.ID.azure && loaded.deployments) {
-          // Startup batches catalog transforms, so match against the current draft rather than a pre-startup snapshot.
-          const existing = Array.from(item.models.values())
-          const found = new Map<Model.ID, Model.Info>()
-          loaded.deployments.forEach((deployment) => {
-            if (deployment.properties.provisioningState !== "Succeeded") return
-            const model = existing.find(
-              (model) => model.id.toLowerCase() === deployment.properties.model.name.toLowerCase(),
-            )
-            if (!model) return
-            const id = found.has(model.id) ? Model.ID.make(deployment.name) : model.id
-            found.set(id, {
-              ...model,
-              id,
-              name: id === model.id ? model.name : `${model.name} (${deployment.name})`,
-              modelID: Model.ID.make(deployment.name),
-            })
-          })
-          for (const id of Array.from(item.models.keys())) {
-            if (!found.has(Model.ID.make(id))) evt.model.remove(item.provider.id, id)
-          }
-          for (const [id, model] of found) {
-            evt.model.update(item.provider.id, id, (draft) => Object.assign(draft, structuredClone(model)))
-          }
-        }
         for (const model of item.models.values()) {
           evt.model.update(item.provider.id, model.id, (draft) => {
             if (resourceName && typeof draft.settings?.baseURL === "string")

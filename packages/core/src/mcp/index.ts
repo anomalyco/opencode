@@ -6,7 +6,7 @@ import { ephemeral } from "@opencode-ai/schema/event"
 import type { Session } from "@opencode-ai/schema/session"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Stream, Types } from "effect"
+import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
@@ -133,7 +133,7 @@ type Data = {
   removed: Set<ServerName>
 }
 
-export type Draft = {
+export type Editor = {
   list: () => readonly [ServerName, Types.DeepMutable<Mcp.ServerConfig>][]
   get: (server: ServerName | string) => Types.DeepMutable<Mcp.ServerConfig> | undefined
   set: (server: ServerName | string, config: Mcp.ServerConfig) => void
@@ -143,7 +143,7 @@ export type Draft = {
 
 const cloneConfig = (config: Mcp.ServerConfig) => structuredClone(config) as Types.DeepMutable<Mcp.ServerConfig>
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly servers: () => Effect.Effect<ServerInfo[]>
   readonly add: (server: ServerName | string, config: Mcp.ServerConfig) => Effect.Effect<void>
   readonly connect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
@@ -227,12 +227,12 @@ export const layer = (options?: Options) =>
         const scope = yield* Scope.fork(root)
         entry.registration = { dispose: Scope.close(scope, Exit.void) }
         yield* integration
-          .transform((draft) => {
-            draft.update(integrationID, (ref) => {
+          .transform((editor) => {
+            editor.update(integrationID, (ref) => {
               ref.name = name
               ref.metadata = { source: "mcp" }
             })
-            draft.method.update({
+            editor.method.update({
               integrationID,
               method: { id: methodID, type: "oauth", label: name },
               authorize: () =>
@@ -259,27 +259,41 @@ export const layer = (options?: Options) =>
         const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
         const remote = entry.config
         const oauth = remote.oauth || undefined
+        const run = Effect.runPromiseWith(yield* Effect.context())
         const base = {
           redirectUrl: oauth?.redirect_uri ?? "http://127.0.0.1/callback",
           scope: oauth?.scope,
           client: oauth?.client_id ? { id: oauth.client_id, secret: oauth.client_secret } : undefined,
           // No browser during connect: an auth-gated server surfaces needs_auth instead of opening a browser.
-          onRedirect: () => {},
+          onRedirect: () => run(Effect.logInfo("mcp oauth authorization required")),
         }
         const found = (yield* credentials.list(entry.integrationID)).at(-1)
-        if (!found || found.value.type !== "oauth")
+        if (!found || found.value.type !== "oauth") {
           // No stored credential yet: an empty in-memory store still lets the SDK run the auth handshake, which
           // ends in UnauthorizedError -> needs_auth. Returning no provider instead would let the transport throw
           // a raw HTTP error, hiding the auth requirement behind a generic failed status. Anonymous servers are
           // unaffected: tokens() returns undefined, so no auth header is sent and the SDK never calls auth().
+          yield* Effect.logInfo("mcp oauth credential unavailable", {
+            integrationID: entry.integrationID,
+            reason: found ? "not_oauth" : "missing",
+          })
           return McpOAuth.provider({ ...base, store: McpOAuth.memoryStore() })
+        }
         const credentialID = found.id
         const methodID = found.value.methodID
+        const fields = { credentialID, integrationID: entry.integrationID }
+        yield* Effect.logInfo("mcp oauth credential loaded", {
+          ...fields,
+          hasRefreshToken: Boolean(found.value.refresh),
+          hasClientInformation: Boolean(McpOAuth.clientFromCredential(found.value)),
+          expiresAt: found.value.expires,
+          expired: found.value.expires !== 0 && found.value.expires <= Date.now(),
+        })
         // Tracks the refresh token this provider last presented, so invalidate can tell whether the SDK
         // rejected the currently-stored credential or a snapshot another connection has already rotated past.
         let presented = found.value.refresh
         const readOAuthCredential = async () => {
-          const stored = await Effect.runPromise(credentials.get(credentialID))
+          const stored = await run(credentials.get(credentialID))
           return stored?.value.type === "oauth" ? stored.value : undefined
         }
         return McpOAuth.provider({
@@ -290,10 +304,25 @@ export const layer = (options?: Options) =>
           // strand every connection in needs_auth until a manual re-auth. Credential deletion notifies all locations;
           // reconnects remain serialized by the server lock.
           invalidate: async (scope) => {
-            if (scope === "verifier" || scope === "discovery") return
+            if (scope === "verifier" || scope === "discovery") {
+              await run(
+                Effect.logDebug("mcp oauth invalidation skipped", { ...fields, scope, reason: "not_credentials" }),
+              )
+              return
+            }
             const oauth = await readOAuthCredential()
-            if (!oauth || oauth.refresh !== presented) return
-            await Effect.runPromise(credentials.remove(credentialID))
+            if (!oauth || oauth.refresh !== presented) {
+              await run(
+                Effect.logInfo("mcp oauth invalidation skipped", {
+                  ...fields,
+                  scope,
+                  reason: oauth ? "token_rotated" : "credential_missing",
+                }),
+              )
+              return
+            }
+            await run(Effect.logWarning("mcp oauth credential invalidation requested", { ...fields, scope }))
+            await run(credentials.remove(credentialID))
           },
           // Always read the latest stored tokens instead of caching at connect time: with refresh-token rotation,
           // a cached snapshot goes stale the moment another connection refreshes, and re-presenting the consumed
@@ -314,7 +343,16 @@ export const layer = (options?: Options) =>
                 client: previous ? McpOAuth.clientFromCredential(previous) : undefined,
               })
               presented = value.refresh
-              await Effect.runPromise(credentials.update(credentialID, { value }))
+              await run(
+                Effect.logInfo("mcp oauth tokens received", {
+                  ...fields,
+                  credentialPresent: Boolean(previous),
+                  refreshRotated: Boolean(previous && previous.refresh !== value.refresh),
+                  hasRefreshToken: Boolean(value.refresh),
+                  expiresAt: value.expires,
+                }),
+              )
+              await run(credentials.update(credentialID, { value }))
             },
             clientInformation: async () => {
               const oauth = await readOAuthCredential()
@@ -323,7 +361,7 @@ export const layer = (options?: Options) =>
             saveClientInformation: async (client) => {
               const oauth = await readOAuthCredential()
               if (!oauth) return
-              await Effect.runPromise(
+              await run(
                 credentials.update(credentialID, {
                   value: Credential.OAuth.make({ ...oauth, metadata: { ...oauth.metadata, client } }),
                 }),
@@ -575,7 +613,10 @@ export const layer = (options?: Options) =>
               : { status: "failed", error: error instanceof Error ? error.message : String(error) }
           yield* Effect.logWarning("mcp connect failed", { server: name, status: entry.status })
           yield* bus.publish(McpEvent.StatusChanged, { server: name })
-        }).pipe(Effect.ensuring(entry.startup.open))
+        }).pipe(
+          Effect.ensuring(entry.startup.open),
+          Effect.annotateLogs({ server: name, directory: location.directory, connectionID: crypto.randomUUID() }),
+        )
 
       const stopServer = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {
         const scope = entry.scope
@@ -630,8 +671,9 @@ export const layer = (options?: Options) =>
 
       let applied: Map<ServerName, Mcp.ServerConfig> | undefined
       const overrides = new Map<ServerName, Mcp.ServerConfig | false>()
-      const reconcile = Effect.fnUntraced(function* (next: Draft) {
-        const servers = new Map(next.list())
+      const reconcileLock = Semaphore.makeUnsafe(1)
+      const reconcile = Effect.fnUntraced(function* () {
+        const servers = state.get().servers
         if (!applied && entries.size === 0) {
           for (const [name, server] of servers) {
             entries.set(name, {
@@ -692,7 +734,7 @@ export const layer = (options?: Options) =>
           Stream.runForEach((event) => Effect.sync(() => fork(reconnect(event.data.integrationID)))),
         ),
       )
-      const state = State.create<Data, Draft>({
+      const state: State.Interface<Data, Editor> = State.create<Data, Editor>({
         name: "mcp",
         initial: () => ({
           servers: new Map(
@@ -702,22 +744,22 @@ export const layer = (options?: Options) =>
           ),
           removed: new Set(Array.from(overrides).flatMap(([name, config]) => (config === false ? [name] : []))),
         }),
-        draft: (draft) => ({
-          list: () => Array.from(draft.servers),
-          get: (server) => draft.servers.get(ServerName.make(server)),
+        editor: (editor) => ({
+          list: () => Array.from(editor.servers),
+          get: (server) => editor.servers.get(ServerName.make(server)),
           set: (server, serverConfig) => {
             const name = ServerName.make(server)
-            if (draft.removed.has(name)) return
-            draft.servers.set(name, cloneConfig(serverConfig))
+            if (editor.removed.has(name)) return
+            editor.servers.set(name, cloneConfig(serverConfig))
           },
           update: (server, update) => {
-            const current = draft.servers.get(ServerName.make(server))
+            const current = editor.servers.get(ServerName.make(server))
             if (!current) return
             update(current)
           },
-          remove: (server) => draft.servers.delete(ServerName.make(server)),
+          remove: (server) => editor.servers.delete(ServerName.make(server)),
         }),
-        finalize: reconcile,
+        notify: () => State.reconcile(root, fork, () => reconcileLock.withPermit(reconcile())),
       })
 
       // Suspend so each await sees current entries; a bare Map iterator is exhausted after one run.

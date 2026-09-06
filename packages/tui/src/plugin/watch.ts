@@ -7,9 +7,9 @@ import { lstat, realpath, stat } from "fs/promises"
 // kills a direct file watch) and filtered by basename so bursts in busy
 // directories stay quiet. Symlinked files are additionally watched at their
 // resolved target, since edits there emit nothing at the link's location.
-// Directory targets are watched at their root only: edits to nested helper
-// files do not change the entrypoint mtime and are not detected. Watches are
-// never torn down individually (a stale watch costs one fs handle and a
+// Directory targets are watched at their root only; the plugin source loader
+// adds each resolved local dependency separately, including nested helpers.
+// Watches are never torn down individually (a stale watch costs one fs handle and a
 // spurious onChange); all die with dispose(). Missing retryable targets are
 // polled until they can be armed without relying on a racy chain of ancestor
 // watches.

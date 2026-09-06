@@ -17,7 +17,6 @@ import { SortableTerminalTab } from "@/session/terminal/tab"
 import { Terminal } from "@/session/terminal/terminal"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useLayout } from "@/shell/state/layout"
 import { useTerminal, type LocalPTY } from "@/session/terminal/context"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { terminalTabLabel } from "@/session/terminal/terminal-label"
@@ -38,9 +37,17 @@ type CachedTerminalSurface = {
 }
 
 export function TerminalPanel(
-  props: { stacked?: boolean; fill?: boolean; framed?: boolean; present?: boolean; contentHeight?: string } = {},
+  props: {
+    stacked?: boolean
+    fill?: boolean
+    framed?: boolean
+    present?: boolean
+    contentHeight?: string
+    embedded?: boolean
+    animate?: boolean
+    reserveReviewToggle?: boolean
+  } = {},
 ) {
-  const layout = useLayout()
   const terminal = useTerminal()
   const sdk = useWorkspaceLocation()
   const language = useLanguage()
@@ -50,7 +57,7 @@ export function TerminalPanel(
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const opened = createMemo(() => view().terminal.opened())
   const size = createSizing()
-  const height = createMemo(() => layout.terminal.height())
+  const height = createMemo(() => view().terminal.height())
   const close = () => view().terminal.close()
   let root: HTMLElement | undefined
   let tabList: HTMLDivElement | undefined
@@ -223,6 +230,7 @@ export function TerminalPanel(
       opened={opened()}
       present={present()}
       framed={props.framed}
+      embedded={props.embedded}
       desktop={isDesktop()}
       stacked={stacked()}
       height={panelHeight()}
@@ -230,10 +238,11 @@ export function TerminalPanel(
       pane={pane()}
       max={max()}
       resizing={size.active()}
+      animate={props.animate}
       onResizeStart={size.start}
       onResize={(next) => {
         size.touch()
-        layout.terminal.resize(next)
+        view().terminal.resize(next)
       }}
       onCollapse={close}
     >
@@ -241,7 +250,10 @@ export function TerminalPanel(
         when={terminal.ready() || store.surfaces.length > 0}
         fallback={
           <div class="flex flex-col h-full pointer-events-none">
-            <div class="h-10 flex items-center gap-2 px-2 border-b border-border-weaker-base bg-v2-background-bg-base overflow-hidden">
+            <div
+              class="h-10 flex items-center gap-2 px-2 border-b border-border-weaker-base bg-v2-background-bg-base overflow-hidden"
+              classList={{ "pe-12": props.reserveReviewToggle }}
+            >
               <For each={handoff()}>
                 {(title) => (
                   <div class="px-2 py-1 rounded-md bg-surface-base text-14-regular text-text-weak truncate max-w-40">
@@ -283,46 +295,53 @@ export function TerminalPanel(
           }}
         >
           <div class="flex flex-col h-full">
-            <Tabs
-              variant="panel"
-              value={terminal.active()}
-              onChange={(id) => terminal.open(id)}
-              class="!h-[52px] !flex-none"
-            >
-              <Tabs.List
-                ref={tabList}
-                onPointerDown={(event: PointerEvent & { currentTarget: HTMLDivElement }) => {
-                  const active = document.activeElement
-                  if (event.target === active) return
-                  if (active instanceof HTMLInputElement && event.currentTarget.contains(active)) active.blur()
-                }}
+            <div class="h-[52px] shrink-0 flex border-b border-border-weaker-base">
+              <Tabs
+                variant="panel"
+                value={terminal.active()}
+                onChange={(id) => terminal.open(id)}
+                class="!h-full min-w-0 !flex-1"
               >
-                <For each={all()}>
-                  {(pty, index) => <SortableTerminalTab terminal={pty} index={index()} onClose={close} />}
-                </For>
-                <div class="h-full flex items-center justify-center">
-                  <Tooltip
-                    value={
-                      <>
-                        {language.t("command.terminal.new")}
-                        <Show when={newTerminalKeybind().length > 0}>
-                          <Keybind keys={newTerminalKeybind()} variant="neutral" />
-                        </Show>
-                      </>
-                    }
-                    placement="bottom"
-                    class="flex items-center"
-                  >
-                    <IconButton
-                      icon={<Icon name="plus-small" size="large" />}
-                      variant="ghost"
-                      onClick={() => terminal.new({ focus: true })}
-                      aria-label={language.t("command.terminal.new")}
-                    />
-                  </Tooltip>
-                </div>
-              </Tabs.List>
-            </Tabs>
+                <Tabs.List
+                  ref={tabList}
+                  class="!border-b-0"
+                  onPointerDown={(event: PointerEvent & { currentTarget: HTMLDivElement }) => {
+                    const active = document.activeElement
+                    if (event.target === active) return
+                    if (active instanceof HTMLInputElement && event.currentTarget.contains(active)) active.blur()
+                  }}
+                >
+                  <For each={all()}>
+                    {(pty, index) => <SortableTerminalTab terminal={pty} index={index()} onClose={close} />}
+                  </For>
+                  <div class="h-full flex items-center justify-center">
+                    <Tooltip
+                      value={
+                        <>
+                          {language.t("command.terminal.new")}
+                          <Show when={newTerminalKeybind().length > 0}>
+                            <Keybind keys={newTerminalKeybind()} variant="neutral" />
+                          </Show>
+                        </>
+                      }
+                      placement="bottom"
+                      class="flex items-center"
+                    >
+                      <IconButton
+                        icon={<Icon name="plus-small" size="large" />}
+                        variant="ghost"
+                        onClick={() => terminal.new({ focus: true })}
+                        aria-label={language.t("command.terminal.new")}
+                      />
+                    </Tooltip>
+                  </div>
+                </Tabs.List>
+              </Tabs>
+              {/* Reserve outside the scroll viewport so overflowing tabs cannot cover the toggle. */}
+              <Show when={props.reserveReviewToggle}>
+                <div class="w-12 shrink-0" aria-hidden />
+              </Show>
+            </div>
             <div class="flex-1 min-h-0 relative">
               <For each={store.surfaces}>
                 {(surface) => (

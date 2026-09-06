@@ -6,6 +6,7 @@
 import type {
   AgentInfo,
   CommandInfo,
+  ConfigEntry,
   FormCancelInput,
   FormInfo,
   FormReplyInput,
@@ -51,6 +52,7 @@ import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
+type OpenCodeEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
 
 export type CreateDataInput = {
   readonly api: () => OpenCodeClient
@@ -58,17 +60,21 @@ export type CreateDataInput = {
   readonly event: {
     readonly on: <Type extends OpenCodeEvent["type"]>(
       type: Type,
-      handler: (event: Extract<OpenCodeEvent, { type: Type }>) => void,
+      handler: (event: OpenCodeEventMap[Type]) => void,
     ) => () => void
     readonly listen: (handler: (event: { name: OpenCodeEvent["type"]; details: OpenCodeEvent }) => void) => () => void
   }
   readonly connection?: {
     readonly status: () => "connected" | "connecting" | "reconnecting"
   }
+  /** Receives failed event-driven reads. Explicit reads still reject to their caller. */
+  readonly onError?: (error: unknown) => void
 }
 
 const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
 const messagePageLimit = 20
+// Trailing window for event bursts that each ask for the same refetch.
+export const settleMs = 150
 
 // Global MCP elicitations temporarily use "global" instead of a real session ID, so the
 // server cannot recover their Location when settling them. Preserve the event Location
@@ -81,11 +87,10 @@ type LocationData = {
   vcs?: VcsInfo
   agent?: AgentInfo[]
   command?: CommandInfo[]
+  config?: ConfigEntry[]
   integration?: IntegrationInfo[]
-  mcp?: {
-    server?: McpServer[]
-    resource?: McpResource[]
-  }
+  mcpServer?: McpServer[]
+  mcpResource?: McpResource[]
   model?: ModelInfo[]
   provider?: ProviderInfo[]
   reference?: ReferenceInfo[]
@@ -108,7 +113,6 @@ type Store = {
     messageCursor: Record<string, string | undefined>
     messageLoading: Record<string, boolean>
     pending: Record<string, SessionInboxInfo[]>
-    input: Record<string, string[]>
     permission: Record<string, PermissionRequest[]>
     // Pending forms keyed by owner: a session ID or the temporary "global" elicitation sentinel.
     form: Record<string, FormWithLocation[]>
@@ -124,8 +128,8 @@ export function locationKey(location: LocationRef) {
   return JSON.stringify([location.directory, location.workspaceID])
 }
 
-function locationQuery(ref?: LocationRef) {
-  return ref ? { directory: ref.directory, workspace: ref.workspaceID } : undefined
+function locationQuery(ref: LocationRef) {
+  return { directory: ref.directory, workspace: ref.workspaceID }
 }
 
 function formRequestOptions(sessionID: string, ref?: LocationRef) {
@@ -139,14 +143,20 @@ function formRequestOptions(sessionID: string, ref?: LocationRef) {
 }
 
 function createSync() {
-  type Pending = { promise: Promise<void>; invalidated: boolean }
+  // `started` is false while a reload waits for the load it replaces. Invalidations that land in
+  // that window are already covered, since the reload has not read anything yet.
+  type Pending = { promise: Promise<void>; invalidated: boolean; started: boolean }
   const state = new Map<string, true | Pending>()
   const start = (key: string, load: () => Promise<void>, wait?: Promise<void>) => {
-    const entry: Pending = { promise: Promise.resolve(), invalidated: false }
+    const entry: Pending = { promise: Promise.resolve(), invalidated: false, started: !wait }
     state.set(key, entry)
-    entry.promise = (wait ? wait.catch(() => undefined).then(load) : load())
+    const run = () => {
+      entry.started = true
+      return load()
+    }
+    entry.promise = (wait ? wait.catch(() => undefined).then(run) : run())
       .then(() => {
-        if (state.get(key) === entry) state.set(key, true)
+        if (state.get(key) === entry && !entry.invalidated) state.set(key, true)
       })
       .finally(() => {
         if (state.get(key) === entry) state.delete(key)
@@ -176,12 +186,12 @@ function createSync() {
       if (key) {
         const active = state.get(key)
         if (active === true) state.delete(key)
-        if (active !== undefined && active !== true) active.invalidated = true
+        if (active !== undefined && active !== true && active.started) active.invalidated = true
         return
       }
       state.forEach((active, current) => {
         if (active === true) state.delete(current)
-        if (active !== true) active.invalidated = true
+        if (active !== true && active.started) active.invalidated = true
       })
     },
   }
@@ -189,6 +199,31 @@ function createSync() {
 
 export function createData(config: CreateDataInput) {
   const api = config.api
+  let disposed = false
+  onCleanup(() => (disposed = true))
+
+  function refresh(load: () => Promise<unknown>) {
+    if (disposed || (config.connection && config.connection.status() !== "connected")) return
+    void load().catch((error) => {
+      if (disposed || (config.connection && config.connection.status() !== "connected")) return
+      if (config.onError) return config.onError(error)
+      console.error("Failed to refresh client data", error)
+    })
+  }
+
+  // Runs `load` once a burst of same-key events goes quiet, so N events cost one refetch.
+  const settling = new Map<string, ReturnType<typeof setTimeout>>()
+  onCleanup(() => settling.forEach((timer) => clearTimeout(timer)))
+  function settle(key: string, load: () => Promise<unknown>) {
+    clearTimeout(settling.get(key))
+    settling.set(
+      key,
+      setTimeout(() => {
+        settling.delete(key)
+        refresh(load)
+      }, settleMs),
+    )
+  }
 
   const [store, setStore] = createStore<Store>({
     session: {
@@ -199,7 +234,6 @@ export function createData(config: CreateDataInput) {
       messageCursor: {},
       messageLoading: {},
       pending: {},
-      input: {},
       permission: {},
       form: {},
     },
@@ -231,13 +265,6 @@ export function createData(config: CreateDataInput) {
         "pending",
         sessionID,
         (store.session.pending[sessionID] ?? []).filter((item) => item.id !== inboxID),
-      )
-    if (store.session.input[sessionID]?.includes(inboxID))
-      setStore(
-        "session",
-        "input",
-        sessionID,
-        (store.session.input[sessionID] ?? []).filter((id) => id !== inboxID),
       )
   }
 
@@ -336,8 +363,8 @@ export function createData(config: CreateDataInput) {
     return request
   }
 
-  // Upsert an admitted inbox item into pending, input, and (for user and
-  // synthetic items) the visible transcript. Used by the inbox.enqueued
+  // Upsert an admitted inbox item into pending and (for user and synthetic
+  // items) the visible transcript. Used by the inbox.enqueued
   // handler and by optimistic admission; the upsert is what reconciles
   // the durable echo with an optimistic placeholder — the durable payload and
   // times replace the client's guess.
@@ -352,8 +379,6 @@ export function createData(config: CreateDataInput) {
         at < 0 ? [...pending, item] : pending.map((entry, index) => (index === at ? item : entry)),
       )
       if (item.type === "compaction") return
-      const input = store.session.input[item.sessionID] ?? []
-      if (!input.includes(item.id)) setStore("session", "input", item.sessionID, [...input, item.id])
       materializeInboxMessage(item)
     })
   }
@@ -402,13 +427,42 @@ export function createData(config: CreateDataInput) {
       index.set(item.id, messages.length)
       messages.push(item)
     },
+    insert(sessionID: string, item: SessionMessageInfo) {
+      message.update(sessionID, (draft, index) => message.append(draft, index, item))
+    },
+    // Streaming events target one assistant message and, within it, the latest part of a kind.
+    // A missing target means the row was never loaded or was evicted; the event is dropped.
+    editAssistant(sessionID: string, messageID: string, fn: (assistant: SessionMessageAssistant) => void) {
+      message.update(sessionID, (draft, index) => {
+        const position = index.get(messageID)
+        const item = position === undefined ? undefined : draft[position]
+        if (item?.type === "assistant") fn(item)
+      })
+    },
+    editTool(sessionID: string, messageID: string, toolID: string, fn: (tool: SessionMessageAssistantTool) => void) {
+      message.editAssistant(sessionID, messageID, (assistant) => {
+        const tool = assistant.content.findLast(
+          (item): item is SessionMessageAssistantTool => item.type === "tool" && item.id === toolID,
+        )
+        if (tool) fn(tool)
+      })
+    },
+    editText(sessionID: string, messageID: string, fn: (text: SessionMessageAssistantText) => void) {
+      message.editAssistant(sessionID, messageID, (assistant) => {
+        const text = assistant.content.findLast((item): item is SessionMessageAssistantText => item.type === "text")
+        if (text) fn(text)
+      })
+    },
+    editReasoning(sessionID: string, messageID: string, fn: (reasoning: SessionMessageAssistantReasoning) => void) {
+      message.editAssistant(sessionID, messageID, (assistant) => {
+        const reasoning = assistant.content.findLast(
+          (item): item is SessionMessageAssistantReasoning => item.type === "reasoning" && !item.time?.completed,
+        )
+        if (reasoning) fn(reasoning)
+      })
+    },
     activeAssistant(messages: SessionMessageInfo[]) {
       const item = messages.findLast((item) => item.type === "assistant" && !item.time.completed)
-      return item?.type === "assistant" ? item : undefined
-    },
-    assistant(messages: SessionMessageInfo[], index: Map<string, number>, messageID: string) {
-      const position = index.get(messageID)
-      const item = position === undefined ? undefined : messages[position]
       return item?.type === "assistant" ? item : undefined
     },
     shell(messages: SessionMessageInfo[], shellID: string) {
@@ -418,19 +472,6 @@ export function createData(config: CreateDataInput) {
     compaction(messages: SessionMessageInfo[]) {
       const item = messages.findLast((item) => item.type === "compaction" && item.status === "running")
       return item?.type === "compaction" ? item : undefined
-    },
-    latestTool(assistant: SessionMessageAssistant | undefined, id?: string) {
-      return assistant?.content.findLast(
-        (item): item is SessionMessageAssistantTool => item.type === "tool" && (id === undefined || item.id === id),
-      )
-    },
-    latestText(assistant: SessionMessageAssistant | undefined) {
-      return assistant?.content.findLast((item): item is SessionMessageAssistantText => item.type === "text")
-    },
-    latestReasoning(assistant: SessionMessageAssistant | undefined) {
-      return assistant?.content.findLast(
-        (item): item is SessionMessageAssistantReasoning => item.type === "reasoning" && !item.time?.completed,
-      )
     },
     reindex(messages: SessionMessageInfo[], index: Map<string, number>, start: number) {
       for (let position = start; position < messages.length; position++) {
@@ -492,6 +533,29 @@ export function createData(config: CreateDataInput) {
     )
   }
 
+  function evictSession(sessionID: string) {
+    if (sessionOutbox.has(sessionID)) return
+    sync.invalidate(`session.pending:${sessionID}`)
+    sync.invalidate(`session.message:${sessionID}`)
+    messageLoads.delete(sessionID)
+    // Keep unacknowledged submissions until their echo or rollback settles them.
+    const pending = store.session.pending[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
+    const messages = store.session.message[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
+    messageIndex.delete(sessionID)
+    if (messages.length) messageIndex.set(sessionID, new Map(messages.map((item, index) => [item.id, index])))
+    setStore(
+      "session",
+      produce((draft) => {
+        delete draft.message[sessionID]
+        delete draft.messageCursor[sessionID]
+        delete draft.messageLoading[sessionID]
+        delete draft.pending[sessionID]
+        if (messages.length) draft.message[sessionID] = messages
+        if (pending.length) draft.pending[sessionID] = pending
+      }),
+    )
+  }
+
   function removeSession(sessionID: string) {
     activeUpdates?.set(sessionID, undefined)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
@@ -511,7 +575,6 @@ export function createData(config: CreateDataInput) {
         delete draft.messageCursor[sessionID]
         delete draft.messageLoading[sessionID]
         delete draft.pending[sessionID]
-        delete draft.input[sessionID]
         delete draft.permission[sessionID]
         delete draft.form[sessionID]
         for (const [rootID, family] of Object.entries(draft.family)) {
@@ -528,31 +591,34 @@ export function createData(config: CreateDataInput) {
       case "server.connected": {
         const updates = new Map<string, DataSessionStatus | undefined>()
         activeUpdates = updates
-        void api()
-          .session.active()
-          .then((active) => {
-            if (activeUpdates !== updates) return
-            // Lifecycle events received during hydration supersede the snapshot.
-            const snapshot = new Map<string, DataSessionStatus>(Object.keys(active).map((id) => [id, "running"]))
-            updates.forEach((status, id) => {
-              if (status === undefined) return snapshot.delete(id)
-              snapshot.set(id, status)
+        refresh(() =>
+          api()
+            .session.active()
+            .then((active) => {
+              if (activeUpdates !== updates) return
+              // Lifecycle events received during hydration supersede the snapshot.
+              const snapshot = new Map<string, DataSessionStatus>(Object.keys(active).map((id) => [id, "running"]))
+              updates.forEach((status, id) => {
+                if (status === undefined) return snapshot.delete(id)
+                snapshot.set(id, status)
+              })
+              activeUpdates = undefined
+              setStore("session", "active", reconcile(Object.fromEntries(snapshot)))
             })
-            activeUpdates = undefined
-            setStore("session", "active", reconcile(Object.fromEntries(snapshot)))
-          })
-          .catch(() => {
-            if (activeUpdates === updates) activeUpdates = undefined
-          })
-        void api()
-          .location.get({ location: locationQuery(defaultLocation()) })
-          .then((location) => {
-            const key = locationKey(location)
-            setStore("location", key, { ...store.location[key], info: location })
-          })
-          .catch((error) => console.error("Failed to preload location", error))
-        void result.location.vcs.sync().catch((error) => console.error("Failed to preload VCS info", error))
-        void result.project.sync().catch((error) => console.error("Failed to preload projects", error))
+            .catch(() => {
+              if (activeUpdates === updates) activeUpdates = undefined
+            }),
+        )
+        refresh(() =>
+          api()
+            .location.get({ location: locationQuery(defaultLocation()) })
+            .then((location) => {
+              const key = locationKey(location)
+              setStore("location", key, { info: location })
+            }),
+        )
+        refresh(() => result.location.vcs.sync())
+        refresh(() => result.project.sync())
         return
       }
       case "project.updated":
@@ -561,7 +627,7 @@ export function createData(config: CreateDataInput) {
       case "session.created":
         sessionOutbox.delete(event.data.sessionID)
         result.session.invalidate(event.data.sessionID)
-        void result.session.sync(event.data.sessionID)
+        refresh(() => result.session.sync(event.data.sessionID))
         // Band-aid: a newly created session starts empty, so live events can be its source of truth.
         // Fetching pending inputs and projected messages separately lets promotion move an input between snapshots,
         // causing both requests to miss it and overwrite event-built state. Skip those racy initial reads until
@@ -583,14 +649,12 @@ export function createData(config: CreateDataInput) {
         const previous = store.session.info[event.data.sessionID]?.agent
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "agent", event.data.agent)
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: messageIDFromEvent(event.id),
-            type: "agent-switched",
-            agent: event.data.agent,
-            previous,
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: messageIDFromEvent(event.id),
+          type: "agent-switched",
+          agent: event.data.agent,
+          previous,
+          time: { created: event.created },
         })
         return
       }
@@ -598,32 +662,37 @@ export function createData(config: CreateDataInput) {
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "model", event.data.model)
         if (!store.session.message[event.data.sessionID]) return
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: messageIDFromEvent(event.id),
-            type: "model-switched",
-            model: event.data.model,
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: messageIDFromEvent(event.id),
+          type: "model-switched",
+          model: event.data.model,
+          time: { created: event.created },
         })
-        void api()
-          .session.message({ sessionID: event.data.sessionID, messageID: messageIDFromEvent(event.id) })
-          .then((item) => {
-            message.update(event.data.sessionID, (draft, index) => {
-              const position = index.get(item.id)
-              if (position === undefined) return message.append(draft, index, item)
-              draft[position] = item
-            })
-          })
-          .catch((error) => console.error("Failed to load projected model switch message", error))
+        refresh(() =>
+          api()
+            .session.message({ sessionID: event.data.sessionID, messageID: messageIDFromEvent(event.id) })
+            .then((item) => {
+              message.update(event.data.sessionID, (draft, index) => {
+                const position = index.get(item.id)
+                if (position === undefined) return message.append(draft, index, item)
+                draft[position] = item
+              })
+            }),
+        )
         return
-      case "session.renamed":
+      case "session.renamed": {
         // Preserve the live title when it races the session's initial read.
-        void result.session.sync(event.data.sessionID).then(() => {
-          if (store.session.info[event.data.sessionID])
-            setStore("session", "info", event.data.sessionID, "title", event.data.title)
+        refresh(() => {
+          const family = sync.pending(`session.family:${event.data.sessionID}`)
+            ? result.session.sync(event.data.sessionID, { children: true })
+            : Promise.resolve()
+          return Promise.all([result.session.sync(event.data.sessionID), family]).then(() => {
+            if (store.session.info[event.data.sessionID])
+              setStore("session", "info", event.data.sessionID, "title", event.data.title)
+          })
         })
         return
+      }
       case "session.moved": {
         const current = store.session.info[event.data.sessionID]
         if (current) {
@@ -635,16 +704,14 @@ export function createData(config: CreateDataInput) {
           setStore("session", "info", event.data.sessionID, "location", event.data.location)
           if (event.data.projectID) setStore("session", "info", event.data.sessionID, "projectID", event.data.projectID)
           setStore("session", "info", event.data.sessionID, "subpath", event.data.subpath)
-          message.update(event.data.sessionID, (draft, index) => {
-            message.append(draft, index, {
-              id: messageIDFromEvent(event.id),
-              type: "location-switched",
-              location: event.data.location,
-              projectID: event.data.projectID,
-              subpath: event.data.subpath,
-              previous,
-              time: { created: event.created },
-            })
+          message.insert(event.data.sessionID, {
+            id: messageIDFromEvent(event.id),
+            type: "location-switched",
+            location: event.data.location,
+            projectID: event.data.projectID,
+            subpath: event.data.subpath,
+            previous,
+            time: { created: event.created },
           })
         }
         return
@@ -656,7 +723,7 @@ export function createData(config: CreateDataInput) {
           if (!directory) {
             if (info.location.workspaceID) continue
             result.session.invalidate(sessionID)
-            void result.session.sync(sessionID)
+            refresh(() => result.session.sync(sessionID))
             continue
           }
           const adopted = Worktree.adopt(
@@ -674,7 +741,7 @@ export function createData(config: CreateDataInput) {
         return
       }
       case "session.inbox.delivered": {
-        const admitted = store.session.input[event.data.sessionID]?.includes(event.data.inboxID) ?? false
+        const admitted = result.session.input.has(event.data.sessionID, event.data.inboxID)
         removePending(event.data.sessionID, event.data.inboxID)
         message.update(event.data.sessionID, (draft, index) => {
           const position = index.get(event.data.inboxID)
@@ -718,41 +785,36 @@ export function createData(config: CreateDataInput) {
         // and produce no transcript message.
         const updateText = event.data.text
         if (updateText === undefined) return
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: messageIDFromEvent(event.id),
-            type: "system",
-            text: updateText,
-            description: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
-            metadata: event.metadata,
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: messageIDFromEvent(event.id),
+          type: "system",
+          text: updateText,
+          description: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
+          metadata: event.metadata,
+          time: { created: event.created },
         })
         return
       case "session.synthetic":
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: messageIDFromEvent(event.id),
-            type: "synthetic",
-            text: event.data.text,
-            description: event.data.description,
-            metadata: event.data.metadata,
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: messageIDFromEvent(event.id),
+          type: "synthetic",
+          text: event.data.text,
+          description: event.data.description,
+          metadata: event.data.metadata,
+          time: { created: event.created },
         })
         return
       case "session.shell.started":
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: messageIDFromEvent(event.id),
-            type: "shell",
-            shellID: event.data.shell.id,
-            command: event.data.shell.command,
-            status: event.data.shell.status,
-            exit: event.data.shell.exit,
-            metadata: event.metadata,
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: messageIDFromEvent(event.id),
+          type: "shell",
+          shellID: event.data.shell.id,
+          command: event.data.shell.command,
+          status: event.data.shell.status,
+          exit: event.data.shell.exit,
+          metadata:
+            event.data.shell.metadata.background === true ? { ...event.metadata, background: true } : event.metadata,
+          time: { created: event.created },
         })
         return
       case "session.shell.ended":
@@ -767,13 +829,12 @@ export function createData(config: CreateDataInput) {
         return
       case "session.message.content.updated": {
         if (store.session.message[event.data.sessionID])
-          message.update(event.data.sessionID, (draft, index) => {
-            const assistant = message.assistant(draft, index, event.data.messageID)
-            if (assistant) assistant.content = [...event.data.content]
+          message.editAssistant(event.data.sessionID, event.data.messageID, (assistant) => {
+            assistant.content = [...event.data.content]
           })
         if (!sync.pending(`session.message:${event.data.sessionID}`)) return
         result.session.message.invalidate(event.data.sessionID)
-        void result.session.message.sync(event.data.sessionID)
+        refresh(() => result.session.message.sync(event.data.sessionID))
         return
       }
       case "session.step.started":
@@ -811,65 +872,54 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.step.streamed":
-        message.update(event.data.sessionID, (draft, index) => {
-          const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
-          if (currentAssistant) currentAssistant.time.streamed = event.created
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.time.streamed = event.created
         })
         return
       case "session.step.ended": {
-        message.update(event.data.sessionID, (draft, index) => {
-          const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
-          if (!currentAssistant) return
-          currentAssistant.time.completed = event.created
-          currentAssistant.finish = event.data.finish
-          currentAssistant.rawFinish = event.data.rawFinish
-          currentAssistant.providerState = event.data.providerState
-          currentAssistant.cost = event.data.cost
-          currentAssistant.tokens = event.data.tokens
-          if (event.data.snapshot)
-            currentAssistant.snapshot = { ...currentAssistant.snapshot, end: event.data.snapshot }
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.time.completed = event.created
+          assistant.finish = event.data.finish
+          assistant.rawFinish = event.data.rawFinish
+          assistant.providerState = event.data.providerState
+          assistant.cost = event.data.cost
+          assistant.tokens = event.data.tokens
+          if (event.data.snapshot) assistant.snapshot = { ...assistant.snapshot, end: event.data.snapshot }
         })
         return
       }
       case "session.step.failed":
-        message.update(event.data.sessionID, (draft, index) => {
-          const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
-          if (!currentAssistant) return
-          currentAssistant.time.completed = event.created
-          currentAssistant.finish = event.data.finish ?? "error"
-          currentAssistant.rawFinish = event.data.rawFinish
-          currentAssistant.providerState = event.data.providerState
-          currentAssistant.error = event.data.error
-          currentAssistant.retry = undefined
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.time.completed = event.created
+          assistant.finish = event.data.finish ?? "error"
+          assistant.rawFinish = event.data.rawFinish
+          assistant.providerState = event.data.providerState
+          assistant.error = event.data.error
+          assistant.retry = undefined
           if (event.data.cost !== undefined && event.data.tokens !== undefined) {
-            currentAssistant.cost = event.data.cost
-            currentAssistant.tokens = event.data.tokens
+            assistant.cost = event.data.cost
+            assistant.tokens = event.data.tokens
           }
         })
         return
       case "session.text.started":
-        message.update(event.data.sessionID, (draft, index) => {
-          message.assistant(draft, index, event.data.assistantMessageID)?.content.push({
-            type: "text",
-            text: "",
-          })
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.content.push({ type: "text", text: "" })
         })
         return
       case "session.text.delta":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestText(message.assistant(draft, index, event.data.assistantMessageID))
-          if (match) match.text += event.data.delta
+        message.editText(event.data.sessionID, event.data.assistantMessageID, (text) => {
+          text.text += event.data.delta
         })
         return
       case "session.text.ended":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestText(message.assistant(draft, index, event.data.assistantMessageID))
-          if (match) match.text = event.data.text
+        message.editText(event.data.sessionID, event.data.assistantMessageID, (text) => {
+          text.text = event.data.text
         })
         return
       case "session.tool.input.started":
-        message.update(event.data.sessionID, (draft, index) => {
-          message.assistant(draft, index, event.data.assistantMessageID)?.content.push({
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.content.push({
             type: "tool",
             id: event.data.id,
             name: event.data.name,
@@ -879,86 +929,60 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.tool.input.delta":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (match?.state.status === "streaming") match.state.input += event.data.delta
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          if (tool.state.status === "streaming") tool.state.input += event.data.delta
         })
         return
       case "session.tool.input.ended":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (match?.state.status === "streaming") match.state.input = event.data.text
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          if (tool.state.status === "streaming") tool.state.input = event.data.text
         })
         return
       case "session.tool.called":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (!match) return
-          match.time.ran = event.created
-          match.executed = event.data.executed
-          match.providerState = event.data.state
-          match.state = { status: "running", input: event.data.input, metadata: {} }
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          tool.time.ran = event.created
+          tool.executed = event.data.executed
+          tool.providerState = event.data.state
+          tool.state = { status: "running", input: event.data.input, metadata: {} }
         })
         return
       case "session.tool.progress":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (match?.state.status !== "running") return
-          match.state.metadata = event.data.metadata
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          if (tool.state.status === "running") tool.state.metadata = event.data.metadata
         })
         return
       case "session.tool.success":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (match?.state.status !== "running") return
-          match.state = {
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          if (tool.state.status !== "running") return
+          tool.state = {
             status: "completed",
-            input: match.state.input,
+            input: tool.state.input,
             metadata: event.data.metadata,
             content: [...event.data.content],
           }
-          match.executed = event.data.executed || match.executed === true
-          match.providerResultState = event.data.resultState
-          match.time.completed = event.created
+          tool.executed = event.data.executed || tool.executed === true
+          tool.providerResultState = event.data.resultState
+          tool.time.completed = event.created
         })
         return
       case "session.tool.failed":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestTool(
-            message.assistant(draft, index, event.data.assistantMessageID),
-            event.data.id,
-          )
-          if (!match || (match.state.status !== "streaming" && match.state.status !== "running")) return
-          match.state = {
+        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          if (tool.state.status !== "streaming" && tool.state.status !== "running") return
+          tool.state = {
             status: "error",
             error: event.data.error,
-            input: typeof match.state.input === "string" ? {} : match.state.input,
+            input: typeof tool.state.input === "string" ? {} : tool.state.input,
             metadata: event.data.metadata,
             content: event.data.content,
           }
-          match.executed = event.data.executed || match.executed === true
-          match.providerResultState = event.data.resultState
-          match.time.completed = event.created
+          tool.executed = event.data.executed || tool.executed === true
+          tool.providerResultState = event.data.resultState
+          tool.time.completed = event.created
         })
         return
       case "session.reasoning.started":
-        message.update(event.data.sessionID, (draft, index) => {
-          message.assistant(draft, index, event.data.assistantMessageID)?.content.push({
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.content.push({
             type: "reasoning",
             text: "",
             state: event.data.state,
@@ -967,30 +991,20 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.reasoning.delta":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestReasoning(message.assistant(draft, index, event.data.assistantMessageID))
-          if (match) match.text += event.data.delta
+        message.editReasoning(event.data.sessionID, event.data.assistantMessageID, (reasoning) => {
+          reasoning.text += event.data.delta
         })
         return
       case "session.reasoning.ended":
-        message.update(event.data.sessionID, (draft, index) => {
-          const match = message.latestReasoning(message.assistant(draft, index, event.data.assistantMessageID))
-          if (match) {
-            match.text = event.data.text
-            match.time = { created: match.time?.created ?? event.created, completed: event.created }
-            if (event.data.state !== undefined) match.state = event.data.state
-          }
+        message.editReasoning(event.data.sessionID, event.data.assistantMessageID, (reasoning) => {
+          reasoning.text = event.data.text
+          reasoning.time = { created: reasoning.time?.created ?? event.created, completed: event.created }
+          if (event.data.state !== undefined) reasoning.state = event.data.state
         })
         return
       case "session.retry.scheduled":
-        message.update(event.data.sessionID, (draft, index) => {
-          const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
-          if (!currentAssistant) return
-          currentAssistant.retry = {
-            attempt: event.data.attempt,
-            at: event.data.at,
-            error: event.data.error,
-          }
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.retry = { attempt: event.data.attempt, at: event.data.at, error: event.data.error }
         })
         return
       case "session.execution.started":
@@ -998,16 +1012,14 @@ export function createData(config: CreateDataInput) {
         return
       case "session.compaction.started":
         if (event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
-        message.update(event.data.sessionID, (draft, index) => {
-          message.append(draft, index, {
-            id: event.data.inputID ?? messageIDFromEvent(event.id),
-            type: "compaction",
-            status: "running",
-            reason: event.data.reason,
-            summary: "",
-            recent: event.data.recent ?? "",
-            time: { created: event.created },
-          })
+        message.insert(event.data.sessionID, {
+          id: event.data.inputID ?? messageIDFromEvent(event.id),
+          type: "compaction",
+          status: "running",
+          reason: event.data.reason,
+          summary: "",
+          recent: event.data.recent ?? "",
+          time: { created: event.created },
         })
         if (event.data.inputID) compacting.get(event.data.sessionID)?.observed.add(event.data.inputID)
         return
@@ -1023,12 +1035,12 @@ export function createData(config: CreateDataInput) {
         // An event can overtake the first read; queue a revalidation when that read is still active.
         if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
         result.session.invalidate(event.data.sessionID)
-        void result.session.sync(event.data.sessionID)
+        refresh(() => result.session.sync(event.data.sessionID))
         return
       case "session.viewed":
         if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
         result.session.invalidate(event.data.sessionID)
-        void result.session.sync(event.data.sessionID)
+        refresh(() => result.session.sync(event.data.sessionID))
         return
       case "session.revert.staged":
         if (store.session.info[event.data.sessionID])
@@ -1042,11 +1054,12 @@ export function createData(config: CreateDataInput) {
         if (store.session.info[event.data.sessionID]) {
           setStore("session", "info", event.data.sessionID, "revert", undefined)
         }
+        // The projector also deletes inbox items enqueued at or after the boundary without a cancel event.
         setStore(
           "session",
-          "input",
+          "pending",
           event.data.sessionID,
-          (store.session.input[event.data.sessionID] ?? []).filter((id) => id < event.data.to),
+          (store.session.pending[event.data.sessionID] ?? []).filter((item) => item.id < event.data.to),
         )
         message.update(event.data.sessionID, (draft, index) => {
           const position = draft.findIndex((item) => item.id >= event.data.to)
@@ -1068,6 +1081,8 @@ export function createData(config: CreateDataInput) {
             Object.assign(current, {
               status: "completed",
               reason: event.data.reason,
+              model: event.data.model,
+              providerState: event.data.providerState,
               summary: event.data.text,
               recent: event.data.recent,
             })
@@ -1078,6 +1093,8 @@ export function createData(config: CreateDataInput) {
             type: "compaction",
             status: "completed",
             reason: event.data.reason,
+            model: event.data.model,
+            providerState: event.data.providerState,
             summary: event.data.text,
             recent: event.data.recent,
             time: { created: event.created },
@@ -1131,11 +1148,10 @@ export function createData(config: CreateDataInput) {
         const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
         if (event.type === "credential.updated") {
           result.location.integration.invalidate(location)
-          void result.location.integration.sync(location)
+          refresh(() => result.location.integration.sync(location))
           return
         }
         setStore("location", key, (data) => ({
-          ...data,
           integration: data?.integration?.map((integration) => {
             if (integration.id !== event.data.integrationID) return integration
             const active = integration.connections.find(
@@ -1150,7 +1166,7 @@ export function createData(config: CreateDataInput) {
         }))
         result.location.model.invalidate(location)
         result.location.provider.invalidate(location)
-        void Promise.all([result.location.model.sync(location), result.location.provider.sync(location)])
+        refresh(() => Promise.all([result.location.model.sync(location), result.location.provider.sync(location)]))
       })
       return
     }
@@ -1161,23 +1177,22 @@ export function createData(config: CreateDataInput) {
       case "catalog.updated":
         result.location.model.invalidate(location)
         result.location.provider.invalidate(location)
-        void Promise.all([result.location.model.sync(location), result.location.provider.sync(location)])
+        refresh(() => Promise.all([result.location.model.sync(location), result.location.provider.sync(location)]))
         break
       case "agent.updated":
         result.location.agent.invalidate(location)
-        void result.location.agent.sync(location)
+        refresh(() => result.location.agent.sync(location))
         break
       case "command.updated":
         result.location.command.invalidate(location)
-        void result.location.command.sync(location)
+        refresh(() => result.location.command.sync(location))
         break
       case "skill.updated":
         result.location.skill.invalidate(location)
-        void result.location.skill.sync(location)
+        refresh(() => result.location.skill.sync(location))
         break
       case "vcs.branch.updated":
         setStore("location", locationKey(location), (data) => ({
-          ...data,
           vcs: {
             branch: {
               ...data?.vcs?.branch,
@@ -1195,7 +1210,6 @@ export function createData(config: CreateDataInput) {
         break
       case "shell.created":
         setStore("location", locationKey(location), (data) => ({
-          ...data,
           shell: {
             ...data?.shell,
             [event.data.info.id]: { ...event.data.info, location },
@@ -1205,40 +1219,82 @@ export function createData(config: CreateDataInput) {
       case "shell.exited":
       case "shell.deleted":
         setStore("location", locationKey(location), (data) => ({
-          ...data,
           shell: Object.fromEntries(Object.entries(data?.shell ?? {}).filter(([id]) => id !== event.data.id)),
         }))
         break
       case "reference.updated":
-        result.location.reference.invalidate()
-        void result.location.reference.sync()
+        result.location.reference.invalidate(location)
+        refresh(() => result.location.reference.sync(location))
         break
       case "integration.updated":
         result.location.integration.invalidate(location)
         result.location.model.invalidate(location)
         result.location.provider.invalidate(location)
-        void Promise.all([
-          result.location.integration.sync(location),
-          result.location.model.sync(location),
-          result.location.provider.sync(location),
-        ])
+        refresh(() =>
+          Promise.all([
+            result.location.integration.sync(location),
+            result.location.model.sync(location),
+            result.location.provider.sync(location),
+          ]),
+        )
         break
       case "config.updated":
+        result.location.config.invalidate(location)
+        if (result.location.config.list(location) !== undefined || sync.has(`location.config:${locationKey(location)}`))
+          refresh(() => result.location.config.sync(location))
+        refresh(() => result.location.websearch.refresh(location))
+        break
       case "websearch.updated":
-        void result.location.websearch.refresh(location)
+        refresh(() => result.location.websearch.refresh(location))
         break
       // Authenticating an MCP integration reconnects its server, which emits mcp.status.changed,
-      // so the mcp list syncs here rather than off integration.updated.
+      // so the mcp list syncs here rather than off integration.updated. The server emits one event
+      // per MCP server as each settles, so a location booting nine servers emitted nine refetches.
       case "mcp.status.changed":
         result.location.mcp.server.invalidate(location)
-        void result.location.mcp.server.sync(location)
+        settle(`mcp.status:${locationKey(location)}`, () => result.location.mcp.server.sync(location))
         break
       case "mcp.resources.changed":
         result.location.mcp.resource.invalidate(location)
-        void result.location.mcp.resource.sync(location)
+        refresh(() => result.location.mcp.resource.sync(location))
         break
     }
   }
+
+  // A cached per-location catalog. `sync` loads once per invalidation, keyed by the
+  // effective location, and publishes under the server's canonical location; `alias`
+  // also publishes under the requested key when the two differ.
+  function locationResource<Field extends keyof LocationData>(
+    field: Field,
+    load: (location: ReturnType<typeof locationQuery>) => Promise<{ location: LocationRef; data: LocationData[Field] }>,
+    options?: { alias?: boolean },
+  ) {
+    const publish = (key: string, value: LocationData[Field]) => setStore("location", key, { [field]: value })
+    return {
+      list: (ref?: LocationRef) => store.location[locationKey(ref ?? defaultLocation())]?.[field],
+      sync: (ref?: LocationRef) => {
+        const location = ref ?? defaultLocation()
+        const id = locationKey(location)
+        return sync.run(`location.${field}:${id}`, async () => {
+          const response = await load(locationQuery(location))
+          const key = locationKey(response.location)
+          publish(key, response.data)
+          if (options?.alias && key !== id) publish(id, response.data)
+        })
+      },
+      invalidate: (ref?: LocationRef) => sync.invalidate(`location.${field}:${locationKey(ref ?? defaultLocation())}`),
+    }
+  }
+
+  const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
+  const shells = locationResource("shell", async (location) => {
+    const response = await api().shell.list({ location })
+    const ref = { directory: response.location.directory, workspaceID: response.location.workspaceID }
+    return {
+      location: response.location,
+      data: Object.fromEntries(response.data.map((info) => [info.id, { ...info, location: ref }])),
+    }
+  })
 
   const result = {
     on: config.event.on,
@@ -1254,9 +1310,11 @@ export function createData(config: CreateDataInput) {
         return creating.has(sessionID)
       },
       remember(info: SessionInfo) {
-        setStore("session", "info", info.id, reconcile(info))
-        sync.complete(`session:${info.id}`)
-        registerSession(info.id)
+        batch(() => {
+          setStore("session", "info", info.id, reconcile(info))
+          sync.complete(`session:${info.id}`)
+          registerSession(info.id)
+        })
       },
       setStatus(sessionID: string, status: DataSessionStatus) {
         setSessionActive(sessionID, status)
@@ -1266,6 +1324,13 @@ export function createData(config: CreateDataInput) {
       },
       family(sessionID: string) {
         return store.session.family[resolveRoot(sessionID)] ?? []
+      },
+      /** Clear heavy cached data for the root and all known descendants. */
+      evict(sessionID: string) {
+        const root = resolveRoot(sessionID)
+        batch(() => {
+          for (const id of new Set([root, sessionID, ...(store.session.family[root] ?? [])])) evictSession(id)
+        })
       },
       cost(sessionID: string) {
         const session = store.session.info[sessionID]
@@ -1279,12 +1344,17 @@ export function createData(config: CreateDataInput) {
       status(sessionID: string) {
         return store.session.active[sessionID] ?? "idle"
       },
+      // Inputs are the pending user and synthetic items; compactions are control items.
       input: {
         list(sessionID: string) {
-          return store.session.input[sessionID] ?? []
+          return (store.session.pending[sessionID] ?? []).flatMap((item) =>
+            item.type === "compaction" ? [] : [item.id],
+          )
         },
         has(sessionID: string, inboxID: string) {
-          return store.session.input[sessionID]?.includes(inboxID) ?? false
+          return (
+            store.session.pending[sessionID]?.some((item) => item.id === inboxID && item.type !== "compaction") ?? false
+          )
         },
       },
       pending: {
@@ -1308,12 +1378,6 @@ export function createData(config: CreateDataInput) {
             const merged = inflight.length === 0 ? pending : [...pending, ...inflight]
             batch(() => {
               setStore("session", "pending", sessionID, reconcile(merged))
-              setStore(
-                "session",
-                "input",
-                sessionID,
-                reconcile(merged.filter((item) => item.type !== "compaction").map((item) => item.id)),
-              )
               merged.forEach(materializeInboxMessage)
             })
           })
@@ -1478,17 +1542,19 @@ export function createData(config: CreateDataInput) {
               : [],
           ])
           const sessions = [info, ...children]
-          setStore(
-            "session",
-            "info",
-            produce((draft) => {
-              for (const session of sessions) draft[session.id] = session
-            }),
-          )
-          for (const session of sessions) {
-            sync.complete(`session:${session.id}`)
-            registerSession(session.id)
-          }
+          batch(() => {
+            setStore(
+              "session",
+              "info",
+              produce((draft) => {
+                for (const session of sessions) draft[session.id] = session
+              }),
+            )
+            for (const session of sessions) {
+              sync.complete(`session:${session.id}`)
+              registerSession(session.id)
+            }
+          })
         })
       },
       invalidate(sessionID: string) {
@@ -1696,7 +1762,7 @@ export function createData(config: CreateDataInput) {
     },
     shell: {
       list(location?: LocationRef) {
-        return Object.values(store.location[locationKey(location ?? defaultLocation())]?.shell ?? {})
+        return Object.values(shells.list(location) ?? {})
       },
       listBySession(sessionID: string) {
         return Object.values(store.location)
@@ -1708,31 +1774,8 @@ export function createData(config: CreateDataInput) {
           .map((data) => data.shell?.[id])
           .find((shell) => shell !== undefined)
       },
-      sync(ref?: LocationRef) {
-        const id = locationKey(ref ?? defaultLocation())
-        return sync.run(`location.shell:${id}`, async () => {
-          const response = await api().shell.list({ location: locationQuery(ref ?? defaultLocation()) })
-          const key = locationKey(response.location)
-          setStore("location", key, {
-            ...store.location[key],
-            shell: Object.fromEntries(
-              response.data.map((info) => [
-                info.id,
-                {
-                  ...info,
-                  location: {
-                    directory: response.location.directory,
-                    workspaceID: response.location.workspaceID,
-                  },
-                },
-              ]),
-            ),
-          })
-        })
-      },
-      invalidate(ref?: LocationRef) {
-        sync.invalidate(`location.shell:${locationKey(ref ?? defaultLocation())}`)
-      },
+      sync: shells.sync,
+      invalidate: shells.invalidate,
     },
     location: {
       info(ref?: LocationRef) {
@@ -1777,6 +1820,7 @@ export function createData(config: CreateDataInput) {
         result.location.vcs.invalidate(location)
         result.location.agent.invalidate(location)
         result.location.command.invalidate(location)
+        result.location.config.invalidate(location)
         result.location.integration.invalidate(location)
         result.location.mcp.server.invalidate(location)
         result.location.mcp.resource.invalidate(location)
@@ -1787,162 +1831,24 @@ export function createData(config: CreateDataInput) {
         result.shell.invalidate(location)
         result.session.form.invalidate("global", location)
       },
-      vcs: {
-        info(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.vcs
-        },
-        sync(ref?: LocationRef) {
-          const location = ref ?? defaultLocation()
-          return sync.run(`location.vcs:${locationKey(location)}`, async () => {
-            const response = await api().vcs.get({ location: locationQuery(location) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], vcs: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.vcs:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
-      agent: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.agent
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.agent:${id}`, async () => {
-            const response = await api().agent.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], agent: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.agent:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
-      command: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.command
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.command:${id}`, async () => {
-            const response = await api().command.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], command: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.command:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
-      integration: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.integration
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.integration:${id}`, async () => {
-            const response = await api().integration.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], integration: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.integration:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
+      vcs: { info: vcs.list, sync: vcs.sync, invalidate: vcs.invalidate },
+      agent: locationResource("agent", (location) => api().agent.list({ location })),
+      command: locationResource("command", (location) => api().command.list({ location })),
+      config: locationResource("config", async (location) => ({
+        location: { directory: location.directory, workspaceID: location.workspace },
+        data: await api().config.get({ location }),
+      })),
+      integration: locationResource("integration", (location) => api().integration.list({ location })),
       mcp: {
-        server: {
-          list(location?: LocationRef) {
-            return store.location[locationKey(location ?? defaultLocation())]?.mcp?.server
-          },
-          sync(ref?: LocationRef) {
-            const id = locationKey(ref ?? defaultLocation())
-            return sync.run(`location.mcp.server:${id}`, async () => {
-              const response = await api().mcp.list({ location: locationQuery(ref ?? defaultLocation()) })
-              const key = locationKey(response.location)
-              setStore("location", key, {
-                ...store.location[key],
-                mcp: { ...store.location[key]?.mcp, server: response.data },
-              })
-            })
-          },
-          invalidate(ref?: LocationRef) {
-            sync.invalidate(`location.mcp.server:${locationKey(ref ?? defaultLocation())}`)
-          },
-        },
-        resource: {
-          list(location?: LocationRef) {
-            return store.location[locationKey(location ?? defaultLocation())]?.mcp?.resource
-          },
-          sync(ref?: LocationRef) {
-            const id = locationKey(ref ?? defaultLocation())
-            return sync.run(`location.mcp.resource:${id}`, async () => {
-              const response = await api().mcp.resource.catalog({
-                location: locationQuery(ref ?? defaultLocation()),
-              })
-              const key = locationKey(response.location)
-              setStore("location", key, {
-                ...store.location[key],
-                mcp: { ...store.location[key]?.mcp, resource: response.data.resources },
-              })
-            })
-          },
-          invalidate(ref?: LocationRef) {
-            sync.invalidate(`location.mcp.resource:${locationKey(ref ?? defaultLocation())}`)
-          },
-        },
+        server: locationResource("mcpServer", (location) => api().mcp.list({ location })),
+        resource: locationResource("mcpResource", async (location) => {
+          const response = await api().mcp.resource.catalog({ location })
+          return { location: response.location, data: response.data.resources }
+        }),
       },
-      model: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.model
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.model:${id}`, async () => {
-            const response = await api().model.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], model: response.data })
-            if (key !== id) setStore("location", id, { ...store.location[id], model: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.model:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
-      provider: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.provider
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.provider:${id}`, async () => {
-            const response = await api().provider.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], provider: response.data })
-            if (key !== id) setStore("location", id, { ...store.location[id], provider: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.provider:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
-      reference: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.reference
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.reference:${id}`, async () => {
-            const response = await api().reference.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], reference: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.reference:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
+      model: locationResource("model", (location) => api().model.list({ location }), { alias: true }),
+      provider: locationResource("provider", (location) => api().provider.list({ location }), { alias: true }),
+      reference: locationResource("reference", (location) => api().reference.list({ location })),
       websearch: {
         list(location?: LocationRef) {
           return store.location[locationKey(location ?? defaultLocation())]?.websearch
@@ -1951,28 +1857,10 @@ export function createData(config: CreateDataInput) {
           const input = { location: locationQuery(ref ?? defaultLocation()) }
           const providers = await api().websearch.providers(input)
           const key = locationKey(providers.location)
-          setStore("location", key, {
-            ...store.location[key],
-            websearch: providers.data,
-          })
+          setStore("location", key, { websearch: providers.data })
         },
       },
-      skill: {
-        list(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.skill
-        },
-        sync(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.skill:${id}`, async () => {
-            const response = await api().skill.list({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], skill: response.data })
-          })
-        },
-        invalidate(ref?: LocationRef) {
-          sync.invalidate(`location.skill:${locationKey(ref ?? defaultLocation())}`)
-        },
-      },
+      skill: locationResource("skill", (location) => api().skill.list({ location })),
     },
   }
 

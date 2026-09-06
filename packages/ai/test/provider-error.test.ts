@@ -81,6 +81,46 @@ describe("provider error classification", () => {
     ).toEqual(["ProviderInternal", "ProviderInternal", "ProviderInternal"])
   })
 
+  test("classifies retryable server messages as provider internal", () => {
+    const message =
+      "The model is currently at capacity due to high demand. Please try again in a few minutes, or use a higher service tier for priority processing."
+
+    expect(
+      [
+        message,
+        "Try again",
+        "Please retry your request shortly.",
+        "You can retry the request.",
+        "Try your request again.",
+        "The service is temporarily at capacity.",
+        "The model is overloaded.",
+        "Service unavailable",
+        "Internal server error",
+        "The server is busy.",
+        "Provider returned error",
+        "Provider returned an error",
+        "ResourceExhausted",
+        "Upstream connection failed",
+        "Exceeded request buffer limit while retrying upstream",
+      ].map((message) => classifyProviderFailure({ message })._tag),
+    ).toEqual(Array(15).fill("ProviderInternal"))
+    expect(
+      classifyProviderFailure({ message: "Provider request failed", rawBody: "Please try again later." })._tag,
+    ).toBe("ProviderInternal")
+  })
+
+  test("prioritizes specific failures over retryable server text", () => {
+    expect(
+      [
+        classifyProviderFailure({ message: "Invalid credentials, try again", status: 401 }),
+        classifyProviderFailure({ message: "Quota exceeded, try again", status: 429 }),
+        classifyProviderFailure({ message: "Rate limit exceeded, try again" }),
+        classifyProviderFailure({ message: "Upstream request failed: validation failed", status: 400 }),
+        classifyProviderFailure({ message: "Try again", status: 200 }),
+      ].map((failure) => failure._tag),
+    ).toEqual(["Authentication", "QuotaExceeded", "RateLimit", "InvalidRequest", "ProviderInternal"])
+  })
+
   test("classifies transient client statuses as provider internal", () => {
     expect([408, 409].map((status) => classifyProviderFailure({ message: `HTTP ${status}`, status })._tag)).toEqual([
       "ProviderInternal",
@@ -111,7 +151,6 @@ describe("provider error classification", () => {
     expect(classifyProviderFailure({ message: '{"type":"error","error":{"code":123}}' })._tag).toBe("UnknownProvider")
     expect(classifyProviderFailure({ message: "not-json" })._tag).toBe("UnknownProvider")
     expect(classifyProviderFailure({ message: "network error" })._tag).toBe("UnknownProvider")
-    expect(classifyProviderFailure({ message: "Provider returned error" })._tag).toBe("UnknownProvider")
   })
 })
 

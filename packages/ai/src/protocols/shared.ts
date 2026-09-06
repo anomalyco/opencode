@@ -6,12 +6,17 @@ import { Headers, HttpClientRequest, HttpClientResponse } from "effect/unstable/
 import {
   InvalidProviderOutputError,
   InvalidRequestError,
+  UnsupportedOperationError,
   AIError,
   HttpContext,
+  LLMRequest,
+  Message,
+  ToolDefinition,
   type ContentPart,
-  type LLMRequest,
   type MediaPart,
+  type ProviderID,
   type TextPart,
+  type ToolEntry,
   type ToolResultPart,
 } from "../schema/index.js"
 import { isRecord } from "../utils/record.js"
@@ -44,6 +49,7 @@ export const promptCacheKey = (request: LLMRequest): string | undefined => {
 export interface ToolAccumulator {
   readonly id: string
   readonly name: string
+  readonly namespace?: string
   readonly input: string
 }
 
@@ -253,6 +259,61 @@ export const invalidRequest = (message: string, cause?: unknown) =>
   new AIError({
     reason: new InvalidRequestError({ message, cause }),
   })
+
+/**
+ * Canonical constructor for operations the selected route does not implement.
+ * Prefer this over `invalidRequest` when the failure is a missing route
+ * capability rather than a malformed caller input, so consumers can branch on
+ * `reason._tag` plus `reason.operation` instead of matching message text.
+ */
+export const unsupportedOperation = (input: {
+  readonly operation: string
+  readonly message: string
+  readonly provider?: ProviderID
+  readonly route?: string
+  readonly cause?: unknown
+}) =>
+  new AIError({
+    reason: new UnsupportedOperationError({
+      operation: input.operation,
+      message: input.message,
+      provider: input.provider,
+      route: input.route,
+      cause: input.cause,
+    }),
+  })
+
+/**
+ * Lower namespaces to flat definitions for protocols without a native
+ * namespace construct. Leaf names join their namespace path with `_` because
+ * `.` is not broadly accepted in provider tool names.
+ */
+export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArray<string> = []) => {
+  const flat = tools.flatMap((tool): ReadonlyArray<ToolDefinition> => {
+    if (tool.type === "namespace") return flattenTools(tool.tools, [...path, tool.name])
+    if (path.length === 0) return [tool]
+    return [new ToolDefinition({ ...tool, name: [...path, tool.name].join("_") })]
+  })
+  return [...new Map(flat.map((tool) => [tool.name, tool])).values()]
+}
+
+export const flattenToolRequest = (request: LLMRequest) => {
+  const messages = request.messages.map((message) => {
+    const content = message.content.map((part) => {
+      if ((part.type !== "tool-call" && part.type !== "tool-result") || part.namespace === undefined) return part
+      return { ...part, name: `${part.namespace}_${part.name}`, namespace: undefined }
+    })
+    return content.every((part, index) => part === message.content[index])
+      ? message
+      : new Message({ ...message, content })
+  })
+  return {
+    tools: flattenTools(request.tools),
+    request: messages.every((message, index) => message === request.messages[index])
+      ? request
+      : LLMRequest.update(request, { messages }),
+  }
+}
 
 export const imageResponse = Effect.fn("ProviderShared.imageResponse")(function* (
   route: string,

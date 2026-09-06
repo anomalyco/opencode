@@ -112,12 +112,12 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
       })
     if (url.pathname === "/api/project/current") return json({ id: "proj_test", directory: worktree })
     if (url.pathname === "/api/project") return json([])
-    if (url.pathname === "/api/worktree/proj_test") {
+    if (url.pathname === "/api/worktree") {
       if (request.method === "GET") return json([{ directory: worktree }])
       if (request.method === "POST") return json({ directory: `${worktree}/created` })
       return new Response(null, { status: 204 })
     }
-    if (url.pathname === "/api/worktree/proj_test/refresh") return new Response(null, { status: 204 })
+    if (url.pathname === "/api/worktree/refresh") return new Response(null, { status: 204 })
     if (url.pathname === "/api/shell")
       return json({
         location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
@@ -134,6 +134,7 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
         data: { resources: [], templates: [] },
       })
     if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
+    if (url.pathname === "/api/config") return json([])
     if (url.pathname === "/api/session/active") return json({ data: {} })
     if (request.method === "POST" && /^\/api\/session\/[^/]+\/model$/.test(url.pathname))
       return new Response(null, { status: 204 })
@@ -145,6 +146,7 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
     if (url.pathname === "/api/form/request")
       return json({ location: { directory, project: { id: "proj_test", directory: worktree } }, data: [] })
     if (/^\/api\/session\/[^/]+\/form$/.test(url.pathname)) return json({ data: [] })
+    if (/^\/api\/experimental\/session\/[^/]+\/terminal$/.test(url.pathname)) return json({ data: [] })
     if (
       ["/api/agent", "/api/model", "/api/provider", "/api/integration", "/api/command", "/api/skill"].includes(
         url.pathname,

@@ -2,8 +2,8 @@ export * as SessionTitle from "./title.js"
 
 import { isDeepStrictEqual } from "node:util"
 import { LLMClient, LLMEvent, Message, SystemPart } from "@opencode-ai/ai"
+import type { Agent } from "@opencode-ai/schema/agent"
 import { Context, DateTime, Effect, Layer, Stream } from "effect"
-import type { Agent } from "../agent.js"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -64,6 +64,7 @@ export const layer = Layer.effect(
           : Effect.void,
       )
       const prepared = yield* context.prepare({
+        kind: "title",
         scope: { session: input.session, agentID: input.agent.id, model: input.model },
         transcript: {
           system: input.agent.system ? [SystemPart.make(input.agent.system)] : [],

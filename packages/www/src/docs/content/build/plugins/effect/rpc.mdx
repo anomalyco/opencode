@@ -1,0 +1,169 @@
+---
+title: "RPC"
+---
+
+Effect plugins can expose methods and events that return typed Effects and
+Streams.
+
+## Define
+
+Use `Rpc.define` with Effect Schema to define the RPC.
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode-ai/plugin/rpc"
+import { Schema } from "effect"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: Schema.Struct({ query: Schema.String }),
+      output: Schema.Struct({ text: Schema.String }),
+      errors: {
+        not_found: Schema.Struct({ query: Schema.String }),
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+    },
+  },
+})
+```
+
+### Validation
+
+Effect Schema validates values and infers their TypeScript types.
+
+```ts
+input: Schema.Struct({ query: Schema.String })
+```
+
+JSON Schema and Standard Schema are also supported.
+
+### Input and output
+
+Use `input` for the method argument and `output` for its return value. Leave
+either one out when there is no value.
+
+```ts
+search: {
+  input: Schema.Struct({ query: Schema.String }),
+  output: Schema.Struct({ text: Schema.String }),
+}
+```
+
+### Errors
+
+Add expected failures to `errors`. Each key becomes the error's `type`.
+
+```ts
+errors: {
+  not_found: Schema.Struct({ query: Schema.String }),
+}
+```
+
+### Events
+
+Add events to the top-level `events` map. Event data must be an object.
+
+```ts
+events: {
+  updated: {
+    schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+  },
+}
+```
+
+## Implement
+
+Register the implementation from the plugin Effect:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode-ai/plugin/effect"
+import { Effect } from "effect"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-effect-plugin",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const registration = yield* ctx.rpc.register(Acme, {
+        search: ({ query }, context) =>
+          findText(query).pipe(
+            Effect.flatMap((text) =>
+              text
+                ? Effect.succeed({ text })
+                : Effect.fail(context.error("not_found", "Result not found", { query })),
+            ),
+          ),
+      })
+
+      const acme = ctx.rpc(Acme)
+      const result = yield* acme.search({ query: "hello" })
+
+      yield* registration.events.emit("updated", { itemID: "item-1", text: result.text })
+    }).pipe(Effect.orDie),
+})
+```
+
+The error map becomes the error type of each method Effect. Use
+`context.error(...)` to create a declared error.
+
+## Call
+
+Once the RPC is registered, it can be called over HTTP or from another plugin.
+
+### HTTP
+
+Create the Effect client, then create the RPC subclient:
+
+```ts
+import { OpenCode } from "@opencode-ai/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const acme = client.rpc(Acme)
+  return yield* acme.search({ query: "hello" })
+})
+
+const result = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+### Plugin
+
+Another Effect plugin can create a local subclient from its context:
+
+```ts
+import { Effect } from "effect"
+
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const acme = ctx.rpc(Acme)
+    const result = yield* acme.search({ query: "hello" })
+    yield* Effect.logInfo(result.text)
+  }).pipe(Effect.orDie)
+```
+
+### Subscribe
+
+RPC events are Streams. Subscribe by event name and run the Stream in a scoped
+fiber:
+
+```ts
+import { Effect, Stream } from "effect"
+
+const acme = ctx.rpc(Acme)
+
+yield *
+  acme.events.subscribe("updated").pipe(
+    Stream.runForEach((event) => Effect.logInfo(event.data.text)),
+    Effect.forkScoped,
+  )
+```
+
+Subscriptions are live only and close when Stream consumption stops.

@@ -47,6 +47,7 @@ export const Request = Schema.Struct({
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
+  canonical: ID.pipe(optional),
   integrationID: Integration.ID.pipe(optional),
   name: Schema.String,
   activation: Activation,

@@ -4,7 +4,7 @@ import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 import { Credential } from "@opencode-ai/schema/credential"
 import { Integration } from "@opencode-ai/core/integration"
 import { McpOAuth } from "@opencode-ai/core/mcp/oauth"
-import { Effect } from "effect"
+import { Effect, Logger } from "effect"
 import { it } from "./lib/effect"
 
 const authServer = Bun.serve({ port: 0, fetch: () => new Response(null, { status: 404 }) })
@@ -29,6 +29,32 @@ const authorize = (redirect_uri?: string) =>
   )
 
 describe("MCP OAuth", () => {
+  it.live("logs OAuth rejection codes without consuming the response or logging credentials", () =>
+    Effect.gen(function* () {
+      const body = { error: "invalid_grant", error_description: "rejected private-refresh-token" }
+      const server = yield* Effect.acquireRelease(
+        Effect.sync(() => Bun.serve({ port: 0, fetch: () => Response.json(body, { status: 400 }) })),
+        (server) => Effect.promise(() => server.stop(true)),
+      )
+      const logged: unknown[] = []
+      const response = yield* Effect.gen(function* () {
+        const request = yield* McpOAuth.loggedFetch({ server: "test" })
+        return yield* Effect.promise(() =>
+          request(server.url, {
+            method: "POST",
+            body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: "private-refresh-token" }),
+          }),
+        )
+      }).pipe(
+        Effect.provideService(Logger.CurrentLoggers, new Set([Logger.make((entry) => logged.push(entry.message))])),
+      )
+      expect(response.status).toBe(400)
+      expect(yield* Effect.promise(() => response.json())).toEqual(body)
+      expect(JSON.stringify(logged)).toContain("invalid_grant")
+      expect(JSON.stringify(logged)).not.toContain("private-refresh-token")
+    }),
+  )
+
   test("retains issuer stamps for configured clients without overriding changed configuration", async () => {
     const store = McpOAuth.memoryStore()
     const provider = McpOAuth.provider({
@@ -216,7 +242,7 @@ describe("MCP OAuth", () => {
   })
 
   test("rejects an invalid redirect URL", async () => {
-    await expect(authorize("not a URL")).rejects.toThrow("cannot be parsed as a URL")
+    await expect(authorize("not a URL")).rejects.toThrow(TypeError)
   })
   ;[
     { name: "accepts a matching issuer", iss: "matching", supported: true, state: true },

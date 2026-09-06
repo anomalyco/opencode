@@ -9,7 +9,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { Model } from "@opencode-ai/core/model"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
@@ -23,6 +23,7 @@ import { Money } from "@opencode-ai/schema/money"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
 import { tempGlobalLayer } from "./fixture/global"
+import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -30,9 +31,10 @@ const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, Session.node, LocationServiceMap.node]),
     [
-      [Bus.node, Bus.configured({ persist: true })],
-      [Global.node, tempGlobalLayer],
-      [SessionExecution.node, SessionExecution.noopLayer],
+      Bus.node.replace(Bus.configured({ persist: true })),
+      Global.node.replace(tempGlobalLayer),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
+      offlineModels,
     ],
   ),
 )
@@ -62,8 +64,8 @@ describe("Session.revert files", () => {
         yield* SessionInbox.promote(database.db, bus, created.id, "steer")
 
         yield* Effect.gen(function* () {
-          const plugins = yield* PluginSupervisor.Service
-          yield* plugins.flush
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
           const snapshot = yield* Snapshot.Service
           const before = yield* snapshot.capture()
           if (!before) throw new Error("Initial snapshot missing")

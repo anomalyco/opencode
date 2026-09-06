@@ -292,20 +292,11 @@ const layer = Layer.effect(
           pending.delete(input.requestID)
           if (input.reply !== "always" || !existing.request.save?.length) return
 
-          const rememberedRules = yield* savedRules()
           for (const [id, item] of pending) {
-            const rules = yield* configured(item.request.sessionID, item.agent).pipe(
+            const result = yield* evaluateInput({ ...item.request, agent: item.agent }).pipe(
               Effect.catchTag("Session.NotFoundError", () => Effect.undefined),
             )
-            if (!rules) continue
-            if (denied(item.request, rules)) continue
-            const effective = [...rules, ...rememberedRules]
-            if (
-              !item.request.resources.every(
-                (resource) => evaluate(item.request.action, resource, effective).effect === "allow",
-              )
-            )
-              continue
+            if (result?.effect !== "allow") continue
             yield* bus.publish(Permission.Event.Replied, {
               sessionID: item.request.sessionID,
               requestID: item.request.id,

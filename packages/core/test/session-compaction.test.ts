@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LLMEvent, LanguageModel, SystemPart, type LLMRequest } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, LanguageModel, ToolDefinition, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -22,11 +22,11 @@ import { App } from "@opencode-ai/core/app"
 import { Agent } from "@opencode-ai/core/agent"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
-import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Money } from "@opencode-ai/schema/money"
 import { Skill } from "@opencode-ai/schema/skill"
+import { Shell } from "@opencode-ai/schema/shell"
 import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -51,7 +51,7 @@ const client = Layer.mock(LLMClient.Service)({
   stream: (request: LLMRequest) => {
     requests.push(request)
     return Stream.make(
-      LLMEvent.textDelta({ id: "summary", text: "manual summary" }),
+      LLMEvent.textDelta({ id: "summary", text: "## Objective\n- manual summary" }),
       LLMEvent.stepFinish({
         index: 0,
         reason: { normalized: "stop" },
@@ -83,19 +83,15 @@ const it = testEffect(
       Bus.node,
       SessionProjector.node,
       SessionStore.node,
-      PluginHooks.node,
       SessionCompaction.node,
       SessionModelRequest.node,
     ]),
-    [
-      [Bus.node, Bus.configured({ persist: true })],
-      [llmClient, client],
-    ],
+    [Bus.node.replace(Bus.configured({ persist: true })), llmClient.replace(client)],
   ),
 )
 
 test("compaction prompt preserves detailed work state and relevant files", () => {
-  const prompt = SessionCompaction.buildPrompt({ context: ["conversation history"] })
+  const prompt = SessionCompaction.buildPrompt(false)
 
   expect(prompt).toContain("## Work State\n### Completed")
   expect(prompt).toContain("### Active")
@@ -127,32 +123,27 @@ test("compaction truncation does not split surrogate pairs", () => {
 })
 
 test("compaction prompt requires the checkpoint headings in order", () => {
-  const prompt = SessionCompaction.buildPrompt({ context: ["Conversation history"] })
+  const prompt = SessionCompaction.buildPrompt(false)
   expect(prompt.match(/^#{2,3} .+$/gm)).toEqual([
     "## Objective",
-    "## Important Details",
+    "## Requirements",
+    "## Decisions",
     "## Work State",
     "### Completed",
     "### Active",
     "### Blocked",
     "## Next Move",
     "## Relevant Files",
+    "## Additional Context",
   ])
-  expect(prompt).toContain("one or two brief sentences")
-  expect(prompt).toContain("constraints/preferences, decisions and why")
-  expect(prompt).toContain("immediate concrete action")
-  expect(prompt).toContain("next action if known")
-  expect(prompt).toContain("Keep every section, even when empty.")
 })
 
-test("compaction points an existing summary to the following history", () => {
-  const prompt = SessionCompaction.buildPrompt({ previousSummary: "Previous summary", context: ["Recent history"] })
-
-  expect(prompt.split("\n", 1)[0]).toBe("Update the anchored summary below using the conversation history below.")
-  expect(prompt).not.toContain("conversation history above")
+test("compaction prompts prohibit task execution", () => {
+  for (const update of [false, true])
+    expect(SessionCompaction.buildPrompt(update)).toContain("Do not continue the task or call tools")
 })
 
-it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
+it.effect("auto compaction estimates current content against the buffered prompt ceiling", () =>
   Effect.gen(function* () {
     const compaction = yield* SessionCompaction.Service
     const session = Session.Info.make({
@@ -163,25 +154,45 @@ it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
       time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
       location: Location.Ref.make({ directory: AbsolutePath.make("/tmp") }),
     })
-    const input = (tokens: number, limit: { context: number; input?: number; output: number }) => ({
-      session,
-      resolved: SessionRunnerModel.resolved(model, {
-        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+    const input = (tokens: number, limit: { context: number; input?: number; output: number }) => {
+      const resolved = SessionRunnerModel.resolved(model, {
+        capabilities: { tools: true, input: ["text", "image", "pdf"], output: ["text"] },
         cost: [],
         limit,
-      }),
-      messages: [
+      })
+      const messages = [
         Schema.decodeUnknownSync(SessionMessage.Assistant)({
           id: SessionMessage.ID.make("msg_assistant"),
           type: "assistant",
           agent: Agent.defaultID,
           model: { id: "test-model", providerID: "test-provider" },
-          content: [],
+          content: [{ type: "text", text: "Done" }],
           tokens: { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 0, completed: 0 },
         }),
-      ],
-    })
+      ]
+      return {
+        session,
+        resolved,
+        messages,
+        context: {
+          session,
+          model: resolved,
+          messages,
+          agent: {
+            id: Agent.defaultID,
+            info: { ...Agent.Info.default(Agent.defaultID), system: "You are a helpful assistant." },
+          },
+          initial: "Project instructions.",
+          tools: {
+            definitions: [
+              ToolDefinition.make({ name: "read", description: "Read files", inputSchema: { type: "object" } }),
+            ],
+            execute: () => Effect.die("unused"),
+          },
+        },
+      }
+    }
 
     const inputLimited = { context: 400_000, input: 272_000, output: 128_000 }
     expect(compaction.required(input(251_999, inputLimited))).toBe(false)
@@ -194,6 +205,69 @@ it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
     const outputLimited = { context: 100_000, output: 30_000 }
     expect(compaction.required(input(69_999, outputLimited))).toBe(false)
     expect(compaction.required(input(70_000, outputLimited))).toBe(true)
+
+    const assistant = input(79_000, contextLimited).messages[0]
+    const tool = SessionMessage.AssistantTool.make({
+      type: "tool",
+      id: "call_read",
+      name: "read",
+      state: { status: "completed", input: {}, content: [{ type: "text", text: "x".repeat(4_000) }] },
+      time: { created: DateTime.makeUnsafe(0) },
+    })
+    const grown = { ...input(79_000, contextLimited), messages: [{ ...assistant, content: [tool] }] }
+    expect(SessionCompaction.estimateTokens(grown)).toBe(80_000)
+    expect(compaction.required(grown)).toBe(true)
+
+    const interrupted = { ...assistant, id: SessionMessage.ID.create(), tokens: undefined }
+    expect(SessionCompaction.estimateTokens({ ...grown, messages: [...grown.messages, interrupted] })).toBe(80_001)
+    // Without provider usage, include 20 tokens for the system prompt, instructions, and tool definition.
+    expect(SessionCompaction.estimateTokens({ ...grown, messages: [interrupted] })).toBe(21)
+    expect(
+      SessionCompaction.estimateTokens({
+        ...grown,
+        messages: [{ ...interrupted, tokens: input(0, contextLimited).messages[0].tokens }],
+      }),
+    ).toBe(21)
+
+    const media = [
+      { type: "file", mime: "image/png", uri: `data:image/png;base64,${"a".repeat(100_000)}` },
+      { type: "file", mime: "application/pdf", uri: `data:application/pdf;base64,${"a".repeat(100_000)}` },
+    ] as const
+    const messages = [
+      { ...assistant, content: [{ ...tool, state: { status: "completed" as const, input: {}, content: media } }] },
+    ]
+    expect(SessionCompaction.estimateTokens({ ...grown, messages })).toBe(82_500)
+    const user = Schema.decodeUnknownSync(SessionMessage.User)({
+      id: SessionMessage.ID.create(),
+      type: "user",
+      text: "",
+      files: media.map((file) => ({ mime: file.mime, data: "a".repeat(100_000), source: { type: "inline" } })),
+      time: { created: 0 },
+    })
+    expect(SessionCompaction.estimateTokens({ ...grown, messages: [...messages, user] })).toBe(86_000)
+    for (const [modalities, tokens, fallback] of [
+      [["text", "image"], 82_040, 1_520],
+      [["text", "pdf"], 83_042, 2_021],
+      [["text"], 79_082, 41],
+    ] as const) {
+      const selected = {
+        ...grown,
+        resolved: { ...grown.resolved, capabilities: { ...grown.resolved.capabilities, input: modalities } },
+      }
+      expect(SessionCompaction.estimateTokens({ ...selected, messages: [...messages, user] })).toBe(tokens)
+      expect(SessionCompaction.estimateTokens({ ...selected, messages: [user] })).toBe(fallback + 20)
+    }
+
+    const checkpoint = Schema.decodeUnknownSync(SessionMessage.CompactionCompleted)({
+      id: SessionMessage.ID.create(),
+      type: "compaction",
+      status: "completed",
+      reason: "auto",
+      summary: "x".repeat(400_000),
+      recent: "",
+      time: { created: 0, completed: 0 },
+    })
+    expect(compaction.required({ ...grown, messages: [checkpoint] })).toBe(false)
   }),
 )
 
@@ -226,6 +300,16 @@ const insertSession = (id: Session.ID, overrides?: Partial<typeof SessionTable.$
       .pipe(Effect.flatMap((session) => (session ? Effect.succeed(session) : Effect.die(`session missing: ${id}`))))
   })
 
+const loaded = (session: Session.Info, messages: readonly SessionMessage.Info[]) => ({
+  session,
+  messages,
+  model: resolved,
+  agent: { id: Agent.defaultID, info: Agent.Info.default(Agent.defaultID) },
+  initial: "Session instructions",
+  instructionUpdate: "",
+  tools: { definitions: [], execute: () => Effect.die("Compaction must not execute tools") },
+})
+
 it.effect("manual compaction summarizes short context instead of no-op", () =>
   Effect.gen(function* () {
     requests = []
@@ -250,6 +334,25 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     }
     const session = yield* insertSession(sessionID, { parent_id: parentID })
     const modelRequests = yield* SessionModelRequest.Service
+    const messages = [
+      userMessage,
+      SessionMessage.Shell.make({
+        id: SessionMessage.ID.create(),
+        type: "shell",
+        shellID: Shell.ID.make("sh_background"),
+        status: "exited",
+        command: "pwd",
+        metadata: { background: true },
+        output: { output: "display-only-output", cursor: 19, size: 19, truncated: false },
+        time: { created: DateTime.makeUnsafe(0), completed: DateTime.makeUnsafe(1) },
+      }),
+      SessionMessage.Synthetic.make({
+        id: SessionMessage.ID.create(),
+        type: "synthetic",
+        text: "User shell pwd completed: /project",
+        time: { created: DateTime.makeUnsafe(2) },
+      }),
+    ]
 
     const delta = yield* bus
       .subscribe(SessionEvent.Compaction.Delta)
@@ -258,13 +361,15 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     expect(
       yield* compaction.compactManual({
         session,
-        resolveModel: () => Effect.succeed(resolved),
+        resolveContext: () => Effect.succeed(loaded(session, messages)),
         prepare: modelRequests.prepare,
-        messages: [userMessage],
+        messages,
         inputID: SessionMessage.ID.make("msg_manual_compaction"),
       }),
     ).toEqual({ status: "completed" })
-    expect(Array.from(yield* Fiber.join(delta)).map((event) => event.data.text)).toEqual(["manual summary"])
+    expect(Array.from(yield* Fiber.join(delta)).map((event) => event.data.text)).toEqual([
+      "## Objective\n- manual summary",
+    ])
 
     expect(requests).toHaveLength(1)
     expect(requests[0]?.promptCacheKey).toBe(sessionID)
@@ -280,8 +385,10 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     expect(requests[0]?.generation).toBeUndefined()
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("Use Effect services and generators.")
+    expect(JSON.stringify(requests[0]?.messages)).toContain("User shell pwd completed: /project")
+    expect(JSON.stringify(requests[0]?.messages)).not.toContain("display-only-output")
     expect(yield* store.context(sessionID)).toMatchObject([
-      { type: "compaction", reason: "manual", summary: "manual summary", recent: "" },
+      { type: "compaction", reason: "manual", summary: "## Objective\n- manual summary", recent: "" },
     ])
     expect(yield* store.get(sessionID)).toMatchObject({
       cost: 0.0000233,
@@ -316,7 +423,7 @@ it.effect("manual compaction records model resolution failures without calling t
     expect(
       yield* compaction.compactManual({
         session,
-        resolveModel: () =>
+        resolveContext: () =>
           Effect.fail(
             new SessionRunnerModel.ModelUnavailableError({
               providerID: Provider.ID.make("test"),
@@ -362,60 +469,25 @@ it.effect("forked session compaction reuses the fork root prompt cache key", () 
       fork_boundary: { type: "before", messageID: SessionMessage.ID.create() },
     })
     const modelRequests = yield* SessionModelRequest.Service
+    const messages = [
+      SessionMessage.User.make({
+        id: SessionMessage.ID.create(),
+        type: "user",
+        text: "Summarize the forked conversation.",
+        time: { created: DateTime.makeUnsafe(0) },
+      }),
+    ]
     expect(
       yield* compaction.compactManual({
         session,
-        resolveModel: () => Effect.succeed(resolved),
+        resolveContext: () => Effect.succeed(loaded(session, messages)),
         prepare: modelRequests.prepare,
-        messages: [
-          {
-            id: SessionMessage.ID.create(),
-            type: "user",
-            text: "Summarize the forked conversation.",
-            time: { created: DateTime.makeUnsafe(0) },
-          },
-        ],
+        messages,
         inputID: SessionMessage.ID.make("msg_fork_compaction"),
       }),
     ).toEqual({ status: "completed" })
 
     expect(requests).toHaveLength(1)
     expect(requests[0]?.promptCacheKey).toBe(rootID)
-  }),
-)
-
-it.effect("keeps session context hooks away from compaction requests", () =>
-  Effect.gen(function* () {
-    requests = []
-    const compaction = yield* SessionCompaction.Service
-    // Context hooks shape the agent conversation; compaction is not part of it,
-    // so it opts out and the transcript passes through unchanged.
-    const hooks = yield* PluginHooks.Service
-    yield* hooks.register("session", "context", (event) =>
-      Effect.sync(() => {
-        event.system.push(SystemPart.make("Injected conversation context"))
-      }),
-    )
-    const session = yield* insertSession(Session.ID.make("ses_hook_compaction"))
-    const modelRequests = yield* SessionModelRequest.Service
-    expect(
-      yield* compaction.compactManual({
-        session,
-        resolveModel: () => Effect.succeed(resolved),
-        prepare: modelRequests.prepare,
-        messages: [
-          {
-            id: SessionMessage.ID.create(),
-            type: "user",
-            text: "Summarize this conversation.",
-            time: { created: DateTime.makeUnsafe(0) },
-          },
-        ],
-        inputID: SessionMessage.ID.make("msg_hook_compaction"),
-      }),
-    ).toEqual({ status: "completed" })
-
-    expect(requests).toHaveLength(1)
-    expect(requests[0]?.system).toEqual([])
   }),
 )

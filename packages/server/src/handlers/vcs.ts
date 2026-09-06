@@ -1,4 +1,5 @@
 import { Vcs } from "@opencode-ai/core/vcs"
+import { ServiceUnavailableError } from "@opencode-ai/protocol/errors"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
@@ -12,6 +13,16 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
           Effect.gen(function* () {
             const vcs = yield* Vcs.Service
             return yield* vcs.info()
+          }),
+        ),
+      )
+      .handle("vcs.base", () =>
+        response(
+          Effect.gen(function* () {
+            const vcs = yield* Vcs.Service
+            return yield* vcs
+              .base()
+              .pipe(Effect.mapError((error) => new ServiceUnavailableError({ service: "vcs", message: error.message })))
           }),
         ),
       )
@@ -35,7 +46,9 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
         response(
           Effect.gen(function* () {
             const vcs = yield* Vcs.Service
-            return yield* vcs.diff(ctx.query.mode, { context: ctx.query.context })
+            return yield* vcs
+              .diff(ctx.query.mode, { context: ctx.query.context, base: ctx.query.base })
+              .pipe(Effect.mapError((error) => new ServiceUnavailableError({ service: "vcs", message: error.message })))
           }),
         ),
       )

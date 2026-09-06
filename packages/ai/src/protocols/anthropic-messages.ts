@@ -6,8 +6,12 @@ import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
+import { Headers } from "effect/unstable/http"
+import { HttpTransport } from "../route/transport/index.js"
 import {
   AIError,
+  HttpOptions,
+  LLMRequest,
   LLMEvent,
   mergeJsonRecords,
   Usage,
@@ -15,7 +19,6 @@ import {
   type FinishReasonDetails,
   type FinishReason,
   type JsonSchema,
-  type LLMRequest,
   type MediaPart,
   type ProviderMetadata,
   type ToolCallPart,
@@ -61,6 +64,8 @@ export type ThinkingInput =
     ))
 
 export interface OptionsInput {
+  /** Advanced in-band compaction. The caller owns checkpoint persistence and recovery. */
+  readonly contextManagement?: ContextManagement
   readonly [key: string]: unknown
   readonly thinking?: ThinkingInput
   readonly effort?: string
@@ -88,6 +93,23 @@ export interface OptionsInput {
 }
 
 export type ProviderOptionsInput = OptionsInput
+
+export const ContextManagement = Schema.Struct({
+  edits: Schema.Array(
+    Schema.Struct({
+      type: Schema.Literal("compact_20260112"),
+      trigger: Schema.optional(
+        Schema.Struct({
+          type: Schema.Literal("input_tokens"),
+          value: Schema.Int.check(Schema.isGreaterThanOrEqualTo(50000)),
+        }),
+      ),
+      pauseAfterCompaction: Schema.optional(Schema.Boolean),
+      instructions: Schema.optional(Schema.String),
+    }),
+  ),
+})
+export type ContextManagement = typeof ContextManagement.Type
 
 // =============================================================================
 // Request Body Schema
@@ -236,7 +258,12 @@ const AnthropicUserBlock = Schema.Union([
   AnthropicToolResultBlock,
 ])
 type AnthropicUserBlock = Schema.Schema.Type<typeof AnthropicUserBlock>
+const AnthropicCompactionBlock = Schema.Struct({
+  type: Schema.Literal("compaction"),
+  content: Schema.NullOr(Schema.String),
+})
 const AnthropicAssistantBlock = Schema.Union([
+  AnthropicCompactionBlock,
   AnthropicTextBlock,
   AnthropicThinkingBlock,
   AnthropicRedactedThinkingBlock,
@@ -312,6 +339,18 @@ const AnthropicContainer = Schema.Union([
 ])
 
 const AnthropicBodyFields = {
+  context_management: Schema.optional(
+    Schema.Struct({
+      edits: Schema.Array(
+        Schema.Struct({
+          type: Schema.Literal("compact_20260112"),
+          trigger: ContextManagement.fields.edits.value.fields.trigger,
+          pause_after_compaction: Schema.optional(Schema.Boolean),
+          instructions: Schema.optional(Schema.String),
+        }),
+      ),
+    }),
+  ),
   model: Schema.String,
   system: optionalArray(AnthropicTextBlock),
   messages: Schema.Array(AnthropicMessage),
@@ -335,7 +374,7 @@ const AnthropicBodyFields = {
 export const AnthropicMessagesBody = Schema.Struct(AnthropicBodyFields)
 export type AnthropicMessagesBody = Schema.Schema.Type<typeof AnthropicMessagesBody>
 
-const AnthropicUsage = Schema.StructWithRest(
+const AnthropicIterationUsage = Schema.StructWithRest(
   Schema.Struct({
     input_tokens: optionalNull(Schema.Number),
     output_tokens: Schema.optional(Schema.Number),
@@ -353,6 +392,13 @@ const AnthropicUsage = Schema.StructWithRest(
     ),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
+)
+const AnthropicUsage = Schema.StructWithRest(
+  Schema.Struct({
+    ...AnthropicIterationUsage.schema.fields,
+    iterations: Schema.optional(Schema.Array(AnthropicIterationUsage)),
+  }),
+  [JsonObject],
 )
 type AnthropicUsage = Schema.Schema.Type<typeof AnthropicUsage>
 
@@ -377,6 +423,7 @@ type AnthropicStreamBlock = Schema.Schema.Type<typeof AnthropicStreamBlock>
 const decodeAnthropicStreamBlock = Schema.decodeUnknownOption(AnthropicStreamBlock)
 
 const AnthropicStreamDelta = Schema.Struct({
+  content: optionalNull(Schema.String),
   type: Schema.optional(Schema.String),
   text: Schema.optional(Schema.String),
   thinking: Schema.optional(Schema.String),
@@ -406,6 +453,8 @@ const AnthropicEvent = Schema.Struct({
 type AnthropicEvent = Schema.Schema.Type<typeof AnthropicEvent>
 
 interface ParserState {
+  readonly provider: LLMRequest["model"]["provider"]
+  readonly compactions: Readonly<Record<number, string | null>>
   readonly providerMetadataKey: string
   readonly tools: ToolStream.State<number>
   readonly reasoningSignatures: Readonly<Record<number, string>>
@@ -831,6 +880,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
       const content: AnthropicUserBlock[] = []
       for (const part of message.content) {
         if (part.type === "text") {
+          if (part.text.trim().length === 0) continue
           content.push({ type: "text", text: part.text, cache_control: cacheControl(breakpoints, part.cache) })
           continue
         }
@@ -840,14 +890,21 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
         }
         return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text", "media"])
       }
-      messages.push({ role: "user", content })
+      if (content.length > 0) messages.push({ role: "user", content })
       continue
     }
 
     if (message.role === "assistant") {
       const content: AnthropicAssistantBlock[] = []
       for (const part of message.content) {
+        if (part.type === "compaction") {
+          if (part.provider !== request.model.provider || part.text === undefined)
+            return yield* invalid("Compaction state must be replayed to its originating provider and API")
+          content.push({ type: "compaction", content: part.text })
+          continue
+        }
         if (part.type === "text") {
+          if (part.text.trim().length === 0) continue
           content.push({ type: "text", text: part.text, cache_control: cacheControl(breakpoints, part.cache) })
           continue
         }
@@ -891,7 +948,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
           `Anthropic Messages assistant messages only support text, reasoning, and tool-call content for now`,
         )
       }
-      messages.push({ role: "assistant", content })
+      if (content.length > 0) messages.push({ role: "assistant", content })
       continue
     }
 
@@ -1001,16 +1058,20 @@ const resolveThinking = Effect.fn("AnthropicMessages.resolveThinking")(function*
 })
 
 const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (request: LLMRequest) {
+  const management = yield* ProviderShared.validateWith(
+    Schema.decodeUnknownEffect(Schema.UndefinedOr(ContextManagement)),
+  )(request.providerOptions?.contextManagement)
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   // Allocate the 4-breakpoint budget in invalidation order: tools → system →
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
   const breakpoints = Cache.newBreakpoints(ANTHROPIC_BREAKPOINT_CAP)
+  const flattened = ProviderShared.flattenToolRequest(request)
   const tools =
-    request.tools.length === 0
+    flattened.tools.length === 0
       ? undefined
-      : request.tools.map((tool) =>
+      : flattened.tools.map((tool) =>
           lowerTool(
             breakpoints,
             tool,
@@ -1019,22 +1080,23 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
         )
   // Anthropic rejects tool_choice when tools are absent; "none" is only meaningful with tools present.
   const toolChoice = tools === undefined || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
+  const systemParts = request.system.filter((part) => part.text.length > 0)
   const system =
-    request.system.length === 0
+    systemParts.length === 0
       ? undefined
-      : request.system.map((part) => ({
+      : systemParts.map((part) => ({
           type: "text" as const,
           text: part.text,
           cache_control: cacheControl(breakpoints, part.cache),
         }))
-  const messages = yield* lowerMessages(request, breakpoints)
+  const messages = yield* lowerMessages(flattened.request, breakpoints)
   if (breakpoints.dropped > 0) {
     yield* Effect.logWarning(
       `Anthropic Messages: dropped ${breakpoints.dropped} cache breakpoint(s); the API allows at most ${ANTHROPIC_BREAKPOINT_CAP} per request.`,
     )
   }
   const options = yield* resolveOptions(request)
-  return {
+  const body = {
     model: request.model.id,
     system,
     messages,
@@ -1054,6 +1116,18 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     inference_geo: options.inference_geo,
     metadata: options.metadata,
     service_tier: options.service_tier,
+  }
+  if (!management) return body
+  return {
+    ...body,
+    context_management: {
+      edits: management.edits.map((edit) => ({
+        type: edit.type,
+        trigger: edit.trigger,
+        pause_after_compaction: edit.pauseAfterCompaction,
+        instructions: edit.instructions,
+      })),
+    },
   }
 })
 
@@ -1076,18 +1150,31 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
 // expose that subset through `output_tokens_details.thinking_tokens`.
 const mapUsage = (usage: AnthropicUsage | undefined, providerMetadataKey: string): Usage | undefined => {
   if (!usage) return undefined
-  const nonCached = usage.input_tokens ?? undefined
-  const cacheRead = usage.cache_read_input_tokens ?? undefined
-  const cacheWrite = usage.cache_creation_input_tokens ?? undefined
+  const iterations = usage.iterations?.length ? usage.iterations : [usage]
+  const last = usage.iterations?.at(-1)
+  const nonCached = ProviderShared.sumTokens(...iterations.map((item) => item.input_tokens ?? undefined))
+  const cacheRead = ProviderShared.sumTokens(...iterations.map((item) => item.cache_read_input_tokens ?? undefined))
+  const cacheWrite = ProviderShared.sumTokens(
+    ...iterations.map((item) => item.cache_creation_input_tokens ?? undefined),
+  )
   const inputTokens = ProviderShared.sumTokens(nonCached, cacheRead, cacheWrite)
+  const outputTokens = ProviderShared.sumTokens(...iterations.map((item) => item.output_tokens))
   return new Usage({
     inputTokens,
-    outputTokens: usage.output_tokens,
+    outputTokens,
+    contextTokens:
+      last?.type === "message"
+        ? ProviderShared.sumTokens(
+            last.input_tokens ?? undefined,
+            last.cache_read_input_tokens ?? undefined,
+            last.cache_creation_input_tokens ?? undefined,
+          )
+        : undefined,
     nonCachedInputTokens: nonCached,
     cacheReadInputTokens: cacheRead,
     cacheWriteInputTokens: cacheWrite,
-    reasoningTokens: usage.output_tokens_details?.thinking_tokens,
-    totalTokens: ProviderShared.totalTokens(inputTokens, usage.output_tokens, undefined),
+    reasoningTokens: ProviderShared.sumTokens(...iterations.map((item) => item.output_tokens_details?.thinking_tokens)),
+    totalTokens: ProviderShared.totalTokens(inputTokens, outputTokens, undefined),
     providerMetadata: { [providerMetadataKey]: usage },
   })
 }
@@ -1109,6 +1196,7 @@ const mergeUsage = (left: Usage | undefined, right: Usage | undefined, providerM
   return new Usage({
     inputTokens,
     outputTokens,
+    contextTokens: right.contextTokens ?? left.contextTokens,
     nonCachedInputTokens,
     cacheReadInputTokens,
     cacheWriteInputTokens,
@@ -1167,7 +1255,6 @@ const onContentBlockStart = (
   event: AnthropicEvent & { readonly content_block: AnthropicStreamBlock },
 ): StepResult => {
   const block = event.content_block
-  if (!block) return [state, NO_EVENTS]
 
   if (block.type === "tool_use" || block.type === "server_tool_use") {
     if (event.index === undefined || !block.id) return [state, NO_EVENTS]
@@ -1262,7 +1349,16 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
 ) {
   const delta = event.delta
 
-  if (delta?.type === "text_delta" && delta.text) {
+  if (delta.type === "compaction_delta") {
+    if (event.index === undefined || !(event.index in state.compactions) || delta.content === undefined)
+      return yield* ProviderShared.eventError(ADAPTER, "Compaction delta is missing its block or content")
+    return [
+      { ...state, compactions: { ...state.compactions, [event.index]: delta.content } },
+      NO_EVENTS,
+    ] satisfies StepResult
+  }
+
+  if (delta.type === "text_delta" && delta.text) {
     if (!state.lifecycle.text.has(`text-${event.index ?? 0}`)) return [state, NO_EVENTS] satisfies StepResult
     const events: LLMEvent[] = []
     return [
@@ -1271,7 +1367,7 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
     ] satisfies StepResult
   }
 
-  if (delta?.type === "thinking_delta" && delta.thinking) {
+  if (delta.type === "thinking_delta" && delta.thinking) {
     if (!state.lifecycle.reasoning.has(`reasoning-${event.index ?? 0}`)) return [state, NO_EVENTS] satisfies StepResult
     const events: LLMEvent[] = []
     return [
@@ -1283,7 +1379,7 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
     ] satisfies StepResult
   }
 
-  if (delta?.type === "signature_delta" && delta.signature) {
+  if (delta.type === "signature_delta" && delta.signature) {
     const index = event.index ?? 0
     if (!state.lifecycle.reasoning.has(`reasoning-${index}`)) return [state, NO_EVENTS] satisfies StepResult
     return [
@@ -1295,7 +1391,7 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
     ] satisfies StepResult
   }
 
-  if (delta?.type === "input_json_delta" && event.index !== undefined) {
+  if (delta.type === "input_json_delta" && event.index !== undefined) {
     if (!delta.partial_json) return [state, NO_EVENTS] satisfies StepResult
     if (!state.tools[event.index]) return [state, NO_EVENTS] satisfies StepResult
     const result = ToolStream.appendExisting(
@@ -1320,6 +1416,18 @@ const onContentBlockStop = Effect.fn("AnthropicMessages.onContentBlockStop")(fun
   event: AnthropicEvent,
 ) {
   if (event.index === undefined) return [state, NO_EVENTS] satisfies StepResult
+  if (event.index in state.compactions) {
+    const { [event.index]: content, ...compactions } = state.compactions
+    const events: LLMEvent[] = []
+    const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
+    events.push(
+      LLMEvent.compaction({
+        provider: state.provider,
+        text: content,
+      }),
+    )
+    return [{ ...state, compactions, lifecycle }, events] satisfies StepResult
+  }
   const result = yield* ToolStream.finish(ADAPTER, state.tools, event.index)
   const events: LLMEvent[] = []
   const resultEvents = result.events ?? []
@@ -1343,31 +1451,51 @@ const onMessageDelta = (
   event: AnthropicEvent & { readonly delta?: AnthropicStreamDelta },
 ): StepResult => {
   const usage = mergeUsage(state.usage, mapUsage(event.usage, state.providerMetadataKey), state.providerMetadataKey)
+  const pendingFinish = (() => {
+    const stopReason = event.delta?.stop_reason
+    if (stopReason === null || stopReason === undefined) return state.pendingFinish
+
+    const stopSequence = event.delta?.stop_sequence
+    const finishMetadata =
+      stopSequence === null || stopSequence === undefined
+        ? state.pendingFinish?.providerMetadata
+        : providerMetadata(state.providerMetadataKey, { stopSequence })
+    return {
+      reason: {
+        normalized: mapFinishReason(stopReason),
+        raw: stopReason,
+      },
+      providerMetadata: finishMetadata,
+    }
+  })()
   return [
     {
       ...state,
       usage,
-      pendingFinish: {
-        reason: {
-          normalized: mapFinishReason(event.delta?.stop_reason),
-          raw: event.delta?.stop_reason ?? undefined,
-        },
-        providerMetadata:
-          event.delta?.stop_sequence === null || event.delta?.stop_sequence === undefined
-            ? undefined
-            : providerMetadata(state.providerMetadataKey, { stopSequence: event.delta.stop_sequence }),
-      },
+      pendingFinish,
     },
     NO_EVENTS,
   ]
 }
 
 const onMessageStop = Effect.fn("AnthropicMessages.onMessageStop")(function* (state: ParserState) {
+  if (Object.keys(state.compactions).length)
+    return yield* ProviderShared.eventError(ADAPTER, "Response ended with an incomplete compaction block")
   const result = yield* ToolStream.finishAll(ADAPTER, state.tools)
   const events: LLMEvent[] = []
   const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
   events.push(...result.events)
-  const finished = Lifecycle.finish(lifecycle, events, {
+  const closed = Object.entries(state.reasoningSignatures).reduce(
+    (current, [index, signature]) =>
+      Lifecycle.reasoningEnd(
+        current,
+        events,
+        `reasoning-${index}`,
+        providerMetadata(state.providerMetadataKey, { signature }),
+      ),
+    lifecycle,
+  )
+  const finished = Lifecycle.finish(closed, events, {
     reason: state.pendingFinish?.reason ?? {
       normalized: "unknown",
       raw: undefined,
@@ -1397,16 +1525,21 @@ const onError = (event: AnthropicEvent) => {
   )
 }
 
-const isKnownStreamBlockType = (type: string) =>
-  type === "text" ||
-  type === "thinking" ||
-  type === "redacted_thinking" ||
-  type === "tool_use" ||
-  type === "server_tool_use" ||
-  isServerToolResultType(type)
-
-const isKnownStreamDeltaType = (type: string) =>
-  type === "text_delta" || type === "thinking_delta" || type === "signature_delta" || type === "input_json_delta"
+const STREAM_BLOCK_TYPES = new Set([
+  "compaction",
+  "text",
+  "thinking",
+  "redacted_thinking",
+  "tool_use",
+  "server_tool_use",
+])
+const STREAM_DELTA_TYPES = new Set([
+  "compaction_delta",
+  "text_delta",
+  "thinking_delta",
+  "signature_delta",
+  "input_json_delta",
+])
 
 const invalidStreamEvent = (event: AnthropicEvent) =>
   Effect.fail(
@@ -1435,7 +1568,16 @@ const step = (state: ParserState, event: AnthropicEvent) => {
   if (event.type === "content_block_start") {
     if (!ProviderShared.isRecord(event.content_block) || typeof event.content_block.type !== "string")
       return invalidStreamEvent(event)
-    if (!isKnownStreamBlockType(event.content_block.type)) return Effect.succeed<StepResult>([state, NO_EVENTS])
+    if (event.content_block.type === "compaction") {
+      const decoded = Schema.decodeUnknownOption(AnthropicCompactionBlock)(event.content_block)
+      if (event.index === undefined || Option.isNone(decoded)) return invalidStreamEvent(event)
+      return Effect.succeed<StepResult>([
+        { ...state, compactions: { ...state.compactions, [event.index]: decoded.value.content } },
+        NO_EVENTS,
+      ])
+    }
+    if (!STREAM_BLOCK_TYPES.has(event.content_block.type) && !isServerToolResultType(event.content_block.type))
+      return Effect.succeed<StepResult>([state, NO_EVENTS])
     const decoded = decodeAnthropicStreamBlock(event.content_block)
     if (Option.isNone(decoded)) return invalidStreamEvent(event)
     const block = decoded.value
@@ -1449,7 +1591,7 @@ const step = (state: ParserState, event: AnthropicEvent) => {
   }
   if (event.type === "content_block_delta") {
     if (!ProviderShared.isRecord(event.delta)) return invalidStreamEvent(event)
-    if (typeof event.delta.type === "string" && !isKnownStreamDeltaType(event.delta.type))
+    if (typeof event.delta.type === "string" && !STREAM_DELTA_TYPES.has(event.delta.type))
       return Effect.succeed<StepResult>([state, NO_EVENTS])
     const decoded = decodeAnthropicStreamDelta(event.delta)
     if (Option.isNone(decoded)) return invalidStreamEvent(event)
@@ -1483,6 +1625,8 @@ export const protocol = Protocol.make({
   stream: {
     event: Protocol.jsonEvent(AnthropicEvent),
     initial: (request) => ({
+      provider: request.model.provider,
+      compactions: {},
       providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
       tools: ToolStream.empty<number>(),
       reasoningSignatures: {},
@@ -1491,6 +1635,37 @@ export const protocol = Protocol.make({
     step,
   },
 })
+
+export const transport = <Body extends Pick<AnthropicMessagesBody, "messages" | "context_management">>() => {
+  const http = HttpTransport.httpJson<Body, string>({ framing })
+  return {
+    ...http,
+    prepare: (input: Parameters<typeof http.prepare>[0]) => {
+      if (
+        !input.body.context_management?.edits.length &&
+        !input.body.messages.some((message) => message.content.some((block) => block.type === "compaction"))
+      )
+        return http.prepare(input)
+      const headers = Headers.fromInput(input.request.http?.headers)
+      const betas = new Set(
+        (headers["anthropic-beta"] ?? "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+      )
+      betas.add("compact-2026-01-12")
+      return http.prepare({
+        ...input,
+        request: LLMRequest.update(input.request, {
+          http: new HttpOptions({
+            ...input.request.http,
+            headers: { ...headers, "anthropic-beta": [...betas].join(",") },
+          }),
+        }),
+      })
+    },
+  }
+}
 
 export const route = Route.make({
   id: ADAPTER,
@@ -1501,7 +1676,7 @@ export const route = Route.make({
     baseURL: DEFAULT_BASE_URL,
   }),
   auth: Auth.none,
-  framing,
+  transport: transport<AnthropicMessagesBody>(),
   headers: () => ({ "anthropic-version": "2023-06-01" }),
 })
 

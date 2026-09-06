@@ -1,5 +1,19 @@
 import { describe, expect } from "bun:test"
-import { AIError, LanguageModel, LLM, LLMClient, LLMEvent, LLMRequest, RateLimitError } from "../src/index.js"
+import {
+  AIError,
+  CompactionPart,
+  CompactionResponse,
+  CompactionCheckpointResponse,
+  LanguageModel,
+  LLM,
+  LLMClient,
+  LLMEvent,
+  LLMRequest,
+  Message,
+  ProviderID,
+  RateLimitError,
+} from "../src/index.js"
+import { OpenAI } from "../src/providers.js"
 import { OpenAIChat } from "../src/protocols/openai-chat.js"
 import { TestLLM } from "../src/testing.js"
 import { Effect, Fiber, Latch, Stream } from "effect"
@@ -66,6 +80,79 @@ describe("TestLLM legacy client", () => {
 })
 
 describe("TestLLM first-class client", () => {
+  it.effect("returns scripted checkpoints only for trigger compaction", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      const request = LLM.request({ model: OpenAI.configure().responses("fixture"), prompt: "hello" })
+      const checkpoint = new CompactionCheckpointResponse({
+        checkpoint: { type: "compaction", provider: ProviderID.make("openai"), encrypted: "opaque" },
+        responseID: "resp_fixture",
+      })
+      const endpoint = new CompactionResponse({ replacement: [] })
+      yield* client.push(checkpoint, endpoint, checkpoint, checkpoint)
+      const operation = LLMClient.compact(request, { mechanism: "trigger" })
+      expect(yield* client.requests()).toEqual([])
+      expect(yield* operation).toBe(checkpoint)
+      expect(yield* client.compact(request, { mechanism: "trigger" }).pipe(Effect.catchDefect(Effect.succeed))).toBe(
+        "TestLLM trigger compaction requires a CompactionCheckpointResponse",
+      )
+      expect(yield* client.compact(request).pipe(Effect.catchDefect(Effect.succeed))).toBe(
+        "TestLLM compaction requires a CompactionResponse",
+      )
+      expect(yield* client.generate(request).pipe(Effect.catchDefect(Effect.succeed))).toBe(
+        "TestLLM generation requires an event response",
+      )
+    }),
+  )
+
+  it.effect("rejects response fixtures for the wrong operation", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      const request = LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" })
+      yield* client.push(TestLLM.stop(), new CompactionResponse({ replacement: [] }))
+      expect(yield* client.compact(request).pipe(Effect.catchDefect(Effect.succeed))).toBe(
+        "TestLLM compaction requires a CompactionResponse",
+      )
+      expect(yield* client.generate(request).pipe(Effect.catchDefect(Effect.succeed))).toBe(
+        "TestLLM generation requires an event response",
+      )
+    }),
+  )
+
+  it.effect("scripts replacement windows with the same lazy recording, gates, and fallback controls", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      const request = LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" })
+      const compacted = new CompactionResponse({
+        replacement: [
+          Message.user("retained input"),
+          Message.assistant(CompactionPart.make({ provider: ProviderID.make("openai"), encrypted: "checkpoint" })),
+          Message.user("retained tail"),
+        ],
+      })
+      yield* client.push(compacted, TestLLM.text("continued", "answer"))
+      const operation = LLMClient.compact(request)
+      expect(yield* client.requests()).toEqual([])
+      const gate = yield* client.gate()
+      const fiber = yield* operation.pipe(Effect.forkChild({ startImmediately: true }))
+      yield* gate.started
+      yield* client.wait(1)
+      expect(fiber.pollUnsafe()).toBeUndefined()
+      yield* gate.release
+      expect(yield* Fiber.join(fiber)).toBe(compacted)
+      const next = LLMRequest.update(request, { messages: compacted.replacement })
+      expect((yield* LLMClient.generate(next)).text).toBe("continued")
+      yield* client.serve((observed) => {
+        expect(observed).toBe(next)
+        return compacted
+      })
+      expect(yield* LLMClient.compact(next)).toBe(compacted)
+      yield* client.always(compacted)
+      expect(yield* LLMClient.compact(next)).toBe(compacted)
+      expect(yield* client.requests()).toEqual([request, next, next, next])
+    }),
+  )
+
   it.effect("provides the same object under normal and test tags with snapshot observations", () =>
     Effect.gen(function* () {
       const llm = yield* TestLLM.Test

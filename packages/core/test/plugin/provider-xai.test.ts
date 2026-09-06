@@ -73,11 +73,11 @@ describe("XAIPlugin", () => {
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const providerID = Provider.ID.make("xai")
-      yield* catalog.transform((draft) => {
-        draft.provider.update(providerID, (provider) => {
+      yield* catalog.transform((editor) => {
+        editor.provider.update(providerID, (provider) => {
           provider.package = Provider.aisdk("@ai-sdk/xai")
         })
-        draft.model.update(providerID, Model.ID.make("grok-4.6"), () => {})
+        editor.model.update(providerID, Model.ID.make("grok-4.6"), () => {})
       })
 
       yield* addPlugin()

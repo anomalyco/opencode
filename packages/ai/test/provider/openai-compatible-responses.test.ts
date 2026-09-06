@@ -96,6 +96,27 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("omits user messages with no content", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+        provider: "example",
+      }).model("example-model")
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [Message.user("Before."), Message.user([]), Message.user("After.")],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { role: "user", content: [{ type: "input_text", text: "Before." }] },
+        { role: "user", content: [{ type: "input_text", text: "After." }] },
+      ])
+    }),
+  )
+
   it.effect("uses data URLs for embedded PDF messages and tool results", () =>
     Effect.gen(function* () {
       const model = configure({
@@ -147,6 +168,66 @@ describe("Open Responses-compatible route", () => {
 
       expect(error.reason._tag).toBe("InvalidRequest")
       expect(error.message).toContain("Open Responses does not support provider-native tool image_generation")
+    }),
+  )
+
+  it.effect("flattens tool namespaces", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model(
+        "example-model",
+      )
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          tools: [
+            {
+              type: "namespace",
+              name: "acme",
+              tools: [
+                {
+                  type: "namespace",
+                  name: "billing",
+                  tools: [ToolDefinition.make({ name: "lookup", description: "Lookup billing", inputSchema: {} })],
+                },
+                ToolDefinition.make({ name: "users", description: "Lookup users", inputSchema: {} }),
+              ],
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "function",
+          name: "acme_billing_lookup",
+          description: "Lookup billing",
+          parameters: {},
+          strict: false,
+        },
+        { type: "function", name: "acme_users", description: "Lookup users", parameters: {}, strict: false },
+      ])
+    }),
+  )
+
+  it.effect("flattens tool namespaces in history", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model(
+        "example-model",
+      )
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant({ type: "tool-call", id: "call_1", name: "lookup", namespace: "crm", input: {} }),
+            Message.tool({ id: "call_1", name: "lookup", namespace: "crm", result: "done", resultType: "text" }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { type: "function_call", call_id: "call_1", name: "crm_lookup", namespace: undefined, arguments: "{}" },
+        { type: "function_call_output", call_id: "call_1", output: "done" },
+      ])
     }),
   )
 
@@ -406,7 +487,7 @@ describe("Open Responses-compatible route", () => {
     })
 
     routings.forEach((routing) => {
-      it.effect(`preserves reasoning summary boundaries and terminal metadata with ${routing.name}`, () =>
+      it.effect(`preserves reasoning summary boundaries without terminal reconciliation with ${routing.name}`, () =>
         Effect.gen(function* () {
           const address = { item_id: routing.item_id, output_index: routing.output_index }
           const response = yield* LLMClient.generate(request).pipe(
@@ -444,21 +525,18 @@ describe("Open Responses-compatible route", () => {
               type: "reasoning",
               text: "Second.",
               providerMetadata: {
-                "openai-compatible": { itemId: routing.id, reasoningEncryptedContent: "final-state" },
+                "openai-compatible": { itemId: routing.id, reasoningEncryptedContent: null },
               },
             },
           ])
           expect(response.events.filter(LLMEvent.is.reasoningEnd)).toEqual([
-            expect.objectContaining({
+            {
+              type: "reasoning-end",
               id: `${routing.id}:0`,
+              text: undefined,
               providerMetadata: { "openai-compatible": { itemId: routing.id } },
-            }),
-            expect.objectContaining({
-              id: `${routing.id}:1`,
-              providerMetadata: {
-                "openai-compatible": { itemId: routing.id, reasoningEncryptedContent: "final-state" },
-              },
-            }),
+            },
+            { type: "reasoning-end", id: `${routing.id}:1` },
           ])
         }),
       )
@@ -568,66 +646,27 @@ describe("Open Responses-compatible route", () => {
       Effect.gen(function* () {
         yield* Effect.forEach(["response.output_item.added", "response.output_item.done"], (type) =>
           Effect.forEach(fixtures, (fixture) =>
-            Effect.forEach(
-              fixture.item.type === "message" ? [undefined, null, 0, false, {}, []] : [null, 0, false, {}, []],
-              (id) =>
-                Effect.gen(function* () {
-                  const error = yield* LLMClient.generate(request).pipe(
-                    Effect.provide(
-                      fixedResponse(
-                        sseEvents(
-                          { type, item: { ...fixture.item, id } },
-                          { type: "response.completed", response: { id: "resp_1" } },
-                        ),
+            Effect.forEach([null, 0, false, {}, []], (id) =>
+              Effect.gen(function* () {
+                const error = yield* LLMClient.generate(request).pipe(
+                  Effect.provide(
+                    fixedResponse(
+                      sseEvents(
+                        { type, item: { ...fixture.item, id } },
+                        { type: "response.completed", response: { id: "resp_1" } },
                       ),
                     ),
-                    Effect.flip,
-                  )
-                  expect(error.reason._tag).toBe("InvalidProviderOutput")
-                }),
+                  ),
+                  Effect.flip,
+                )
+                expect(error.reason._tag).toBe("InvalidProviderOutput")
+              }),
             ),
           ),
         )
       }),
     )
   })
-
-  it.effect("streams function calls without optional item ids through the shared baseline", () =>
-    Effect.gen(function* () {
-      const model = configure({
-        apiKey: "test-key",
-        baseURL: "https://responses.example.test/v1",
-        provider: "example",
-      }).model("example-model")
-      const item = { type: "function_call", call_id: "call_1", name: "lookup", arguments: "" }
-      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Look it up." })).pipe(
-        Effect.provide(
-          fixedResponse(
-            sseEvents(
-              { type: "response.output_item.added", output_index: 1, item },
-              {
-                type: "response.function_call_arguments.delta",
-                output_index: 1,
-                item_id: "opaque_item",
-                delta: '{"query":"shared"}',
-              },
-              {
-                type: "response.output_item.done",
-                output_index: 1,
-                item: { ...item, arguments: '{"query":"complete"}' },
-              },
-              { type: "response.completed", response: { id: "resp_1" } },
-            ),
-          ),
-        ),
-      )
-
-      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
-        expect.objectContaining({ id: "call_1", name: "lookup", input: { query: "complete" } }),
-      ])
-      expect(response.events.find(LLMEvent.is.toolCall)?.providerMetadata).toBeUndefined()
-    }),
-  )
 
   it.effect("finalizes pending function calls from completed response output", () =>
     Effect.gen(function* () {
@@ -671,7 +710,7 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
-  it.effect("preserves terminal reasoning metadata when item completion is missing", () =>
+  it.effect("ignores terminal reasoning output when item completion is missing", () =>
     Effect.gen(function* () {
       const model = configure({
         apiKey: "test-key",
@@ -697,8 +736,9 @@ describe("Open Responses-compatible route", () => {
         ),
       )
 
-      expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
-        providerMetadata: { "openai-compatible": { itemId: "rs_raw", reasoningEncryptedContent: "raw-state" } },
+      expect(response.events.find((event) => event.type === "reasoning-end")).toEqual({
+        type: "reasoning-end",
+        id: "rs_raw:0",
       })
     }),
   )

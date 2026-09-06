@@ -7,17 +7,23 @@ import { OpenCode } from "./opencode"
 
 export type Configuration = WorkerdProfile.Configuration
 
-export interface CreateOptions extends WorkerdProfile.Options {
+export interface CreateOptions<R = never> extends WorkerdProfile.Options {
   readonly log?: OpenCode.CreateOptions["log"]
   readonly workspaceProviders?: OpenCode.CreateOptions["workspaceProviders"]
+  readonly instances?: OpenCode.CreateOptions<R>["instances"]
 }
 
-export const create = ({ log, workspaceProviders, ...options }: CreateOptions) => {
+export const create = <R = never>({ log, workspaceProviders, instances, ...options }: CreateOptions<R>) => {
   const profile = WorkerdProfile.make(options)
-  return OpenCode.create({ ...profile.options, log, workspaceProviders }, { overrides: profile.replacements })
+  return OpenCode.create(
+    { ...profile.options, log, workspaceProviders, instances },
+    { overrides: profile.replacements },
+  )
 }
 
-export const layer = (options: CreateOptions): Layer.Layer<OpenCode.Service, Config.ConfigError | Error> =>
+export const layer = <R = never>(
+  options: CreateOptions<R>,
+): Layer.Layer<OpenCode.Service, Config.ConfigError | Error, Exclude<R, Scope.Scope>> =>
   Layer.effect(OpenCode.Service, create(options))
 
 export type Interface = OpenCode.Interface

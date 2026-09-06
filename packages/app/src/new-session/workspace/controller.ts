@@ -11,27 +11,15 @@ import { normalizeProjectInfo } from "@/runtime/server/global-sync/utils"
 import {
   isWorkspaceDirectory,
   isWorkspaceSelection,
-  sameDirectory,
   workspaceDefaultSelection,
   workspaceDirectories,
   workspaceSelectionDestination,
 } from "@/workspaces/paths"
 
-export function resolveNewSessionWorktree(input: {
-  enabled: boolean
-  selected?: string
-  directory: string
-  projectWorktree?: string
-  fallback?: string
-}) {
+export function resolveNewSessionWorktree(input: { enabled: boolean; selected?: string; fallback?: string }) {
   if (!input.enabled) return "main"
   if (input.selected) return input.selected
-  return normalizeNewSessionWorktree(input.fallback ?? "main", input.directory, input.projectWorktree)
-}
-
-export function normalizeNewSessionWorktree(value: string, directory: string, projectWorktree?: string) {
-  if (value === "main" && projectWorktree && !sameDirectory(directory, projectWorktree)) return projectWorktree
-  return value
+  return input.fallback ?? "main"
 }
 
 export function resolveNewSessionBranch(input: {
@@ -92,8 +80,6 @@ export function createNewSessionWorkspaceController(input: {
     resolveNewSessionWorktree({
       enabled: visible(),
       selected: selected(),
-      directory: sdk().directory,
-      projectWorktree: currentProject()?.worktree,
       fallback: fallback(),
     }),
   )
@@ -145,7 +131,7 @@ export function createNewSessionWorkspaceController(input: {
       remember,
       set: (worktree: string) => {
         input.setSelectedBranch(undefined)
-        input.setSelectedWorktree(normalizeNewSessionWorktree(worktree, sdk().directory, currentProject()?.worktree))
+        input.setSelectedWorktree(worktree)
         remember(worktree)
       },
       create: (branch: string) => {

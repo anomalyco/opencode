@@ -20,6 +20,7 @@
     "migration": "bun run script/migration.ts",
     "fix-node-pty": "bun run script/fix-node-pty.ts",
     "benchmark:location": "bun run script/benchmark-location.ts",
+    "benchmark:location-memory": "bun run script/benchmark-location-memory.ts",
     "build": "bun run script/build.ts",
     "update-models-snapshot": "bun run script/update-models-snapshot.ts",
     "test": "bun run script/test.ts",
@@ -100,7 +101,6 @@
   },
   "dependencies": {
     "@ai-sdk/alibaba": "1.0.17",
-    "@ai-sdk/amazon-bedrock": "4.0.112",
     "@ai-sdk/anthropic": "3.0.82",
     "@ai-sdk/azure": "3.0.88",
     "@ai-sdk/cohere": "3.0.27",
@@ -112,7 +112,6 @@
     "@ai-sdk/provider": "3.0.8",
     "@ai-sdk/provider-utils": "4.0.23",
     "@ai-sdk/vercel": "2.0.39",
-    "@aws-sdk/credential-providers": "3.1057.0",
     "@lydell/node-pty": "catalog:",
     "@modelcontextprotocol/client": "2.0.0",
     "@modelcontextprotocol/core": "2.0.0",

@@ -7,7 +7,7 @@ function setup(
 ) {
   const requests: Array<{ url: URL; init?: RequestInit }> = []
   const api = createApiForServer({
-    server: { url: "https://server.example:4096", username: "image-user", password: "secret" },
+    server: { url: "https://server.example:4096", password: "secret" },
     fetch: (async (input: string | URL | Request, init?: RequestInit) => {
       requests.push({ url: new URL(input instanceof Request ? input.url : input), init })
       return respond(init)
@@ -38,7 +38,7 @@ describe("readLocalImage", () => {
     expect(requests[0].url.pathname).toBe(`/api/fs/read/${encoded}`)
     expect([...requests[0].url.searchParams]).toEqual([["location[directory]", directory]])
     expect(requests[0].init?.method).toBe("GET")
-    expect(new Headers(requests[0].init?.headers).get("authorization")).toBe(`Basic ${btoa("image-user:secret")}`)
+    expect(new Headers(requests[0].init?.headers).get("authorization")).toBe(`Basic ${btoa("opencode:secret")}`)
     expect(requests[0].init?.signal).toBe(signal)
   })
 

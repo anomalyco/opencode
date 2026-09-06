@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
+import { LanguageModel } from "@opencode-ai/ai"
+import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Effect, Fiber, Layer, Stream } from "effect"
-import { TestClock } from "effect/testing"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Integration } from "@opencode-ai/core/integration"
 import { Credential } from "@opencode-ai/core/credential"
@@ -9,6 +10,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { Model } from "@opencode-ai/core/model"
+import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "./fixture/location"
@@ -25,11 +27,57 @@ const locationLayer = Layer.succeed(
 )
 const catalogLayer = AppNodeBuilder.build(
   LayerNode.group([Catalog.node, Bus.node, Credential.node, Integration.node]),
-  [[Location.node, locationLayer]],
+  [Location.node.replace(locationLayer)],
 )
 const it = testEffect(catalogLayer)
 
 describe("Catalog", () => {
+  ;["variant", "empty-key", "metadata", "aisdk"].forEach((path) =>
+    it.effect(`keeps nested catalog values editable after ${path} model resolution`, () =>
+      Effect.gen(function* () {
+        const catalog = yield* Catalog.Service
+        const providerID = Provider.ID.make("resolve-fixture")
+        const modelID = Model.ID.make("fixture-model")
+        yield* catalog.transform((editor) =>
+          editor.model.update(providerID, modelID, (model) => {
+            model.package = path === "aisdk" ? Provider.aisdk("@ai-sdk/fixture") : "@opencode-ai/ai/providers/openai"
+            model.settings = {
+              apiKey: path === "empty-key" ? "" : "fixture-key",
+              baseURL: "https://fixture.example/v1",
+            }
+            model.variants = [{ id: Model.VariantID.make("high"), body: { reasoning: { effort: "high" } } }]
+          }),
+        )
+        const selected = required(yield* catalog.model.get(providerID, modelID))
+        if (path === "variant") yield* ModelResolver.withVariant(selected, Model.VariantID.make("high"))
+        if (path !== "variant")
+          yield* ModelResolver.fromCatalogModel(
+            selected,
+            path === "metadata"
+              ? Credential.Key.make({ type: "key", key: "fixture-key", metadata: { tenant: "fixture" } })
+              : undefined,
+            {
+              loadAISDK: () =>
+                Effect.succeed(LanguageModel.make({ id: modelID, provider: providerID, route: OpenAIChat.route })),
+            },
+          )
+
+        yield* catalog.transform((editor) =>
+          editor.model.update(providerID, modelID, (model) => {
+            model.limit.context = 100_000
+            model.capabilities.tools = false
+            model.variants.push({ id: Model.VariantID.make("other") })
+          }),
+        )
+        expect(required(yield* catalog.model.get(providerID, modelID))).toMatchObject({
+          limit: { context: 100_000 },
+          capabilities: { tools: false },
+          variants: [{ id: "high" }, { id: "other" }],
+        })
+      }),
+    ),
+  )
+
   it.effect("publishes an updated event after catalog changes", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
@@ -45,10 +93,36 @@ describe("Catalog", () => {
     }),
   )
 
+  it.effect("preserves provider identity when updating new and existing providers", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = Provider.ID.make("original")
+      const renamed = Provider.ID.make("renamed")
+      yield* catalog.transform((editor) => {
+        editor.provider.update(providerID, (provider) => {
+          provider.id = renamed
+          provider.name = "Created"
+        })
+        expect(editor.provider.get(providerID)?.provider.id).toBe(providerID)
+        editor.provider.update(providerID, (provider) => {
+          provider.id = renamed
+          provider.name = "Updated"
+        })
+      })
+
+      expect(yield* catalog.provider.get(providerID)).toMatchObject({ id: providerID, name: "Updated" })
+      expect(yield* catalog.provider.get(renamed)).toBeUndefined()
+      expect((yield* catalog.provider.all()).map((provider) => provider.id)).toEqual([providerID])
+
+      yield* catalog.reload()
+      expect(yield* catalog.provider.get(providerID)).toMatchObject({ id: providerID, name: "Updated" })
+    }),
+  )
+
   it.effect("derives availability from active credentials without changing provider state", () => {
     const integrationID = Integration.ID.make("test")
     const localCatalogLayer = Layer.fresh(
-      AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node]), [[Location.node, locationLayer]]),
+      AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node]), [Location.node.replace(locationLayer)]),
     )
 
     return Effect.gen(function* () {
@@ -78,7 +152,7 @@ describe("Catalog", () => {
     const providerID = Provider.ID.make("remote")
     const localCatalogLayer = Layer.fresh(
       AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node, Integration.node]), [
-        [Location.node, locationLayer],
+        Location.node.replace(locationLayer),
       ]),
     )
 
@@ -108,7 +182,7 @@ describe("Catalog", () => {
     const providerID = Provider.ID.make("remote")
     const localCatalogLayer = Layer.fresh(
       AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node, Integration.node]), [
-        [Location.node, locationLayer],
+        Location.node.replace(locationLayer),
       ]),
     )
 
@@ -275,7 +349,7 @@ describe("Catalog", () => {
       const providerID = Provider.ID.make("test")
       const old = Model.ID.make("old")
       const newest = Model.ID.make("new")
-      const models = (catalog: Catalog.Draft) => {
+      const models = (catalog: Catalog.Editor) => {
         catalog.provider.update(providerID, () => {})
         catalog.model.update(providerID, old, (model) => {
           model.time.released = 1000
@@ -293,9 +367,7 @@ describe("Catalog", () => {
       expect((yield* catalog.model.default())?.id).toBe(old)
 
       configured = false
-      const reload = yield* catalog.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(reload)
+      yield* catalog.reload()
       expect((yield* catalog.model.default())?.id).toBe(newest)
     }),
   )

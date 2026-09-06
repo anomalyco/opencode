@@ -1,9 +1,10 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, RcMap, Scope } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
 import { Bus } from "@opencode-ai/core/bus"
+import { Instance } from "@opencode-ai/core/instance/service"
 import { Location } from "@opencode-ai/core/location"
 import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -15,16 +16,23 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionEnvironment } from "@opencode-ai/core/session/environment"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { testEffect } from "./lib/effect"
-import { globalProjectLayer } from "./lib/project"
+import { globalProjectNode } from "./lib/project"
+import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
 
 const closed: Session.ID[] = []
-const transport = Layer.succeed(
+const transportScopes = new Set<Scope.Scope>()
+const transport = Layer.effect(
   SessionModelTransport.Service,
-  SessionModelTransport.Service.of({
-    bind: () => ({ execute: () => Effect.die("Unexpected WebSocket execution") }),
-    close: (sessionID) => Effect.sync(() => closed.push(sessionID)),
-    closeAll: Effect.void,
+  Effect.gen(function* () {
+    const scope = yield* Scope.Scope
+    transportScopes.add(scope)
+    yield* Effect.addFinalizer(() => Effect.sync(() => transportScopes.delete(scope)))
+    return SessionModelTransport.Service.of({
+      bind: () => ({ execute: () => Effect.die("Unexpected WebSocket execution") }),
+      close: (sessionID) => Effect.sync(() => closed.push(sessionID)),
+      closeAll: Effect.void,
+    })
   }),
 )
 const it = testEffect(
@@ -36,12 +44,14 @@ const it = testEffect(
       SessionStore.node,
       SessionEnvironment.node,
       Session.node,
+      Instance.node,
       LocationServiceMap.node,
     ]),
     [
-      [Project.node, globalProjectLayer],
-      [SessionExecution.node, SessionExecution.noopLayer],
-      [SessionModelTransport.node, transport],
+      Project.node.replace(globalProjectNode),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
+      SessionModelTransport.node.replace(transport),
+      offlineModels,
     ],
   ),
 )
@@ -69,6 +79,27 @@ describe("Session.remove", () => {
       expect(yield* environments.get(child.id)).toBeUndefined()
       expect(yield* Effect.result(session.get(parent.id))).toMatchObject({ _tag: "Failure" })
       expect(yield* Effect.result(session.get(child.id))).toMatchObject({ _tag: "Failure" })
+    }),
+  )
+
+  it.live("removes unloaded sessions and children without initializing an instance", () =>
+    Effect.gen(function* () {
+      const temporary = yield* tmpdirScoped()
+      const sessions = yield* Session.Service
+      const locations = yield* LocationServiceMap.Service
+      const parent = yield* sessions.create({
+        location: Location.Ref.make({ directory: AbsolutePath.make(temporary.path) }),
+      })
+      const child = yield* sessions.create({ parentID: parent.id })
+      closed.length = 0
+      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+
+      yield* sessions.remove(parent.id)
+
+      expect(closed).toEqual([parent.id, child.id])
+      expect(transportScopes.size).toBe(1)
+      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+      expect((yield* sessions.list()).data).toEqual([])
     }),
   )
 

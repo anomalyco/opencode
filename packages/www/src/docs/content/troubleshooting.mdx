@@ -42,6 +42,40 @@ opencode2 service start
   needed when diagnosing its lifecycle.
 </Callout>
 
+## Allow a browser origin
+
+If a browser client on another origin cannot connect because of CORS, add the client's origin to the service configuration:
+
+```bash
+opencode2 service set cors http://192.168.1.10:3001
+opencode2 service get cors
+```
+
+Use an exact HTTP or HTTPS origin, including the port when needed, without a path or trailing slash. To allow multiple
+origins, pass a comma-separated list as one argument; whitespace around each origin is trimmed:
+
+```bash
+opencode2 service set cors "http://192.168.1.10:3001, https://app.example.com"
+```
+
+`service get cors` prints a JSON array. Remove the configured list with:
+
+```bash
+opencode2 service unset cors
+```
+
+Setting or unsetting service configuration stops the background service. Its next start picks up the new configuration;
+use `opencode2 service start` to start it explicitly.
+
+For a foreground server, repeat `--cors` for each additional allowed origin:
+
+```bash
+opencode2 serve --cors http://192.168.1.10:3001 --cors https://app.example.com
+```
+
+With `serve --service`, supplied `--cors` flags override the persisted list for that process. Without those flags, service
+mode uses the persisted list. CORS does not change the listening address or bypass server authentication.
+
 ## Inspect the API
 
 The `api` command uses the local service discovery and authentication flow. It accepts either an HTTP method and path or an

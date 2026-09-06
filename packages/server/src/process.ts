@@ -1,7 +1,9 @@
 export * as ServerProcess from "./process"
 
 import { NodeHttpServer } from "@effect/platform-node"
+import { Bus } from "@opencode-ai/core/bus"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
+import { InstallationEvent } from "@opencode-ai/schema/installation-event"
 import { hasPtyConnectTicketURL } from "@opencode-ai/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode-ai/protocol/groups/persistent-pty"
 import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
@@ -63,7 +65,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   yield* bound.http
     .serve(
       dispatch(password, status, application, options.app?.version ?? "unknown").pipe(
-        HttpMiddleware.cors({ allowedOrigins: isAllowedCorsOrigin, maxAge: 86_400 }),
+        HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
       ),
       errorResponseLogger,
     )
@@ -114,7 +116,14 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
       )
     yield* Ref.set(application, Option.some(transform ? transform(app) : app))
     yield* status.ready
-    return { address: bound.http.address, shutdown: shutdown.await }
+    const bus = Context.get(context, Bus.Service)
+    return {
+      address: bound.http.address,
+      shutdown: shutdown.await,
+      updateAvailable: (version: string) =>
+        bus.publish(InstallationEvent.UpdateAvailable, { version }).pipe(Effect.asVoid),
+      updated: (version: string) => bus.publish(InstallationEvent.Updated, { version }).pipe(Effect.asVoid),
+    }
   }).pipe(
     Effect.catchCause((cause) => {
       if (!lifecycle || Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
@@ -184,6 +193,7 @@ function dispatch(
     const app = yield* Ref.get(application)
     const ready = state.type === "ready" && Option.isSome(app)
     if (
+      (url.pathname === "/api" || url.pathname.startsWith("/api/") || url.pathname === "/openapi.json") &&
       (!ready || (!hasPtyConnectTicketURL(url) && !hasPersistentPtyConnectTicketURL(url))) &&
       !(yield* authorizedRequest(request, auth))
     )

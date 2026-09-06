@@ -10,9 +10,19 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-const values = (url: string): ServerFormValues => ({ url, name: "", username: "opencode", password: "" })
+const values = (url: string): ServerFormValues => ({ url, name: "", password: "" })
 
 describe("createServerHealthPreview", () => {
+  test.each(["", "secret"])("previews a server with only its password (%s)", async (password) => {
+    const requests: ServerConnection.HttpBase[] = []
+    const preview = createServerHealthPreview(async (http) => {
+      requests.push(http)
+      return { healthy: true }
+    })
+    await preview.preview({ ...values("server.example.com"), password }, () => {})
+    expect(requests).toEqual([{ url: "http://server.example.com", ...(password ? { password } : {}) }])
+  })
+
   test("ignores an older response that resolves after the latest response", async () => {
     const first = deferred<{ healthy: boolean }>()
     const second = deferred<{ healthy: boolean }>()

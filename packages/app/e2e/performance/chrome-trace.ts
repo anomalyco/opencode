@@ -14,7 +14,6 @@ const categories = [
   "blink.console",
   "blink.user_timing",
   "latencyInfo",
-  "disabled-by-default-devtools.timeline.stack",
   "disabled-by-default-v8.cpu_profiler",
 ]
 
@@ -34,6 +33,9 @@ export async function startChromeTrace(page: Page, name: string): Promise<undefi
           .map((category) => category.slice(1)),
         includedCategories: [
           ...categories.filter((category) => !category.startsWith("-")),
+          ...(process.env.OPENCODE_PERFORMANCE_STACK_TRACE === "1"
+            ? ["disabled-by-default-devtools.timeline.stack"]
+            : []),
           ...(selectors
             ? ["disabled-by-default-blink.debug", "disabled-by-default-devtools.timeline.invalidationTracking"]
             : []),

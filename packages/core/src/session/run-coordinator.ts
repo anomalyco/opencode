@@ -7,6 +7,8 @@ import type { Promotable } from "./inbox.js"
 export interface Coordinator<Key, E, Reason = never> {
   /** Snapshots keys with an execution owned by this coordinator. */
   readonly active: Effect.Effect<ReadonlySet<Key>>
+  /** Checks ownership for one key, including cleanup and terminal settlement. */
+  readonly isActive: (key: Key) => Effect.Effect<boolean>
   /** Starts an execution while idle, or joins the active execution and returns its exit. */
   readonly run: (key: Key) => Effect.Effect<void, E>
   /** Rings the doorbell: an idle key starts an execution; an active one drains again before settling. */
@@ -15,9 +17,14 @@ export interface Coordinator<Key, E, Reason = never> {
    * Stops the active execution and clears its doorbell. No-op when idle. Resolves once the
    * interruption is accepted, not when cleanup settles: the execution fiber finishes its
    * finalizers and settled hook on its own time. Returns whether an active execution was
-   * interrupted. Compose with `awaitIdle` for settlement.
+   * interrupted. `awaitSettlement` waits for this execution's cleanup and settled hook,
+   * without following fresh work admitted during cleanup. `awaitIdle` follows successors too.
    */
-  readonly interrupt: (key: Key, reason?: Reason) => Effect.Effect<boolean>
+  readonly interrupt: (
+    key: Key,
+    reason?: Reason,
+    options?: { readonly awaitSettlement?: boolean },
+  ) => Effect.Effect<boolean>
   /** Resolves once no execution is active for the key. Returns immediately when already idle and never starts work. */
   readonly awaitIdle: (key: Key) => Effect.Effect<void>
 }
@@ -112,6 +119,8 @@ export const make = <Key, E, Reason = never>(options: {
       Deferred.doneUnsafe(execution.done, exit)
     }
 
+    const isActive = (key: Key) => Effect.sync(() => executions.has(key))
+
     const run = (key: Key): Effect.Effect<void, E> =>
       Effect.suspend(() => {
         const execution = executions.get(key)
@@ -166,5 +175,22 @@ export const make = <Key, E, Reason = never>(options: {
         return Deferred.await(execution.done).pipe(Effect.ignoreCause, Effect.andThen(awaitIdle(key)))
       })
 
-    return { active: Effect.sync(() => new Set(executions.keys())), run, wake, interrupt, awaitIdle }
+    return {
+      active: Effect.sync(() => new Set(executions.keys())),
+      isActive,
+      run,
+      wake,
+      interrupt: (key, reason, options) =>
+        Effect.suspend(() => {
+          const execution = executions.get(key)
+          return interrupt(key, reason).pipe(
+            Effect.tap(() =>
+              options?.awaitSettlement && execution
+                ? Deferred.await(execution.done).pipe(Effect.ignoreCause)
+                : Effect.void,
+            ),
+          )
+        }),
+      awaitIdle,
+    }
   })

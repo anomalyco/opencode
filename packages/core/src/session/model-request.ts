@@ -2,12 +2,14 @@ export * as SessionModelRequest from "./model-request.js"
 
 import { HttpOptions, LanguageModel, LLM, LLMRequest, Message, SystemPart } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
+import type { SessionRequestKind } from "@opencode-ai/plugin/effect/session"
+import type { Agent } from "@opencode-ai/schema/agent"
+import type { Model } from "@opencode-ai/schema/model"
 import type { Content } from "@opencode-ai/schema/tool"
 import { Cause, Config, Context, Effect, Layer, Result, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app.js"
-import { Model } from "../model.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { QuestionTool } from "../tool/plugin/question.js"
@@ -18,7 +20,6 @@ import { SessionSchema } from "./schema.js"
 import { SessionSystemPrompt } from "./system-prompt.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
 import type { SessionMessage } from "./message.js"
-import type { Agent } from "../agent.js"
 
 const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
 const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
@@ -53,15 +54,21 @@ export interface Prepared {
    * One request-scoped execution operation. Unknown and hook-removed calls
    * fail individually through the same seam.
    */
-  readonly executeTool: (input: Parameters<Tool.Snapshot["execute"]>[0]) => Effect.Effect<Tool.Result, ExecuteError>
+  readonly executeTool: (
+    input: Parameters<Tool.Snapshot["execute"]>[0],
+  ) => Effect.Effect<Tool.NormalizedResult, ExecuteError>
 }
 
 interface PrepareInput {
+  /** Which Session flow issues this request; request hooks receive it alongside the Session identity. */
+  readonly kind: SessionRequestKind
   readonly scope: {
     readonly session: SessionSchema.Info
     readonly agentID: Agent.ID
+    /** Agent whose context an auxiliary request reuses, without changing its request-hook identity. */
+    readonly contextAgentID?: Agent.ID
     readonly model: SessionRunnerModel.Resolved
-    /** Omitted for requests that carry no tools (title, compaction). */
+    /** Omitted for requests that carry no tool definitions, such as titles. */
     readonly tools?: Tool.Snapshot
   }
   readonly transcript: {
@@ -70,9 +77,8 @@ interface PrepareInput {
   }
   readonly toolChoice?: LLM.RequestInput["toolChoice"]
   /**
-   * Session context hooks shape the agent conversation. Requests that are not
-   * part of the conversation (title, compaction) opt out: their transcripts
-   * pass through unchanged.
+   * Session context hooks shape the agent conversation. Standalone requests
+   * such as titles opt out; compaction uses the selected Session context.
    */
   readonly contextHooks?: false
   /** Stateful Session WebSocket channels require an explicit durable-runner opt-in. */
@@ -194,6 +200,7 @@ interface HookScope {
   readonly sessionID: SessionSchema.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
+  readonly kind: SessionRequestKind
 }
 
 const sessionHeaders = (session: Pick<SessionSchema.Info, "id" | "parentID" | "projectID">, app: App.Info) => ({
@@ -300,7 +307,7 @@ export const layer = Layer.effect(
       const definitions = Object.fromEntries(Array.from(given, ([definition, tool]) => [tool.name, definition]))
       const context: PluginHooks.Domains["session"]["context"] = {
         sessionID: session.id,
-        agent: input.scope.agentID,
+        agent: input.scope.contextAgentID ?? input.scope.agentID,
         model: resolved.ref,
         system: input.transcript.system,
         messages: input.transcript.messages,
@@ -322,7 +329,7 @@ export const layer = Layer.effect(
       )
       const request = yield* applyModelHooks(
         hooks,
-        { sessionID: session.id, agent: input.scope.agentID, model: resolved.ref },
+        { sessionID: session.id, agent: input.scope.agentID, model: resolved.ref, kind: input.kind },
         LLM.request({
           model,
           http: {
@@ -353,6 +360,7 @@ export const layer = Layer.effect(
             sessionID: session.id,
             agent: input.scope.agentID,
             model: resolved.ref,
+            kind: input.kind,
           })
         : undefined
       const options: StreamOptions = {

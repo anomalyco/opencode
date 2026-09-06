@@ -227,7 +227,7 @@ export class SQLiteEffectInsertBase<
   config: SQLiteInsertConfig<TTable>
 
   constructor(
-    private table: TTable,
+    table: TTable,
     values: SQLiteInsertConfig["values"],
     private effectSession: SQLiteEffectSession<TEffectHKT, TRunResult, any>,
     private effectDialect: SQLiteDialect,

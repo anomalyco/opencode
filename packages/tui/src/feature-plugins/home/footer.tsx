@@ -52,7 +52,11 @@ function Plugins(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const visibility = createMemo(() => homeFooterVisibility(dimensions().width))
   const plugins = usePlugin()
-  const failed = createMemo(() => plugins.list().filter((item) => item.status === "failed").length)
+  const failed = createMemo(
+    () =>
+      plugins.list().filter((item) => item.status === "failed").length +
+      plugins.server().filter((item) => item.state.status === "failed").length,
+  )
 
   return (
     <Show when={failed()}>

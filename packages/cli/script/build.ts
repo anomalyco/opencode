@@ -128,6 +128,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
     external: ["node-gyp"],
     format: "esm",
     minify: true,
+    bytecode: true,
     sourcemap: Script.channel === "dev" || Script.channel === "local" ? "inline" : "none",
     splitting: true,
     compile: {
@@ -138,13 +139,19 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
       target: target.replace(binary, "bun") as Bun.Build.CompileTarget,
       ...(executablePath ? { executablePath } : {}),
       outfile: path.join(outdir, name, "bin", binary),
-      execArgv: [`--user-agent=${binary}/${Script.version}`, "--use-system-ca", "--no-warnings", "--"],
+      execArgv: [
+        `--user-agent=opencode/${Script.channel}/${Script.version}/cli`,
+        "--use-system-ca",
+        "--no-warnings",
+        "--",
+      ],
       windows: {},
     },
     define: {
       OPENCODE_VERSION: `'${Script.version}'`,
       OPENCODE_CLI_NAME: `'${binary}'`,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
+      OPENCODE_ARTIFACT: `'cli'`,
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "undefined",
       // FFF_LIBC selects the fff native lib variant: "musl" or "gnu".
       FFF_LIBC: item.os === "linux" ? `'${item.abi ?? "gnu"}'` : "undefined",

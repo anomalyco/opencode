@@ -245,9 +245,9 @@ export const OpenAIPlugin = define({
           : undefined
     })
 
-    yield* ctx.integration.transform((draft) => {
-      draft.method.update(browser(ctx.app))
-      draft.method.update(headless(ctx.app))
+    yield* ctx.integration.transform((editor) => {
+      editor.method.update(browser(ctx.app))
+      editor.method.update(headless(ctx.app))
     })
     yield* load()
     yield* ctx.catalog.transform((evt) => {
@@ -274,10 +274,12 @@ export const OpenAIPlugin = define({
             return
           }
           const apiID = draft.modelID ?? draft.id
-          const match = apiID.match(/^gpt-(\d+\.\d+)/)
+          const match = apiID.match(/^gpt-(\d+)(?:\.(\d+))?/)
+          const major = Number(match?.[1])
+          const minor = Number(match?.[2] ?? 0)
           if (
             !codexAllowed.has(apiID) &&
-            (codexDisallowed.has(apiID) || !match || Number.parseFloat(match[1]) <= 5.4)
+            (codexDisallowed.has(apiID) || !match || !(major > 5 || (major === 5 && minor > 4)))
           ) {
             draft.enabled = false
             return

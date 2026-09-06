@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { createEffect, createRoot } from "solid-js"
-import { createStore } from "solid-js/store"
+import { Schema } from "effect"
 import type { Platform } from "@/runtime/platform/platform"
 import { createComposerReady, createComposerState } from "@/composer/state"
 import { ServerScope } from "@/runtime/server/scope"
@@ -34,12 +34,96 @@ const platform: Platform = {
 }
 
 describe("prompt persistence", () => {
+  test.each([null, "null", '"invalid"', "not json"])(
+    "keeps dynamic initial input with unavailable stored state: %s",
+    async (raw) => {
+      const store = createDraftStore({
+        get: async () => raw,
+        set: async () => undefined,
+        remove: async () => undefined,
+        putBlob: async () => "unused",
+        getBlob: async () => null,
+      })
+      const model = { providerID: "provider", modelID: "model", variant: "high" }
+      const root = createRoot((dispose) => ({
+        dispose,
+        session: createComposerState(
+          ServerScope.local,
+          { draftID: `draft-initial-${raw}` },
+          { prompt: "initial prompt", model },
+          { ...platform, draftStore: store },
+        ),
+      }))
+      await root.session.ready.promise
+      expect(root.session.current()).toEqual([{ type: "text", content: "initial prompt", start: 0, end: 14 }])
+      expect(root.session.cursor()).toBe(14)
+      expect(root.session.model.current()).toEqual(model)
+      root.dispose()
+    },
+  )
+
+  test("decodes hydrated images and writes canonical blob references through draft storage", async () => {
+    const documents = new Map<string, string>()
+    const blobs = new Map<string, Blob>()
+    const store = createDraftStore({
+      get: async (key) => documents.get(key) ?? null,
+      set: async (key, value) => void documents.set(key, value),
+      remove: async (key) => void documents.delete(key),
+      putBlob: async (blob) => {
+        blobs.set("composer-image", blob)
+        return "composer-image"
+      },
+      getBlob: async (id) => blobs.get(id) ?? null,
+    })
+    const target = Persist.draft("draft-schema-image", "prompt")
+    const key = `${target.storage}:${target.key}`
+    await store.setItem(
+      key,
+      JSON.stringify({
+        prompt: [
+          {
+            type: "image",
+            id: "image",
+            filename: "image.png",
+            mime: "image/png",
+            dataUrl: "data:image/png;base64,YQ==",
+          },
+        ],
+      }),
+    )
+    const root = createRoot((dispose) => ({
+      dispose,
+      session: createComposerState(ServerScope.local, { draftID: "draft-schema-image" }, undefined, {
+        ...platform,
+        draftStore: store,
+      }),
+    }))
+    await root.session.ready.promise
+    expect(root.session.current()).toEqual([
+      {
+        type: "image",
+        id: "image",
+        filename: "image.png",
+        mime: "image/png",
+        blob: { id: "composer-image", url: expect.stringMatching(/^blob:/) },
+      },
+    ])
+    root.session.set([{ type: "text", content: "hello", start: 0, end: 5 }, ...root.session.current()])
+    await Bun.sleep(0)
+    expect(documents.get(key)).toContain("hello")
+    expect(documents.get(key)).toContain('"blob":{"id":"composer-image"}')
+    expect(documents.get(key)).not.toContain("dataUrl")
+    expect(documents.get(key)).not.toContain("blob:")
+    root.dispose()
+  })
+
   test("relocates a previous key into canonical storage", () => {
     localStorage.setItem("server.v3", JSON.stringify({ list: ["https://example.com"] }))
 
     const [state] = persisted(
       { ...Persist.global("server"), previousKey: "server.v3" },
-      createStore({ list: [] as string[] }),
+      Schema.Struct({ list: Schema.mutable(Schema.Array(Schema.String)) }),
+      { list: [] },
       platform,
     )
 

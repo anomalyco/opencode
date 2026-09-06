@@ -2,17 +2,17 @@ export * as PlanPlugin from "./plan.js"
 
 import { Message, ToolFailure } from "@opencode-ai/ai"
 import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Agent } from "@opencode-ai/schema/agent"
+import type { SessionEvent } from "@opencode-ai/schema/session-event"
 import { Global } from "@opencode-ai/util/global"
 import { Effect, Stream } from "effect"
 import path from "path"
-import { Agent } from "../agent.js"
 import { Permission } from "../permission.js"
-import { SessionEvent } from "../session/event.js"
 
 const plan = Agent.ID.make("plan")
 
 const enter = (directory: string) => `<system-reminder>
-You are in Plan mode. You may optionally create or update plan documents in:
+You are in Plan mode. Discuss the plan with the user directly in the conversation. Do not create or update plan files unless the user explicitly asks you to; when they do, write them only in:
 ${directory}
 
 Do not modify any other files or ask a subagent to do so.
@@ -30,8 +30,8 @@ export const Plugin = define({
     const global = yield* Global.Service
     const directory = path.join(global.home, ".opencode", "plan")
     const enterReminder = enter(directory)
-    yield* ctx.agent.transform((draft) => {
-      draft.update(plan, (item) => {
+    yield* ctx.agent.transform((editor) => {
+      editor.update(plan, (item) => {
         item.name = Agent.Name.make("Plan")
         item.description = "Read-only agent for exploring the codebase and planning work before implementation."
         item.mode = "primary"

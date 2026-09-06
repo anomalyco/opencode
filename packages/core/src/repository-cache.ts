@@ -6,7 +6,7 @@
  * observe the checkout move underneath them.
  */
 import path from "path"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Clock, Context, Duration, Effect, Layer, Option, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Git } from "./git.js"
 import { Global } from "@opencode-ai/util/global"
@@ -14,6 +14,12 @@ import { Repository } from "./repository.js"
 import { AbsolutePath } from "./schema.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { EffectFlock } from "@opencode-ai/util/effect-flock"
+import { KV } from "./kv.js"
+
+const Refresh = Schema.Struct({
+  attemptedAt: Schema.Number,
+})
+const refreshInterval = Duration.toMillis(Duration.days(1))
 
 export type Result = {
   readonly repository: string
@@ -27,7 +33,8 @@ export type Result = {
 
 export type EnsureInput = {
   readonly reference: Repository.RemoteReference
-  readonly refresh?: boolean
+  /** `daily` throttles existing checkouts; `true` forces a refresh. */
+  readonly refresh?: boolean | "daily"
   readonly branch?: string
 }
 
@@ -105,50 +112,55 @@ export const validateBranch = Effect.fn("RepositoryCache.validateBranch")(functi
   })
 })
 
-const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFlock.Service | Global.Service> =
-  Layer.effect(
-    Service,
-    Effect.gen(function* () {
-      const fs = yield* FSUtil.Service
-      const git = yield* Git.Service
-      const flock = yield* EffectFlock.Service
-      const global = yield* Global.Service
+const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const fs = yield* FSUtil.Service
+    const git = yield* Git.Service
+    const flock = yield* EffectFlock.Service
+    const global = yield* Global.Service
+    const kv = yield* KV.Service
 
-      return Service.of({
-        ensure: Effect.fn("RepositoryCache.ensure")(function* (input) {
-          if (input.branch) yield* validateBranch(input.branch)
+    return Service.of({
+      ensure: Effect.fn("RepositoryCache.ensure")(function* (input) {
+        if (input.branch) yield* validateBranch(input.branch)
 
-          const repository = input.reference.label
-          const localPath = Repository.cachePath(global.repos, input.reference, input.branch)
-          const cloneTarget = Repository.parse(input.reference.remote) ?? input.reference
+        const repository = input.reference.label
+        const localPath = Repository.cachePath(global.repos, input.reference, input.branch)
+        const key = `repository-cache:${localPath}`
+        const cloneTarget = Repository.parse(input.reference.remote) ?? input.reference
 
-          return yield* flock
-            .withLock(
-              Effect.gen(function* () {
-                yield* cacheOperation(fs.ensureDir(path.dirname(localPath)), "ensure cache directory", localPath)
+        return yield* flock
+          .withLock(
+            Effect.gen(function* () {
+              yield* cacheOperation(fs.ensureDir(path.dirname(localPath)), "ensure cache directory", localPath)
 
-                const existing = yield* git.repo.discover(AbsolutePath.make(localPath))
-                const origin = existing ? yield* git.remote.get(existing) : undefined
-                const originReference = origin ? Repository.parse(origin) : undefined
-                // Discovery walks upward, so an enclosing repository with a
-                // matching origin could masquerade as the cache entry; reuse
-                // requires the checkout to live exactly at the cache path.
-                const worktree = existing ? yield* fs.resolve(localPath) : undefined
-                const reuse = Boolean(
-                  existing &&
-                    existing.worktree === worktree &&
-                    originReference &&
-                    Repository.same(originReference, cloneTarget),
-                )
-                if (!reuse && (yield* fs.existsSafe(localPath))) {
-                  yield* cacheOperation(fs.remove(localPath, { recursive: true }), "remove stale cache", localPath)
-                }
+              const existing = yield* git.repo.discover(AbsolutePath.make(localPath))
+              const origin = existing ? yield* git.remote.get(existing) : undefined
+              const originReference = origin ? Repository.parse(origin) : undefined
+              // Discovery walks upward, so an enclosing repository with a
+              // matching origin could masquerade as the cache entry; reuse
+              // requires the checkout to live exactly at the cache path.
+              const worktree = existing ? yield* fs.resolve(localPath) : undefined
+              const reuse = Boolean(
+                existing &&
+                  existing.worktree === worktree &&
+                  originReference &&
+                  Repository.same(originReference, cloneTarget),
+              )
+              if (!reuse && (yield* fs.existsSafe(localPath))) {
+                yield* cacheOperation(fs.remove(localPath, { recursive: true }), "remove stale cache", localPath)
+              }
 
-                const status = !reuse
-                  ? ("cloned" as const)
-                  : input.refresh
-                    ? ("refreshed" as const)
-                    : ("cached" as const)
+              const now = yield* Clock.currentTimeMillis
+              const previous = Option.getOrUndefined(Schema.decodeUnknownOption(Refresh)(yield* kv.get(key)))
+              const refresh =
+                input.refresh === "daily" ? !previous || now - previous.attemptedAt >= refreshInterval : input.refresh
+              const status = !reuse ? ("cloned" as const) : refresh ? ("refreshed" as const) : ("cached" as const)
+
+              if (status !== "cached") {
+                // Record attempts before network work so failures obey the same refresh interval.
+                yield* kv.set(key, { attemptedAt: now })
 
                 if (status === "cloned") {
                   yield* git.repo
@@ -192,35 +204,36 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFl
                     .resetHard(existing, target ? `origin/${target}` : "HEAD")
                     .pipe(Effect.mapError((error) => new ResetFailedError({ repository, message: error.message })))
                 }
+              }
 
-                const checkout = yield* git.repo.discover(AbsolutePath.make(localPath))
+              const checkout = yield* git.repo.discover(AbsolutePath.make(localPath))
 
-                return {
-                  repository,
-                  host: input.reference.host,
-                  remote: input.reference.remote,
-                  localPath,
-                  status,
-                  head: checkout ? yield* git.history.head(checkout) : undefined,
-                  branch: checkout ? yield* git.history.branch(checkout) : undefined,
-                } satisfies Result
-              }),
-              `repository-cache:${localPath}`,
-            )
-            .pipe(
-              Effect.mapError((error) =>
-                isError(error) ? error : new LockFailedError({ localPath, message: errorMessage(error) }),
-              ),
-            )
-        }),
-      })
-    }),
-  )
+              return {
+                repository,
+                host: input.reference.host,
+                remote: input.reference.remote,
+                localPath,
+                status,
+                head: checkout ? yield* git.history.head(checkout) : undefined,
+                branch: checkout ? yield* git.history.branch(checkout) : undefined,
+              } satisfies Result
+            }),
+            key,
+          )
+          .pipe(
+            Effect.mapError((error) =>
+              isError(error) ? error : new LockFailedError({ localPath, message: errorMessage(error) }),
+            ),
+          )
+      }),
+    })
+  }),
+)
 
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [EffectFlock.node, FSUtil.node, Git.node, Global.node],
+  deps: [EffectFlock.node, FSUtil.node, Git.node, Global.node, KV.node],
 })
 
 function errorMessage(error: unknown) {

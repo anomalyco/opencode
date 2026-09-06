@@ -13,6 +13,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Credential } from "@opencode-ai/core/credential"
 import { ConfigMigrateV1 } from "@opencode-ai/core/v1/config/migrate"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { ConfigNormalize } from "@opencode-ai/core/config/normalize"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Bus } from "@opencode-ai/core/bus"
 import { Global } from "@opencode-ai/util/global"
@@ -55,12 +56,12 @@ function testLayer(
     ),
   )
   const built = AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
-    [Config.node, Config.configured(options)],
-    [Location.node, locationLayer],
-    [Global.node, Global.layerWith({ config: globalDirectory, home: path.join(globalDirectory, "home") })],
-    [Credential.node, credentialNode],
-    [WellKnown.node, wellknownNode],
-    [Watcher.node, watcher],
+    Config.node.replace(Config.configured(options)),
+    Location.node.replace(locationLayer),
+    Global.node.replace(Global.layerWith({ config: globalDirectory, home: path.join(globalDirectory, "home") })),
+    Credential.node.replace(credentialNode),
+    WellKnown.node.replace(wellknownNode),
+    Watcher.node.replace(watcher),
   ])
   // Merge the watcher layer by reference so Watcher.Test resolves to the same
   // memoized instance the built graph uses.
@@ -105,6 +106,10 @@ describe("Config", () => {
             Effect.gen(function* () {
               const config = yield* Config.Service
               expect(ambient(yield* config.entries())).toEqual([])
+              const watcher = yield* Watcher.Test
+              expect(
+                (yield* watcher.subscriptions()).filter((watch) => watch.type === "entries" && watch.path === home),
+              ).toEqual([])
             }).pipe(
               Effect.provide(
                 testLayer(project, global, project, undefined, undefined, undefined, undefined, { global: false }),
@@ -144,6 +149,46 @@ describe("Config", () => {
               ),
             ),
           ),
+        )
+      }),
+    ),
+  )
+
+  it.live("discovers the global config directory once when the project walk reaches it", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        // The global config dir is the project's own .opencode (as isolated
+        // hosts pin OPENCODE_CONFIG_DIR), and the location is the project under
+        // a symlinked spelling, so the walk reaches the same directory under a
+        // different string than the global root.
+        const real = path.join(tmp.path, "real")
+        const link = path.join(tmp.path, "link")
+        const global = AbsolutePath.make(path.join(real, ".opencode"))
+        const once = Effect.gen(function* () {
+          const config = yield* Config.Service
+          const watcher = yield* Watcher.Test
+          const entries = yield* config.entries()
+          expect(entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))).toEqual([global])
+          expect(entries.flatMap((entry) => (entry.type === "document" ? [entry.info.shell] : []))).toEqual(["global"])
+          expect(
+            (yield* watcher.subscriptions())
+              .filter((subscription) => subscription.type === "directory")
+              .map((subscription) => subscription.path),
+          ).toEqual([global])
+          expect(
+            (yield* watcher.subscriptions()).filter((subscription) =>
+              subscription.path.includes(`${path.sep}.opencode${path.sep}`),
+            ),
+          ).toEqual([])
+        })
+        return Effect.promise(async () => {
+          await fs.mkdir(global, { recursive: true })
+          await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ shell: "global" }))
+          await fs.symlink(real, link, process.platform === "win32" ? "junction" : undefined)
+        }).pipe(
+          Effect.andThen(once.pipe(Effect.provide(testLayer(link, global, real)))),
+          // Same spelling on both sides: still exactly once.
+          Effect.andThen(once.pipe(Effect.provide(testLayer(real, global, real)))),
         )
       }),
     ),
@@ -199,6 +244,8 @@ describe("Config", () => {
             Effect.gen(function* () {
               const config = yield* Config.Service
               expect(Config.latest(yield* config.entries(), "shell")).toBe("global")
+              const watcher = yield* Watcher.Test
+              expect((yield* watcher.subscriptions()).map((subscription) => subscription.path)).toEqual([global])
             }).pipe(
               Effect.provide(
                 testLayer(project, global, project, undefined, undefined, emptyCredentialNode, emptyWellknownNode, {
@@ -212,17 +259,19 @@ describe("Config", () => {
     ),
   )
 
-  it.live("reloads external config and publishes directory updates", () =>
+  it.live("reloads file substitutions when their source changes", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const global = path.join(tmp.path, "global")
           const project = path.join(tmp.path, "project")
           const file = path.join(global, "opencode.json")
+          const source = path.join(global, "shell.txt")
           yield* Effect.promise(async () => {
             await fs.mkdir(global, { recursive: true })
             await fs.mkdir(project, { recursive: true })
-            await fs.writeFile(file, JSON.stringify({ shell: "first" }))
+            await fs.writeFile(source, "first")
+            await fs.writeFile(file, JSON.stringify({ shell: "{file:shell.txt}" }))
           })
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
@@ -233,15 +282,43 @@ describe("Config", () => {
               .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
             yield* Effect.sleep("10 millis")
 
-            yield* watcher.emit({ type: "update", path: path.join(global, "commands", "review.md") })
-            yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "second" })))
-            yield* watcher.emit({ type: "update", path: file })
+            yield* Effect.promise(() => fs.writeFile(source, "second"))
+            yield* watcher.emit({ type: "update", path: source })
 
             expect(yield* Fiber.join(changed)).toHaveLength(1)
             expect(Config.latest(yield* config.entries(), "shell")).toBe("second")
           }).pipe(Effect.provide(testLayer(project, global, project, undefined, Watcher.testLayer)))
         }),
       ),
+    ),
+  )
+
+  it.live("excludes missing files under symlinked global roots when global is disabled", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const link = path.join(tmp.path, "link")
+        const project = path.join(link, "plugins", "demo")
+        return Effect.promise(async () => {
+          await fs.mkdir(path.join(global, "plugins", "demo"), { recursive: true })
+          await fs.symlink(global, link, process.platform === "win32" ? "junction" : undefined)
+        }).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const watcher = yield* Watcher.Test
+              const subscriptions = yield* watcher.subscriptions()
+              expect(subscriptions.length).toBeGreaterThan(0)
+              expect(
+                subscriptions.filter((item) => inFixture(global, item.path) || inFixture(link, item.path)),
+              ).toEqual([])
+            }).pipe(
+              Effect.provide(
+                testLayer(project, global, project, undefined, undefined, undefined, undefined, { global: false }),
+              ),
+            ),
+          ),
+        )
+      }),
     ),
   )
 
@@ -311,16 +388,15 @@ describe("Config", () => {
           }).pipe(
             Effect.provide(
               AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
-                [
-                  Location.node,
+                Location.node.replace(
                   Layer.succeed(
                     Location.Service,
                     Location.Service.of(location({ directory: AbsolutePath.make(project) })),
                   ),
-                ],
-                [Global.node, Global.layerWith({ config: global, home: path.join(global, "home") })],
-                [Credential.node, emptyCredentialNode],
-                [WellKnown.node, emptyWellknownNode],
+                ),
+                Global.node.replace(Global.layerWith({ config: global, home: path.join(global, "home") })),
+                Credential.node.replace(emptyCredentialNode),
+                WellKnown.node.replace(emptyWellknownNode),
               ]),
             ),
           )
@@ -587,6 +663,21 @@ describe("Config", () => {
     })
   })
 
+  test("migrates the v1 update policy", () => {
+    expect(ConfigMigrateV1.migrate({ autoupdate: false }).update).toBe("disable")
+    expect(ConfigMigrateV1.migrate({ autoupdate: "notify" }).update).toBe("notify")
+    expect(ConfigMigrateV1.migrate({ autoupdate: true }).update).toBe("auto")
+    expect(ConfigMigrateV1.migrate({}).update).toBeUndefined()
+  })
+
+  test("normalizes the native auto update policy", () => {
+    expect(ConfigNormalize.normalize({ update: "auto" })).toEqual({
+      type: "normalized",
+      encoded: { update: "auto" },
+      diagnostics: [],
+    })
+  })
+
   test("migrates v1 provider lists to policies", () => {
     expect(
       ConfigMigrateV1.migrate({
@@ -746,30 +837,32 @@ describe("Config", () => {
     expect(migrated.providers?.custom?.models?.boolean?.compatibility).toBeUndefined()
   })
 
-  test("migrates v1 command configuration", () => {
-    expect(
-      ConfigMigrateV1.migrate({
-        command: {
-          review: {
-            template: "Review changes",
-            description: "Review code",
-            agent: "reviewer",
-            model: "anthropic/claude",
-            variant: "high",
-            subtask: true,
+  for (const subtask of [true, false]) {
+    test(`migrates v1 command configuration with subtask: ${subtask}`, () => {
+      expect(
+        ConfigMigrateV1.migrate({
+          command: {
+            review: {
+              template: "Review changes",
+              description: "Review code",
+              agent: "reviewer",
+              model: "anthropic/claude",
+              variant: "high",
+              subtask,
+            },
           },
+        }).commands,
+      ).toEqual({
+        review: {
+          template: "Review changes",
+          description: "Review code",
+          agent: "reviewer",
+          model: { providerID: "anthropic", model: "claude", variant: "high" },
+          subagent: subtask,
         },
-      }).commands,
-    ).toEqual({
-      review: {
-        template: "Review changes",
-        description: "Review code",
-        agent: "reviewer",
-        model: { providerID: "anthropic", model: "claude", variant: "high" },
-        subtask: true,
-      },
+      })
     })
-  })
+  }
 
   test("normalizes renamed permission actions when migrating v1 permissions", () => {
     expect(
@@ -834,7 +927,7 @@ describe("Config", () => {
     ),
   )
 
-  it.live("does not watch ecosystem config roots", () =>
+  it.live("does not recursively watch ecosystem config roots", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
@@ -854,6 +947,11 @@ describe("Config", () => {
                 type: "directory",
                 path: AbsolutePath.make(path.join(tmp.path, "global")),
                 ignore: ["**/{node_modules,.git}/**", ".git", "node_modules"],
+              },
+              {
+                type: "entries",
+                path: tmp.path,
+                names: [".agents", ".claude", ".opencode", "opencode.json", "opencode.jsonc"],
               },
             ])
           }).pipe(Effect.provide(testLayer(tmp.path, undefined, undefined, undefined, Watcher.testLayer)))
@@ -1027,7 +1125,7 @@ describe("Config", () => {
                 shell: "/bin/bash",
                 model: "anthropic/claude",
                 default_agent: "reviewer",
-                autoupdate: "notify",
+                update: "notify",
                 share: "disabled",
                 enterprise: { url: "https://share.example.com" },
                 username: "test-user",
@@ -1098,10 +1196,6 @@ describe("Config", () => {
                   sdk: { repository: "github.com/example/sdk", branch: "main" },
                   shorthand: "github.com/example/docs",
                 },
-                plugins: [
-                  "opencode-helicone-session",
-                  { package: "@my-org/audit-plugin", options: { endpoint: "https://audit.example.com" } },
-                ],
               }),
             ),
           )
@@ -1114,7 +1208,7 @@ describe("Config", () => {
             expect(documents[0]?.info.shell).toBe("/bin/bash")
             expect(documents[0]?.info.model).toEqual(selection("anthropic/claude"))
             expect(documents[0]?.info.default_agent).toBe("reviewer")
-            expect(documents[0]?.info.autoupdate).toBe("notify")
+            expect(documents[0]?.info.update).toBe("notify")
             expect(documents[0]?.info.share).toBe("disabled")
             expect(documents[0]?.info.enterprise).toEqual({ url: "https://share.example.com" })
             expect(documents[0]?.info.username).toBe("test-user")
@@ -1192,10 +1286,6 @@ describe("Config", () => {
               sdk: { repository: "github.com/example/sdk", branch: "main" },
               shorthand: "github.com/example/docs",
             })
-            expect(documents[0]?.info.plugins).toEqual([
-              "opencode-helicone-session",
-              { package: "@my-org/audit-plugin", options: { endpoint: "https://audit.example.com" } },
-            ])
           }).pipe(Effect.provide(testLayer(tmp.path)))
         }),
       ),
@@ -1245,6 +1335,7 @@ describe("Config", () => {
               JSON.stringify({
                 shell: "/bin/zsh",
                 default_agent: "reviewer",
+                autoupdate: false,
                 snapshot: false,
                 autoshare: true,
                 permission: {
@@ -1260,10 +1351,6 @@ describe("Config", () => {
                     permission: { read: "allow" },
                   },
                 },
-                plugin: [
-                  "opencode-helicone-session",
-                  ["@my-org/audit-plugin", { endpoint: "https://audit.example.com" }],
-                ],
                 skills: { paths: ["./skills"], urls: ["https://example.com/.well-known/skills/"] },
                 references: {
                   docs: { path: "../docs", description: "Use for product documentation", hidden: true },
@@ -1325,6 +1412,7 @@ describe("Config", () => {
             expect(documents[0]?.info).toBeInstanceOf(Info)
             expect(documents[0]?.info.shell).toBe("/bin/zsh")
             expect(documents[0]?.info.default_agent).toBe("reviewer")
+            expect(documents[0]?.info.update).toBe("disable")
             expect(documents[0]?.info.snapshots).toBe(false)
             expect(documents[0]?.info.share).toBe("auto")
             expect(documents[0]?.info.permissions).toEqual([
@@ -1339,10 +1427,6 @@ describe("Config", () => {
               request: { body: { temperature: 0.2 } },
               permissions: [{ action: "read", resource: "*", effect: "allow" }],
             })
-            expect(documents[0]?.info.plugins).toEqual([
-              "opencode-helicone-session",
-              { package: "@my-org/audit-plugin", options: { endpoint: "https://audit.example.com" } },
-            ])
             expect(documents[0]?.info.skills).toEqual(["./skills", "https://example.com/.well-known/skills/"])
             expect(documents[0]?.info.references).toEqual({
               docs: { path: "../docs", description: "Use for product documentation", hidden: true },
@@ -1424,8 +1508,9 @@ describe("Config", () => {
 
             expect(documents.map((document) => document.info.$schema)).toEqual(["base"])
             expect(yield* watcher.subscriptions()).toContainEqual({
-              path: path.join(tmp.path, "opencode.jsonc"),
-              type: "file",
+              path: tmp.path,
+              type: "entries",
+              names: [".agents", ".claude", ".opencode", "opencode.json", "opencode.jsonc"],
             })
           }).pipe(Effect.provide(testLayer(tmp.path)))
         }),

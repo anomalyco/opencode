@@ -3,8 +3,7 @@ export * as ModelResolver from "./model-resolver.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { LanguageModel } from "@opencode-ai/ai"
 import { Auth } from "@opencode-ai/ai/route"
-import { Context, Effect, Layer, Schema } from "effect"
-import { produce } from "immer"
+import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
 import { AISDKNative } from "./aisdk-native.js"
 import { Catalog } from "./catalog.js"
@@ -79,6 +78,8 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelResolver") {}
 
+// Catalog models are shared with the retained registry value and stay editable by later transforms, so
+// resolution copies with spreads: immer's produce would deep-freeze the unchanged subtrees it shares with its input.
 export const withVariant = (
   model: Info,
   variantID: VariantID | undefined,
@@ -95,11 +96,12 @@ export const withVariant = (
     )
   return Effect.succeed(
     variant
-      ? produce(model, (draft) => {
-          draft.settings = Provider.mergeOverlay(draft.settings, variant.settings)
-          draft.headers = Provider.mergeHeaders(draft.headers, variant.headers)
-          draft.body = Provider.mergeOverlay(draft.body, variant.body)
-        })
+      ? {
+          ...model,
+          settings: Provider.mergeOverlay(model.settings, variant.settings),
+          headers: Provider.mergeHeaders(model.headers, variant.headers),
+          body: Provider.mergeOverlay(model.body, variant.body),
+        }
       : model,
   )
 }
@@ -132,7 +134,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
         packageName,
         settings: configured,
         modelID: resolved.modelID ?? resolved.id,
-        providerID: resolved.providerID,
+        providerID: resolved.canonical ?? resolved.providerID,
       })
     : undefined
   const native = mapping?.package ?? resolved.package
@@ -147,10 +149,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
         ...configuration,
       }) ?? {},
     )
-    const runtime = produce(resolved, (draft) => {
-      draft.settings = settings
-    })
-    return yield* loadAISDK(runtime).pipe(Effect.mapError(() => unsupported(resolved)))
+    return yield* loadAISDK({ ...resolved, settings }).pipe(Effect.mapError(() => unsupported(resolved)))
   }
   if (!native) return yield* unsupported(resolved)
 
@@ -160,7 +159,8 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     Effect.mapError(() => unsupported(resolved)),
   )
   const settings = {
-    ...(credential ? withoutNativeAuthSettings(mapped) : mapped),
+    ...(credential ? Struct.omit(mapped, ["accessToken", "apiKey", "authToken"]) : mapped),
+    ...(resolved.canonical === undefined ? {} : { provider: resolved.canonical }),
     ...nativeCredentialSettings(specifier, credential),
     headers: Provider.mergeHeaders(mapping?.headers, resolved.headers),
     body: Provider.mergeOverlay(mapping?.body, resolved.body),
@@ -169,7 +169,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     try: () => {
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
       return LanguageModel.update(runtime, {
-        provider: resolved.providerID,
+        provider: resolved.canonical ?? resolved.providerID,
         compatibility: resolved.compatibility
           ? Object.assign({}, runtime.compatibility, resolved.compatibility)
           : runtime.compatibility,
@@ -181,11 +181,13 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
 
 function prepareRuntimeModel(model: Info, credential: Credential.Value | undefined) {
   if (model.settings?.apiKey !== "" && (credential?.type !== "key" || credential.metadata === undefined)) return model
-  return produce(model, (draft) => {
-    if (draft.settings?.apiKey === "") delete draft.settings.apiKey
-    if (credential?.type === "key" && credential.metadata !== undefined)
-      draft.body = Provider.mergeOverlay(draft.body, credential.metadata)
-  })
+  return {
+    ...model,
+    ...(model.settings?.apiKey === "" ? { settings: Struct.omit(model.settings, ["apiKey"]) } : {}),
+    ...(credential?.type === "key" && credential.metadata !== undefined
+      ? { body: Provider.mergeOverlay(model.body, credential.metadata) }
+      : {}),
+  }
 }
 
 function validateProviderVariables(
@@ -240,11 +242,6 @@ const nativeCredentialSettings = (specifier: string, credential: Credential.Valu
   )
     return { accessToken: credential.access }
   return { apiKey: credential.access }
-}
-
-const withoutNativeAuthSettings = (settings: Record<string, unknown>) => {
-  const { accessToken: _accessToken, apiKey: _apiKey, authToken: _authToken, ...rest } = settings
-  return rest
 }
 
 const unsupported = (model: Info) =>
@@ -338,6 +335,7 @@ function usesAPIKeyAuth(packageName: string | undefined) {
     name === "@ai-sdk/openai-compatible" ||
     name === "@ai-sdk/google" ||
     name === "@ai-sdk/groq" ||
+    name === "@ai-sdk/mistral" ||
     name === "@ai-sdk/togetherai" ||
     name === "@ai-sdk/xai" ||
     name === "@openrouter/ai-sdk-provider" ||
@@ -351,6 +349,7 @@ function usesAPIKeyAuth(packageName: string | undefined) {
     name === "@opencode-ai/ai/providers/openai-compatible" ||
     name === "@opencode-ai/ai/providers/google" ||
     name === "@opencode-ai/ai/providers/groq" ||
+    name === "@opencode-ai/ai/providers/mistral" ||
     name === "@opencode-ai/ai/providers/togetherai" ||
     name === "@opencode-ai/ai/providers/xai" ||
     name === "@opencode-ai/ai/providers/openrouter" ||

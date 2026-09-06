@@ -10,7 +10,7 @@ import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { tempLocationLayer } from "./fixture/location"
 
-const it = testEffect(AppNodeBuilder.build(Ripgrep.node, [[Location.node, tempLocationLayer]]))
+const it = testEffect(AppNodeBuilder.build(Ripgrep.node, [Location.node.replace(tempLocationLayer)]))
 
 describe("Ripgrep", () => {
   it.live("globs files as an array", () =>

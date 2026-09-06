@@ -25,18 +25,20 @@ import { Plugin } from "./plugin.js"
 import { PluginHooks } from "./plugin/hooks.js"
 import { InstancePlugins } from "./plugin/instance.js"
 import { PluginSupervisor } from "./plugin/supervisor.js"
+import { WorktreeRefresh } from "./worktree/refresh.js"
 import { Worktree } from "./worktree.js"
 import { Pty } from "./pty.js"
 import { Shell } from "./shell.js"
 import { ShellSelect } from "./shell/select.js"
 import { Reference } from "./reference.js"
+import { Rpc } from "./rpc.js"
 import { WebSearch } from "./websearch.js"
 import { ReferenceInstructions } from "./reference/instructions.js"
 import { SessionRunnerLLM } from "./session/runner/llm.js"
 import { SessionRunnerModel } from "./session/runner/model.js"
-import { SessionModelTransport } from "./session/model-transport.js"
 import { SessionCompaction } from "./session/compaction.js"
 import { SessionTitle } from "./session/title.js"
+import { SessionContext } from "./session/context.js"
 import { Skill } from "./skill.js"
 import { SkillInstructions } from "./skill/instructions.js"
 import { Snapshot } from "./snapshot.js"
@@ -44,7 +46,6 @@ import { InstructionDiscovery } from "./instruction-discovery.js"
 import { InstructionBuiltIns } from "./instructions/builtins.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
 import { SessionInstructions } from "./session/instructions.js"
-import { SessionGenerateNode } from "./session/generate-node.js"
 import { McpTool } from "./tool/mcp.js"
 import { ReadToolFileSystem } from "./tool/read-filesystem.js"
 import { Tool } from "./tool.js"
@@ -52,6 +53,7 @@ import { ToolOutput } from "./tool-output.js"
 import { Vcs } from "./vcs.js"
 
 export * as Instance from "./instance.js"
+export { Service, node, type Interface } from "./instance/service.js"
 
 const nodes = [
   Location.node,
@@ -60,6 +62,7 @@ const nodes = [
   Agent.node,
   Command.node,
   Reference.node,
+  Rpc.node,
   WebSearch.node,
   Integration.node,
   Catalog.node,
@@ -69,7 +72,8 @@ const nodes = [
   PluginHooks.node,
   InstancePlugins.node,
   PluginSupervisor.node,
-  Worktree.refreshNode,
+  WorktreeRefresh.node,
+  Worktree.node,
   FileSystemSearch.node,
   FileSystem.node,
   ShellSelect.node,
@@ -91,25 +95,24 @@ const nodes = [
   InstructionEntry.node,
   Form.node,
   Generate.node,
-  SessionGenerateNode.node,
   ReadToolFileSystem.node,
   McpTool.node,
   SessionInstructions.node,
   SessionRunnerModel.node,
-  SessionModelTransport.node,
   SessionCompaction.node,
   SessionTitle.node,
+  SessionContext.node,
   Snapshot.node,
   SessionRunnerLLM.node,
   Vcs.node,
   // Start repository watches only after boot-critical filesystem and Git work.
   LocationWatcher.node,
-] as const satisfies readonly Node.LocationNode<unknown, unknown>[]
+] as const satisfies readonly Node.LocationGraph<never, unknown>[]
 
-export const graph = LayerNode.group<typeof nodes>(nodes)
+export const graph = LayerNode.group(nodes)
 
 export type Services = LayerNode.Output<typeof graph>
-export type Error = LayerNode.Error<typeof graph>
+export type Error = Layer.Error<ReturnType<typeof layer>>
 
 export interface Options {
   // Plugins this instance is born with; empty and absent are equivalent.
@@ -135,29 +138,25 @@ export interface Options {
 // source still honors explicit plugin operations from wellknown and
 // host-injected config.
 const vanillaReplacements: LayerNode.Replacements = [
-  [Config.node, Config.configured({ project: false, global: false })],
-  [InstructionDiscovery.node, InstructionDiscovery.configured({ project: false, global: false })],
+  Config.node.replace(Config.configured({ project: false, global: false })),
+  InstructionDiscovery.node.replace(InstructionDiscovery.configured({ project: false, global: false })),
 ]
 
 // One instance is one compiled, fresh copy of the graph standing on a directory.
-export function layer(ref: Location.Ref, options: Options = {}) {
+export function layer(ref: Location.Ref, options: Options = {}): Layer.Layer<Services> {
   const startedAt = performance.now()
   // Ordered: vanilla defaults, then caller replacements (which win over the
-  // defaults), then bound pairs (which win over everything).
-  const allReplacements: LayerNode.Replacements = [
+  // defaults), then instance bindings (which win over everything).
+  const replacements: LayerNode.Replacements = [
     ...(options.discovery === false ? vanillaReplacements : []),
     ...(options.replacements ?? []),
-    [Location.node, Location.boundNode(ref, { discovery: options.discovery })],
-    [InstancePlugins.node, InstancePlugins.bound(options.plugins ?? [])],
+    Location.node.replace(Location.boundNode(ref, { discovery: options.discovery })),
+    InstancePlugins.node.replace(InstancePlugins.bound(options.plugins ?? [])),
   ]
-  // Apply replacements during hoist, not afterward: replacements can
-  // introduce new tagged dependencies (Location.boundNode depends on
-  // Project), and the hoist walk is the only pass that can still slice
-  // those back out.
-  const location = LayerNode.hoist(graph, Node.tags.values.global, allReplacements)
 
-  return LayerNode.compile(location.node).pipe(
-    Layer.fresh,
+  return LayerNode.compile(graph, { replacements, shared: Node.tags.values.global }).pipe(
+    // Instance boot failures are defects; provided operations retain their typed errors.
+    Layer.orDie,
     Layer.tap(() =>
       Effect.logInfo("location services booted", {
         directory: ref.directory,
@@ -165,6 +164,5 @@ export function layer(ref: Location.Ref, options: Options = {}) {
         durationMs: Math.round(performance.now() - startedAt),
       }),
     ),
-    Layer.provide(LayerNode.compile(location.hoisted)),
   )
 }

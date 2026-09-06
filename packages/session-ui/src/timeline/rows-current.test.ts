@@ -53,6 +53,13 @@ describe("current session timeline rows", () => {
         output: { output: "/repo", cursor: 5, size: 5, truncated: false },
         time: { created: 1, completed: 2 },
       },
+      {
+        id: "msg_shell_completion",
+        type: "synthetic",
+        text: "User shell pwd completed: /repo",
+        metadata: { source: "shell", shellID: "shell_1", state: "completed" },
+        time: { created: 3 },
+      },
     ] satisfies SessionMessageInfo[]
     const result = Timeline.constructSessionMessageRows(source, true, { type: "idle" })
 

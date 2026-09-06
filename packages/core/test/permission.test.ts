@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Fiber, Layer } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -9,7 +9,6 @@ import { Location } from "@opencode-ai/core/location"
 import { Permission } from "@opencode-ai/core/permission"
 import { PermissionTable } from "@opencode-ai/core/permission/sql"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
-import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -27,20 +26,12 @@ const current = Layer.succeed(
 )
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([
-      Database.node,
-      Bus.node,
-      SessionStore.node,
-      PermissionSaved.node,
-      Agent.node,
-      PluginHooks.node,
-      Permission.node,
-    ]),
-    [[Location.node, current]],
+    LayerNode.group([Database.node, Bus.node, SessionStore.node, PermissionSaved.node, Agent.node, Permission.node]),
+    [Location.node.replace(current)],
   ),
 )
 
-function setup(rules: Permission.Ruleset = []) {
+function setup(rules: Permission.Ruleset = [], sessionID = Session.ID.make("ses_test")) {
   return Effect.gen(function* () {
     const { db } = yield* Database.Service
     yield* db
@@ -52,7 +43,7 @@ function setup(rules: Permission.Ruleset = []) {
     yield* db
       .insert(SessionTable)
       .values({
-        id: Session.ID.make("ses_test"),
+        id: sessionID,
         project_id: Project.ID.global,
         slug: "test",
         directory: "/project",
@@ -88,18 +79,19 @@ function assertion(input: Partial<Permission.AssertInput> = {}) {
   } satisfies Permission.AssertInput
 }
 
-function waitForRequest() {
+function waitForRequest(input: Partial<Permission.AssertInput> = {}) {
   return Effect.gen(function* () {
+    const value = assertion(input)
     const service = yield* Permission.Service
     const bus = yield* Bus.Service
     const asked = yield* Deferred.make<Permission.Request>()
-    const unsubscribe = yield* bus.listen((event) =>
-      event.type === Permission.Event.Asked.type
-        ? Deferred.succeed(asked, event.data as Permission.Request).pipe(Effect.asVoid)
-        : Effect.void,
-    )
+    const unsubscribe = yield* bus.listen((event) => {
+      if (event.type !== Permission.Event.Asked.type) return Effect.void
+      const request = event.data as Permission.Request
+      return request.id === value.id ? Deferred.succeed(asked, request).pipe(Effect.asVoid) : Effect.void
+    })
     yield* Effect.addFinalizer(() => unsubscribe)
-    const fiber = yield* service.assert(assertion()).pipe(Effect.forkScoped)
+    const fiber = yield* service.assert(value).pipe(Effect.forkScoped)
     const request = yield* Deferred.await(asked)
     return { service, fiber, request }
   })
@@ -153,74 +145,6 @@ describe("Permission", () => {
       const blocked = yield* service.assert(assertion()).pipe(Effect.flip)
       expect(blocked).toBeInstanceOf(Permission.BlockedError)
       expect(yield* service.list()).toEqual([])
-    }),
-  )
-
-  it.effect("lets plugins review allow and ask decisions without overriding configured denies", () =>
-    Effect.gen(function* () {
-      const hooks = yield* PluginHooks.Service
-      const seen: string[] = []
-      yield* hooks.register("permission", "evaluate", (event) =>
-        Effect.sync(() => {
-          seen.push(event.effect)
-          event.effect = event.action === "write" ? "deny" : "allow"
-          event.message = "Reviewed by policy"
-        }),
-      )
-      const service = yield* Permission.Service
-
-      yield* setup([{ action: "read", resource: "*", effect: "allow" }])
-      expect(yield* service.ask(assertion())).toMatchObject({ effect: "allow" })
-
-      yield* setRules([])
-      expect(yield* service.ask(assertion({ id: Permission.ID.create("per_ask") }))).toMatchObject({ effect: "allow" })
-      expect(yield* service.list()).toEqual([])
-
-      const blocked = yield* service
-        .assert(assertion({ id: Permission.ID.create("per_write"), action: "write" }))
-        .pipe(Effect.flip)
-      expect(blocked).toBeInstanceOf(Permission.BlockedError)
-      expect(blocked.message).toBe("Reviewed by policy")
-
-      yield* setRules([{ action: "read", resource: "*", effect: "deny" }])
-      expect(yield* service.ask(assertion({ id: Permission.ID.create("per_deny") }))).toMatchObject({ effect: "deny" })
-      expect(seen).toEqual(["allow", "ask", "ask"])
-    }),
-  )
-
-  it.effect("publishes the reviewer message when a plugin escalates to ask", () =>
-    Effect.gen(function* () {
-      yield* setup([{ action: "read", resource: "*", effect: "allow" }])
-      const hooks = yield* PluginHooks.Service
-      yield* hooks.register("permission", "evaluate", (event) =>
-        Effect.sync(() => {
-          event.effect = "ask"
-          event.message = "Confirm production access"
-        }),
-      )
-      const service = yield* Permission.Service
-      const result = yield* service.ask(assertion())
-
-      expect(result.effect).toBe("ask")
-      expect(yield* service.get(result.id)).toMatchObject({ message: "Confirm production access" })
-    }),
-  )
-
-  it.effect("allows cancellation while a permission reviewer is running", () =>
-    Effect.gen(function* () {
-      yield* setup([{ action: "read", resource: "*", effect: "allow" }])
-      const hooks = yield* PluginHooks.Service
-      const started = yield* Deferred.make<void>()
-      yield* hooks.register("permission", "evaluate", () =>
-        Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
-      )
-      const service = yield* Permission.Service
-      const fiber = yield* service.assert(assertion()).pipe(Effect.forkScoped)
-
-      yield* Deferred.await(started)
-      yield* Fiber.interrupt(fiber)
-      const exit = yield* Fiber.await(fiber)
-      expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
     }),
   )
 
@@ -383,6 +307,44 @@ describe("Permission", () => {
       expect(yield* saved.list()).toEqual([])
     }),
   )
+
+  for (const guard of ["configured deny", "missing Session"] as const) {
+    it.effect(`skips pending auto-approval after always for ${guard}`, () =>
+      Effect.gen(function* () {
+        yield* setup()
+        yield* setup([], Session.ID.make("ses_other"))
+        const agents = yield* Agent.Service
+        yield* agents.transform((editor) =>
+          editor.update(Agent.ID.make("reviewer"), (agent) => {
+            agent.permissions = []
+          }),
+        )
+        const selected = yield* waitForRequest({ save: ["src/*"] })
+        const other = yield* waitForRequest({
+          id: Permission.ID.create("per_other"),
+          sessionID: Session.ID.make("ses_other"),
+          agent: Agent.ID.make("reviewer"),
+        })
+        if (guard === "configured deny") {
+          yield* agents.transform((editor) =>
+            editor.update(Agent.ID.make("reviewer"), (agent) => {
+              agent.permissions = [{ action: "read", resource: "*", effect: "deny" }]
+            }),
+          )
+        }
+        if (guard === "missing Session") {
+          const { db } = yield* Database.Service
+          yield* db.delete(SessionTable).where(eq(SessionTable.id, other.request.sessionID)).run().pipe(Effect.orDie)
+        }
+        yield* selected.service.reply({ requestID: selected.request.id, reply: "always" })
+        yield* Fiber.join(selected.fiber)
+        expect(yield* selected.service.list()).toEqual([other.request])
+        expect(other.fiber.pollUnsafe()).toBeUndefined()
+        yield* Fiber.interrupt(other.fiber)
+        expect(yield* selected.service.list()).toEqual([])
+      }),
+    )
+  }
 })
 
 describe("shell scanner permission impact", () => {

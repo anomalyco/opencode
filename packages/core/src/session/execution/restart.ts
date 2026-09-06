@@ -9,6 +9,8 @@ import { SessionEvent } from "../event.js"
 import { SessionExecution } from "../execution.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
+import { ShellResult } from "../../shell/result.js"
+import { SubagentCompletion } from "../subagent-completion.js"
 
 const CONTINUE_AFTER_SERVER_RESTART =
   "The server restarted while you were working. Continue from where you left off without repeating completed work."
@@ -115,13 +117,13 @@ export const layer = (options?: Options) =>
             id: background.notificationID,
             sessionID: recovery.sessionID,
             description: recovery.command,
-            text: `<shell id="${background.id}" state="${state}" command="${recovery.command}">\n${text}\n</shell>`,
-            metadata: {
-              source: "shell",
+            ...ShellResult.notification({
               jobID: background.id,
               shellID: recovery.shellID,
+              command: recovery.command,
               state,
-            },
+              text,
+            }),
             ...(suspended.has(recovery.sessionID) ? { resume: false } : {}),
           })
           .pipe(
@@ -143,36 +145,19 @@ export const layer = (options?: Options) =>
         }
 
         const notify = Effect.fnUntraced(function* (result: Pick<Job.Background, "status" | "output" | "error">) {
-          if (result.status === "running") return
-          const text =
-            result.status === "completed"
-              ? (result.output ?? "Subagent completed without a text response.")
-              : result.status === "error"
-                ? (result.error ?? "Subagent failed")
-                : "Subagent cancelled"
-          yield* sessions
-            .synthetic({
-              id: background.notificationID,
-              sessionID: recovery.parentSessionID,
-              ...(suspended.has(recovery.parentSessionID) ? { resume: false } : {}),
-              description: recovery.description,
-              text: `<subagent sessionID="${recovery.childSessionID}" state="${result.status}" description="${recovery.description}">\n${text}\n</subagent>`,
-              metadata: {
-                source: "subagent",
-                childID: recovery.childSessionID,
-                agent: recovery.agent,
-                state: result.status,
-              },
-            })
-            .pipe(Effect.orDie)
-          yield* jobs.completeBackground(background.notificationID)
+          yield* SubagentCompletion.deliver(sessions, jobs, {
+            ...result,
+            recovery,
+            notificationID: background.notificationID,
+            resume: suspended.has(recovery.parentSessionID) ? false : undefined,
+          }).pipe(Effect.orDie)
         })
 
         if (background.status !== "running") {
           yield* notify(background)
           return
         }
-        if ((yield* execution.active).has(recovery.childSessionID)) return
+        if (yield* execution.isActive(recovery.childSessionID)) return
         if (!(yield* prepareResume(recovery.childSessionID))) {
           yield* notify({ status: "error", error: RESUME_EXHAUSTED.message })
           return
@@ -191,13 +176,7 @@ export const layer = (options?: Options) =>
                 (message) =>
                   message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
               )
-              if (assistant?.type !== "assistant") return "Subagent completed without a text response."
-              return (
-                assistant.content
-                  .filter((part) => part.type === "text")
-                  .map((part) => part.text)
-                  .join("") || "Subagent completed without a text response."
-              )
+              return SubagentCompletion.text(assistant)
             }),
           ),
         })

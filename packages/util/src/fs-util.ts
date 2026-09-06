@@ -250,7 +250,7 @@ export namespace FSUtil {
     try {
       return normalizePath(realpathSync(resolved))
     } catch (e: any) {
-      if (e?.code === "ENOENT") return normalizePath(resolved)
+      if (e?.code === "ENOENT" || e?.code === "ENOTDIR") return normalizePath(resolved)
       throw e
     }
   }

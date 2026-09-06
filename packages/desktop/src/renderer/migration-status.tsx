@@ -49,12 +49,8 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
     await wait(1_000, abort.signal)
     if (abort.signal.aborted) return
 
-    const client = OpenCode.make({
-      baseUrl: props.server.url,
-      headers: props.server.password
-        ? { Authorization: `Basic ${btoa(`${props.server.username ?? "opencode"}:${props.server.password}`)}` }
-        : undefined,
-    })
+    // The main process credentials sidecar requests; see `wireRendererHeaders`.
+    const client = OpenCode.make({ baseUrl: props.server.url })
 
     void (async () => {
       while (true) {

@@ -1,5 +1,6 @@
 import { SessionMessage } from "@opencode-ai/schema/session-message"
-import type { SessionMessageUser } from "@opencode-ai/client/promise"
+import type { SessionMessageUser, SkillInfo } from "@opencode-ai/client/promise"
+import { Skill } from "@opencode-ai/schema/skill"
 import { Event } from "@opencode-ai/schema/event"
 import type { Accessor } from "solid-js"
 import type { PromptHistoryComment } from "./history/entry"
@@ -27,6 +28,8 @@ type ComposerSubmission = {
 type ComposerSubmitInput = {
   adapter: ComposerAdapter
   mode: Accessor<"normal" | "shell">
+  commands: Accessor<readonly { name: string }[] | undefined>
+  skills: Accessor<readonly Pick<SkillInfo, "id" | "name" | "slash">[] | undefined>
   editor: () => HTMLDivElement | undefined
   queueScroll: () => void
   addToHistory: (prompt: Prompt, mode: "normal" | "shell") => void
@@ -65,6 +68,9 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
     if (submitting.has(input.adapter.state)) return
     submitting.add(input.adapter.state)
     const comments = input.comments.capture()
+    // Capture command intent before starting a session in a worktree whose catalog has not loaded.
+    const command = value.mode === "normal" ? findCommand(input.commands(), value.text) : undefined
+    if (value.mode === "normal" && !command) value.prompt = withSlashSkill(value.prompt, input.skills())
 
     try {
       const started =
@@ -78,7 +84,6 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
       input.resetHistory()
       const restore = () => restoreSubmission(input, submission, value, comments)
 
-      const command = value.mode === "normal" ? findCommand(session, value.text) : undefined
       if (value.mode === "normal" && !command) {
         session.handoff?.set(handoffMessage(value))
         const optimisticBusy = !input.adapter.working()
@@ -248,7 +253,8 @@ function restoreSubmission(
         preview: item.preview,
       })),
   )
-  if (value.mode === "normal") {
+  // A recovered follow-up changes the payload, so it must use a new admission ID.
+  if (value.mode === "normal" && restored.prompt === submission.prompt) {
     restored.target.retry.set({
       id: value.id,
       agent: value.selection.agent,
@@ -276,13 +282,33 @@ async function sendShell(session: ComposerSession, value: ComposerSubmission) {
   await session.api.shell({ sessionID: session.id, id: Event.ID.create(), command: value.text })
 }
 
-function findCommand(session: ComposerSession, text: string) {
+function findCommand(commands: ReturnType<ComposerSubmitInput["commands"]>, text: string) {
   if (!text.startsWith("/")) return
   const [name, ...arguments_] = text.split(" ")
   const command = name.slice(1)
-  if (!session.data.location.command.list({ directory: session.directory })?.some((item) => item.name === command))
-    return
+  if (!commands?.some((item) => item.name === command)) return
   return { command, arguments: arguments_.join(" ") }
+}
+
+export function withSlashSkill(prompt: Prompt, skills: ReturnType<ComposerSubmitInput["skills"]>): Prompt {
+  const first = prompt[0]
+  if (first?.type !== "text") return prompt
+  const name = /^\/(\S+)(?:\s|$)/.exec(first.content)?.[1]
+  const skill = skills?.find((item) => item.slash === true && item.id === name)
+  if (!skill || prompt.some((part) => part.type === "skill" && part.id === skill.id)) return prompt
+  const content = `/${skill.id}`
+  return [
+    {
+      type: "skill",
+      id: Skill.ID.make(skill.id),
+      name: Skill.Name.make(skill.name),
+      content,
+      start: 0,
+      end: content.length,
+    },
+    { ...first, content: first.content.slice(content.length), start: content.length },
+    ...prompt.slice(1),
+  ]
 }
 
 async function sendCommand(

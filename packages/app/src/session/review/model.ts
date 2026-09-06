@@ -38,7 +38,7 @@ export function createSessionReview(input: {
   const location = useWorkspaceLocation()
   const server = useServerSDK()
   const [state, setState] = createStore({
-    mobileTab: "session" as "session" | "changes",
+    mobileTab: "session" as "session" | "changes" | "files" | "usage",
     detailsOpen: false,
     scroll: undefined as HTMLDivElement | undefined,
     pendingFile: undefined as string | undefined,
@@ -55,9 +55,9 @@ export function createSessionReview(input: {
   const options = createMemo<ChangeMode[]>(() => {
     const list: ChangeMode[] = []
     const project = input.session.project()
-    if (project?.vcs === "git") list.push("git")
+    if (project?.vcs) list.push("git")
     if (
-      project?.vcs === "git" &&
+      project?.vcs &&
       vcs()?.branch.current &&
       vcs()?.branch.default &&
       vcs()?.branch.current !== vcs()?.branch.default
@@ -66,7 +66,9 @@ export function createSessionReview(input: {
     }
     return list
   })
-  const mobileChanges = createMemo(() => !input.session.isDesktop() && state.mobileTab === "changes")
+  const mobileChanges = createMemo(
+    () => !input.session.isDesktop() && !input.screen.terminal.open() && state.mobileTab === "changes",
+  )
   const vcsMode = createMemo<VcsMode | undefined>(() => {
     const value = mode()
     return value === "git" || value === "branch" ? value : undefined
@@ -92,7 +94,7 @@ export function createSessionReview(input: {
     const value = vcsMode()
     return {
       queryKey: [...vcsKey(), value] as const,
-      enabled: server.connection.status() === "connected" && wantsReview() && input.session.project()?.vcs === "git",
+      enabled: server.connection.status() === "connected" && wantsReview() && !!input.session.project()?.vcs,
       refetchOnMount: "always" as const,
       refetchOnWindowFocus: true,
       queryFn: value
@@ -108,7 +110,7 @@ export function createSessionReview(input: {
   })
   const detailsQuery = createQuery(() => ({
     queryKey: [server.scope, "session-details", input.session.workspace.directory()] as const,
-    enabled: state.detailsOpen && server.connection.status() === "connected" && input.session.project()?.vcs === "git",
+    enabled: state.detailsOpen && server.connection.status() === "connected" && !!input.session.project()?.vcs,
     queryFn: () =>
       server.api.vcs
         .diff({ location: { directory: input.session.workspace.directory() }, mode: "working" })
@@ -407,11 +409,11 @@ export function createSessionReview(input: {
     loadDiff,
     mobile: {
       changes: mobileChanges,
-      setTab: (tab: "session" | "changes") => setState("mobileTab", tab),
+      setTab: (tab: "session" | "changes" | "files" | "usage") => setState("mobileTab", tab),
       tab: () => state.mobileTab,
     },
     mode,
-    noGit: createMemo(() => !!input.session.project() && input.session.project()?.vcs !== "git"),
+    noGit: createMemo(() => !!input.session.project() && !input.session.project()?.vcs),
     open,
     openFile,
     options,

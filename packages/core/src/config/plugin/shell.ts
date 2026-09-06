@@ -12,9 +12,9 @@ export const Plugin = define({
     const config = yield* Config.Service
     const shell = yield* ShellSelect.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, shell.reload())
-    yield* shell.transform((draft) => {
+    yield* shell.transform((editor) => {
       const configured = Config.latest(loaded.entries, "shell")
-      if (configured) draft.configure(configured)
+      if (configured) editor.configure(configured)
     })
   }),
 })

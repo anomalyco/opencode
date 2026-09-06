@@ -2,9 +2,11 @@ import { Platform, usePlatform } from "@/runtime/platform/platform"
 import { makePersisted, messageSync, type AsyncStorage, type SyncStorage } from "@solid-primitives/storage"
 import { checksum } from "@opencode-ai/util/encode"
 import { createResource, onCleanup, type Accessor } from "solid-js"
-import type { SetStoreFunction, Store } from "solid-js/store"
+import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
+import { Option, Schema } from "effect"
 import { pathKey } from "@/workspaces/path-key"
 import { ScopedKey, ServerScope } from "@/runtime/server/scope"
+import { Persistence } from "./schema"
 
 type InitType = Promise<string> | string | null
 type PersistedWithReady<T> = [
@@ -22,7 +24,6 @@ type PersistTarget = {
   workspaceStorageAliases?: string[]
   previousKey?: string
   key: string
-  migrate?: (value: unknown) => unknown
 }
 
 const GLOBAL_STORAGE = "opencode.global.dat"
@@ -164,65 +165,10 @@ function write(storage: Storage, key: string, value: string) {
   return ok
 }
 
-function snapshot(value: unknown) {
-  return JSON.parse(JSON.stringify(value)) as unknown
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-function merge(defaults: unknown, value: unknown): unknown {
-  if (value === undefined) return defaults
-  if (value === null) return value
-
-  if (Array.isArray(defaults)) {
-    if (Array.isArray(value)) return value
-    return defaults
-  }
-
-  if (isRecord(defaults)) {
-    if (!isRecord(value)) return defaults
-
-    const result: Record<string, unknown> = { ...defaults }
-    for (const key of Object.keys(value)) {
-      if (key in defaults) {
-        result[key] = merge((defaults as Record<string, unknown>)[key], (value as Record<string, unknown>)[key])
-      } else {
-        result[key] = (value as Record<string, unknown>)[key]
-      }
-    }
-    return result
-  }
-
-  return value
-}
-
-function parse(value: string) {
-  try {
-    return JSON.parse(value) as unknown
-  } catch {
-    return undefined
-  }
-}
-
-function normalize(defaults: unknown, raw: string, migrate?: (value: unknown) => unknown) {
-  const parsed = parse(raw)
-  if (parsed === undefined) return
-  const migrated = migrate ? migrate(parsed) : parsed
-  const merged = merge(defaults, migrated)
-  return JSON.stringify(merged)
-}
-
-function readCurrent(input: {
-  storage: SyncStorage
-  key: string
-  defaults: unknown
-  migrate?: (value: unknown) => unknown
-}) {
+function readCurrent(input: { storage: SyncStorage; key: string; normalize: (raw: string) => string | undefined }) {
   const raw = input.storage.getItem(input.key)
   if (raw === null) return
-  const next = normalize(input.defaults, raw, input.migrate)
+  const next = input.normalize(raw)
   if (next === undefined) {
     input.storage.removeItem(input.key)
     return null
@@ -235,15 +181,14 @@ function relocateStoredValue(input: {
   current: SyncStorage
   sources: { storage: SyncStorage; key?: string }[]
   key: string
-  defaults: unknown
-  migrate?: (value: unknown) => unknown
+  normalize: (raw: string) => string | undefined
 }) {
   for (const source of input.sources) {
     const key = source.key ?? input.key
     const raw = source.storage.getItem(key)
     if (raw === null) continue
 
-    const next = normalize(input.defaults, raw, input.migrate)
+    const next = input.normalize(raw)
     if (next === undefined) {
       source.storage.removeItem(key)
       continue
@@ -259,12 +204,11 @@ function relocateStoredValue(input: {
 async function readCurrentAsync(input: {
   storage: AsyncStorage
   key: string
-  defaults: unknown
-  migrate?: (value: unknown) => unknown
+  normalize: (raw: string) => string | undefined
 }) {
   const raw = await input.storage.getItem(input.key)
   if (raw === null) return
-  const next = normalize(input.defaults, raw, input.migrate)
+  const next = input.normalize(raw)
   if (next === undefined) {
     await input.storage.removeItem(input.key).catch(() => undefined)
     return null
@@ -291,15 +235,14 @@ async function relocateStoredValueAsync(input: {
   current: AsyncStorage
   sources: { storage: AsyncStorage; key?: string }[]
   key: string
-  defaults: unknown
-  migrate?: (value: unknown) => unknown
+  normalize: (raw: string) => string | undefined
 }) {
   for (const source of input.sources) {
     const key = source.key ?? input.key
     const raw = await source.storage.getItem(key)
     if (raw === null) continue
 
-    const next = normalize(input.defaults, raw, input.migrate)
+    const next = input.normalize(raw)
     if (next === undefined) {
       await removeAsync(source.storage, key)
       continue
@@ -446,7 +389,6 @@ export function draftPersistedKeys() {
 export const PersistTesting = {
   localStorageDirect,
   localStorageWithPrefix,
-  normalize,
   resolveTarget,
   windowStorage,
   workspaceStorage,
@@ -529,15 +471,24 @@ export function removePersisted(
   }
 }
 
-export function persisted<T>(
+export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
   target: string | PersistTarget,
-  store: [Store<T>, SetStoreFunction<T>],
+  schema: S | Persistence.Migrated<S>,
+  initial: NoInfer<S["Type"]>,
   platformOverride?: Platform,
-): PersistedWithReady<T> {
+): PersistedWithReady<S["Type"]> {
   const platform = platformOverride ?? usePlatform()
   const config = resolveTarget(typeof target === "string" ? { key: target } : target, platform)
 
-  const defaults = snapshot(store[0])
+  const initialized = Persistence.withInitial(schema, initial)
+  const json = Schema.fromJsonString(initialized)
+  const decode = Schema.decodeUnknownOption(json)
+  const serialize = Schema.encodeSync(json)
+  const normalize = (raw: string) => {
+    const value = decode(raw)
+    if (Option.isSome(value)) return serialize(value.value)
+  }
+  const store = createStore<S["Type"]>(Schema.decodeUnknownSync(Schema.toType(initialized))(initial))
   const isDesktop = platform.platform === "desktop" && !!platform.storage
   const draft = config.draft ? platform.draftStore : undefined
 
@@ -567,14 +518,13 @@ export function persisted<T>(
 
       const api: SyncStorage = {
         getItem: (key) => {
-          const value = readCurrent({ storage: current, key, defaults, migrate: config.migrate })
+          const value = readCurrent({ storage: current, key, normalize })
           if (value !== undefined) return value
           return relocateStoredValue({
             current,
             sources,
             key,
-            defaults,
-            migrate: config.migrate,
+            normalize,
           })
         },
         setItem: (key, value) => {
@@ -610,14 +560,13 @@ export function persisted<T>(
 
     const api: AsyncStorage = {
       getItem: async (key) => {
-        const value = await readCurrentAsync({ storage: current, key, defaults, migrate: config.migrate })
+        const value = await readCurrentAsync({ storage: current, key, normalize })
         if (value !== undefined) return value
         const relocated = await relocateStoredValueAsync({
           current,
           sources: relocationSources,
           key,
-          defaults,
-          migrate: config.migrate,
+          normalize,
         })
         if (draftLatest === undefined) {
           if (draft && relocated !== null) return (await current.getItem(key)) ?? relocated
@@ -644,9 +593,11 @@ export function persisted<T>(
       : undefined
   if (channel) onCleanup(() => channel.close())
 
-  const [state, setState, init] = makePersisted<T, typeof store>(store, {
+  const [state, setState, init] = makePersisted<S["Type"], typeof store>(store, {
     name: config.key,
     storage,
+    serialize,
+    deserialize: Schema.decodeUnknownSync(json),
     sync: channel ? messageSync(channel) : undefined,
   })
 

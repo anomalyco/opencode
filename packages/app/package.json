@@ -34,6 +34,8 @@
     "test:service-worker": "bun run build && playwright test --config e2e/service-worker/playwright.config.ts",
     "test:stability": "bun test ./e2e/performance/unit/visual-stability.test.ts && playwright test --config e2e/performance/timeline-stability/playwright.config.ts",
     "test:bench": "bun test ./e2e/performance/unit && playwright test --config e2e/performance/playwright.config.ts",
+    "bench:tabs": "PLAYWRIGHT_BUILD=1 playwright test --config e2e/performance/playwright.config.ts timeline/session-tab-switch-benchmark.spec.ts --repeat-each=20 --workers=1 --retries=0 --reporter=line,./e2e/performance/tab-switch-reporter.ts",
+    "bench:entry": "PLAYWRIGHT_BUILD=1 playwright test --config e2e/performance/playwright.config.ts timeline/session-entry-benchmark.spec.ts --repeat-each=20 --workers=1 --retries=0 --reporter=line,./e2e/performance/tab-switch-reporter.ts",
     "test:bench:devex": "bun test ./e2e/performance/unit/desktop-startup.test.ts && playwright test --config e2e/performance/devex/playwright.config.ts"
   },
   "license": "MIT",
@@ -54,6 +56,7 @@
     "vite-plugin-solid": "2.11.14"
   },
   "dependencies": {
+    "@corvu/drawer": "catalog:",
     "@dnd-kit/abstract": "0.5.0",
     "@dnd-kit/dom": "0.5.0",
     "@dnd-kit/helpers": "0.5.0",

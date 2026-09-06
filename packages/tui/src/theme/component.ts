@@ -3,7 +3,16 @@ import type { Accessor } from "solid-js"
 import type { Mode, ResolvedTheme, ResolvedThemeTokens } from "@opencode-ai/theme/tui"
 
 export function createComponentTheme(current: Accessor<ResolvedTheme>, mode: Accessor<Mode>) {
-  const create = (view: Accessor<ResolvedThemeTokens>) => ({
+  return Object.assign(createComponentThemeView(current, mode), {
+    contextual: {
+      elevated: createComponentThemeView(() => current().contextual.elevated, mode),
+      overlay: createComponentThemeView(() => current().contextual.overlay, mode),
+    },
+  })
+}
+
+export function createComponentThemeView(view: Accessor<ResolvedThemeTokens>, mode: Accessor<Mode>) {
+  return {
     get hue() {
       return view().hue
     },
@@ -35,14 +44,7 @@ export function createComponentTheme(current: Accessor<ResolvedTheme>, mode: Acc
     increase: (color: RGBA, amount = 1) => view().increase(color, amount),
     decrease: (color: RGBA, amount = 1) => view().decrease(color, amount),
     raise: (color: RGBA) => (mode() === "light" ? view().increase(color) : view().decrease(color)),
-  })
-
-  return Object.assign(create(current), {
-    contextual: {
-      elevated: create(() => current().contextual.elevated),
-      overlay: create(() => current().contextual.overlay),
-    },
-  })
+  }
 }
 
 export type ComponentTheme = ReturnType<typeof createComponentTheme>

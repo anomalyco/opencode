@@ -32,6 +32,11 @@
   }
 }
 
+/* iOS can report navigator.standalone without matching display-mode. */
+#root[data-standalone="true"] {
+  height: 100vh;
+}
+
 @layer components {
   [data-slot="session-side-panel-presence"][data-opened="true"] {
     animation: terminal-panel-presence-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -158,6 +163,15 @@
     to {
       height: 0;
     }
+  }
+
+  ::highlight(timeline-search-hit) {
+    background-color: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+  }
+
+  ::highlight(timeline-search-hit-active) {
+    background-color: var(--v2-icon-icon-accent);
+    color: var(--v2-background-bg-deep);
   }
 
   [data-component="getting-started"] {
@@ -311,6 +325,69 @@
     }
     to {
       visibility: hidden;
+    }
+  }
+
+  @keyframes session-dropzone-enter {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes session-dropzone-content-enter {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.96);
+    }
+  }
+
+  @keyframes session-dropzone-upload-enter {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.92);
+    }
+  }
+
+  @keyframes session-dropzone-stripes-drift {
+    to {
+      background-position: 33.941px 0;
+    }
+  }
+
+  [data-component="session-dropzone"][data-visible="true"] {
+    animation: session-dropzone-enter 200ms cubic-bezier(0.215, 0.61, 0.355, 1);
+  }
+
+  [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-content"] {
+    animation: session-dropzone-content-enter 200ms cubic-bezier(0.215, 0.61, 0.355, 1);
+  }
+
+  [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-upload"] {
+    animation: session-dropzone-upload-enter 240ms cubic-bezier(0.215, 0.61, 0.355, 1);
+  }
+
+  [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-stripes"] {
+    animation: session-dropzone-stripes-drift 3s linear infinite;
+  }
+
+  [data-component="session-dropzone"] {
+    --session-dropzone-wash: 4%;
+    --session-dropzone-stripe: 7%;
+    --session-dropzone-card: var(--v2-background-bg-base);
+  }
+
+  [data-color-scheme="dark"] [data-component="session-dropzone"] {
+    --session-dropzone-wash: 6%;
+    --session-dropzone-stripe: 14%;
+    --session-dropzone-card: var(--v2-background-bg-layer-01);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-component="session-dropzone"][data-visible="true"],
+    [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-content"],
+    [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-upload"],
+    [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-stripes"] {
+      animation: none;
     }
   }
 

@@ -11,12 +11,13 @@ import { permissionAlwaysLines, permissionOptionLabel, permissionPresentation } 
 import { getScrollAcceleration } from "../../util/scroll"
 import { useConfig } from "../../config"
 import { Keymap } from "../../context/keymap"
+import { useInteractivity } from "../../context/interactivity"
 import { usePathFormatter } from "../../context/path-format"
 import { SimulationSemantics } from "../../simulation/semantics"
 import { PatchDiff } from "../../component/patch-diff"
 import { useToast } from "../../ui/toast"
 
-type PermissionStage = "permission" | "always" | "reject"
+type PermissionStage = "permission" | "reject"
 
 function EditBody(props: { file?: string; diff?: string; patch?: string }) {
   const theme = useTheme()
@@ -140,27 +141,6 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
 
   return (
     <Switch>
-      <Match when={store.stage === "always"}>
-        <SessionQuestion
-          title="Always allow"
-          semanticLabel={`Always allow ${props.request.action}`}
-          instance={props.request.id}
-          body={
-            <box paddingLeft={1} gap={1}>
-              <For each={permissionAlwaysLines(props.request)}>
-                {(line, index) => <text fg={index() === 0 ? theme.text.subdued : theme.text.default}>{line}</text>}
-              </For>
-            </box>
-          }
-          options={{ confirm: permissionOptionLabel("confirm"), cancel: permissionOptionLabel("cancel") }}
-          escapeKey="cancel"
-          onSelect={(option) => {
-            setStore("stage", "permission")
-            if (option === "cancel") return
-            reply("always")
-          }}
-        />
-      </Match>
       <Match when={store.stage === "reject"}>
         <RejectPrompt
           action={props.request.action}
@@ -185,7 +165,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             },
             pathFormatter.format,
           )
-          const presentationBody =
+          const presentationBody = () =>
             props.request.action === "edit" ? (
               <EditBody file={current.file} diff={current.diff} patch={current.patch} />
             ) : props.request.action === "external_directory" ? (
@@ -240,7 +220,15 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               semanticLabel={permissionSemanticLabel(props.request.action, current.title)}
               instance={props.request.id}
               header={header()}
-              body={presentationBody}
+              body={(option) => (
+                <Show when={option === "always"} fallback={presentationBody()}>
+                  <box paddingLeft={1} gap={1}>
+                    <For each={permissionAlwaysLines(props.request)}>
+                      {(line, index) => <text fg={index() === 0 ? theme.text.subdued : theme.text.default}>{line}</text>}
+                    </For>
+                  </box>
+                </Show>
+              )}
               options={
                 props.request.save?.length
                   ? {
@@ -254,7 +242,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               fullscreen
               onSelect={(option) => {
                 if (option === "always") {
-                  setStore("stage", "always")
+                  reply("always")
                   return
                 }
                 if (option === "reject") {
@@ -288,6 +276,7 @@ function RejectPrompt(props: {
   onCancel: () => void
 }) {
   let input: TextareaRenderable
+  const enabled = useInteractivity()
   const theme = useTheme("elevated")
   const config = useConfig().data
   const dimensions = useTerminalDimensions()
@@ -364,7 +353,7 @@ function RejectPrompt(props: {
             }))(val)
             val.traits = { status: "REJECT" }
           }}
-          focused
+          focused={enabled()}
           textColor={theme.text.default}
           focusedTextColor={theme.text.default}
           cursorColor={theme.text.default}
@@ -423,7 +412,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
   group?: string
   choicesLabel?: string
   header?: JSX.Element
-  body: JSX.Element
+  body: JSX.Element | ((option: keyof T) => JSX.Element)
   options: T
   escapeKey?: keyof T
   fullscreen?: boolean
@@ -547,7 +536,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
             {props.header}
           </box>
         </Show>
-        {props.body}
+        {typeof props.body === "function" ? props.body(store.selected) : props.body}
       </box>
       <box
         flexDirection={narrow() ? "column" : "row"}
@@ -591,7 +580,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
                     ? theme.background.action.primary.focused
                     : theme.background.action.primary.default
                 }
-                onMouseOver={() => setStore("selected", option)}
+                onMouseMove={() => setStore("selected", option)}
                 onMouseUp={() => {
                   setStore("selected", option)
                   props.onSelect(option)

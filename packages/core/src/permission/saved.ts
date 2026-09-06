@@ -2,9 +2,9 @@ export * as PermissionSaved from "./saved.js"
 
 import { eq } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
+import { Project } from "@opencode-ai/schema/project"
 import { Database } from "../database/database.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Project } from "../project.js"
 import { PermissionTable } from "./sql.js"
 import { PermissionSaved } from "@opencode-ai/schema/permission-saved"
 

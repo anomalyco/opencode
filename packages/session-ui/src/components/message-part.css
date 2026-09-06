@@ -167,10 +167,13 @@
     justify-content: flex-end;
     gap: 10px;
     width: 100%;
-    opacity: 0;
-    pointer-events: none;
     transition: opacity 0.15s ease;
     will-change: opacity;
+
+    @media (hover: hover) {
+      opacity: 0;
+      pointer-events: none;
+    }
 
     [data-component="tooltip-v2-trigger"] {
       display: inline-flex;
@@ -235,10 +238,13 @@
     align-items: center;
     justify-content: flex-start;
     gap: 10px;
-    opacity: 0;
-    pointer-events: none;
     transition: opacity 0.15s ease;
     will-change: opacity;
+
+    @media (hover: hover) {
+      opacity: 0;
+      pointer-events: none;
+    }
 
     [data-component="tooltip-v2-trigger"] {
       display: inline-flex;
@@ -357,6 +363,17 @@
   }
 }
 
+[data-component="read-image"] {
+  min-width: 0;
+
+  img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+  }
+}
+
 [data-component="bash-output"] {
   direction: ltr;
   unicode-bidi: isolate;
@@ -371,9 +388,12 @@
     position: absolute;
     top: 4px;
     right: 4px;
-    opacity: 0;
-    pointer-events: none;
     transition: opacity 0.15s ease;
+
+    @media (hover: hover) {
+      opacity: 0;
+      pointer-events: none;
+    }
   }
 
   &:hover [data-slot="bash-copy"],
@@ -443,103 +463,7 @@
 [data-component="collapsible"].tool-collapsible:has(
     > [data-slot="collapsible-content"] [data-component="bash-output"][data-variant="shell"]
   ) {
-  --tool-content-gap: 6px;
-}
-
-[data-component="edit-trigger"],
-[data-component="write-trigger"] {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-
-  [data-slot="message-part-title-area"] {
-    flex-grow: 1;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-  }
-
-  [data-slot="message-part-title"] {
-    flex: 1 1 auto;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-    font-family: var(--font-family-sans);
-    font-size: 14px;
-    font-style: normal;
-    font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
-    letter-spacing: var(--letter-spacing-normal);
-    color: var(--v2-text-text-muted);
-  }
-
-  [data-slot="message-part-title-spinner"] {
-    margin-left: 4px;
-    width: 16px;
-    height: 16px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    color: var(--v2-text-text-muted);
-
-    [data-component="spinner"] {
-      width: 16px;
-      height: 16px;
-    }
-  }
-
-  [data-slot="message-part-title-text"] {
-    flex-shrink: 0;
-    text-transform: capitalize;
-    color: var(--v2-text-text-base);
-  }
-
-  [data-slot="message-part-title-filename"] {
-    /* No text-transform - preserve original filename casing */
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-weight: var(--font-weight-regular);
-    direction: ltr;
-    unicode-bidi: isolate;
-  }
-
-  [data-slot="message-part-path"] {
-    display: flex;
-    flex-grow: 1;
-    min-width: 0;
-    font-weight: var(--font-weight-regular);
-    direction: ltr;
-    unicode-bidi: isolate;
-  }
-
-  [data-slot="message-part-directory"] {
-    color: var(--v2-text-text-muted);
-    text-overflow: ellipsis;
-    overflow: hidden;
-    white-space: nowrap;
-    direction: rtl;
-    text-align: left;
-  }
-
-  [data-slot="message-part-filename"] {
-    color: var(--v2-text-text-base);
-    flex-shrink: 0;
-  }
-
-  [data-slot="message-part-actions"] {
-    display: flex;
-    gap: 16px;
-    align-items: center;
-    justify-content: flex-end;
-    flex-shrink: 0;
-  }
+  --tool-content-gap: 8px;
 }
 
 [data-component="edit-content"] {
@@ -1526,4 +1450,18 @@
 :root body [data-workspace-session] [data-component="user-message"] [data-slot="user-message-text"] {
   background: var(--v2-background-bg-accent);
   color: var(--v2-text-text-contrast);
+}
+
+:root[data-color-scheme="light"] body [data-local-session] [data-component="user-message"]
+  [data-slot="user-message-text"] {
+  background: var(--v2-blue-100);
+  color: var(--v2-blue-700);
+  border-radius: 8px;
+}
+
+:root[data-color-scheme="dark"] body [data-local-session] [data-component="user-message"]
+  [data-slot="user-message-text"] {
+  background: var(--v2-blue-1200);
+  color: var(--v2-blue-300);
+  border-radius: 8px;
 }

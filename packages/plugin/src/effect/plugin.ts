@@ -2,7 +2,6 @@ import type { ExperimentalApi, GenerateApi, PluginApi } from "@opencode-ai/clien
 import type { Location } from "@opencode-ai/schema/location"
 import type { Effect, Scope } from "effect"
 import type { PluginOptions } from "../options.js"
-import type { VcsDiscovery } from "../vcs.js"
 import type { App } from "../app.js"
 import type { AgentDomain } from "./agent.js"
 import type { AISDKDomain } from "./aisdk.js"
@@ -13,6 +12,7 @@ import type { IntegrationDomain } from "./integration.js"
 import type { MCPDomain } from "./mcp.js"
 import type { PermissionDomain } from "./permission.js"
 import type { ReferenceDomain } from "./reference.js"
+import type { RpcDomain } from "./rpc.js"
 import type { SessionDomain } from "./session.js"
 import type { ShellDomain } from "./shell.js"
 import type { SkillDomain } from "./skill.js"
@@ -20,6 +20,7 @@ import type { StorageDomain } from "./storage.js"
 import type { ToolDomain } from "./tool.js"
 import type { VcsDomain } from "./vcs.js"
 import type { WebSearchDomain } from "./websearch.js"
+import type { WorktreeDomain } from "./worktree.js"
 
 export interface Context {
   readonly app: App
@@ -37,8 +38,9 @@ export interface Context {
   readonly mcp: MCPDomain
   readonly generate: GenerateApi<unknown>
   readonly permission: PermissionDomain
-  readonly plugin: PluginApi<unknown>
+  readonly plugin: Pick<PluginApi<unknown>, "list">
   readonly reference: ReferenceDomain
+  readonly rpc: RpcDomain
   readonly session: SessionDomain
   readonly shell: ShellDomain
   readonly skill: SkillDomain
@@ -46,12 +48,11 @@ export interface Context {
   readonly tool: ToolDomain
   readonly vcs: VcsDomain
   readonly websearch: WebSearchDomain
+  readonly worktree: WorktreeDomain
 }
 
 export interface Plugin<R = Scope.Scope> {
   readonly id: string
-  readonly tui?: boolean
-  readonly vcs?: VcsDiscovery
   readonly effect: (context: Context) => Effect.Effect<void, never, R>
 }
 

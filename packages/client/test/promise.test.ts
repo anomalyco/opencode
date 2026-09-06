@@ -24,6 +24,7 @@ test("exposes every standard HTTP API group", () => {
     "file",
     "command",
     "skill",
+    "rpc",
     "event",
     "pty",
     "experimental",
@@ -47,7 +48,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.integration.command)).toEqual(["connect", "status", "cancel"])
   expect(Object.keys(client.websearch)).toEqual(["providers", "query"])
   expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
-  expect(Object.keys(client.vcs)).toEqual(["get", "status", "branches", "diff"])
+  expect(Object.keys(client.vcs)).toEqual(["get", "base", "status", "branches", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove", "connect"])
   expect(Object.keys(client.pty.connect)).toEqual(["token"])
   expect(Object.keys(client.experimental)).toEqual(["persistentPty"])
@@ -82,6 +83,46 @@ test("config.get returns ordered config entries for a location", async () => {
   expect(await client.config.get({ location: { directory: "/tmp/project" } })).toEqual(entries)
   expect(request?.method).toBe("GET")
   expect(request?.url).toBe("http://localhost:3000/api/config?location%5Bdirectory%5D=%2Ftmp%2Fproject")
+})
+
+test("vcs.base and committed diffs preserve location and explicit base on the wire", async () => {
+  const requests: Request[] = []
+  const location = { directory: "/repo", project: { id: "global", directory: "/repo", canonical: "/repo" } }
+  const base = { name: "release", ref: "refs/remotes/origin/release", source: "reflog" }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push(request)
+      return Response.json({ location, data: new URL(request.url).pathname.endsWith("/base") ? base : [] })
+    },
+  })
+  expect(await client.vcs.base({ location: { directory: "/repo" } })).toEqual({ location, data: base })
+  expect(
+    await client.vcs.diff({ location: { directory: "/repo" }, mode: "committed", base: base.ref, context: 1 }),
+  ).toEqual({ location, data: [] })
+  expect(new URL(requests[0].url).pathname).toBe("/api/vcs/base")
+  const query = new URL(requests[1].url).searchParams
+  expect(query.get("location[directory]")).toBe("/repo")
+  expect(query.get("mode")).toBe("committed")
+  expect(query.get("base")).toBe(base.ref)
+  expect(query.get("context")).toBe("1")
+})
+
+test("vcs.diff exposes unavailable comparisons as errors, not empty diffs", async () => {
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      Response.json(
+        { _tag: "ServiceUnavailableError", service: "vcs", message: "No review base available" },
+        { status: 503 },
+      ),
+  })
+  await expect(client.vcs.diff({ mode: "committed" })).rejects.toMatchObject({
+    _tag: "ServiceUnavailableError",
+    service: "vcs",
+    message: "No review base available",
+  })
 })
 
 test("project.update uses the global project contract", async () => {
@@ -295,7 +336,7 @@ test("file.read returns binary content from the public HTTP contract", async () 
   )
 })
 
-test("worktree methods use the global project contract", async () => {
+test("all worktree operations use location-based routes without a project parameter", async () => {
   const requests: Request[] = []
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
@@ -309,27 +350,25 @@ test("worktree methods use the global project contract", async () => {
     },
   })
 
-  expect(await client.worktree.list({ projectID: "proj_test" })).toEqual([{ directory: "/tmp/project" }])
+  expect(await client.worktree.list()).toEqual([{ directory: "/tmp/project" }])
   expect(
     await client.worktree.create({
-      projectID: "proj_test",
       strategy: "git",
       directory: "/tmp/worktrees",
       name: "api",
     }),
   ).toEqual({ directory: "/tmp/worktrees/api" })
   await client.worktree.remove({
-    projectID: "proj_test",
     directory: "/tmp/worktrees/api",
     force: false,
   })
-  await client.worktree.refresh({ projectID: "proj_test" })
+  await client.worktree.refresh()
 
   expect(requests.map((request) => [request.method, request.url])).toEqual([
-    ["GET", "http://localhost:3000/api/worktree/proj_test"],
-    ["POST", "http://localhost:3000/api/worktree/proj_test"],
-    ["DELETE", "http://localhost:3000/api/worktree/proj_test"],
-    ["POST", "http://localhost:3000/api/worktree/proj_test/refresh"],
+    ["GET", "http://localhost:3000/api/worktree"],
+    ["POST", "http://localhost:3000/api/worktree"],
+    ["DELETE", "http://localhost:3000/api/worktree"],
+    ["POST", "http://localhost:3000/api/worktree/refresh"],
   ])
   expect(await requests[1]?.json()).toEqual({
     strategy: "git",
@@ -337,6 +376,39 @@ test("worktree methods use the global project contract", async () => {
     name: "api",
   })
   expect(await requests[2]?.json()).toEqual({ directory: "/tmp/worktrees/api", force: false })
+})
+
+test("worktree operations send the configuration location separately from their payload", async () => {
+  const requests: Request[] = []
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      requests.push(request)
+      if (request.method === "GET") return Response.json([{ directory: "/configured/task", strategy: "git" }])
+      if (request.method === "DELETE" || new URL(request.url).pathname.endsWith("/refresh"))
+        return new Response(null, { status: 204 })
+      return Response.json({ directory: "/configured/task" })
+    },
+  })
+  expect(await client.worktree.create({ location: { directory: "/repo/nested" }, name: "task" })).toEqual({
+    directory: "/configured/task",
+  })
+  expect(requests[0]?.url).toBe("http://localhost:3000/api/worktree?location%5Bdirectory%5D=%2Frepo%2Fnested")
+  expect(await requests[0]?.json()).toEqual({ name: "task" })
+  await client.worktree.remove({
+    location: { directory: "/repo/nested" },
+    directory: "/configured/task",
+    force: true,
+  })
+  await client.worktree.refresh({ location: { directory: "/repo/nested" } })
+  expect(requests[1]?.url).toBe("http://localhost:3000/api/worktree?location%5Bdirectory%5D=%2Frepo%2Fnested")
+  expect(await requests[1]?.json()).toEqual({ directory: "/configured/task", force: true })
+  expect(requests[2]?.url).toBe("http://localhost:3000/api/worktree/refresh?location%5Bdirectory%5D=%2Frepo%2Fnested")
+  expect(await client.worktree.list({ location: { directory: "/repo/nested" } })).toEqual([
+    { directory: "/configured/task", strategy: "git" },
+  ])
+  expect(requests[3]?.url).toBe("http://localhost:3000/api/worktree?location%5Bdirectory%5D=%2Frepo%2Fnested")
 })
 
 test("workspace.destroy returns the transition result", async () => {
@@ -603,6 +675,31 @@ test("event.subscribe ignores server heartbeat comments", async () => {
   expect(received).toEqual([event])
 })
 
+test("event.subscribe reports heartbeat comments as stream activity", async () => {
+  const event = { id: "evt_sentinel", created: 1, type: "server.connected", data: {} }
+  const encoder = new TextEncoder()
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode(": heartbeat\n\n"))
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+            controller.enqueue(encoder.encode(": heartbeat\n\n"))
+            controller.close()
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+  })
+  let activity = 0
+  const received = []
+  for await (const item of client.event.subscribe({ onActivity: () => activity++ })) received.push(item)
+  expect(received).toEqual([event])
+  expect(activity).toBe(3)
+})
+
 // Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
 test("event transport passes through ordinary health requests", async () => {
   const requests: string[] = []
@@ -635,6 +732,51 @@ test("event.subscribe terminates on malformed Promise SSE data", async () => {
     name: "ClientError",
     reason: "MalformedResponse",
   })
+})
+
+test("native event signals cancel only their listener and close transport after the last listener", async () => {
+  const opened = Promise.withResolvers<Request>()
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    headers: { authorization: "Bearer events" },
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      opened.resolve(request)
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            request.signal.addEventListener("abort", () => controller.error(request.signal.reason), { once: true })
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    },
+  })
+  const first = new AbortController()
+  const second = new AbortController()
+  const one = client.event.subscribe({ signal: first.signal })[Symbol.asyncIterator]().next()
+  const two = client.event.subscribe({ signal: second.signal })[Symbol.asyncIterator]().next()
+  const request = await opened.promise
+  expect(request.headers.get("authorization")).toBe("Bearer events")
+  first.abort()
+  expect((await one).done).toBe(true)
+  expect(request.signal.aborted).toBe(false)
+  second.abort()
+  expect((await two).done).toBe(true)
+  expect(request.signal.aborted).toBe(true)
+})
+
+test("native pre-aborted event signals do not open a transport", async () => {
+  let requests = 0
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () => {
+      requests++
+      return new Response(null)
+    },
+  })
+  expect((await client.event.subscribe({ signal: AbortSignal.abort() })[Symbol.asyncIterator]().next()).done).toBe(true)
+  expect(requests).toBe(0)
 })
 
 test("event.subscribe accepts a fragmented SSE event below the size limit", async () => {

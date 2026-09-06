@@ -461,9 +461,7 @@ export const operationInput = (
   const fields = [...parameters.value, ...requestBody.value.fields]
 
   const conflicts = new Set(
-    [...Map.groupBy(fields, (field) => field.name)]
-      .filter(([, matches]) => new Set(matches.map((field) => field.location)).size > 1)
-      .map(([name]) => name),
+    [...Map.groupBy(fields, (field) => field.name)].filter(([, matches]) => matches.length > 1).map(([name]) => name),
   )
   const used = new Set<string>()
   return {

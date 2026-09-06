@@ -47,6 +47,7 @@ export function isRetryable(error: AIError) {
     case "QuotaExceeded":
     case "ContentPolicy":
     case "InvalidRequest":
+    case "UnsupportedOperation":
     case "NoRoute":
       return false
     default: {
@@ -77,11 +78,11 @@ const schedule = Schedule.max([Schedule.exponential("2 seconds"), Schedule.recur
   }),
 )
 
-export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID) =>
+export const policy = (sessionID: SessionSchema.ID) =>
   Effect.gen(function* () {
     const step = yield* Schedule.toStep(schedule)
     let attempt = 1
-    const decide = (input: Input) =>
+    return (input: Input) =>
       Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis
         const next = yield* step(now, input).pipe(Pull.catchDone(() => Effect.succeed(undefined)))
@@ -103,6 +104,11 @@ export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID) =>
           Number.isFinite(event.decision.delay) && event.decision.delay >= 0 ? Math.ceil(event.decision.delay) : delay
         return { retry: true as const, attempt, delay: normalized }
       })
+  })
+
+export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID) =>
+  Effect.gen(function* () {
+    const decide = yield* policy(sessionID)
     const wait = (input: {
       readonly decision: Decision
       readonly assistantMessageID: SessionMessage.ID

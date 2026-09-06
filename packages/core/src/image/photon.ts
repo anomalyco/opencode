@@ -78,9 +78,15 @@ export const make = Effect.gen(function* () {
             ...JPEG_QUALITIES.map((quality) => ["image/jpeg", () => resized.get_bytes_jpeg(quality)] as const),
           ]
           for (const [mime, encode] of encoders) {
-            const candidate = Buffer.from(encode()).toString("base64")
-            if (Buffer.byteLength(candidate, "utf-8") <= limits.maxBase64Bytes)
-              return { ...content, content: candidate, encoding: "base64" as const, mime }
+            const candidate = encode()
+            // Base64 uses four bytes per three input bytes, including padding.
+            if (Math.ceil(candidate.length / 3) * 4 <= limits.maxBase64Bytes)
+              return {
+                ...content,
+                content: Buffer.from(candidate).toString("base64"),
+                encoding: "base64" as const,
+                mime,
+              }
           }
         } finally {
           resized.free()

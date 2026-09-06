@@ -289,22 +289,22 @@ describe("LMStudioPlugin", () => {
           const catalog = yield* Catalog.Service
           const integrations = yield* Integration.Service
           const providerID = Provider.ID.make("lmstudio")
-          yield* integrations.transform((draft) => {
-            draft.update(Integration.ID.make("lmstudio"), (integration) => {
+          yield* integrations.transform((editor) => {
+            editor.update(Integration.ID.make("lmstudio"), (integration) => {
               integration.name = "LMStudio"
             })
-            draft.method.update({
+            editor.method.update({
               integrationID: Integration.ID.make("lmstudio"),
               method: { type: "env", names: ["LMSTUDIO_API_KEY"] },
             })
           })
-          yield* catalog.transform((draft) => {
-            draft.provider.update(providerID, (provider) => {
+          yield* catalog.transform((editor) => {
+            editor.provider.update(providerID, (provider) => {
               provider.name = "LMStudio"
               provider.package = "aisdk:@ai-sdk/openai-compatible"
               provider.integrationID = Integration.ID.make("lmstudio")
             })
-            draft.model.update(providerID, Model.ID.make("static-model"), () => {})
+            editor.model.update(providerID, Model.ID.make("static-model"), () => {})
           })
 
           expect((yield* catalog.provider.available()).map((provider) => provider.id)).not.toContain(providerID)
@@ -319,11 +319,11 @@ describe("LMStudioPlugin", () => {
           expect(yield* catalog.model.get(providerID, Model.ID.make("static-model"))).toBeUndefined()
           expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(providerID)
 
-          yield* integrations.transform((draft) => {
-            draft.update(Integration.ID.make("lmstudio"), (integration) => {
+          yield* integrations.transform((editor) => {
+            editor.update(Integration.ID.make("lmstudio"), (integration) => {
               integration.name = "Configured LM Studio"
             })
-            draft.method.update({ integrationID: Integration.ID.make("lmstudio"), method: { type: "key" } })
+            editor.method.update({ integrationID: Integration.ID.make("lmstudio"), method: { type: "key" } })
           })
           expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(providerID)
 

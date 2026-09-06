@@ -20,8 +20,12 @@ export function serverStatusDotClass(input: {
   serverHealth: boolean | undefined
   attention?: boolean
   issue: boolean
+  connecting?: boolean
 }) {
   if (input.serverHealth === false) return "bg-icon-critical-base"
+  // The event stream is (re)connecting: keep the neutral dot but let it breathe so a stale
+  // session is visibly waiting on the server rather than silently frozen.
+  if (input.connecting) return "bg-border-weak-base animate-pulse"
   if (!input.ready || input.serverHealth === undefined) return "bg-border-weak-base"
   if (input.attention) return "bg-v2-background-bg-accent"
   if (input.issue) return "bg-icon-warning-base"

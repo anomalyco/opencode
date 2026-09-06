@@ -1,60 +1,67 @@
 export * as Session from "./session.js"
 export * from "./session/schema.js"
 
-import { Cause, Effect, Layer, Schema, Context, RcMap, Stream, Scope } from "effect"
+import { Effect, Layer, Schema, Context, Stream } from "effect"
+import { LLMClient } from "@opencode-ai/ai"
 import { ListAnchor } from "@opencode-ai/schema/session"
-import { and, asc, desc, eq, gt, isNull, like, lt, or, type SQL } from "drizzle-orm"
+import { and, desc, eq } from "drizzle-orm"
 import { Project } from "./project.js"
-import { Workspace } from "@opencode-ai/schema/workspace"
 import { Model } from "@opencode-ai/schema/model"
 import { Location } from "./location.js"
 import { SessionMessage } from "./session/message.js"
-import { Base64, FileAttachment, Prompt } from "@opencode-ai/schema/prompt"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Bus } from "./bus.js"
+import { Instance } from "./instance/service.js"
 import { Database } from "./database/database.js"
 import { SessionProjector } from "./session/projector.js"
-import { SessionMessageTable, SessionTable } from "./session/sql.js"
+import { SessionMessageTable } from "./session/sql.js"
 import { SessionSchema } from "./session/schema.js"
-import { AbsolutePath, PositiveInt, RelativePath } from "./schema.js"
+import { RelativePath } from "./schema.js"
 import { Agent } from "@opencode-ai/schema/agent"
-import { Money } from "@opencode-ai/schema/money"
 import { App } from "./app.js"
 import { Slug } from "./util/slug.js"
-import { upsertProject } from "./project/sql.js"
 import path from "path"
-import { fromRow } from "./session/info.js"
 import { SessionRunner } from "./session/runner/index.js"
 import { SessionStore } from "./session/store.js"
 import { SessionExecution } from "./session/execution.js"
-import { SessionModelTransport } from "./session/model-transport.js"
-import { ForkEmptyError, MessageDecodeError, NotFoundError } from "./session/error.js"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { LocationServiceMap } from "./location-service-map.js"
+import {
+  AttachmentError,
+  BusyError,
+  CompactionConflictError,
+  ForkEmptyError,
+  InboxConflictError,
+  MessageDecodeError,
+  MessageIncompleteError,
+  MessageNotAssistantError,
+  MessageNotFoundError,
+  MessageToolIncompleteError,
+  NotFoundError,
+  PromptConflictError,
+  SkillNotFoundError,
+  SyntheticConflictError,
+} from "./session/error.js"
+import { Node } from "@opencode-ai/util/effect/app-node"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { SessionEvent } from "./session/event.js"
 import { SessionInbox } from "./session/inbox.js"
 import { InstructionState } from "./session/instruction-state.js"
 import { SessionGenerate } from "./session/generate.js"
+import { SessionCommand } from "./session/command.js"
+import {
+  SessionMove,
+  DestinationNotFoundError,
+  DestinationNotDirectoryError,
+  DestinationUnavailableError,
+} from "./session/move.js"
+import { SessionModelTransport } from "./session/model-transport.js"
+import { llmClient } from "./effect/app-node-platform.js"
 import { Snapshot } from "./snapshot.js"
-import { SessionRevert } from "./session/revert.js"
-import { Session } from "@opencode-ai/schema/session"
+import { Session } from "./session/session.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Image } from "./image.js"
-import { PluginSupervisor } from "./plugin/supervisor-service.js"
-import { PluginHooks } from "./plugin/hooks.js"
-import { Mime } from "./mime.js"
 import type { EventLog } from "@opencode-ai/schema/event-log"
-import { Event } from "@opencode-ai/schema/event"
-import { Skill } from "./skill.js"
 import { Job } from "./job.js"
-import { Command } from "./command.js"
-import { Shell } from "./shell.js"
-import { Global } from "@opencode-ai/util/global"
-import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
-import { KeyedMutex } from "./effect/keyed-mutex.js"
-import { fileURLToPath } from "url"
+import type { Command } from "./command.js"
 import { SessionEnvironment } from "./session/environment.js"
-import { SessionHistory } from "./session/history.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
 
 // get project -> project.locations
@@ -68,30 +75,8 @@ import { InstructionEntry } from "./session/instruction-entry.js"
 
 export { ListAnchor }
 
-const ListInputBase = {
-  workspaceID: Workspace.ID.pipe(Schema.optional),
-  search: Schema.String.pipe(Schema.optional),
-  limit: PositiveInt.pipe(Schema.optional),
-  order: Schema.Literals(["asc", "desc"]).pipe(Schema.optional),
-  parentID: Schema.NullOr(SessionSchema.ID).pipe(Schema.optional),
-  anchor: ListAnchor.pipe(Schema.optional),
-}
-
-const ListDirectoryInput = Schema.Struct({
-  ...ListInputBase,
-  directory: AbsolutePath,
-})
-
-const ListProjectInput = Schema.Struct({
-  ...ListInputBase,
-  project: Project.ID,
-  subpath: RelativePath.pipe(Schema.optional),
-})
-
-const ListAllInput = Schema.Struct(ListInputBase)
-
-export const ListInput = Schema.Union([ListDirectoryInput, ListProjectInput, ListAllInput])
-export type ListInput = typeof ListInput.Type
+export const ListInput = SessionStore.ListInput
+export type ListInput = SessionStore.ListInput
 
 type CreateBaseInput = {
   id?: SessionSchema.ID
@@ -103,90 +88,31 @@ type CreateBaseInput = {
 type CreateInput = CreateBaseInput &
   ({ location: Location.Ref; parentID?: never } | { parentID: SessionSchema.ID; location?: never })
 
-type CompactInput = {
-  id?: SessionMessage.ID
-  sessionID: SessionSchema.ID
-  delivery?: SessionInbox.Delivery
-}
+type CompactInput = Parameters<Session.Handle["compact"]>[0] & { sessionID: SessionSchema.ID }
 
 type ForkInput = {
   sessionID: SessionSchema.ID
-  boundary: Session.ForkRequestBoundary
+  boundary: SessionSchema.ForkRequestBoundary
 }
 
-export { MessageDecodeError, NotFoundError }
-
-export class PromptConflictError extends Schema.TaggedError<PromptConflictError>()("Session.PromptConflictError", {
-  sessionID: SessionSchema.ID,
-  messageID: SessionMessage.ID,
-}) {}
-export class SyntheticConflictError extends Schema.TaggedError<SyntheticConflictError>()(
-  "Session.SyntheticConflictError",
-  {
-    sessionID: SessionSchema.ID,
-    inputID: SessionMessage.ID,
-  },
-) {}
-export class AttachmentError extends Schema.TaggedError<AttachmentError>()("Session.AttachmentError", {
-  uri: Schema.String,
-  message: Schema.String,
-}) {}
-export class CompactionConflictError extends Schema.TaggedError<CompactionConflictError>()(
-  "Session.CompactionConflictError",
-  {
-    sessionID: SessionSchema.ID,
-    inputID: SessionMessage.ID,
-  },
-) {}
-export class BusyError extends Schema.TaggedError<BusyError>()("Session.BusyError", {
-  sessionID: SessionSchema.ID,
-}) {}
-export class MessageNotAssistantError extends Schema.TaggedError<MessageNotAssistantError>()(
-  "Session.MessageNotAssistantError",
-  {
-    sessionID: SessionSchema.ID,
-    messageID: SessionMessage.ID,
-  },
-) {}
-export class MessageIncompleteError extends Schema.TaggedError<MessageIncompleteError>()(
-  "Session.MessageIncompleteError",
-  {
-    sessionID: SessionSchema.ID,
-    messageID: SessionMessage.ID,
-  },
-) {}
-export class MessageToolIncompleteError extends Schema.TaggedError<MessageToolIncompleteError>()(
-  "Session.MessageToolIncompleteError",
-  {
-    sessionID: SessionSchema.ID,
-    messageID: SessionMessage.ID,
-  },
-) {}
-export class InboxConflictError extends Schema.TaggedError<InboxConflictError>()("Session.InboxConflictError", {
-  sessionID: SessionSchema.ID,
-  inboxID: SessionMessage.ID,
-}) {}
+export {
+  AttachmentError,
+  BusyError,
+  CompactionConflictError,
+  InboxConflictError,
+  MessageDecodeError,
+  MessageIncompleteError,
+  MessageNotAssistantError,
+  MessageNotFoundError,
+  MessageToolIncompleteError,
+  NotFoundError,
+  PromptConflictError,
+  SkillNotFoundError,
+  SyntheticConflictError,
+}
 type InboxItemRef = { readonly sessionID: SessionSchema.ID; readonly inboxID: SessionMessage.ID }
-export class SkillNotFoundError extends Schema.TaggedError<SkillNotFoundError>()("Session.SkillNotFoundError", {
-  skill: Skill.ID,
-}) {}
 
-export class DestinationNotFoundError extends Schema.TaggedError<DestinationNotFoundError>()(
-  "Session.DestinationNotFoundError",
-  { directory: AbsolutePath },
-) {}
-
-export class DestinationNotDirectoryError extends Schema.TaggedError<DestinationNotDirectoryError>()(
-  "Session.DestinationNotDirectoryError",
-  { directory: AbsolutePath },
-) {}
-
-export class DestinationUnavailableError extends Schema.TaggedError<DestinationUnavailableError>()(
-  "Session.DestinationUnavailableError",
-  { directory: AbsolutePath },
-) {}
-export const MessageNotFoundError = SessionRevert.MessageNotFoundError
-export type MessageNotFoundError = SessionRevert.MessageNotFoundError
+export { DestinationNotFoundError, DestinationNotDirectoryError, DestinationUnavailableError }
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<{
@@ -203,32 +129,16 @@ export interface Interface {
   }) => Effect.Effect<SessionEnvironment.Variables | undefined, NotFoundError>
   readonly view: (input: { sessionID: SessionSchema.ID; idle: number }) => Effect.Effect<void, NotFoundError>
   readonly remove: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
-  readonly messages: (input: {
-    sessionID: SessionSchema.ID
-    limit?: number
-    order?: "asc" | "desc"
-    cursor?: {
-      id: SessionMessage.ID
-      direction: "previous" | "next"
-    }
-  }) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
+  readonly messages: (
+    input: SessionStore.MessagesInput,
+  ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
   readonly message: (input: {
     sessionID: SessionSchema.ID
     messageID: SessionMessage.ID
   }) => Effect.Effect<SessionMessage.Info | undefined>
-  readonly updateMessage: (input: {
-    readonly sessionID: SessionSchema.ID
-    readonly messageID: SessionMessage.ID
-    readonly content: readonly SessionMessage.AssistantContent[]
-  }) => Effect.Effect<
-    SessionMessage.Assistant,
-    | NotFoundError
-    | MessageNotFoundError
-    | BusyError
-    | MessageNotAssistantError
-    | MessageIncompleteError
-    | MessageToolIncompleteError
-  >
+  readonly updateMessage: (
+    input: Parameters<Session.Handle["updateMessage"]>[0] & { readonly sessionID: SessionSchema.ID },
+  ) => ReturnType<Session.Handle["updateMessage"]>
   readonly context: (
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
@@ -256,26 +166,10 @@ export interface Interface {
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: Agent.ID }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: { sessionID: SessionSchema.ID; model: Model.Ref }) => Effect.Effect<void, NotFoundError>
   readonly rename: (input: { sessionID: SessionSchema.ID; title: string }) => Effect.Effect<void, NotFoundError>
-  readonly move: (input: {
-    sessionID: SessionSchema.ID
-    directory: AbsolutePath
-    workspaceID?: Location.Ref["workspaceID"]
-    delivery?: SessionInbox.Delivery
-  }) => Effect.Effect<
-    void,
-    NotFoundError | DestinationNotFoundError | DestinationNotDirectoryError | DestinationUnavailableError
-  >
-  readonly prompt: (input: {
-    id?: SessionMessage.ID
-    sessionID: SessionSchema.ID
-    text: string
-    files?: PromptInput.Prompt["files"]
-    agents?: PromptInput.Prompt["agents"]
-    skills?: PromptInput.Prompt["skills"]
-    metadata?: Record<string, unknown>
-    delivery?: SessionInbox.Delivery
-    resume?: boolean
-  }) => Effect.Effect<SessionInbox.User, NotFoundError | PromptConflictError | AttachmentError | SkillNotFoundError>
+  readonly move: SessionMove.Interface["move"]
+  readonly prompt: (
+    input: Parameters<Session.Handle["prompt"]>[0] & { sessionID: SessionSchema.ID },
+  ) => ReturnType<Session.Handle["prompt"]>
   /** Generates text from current Session context without admitting input or mutating history. */
   readonly generate: (input: {
     sessionID: SessionSchema.ID
@@ -290,17 +184,12 @@ export interface Interface {
     skills?: PromptInput.Prompt["skills"]
     delivery?: SessionInbox.Delivery
   }) => Effect.Effect<void, NotFoundError | Command.NotFoundError | Command.ExecutionError>
-  readonly shell: (input: {
-    id?: Event.ID
-    sessionID: SessionSchema.ID
-    command: string
-  }) => Effect.Effect<void, NotFoundError>
-  readonly skill: (input: {
-    id?: SessionMessage.ID
-    sessionID: SessionSchema.ID
-    skill: Skill.ID
-    resume?: boolean
-  }) => Effect.Effect<void, NotFoundError | SkillNotFoundError>
+  readonly shell: (
+    input: Parameters<Session.Handle["shell"]>[0] & { sessionID: SessionSchema.ID },
+  ) => ReturnType<Session.Handle["shell"]>
+  readonly skill: (
+    input: Parameters<Session.Handle["skill"]>[0] & { sessionID: SessionSchema.ID },
+  ) => ReturnType<Session.Handle["skill"]>
   readonly compact: (
     input: CompactInput,
   ) => Effect.Effect<SessionInbox.Compaction, NotFoundError | CompactionConflictError>
@@ -309,21 +198,15 @@ export interface Interface {
   readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => Effect.Effect<boolean>
-  readonly synthetic: (input: {
-    id?: SessionMessage.ID
-    sessionID: SessionSchema.ID
-    text: string
-    description?: string
-    metadata?: Record<string, unknown>
-    delivery?: SessionInbox.Delivery
-    resume?: boolean
-  }) => Effect.Effect<SessionInbox.Synthetic, NotFoundError | SyntheticConflictError>
+  readonly synthetic: (
+    input: Parameters<Session.Handle["synthetic"]>[0] & { sessionID: SessionSchema.ID },
+  ) => ReturnType<Session.Handle["synthetic"]>
   readonly revert: {
     readonly stage: (input: {
       sessionID: SessionSchema.ID
       messageID: SessionMessage.ID
       files?: boolean
-    }) => Effect.Effect<Session.Revert, NotFoundError | MessageNotFoundError | BusyError | Snapshot.Error>
+    }) => Effect.Effect<SessionSchema.Revert, NotFoundError | MessageNotFoundError | BusyError | Snapshot.Error>
     readonly clear: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | BusyError | Snapshot.Error>
     readonly commit: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | BusyError>
   }
@@ -339,51 +222,16 @@ const layer = Layer.effect(
     const db = database.db
     const bus = yield* Bus.Service
     const projects = yield* Project.Service
-    const global = yield* Global.Service
     const execution = yield* SessionExecution.Service
+    const llm = yield* LLMClient.Service
+    const transport = yield* SessionModelTransport.Service
     const store = yield* SessionStore.Service
-    const locations = yield* LocationServiceMap.Service
-    const fs = yield* FSUtil.Service
+    const instances = yield* Instance.Service
+    const moves = yield* SessionMove.Service
     const jobs = yield* Job.Service
     const environments = yield* SessionEnvironment.Service
-    const scope = yield* Scope.Scope
-    const activeShells = new Set<SessionSchema.ID>()
-    const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
-    const closeTransport = Effect.fn("Session.closeTransport")(function* (session: SessionSchema.Info) {
-      const location = Location.Ref.make({
-        directory: session.location.directory,
-        workspaceID: session.location.workspaceID,
-      })
-      if (!(yield* RcMap.has(locations.rcMap, location))) return
-      yield* SessionModelTransport.Service.use((transport) => transport.close(session.id)).pipe(
-        Effect.provide(locations.get(location)),
-      )
-    })
+    const sessions = yield* Session.make()
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
-    const persistProject = (project: Project.Resolved) => upsertProject(db, project).pipe(Effect.orDie)
-
-    const pendingConflict = Effect.fn("Session.pendingConflict")(function* (input: InboxItemRef) {
-      yield* result.get(input.sessionID)
-      return yield* new InboxConflictError(input)
-    })
-    const mutatePending = (
-      input: InboxItemRef,
-      mutation: (
-        bus: Bus.Interface,
-        input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID },
-      ) => Effect.Effect<unknown>,
-      wake = false,
-    ) =>
-      Effect.uninterruptible(
-        Effect.gen(function* () {
-          yield* mutation(bus, { sessionID: input.sessionID, id: input.inboxID }).pipe(
-            Effect.catchDefect((defect) =>
-              defect instanceof SessionInbox.LifecycleConflict ? pendingConflict(input) : Effect.die(defect),
-            ),
-          )
-          if (wake) yield* execution.wake(input.sessionID)
-        }),
-      )
 
     const result = Service.of({
       create: Effect.fn("Session.create")(function* (input) {
@@ -396,7 +244,6 @@ const layer = Layer.effect(
         if (location === undefined)
           return yield* Effect.die(new Error("Session.create requires either location or an existing parentID"))
         const project = yield* projects.resolve(location.directory)
-        yield* persistProject(project)
         const projected = yield* bus
           .publish(
             SessionEvent.Created,
@@ -484,155 +331,41 @@ const layer = Layer.effect(
         })
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
-      get: Effect.fn("Session.get")(function* (sessionID) {
-        const session = yield* store.get(sessionID)
-        if (!session) return yield* new NotFoundError({ sessionID })
-        return session
-      }),
+      get: (sessionID) => sessions.forSession(sessionID).get(),
       environment: Effect.fn("Session.environment")(function* (input) {
         yield* result.get(input.sessionID)
         if (input.variables !== undefined) yield* environments.set(input.sessionID, input.variables)
         return yield* environments.get(input.sessionID)
       }),
-      view: Effect.fn("Session.view")(function* (input) {
-        const row = yield* db
-          .select({ idle: SessionTable.time_idle, viewed: SessionTable.time_viewed })
-          .from(SessionTable)
-          .where(eq(SessionTable.id, input.sessionID))
-          .get()
-          .pipe(Effect.orDie)
-        if (!row) return yield* new NotFoundError({ sessionID: input.sessionID })
-        if (row.idle === null || input.idle > row.idle || (row.viewed !== null && row.viewed >= input.idle))
-          return yield* Effect.void
-        yield* bus.publish(SessionEvent.Viewed, { sessionID: input.sessionID, idle: input.idle })
-      }),
+      view: (input) => sessions.forSession(input.sessionID).view(input),
       remove: Effect.fn("Session.remove")(function* (sessionID) {
-        const session = yield* result.get(sessionID)
+        yield* result.get(sessionID)
         yield* execution.interrupt(sessionID)
         yield* execution.awaitIdle(sessionID)
-        yield* closeTransport(session)
+        yield* transport.close(sessionID)
         const children = yield* result.list({ parentID: sessionID })
         yield* Effect.forEach(children.data, (child) => result.remove(child.id), { concurrency: 1, discard: true })
         yield* environments.clear(sessionID)
         yield* bus.publish(SessionEvent.Deleted, { sessionID })
         yield* bus.remove(sessionID)
       }),
-      list: Effect.fn("Session.list")(function* (input = {}) {
-        const direction = input.anchor?.direction ?? "next"
-        const requestedOrder = input.order ?? "desc"
-        const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
-        const sortColumn = SessionTable.time_updated
-        const conditions: SQL[] = []
-        if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
-        if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
-        if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
-        if ("project" in input && input.subpath !== undefined) conditions.push(eq(SessionTable.path, input.subpath))
-        if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
-        if (input.parentID !== undefined)
-          conditions.push(
-            input.parentID === null ? isNull(SessionTable.parent_id) : eq(SessionTable.parent_id, input.parentID),
-          )
-        if (input.anchor) {
-          conditions.push(
-            order === "asc"
-              ? or(
-                  gt(sortColumn, input.anchor.time),
-                  and(eq(sortColumn, input.anchor.time), gt(SessionTable.id, input.anchor.id)),
-                )!
-              : or(
-                  lt(sortColumn, input.anchor.time),
-                  and(eq(sortColumn, input.anchor.time), lt(SessionTable.id, input.anchor.id)),
-                )!,
-          )
-        }
-        const query = db
-          .select()
-          .from(SessionTable)
-          .where(conditions.length > 0 ? and(...conditions) : undefined)
-          .orderBy(
-            order === "asc" ? asc(sortColumn) : desc(sortColumn),
-            order === "asc" ? asc(SessionTable.id) : desc(SessionTable.id),
-          )
-        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
-          Effect.orDie,
-        )
-        return { data: (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row)) }
+      list: Effect.fn("Session.list")(function* (input) {
+        return { data: yield* store.list(input) }
       }),
       messages: Effect.fn("Session.messages")(function* (input) {
         yield* result.get(input.sessionID)
-        const direction = input.cursor?.direction ?? "next"
-        const requestedOrder = input.order ?? "desc"
-        const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
-        const anchor = input.cursor
-          ? yield* db
-              .select({ seq: SessionMessageTable.seq })
-              .from(SessionMessageTable)
-              .where(
-                and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, input.cursor.id)),
-              )
-              .get()
-              .pipe(Effect.orDie)
-          : undefined
-        if (input.cursor && !anchor) return []
-        const boundary = anchor
-          ? order === "asc"
-            ? gt(SessionMessageTable.seq, anchor.seq)
-            : lt(SessionMessageTable.seq, anchor.seq)
-          : undefined
-        const where = boundary
-          ? and(eq(SessionMessageTable.session_id, input.sessionID), boundary)
-          : eq(SessionMessageTable.session_id, input.sessionID)
-        const query = db
-          .select()
-          .from(SessionMessageTable)
-          .where(where)
-          .orderBy(order === "asc" ? asc(SessionMessageTable.seq) : desc(SessionMessageTable.seq))
-        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
-          Effect.orDie,
-        )
-        return yield* Effect.forEach(
-          direction === "previous" ? rows.toReversed() : rows,
-          SessionHistory.decodeMessageRow,
-        )
+        return yield* store.messages(input)
       }),
-      message: Effect.fn("Session.message")(function* (input) {
-        const stored = yield* store.message(input.messageID)
-        return stored?.sessionID === input.sessionID ? stored.message : undefined
-      }),
-      updateMessage: Effect.fn("Session.updateMessage")(function* (input) {
-        const ref = { sessionID: input.sessionID, messageID: input.messageID }
-        yield* result.get(ref.sessionID)
-        if ((yield* execution.active).has(ref.sessionID)) return yield* new BusyError({ sessionID: ref.sessionID })
-        const message = yield* result.message(ref)
-        if (!message) return yield* new MessageNotFoundError(ref)
-        if (message.type !== "assistant") return yield* new MessageNotAssistantError(ref)
-        if (!message.time.completed) return yield* new MessageIncompleteError(ref)
-        if (
-          input.content.some(
-            (content) =>
-              content.type === "tool" && (content.state.status === "streaming" || content.state.status === "running"),
-          )
-        )
-          return yield* new MessageToolIncompleteError(ref)
-        yield* bus.publish(SessionEvent.MessageContentUpdated, {
-          ...ref,
-          content: Schema.encodeSync(Schema.Array(SessionMessage.AssistantContent))(input.content),
-        })
-        const updated = yield* result.message(ref)
-        if (updated?.type !== "assistant") return yield* new MessageNotFoundError(ref)
-        return updated
-      }),
+      message: (input) => sessions.forSession(input.sessionID).message(input.messageID),
+      updateMessage: (input) => sessions.forSession(input.sessionID).updateMessage(input),
       context: Effect.fn("Session.context")(function* (sessionID) {
         yield* result.get(sessionID)
         return yield* store.context(sessionID)
       }),
-      inbox: Effect.fn("Session.inbox")(function* (sessionID) {
-        yield* result.get(sessionID)
-        return yield* SessionInbox.list(db, sessionID)
-      }),
-      cancelInbox: Effect.fn("Session.cancelInbox")((input) => mutatePending(input, SessionInbox.cancel)),
-      steerInbox: Effect.fn("Session.steerInbox")((input) => mutatePending(input, SessionInbox.steer, true)),
-      queueInbox: Effect.fn("Session.queueInbox")((input) => mutatePending(input, SessionInbox.queue)),
+      inbox: (sessionID) => sessions.forSession(sessionID).inbox(),
+      cancelInbox: (input) => sessions.forSession(input.sessionID).cancelInbox(input.inboxID),
+      steerInbox: (input) => sessions.forSession(input.sessionID).steerInbox(input.inboxID),
+      queueInbox: (input) => sessions.forSession(input.sessionID).queueInbox(input.inboxID),
       log: (input) =>
         Stream.unwrap(
           result
@@ -644,258 +377,29 @@ const layer = Layer.effect(
               Bus.isSynced(item) || isDurableSessionEvent(item),
           ),
         ),
-      prompt: Effect.fn("Session.prompt")((input) =>
-        Effect.uninterruptibleMask((restore) =>
-          Effect.gen(function* () {
-            const session = yield* result.get(input.sessionID)
-            const messageID = input.id ?? SessionMessage.ID.create()
-            const admitted = yield* Effect.gen(function* () {
-              const existing = yield* SessionInbox.reconcile(db, {
-                id: messageID,
-                sessionID: session.id,
-                delivery: input.delivery ?? "steer",
-              })
-              if (existing) return existing
-              const item = yield* restore(
-                preparePrompt(input, messageID).pipe(
-                  Effect.provide(locations.get(session.location)),
-                  Effect.provideService(FSUtil.Service, fs),
-                ),
-              )
-              // Commit a staged revert only after preparation succeeds, before admitting new work.
-              if (session.revert) yield* SessionRevert.commit(session).pipe(Effect.provideService(Bus.Service, bus))
-              return yield* SessionInbox.admit(db, bus, {
-                id: messageID,
-                sessionID: session.id,
-                item,
-              })
-            }).pipe(
-              Effect.catchDefect((defect) =>
-                defect instanceof SessionInbox.LifecycleConflict
-                  ? new PromptConflictError({ sessionID: input.sessionID, messageID })
-                  : Effect.die(defect),
-              ),
-            )
-            // First admission wins: same-session reuse is idempotent and ignores the
-            // retried payload, metadata, and delivery mode.
-            if (admitted.type !== "user" || admitted.sessionID !== input.sessionID)
-              return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
-            if (input.resume !== false) {
-              if (activeShells.has(admitted.sessionID)) return admitted
-              yield* execution.wake(admitted.sessionID)
-            }
-            return admitted
-          }),
-        ),
-      ),
+      prompt: (input) => sessions.forSession(input.sessionID).prompt(input),
       generate: Effect.fn("Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        const generate = yield* SessionGenerate.Service.pipe(Effect.provide(locations.get(session.location)))
-        return yield* generate.generate(input)
+        return yield* SessionGenerate.generate({ session, prompt: input.prompt }).pipe(
+          Effect.provideService(Instance.Service, instances),
+          Effect.provideService(Database.Service, database),
+          Effect.provideService(LLMClient.Service, llm),
+        )
       }),
       command: Effect.fn("Session.command")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        const commands = yield* Effect.gen(function* () {
-          const plugins = yield* PluginSupervisor.Service
-          yield* plugins.flush
-          return yield* Command.Service
-        }).pipe(Effect.provide(locations.get(session.location)))
-        const delivery = input.delivery ?? "steer"
-        yield* commands.execute({
-          name: input.command,
-          invocation: {
-            sessionID: input.sessionID,
-            prompt: {
-              text: input.text,
-              files: input.files,
-              agents: input.agents,
-              skills: input.skills,
-            },
-            delivery,
-          },
-        })
-      }),
-      shell: Effect.fn("Session.shell")(function* (input) {
-        const session = yield* result.get(input.sessionID)
-        yield* shellLocks.withLock(input.sessionID)(
-          Effect.gen(function* () {
-            activeShells.add(input.sessionID)
-            yield* execution.awaitIdle(input.sessionID)
-            const started = yield* Effect.gen(function* () {
-              const plugins = yield* PluginSupervisor.Service
-              yield* plugins.flush
-              const shell = yield* Shell.Service
-              return yield* shell
-                .create({
-                  command: input.command,
-                  cwd: session.location.directory,
-                  timeout: 0,
-                  metadata: { sessionID: input.sessionID },
-                })
-                .pipe(Effect.orDie)
-            }).pipe(Effect.provide(locations.get(session.location)))
-            yield* bus.publish(
-              SessionEvent.Shell.Started,
-              {
-                sessionID: input.sessionID,
-                shell: started,
-              },
-              { id: input.id },
-            )
-            const completed = yield* Effect.gen(function* () {
-              const shell = yield* Shell.Service
-              const terminal = yield* shell.wait(started.id).pipe(
-                Effect.map((info) => ({ info, retained: true as const })),
-                Effect.catchTag("Shell.NotFoundError", () =>
-                  Effect.succeed({ info: synthesizeTerminalShellInfo(started), retained: false as const }),
-                ),
-              )
-              const output = terminal.retained
-                ? yield* shell
-                    .output(started.id, { limit: SHELL_MAX_CAPTURE_BYTES })
-                    .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
-                : missingShellOutput()
-              return { shell: terminal.info, output }
-            }).pipe(Effect.provide(locations.get(session.location)))
-            yield* bus.publish(SessionEvent.Shell.Ended, {
-              sessionID: input.sessionID,
-              shell: completed.shell,
-              output: completed.output,
-            })
-          }).pipe(
-            Effect.ensuring(
-              Effect.gen(function* () {
-                activeShells.delete(input.sessionID)
-                yield* execution.wake(input.sessionID)
-              }),
-            ),
-          ),
+        return yield* SessionCommand.execute({ ...input, session }).pipe(
+          Effect.provideService(Instance.Service, instances),
         )
       }),
-      skill: Effect.fn("Session.skill")(function* (input) {
-        const session = yield* result.get(input.sessionID)
-        const skills = yield* Skill.Service.pipe(Effect.provide(locations.get(session.location)))
-        const skill = yield* skills.get(input.skill)
-        if (!skill) return yield* new SkillNotFoundError({ skill: input.skill })
-        yield* bus.publish(
-          SessionEvent.Skill.Activated,
-          {
-            sessionID: input.sessionID,
-            id: skill.id,
-            name: skill.name,
-            text: skill.content,
-          },
-          { id: input.id ? Event.ID.make(input.id.replace(/^msg_/, "evt_")) : undefined },
-        )
-        if (input.resume !== false)
-          yield* execution
-            .resume(input.sessionID)
-            .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
-      }),
-      switchAgent: Effect.fn("Session.switchAgent")(function* (input) {
-        const session = yield* result.get(input.sessionID)
-        yield* bus.publish(SessionEvent.AgentSelected, {
-          sessionID: input.sessionID,
-          agent: input.agent,
-          previous: session.agent,
-        })
-      }),
-      switchModel: Effect.fn("Session.switchModel")(function* (input) {
-        const session = yield* result.get(input.sessionID)
-        if (
-          session.model?.providerID === input.model.providerID &&
-          session.model.id === input.model.id &&
-          (session.model.variant ?? "default") === (input.model.variant ?? "default")
-        )
-          return
-        yield* bus.publish(SessionEvent.ModelSelected, {
-          sessionID: input.sessionID,
-          model: input.model,
-          previous: session.model,
-        })
-      }),
-      rename: Effect.fn("Session.rename")(function* (input) {
-        yield* result.get(input.sessionID)
-        yield* bus.publish(SessionEvent.Renamed, {
-          sessionID: input.sessionID,
-          title: input.title,
-        })
-      }),
-      move: Effect.fn("Session.move")(function* (input) {
-        const current = yield* result.get(input.sessionID)
-        const value = input.directory.trim()
-        const expanded =
-          value === "~" ? global.home : value.startsWith("~/") ? path.join(global.home, value.slice(2)) : value
-        const directory = AbsolutePath.make(path.resolve(current.location.directory, expanded))
-        const info = yield* fs.stat(directory).pipe(Effect.orElseSucceed(() => undefined))
-        if (!info) return yield* new DestinationNotFoundError({ directory })
-        if (info.type !== "Directory") return yield* new DestinationNotDirectoryError({ directory })
-        const project = yield* projects.resolve(directory)
-        const payload: SessionInbox.MovePayload = {
-          location: Location.Ref.make({ directory, workspaceID: input.workspaceID }),
-          projectID: project.id,
-          subpath: RelativePath.make(path.relative(project.directory, directory).replaceAll("\\", "/")),
-        }
-        yield* Location.Service.pipe(
-          Effect.provide(locations.get(payload.location)),
-          Effect.scoped,
-          Effect.catchCause((cause) => {
-            if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
-            return Effect.logWarning("session move destination unavailable", { directory, cause }).pipe(
-              Effect.andThen(Effect.fail(new DestinationUnavailableError({ directory }))),
-            )
-          }),
-        )
-        yield* persistProject(project)
-        const item = SessionInbox.Item.make({
-          type: "move",
-          payload,
-          delivery: input.delivery ?? "steer",
-        })
-        yield* SessionInbox.serialized(
-          input.sessionID,
-          Effect.gen(function* () {
-            const latest = yield* result.get(input.sessionID)
-            const source = yield* fs.stat(latest.location.directory).pipe(Effect.orElseSucceed(() => undefined))
-            if (!source || source.type !== "Directory") {
-              const cancellations = (yield* SessionInbox.moveIDs(db, input.sessionID)).map(
-                (item) => [SessionEvent.InboxCancelled, { sessionID: input.sessionID, inboxID: item.id }] as const,
-              )
-              const moved = [SessionEvent.Moved, { sessionID: input.sessionID, ...payload }] as const
-              const first = cancellations[0]
-              if (!first) return yield* bus.publish(...moved).pipe(Effect.asVoid)
-              return yield* bus.publishAll([first, ...cancellations.slice(1), moved])
-            }
-            yield* SessionInbox.admit(db, bus, {
-              id: SessionMessage.ID.create(),
-              sessionID: input.sessionID,
-              item,
-            })
-          }),
-        )
-        yield* execution.wake(input.sessionID)
-      }),
-      compact: Effect.fn("Session.compact")(function* (input) {
-        yield* result.get(input.sessionID)
-        const inputID = input.id ?? SessionMessage.ID.create()
-        const admitted = yield* SessionInbox.admitCompaction(db, bus, {
-          id: inputID,
-          sessionID: input.sessionID,
-          delivery: input.delivery ?? "steer",
-        }).pipe(
-          Effect.catchDefect((defect) =>
-            defect instanceof SessionInbox.LifecycleConflict
-              ? new CompactionConflictError({ sessionID: input.sessionID, inputID })
-              : Effect.die(defect),
-          ),
-        )
-        yield* execution.wake(input.sessionID)
-        return admitted
-      }),
-      wait: Effect.fn("Session.wait")(function* (sessionID) {
-        yield* result.get(sessionID)
-        yield* execution.awaitIdle(sessionID)
-      }),
+      shell: (input) => sessions.forSession(input.sessionID).shell(input),
+      skill: (input) => sessions.forSession(input.sessionID).skill(input),
+      switchAgent: (input) => sessions.forSession(input.sessionID).switchAgent(input),
+      switchModel: (input) => sessions.forSession(input.sessionID).switchModel(input),
+      rename: (input) => sessions.forSession(input.sessionID).rename(input),
+      move: moves.move,
+      compact: (input) => sessions.forSession(input.sessionID).compact(input),
+      wait: (sessionID) => sessions.forSession(sessionID).wait(),
       active: execution.active,
       background: Effect.fn("Session.background")(function* (sessionID) {
         yield* result.get(sessionID)
@@ -915,78 +419,13 @@ const layer = Layer.effect(
           })
           .pipe(Effect.catchTag("Session.SyntheticConflictError", Effect.die))
       }),
-      resume: Effect.fn("Session.resume")(function* (sessionID) {
-        yield* result.get(sessionID)
-        yield* execution.resume(sessionID)
-      }),
-      synthetic: Effect.fn("Session.synthetic")((input) =>
-        Effect.uninterruptible(
-          Effect.gen(function* () {
-            yield* result.get(input.sessionID)
-            const inputID = input.id ?? SessionMessage.ID.create()
-            const admittedInput = SessionInbox.Item.make({
-              type: "synthetic",
-              payload: {
-                text: input.text,
-                description: input.description,
-                metadata: input.metadata,
-              },
-              delivery: input.delivery ?? "steer",
-            })
-            const admitted = yield* SessionInbox.admit(db, bus, {
-              id: inputID,
-              sessionID: input.sessionID,
-              item: admittedInput,
-            }).pipe(
-              Effect.catchDefect((defect) =>
-                defect instanceof SessionInbox.LifecycleConflict
-                  ? new SyntheticConflictError({ sessionID: input.sessionID, inputID })
-                  : Effect.die(defect),
-              ),
-            )
-            // First admission wins: same-session reuse is idempotent and ignores the
-            // retried payload, metadata, and delivery mode.
-            if (admitted.type !== "synthetic" || admitted.sessionID !== input.sessionID)
-              return yield* new SyntheticConflictError({ sessionID: input.sessionID, inputID })
-            if (input.resume !== false && !(yield* result.get(input.sessionID)).revert)
-              yield* execution.wake(input.sessionID)
-            return admitted
-          }),
-        ),
-      ),
-      interrupt: Effect.fn("Session.interrupt")((sessionID, options) =>
-        Effect.uninterruptible(execution.interrupt(sessionID, options)),
-      ),
+      resume: (sessionID) => sessions.forSession(sessionID).resume(),
+      synthetic: (input) => sessions.forSession(input.sessionID).synthetic(input),
+      interrupt: (sessionID, options) => sessions.forSession(sessionID).interrupt(options),
       revert: {
-        stage: Effect.fn("Session.revert.stage")(function* (input) {
-          const session = yield* result.get(input.sessionID)
-          if ((yield* execution.active).has(input.sessionID))
-            return yield* new BusyError({ sessionID: input.sessionID })
-          return yield* Effect.gen(function* () {
-            const plugins = yield* PluginSupervisor.Service
-            yield* plugins.flush
-            return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
-              Effect.provideService(Database.Service, database),
-              Effect.provideService(Bus.Service, bus),
-            )
-          }).pipe(Effect.provide(locations.get(session.location)))
-        }),
-        clear: Effect.fn("Session.revert.clear")(function* (sessionID) {
-          const session = yield* result.get(sessionID)
-          if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
-          const revert = yield* Effect.gen(function* () {
-            const plugins = yield* PluginSupervisor.Service
-            yield* plugins.flush
-            return yield* SessionRevert.clear(session).pipe(Effect.provideService(Bus.Service, bus))
-          }).pipe(Effect.provide(locations.get(session.location)))
-          yield* execution.wake(sessionID)
-          return revert
-        }),
-        commit: Effect.fn("Session.revert.commit")(function* (sessionID) {
-          const session = yield* result.get(sessionID)
-          if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
-          return yield* SessionRevert.commit(session).pipe(Effect.provideService(Bus.Service, bus))
-        }),
+        stage: (input) => sessions.forSession(input.sessionID).revert.stage(input),
+        clear: (sessionID) => sessions.forSession(sessionID).revert.clear(),
+        commit: (sessionID) => sessions.forSession(sessionID).revert.commit(),
       },
     })
 
@@ -994,224 +433,7 @@ const layer = Layer.effect(
   }),
 )
 
-function missingShellOutput() {
-  const output = "Shell command output is no longer available."
-  return {
-    output,
-    cursor: Buffer.byteLength(output),
-    size: Buffer.byteLength(output),
-    truncated: false,
-  }
-}
-
-function synthesizeTerminalShellInfo(started: ShellSchema.Info): ShellSchema.Info {
-  return {
-    ...started,
-    // The Shell record was removed before waiters could observe it; publish a terminal
-    // boundary instead of leaving the Session shell message permanently running.
-    status: "killed",
-    time: { ...started.time, completed: Date.now() },
-  }
-}
-
-const preparePrompt = Effect.fn("Session.preparePrompt")(function* (
-  request: Parameters<Interface["prompt"]>[0],
-  messageID: SessionMessage.ID,
-) {
-  const plugins = yield* PluginSupervisor.Service
-  yield* plugins.flush
-  const hooks = yield* PluginHooks.Service
-  const event = yield* hooks.trigger("session", "prompt", {
-    sessionID: request.sessionID,
-    messageID,
-    prompt: structuredClone({
-      text: request.text,
-      files: request.files?.slice(),
-      agents: request.agents?.slice(),
-      skills: request.skills?.slice(),
-    }),
-    metadata: structuredClone(request.metadata),
-    delivery: request.delivery ?? "steer",
-  })
-  const input = event.prompt
-  const fs = yield* FSUtil.Service
-  const files = input.files
-    ? yield* Effect.forEach(input.files, (file) => materializeAttachment(fs, file), { concurrency: 8 })
-    : undefined
-  const requested = input.skills
-  const selected = yield* Effect.gen(function* () {
-    if (!requested?.length) return undefined
-    const skillService = yield* Skill.Service
-    const prepared = new Map<Skill.ID, Skill.Name>()
-    return yield* Effect.forEach(requested, (attachment) =>
-      Effect.gen(function* () {
-        const name = prepared.get(attachment.id)
-        if (name !== undefined) return { id: attachment.id, name, mention: attachment.mention }
-        const skill = yield* skillService.get(attachment.id)
-        if (!skill) return yield* new SkillNotFoundError({ skill: attachment.id })
-        prepared.set(skill.id, skill.name)
-        return {
-          id: skill.id,
-          name: skill.name,
-          text: (yield* Skill.prepare(fs, skill).pipe(Effect.orDie)).output,
-          mention: attachment.mention,
-        }
-      }),
-    )
-  })
-  return SessionInbox.Item.make({
-    type: "user",
-    payload: {
-      ...Prompt.make({
-        text: input.text,
-        agents: input.agents,
-        files,
-        skills: selected?.length ? selected : undefined,
-      }),
-      metadata: event.metadata,
-    },
-    delivery: event.delivery,
-  })
-})
-
-const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
-
-const materializeAttachment = Effect.fn("Session.materializeAttachment")(function* (
-  fs: FSUtil.Interface,
-  input: PromptInput.FileAttachment,
-) {
-  const resolved = input.uri.startsWith("data:")
-    ? {
-        bytes: yield* decodeDataURL(input.uri),
-        source: { type: "inline" as const },
-        start: undefined,
-        end: undefined,
-        name: undefined,
-        mime: undefined,
-      }
-    : yield* readFileAttachment(fs, input.uri)
-  if (resolved.bytes.byteLength > MAX_ATTACHMENT_BYTES)
-    return yield* new AttachmentError({
-      uri: input.uri,
-      message: `Attachment exceeds the ${MAX_ATTACHMENT_BYTES} byte limit: ${input.uri}`,
-    })
-
-  const mime = resolved.mime ?? Mime.detect(resolved.bytes)
-  const content =
-    mime === "text/plain" && resolved.start !== undefined
-      ? Buffer.from(
-          Buffer.from(resolved.bytes)
-            .toString("utf8")
-            .split("\n")
-            .slice(resolved.start - 1, resolved.end)
-            .join("\n"),
-        )
-      : resolved.bytes
-  const normalized = yield* normalizeImageAttachment(input, Buffer.from(content).toString("base64"), mime)
-  return FileAttachment.create({
-    data: normalized.data,
-    mime: normalized.mime,
-    source: resolved.source,
-    name: input.name ?? resolved.name,
-    description: input.description,
-    mention: input.mention,
-  })
-})
-
-const normalizeImageAttachment = Effect.fn("Session.normalizeImageAttachment")(function* (
-  input: PromptInput.FileAttachment,
-  data: string,
-  mime: string,
-) {
-  if (!mime.startsWith("image/")) return { data: Base64.make(data), mime }
-  const service = yield* Image.Service
-  const label = input.name ?? (input.uri.startsWith("data:") ? "inline attachment" : input.uri)
-  const content = { uri: label, content: data, encoding: "base64" as const, mime }
-  const normalized = yield* service.normalize(label, content).pipe(
-    Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(content)),
-    Effect.mapError((error) => new AttachmentError({ uri: label, message: error.message })),
-  )
-  return { data: Base64.make(normalized.content), mime: normalized.mime }
-})
-
-const readFileAttachment = Effect.fn("Session.readFileAttachment")(function* (fs: FSUtil.Interface, uri: string) {
-  const url = yield* Effect.try({
-    try: () => new URL(uri),
-    catch: () => new AttachmentError({ uri, message: `Invalid attachment URI: ${uri}` }),
-  })
-  if (url.protocol !== "file:")
-    return yield* new AttachmentError({ uri, message: `Unsupported attachment URI: ${uri}` })
-  const start = positiveInt(url.searchParams.get("start"))
-  const end = positiveInt(url.searchParams.get("end"))
-  const target = yield* Effect.try({
-    try: () => {
-      url.search = ""
-      url.hash = ""
-      return fileURLToPath(url)
-    },
-    catch: () => new AttachmentError({ uri, message: `Invalid file URI: ${uri}` }),
-  })
-  const info = yield* fs
-    .stat(target)
-    .pipe(Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })))
-  if (info.type === "Directory") {
-    const entries = yield* fs
-      .readDirectoryEntries(target)
-      .pipe(Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })))
-    return {
-      bytes: Buffer.from(
-        entries
-          .filter((entry) => entry.type === "file" || entry.type === "directory")
-          .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "directory" ? -1 : 1))
-          .map((entry) => entry.name + (entry.type === "directory" ? path.sep : ""))
-          .join("\n"),
-      ),
-      source: { type: "uri" as const, uri },
-      start: undefined,
-      end: undefined,
-      name: path.basename(target),
-      mime: "application/x-directory",
-    }
-  }
-  if (info.type !== "File") return yield* new AttachmentError({ uri, message: `Attachment is not a file: ${uri}` })
-  if (Number(info.size) > MAX_ATTACHMENT_BYTES)
-    return yield* new AttachmentError({
-      uri,
-      message: `Attachment exceeds the ${MAX_ATTACHMENT_BYTES} byte limit: ${uri}`,
-    })
-  const bytes = yield* fs
-    .readFile(target)
-    .pipe(Effect.mapError(() => new AttachmentError({ uri, message: `Unable to read attachment: ${uri}` })))
-  return { bytes, source: { type: "uri" as const, uri }, start, end, name: path.basename(target), mime: undefined }
-})
-
-function decodeDataURL(uri: string) {
-  return Effect.try({
-    try: () => {
-      const comma = uri.indexOf(",")
-      if (comma === -1) throw new Error("Invalid data URL")
-      const metadata = uri.slice(5, comma)
-      const payload = uri.slice(comma + 1)
-      if (!metadata.split(";").some((part) => part.toLowerCase() === "base64"))
-        return Buffer.from(decodeURIComponent(payload))
-      const bytes = Buffer.from(payload, "base64")
-      if (bytes.toString("base64") !== payload) throw new Error("Non-canonical base64")
-      return bytes
-    },
-    catch: () => new AttachmentError({ uri, message: "Invalid attachment data URL" }),
-  })
-}
-
-function positiveInt(value: string | null) {
-  if (value === null) return
-  const parsed = Number(value)
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
-}
-
-// Mirrors the shell tool's in-memory preview safety limit.
-const SHELL_MAX_CAPTURE_BYTES = 1024 * 1024
-
-export const node = makeGlobalNode({
+export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.global> = Node.makeGlobalNode({
   service: Service,
   layer,
   deps: [
@@ -1221,11 +443,14 @@ export const node = makeGlobalNode({
     Bus.node,
     Project.node,
     SessionExecution.node,
+    SessionModelTransport.node,
+    llmClient,
     SessionStore.node,
-    LocationServiceMap.node,
+    Instance.node,
+    SessionInbox.node,
+    SessionMove.node,
     SessionProjector.node,
     FSUtil.node,
-    Global.node,
     App.node,
   ],
 })

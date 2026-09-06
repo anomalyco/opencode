@@ -29,16 +29,40 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         paddingRight={2}
         position={props.overlay ? "absolute" : "relative"}
       >
+        <box flexShrink={0} paddingRight={2} paddingBottom={1}>
+          <title_shimmer
+            fg={theme.text.default}
+            rename={{
+              pending: data.session.title.pending(props.sessionID),
+              title: withTimestampedFallback(session()),
+            }}
+            enabled={config.animations ?? true}
+            backdrop={theme.background.default}
+            attributes={
+              data.session.title.pending(props.sessionID) && config.animations === false
+                ? TextAttributes.DIM
+                : TextAttributes.BOLD
+            }
+          >
+            {withTimestampedFallback(session())}
+          </title_shimmer>
+          <Show when={session().location.workspaceID}>
+            <text fg={theme.text.subdued}>{session().location.workspaceID}</text>
+          </Show>
+        </box>
         <scrollbox
-          ref={(scroll) =>
-            queueMicrotask(() => {
-              if (!scroll.isDestroyed) scroll.verticalScrollBar.resetVisibilityControl()
-            })
-          }
           flexGrow={1}
+          minHeight={0}
           scrollAcceleration={scrollAcceleration()}
+          // The sidebar only scrolls vertically; a horizontal bar steals a row during initial layout.
+          horizontalScrollbarOptions={{ visible: false }}
           verticalScrollbarOptions={{
-            visible: false,
+            // Use the content's reserved right padding instead of changing its width when the bar toggles.
+            position: "absolute",
+            right: 0,
+            top: 0,
+            width: 1,
+            height: "100%",
             trackOptions: {
               backgroundColor: theme.background.default,
               foregroundColor: theme.scrollbar.default,
@@ -46,27 +70,6 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           }}
         >
           <box flexShrink={0} gap={1} paddingRight={1}>
-            <box paddingRight={1}>
-              <title_shimmer
-                fg={theme.text.default}
-                rename={{
-                  pending: data.session.title.pending(props.sessionID),
-                  title: withTimestampedFallback(session()),
-                }}
-                enabled={config.animations ?? true}
-                backdrop={theme.background.default}
-                attributes={
-                  data.session.title.pending(props.sessionID) && config.animations === false
-                    ? TextAttributes.DIM
-                    : TextAttributes.BOLD
-                }
-              >
-                {withTimestampedFallback(session())}
-              </title_shimmer>
-              <Show when={session().location.workspaceID}>
-                <text fg={theme.text.subdued}>{session().location.workspaceID}</text>
-              </Show>
-            </box>
             <Slot path="sidebar.content" input={{ sessionID: props.sessionID }} />
           </box>
         </scrollbox>

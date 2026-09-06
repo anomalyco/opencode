@@ -40,8 +40,7 @@ export function SessionWorkspaceMenu(props: {
     if (!open) return
     const sdk = serverSDK
     void sdk.api.worktree
-      .refresh({ projectID: props.project.id })
-      .then(() => sdk.api.worktree.list({ projectID: props.project.id }))
+      .list({ location: { directory: props.directory } })
       .then((items) =>
         setDirectories(
           items.map((item) => item.directory).filter((directory) => !sameDirectory(props.project.worktree, directory)),
@@ -60,6 +59,7 @@ export function SessionWorkspaceMenu(props: {
         selection === "create"
           ? await createWorktree({
               api: sdk.api,
+              data,
               directory: props.directory,
               project: data.location.info({ directory: props.directory })?.project,
             })

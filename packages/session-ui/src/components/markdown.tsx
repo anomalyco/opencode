@@ -23,12 +23,17 @@ import {
   MarkdownWorkerDisposedError,
   MarkdownWorkerSupersededError,
   MarkdownWorkerUnavailableError,
-  parseMarkdown,
   projectMarkdown,
 } from "./markdown-worker"
 import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol"
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
-import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
+import {
+  getCachedMarkdown,
+  getReadyMarkdown,
+  renderCachedMarkdown,
+  touchCachedMarkdown,
+  type MarkdownCacheEntry,
+} from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
 import { renderMermaidSvg } from "./markdown-mermaid"
 import { createMarkdownRenderer } from "./markdown-solid"
@@ -349,8 +354,9 @@ function initialResult(
     const blocks = projection.blocks.flatMap((block, index) => {
       if (block.mode === "code") return []
       const cacheKey = `${base}:${index}:${block.mode}`
-      const cached = getCachedMarkdown(cacheKey)
+      const cached = block.mode === "full" ? getReadyMarkdown(block, cacheKey) : getCachedMarkdown(cacheKey)
       if (cached?.raw !== block.raw) return []
+      if (block.mode !== "full") touchCachedMarkdown(cacheKey, cached)
       return [{ key: `${owner}:${cacheKey}`, mode: block.mode, ...cached }]
     })
     if (blocks.length === projection.blocks.length) return { text, blocks, ready: true }
@@ -390,6 +396,7 @@ export function Markdown(
   const markdown = useMarkdown()
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const owner = createUniqueId()
+  const lifetime = new AbortController()
   const activeCodeKeys = new Set<string>()
   const completedCode = new Map<string, Extract<RenderedBlock, { mode: "code" }>>()
   let streamed = false
@@ -411,6 +418,13 @@ export function Markdown(
     if (value?.text) return value
     return pendingProjection(local.text)
   }
+  const initial = initialResult(
+    local.text,
+    local.cacheKey,
+    local.streaming ? pendingProjection(local.text) : completedProjection(local.text),
+    owner,
+    local.deferUntilReady,
+  )
   const [html] = createResource(
     () => {
       if (isServer)
@@ -427,7 +441,7 @@ export function Markdown(
         projection: value,
       }
     },
-    async (src): Promise<RenderResult> => {
+    (src): RenderResult | Promise<RenderResult> => {
       if (isServer)
         return {
           text: src.text,
@@ -443,6 +457,7 @@ export function Markdown(
           ],
         } satisfies RenderResult
       if (!src.text) return { text: src.text, blocks: [], ready: true } satisfies RenderResult
+      if (!streamed && initial.ready && initial.text === src.text) return initial
 
       const base = src.key ?? checksum(src.text)
       return Promise.all(
@@ -466,47 +481,35 @@ export function Markdown(
             return rendered
           }
 
-          if (key) {
-            const cached = getCachedMarkdown(key)
-            if (cached?.raw === block.raw) {
-              touchCachedMarkdown(key, cached)
-              return { key: blockKey, mode: block.mode, ...cached }
-            }
+          const ready = block.mode === "full" ? getReadyMarkdown(block, key) : undefined
+          return {
+            key: blockKey,
+            mode: block.mode,
+            ...(ready ?? (await renderCachedMarkdown(block, key, lifetime.signal))),
           }
-
-          const hash = checksum(block.raw)
-          const safe = sanitizeMarkdown(await parseMarkdown(block.src))
-          if (key && hash) touchCachedMarkdown(key, { raw: block.raw, hash, html: safe })
-          return { key: blockKey, mode: block.mode, raw: block.raw, hash: hash ?? "", html: safe }
         }),
       )
         .then((blocks) => ({ text: src.text, blocks, ready: true }) satisfies RenderResult)
         .catch(
           () =>
-            ({
-              text: src.text,
-              ready: true,
-              blocks: [
-                {
-                  key: base ?? "fallback",
-                  mode: "full" as const,
-                  raw: src.text,
-                  hash: checksum(src.text) ?? "",
-                  html: fallback(src.text),
-                },
-              ],
-            }) satisfies RenderResult,
+            (lifetime.signal.aborted
+              ? { text: src.text, blocks: [], ready: false }
+              : {
+                  text: src.text,
+                  ready: true,
+                  blocks: [
+                    {
+                      key: base ?? "fallback",
+                      mode: "full" as const,
+                      raw: src.text,
+                      hash: checksum(src.text) ?? "",
+                      html: fallback(src.text),
+                    },
+                  ],
+                }) satisfies RenderResult,
         )
     },
-    {
-      initialValue: initialResult(
-        local.text,
-        local.cacheKey,
-        local.streaming ? pendingProjection(local.text) : completedProjection(local.text),
-        owner,
-        local.deferUntilReady,
-      ),
-    },
+    { initialValue: initial },
   )
 
   let copyCleanup: (() => void) | undefined
@@ -566,11 +569,12 @@ export function Markdown(
   })
 
   onCleanup(() => {
+    lifetime.abort()
     images?.dispose()
     if (copyCleanup) copyCleanup()
     const container = root()
     if (container) disposeRenderedMarkdown(container)
-    disposeMarkdownProjection(owner)
+    if (streamed) disposeMarkdownProjection(owner)
     activeCodeKeys.forEach(disposeCode)
     completedCode.clear()
   })

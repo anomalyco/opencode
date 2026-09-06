@@ -15,6 +15,12 @@ import type {
   AgentGetOutput,
   PluginListInput,
   PluginListOutput,
+  PluginAwaitActivationInput,
+  PluginAwaitActivationOutput,
+  PluginCheckInput,
+  PluginCheckOutput,
+  PluginUpdateInput,
+  PluginUpdateOutput,
   SessionListInput,
   SessionListOutput,
   SessionStatsInput,
@@ -185,6 +191,8 @@ import type {
   CommandListOutput,
   SkillListInput,
   SkillListOutput,
+  RpcCallInput,
+  RpcCallOutput,
   EventSubscribeOutput,
   PtyListInput,
   PtyListOutput,
@@ -244,6 +252,8 @@ import type {
   WorkspaceDestroyOutput,
   VcsGetInput,
   VcsGetOutput,
+  VcsBaseInput,
+  VcsBaseOutput,
   VcsStatusInput,
   VcsStatusOutput,
   VcsBranchesInput,
@@ -318,7 +328,31 @@ const EndpointPluginList = (raw: RawClient["server.plugin"]) => (input?: PluginL
     raw["plugin.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroupPlugin = (raw: RawClient["server.plugin"]) => ({ list: EndpointPluginList(raw) })
+const EndpointPluginAwaitActivation = (raw: RawClient["server.plugin"]) => (input?: PluginAwaitActivationInput) =>
+  preserveEffect<PluginAwaitActivationOutput>()(
+    raw["plugin.awaitActivation"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointPluginCheck = (raw: RawClient["server.plugin"]) => (input?: PluginCheckInput) =>
+  preserveEffect<PluginCheckOutput>()(
+    raw["plugin.check"]({ query: { location: input?.["location"] }, payload: { target: input?.["target"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const EndpointPluginUpdate = (raw: RawClient["server.plugin"]) => (input: PluginUpdateInput) =>
+  preserveEffect<PluginUpdateOutput>()(
+    raw["plugin.update"]({ query: { location: input["location"] }, payload: { targets: input["targets"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const adaptGroupPlugin = (raw: RawClient["server.plugin"]) => ({
+  list: EndpointPluginList(raw),
+  awaitActivation: EndpointPluginAwaitActivation(raw),
+  check: EndpointPluginCheck(raw),
+  update: EndpointPluginUpdate(raw),
+})
 
 const EndpointSessionList = (raw: RawClient["server.session"]) => (input?: SessionListInput) =>
   preserveEffect<SessionListOutput>()(
@@ -1164,6 +1198,17 @@ const EndpointSkillList = (raw: RawClient["server.skill"]) => (input?: SkillList
 
 const adaptGroupSkill = (raw: RawClient["server.skill"]) => ({ list: EndpointSkillList(raw) })
 
+const EndpointRpcCall = (raw: RawClient["server.rpc"]) => (input: RpcCallInput) =>
+  preserveEffect<RpcCallOutput>()(
+    raw["rpc.call"]({
+      params: { rpcID: input["rpcID"], method: input["method"] },
+      query: { location: input["location"] },
+      payload: { input: input["input"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupRpc = (raw: RawClient["server.rpc"]) => ({ call: EndpointRpcCall(raw) })
+
 const EndpointEventSubscribe = (raw: RawClient["server.event"]) => () =>
   preserveStream<EventSubscribeOutput>()(
     Stream.unwrap(
@@ -1406,21 +1451,21 @@ const EndpointReferenceList = (raw: RawClient["server.reference"]) => (input?: R
 
 const adaptGroupReference = (raw: RawClient["server.reference"]) => ({ list: EndpointReferenceList(raw) })
 
-const EndpointWorktreeList = (raw: RawClient["server.worktree"]) => (input: WorktreeListInput) =>
+const EndpointWorktreeList = (raw: RawClient["server.worktree"]) => (input?: WorktreeListInput) =>
   preserveEffect<WorktreeListOutput>()(
-    raw["worktree.list"]({ params: { projectID: input["projectID"] } }).pipe(Effect.mapError(mapClientError)),
+    raw["worktree.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const EndpointWorktreeCreate = (raw: RawClient["server.worktree"]) => (input: WorktreeCreateInput) =>
+const EndpointWorktreeCreate = (raw: RawClient["server.worktree"]) => (input?: WorktreeCreateInput) =>
   preserveEffect<WorktreeCreateOutput>()(
     raw["worktree.create"]({
-      params: { projectID: input["projectID"] },
+      query: { location: input?.["location"] },
       payload: {
-        strategy: input["strategy"],
-        from: input["from"],
-        branch: input["branch"],
-        directory: input["directory"],
-        name: input["name"],
+        strategy: input?.["strategy"],
+        from: input?.["from"],
+        branch: input?.["branch"],
+        directory: input?.["directory"],
+        name: input?.["name"],
       },
     }).pipe(Effect.mapError(mapClientError)),
   )
@@ -1428,14 +1473,14 @@ const EndpointWorktreeCreate = (raw: RawClient["server.worktree"]) => (input: Wo
 const EndpointWorktreeRemove = (raw: RawClient["server.worktree"]) => (input: WorktreeRemoveInput) =>
   preserveEffect<WorktreeRemoveOutput>()(
     raw["worktree.remove"]({
-      params: { projectID: input["projectID"] },
+      query: { location: input["location"] },
       payload: { directory: input["directory"], force: input["force"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
-const EndpointWorktreeRefresh = (raw: RawClient["server.worktree"]) => (input: WorktreeRefreshInput) =>
+const EndpointWorktreeRefresh = (raw: RawClient["server.worktree"]) => (input?: WorktreeRefreshInput) =>
   preserveEffect<WorktreeRefreshOutput>()(
-    raw["worktree.refresh"]({ params: { projectID: input["projectID"] } }).pipe(Effect.mapError(mapClientError)),
+    raw["worktree.refresh"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
 const adaptGroupWorktree = (raw: RawClient["server.worktree"]) => ({
@@ -1468,6 +1513,11 @@ const EndpointVcsGet = (raw: RawClient["server.vcs"]) => (input?: VcsGetInput) =
     raw["vcs.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointVcsBase = (raw: RawClient["server.vcs"]) => (input?: VcsBaseInput) =>
+  preserveEffect<VcsBaseOutput>()(
+    raw["vcs.base"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointVcsStatus = (raw: RawClient["server.vcs"]) => (input?: VcsStatusInput) =>
   preserveEffect<VcsStatusOutput>()(
     raw["vcs.status"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1482,13 +1532,14 @@ const EndpointVcsBranches = (raw: RawClient["server.vcs"]) => (input?: VcsBranch
 
 const EndpointVcsDiff = (raw: RawClient["server.vcs"]) => (input: VcsDiffInput) =>
   preserveEffect<VcsDiffOutput>()(
-    raw["vcs.diff"]({ query: { location: input["location"], mode: input["mode"], context: input["context"] } }).pipe(
-      Effect.mapError(mapClientError),
-    ),
+    raw["vcs.diff"]({
+      query: { location: input["location"], mode: input["mode"], base: input["base"], context: input["context"] },
+    }).pipe(Effect.mapError(mapClientError)),
   )
 
 const adaptGroupVcs = (raw: RawClient["server.vcs"]) => ({
   get: EndpointVcsGet(raw),
+  base: EndpointVcsBase(raw),
   status: EndpointVcsStatus(raw),
   branches: EndpointVcsBranches(raw),
   diff: EndpointVcsDiff(raw),
@@ -1556,6 +1607,7 @@ const adaptClient = (raw: RawClient) => ({
   file: adaptGroupFile(raw["server.fs"]),
   command: adaptGroupCommand(raw["server.command"]),
   skill: adaptGroupSkill(raw["server.skill"]),
+  rpc: adaptGroupRpc(raw["server.rpc"]),
   event: adaptGroupEvent(raw["server.event"]),
   pty: adaptGroupPty(raw["server.pty"]),
   experimental: adaptGroupExperimental(raw["server.experimental"]),

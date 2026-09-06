@@ -1,13 +1,14 @@
 export * as Credential from "./credential.js"
 
 import { asc, desc, eq } from "drizzle-orm"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Cause, Context, Effect, Layer, Schema } from "effect"
 import { Credential } from "@opencode-ai/schema/credential"
 import { Integration } from "@opencode-ai/schema/integration"
 import { Database } from "./database/database.js"
 import { Bus } from "./bus.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { CredentialTable } from "./credential/sql.js"
+import { ErrorSummary } from "./util/error-summary.js"
 
 export const ID = Credential.ID
 export type ID = Credential.ID
@@ -123,7 +124,21 @@ const layer = Layer.effect(
                 .run()
             }),
           )
-          .pipe(Effect.orDie)
+          .pipe(
+            Effect.onError((cause) =>
+              Effect.logError("credential create failed", {
+                credentialID: credential.id,
+                integrationID: credential.integrationID,
+                errors: ErrorSummary.from(Cause.squash(cause)),
+              }),
+            ),
+            Effect.orDie,
+          )
+        yield* Effect.logInfo("credential created", {
+          credentialID: credential.id,
+          integrationID: credential.integrationID,
+          type: credential.value.type,
+        })
         yield* bus.publish(Event.Updated, {}, { global: true })
         yield* bus.publish(
           Event.Switched,
@@ -154,8 +169,19 @@ const layer = Layer.effect(
               return credential.integration_id
             }),
           )
-          .pipe(Effect.orDie)
-        if (integrationID) yield* bus.publish(Event.Switched, { integrationID, credentialID: id }, { global: true })
+          .pipe(
+            Effect.onError((cause) =>
+              Effect.logError("credential activate failed", {
+                credentialID: id,
+                errors: ErrorSummary.from(Cause.squash(cause)),
+              }),
+            ),
+            Effect.orDie,
+          )
+        if (integrationID) {
+          yield* Effect.logInfo("credential activated", { integrationID, credentialID: id })
+          yield* bus.publish(Event.Switched, { integrationID, credentialID: id }, { global: true })
+        }
       }),
       update: Effect.fn("Credential.update")(function* (id, updates) {
         if (updates.label === undefined && updates.value === undefined) return
@@ -164,15 +190,46 @@ const layer = Layer.effect(
           .from(CredentialTable)
           .where(eq(CredentialTable.id, id))
           .get()
-          .pipe(Effect.orDie)
-        if (!credential?.integrationID) return
+          .pipe(
+            Effect.onError((cause) =>
+              Effect.logError("credential update lookup failed", {
+                credentialID: id,
+                errors: ErrorSummary.from(Cause.squash(cause)),
+              }),
+            ),
+            Effect.orDie,
+          )
+        if (!credential?.integrationID) {
+          yield* Effect.logWarning("credential update skipped", { credentialID: id, reason: "credential_missing" })
+          return
+        }
         if (updates.label === credential.label && updates.value === undefined) return
-        yield* db
+        const updated = yield* db
           .update(CredentialTable)
           .set({ label: updates.label, value: updates.value })
           .where(eq(CredentialTable.id, id))
-          .run()
-          .pipe(Effect.orDie)
+          .returning({ id: CredentialTable.id })
+          .get()
+          .pipe(
+            Effect.onError((cause) =>
+              Effect.logError("credential update failed", {
+                credentialID: id,
+                integrationID: credential.integrationID,
+                errors: ErrorSummary.from(Cause.squash(cause)),
+              }),
+            ),
+            Effect.orDie,
+          )
+        if (!updated) {
+          yield* Effect.logWarning("credential update skipped", { credentialID: id, reason: "credential_removed" })
+          return
+        }
+        yield* Effect.logInfo("credential updated", {
+          credentialID: id,
+          integrationID: credential.integrationID,
+          valueChanged: updates.value !== undefined,
+          labelChanged: updates.label !== undefined && updates.label !== credential.label,
+        })
         if (updates.label !== undefined && updates.label !== credential.label)
           yield* bus.publish(Event.Updated, {}, { global: true })
       }),
@@ -191,7 +248,8 @@ const layer = Layer.effect(
                     .get()
                 : undefined
               yield* tx.delete(CredentialTable).where(eq(CredentialTable.id, id)).run()
-              if (!credential.integration_id || active?.id !== id) return { switched: false as const }
+              if (!credential.integration_id || active?.id !== id)
+                return { switched: false as const, integrationID: credential.integration_id }
               const replacement = yield* tx
                 .select({ id: CredentialTable.id })
                 .from(CredentialTable)
@@ -217,8 +275,22 @@ const layer = Layer.effect(
               }
             }),
           )
-          .pipe(Effect.orDie)
+          .pipe(
+            Effect.onError((cause) =>
+              Effect.logError("credential remove failed", {
+                credentialID: id,
+                errors: ErrorSummary.from(Cause.squash(cause)),
+              }),
+            ),
+            Effect.orDie,
+          )
         if (!removed) return
+        yield* Effect.logInfo("credential removed", {
+          credentialID: id,
+          integrationID: removed.integrationID,
+          active: removed.switched,
+          ...(removed.switched ? { replacementID: removed.credentialID } : {}),
+        })
         yield* bus.publish(Event.Updated, {}, { global: true })
         if (removed.switched)
           yield* bus.publish(

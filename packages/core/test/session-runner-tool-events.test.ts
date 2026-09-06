@@ -1,25 +1,37 @@
 import { expect, test } from "bun:test"
-import { Cause, Effect, Exit, Schema } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect"
+import { eq } from "drizzle-orm"
 import { LLMEvent } from "@opencode-ai/ai"
 import { Money } from "@opencode-ai/schema/money"
 import { Bus } from "@opencode-ai/core/bus"
+import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { EventTable } from "@opencode-ai/core/event/sql"
 import { Event } from "@opencode-ai/schema/event"
 import { Agent } from "@opencode-ai/core/agent"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Session } from "@opencode-ai/core/session"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { Project } from "@opencode-ai/core/project"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
-import { RelativePath } from "@opencode-ai/core/schema"
+import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { createLLMEventPublisher } from "@opencode-ai/core/session/runner/publish-llm-event"
-import { it } from "./lib/effect"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { it, testEffect } from "./lib/effect"
 import { TestClock } from "effect/testing"
 
 const sessionID = Session.ID.make("ses_tool_event_test")
 const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
 
-const capture = (providerMetadataKey = "anthropic", options?: { readonly interruptProgress?: boolean }) => {
+const capture = (
+  providerMetadataKey = "anthropic",
+  options?: { readonly interruptProgress?: boolean; readonly beforeTextDelta?: Effect.Effect<void> },
+) => {
   const published: Array<{ readonly type: string; readonly data: unknown }> = []
   const bus: Pick<Bus.Interface, "publish"> = {
     publish: (definition, data) => {
@@ -31,6 +43,8 @@ const capture = (providerMetadataKey = "anthropic", options?: { readonly interru
         })
         return event
       })
+      if (definition.type === SessionEvent.Text.Delta.type && options?.beforeTextDelta)
+        return options.beforeTextDelta.pipe(Effect.andThen(publish))
       return definition.type === SessionEvent.Tool.Progress.type && options?.interruptProgress
         ? publish.pipe(Effect.andThen(Effect.interrupt))
         : publish
@@ -115,6 +129,88 @@ test("provider-executed success derives content and retains provider result stat
     resultState: { result: { type: "content" } },
   })
 })
+
+testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node]), [
+    Bus.node.replace(Bus.configured({ persist: true })),
+  ]),
+).effect("commits a hosted tool result when cancellation races with the aggregate lock", () =>
+  Effect.gen(function* () {
+    const database = yield* Database.Service
+    const bus = yield* Bus.Service
+    const held = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const queued = yield* Deferred.make<void>()
+    const assistantMessageID = SessionMessage.ID.create()
+    yield* database.db
+      .insert(ProjectTable)
+      .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+      .run()
+    yield* database.db
+      .insert(SessionTable)
+      .values({ id: sessionID, project_id: Project.ID.global, slug: "publish", directory: "/project", version: "test" })
+      .run()
+    const publisher = createLLMEventPublisher(
+      {
+        publish: (definition, data, options) =>
+          (definition.type === SessionEvent.Tool.Success.type ? Deferred.succeed(queued, undefined) : Effect.void).pipe(
+            Effect.andThen(bus.publish(definition, data, options)),
+          ),
+      },
+      {
+        sessionID,
+        assistantMessageID,
+        agent: Agent.defaultID,
+        model: { id: Model.ID.make("test-model"), providerID: Provider.ID.opencode },
+        providerMetadataKey: "openai",
+      },
+    )
+    yield* publisher.publish(LLMEvent.toolCall({ ...call, providerExecuted: true }))
+    yield* Effect.acquireRelease(
+      bus.listen((event) =>
+        event.type === SessionEvent.Renamed.type
+          ? Deferred.succeed(held, undefined).pipe(Effect.andThen(Deferred.await(release)))
+          : Effect.void,
+      ),
+      (unsubscribe) => unsubscribe,
+    )
+    // Listener delivery holds the aggregate lock after this unrelated event commits.
+    const holder = yield* bus
+      .publish(SessionEvent.Renamed, { sessionID, title: "Hold publication" })
+      .pipe(Effect.forkScoped({ startImmediately: true }))
+    yield* Deferred.await(held)
+    const publication = yield* publisher
+      .publish(LLMEvent.toolResult({ ...hostedResult, providerExecuted: true }))
+      .pipe(Effect.forkScoped({ startImmediately: true }))
+    yield* Effect.addFinalizer(() => Deferred.succeed(release, undefined))
+    yield* Deferred.await(queued)
+    const cancellation = yield* Fiber.interrupt(publication).pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Effect.yieldNow
+
+    expect(cancellation.pollUnsafe()).toBeUndefined()
+    yield* Deferred.succeed(release, undefined)
+    yield* Fiber.join(holder)
+    yield* Fiber.join(cancellation)
+    expect(Exit.hasInterrupts(yield* Fiber.await(publication))).toBe(true)
+    expect(yield* publisher.failUnsettledTools({ type: "aborted", message: "Interrupted" })).toBe(false)
+
+    const events = yield* database.db
+      .select({ type: EventTable.type })
+      .from(EventTable)
+      .where(eq(EventTable.aggregate_id, sessionID))
+      .all()
+    expect(events.filter((event) => event.type === "session.tool.success.2")).toHaveLength(1)
+    expect(events.some((event) => event.type === "session.tool.failed.2")).toBe(false)
+    const message = yield* database.db
+      .select()
+      .from(SessionMessageTable)
+      .where(eq(SessionMessageTable.id, assistantMessageID))
+      .get()
+    expect(message?.data).toMatchObject({
+      content: [{ type: "tool", id: call.id, executed: true, state: { status: "completed" } }],
+    })
+  }),
+)
 
 test("interrupted progress metadata remains in the terminal failure snapshot", async () => {
   const { published, publisher } = capture("anthropic", { interruptProgress: true })
@@ -232,6 +328,30 @@ test("reasoning state from start, empty delta, and end is merged", async () => {
   })
 })
 
+for (const kind of ["text", "reasoning"] as const) {
+  it.effect(`publishes the trailing ${kind} chunk while the provider is paused`, () =>
+    Effect.gen(function* () {
+      const { published, publisher } = capture()
+      yield* publisher.publish(LLMEvent[kind === "text" ? "textStart" : "reasoningStart"]({ id: kind }))
+      yield* publisher.publish(
+        LLMEvent[kind === "text" ? "textDelta" : "reasoningDelta"]({ id: kind, text: "Running the comm" }),
+      )
+      yield* TestClock.adjust("100 millis")
+      expect(
+        published.filter((event) => event.type === `session.${kind}.delta`).map((event) => event.data),
+      ).toMatchObject([{ delta: "Running the comm" }])
+
+      yield* publisher.publish(LLMEvent[kind === "text" ? "textDelta" : "reasoningDelta"]({ id: kind, text: "and." }))
+      yield* TestClock.adjust("100 millis")
+      expect(
+        published.filter((event) => event.type === `session.${kind}.delta`).map((event) => event.data),
+      ).toMatchObject([{ delta: "Running the comm" }, { delta: "and." }])
+      expect(published.some((event) => event.type === `session.${kind}.ended.1`)).toBe(false)
+      yield* publisher.flush()
+    }),
+  )
+}
+
 it.effect("batches text deltas and flushes pending text before the terminal event", () =>
   Effect.gen(function* () {
     const { published, publisher } = capture()
@@ -250,15 +370,44 @@ it.effect("batches text deltas and flushes pending text before the terminal even
     yield* TestClock.adjust("99 millis")
     expect(published.filter((event) => event.type === "session.text.delta")).toHaveLength(0)
     yield* TestClock.adjust("1 millis")
-    yield* publisher.publish(LLMEvent.textDelta({ id: "text", text: " four" }))
     expect(published.filter((event) => event.type === "session.text.delta").map((event) => event.data)).toMatchObject([
-      { delta: "one two three four" },
+      { delta: "one two three" },
     ])
 
+    yield* publisher.publish(LLMEvent.textDelta({ id: "text", text: " four" }))
     yield* publisher.publish(LLMEvent.textDelta({ id: "text", text: " five" }))
     yield* publisher.publish(LLMEvent.textEnd({ id: "text" }))
     expect(published.slice(-2).map((event) => event.type)).toEqual(["session.text.delta", "session.text.ended.1"])
-    expect(published.at(-2)?.data).toMatchObject({ delta: " five" })
+    expect(published.at(-2)?.data).toMatchObject({ delta: " four five" })
+    const count = published.length
+    yield* TestClock.adjust("1 second")
+    expect(published).toHaveLength(count)
+  }),
+)
+
+it.effect("retains new chunks and orders text-end behind an in-flight timer publication", () =>
+  Effect.gen(function* () {
+    const entered = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const { published, publisher } = capture("anthropic", {
+      beforeTextDelta: Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))),
+    })
+    yield* publisher.publish(LLMEvent.textStart({ id: "text" }))
+    yield* publisher.publish(LLMEvent.textDelta({ id: "text", text: "comm" }))
+    yield* TestClock.adjust("100 millis")
+    yield* Deferred.await(entered)
+    yield* publisher.publish(LLMEvent.textDelta({ id: "text", text: "and." }))
+    const ending = yield* publisher
+      .publish(LLMEvent.textEnd({ id: "text" }))
+      .pipe(Effect.forkChild({ startImmediately: true }))
+    expect(published.some((event) => event.type === "session.text.ended.1")).toBe(false)
+    yield* Deferred.succeed(release, undefined)
+    yield* Fiber.join(ending)
+    expect(published.slice(-3)).toMatchObject([
+      { type: "session.text.delta", data: { delta: "comm" } },
+      { type: "session.text.delta", data: { delta: "and." } },
+      { type: "session.text.ended.1", data: { text: "command." } },
+    ])
   }),
 )
 

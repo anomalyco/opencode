@@ -4,10 +4,11 @@ import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
-import { BranchList, FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
+import { Base, BranchList, FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
 import { AppProcess } from "@opencode-ai/util/process"
 import { Location } from "../../location.js"
 import type { Adapter, BranchOptions, DiffOptions } from "../../vcs.js"
+import { DiffError } from "../../vcs.js"
 import {
   chunksByFile,
   emptyPatch,
@@ -19,7 +20,6 @@ import type { Patch } from "../../vcs/patch.js"
 
 export const Plugin = define({
   id: "opencode.vcs.git",
-  vcs: { id: "git", markers: [".git"] },
   effect: Effect.fn("VcsGitPlugin")(function* (ctx) {
     const location = yield* Location.Service
     if (location.vcs?.type !== "git") return
@@ -30,14 +30,15 @@ export const Plugin = define({
       worktree: location.project.directory,
     })
 
-    yield* ctx.vcs.transform((draft) => {
-      draft.add({
+    yield* ctx.vcs.transform((editor) => {
+      editor.add({
         id: "git",
         name: "Git",
         info: () => adapter.info(),
+        base: () => adapter.base(),
         branches: (input) => adapter.branches({ search: input.search, limit: input.limit }),
         status: () => adapter.status(),
-        diff: (input) => adapter.diff(input.mode, { context: input.context }),
+        diff: (input) => adapter.diff(input.mode, { context: input.context, base: input.base }),
       })
     })
   }),
@@ -48,7 +49,7 @@ export const Plugin = define({
  * batched through one `git diff` invocation where possible and capped by
  * per-file and total byte budgets, falling back to empty patches when capped.
  */
-function make(proc: AppProcess.Interface, input: { directory: string; worktree: string }): Adapter {
+function make(proc: AppProcess.Interface, input: { directory: string; worktree: string }) {
   // Listing commands scope pathspecs to the requested directory; per-file
   // commands run from the worktree root because git lists root-relative paths.
   const ctx: Ctx = { git: makeGit(proc), directory: input.directory, worktree: input.worktree }
@@ -60,6 +61,7 @@ function make(proc: AppProcess.Interface, input: { directory: string; worktree: 
       })
       return { branch: { current, default: root?.name } } satisfies Info
     }),
+    base: () => ctx.git.base(ctx.directory),
     branches: Effect.fn("VcsGit.branches")(function* (options?: BranchOptions) {
       return yield* ctx.git.branches(ctx.directory, options)
     }),
@@ -93,24 +95,22 @@ function make(proc: AppProcess.Interface, input: { directory: string; worktree: 
         return yield* track(ctx, (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined, options)
       }
 
-      const [current, root] = yield* Effect.all([git.branch(ctx.directory), git.defaultBranch(ctx.directory)], {
-        concurrency: 2,
-      })
-      if (!root) return []
-      if (current && current === root.name) return []
-      const ref = yield* git.mergeBase(ctx.directory, root.ref)
-      if (!ref) return []
-      return yield* diffAgainstRef(ctx, ref, options)
+      if (!(yield* git.hasHead(ctx.directory))) {
+        return mode === "committed" ? [] : yield* track(ctx, undefined, options)
+      }
+      const base = options?.base ?? (yield* git.defaultBranch(ctx.directory))?.ref
+      const ref = base ? yield* git.mergeBase(ctx.directory, base) : undefined
+      if (!ref) {
+        return yield* new DiffError({
+          message: base ? `No merge base available for ${base}` : "No review base available",
+        })
+      }
+      return yield* diffAgainstRef(ctx, ref, { ...options, target: mode === "committed" ? "HEAD" : undefined })
     }),
-  }
+  } satisfies Adapter
 }
 
 type Kind = FileStatus["status"]
-
-interface Base {
-  readonly name: string
-  readonly ref: string
-}
 
 interface Item {
   readonly file: string
@@ -124,8 +124,11 @@ interface Stat {
   readonly deletions: number
 }
 
-interface PatchOptions {
-  readonly context?: number
+interface GitDiffOptions extends DiffOptions {
+  readonly target?: "HEAD"
+}
+
+interface PatchOptions extends GitDiffOptions {
   readonly maxOutputBytes?: number
 }
 
@@ -196,7 +199,7 @@ function makeGit(proc: AppProcess.Interface) {
     const result = yield* run(["config", "init.defaultBranch"], { cwd })
     const name = result.text().trim()
     if (!name || !list.includes(name)) return
-    return { name, ref: name } satisfies Base
+    return { name, ref: name }
   })
 
   const primary = Effect.fnUntraced(function* (cwd: string) {
@@ -239,15 +242,70 @@ function makeGit(proc: AppProcess.Interface) {
           .trim()
           .replace(/^refs\/remotes\//, "")
         const name = ref.startsWith(`${remote}/`) ? ref.slice(`${remote}/`.length) : ""
-        if (name) return { name, ref } satisfies Base
+        if (name) return { name, ref }
       }
     }
 
     const list = yield* lines(["for-each-ref", "--format=%(refname:short)", "refs/heads"], { cwd })
     const next = yield* configured(cwd, list)
     if (next) return next
-    if (list.includes("main")) return { name: "main", ref: "main" } satisfies Base
-    if (list.includes("master")) return { name: "master", ref: "master" } satisfies Base
+    if (list.includes("main")) return { name: "main", ref: "main" }
+    if (list.includes("master")) return { name: "master", ref: "master" }
+  })
+
+  const resolve = Effect.fnUntraced(function* (cwd: string, ref: string) {
+    const result = yield* run(["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`], { cwd })
+    if (result.exitCode !== 0) return
+    return result.text().trim() || undefined
+  })
+
+  const ancestor = Effect.fnUntraced(function* (cwd: string, commit: string, ref: string) {
+    if (!/^[a-f0-9]{40,64}$/.test(commit)) return false
+    return (yield* run(["merge-base", "--is-ancestor", commit, ref], { cwd })).exitCode === 0
+  })
+
+  const namedRef = Effect.fnUntraced(function* (cwd: string, input: string) {
+    // Creation hints must identify a branch, not HEAD, an object ID, or a revision expression.
+    if (input === "HEAD" || input.endsWith("/HEAD") || /[~^:@{}\s]/.test(input)) return
+    const ref = (yield* text(["rev-parse", "--symbolic-full-name", "--verify", "--end-of-options", input], {
+      cwd,
+    })).trim()
+    if (!/^refs\/(heads|remotes)\/.+/.test(ref) || ref.endsWith("/HEAD") || !(yield* resolve(cwd, ref))) return
+    return { name: ref.replace(/^refs\/heads\//, "").replace(/^refs\/remotes\/[^/]+\//, ""), ref }
+  })
+
+  const base = Effect.fn("VcsGit.base")(function* (cwd: string) {
+    if (!(yield* hasHead(cwd))) return null
+    const current = yield* branch(cwd)
+    if (!current) return yield* new DiffError({ message: "Choose a review base" })
+    const history = (yield* lines(
+      ["reflog", "show", "--max-count=256", "--format=%H%x00%gs", `refs/heads/${current}`],
+      {
+        cwd,
+      },
+    )).flatMap((line) => {
+      const match = /^([a-f0-9]+)\0(.+)$/.exec(line)
+      return match ? [{ commit: match[1], message: match[2] }] : []
+    })
+    const renamed = history.some((entry) => entry.message.startsWith("Branch: renamed "))
+    const creation = renamed ? undefined : history.find((entry) => entry.message.startsWith("branch: Created from "))
+    const origin = creation?.message.slice("branch: Created from ".length)
+    if (creation && origin) {
+      const candidate = yield* namedRef(cwd, origin)
+      if (
+        candidate &&
+        candidate.name !== current &&
+        (yield* ancestor(cwd, creation.commit, "HEAD")) &&
+        (yield* ancestor(cwd, creation.commit, candidate.ref))
+      ) {
+        return { ...candidate, source: "reflog" } satisfies Base
+      }
+    }
+    const root = yield* defaultBranch(cwd)
+    if (!root || current !== root.name) return yield* new DiffError({ message: "Choose a review base" })
+    const candidate = yield* namedRef(cwd, root.ref)
+    if (!candidate) return yield* new DiffError({ message: "The default review base is unavailable" })
+    return { name: root.name, ref: candidate.ref, source: "default" } satisfies Base
   })
 
   const hasHead = Effect.fn("VcsGit.hasHead")(function* (cwd: string) {
@@ -256,7 +314,9 @@ function makeGit(proc: AppProcess.Interface) {
   })
 
   const mergeBase = Effect.fn("VcsGit.mergeBase")(function* (cwd: string, base: string) {
-    const result = yield* run(["merge-base", base, "HEAD"], { cwd })
+    const ref = yield* resolve(cwd, base)
+    if (!ref) return
+    const result = yield* run(["merge-base", ref, "HEAD"], { cwd })
     if (result.exitCode !== 0) return
     return result.text().trim() || undefined
   })
@@ -272,10 +332,13 @@ function makeGit(proc: AppProcess.Interface) {
     })
   })
 
-  const diff = Effect.fn("VcsGit.diffNames")(function* (cwd: string, ref: string) {
-    const list = nuls(
-      yield* text(["diff", "--no-ext-diff", "--no-renames", "--name-status", "-z", ref, "--", "."], { cwd }),
+  const diff = Effect.fn("VcsGit.diffNames")(function* (cwd: string, ref: string, target?: string) {
+    const result = yield* run(
+      ["diff", "--no-ext-diff", "--no-renames", "--name-status", "-z", ref, ...(target ? [target] : []), "--", "."],
+      { cwd },
     )
+    if (result.exitCode !== 0) return yield* new DiffError({ message: "Unable to list Git changes" })
+    const list = nuls(result.text())
     return list.flatMap((code, idx) => {
       if (idx % 2 !== 0) return []
       const file = list[idx + 1]
@@ -284,9 +347,12 @@ function makeGit(proc: AppProcess.Interface) {
     })
   })
 
-  const stats = Effect.fn("VcsGit.stats")(function* (cwd: string, ref: string) {
+  const stats = Effect.fn("VcsGit.stats")(function* (cwd: string, ref: string, target?: string) {
     return nuls(
-      yield* text(["diff", "--no-ext-diff", "--no-renames", "--numstat", "-z", ref, "--", "."], { cwd }),
+      yield* text(
+        ["diff", "--no-ext-diff", "--no-renames", "--numstat", "-z", ref, ...(target ? [target] : []), "--", "."],
+        { cwd },
+      ),
     ).flatMap((item) => {
       const a = item.indexOf("\t")
       const b = item.indexOf("\t", a + 1)
@@ -309,7 +375,17 @@ function makeGit(proc: AppProcess.Interface) {
 
   const patch = Effect.fn("VcsGit.patch")(function* (cwd: string, ref: string, file: string, options?: PatchOptions) {
     const result = yield* run(
-      ["diff", "--patch", "--no-ext-diff", "--no-renames", `--unified=${options?.context ?? 3}`, ref, "--", file],
+      [
+        "diff",
+        "--patch",
+        "--no-ext-diff",
+        "--no-renames",
+        `--unified=${options?.context ?? 3}`,
+        ref,
+        ...(options?.target ? [options.target] : []),
+        "--",
+        file,
+      ],
       { cwd, maxOutputBytes: options?.maxOutputBytes },
     )
     return { text: result.truncated ? "" : result.text(), truncated: result.truncated } satisfies Patch
@@ -317,7 +393,17 @@ function makeGit(proc: AppProcess.Interface) {
 
   const patchAll = Effect.fn("VcsGit.patchAll")(function* (cwd: string, ref: string, options?: PatchOptions) {
     const result = yield* run(
-      ["diff", "--patch", "--no-ext-diff", "--no-renames", `--unified=${options?.context ?? 3}`, ref, "--", "."],
+      [
+        "diff",
+        "--patch",
+        "--no-ext-diff",
+        "--no-renames",
+        `--unified=${options?.context ?? 3}`,
+        ref,
+        ...(options?.target ? [options.target] : []),
+        "--",
+        ".",
+      ],
       { cwd, maxOutputBytes: options?.maxOutputBytes },
     )
     return { text: result.text(), truncated: result.truncated } satisfies Patch
@@ -367,6 +453,7 @@ function makeGit(proc: AppProcess.Interface) {
   return {
     branch,
     branches,
+    base,
     defaultBranch,
     hasHead,
     mergeBase,
@@ -393,10 +480,11 @@ const merge = (...lists: Item[][]) => {
 
 const emptyBatch = () => ({ patches: new Map<string, string>(), capped: false })
 
-const batchPatches = Effect.fnUntraced(function* (ctx: Ctx, ref: string, list: Item[], options?: DiffOptions) {
+const batchPatches = Effect.fnUntraced(function* (ctx: Ctx, ref: string, list: Item[], options?: GitDiffOptions) {
   if (list.length === 0) return emptyBatch()
 
   const result = yield* ctx.git.patchAll(ctx.directory, ref, {
+    target: options?.target,
     context: options?.context ?? PATCH_CONTEXT_LINES,
     maxOutputBytes: MAX_TOTAL_PATCH_BYTES,
   })
@@ -407,7 +495,12 @@ const batchPatches = Effect.fnUntraced(function* (ctx: Ctx, ref: string, list: I
   }
 })
 
-const nativePatch = Effect.fnUntraced(function* (ctx: Ctx, ref: string | undefined, item: Item, options?: DiffOptions) {
+const nativePatch = Effect.fnUntraced(function* (
+  ctx: Ctx,
+  ref: string | undefined,
+  item: Item,
+  options?: GitDiffOptions,
+) {
   const result =
     item.code === "??" || !ref
       ? yield* ctx.git.patchUntracked(ctx.worktree, item.file, {
@@ -415,6 +508,7 @@ const nativePatch = Effect.fnUntraced(function* (ctx: Ctx, ref: string | undefin
           maxOutputBytes: MAX_PATCH_BYTES,
         })
       : yield* ctx.git.patch(ctx.worktree, ref, item.file, {
+          target: options?.target,
           context: options?.context ?? PATCH_CONTEXT_LINES,
           maxOutputBytes: MAX_PATCH_BYTES,
         })
@@ -434,7 +528,7 @@ const patchForItem = Effect.fnUntraced(function* (
   item: Item,
   batch: { patches: Map<string, string>; capped: boolean },
   capped: boolean,
-  options?: DiffOptions,
+  options?: GitDiffOptions,
 ) {
   if (capped) return emptyPatch(item.file)
 
@@ -450,7 +544,7 @@ const files = Effect.fnUntraced(function* (
   list: Item[],
   map: Map<string, { additions: number; deletions: number }>,
   batch: { patches: Map<string, string>; capped: boolean },
-  options?: DiffOptions,
+  options?: GitDiffOptions,
 ) {
   const next: FileDiff.Info[] = []
   let total = 0
@@ -459,7 +553,7 @@ const files = Effect.fnUntraced(function* (
   for (const item of list.toSorted((a, b) => a.file.localeCompare(b.file))) {
     const stat =
       map.get(item.file) ??
-      (item.status === "added" ? yield* ctx.git.statUntracked(ctx.worktree, item.file) : undefined)
+      (!options?.target && item.status === "added" ? yield* ctx.git.statUntracked(ctx.worktree, item.file) : undefined)
     const patch = yield* patchForItem(ctx, ref, item, batch, capped, options)
     const result: { patch: string; capped: boolean } = capped
       ? { patch, capped: true }
@@ -481,9 +575,13 @@ const files = Effect.fnUntraced(function* (
   return next
 })
 
-const diffAgainstRef = Effect.fnUntraced(function* (ctx: Ctx, ref: string, options?: DiffOptions) {
+const diffAgainstRef = Effect.fnUntraced(function* (ctx: Ctx, ref: string, options?: GitDiffOptions) {
   const [list, stats, extra] = yield* Effect.all(
-    [ctx.git.diff(ctx.directory, ref), ctx.git.stats(ctx.directory, ref), ctx.git.status(ctx.directory)],
+    [
+      ctx.git.diff(ctx.directory, ref, options?.target),
+      ctx.git.stats(ctx.directory, ref, options?.target),
+      options?.target ? Effect.succeed([]) : ctx.git.status(ctx.directory),
+    ],
     { concurrency: 3 },
   )
   return yield* files(

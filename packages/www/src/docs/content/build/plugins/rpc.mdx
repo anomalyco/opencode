@@ -1,0 +1,231 @@
+---
+title: "RPC"
+---
+
+Plugins can expose custom methods and events that run on the server and can be
+called by other plugins or clients.
+
+## Define
+
+Use `Rpc.define` to list the RPC's methods, errors, and events.
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode-ai/plugin/rpc"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      errors: {
+        not_found: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: {
+        type: "object",
+        properties: {
+          itemID: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["itemID", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+})
+```
+
+### Validation
+
+An RPC definition describes the shapes of input and output of methods, events
+and errors. It supports two schema formats:
+
+- JSON Schema, simple and requires no dependencies.
+- Any Standard Schema compliant validator
+  - Zod
+  - Valibot
+  - ArkType
+
+### Input and output
+
+Each method can define an `input` schema for its argument and an `output` schema
+for its return value. Leave either one out if the method does not accept or
+return a value.
+
+```ts
+search: {
+  input: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+  },
+  output: {
+    type: "object",
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
+}
+```
+
+JSON Schema values are `unknown` in TypeScript, so narrow them before use.
+Standard Schema infers the input and output types.
+
+### Errors
+
+Add an `errors` map to a method for expected failures. Each key becomes the
+error's `type`, and its schema defines the error's `data`.
+
+```ts
+errors: {
+  not_found: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+    additionalProperties: false,
+  },
+}
+```
+
+Error names beginning with `rpc.` are reserved by OpenCode.
+
+### Events
+
+Add events to the top-level `events` map. Each event has a schema for the data
+sent to subscribers.
+
+Event data must be an object. Use an empty object schema when there is no data:
+
+```ts
+events: {
+  refreshed: {
+    schema: { type: "object", additionalProperties: false },
+  },
+}
+```
+
+Scalars, arrays, `null`, and `undefined` are not valid event data.
+
+## Implement
+
+Register the implementation inside `setup`:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode-ai/plugin"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-plugin",
+  async setup(ctx) {
+    const registration = await ctx.rpc.register(Acme, {
+      search: async (input, context) => {
+        const { query } = input as { query: string }
+        const text = await findText(query, { signal: context.signal })
+        if (!text) return context.error("not_found", "Result not found", { query })
+        return { text }
+      },
+    })
+
+    const acme = ctx.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+
+    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+  },
+})
+```
+
+After registering the RPC, the same plugin can call it through `ctx.rpc(Acme)`.
+
+The second argument includes `signal` for cancellation and `context.error(...)`
+for declared errors. You can return or throw the error.
+
+One plugin can register more than one RPC. Disposing the registration removes it.
+
+## Call
+
+Once the RPC is registered, it can be called over HTTP or from another plugin.
+
+### HTTP
+
+Create an OpenCode client, then use `client.rpc` to create a subclient for the
+RPC:
+
+```ts
+import { OpenCode } from "@opencode-ai/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const acme = client.rpc(Acme)
+const result = await acme.search({ query: "hello" })
+```
+
+### Plugin
+
+Plugins already have an OpenCode client. For example, a TUI plugin can create
+the same RPC subclient from `context.client`:
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode-ai/plugin/tui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  id: "acme-tui",
+  async setup(context) {
+    const acme = context.client.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+    console.log(result)
+  },
+})
+```
+
+### Subscribe
+
+Use `events.on` for a callback and unsubscribe when the listener is no longer
+needed:
+
+```ts
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+
+unsubscribe()
+```
+
+For an async iterable, use `events.subscribe("updated")`:
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+Event subscriptions are live only, so disconnected subscribers miss events.
+
+- Subscribe with the local name, such as `updated`.
+- The received type is prefixed, such as `rpc.acme.updated`.
+- Each event includes `data` and `location`.
+- Plugin unload closes its subscriptions.
+
+External clients receive events from every location, so check `event.location`
+when needed. The server plugin still needs to be configured and running.

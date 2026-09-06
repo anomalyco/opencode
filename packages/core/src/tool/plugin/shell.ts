@@ -2,18 +2,21 @@ export * as ShellTool from "./shell.js"
 
 import { ToolFailure } from "@opencode-ai/ai"
 import type { Context } from "@opencode-ai/plugin/effect/plugin"
+import type { ShellCreateBefore } from "@opencode-ai/plugin/effect/shell"
+import type { Tool } from "@opencode-ai/schema/tool"
 import { Deferred, Effect, Schema, Scope } from "effect"
 import { Config } from "../../config.js"
 import { Environment } from "../../environment/index.js"
+import { Job } from "../../job.js"
 import { LocationMutation } from "../../location-mutation.js"
 import { Permission } from "../../permission.js"
-import { PluginRuntime } from "../../plugin/runtime.js"
 import { NonNegativeInt } from "../../schema.js"
+import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
 import { Shell } from "../../shell.js"
 import { ShellParse } from "../../shell/parse.js"
 import { ShellSelect } from "../../shell/select.js"
-import { ToolOutput } from "../../tool-output.js"
+import { ShellResult } from "../../shell/result.js"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
@@ -71,11 +74,7 @@ const Output = Schema.Struct({
 type Output = typeof Output.Type
 
 const resultMessages = (output: Output) => {
-  const notice = (() => {
-    if (output.status === "running") return BACKGROUND_INSTRUCTION
-    if (output.timeout) return "Command timed out before completion."
-    if (output.exit !== undefined) return `Command exited with code ${output.exit}.`
-  })()
+  const notice = output.status === "running" ? BACKGROUND_INSTRUCTION : ShellResult.notice(output)
   return [output.output, ...(notice ? [notice] : [])]
 }
 
@@ -85,10 +84,8 @@ const toolResult = (output: Output) => {
     content: resultMessages(output).map((text) => ({ type: "text" as const, text })),
     metadata: {
       status: output.status,
-      truncated: output.truncated,
-      ...(output.exit !== undefined ? { exit: output.exit } : {}),
+      ...ShellResult.metadata(output),
       ...(output.shellID !== undefined ? { shellID: output.shellID } : {}),
-      ...(output.timeout !== undefined ? { timeout: output.timeout } : {}),
     },
   }
 }
@@ -103,7 +100,8 @@ const backgroundResult = (shellID: string, file: string) => ({
 export const Plugin = {
   id: "opencode.tool.shell",
   effect: Effect.fn("ShellTool.Plugin")(function* (ctx: Context) {
-    const runtime = yield* PluginRuntime.Service
+    const sessions = yield* Session.Service
+    const jobs = yield* Job.Service
     const scope = yield* Scope.Scope
     const environment = yield* Environment.Service
     const mutation = yield* LocationMutation.Service
@@ -113,6 +111,56 @@ export const Plugin = {
     const permission = yield* Permission.Service
     const config = yield* Config.Service
 
+    const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
+      const source = {
+        type: "tool" as const,
+        messageID: context.messageID,
+        id: context.id,
+      }
+      const target = yield* mutation.resolve({ path: invocation.cwd, kind: "directory" })
+      invocation.cwd = target.absolute
+      const timeout = invocation.timeout
+      const portable = Config.latest(yield* config.entries(), "experimental")?.portable_shell_scanner === true
+      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute, { portable })
+      const directories = yield* Effect.forEach(parsed.directories, (directory) =>
+        mutation.resolve({
+          path: LocationMutation.resolvePath(target.absolute, directory),
+          kind: "directory",
+        }),
+      )
+      const external = [target, ...directories]
+        .map((item) => item.externalDirectory)
+        .filter((item) => item !== undefined)
+        .filter((item, index, items) => items.findIndex((other) => other.resource === item.resource) === index)
+      if (external.length > 0)
+        yield* permission.assert({
+          action: "external_directory",
+          resources: external.map((item) => item.resource),
+          save: external.map((item) => item.save),
+          sessionID: context.sessionID,
+          agent: context.agent,
+          source,
+        })
+      if (parsed.commands.length > 0)
+        yield* permission.assert({
+          action: name,
+          resources: parsed.commands.map((command) => command.resource),
+          save: parsed.commands.map((command) => command.save),
+          sessionID: context.sessionID,
+          agent: context.agent,
+          source,
+        })
+      // Approval can outlive the directory, so validate immediately before spawning.
+      const workdir = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(
+        Effect.catchTag("Environment.NotFound", () =>
+          Effect.fail(new Error(`Working directory does not exist: ${target.absolute}`)),
+        ),
+      )
+      if (workdir !== "directory")
+        return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.absolute}`))
+      return timeout
+    })
+
     const notifyWhenDone = Effect.fn("ShellTool.notifyWhenDone")(
       function* (
         sessionID: SessionSchema.ID,
@@ -121,7 +169,7 @@ export const Plugin = {
         command: string,
         settled: Deferred.Deferred<Output>,
       ) {
-        const info = (yield* runtime.job.wait({ id })).info
+        const info = (yield* jobs.wait({ id })).info
         if (!info || info.status === "running") return
         const output = info.status === "completed" ? yield* Deferred.await(settled) : undefined
         const text = output
@@ -129,33 +177,27 @@ export const Plugin = {
           : info.status === "error"
             ? (info.error ?? "Command failed")
             : "Command cancelled"
-        yield* runtime.session.synthetic({
+        yield* sessions.synthetic({
           ...(info.notificationID ? { id: info.notificationID } : {}),
           sessionID,
-          text: `<shell id="${id}" state="${info.status}" command="${command}">\n${text}\n</shell>`,
           description: command,
-          metadata: {
-            source: "shell",
+          ...ShellResult.notification({
             jobID: id,
             shellID,
+            command,
             state: info.status,
-            ...(output
-              ? {
-                  truncated: output.truncated,
-                  ...(output.exit !== undefined ? { exit: output.exit } : {}),
-                  ...(output.timeout !== undefined ? { timeout: output.timeout } : {}),
-                }
-              : {}),
-          },
+            text,
+            output,
+          }),
         })
-        if (info.notificationID) yield* runtime.job.completeBackground(info.notificationID)
+        if (info.notificationID) yield* jobs.completeBackground(info.notificationID)
       },
       Effect.forkIn(scope, { startImmediately: true }),
     )
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false },
           description: description(),
@@ -163,11 +205,6 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const source = {
-                type: "tool" as const,
-                messageID: context.messageID,
-                id: context.id,
-              }
               const timeout = input.background === true ? (input.timeout ?? 0) : (input.timeout ?? DEFAULT_TIMEOUT_MS)
               let finalTimeout = timeout
               const info = yield* shell.create(
@@ -180,106 +217,29 @@ export const Plugin = {
                 },
                 (invocation) =>
                   Effect.gen(function* () {
-                    const target = yield* mutation.resolve({ path: invocation.cwd, kind: "directory" })
-                    invocation.cwd = target.absolute
-                    finalTimeout = invocation.timeout
-                    const portable =
-                      Config.latest(yield* config.entries(), "experimental")?.portable_shell_scanner === true
-                    const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute, {
-                      portable,
-                    })
-                    const directories = yield* Effect.forEach(parsed.directories, (directory) =>
-                      mutation.resolve({
-                        path: LocationMutation.resolvePath(target.absolute, directory),
-                        kind: "directory",
-                      }),
-                    )
-                    const external = [target, ...directories]
-                      .map((item) => item.externalDirectory)
-                      .filter((item) => item !== undefined)
-                      .filter(
-                        (item, index, items) => items.findIndex((other) => other.resource === item.resource) === index,
-                      )
-                    if (external.length > 0)
-                      yield* permission.assert({
-                        action: "external_directory",
-                        resources: external.map((item) => item.resource),
-                        save: external.map((item) => item.save),
-                        sessionID: context.sessionID,
-                        agent: context.agent,
-                        source,
-                      })
-                    if (parsed.commands.length > 0)
-                      yield* permission.assert({
-                        action: name,
-                        resources: parsed.commands.map((command) => command.resource),
-                        save: parsed.commands.map((command) => command.save),
-                        sessionID: context.sessionID,
-                        agent: context.agent,
-                        source,
-                      })
-                    const workdir = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(
-                      Effect.catchTag("Environment.NotFound", () =>
-                        Effect.fail(new Error(`Working directory does not exist: ${target.absolute}`)),
-                      ),
-                    )
-                    if (workdir !== "directory")
-                      return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.absolute}`))
+                    finalTimeout = yield* prepare(invocation, context)
                   }),
               )
               yield* context.progress({ shellID: info.id })
 
-              const captureShell = Effect.fnUntraced(function* () {
-                const configured = Config.latest(yield* config.entries(), "tool_output")
-                const maxLines = configured?.max_lines ?? ToolOutput.MAX_LINES
-                const maxBytes = configured?.max_bytes ?? ToolOutput.MAX_BYTES
-                const latest = yield* shell.output(info.id, { cursor: Number.MAX_SAFE_INTEGER })
-                const page = yield* shell.output(info.id, {
-                  cursor: Math.max(0, latest.size - maxBytes),
-                  limit: maxBytes,
-                })
-                const lines = page.output.split("\n")
-                if (page.output.endsWith("\n")) lines.pop()
-                const truncated = latest.size > maxBytes || lines.length > maxLines
-                const output = lines.length > maxLines ? lines.slice(-maxLines).join("\n") : page.output
-                const notice = truncated ? `\n\n[output truncated; full output saved to: ${info.file}]` : ""
+              const settled = yield* Deferred.make<Output>()
+              const run = Effect.gen(function* () {
+                const result = yield* shell.result(info)
+                if (!result.capture) return yield* new Shell.NotFoundError({ id: info.id })
+                const output = ShellResult.output(result)
                 return {
-                  output: `${output || "(no output)"}${notice}`,
-                  truncated,
-                }
-              })
-
-              const settleShell = Effect.fnUntraced(function* () {
-                const final = yield* shell.wait(info.id)
-                const capture = yield* captureShell()
-
-                // `exit` is optionalKey in the Output schema; a present-but-undefined key
-                // fails output encoding, so omit it when the process has no exit code.
-                if (final.status === "timeout") {
-                  return {
-                    ...(final.exit !== undefined ? { exit: final.exit } : {}),
-                    output: `${capture.output}\n\nCommand exceeded timeout of ${finalTimeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
-                    truncated: capture.truncated,
-                    timeout: true,
-                    status: "completed" as const,
-                  }
-                }
-
-                return {
-                  ...(final.exit !== undefined ? { exit: final.exit } : {}),
-                  output: capture.output,
-                  truncated: capture.truncated,
+                  ...output,
+                  output: output.timeout
+                    ? `${output.output}\n\nCommand exceeded timeout of ${finalTimeout} ms. Retry with a larger timeout if the command is expected to take longer.`
+                    : output.output,
                   status: "completed" as const,
                 }
-              })
-
-              const settled = yield* Deferred.make<Output>()
-              const run = settleShell().pipe(
+              }).pipe(
                 Effect.tap((output) => Deferred.succeed(settled, output)),
                 Effect.map((output) => resultMessages(output).join("\n\n")),
                 Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),
               )
-              const job = yield* runtime.job.start({
+              const job = yield* jobs.start({
                 // CodeMode children share a tool-call ID, but each shell must own its job.
                 id: info.id,
                 type: name,
@@ -295,14 +255,14 @@ export const Plugin = {
               })
 
               if (input.background === true) {
-                yield* runtime.job.background(job.id)
+                yield* jobs.background(job.id)
                 yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
                 return backgroundResult(info.id, info.file)
               }
 
-              const result = yield* runtime.job
+              const result = yield* jobs
                 .block({ id: job.id, sessionID: context.sessionID })
-                .pipe(Effect.onInterrupt(() => runtime.job.cancel(job.id).pipe(Effect.ignore)))
+                .pipe(Effect.onInterrupt(() => jobs.cancel(job.id).pipe(Effect.ignore)))
               if (result?.type === "backgrounded") {
                 yield* shell.timeout(info.id, 0)
                 yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)

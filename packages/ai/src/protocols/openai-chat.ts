@@ -736,6 +736,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     )
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
+  const flattened = ProviderShared.flattenToolRequest(request)
   const provider = String(request.model.provider)
   const baseURL = request.model.route.endpoint.baseURL
   const detectedMaxTokensField = detectMaxTokensField(provider, baseURL)
@@ -748,16 +749,16 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   const zaiToolStream =
     request.model.compatibility?.zaiToolStream ?? detectZaiToolStream(provider, baseURL, request.model.id)
   const hasHistory = hasToolHistory(request.messages)
-  const hasActiveTools = request.tools.length > 0
+  const hasActiveTools = flattened.tools.length > 0
   return {
     model: request.model.id,
-    messages: yield* lowerMessages(request, options),
+    messages: yield* lowerMessages(flattened.request, options),
     tools:
-      request.tools.length === 0
+      flattened.tools.length === 0
         ? hasHistory
           ? []
           : undefined
-        : request.tools.map((tool) =>
+        : flattened.tools.map((tool) =>
             lowerTool(
               tool,
               ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
@@ -815,7 +816,12 @@ const mapFinishReason = Effect.fn("OpenAIChat.mapFinishReason")(function* (event
     case "tool_calls":
       return "tool-calls" as const
     default:
-      return "unknown" as const
+      return yield* new AIError({
+        reason: new UnknownProviderError({
+          message: `Provider finish_reason: ${reason}`,
+          body: ProviderShared.encodeJson(event),
+        }),
+      })
   }
 })
 
@@ -1054,17 +1060,25 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       events.push(...result.events)
     }
 
-    if (finishReason !== undefined && state.finishReason === undefined && Object.keys(pendingTools).length > 0)
+    const incompleteTools = finishReason?.normalized === "content-filter" || finishReason?.normalized === "length"
+    if (
+      finishReason !== undefined &&
+      !incompleteTools &&
+      state.finishReason === undefined &&
+      Object.keys(pendingTools).length
+    )
       return yield* ProviderShared.eventError(
         ADAPTER,
         "OpenAI Chat tool call delta is missing id or name",
         ProviderShared.encodeJson(event),
       )
 
-    // Finalize accumulated tool inputs eagerly when finish_reason arrives so
-    // valid calls and malformed local calls settle independently.
+    // Filtering or truncation terminates the response without confirming pending tool calls.
     const finished =
-      finishReason !== undefined && state.finishReason === undefined && Object.keys(tools).length > 0
+      finishReason !== undefined &&
+      !incompleteTools &&
+      state.finishReason === undefined &&
+      Object.keys(tools).length > 0
         ? yield* ToolStream.finishAll(ADAPTER, tools)
         : undefined
 

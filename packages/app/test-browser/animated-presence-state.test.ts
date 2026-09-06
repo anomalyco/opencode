@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { createAnimatedPresence } from "../src/runtime/animated-presence"
-import { createRoot, createSignal } from "solid-js"
+import { batch, createRoot, createSignal } from "solid-js"
 
 test("animates visibility changes without animating initial presence", () => {
   createRoot((dispose) => {
@@ -44,6 +44,25 @@ test("animates the first appearance when initially hidden", () => {
     expect(presence.animate()).toBe(true)
     expect(presence.value()).toBe("steer")
 
+    dispose()
+  })
+})
+
+test("does not animate visibility changes across identities", () => {
+  createRoot((dispose) => {
+    const [identity, setIdentity] = createSignal("a")
+    const [value, setValue] = createSignal<string | undefined>("visible")
+    const presence = createAnimatedPresence(value, () => null, identity)
+
+    expect(presence.animate()).toBe(false)
+    batch(() => {
+      setIdentity("b")
+      setValue(undefined)
+    })
+    expect(presence.animate()).toBe(false)
+
+    setValue("visible")
+    expect(presence.animate()).toBe(true)
     dispose()
   })
 })

@@ -47,7 +47,6 @@ type MockStreamWindow = Window & {
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
-  const state = { cursors: new Map<string, string>(), nextCursor: 0 }
   const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
   await page.addInitScript(
@@ -135,13 +134,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     }, 50)
     page.on("close", () => clearInterval(timer))
   }
-  const transport = HttpRouter.toWebHandler(
-    HttpApiBuilder.layer(MockApi).pipe(
-      Layer.provide(mockHandlers(config, state)),
-      Layer.provide(HttpServer.layerServices),
-    ),
-    { disableLogger: true },
-  )
+  const transport = createMockServerHandler(config)
   page.on("close", () => void transport.dispose())
 
   await page.route("**/api/**", async (route) => {
@@ -171,6 +164,16 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       body: Buffer.from(await response.arrayBuffer()),
     })
   })
+}
+
+export function createMockServerHandler(config: MockServerConfig) {
+  return HttpRouter.toWebHandler(
+    HttpApiBuilder.layer(MockApi).pipe(
+      Layer.provide(mockHandlers(config, { cursors: new Map<string, string>(), nextCursor: 0 })),
+      Layer.provide(HttpServer.layerServices),
+    ),
+    { disableLogger: true },
+  )
 }
 
 const corsHeaders = {
@@ -606,9 +609,12 @@ export function currentSession(session: { id: string } & Record<string, unknown>
     model: session.model ?? { id: "mock-model", providerID: "mock-provider" },
     cost: session.cost ?? 0,
     tokens: session.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    ...(typeof session.outcome === "string" ? { outcome: session.outcome } : {}),
     time: {
       created: "created" in time && typeof time.created === "number" ? time.created : 0,
       updated: "updated" in time && typeof time.updated === "number" ? time.updated : 0,
+      ...("idle" in time && typeof time.idle === "number" ? { idle: time.idle } : {}),
+      ...("viewed" in time && typeof time.viewed === "number" ? { viewed: time.viewed } : {}),
       ...(session.time && typeof session.time === "object" && "archived" in session.time
         ? { archived: session.time.archived }
         : {}),

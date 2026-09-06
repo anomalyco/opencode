@@ -25,15 +25,17 @@ story("renders every admitted tool family and hides timeline-only exclusions", a
   ]) {
     await expect(timeline.locator(`[data-timeline-part-id="tool_family_${id}"]`), id).toBeVisible()
   }
-  const patch = timeline.locator('[data-timeline-part-id="tool_family_patch"]')
-  await expect(patch.getByText("1 file", { exact: true })).toBeVisible()
-  await expect(patch.getByRole("button", { name: "Patch 1 file", exact: true })).toHaveCount(0)
-  await expect(patch.getByRole("button")).toHaveCount(1)
-  await expect(patch.locator('[data-scope="apply-patch"] button')).toHaveAttribute("aria-expanded", "false")
-  await expect(patch.locator('[data-slot="message-part-title-filename"]')).toHaveCount(0)
-  await expect(patch.locator('[data-slot="message-part-actions"]')).toHaveCount(0)
-  const edit = timeline.locator('[data-timeline-part-id="tool_family_edit"]')
-  await expect(edit).toContainText("Edit")
+  for (const name of ["edit", "write", "patch"]) {
+    const tool = timeline.locator(`[data-timeline-part-id="tool_family_${name}"]`)
+    await expect(tool.getByText("1 file", { exact: true })).toBeVisible()
+    await expect(tool.getByRole("button")).toHaveCount(1)
+    await expect(tool.locator('[data-scope="apply-patch"] button')).toHaveAttribute("aria-expanded", "false")
+    await expect(tool.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("data-locked", "")
+    await expect(tool.locator('[data-slot="message-part-title-filename"]')).toHaveCount(0)
+    await expect(tool.locator('[data-slot="message-part-actions"]')).toHaveCount(0)
+    await expect(tool.locator('[data-slot="basic-tool-tool-title"]')).toHaveCSS("font-size", "13px")
+    await expect(tool.locator('[data-slot="basic-tool-tool-title"]')).toHaveCSS("line-height", "16px")
+  }
   await expect(timeline.locator('[data-timeline-part-id="tool_family_todo"]')).toHaveCount(0)
 })
 

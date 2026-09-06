@@ -11,6 +11,7 @@
   },
   "scripts": {
     "typecheck": "tsgo -b",
+    "test": "bun test --timeout 30000",
     "dev": "bun ./scripts/dev.ts",
     "prebuild": "bun ./scripts/prebuild.ts",
     "build": "electron-vite build",
@@ -30,7 +31,7 @@
     "electron-window-state": "^5.0.3"
   },
   "devDependencies": {
-    "@brendonovich/vite-plugin-opencode": "0.1.1",
+    "@brendonovich/vite-plugin-opencode": "0.1.3",
     "@effect/platform-node": "catalog:",
     "@lydell/node-pty": "catalog:",
     "@opencode-ai/app": "workspace:*",
@@ -44,6 +45,7 @@
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "app-builder-lib": "26.15.7",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "electron": "42.10.1",

@@ -92,11 +92,11 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = Provider.ID.make("custom")
       const inheritedID = Model.ID.make("inherited")
       const overriddenID = Model.ID.make("overridden")
-      yield* catalog.transform((draft) => {
-        draft.model.update(providerID, inheritedID, (model) => {
+      yield* catalog.transform((editor) => {
+        editor.model.update(providerID, inheritedID, (model) => {
           model.capabilities = { tools: false, input: ["text"], output: ["text"] }
         })
-        draft.model.update(providerID, overriddenID, (model) => {
+        editor.model.update(providerID, overriddenID, (model) => {
           model.capabilities = { tools: false, input: ["text"], output: ["text"] }
         })
       })
@@ -273,8 +273,8 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const catalog = yield* Catalog.Service
       const providerID = Provider.ID.make("custom")
       const modelID = Model.ID.make("chat")
-      yield* catalog.transform((draft) => {
-        draft.model.update(providerID, modelID, (model) => {
+      yield* catalog.transform((editor) => {
+        editor.model.update(providerID, modelID, (model) => {
           model.package = "aisdk:@ai-sdk/anthropic"
           model.settings = { baseURL: "https://catalog.example/v1" }
           model.capabilities = { tools: false, input: ["audio"], output: ["audio"] }
@@ -405,6 +405,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
               providers: {
                 custom: {
                   name: "Configured",
+                  canonical: "anthropic",
                   env: ["CUSTOM_API_KEY"],
                   package: "native",
                   headers: { first: "first", shared: "first" },
@@ -441,6 +442,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
               providers: {
                 custom: {
                   package: "aisdk:custom-sdk",
+                  canonical: "anthropic",
                   settings: { baseURL: "https://example.test" },
                   headers: { last: "last", shared: "last" },
                   models: {
@@ -478,12 +480,23 @@ describe("ConfigProviderPlugin.Plugin", () => {
           }),
         ]
 
+        yield* catalog.transform((editor) => {
+          editor.provider.update(Provider.ID.anthropic, (provider) => {
+            provider.package = "aisdk:@ai-sdk/anthropic"
+          })
+          editor.model.update(Provider.ID.anthropic, modelID, (model) => {
+            model.variants = [{ id: Model.VariantID.make("fast"), settings: { effort: "high" } }]
+          })
+        })
         yield* addPlugin(entries)
 
         const provider = required(yield* catalog.provider.get(providerID))
         const model = required(yield* catalog.model.get(providerID, modelID))
         expect((yield* catalog.model.default())?.id).toBe(Model.ID.make("default"))
         expect(provider.name).toBe("Renamed")
+        expect(provider.canonical).toBe(Provider.ID.anthropic)
+        expect(model.canonical).toBe(Provider.ID.anthropic)
+        expect(model.providerID).toBe(providerID)
         expect((yield* integrations.get(Integration.ID.make("custom")))?.methods).toContainEqual({
           type: "env",
           names: ["CUSTOM_API_KEY"],
@@ -491,6 +504,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
         expect((yield* integrations.get(Integration.ID.make("custom")))?.name).toBe("Renamed")
         expect(provider.activation).toBe("enabled")
         expect(provider.package).toBe("aisdk:custom-sdk")
+        expect(model.package).toBe("aisdk:custom-sdk")
         expect(provider.settings).toEqual({ baseURL: "https://example.test" })
         expect(provider.headers).toEqual({ first: "first", shared: "last", last: "last" })
         expect(model.id).toBe(modelID)
@@ -522,6 +536,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
           Model.VariantID.make("slow"),
         ])
         expect(model.variants?.[0]?.headers).toEqual({ first: "first", shared: "last", last: "last" })
+        expect(model.variants?.[0]?.settings).toEqual({ effort: "high" })
         expect(model.variants?.[1]?.headers).toEqual({ slow: "slow" })
       }),
     ),

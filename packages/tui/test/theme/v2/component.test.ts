@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { createSignal } from "solid-js"
 import { RGBA } from "@opentui/core"
 import { DEFAULT_THEME, resolveTheme, selectTheme, type ContextName } from "@opencode-ai/theme/tui"
-import { createComponentTheme } from "../../../src/theme/component"
+import { createComponentTheme, createComponentThemeView } from "../../../src/theme/component"
 
 test("provides reactive properties, states, contexts, and color operations", () => {
   const [resolved, setResolved] = createSignal(resolveTheme(selectTheme(DEFAULT_THEME, "light")))
@@ -66,4 +66,20 @@ test("provides reactive properties, states, contexts, and color operations", () 
   expect(current().text.default).toBe(resolved().contextual.elevated.text.default)
   expect(current().decrease(current().background.surface.offset, 1)).toBe(resolved().hue.neutral[600])
   expect(current().raise(current().background.surface.offset)).toBe(resolved().hue.neutral[600])
+})
+
+test("a stable component theme view follows presentation context changes", () => {
+  const [resolved, setResolved] = createSignal(resolveTheme(selectTheme(DEFAULT_THEME, "dark")))
+  const [context, setContext] = createSignal<ContextName>()
+  const theme = createComponentThemeView(
+    () => (context() ? resolved().contextual[context()!] : resolved()),
+    () => "dark",
+  )
+  expect(theme.background.default).toBe(resolved().background.default)
+  setContext("elevated")
+  expect(theme.background.default).toBe(resolved().contextual.elevated.background.default)
+  setContext(undefined)
+  expect(theme.background.default).toBe(resolved().background.default)
+  setResolved(resolveTheme(selectTheme(DEFAULT_THEME, "light")))
+  expect(theme.text.default).toBe(resolved().text.default)
 })

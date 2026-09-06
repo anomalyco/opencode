@@ -188,7 +188,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
       footer={
         <box>
           <Show when={recent.loading || projects.loading}>
-            <Spinner color={theme.text.subdued}>Refreshing sessions and projects...</Spinner>
+            <Spinner color={theme.text.subdued}>Refreshing sessions and projects…</Spinner>
           </Show>
           <Show when={recent() === false || projects() === false}>
             <text fg={theme.text.feedback.error.default}>
@@ -202,7 +202,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         <box paddingLeft={4} paddingRight={4}>
           <text fg={theme.text.subdued}>
             {recent.loading || projects.loading || matched.loading
-              ? "Searching sessions and projects..."
+              ? "Searching sessions and projects…"
               : shortcuts.get("session.list")
                 ? `No matches · search all sessions with ${shortcuts.get("session.list")}`
                 : "No matches"}

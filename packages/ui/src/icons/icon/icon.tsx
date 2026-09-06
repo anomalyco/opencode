@@ -4,9 +4,13 @@ import "./icon.css"
 
 // Consumers center the SVG viewport, so each icon must center its artwork within its viewBox.
 const icons = {
+  flask: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M5.5 2H10.5M6 2V6L2.5 12C2 13 2.5 14 3.5 14H12.5C13.5 14 14 13 13.5 12L10 6V2M4.25 9H11.75" stroke="currentColor" stroke-linecap="square" stroke-linejoin="round"/>`,
+  },
   edit: {
     viewBox: "0 0 16 16",
-    body: `<path d="M13.5555 8.21534V13.5556H2.44434L2.44434 2.4445H7.78462M6.88878 9.11119C6.88878 9.11119 8.96327 9.0367 9.69678 8.3032L14.0301 3.96986C14.5824 3.4176 14.5824 2.52213 14.0301 1.96986C13.4778 1.4176 12.5824 1.4176 12.0301 1.96986L7.69678 6.3032C7.00513 6.99484 6.88878 9.11119 6.88878 9.11119Z" stroke="currentColor"/>`,
+    body: `<path d="M13.5556 8.21529V13.5556H2.44446L2.44446 2.44445H7.78474M6.00002 8.16216V10H7.83786L14 3.83784L12.1622 2L6.00002 8.16216Z" stroke="currentColor"/>`,
   },
   "folder-add-left": {
     viewBox: "0 0 16 16",
@@ -31,6 +35,10 @@ const icons = {
   help: {
     viewBox: "0 0 16 16",
     body: `<path d="M6.33345 6.33349V5.00015H9.66679V7.00015L8.00015 8.00015V9.66679M8.27485 11.6819H7.71897M14.4446 8.00011C14.4446 11.5593 11.5593 14.4446 8.00011 14.4446C4.44094 14.4446 1.55566 11.5593 1.55566 8.00011C1.55566 4.44094 4.44094 1.55566 8.00011 1.55566C11.5593 1.55566 14.4446 4.44094 14.4446 8.00011Z" stroke="currentColor" stroke-linecap="square"/>`,
+  },
+  info: {
+    viewBox: "0 0 16 16",
+    body: `<g transform="translate(2 2)"><path d="M12 12H0V0H12V12ZM1 1V11H11V1H1ZM6.5791 4.81641V9.37207H5.5791V5.81641H4.46777V4.81641H6.5791ZM6.85645 2.62891V3.62891H5.30078V2.62891H6.85645Z" fill="currentColor"/></g>`,
   },
   "circle-exclamation": {
     viewBox: "0 0 16 16",
@@ -134,7 +142,7 @@ const icons = {
   },
   "window-analytics": {
     viewBox: "0 0 16 16",
-    body: `<g transform="translate(1 2)"><path d="M7 4H11M7 8H11M0.5 0.5V11.5H13.5V0.5H0.5ZM3.5 3.5H4.5V4.5H3.5V3.5ZM3.5 7.5H4.5V8.5H3.5V7.5Z" stroke="currentColor" stroke-miterlimit="10" stroke-linecap="square"/></g>`,
+    body: `<path d="M14.5 9.8333V13.5H1.5V2.5H7.1667M9.5 2.5V7.5H14.5V2.5H9.5Z" stroke="currentColor" stroke-miterlimit="10" stroke-linecap="square"/>`,
   },
   trash: {
     viewBox: "0 0 20 20",
@@ -148,9 +156,21 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M4.14908 11.0081H1.76282V1.51758H9.1038V2.55588M14.2225 4.99681H6.75397V14.4873H14.2225V4.99681Z" stroke="currentColor"/>`,
   },
+  "arrow-up-right": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M11 9.56V5H6.44M11 5L5 11" stroke="currentColor"/>`,
+  },
   "outline-square-arrow": {
     viewBox: "0 0 16 16",
     body: `<path d="M13.5555 6.66656V2.44434H9.33326M13.5555 2.44434L7.99993 7.99989M13.5555 9.33324V13.5555C13.5555 13.5555 12.7599 13.5555 11.7777 13.5555H2.44438C2.44438 13.5555 2.44438 12.7599 2.44438 11.7777V4.22213C2.44438 3.2399 2.44434 2.44435 2.44434 2.44435H6.66661" stroke="currentColor"/>`,
+  },
+  "outline-arrow-to-corner-top-right": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M2 8.5V2H14V14H8M5 5.66667H10.3333V11M3.66797 12.333L9.94292 6.05806" stroke="currentColor" stroke-linecap="square"/>`,
+  },
+  "outline-hexagonal-warning": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M10.6667 1.33325H5.33272L1.33334 5.33325L1.33342 10.6917L5.3327 14.691L10.6667 14.6909L14.6911 10.6917V5.33255L10.6667 1.33325Z" stroke="currentColor"/><path d="M8 10.6667H8.00667" stroke="currentColor" stroke-linecap="square"/><path d="M8 7.99992V5.33325" stroke="currentColor" stroke-linecap="square"/>`,
   },
   "outline-share": {
     viewBox: "0 0 16 16",
@@ -187,10 +207,19 @@ function getIcon(name: IconName) {
   return { body, viewBox: additionalIconViewBox(name as keyof typeof additionalIcons) }
 }
 
+function spriteContent() {
+  return Array.from(new Set<IconName>([...Object.keys(additionalIcons), ...Object.keys(icons)] as IconName[]))
+    .map((name) => `<symbol id="${symbol(name)}" viewBox="${getIcon(name).viewBox}">${getIcon(name).body}</symbol>`)
+    .join("")
+}
+
 function ensureSprite() {
   if (spriteInserted) return
   if (typeof document === "undefined") return
-  if (document.getElementById(spriteID)) {
+  // Hot reload preserves the DOM sprite, but its symbols may be from an older module.
+  const existing = document.getElementById(spriteID)
+  if (existing) {
+    existing.innerHTML = spriteContent()
     spriteInserted = true
     return
   }
@@ -202,9 +231,7 @@ function ensureSprite() {
   svg.setAttribute("height", "0")
   svg.style.position = "absolute"
   svg.style.overflow = "hidden"
-  svg.innerHTML = Array.from(new Set<IconName>([...Object.keys(additionalIcons), ...Object.keys(icons)] as IconName[]))
-    .map((name) => `<symbol id="${symbol(name)}" viewBox="${getIcon(name).viewBox}">${getIcon(name).body}</symbol>`)
-    .join("")
+  svg.innerHTML = spriteContent()
   document.body.insertBefore(svg, document.body.firstChild)
   spriteInserted = true
 }

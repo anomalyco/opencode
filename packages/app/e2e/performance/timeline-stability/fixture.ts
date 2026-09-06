@@ -11,6 +11,7 @@ import type {
 } from "@opencode-ai/client/promise"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
+import type { TimelineDetail } from "@opencode-ai/session-ui/timeline/detail"
 import { expect, type Page } from "@playwright/test"
 import { Schema } from "effect"
 import { mockOpenCodeServer } from "../../utils/mock-server"
@@ -122,7 +123,7 @@ export async function setupTimeline(
     messages?: TimelineMessage[]
     sessionMessages?: SessionMessageInfo[]
     sessionStatus?: Record<string, SessionStatus>
-    settings?: Record<string, boolean>
+    settings?: Record<string, boolean | TimelineDetail>
     sessions?: Session[]
     cpuRate?: number
     viewport?: { width: number; height: number }

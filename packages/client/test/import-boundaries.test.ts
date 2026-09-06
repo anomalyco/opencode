@@ -14,34 +14,34 @@ describe("public import boundaries", () => {
   test("isolates each public entrypoint", async () => {
     const root = await bundleInputs("@opencode-ai/client", "browser")
 
-    expect(within(root, effect)).toEqual([])
-    expect(within(root, schema)).toEqual([])
-    expect(within(root, protocol)).toEqual([])
-    expect(within(root, core)).toEqual([])
-    expect(within(root, server)).toEqual([])
+    expect(within(root.all, effect)).toEqual([])
+    expect(within(root.all, schema)).toEqual([])
+    expect(within(root.all, protocol)).toEqual([])
+    expect(within(root.all, core)).toEqual([])
+    expect(within(root.all, server)).toEqual([])
 
     const network = await bundleInputs("@opencode-ai/client/effect", "browser")
 
-    expect(within(network, effect).length).toBeGreaterThan(0)
-    expect(within(network, schema).length).toBeGreaterThan(0)
-    expect(within(network, protocol).length).toBeGreaterThan(0)
-    expect(within(network, core)).toEqual([])
-    expect(within(network, server)).toEqual([])
+    expect(within(network.eager, effect).length).toBeGreaterThan(0)
+    expect(within(network.eager, schema).length).toBeGreaterThan(0)
+    expect(within(network.eager, protocol).length).toBeGreaterThan(0)
+    expect(within(network.all, core)).toEqual([])
+    expect(within(network.all, server)).toEqual([])
 
     const promiseService = await bundleInputs("@opencode-ai/client/service", "bun")
 
-    expect(within(promiseService, effect)).toEqual([])
-    expect(within(promiseService, schema)).toEqual([])
-    expect(within(promiseService, protocol)).toEqual([])
-    expect(within(promiseService, core)).toEqual([])
-    expect(within(promiseService, server)).toEqual([])
+    expect(within(promiseService.all, effect)).toEqual([])
+    expect(within(promiseService.all, schema)).toEqual([])
+    expect(within(promiseService.all, protocol)).toEqual([])
+    expect(within(promiseService.all, core)).toEqual([])
+    expect(within(promiseService.all, server)).toEqual([])
 
     const effectService = await bundleInputs("@opencode-ai/client/effect/service", "bun")
 
-    expect(within(effectService, effect).length).toBeGreaterThan(0)
-    expect(within(effectService, protocol).length).toBeGreaterThan(0)
-    expect(within(effectService, core)).toEqual([])
-    expect(within(effectService, server)).toEqual([])
+    expect(within(effectService.eager, effect).length).toBeGreaterThan(0)
+    expect(within(effectService.eager, protocol).length).toBeGreaterThan(0)
+    expect(within(effectService.all, core)).toEqual([])
+    expect(within(effectService.all, server)).toEqual([])
   })
 })
 
@@ -70,8 +70,21 @@ async function bundleInputs(specifier: string, target: "browser" | "bun") {
       new Response(child.stderr).text(),
     ])
     if (exitCode !== 0) throw new Error(stdout + stderr)
-    const metadata = await Bun.file(metafile).json()
-    return Object.keys(metadata.inputs).map((input) => resolve(directory, input))
+    const metadata: {
+      inputs: Record<string, { imports: Array<{ path: string; kind: string; external?: boolean }> }>
+    } = await Bun.file(metafile).json()
+    const inputs = new Map(Object.entries(metadata.inputs).map(([file, input]) => [resolve(directory, file), input]))
+    const eager = new Set<string>()
+    const visit = (file: string) => {
+      if (eager.has(file)) return
+      eager.add(file)
+      inputs
+        .get(file)
+        ?.imports.filter((input) => !input.external && input.kind !== "dynamic-import")
+        .forEach((input) => visit(resolve(directory, input.path)))
+    }
+    visit(entrypoint)
+    return { all: Array.from(inputs.keys()), eager: Array.from(eager) }
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }

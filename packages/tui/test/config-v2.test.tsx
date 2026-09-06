@@ -9,12 +9,24 @@ import { CommandMap, Definitions } from "../src/config/v1/keybind"
 
 const decodeInfo = Schema.decodeUnknownSync(Info)
 
-test("validates mini replay settings", () => {
+test("validates the three explicit diff source defaults", () => {
+  for (const source of ["branch", "committed", "working"] as const) {
+    expect(decodeInfo({ diffs: { source } })).toEqual({ diffs: { source } })
+  }
+  expect(decodeInfo({ diffs: {} })).toEqual({ diffs: {} })
+  expect(() => decodeInfo({ diffs: { source: "auto" } })).toThrow()
+})
+
+test("validates mini replay and work spinner settings", () => {
   expect(decodeInfo({ mini: { replay: false, replay_limit: 50 } })).toEqual({
     mini: { replay: false, replay_limit: 50 },
   })
   expect(() => decodeInfo({ mini: { replay_limit: 0 } })).toThrow()
   expect(() => decodeInfo({ mini: { replay_limit: 1.5 } })).toThrow()
+  expect(decodeInfo({ mini: { work_spinner: "quadrant-orbit" } })).toEqual({
+    mini: { work_spinner: "quadrant-orbit" },
+  })
+  expect(() => decodeInfo({ mini: { work_spinner: "unknown" } })).toThrow()
 })
 
 test("validates the session tabs setting", () => {
@@ -92,29 +104,6 @@ test("validates terminal copy behavior", () => {
   const setting = settings.find((setting) => setting.path.join(".") === "terminal.copy")
   expect(setting?.values).toEqual(["manual", "select"])
   expect(setting?.default).toBe(process.platform === "win32" ? "manual" : "select")
-})
-
-test("keeps persistent terminals disabled until explicitly enabled", () => {
-  const disabled = resolve({}, { terminalSuspend: true })
-  expect(disabled.session.terminal ?? false).toBe(false)
-  expect(disabled.keybinds.get("theme.switch")).toMatchObject([{ key: "<leader>t" }])
-  expect(disabled.keybinds.get("terminal.toggle")).toEqual([])
-  expect(settings.find((setting) => setting.path.join(".") === "session.terminal")?.default).toBe(false)
-  expect(settings.filter((setting) => setting.category === "Terminal").map((setting) => setting.title)).toEqual([
-    "Window title",
-    "Copy behavior",
-  ])
-
-  const enabled = resolve({ session: { terminal: true } }, { terminalSuspend: true })
-  expect(enabled.keybinds.get("terminal.toggle")).toMatchObject([{ key: "<leader>t" }])
-  expect(enabled.keybinds.get("theme.switch")).toEqual([])
-
-  const customized = resolve(
-    { session: { terminal: true }, keybinds: { "theme.switch": "<leader>t", "terminal.toggle": "<leader>p" } },
-    { terminalSuspend: true },
-  )
-  expect(customized.keybinds.get("theme.switch")).toMatchObject([{ key: "<leader>t" }])
-  expect(customized.keybinds.get("terminal.toggle")).toMatchObject([{ key: "<leader>p" }])
 })
 
 test("uses command IDs as keybind keys", () => {

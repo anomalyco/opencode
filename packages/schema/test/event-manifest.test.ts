@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { Schema } from "effect"
 import {
   Agent,
   Config,
@@ -17,7 +18,6 @@ import { EventManifest } from "../src/event-manifest.js"
 import { FileSystemV1 } from "../src/filesystem-v1.js"
 import { IdeEvent } from "../src/ide-event.js"
 import { McpEvent } from "../src/mcp-event.js"
-import { Plugin } from "../src/plugin.js"
 import { SessionEvent } from "../src/session-event.js"
 import { SessionID } from "../src/session-id.js"
 import { SessionMessage } from "../src/session-message.js"
@@ -37,7 +37,6 @@ describe("public event manifest", () => {
       Array.from(new Set(EventManifest.Definitions.map((definition) => definition.type))),
     )
     expect(EventManifest.Latest.get("agent.updated")).toBe(Agent.Event.Updated)
-    expect(EventManifest.Latest.get("plugin.updated")).toBe(Plugin.Event.Updated)
     expect(EventManifest.Server.get("mcp.status.changed")).toBe(McpEvent.StatusChanged)
     expect(EventManifest.Server.get("mcp.resources.changed")).toBe(McpEvent.ResourcesChanged)
     expect(EventManifest.Server.get("session.created")).toBe(SessionEvent.Created)
@@ -70,7 +69,6 @@ describe("public event manifest", () => {
     expect(PersistentPty.Event.Definitions).toEqual([PersistentPty.Event.Added, PersistentPty.Event.Removed])
     expect(Form.Event.Definitions).toEqual([Form.Event.Created, Form.Event.Replied, Form.Event.Cancelled])
     expect(Reference.Event.Definitions).toEqual([Reference.Event.Updated])
-    expect(Plugin.Event.Definitions).toEqual([Plugin.Event.Added, Plugin.Event.Updated])
     expect(McpEvent.Definitions).toEqual([McpEvent.ToolsChanged, McpEvent.ResourcesChanged, McpEvent.StatusChanged])
     expect(EventManifest.Latest.has("mcp.browser.open.failed")).toBe(false)
     expect(EventManifest.Latest.has("ide.installed")).toBe(false)

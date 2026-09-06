@@ -6,8 +6,15 @@ import { MarkdownProvider } from "../src/context/markdown"
 import { OpenCode } from "@opencode-ai/client/promise"
 import { readLocalImage } from "../../app/src/runtime/server/image"
 
-export { sanitizeMarkdown } from "../src/components/markdown-cache"
+export {
+  getCachedMarkdown,
+  renderCachedMarkdown,
+  sanitizeMarkdown,
+  touchCachedMarkdown,
+} from "../src/components/markdown-cache"
 export { renderMermaidSvg } from "../src/components/markdown-mermaid"
+export { MarkdownWorkerDisposedError } from "../src/components/markdown-worker"
+export { preloadMarkdown }
 
 export async function mountMarkdown(options: {
   text: string

@@ -71,7 +71,7 @@ function expectLifecycle(events: ReadonlyArray<LLMEvent>, completed: boolean) {
 }
 
 describe("Open Responses basic-item lifecycles", () => {
-  it.effect("closes implicit summary boundaries and ignores late events for completed reasoning", () =>
+  it.effect("closes implicit summary boundaries", () =>
     Effect.gen(function* () {
       const item = { type: "reasoning", id: "rs_1", encrypted_content: "encrypted-state" }
       const events = yield* collect(
@@ -90,12 +90,6 @@ describe("Open Responses basic-item lifecycles", () => {
           delta: "Third",
         },
         { type: "response.output_item.done", item },
-        { type: "response.output_item.done", item },
-        { type: "response.output_item.added", item },
-        { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 3 },
-        { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 3, delta: "late" },
-        { type: "response.reasoning_summary_text.done", item_id: "rs_1", summary_index: 2, text: "late final" },
-        { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 3 },
         completed,
       )
 
@@ -129,7 +123,7 @@ describe("Open Responses basic-item lifecycles", () => {
     }),
   )
 
-  it.effect("preserves done-only encrypted reasoning without replaying its summary or late events", () =>
+  it.effect("preserves done-only reasoning text and encryption", () =>
     Effect.gen(function* () {
       const item = {
         type: "reasoning",
@@ -139,11 +133,6 @@ describe("Open Responses basic-item lifecycles", () => {
       }
       const events = yield* collect(
         { type: "response.output_item.done", item },
-        { type: "response.output_item.done", item },
-        { type: "response.output_item.added", item },
-        { type: "response.reasoning_summary_text.delta", item_id: "rs_1", delta: "late" },
-        { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 1 },
-        { type: "response.reasoning_summary_text.done", item_id: "rs_1", summary_index: 1, text: "late final" },
         completed,
         // Route termination must also prevent events after response completion.
         { type: "response.output_item.added", item: { type: "reasoning", id: "rs_after" } },
@@ -157,6 +146,7 @@ describe("Open Responses basic-item lifecycles", () => {
         {
           type: "reasoning-end",
           id: "rs_1",
+          text: "Not streamed",
           providerMetadata: { "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         },
       ])
@@ -215,93 +205,179 @@ describe("Open Responses basic-item lifecycles", () => {
       ])
     }),
   )
-  it.effect("allows a message to be registered again without inheriting its previous phase", () =>
+
+  it.effect("preserves non-empty done-only message content", () =>
     Effect.gen(function* () {
+      const text = {
+        type: "message",
+        id: "msg_text",
+        content: [{ type: "output_text", text: "Done-only text." }],
+      }
+      const refusal = {
+        type: "message",
+        id: "msg_refusal",
+        content: [{ type: "refusal", refusal: "Done-only refusal." }],
+      }
       const events = yield* collect(
-        { type: "response.output_item.added", item: { type: "message", id: "msg_1", phase: "commentary" } },
-        { type: "response.output_text.delta", item_id: "msg_1", delta: "First" },
-        { type: "response.output_item.done", item: { type: "message", id: "msg_1" } },
-        { type: "response.output_item.added", item: { type: "message", id: "msg_1" } },
-        { type: "response.output_text.delta", item_id: "msg_1", delta: "Second" },
-        { type: "response.output_item.done", item: { type: "message", id: "msg_1" } },
+        { type: "response.output_item.done", item: text },
+        {
+          type: "response.output_item.done",
+          item: { type: "message", id: "msg_empty", content: [{ type: "output_text", text: "" }] },
+        },
+        { type: "response.output_item.done", item: refusal },
         completed,
       )
-      expect(events.filter(LLMEvent.is.textEnd)).toEqual([
+
+      expect(events.filter((event) => event.type.startsWith("text-"))).toEqual([
+        {
+          type: "text-start",
+          id: "msg_text",
+          providerMetadata: { "openai-compatible": { itemId: "msg_text" } },
+        },
         {
           type: "text-end",
-          id: "msg_1",
-          providerMetadata: { "openai-compatible": { itemId: "msg_1", phase: "commentary" } },
+          id: "msg_text",
+          text: "Done-only text.",
+          providerMetadata: { "openai-compatible": { itemId: "msg_text" } },
         },
-        { type: "text-end", id: "msg_1", providerMetadata: { "openai-compatible": { itemId: "msg_1" } } },
+        {
+          type: "text-start",
+          id: "msg_refusal",
+          providerMetadata: { "openai-compatible": { itemId: "msg_refusal" } },
+        },
+        {
+          type: "text-end",
+          id: "msg_refusal",
+          text: "Done-only refusal.",
+          providerMetadata: { "openai-compatible": { itemId: "msg_refusal" } },
+        },
       ])
-      expect(events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["First", "Second"])
     }),
   )
-  ;[undefined, "fc_1"].forEach((id) => {
-    it.effect(`opens and closes a done-only tool ${id === undefined ? "without" : "with"} an item id`, () =>
-      Effect.gen(function* () {
-        const item = {
-          type: "function_call",
-          ...(id === undefined ? {} : { id }),
-          call_id: "call_1",
+
+  // Captured from Bedrock Mantle (openai.gpt-oss-120b): the terminal function_call
+  // items rename `id` to `item_id` and carry a stray `output_index`.
+  it.effect("recovers a terminal function_call id from its output slot", () =>
+    Effect.gen(function* () {
+      const terminal = {
+        type: "function_call",
+        item_id: "fc_828bee50dee1d029",
+        call_id: "call_bc1eb4b42e70ee53",
+        name: "get_weather",
+        arguments: '{\n  "city": "Paris"\n}',
+        output_index: 1,
+        status: "completed",
+      }
+      const events = yield* collect(
+        {
+          type: "response.output_item.added",
+          output_index: 0,
+          item: { type: "reasoning", id: "msg_879a68b589198b4c" },
+        },
+        { type: "response.output_item.done", output_index: 0, item: { type: "reasoning", id: "msg_879a68b589198b4c" } },
+        {
+          type: "response.output_item.added",
+          output_index: 1,
+          item: {
+            type: "function_call",
+            id: "fc_828bee50dee1d029",
+            call_id: "call_bc1eb4b42e70ee53",
+            name: "get_weather",
+            arguments: "",
+            status: "in_progress",
+          },
+        },
+        {
+          type: "response.function_call_arguments.delta",
+          output_index: 1,
+          item_id: "fc_828bee50dee1d029",
+          delta: '{\n  "city": "Paris"\n}',
+        },
+        {
+          type: "response.function_call_arguments.done",
+          output_index: 1,
+          item_id: "fc_828bee50dee1d029",
+          arguments: '{\n  "city": "Paris"\n}',
+        },
+        { type: "response.output_item.done", output_index: 1, item: terminal },
+        {
+          type: "response.completed",
+          response: { id: "resp_1", output: [{ type: "reasoning", id: "msg_879a68b589198b4c" }, terminal] },
+        },
+      )
+      const providerMetadata = { "openai-compatible": { itemId: "fc_828bee50dee1d029" } }
+      expect(events.filter((event) => event.type.startsWith("tool-"))).toEqual([
+        { type: "tool-input-start", id: "call_bc1eb4b42e70ee53", name: "get_weather", providerMetadata },
+        {
+          type: "tool-input-delta",
+          id: "call_bc1eb4b42e70ee53",
+          name: "get_weather",
+          text: '{\n  "city": "Paris"\n}',
+          input: { city: "Paris" },
+        },
+        { type: "tool-input-end", id: "call_bc1eb4b42e70ee53", name: "get_weather", providerMetadata },
+        {
+          type: "tool-call",
+          id: "call_bc1eb4b42e70ee53",
+          name: "get_weather",
+          input: { city: "Paris" },
+          providerMetadata,
+        },
+      ])
+    }),
+  )
+  it.effect("mints an id for a done-only tool that never had one", () =>
+    Effect.gen(function* () {
+      const events = yield* collect(
+        {
+          type: "response.output_item.done",
+          output_index: 0,
+          item: { type: "function_call", call_id: "call_1", name: "lookup", arguments: '{"query":"weather"}' },
+        },
+        completed,
+      )
+      const call = events.find(LLMEvent.is.toolCall)
+      expect(call).toMatchObject({ id: "call_1", name: "lookup", input: { query: "weather" } })
+      expect(call?.providerMetadata?.["openai-compatible"]).toMatchObject({
+        itemId: expect.stringMatching(/^fc_[0-9a-f]{32}$/),
+      })
+    }),
+  )
+
+  it.effect("opens and closes a done-only tool", () =>
+    Effect.gen(function* () {
+      const item = {
+        type: "function_call",
+        id: "fc_1",
+        call_id: "call_1",
+        name: "lookup",
+        arguments: '{"query":"weather"}',
+      }
+      const events = yield* collect({ type: "response.output_item.done", item }, completed)
+      const providerMetadata = { "openai-compatible": { itemId: "fc_1" } }
+      expect(events.filter((event) => event.type.startsWith("tool-"))).toEqual([
+        { type: "tool-input-start", id: "call_1", name: "lookup", namespace: undefined, providerMetadata },
+        { type: "tool-input-end", id: "call_1", name: "lookup", namespace: undefined, providerMetadata },
+        {
+          type: "tool-call",
+          id: "call_1",
           name: "lookup",
-          arguments: '{"query":"weather"}',
-        }
-        const events = yield* collect(
-          { type: "response.output_item.done", item },
-          { type: "response.output_item.done", item: { ...item, id: "fc_1" } },
-          { type: "response.output_item.added", item },
-          completed,
-        )
-        const providerMetadata = id === undefined ? undefined : { "openai-compatible": { itemId: id } }
-        expect(events.filter((event) => event.type.startsWith("tool-"))).toEqual([
-          { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata },
-          { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata },
-          { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" }, providerMetadata },
-        ])
-        expect(events.filter(LLMEvent.is.finish)).toEqual([
-          {
-            type: "finish",
-            reason: { normalized: "tool-calls", raw: undefined },
-            providerMetadata: { "openai-compatible": { responseId: "resp_1", serviceTier: undefined } },
-          },
-        ])
-      }),
-    )
+          namespace: undefined,
+          input: { query: "weather" },
+          providerMetadata,
+        },
+      ])
+      expect(events.filter(LLMEvent.is.finish)).toEqual([
+        {
+          type: "finish",
+          reason: { normalized: "tool-calls", raw: undefined },
+          providerMetadata: { "openai-compatible": { responseId: "resp_1", serviceTier: undefined } },
+        },
+      ])
+    }),
+  )
 
-    it.effect(`deduplicates a pending call whose item id is ${id === undefined ? "introduced" : "omitted"} later`, () =>
-      Effect.gen(function* () {
-        const item = { type: "function_call", call_id: "call_1", name: "lookup" }
-        const first = { ...item, ...(id === undefined ? {} : { id }) }
-        const duplicate = { ...item, ...(id === undefined ? { id: "fc_1" } : {}) }
-        const events = yield* collect(
-          { type: "response.output_item.added", item: first },
-          { type: "response.function_call_arguments.delta", item_id: id ?? "call_1", delta: '{"query":"weather"}' },
-          { type: "response.output_item.added", item: duplicate },
-          { type: "response.output_item.done", item: duplicate },
-          { type: "response.output_item.done", item: first },
-          { type: "response.output_item.added", item: duplicate },
-          completed,
-        )
-        // Identity metadata comes from the first admission, not the duplicate.
-        const providerMetadata = id === undefined ? undefined : { "openai-compatible": { itemId: id } }
-        expect(events.filter((event) => event.type.startsWith("tool-"))).toEqual([
-          { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata },
-          {
-            type: "tool-input-delta",
-            id: "call_1",
-            name: "lookup",
-            text: '{"query":"weather"}',
-            input: { query: "weather" },
-          },
-          { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata },
-          { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" }, providerMetadata },
-        ])
-      }),
-    )
-  })
-
-  it.effect("recovers pending items in completed output order with terminal encrypted metadata", () =>
+  it.effect("recovers pending calls without reconciling terminal reasoning", () =>
     Effect.gen(function* () {
       const events = yield* collect(
         {
@@ -326,11 +402,6 @@ describe("Open Responses basic-item lifecycles", () => {
       )
       expect(events.slice(5, -2)).toEqual([
         {
-          type: "reasoning-end",
-          id: "rs_1:0",
-          providerMetadata: { "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: "terminal-state" } },
-        },
-        {
           type: "tool-input-end",
           id: "call_1",
           name: "lookup",
@@ -341,24 +412,11 @@ describe("Open Responses basic-item lifecycles", () => {
           id: "call_1",
           name: "lookup",
           input: { query: "final" },
+          providerExecuted: undefined,
           providerMetadata: { "openai-compatible": { itemId: "fc_1" } },
         },
+        { type: "reasoning-end", id: "rs_1:0" },
       ])
-    }),
-  )
-
-  it.effect("preserves call identity and pending order when an item id is reused", () =>
-    Effect.gen(function* () {
-      const first = { type: "function_call", id: "fc_1", call_id: "call_1", name: "lookup", arguments: "{}" }
-      const events = yield* collect(
-        { type: "response.output_item.added", item: first },
-        { type: "response.output_item.added", item: { ...first, id: "fc_2", call_id: "call_2" } },
-        { type: "response.output_item.done", item: first },
-        { type: "response.output_item.added", item: { ...first, call_id: "call_3" } },
-        { type: "response.output_item.done", item: first },
-        completed,
-      )
-      expect(events.filter(LLMEvent.is.toolCall).map((event) => event.id)).toEqual(["call_1", "call_2", "call_3"])
     }),
   )
 
@@ -411,14 +469,15 @@ describe("Open Responses basic-item lifecycles", () => {
         { type: "response.output_text.delta", item_id: "msg_1", delta: "Answer" },
         {
           type: "response.output_item.added",
-          item: { type: "function_call", call_id: "call_1", name: "lookup", arguments: "{}" },
+          item: { type: "function_call", id: "fc_1", call_id: "call_1", name: "lookup", arguments: "{}" },
         },
         completed,
       )
       // Generic terminal closure does not repeat the message's phase metadata.
+      const providerMetadata = { "openai-compatible": { itemId: "fc_1" } }
       expect(events.slice(4, -2)).toEqual([
-        { type: "tool-input-end", id: "call_1", name: "lookup" },
-        { type: "tool-call", id: "call_1", name: "lookup", input: {} },
+        { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata },
+        { type: "tool-call", id: "call_1", name: "lookup", input: {}, providerMetadata },
         { type: "text-end", id: "msg_1" },
       ])
     }),

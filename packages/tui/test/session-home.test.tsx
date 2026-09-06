@@ -29,7 +29,7 @@ test.each([
   const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
   const session = {
-    id: "dummy",
+    id: "ses_test",
     title: "Long history",
     projectID: "project",
     location: { directory },
@@ -63,8 +63,8 @@ test.each([
   const events = createEventStream()
   const calls = createFetch(async (url, request) => {
     if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
-    if (url.pathname === "/api/session/dummy") return json({ data: session })
-    if (url.pathname === "/api/session/dummy/message") {
+    if (url.pathname === "/api/session/ses_test") return json({ data: session })
+    if (url.pathname === "/api/session/ses_test/message") {
       const end = Number(url.searchParams.get("cursor") ?? messages.length)
       const limit = Number(url.searchParams.get("limit"))
       const start = Math.max(0, end - limit)
@@ -79,8 +79,8 @@ test.each([
       if (mode === "prepend-failure" && limit === 200) return json({ message: "offline" }, { status: 503 })
       return json({ data: messages.slice(start, end).toReversed(), cursor: end ? { next: String(start) } : {} })
     }
-    if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
-    if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
+    if (url.pathname === "/api/session/ses_test/inbox") return json({ data: [] })
+    if (url.pathname === "/api/session/ses_test/permission") return json({ data: [] })
     return undefined
   }, events)
   const server = Bun.serve({ port: 0, idleTimeout: 0, fetch: (request) => calls.fetch(request) })
@@ -103,9 +103,9 @@ test.each([
         }),
         update: async () => ({}),
       },
-      packages: { resolve: async () => undefined },
+      packages: { prepare: async () => ({ directory: "" }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
-      args: { sessionID: "dummy" },
+      args: { sessionID: "ses_test" },
       log: () => {},
     }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
   )
@@ -190,7 +190,7 @@ test.each([
       return
     }
     setup.mockInput.pressKey("HOME")
-    await setup.waitForFrame((frame) => frame.includes("Loading session history..."))
+    await setup.waitForFrame((frame) => frame.includes("Loading session history…"))
     setup.mockInput.pressKey("HOME")
     await setup.waitForVisualIdle()
     expect(pages).toEqual([
@@ -279,9 +279,9 @@ test.each([
         id: "evt_live",
         created: 400,
         type: "session.inbox.enqueued",
-        durable: { aggregateID: "dummy", seq: 1, version: 1 },
+        durable: { aggregateID: "ses_test", seq: 1, version: 1 },
         data: {
-          sessionID: "dummy",
+          sessionID: "ses_test",
           inboxID: "message-live",
           item: { type: "user", payload: { text: "Live message after failure" }, delivery: "steer" },
         },
