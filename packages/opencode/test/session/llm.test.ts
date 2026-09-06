@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:tes
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import path from "path"
 import { tool, type ModelMessage } from "ai"
+import type { JSONSchema7 } from "@ai-sdk/provider"
 import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
@@ -1207,6 +1208,93 @@ describe("session.llm.stream", () => {
         enabled_providers: [alibabaQwenFixture.providerID],
         provider: {
           [alibabaQwenFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  const anthropicThinkingFixture = { providerID: "anthropic", modelID: "claude-sonnet-4-5" }
+  it.instance(
+    "uses native output_format (not forced tool_choice) for structured output on a thinking Anthropic model",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(anthropicThinkingFixture.providerID, anthropicThinkingFixture.modelID)
+        // Sanity: this only matters for reasoning-capable models.
+        expect(fixture.model.reasoning).toBe(true)
+
+        // Interrupt before consuming the response body — the request is captured
+        // on arrival, so the (unparseable) response never has to be drained.
+        const pending = waitStreamingRequest("/messages")
+
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(anthropicThinkingFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-structured-thinking")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("msg_user-structured-thinking"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          // "high" variant enables Anthropic thinking for this model.
+          model: { providerID: ProviderV2.ID.make(anthropicThinkingFixture.providerID), modelID: resolved.id, variant: "high" },
+        } satisfies SessionV1.User
+
+        const schema: JSONSchema7 = {
+          type: "object",
+          properties: { description: { type: "string" } },
+          required: ["description"],
+          additionalProperties: false,
+        }
+
+        const fiber = yield* drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["Return structured output."],
+          messages: [{ role: "user", content: "Describe the repo as JSON" }],
+          tools: {},
+          // Even if the caller forces "required" (the legacy structured-output
+          // path), native structured output must override it — Anthropic rejects
+          // thinking + forced tool use.
+          toolChoice: "required",
+          structuredOutput: { schema },
+        }).pipe(Effect.exit, Effect.forkScoped)
+
+        const capture = yield* Effect.promise(() => pending.request)
+        yield* Fiber.interrupt(fiber)
+
+        const body = capture.body
+        expect(body.model).toBe(resolved.api.id)
+
+        // Thinking is enabled (this is the conflicting surface).
+        expect(body.thinking).toBeDefined()
+
+        // Native structured output is requested via output_config.format, not a
+        // forced StructuredOutput tool.
+        const outputConfig = body.output_config as { format?: { type?: string } } | undefined
+        expect(outputConfig?.format?.type).toBe("json_schema")
+
+        // The forced tool choice must NOT survive — Anthropic uses { type: "any" }
+        // / { type: "tool" } for forced calls; native output must leave it unforced.
+        const toolChoice = body.tool_choice as { type?: string } | undefined
+        expect(toolChoice?.type === "any" || toolChoice?.type === "tool").toBe(false)
+      }),
+    {
+      config: () => ({
+        enabled_providers: [anthropicThinkingFixture.providerID],
+        provider: {
+          [anthropicThinkingFixture.providerID]: {
             options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
           },
         },
