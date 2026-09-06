@@ -37,8 +37,7 @@ const context = (id: string, system = fallback): SessionHooks["context"] => ({
       { description: name, input: { type: "object" } },
     ]),
   ),
-  generation: {},
-  providerOptions: {},
+  options: {},
 })
 
 describe("OptimizePlugin", () => {

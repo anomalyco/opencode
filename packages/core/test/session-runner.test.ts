@@ -2308,7 +2308,7 @@ describe("SessionRunnerLLM", () => {
             expect(event.model.variant).toBe(variant)
             event.system.push(SystemPart.make("Hook-provided instructions"))
             event.tools.echo.description = "Hook-provided tool description"
-            event.generation.maxTokens = 4_000
+            event.options.maxTokens = 4_000
           }),
         )
         yield* hooks.register("session", "model.request", (event) =>

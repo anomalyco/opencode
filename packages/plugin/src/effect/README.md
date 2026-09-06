@@ -100,6 +100,13 @@ yield *
   )
 
 yield *
+  ctx.session.hook("title", (event) =>
+    Effect.sync(() => {
+      event.options.maxTokens = 32
+    }),
+  )
+
+yield *
   ctx.session.hook("retry", (event) =>
     Effect.sync(() => {
       if (event.attempt >= 3) event.decision = { retry: false }
