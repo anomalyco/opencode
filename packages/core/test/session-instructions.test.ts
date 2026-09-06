@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import path from "path"
 import { DateTime, Effect, Layer } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
+import { Skill } from "@opencode-ai/core/skill"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Config } from "@opencode-ai/core/config"
@@ -40,6 +41,7 @@ const readToolNode = makeLocationNode({
   name: "test/read-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(ReadTool.Plugin)),
   deps: [
+    Skill.node,
     Tool.node,
     ReadToolFileSystem.node,
     LocationMutation.node,

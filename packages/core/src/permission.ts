@@ -102,7 +102,11 @@ export function merge(...rulesets: Permission.Ruleset[]): Permission.Ruleset {
 
 export interface Interface {
   readonly ask: (input: AssertInput) => Effect.Effect<AskResult, SessionErrors.NotFoundError>
-  readonly assert: (input: AssertInput) => Effect.Effect<void, Error | SessionErrors.NotFoundError>
+  /** Caller-owned allowances last only for this assertion and cannot override configured denials. */
+  readonly assert: (
+    input: AssertInput,
+    allow?: readonly string[],
+  ) => Effect.Effect<void, Error | SessionErrors.NotFoundError>
   readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError>
   readonly get: (id: ID) => Effect.Effect<Request | undefined>
   readonly forSession: (sessionID: SessionSchema.ID) => Effect.Effect<ReadonlyArray<Request>>
@@ -165,10 +169,14 @@ const layer = Layer.effect(
       return rules.filter((rule) => Wildcard.match(input.action, rule.action))
     }
 
-    const evaluateInput = Effect.fnUntraced(function* (input: AssertInput) {
+    const evaluateInput = Effect.fnUntraced(function* (input: AssertInput, allow: readonly string[] = []) {
       const rules = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
-      const all = [...rules, ...(yield* savedRules())]
+      const all = [
+        ...rules,
+        ...(yield* savedRules()),
+        ...allow.map((resource): Permission.Rule => ({ action: input.action, resource, effect: "allow" })),
+      ]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
       const effect: Permission.Effect = effects.includes("ask") ? "ask" : "allow"
       const event = yield* hooks.trigger("permission", "evaluate", {
@@ -218,9 +226,9 @@ const layer = Layer.effect(
       return { id: value.id, effect: result.effect }
     })
 
-    const assert = Effect.fn("Permission.assert")((input: AssertInput) =>
+    const assert = Effect.fn("Permission.assert")((input: AssertInput, allow?: readonly string[]) =>
       Effect.gen(function* () {
-        const result = yield* evaluateInput(input)
+        const result = yield* evaluateInput(input, allow)
         return yield* Effect.uninterruptibleMask((restore) =>
           Effect.gen(function* () {
             if (result.effect === "deny") {
