@@ -9,6 +9,7 @@ import * as Stream from "effect/Stream"
 import { Config } from "@/config/config"
 import { LLM } from "../../src/session/llm"
 import { SessionCompaction } from "../../src/session/compaction"
+import { isOverflow } from "../../src/session/overflow"
 import { Token } from "@/util/token"
 import { Plugin } from "../../src/plugin"
 import { provideTmpdirInstance, TestInstance } from "../fixture/fixture"
@@ -62,6 +63,7 @@ function createModel(opts: {
   input?: number
   cost?: Provider.Model["cost"]
   npm?: string
+  apiID?: string
 }): Provider.Model {
   return {
     id: "test-model",
@@ -81,7 +83,7 @@ function createModel(opts: {
       input: { text: true, image: false, audio: false, video: false },
       output: { text: true, image: false, audio: false, video: false },
     },
-    api: { npm: opts.npm ?? "@ai-sdk/anthropic" },
+    api: { id: opts.apiID ?? "test-model", npm: opts.npm ?? "@ai-sdk/anthropic" },
     options: {},
   } as Provider.Model
 }
@@ -1702,6 +1704,35 @@ describe("SessionNs.getUsage", () => {
 
     expect(result.tokens.input).toBe(800)
     expect(result.tokens.cache.read).toBe(200)
+  })
+
+  test("does not double count cached input from Bedrock GPT-5.6", () => {
+    const model = createModel({
+      context: 200_000,
+      input: 200_000,
+      output: 64_000,
+      npm: "@ai-sdk/amazon-bedrock",
+      apiID: "us.openai.gpt-5.6-luna",
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: usage({
+        inputTokens: 302_820,
+        outputTokens: 639,
+        totalTokens: 303_459,
+        cacheReadInputTokens: 132_976,
+        cacheWriteInputTokens: 18_433,
+      }),
+    })
+
+    expect(result.tokens).toEqual({
+      total: 152_050,
+      input: 2,
+      output: 639,
+      reasoning: 0,
+      cache: { read: 132_976, write: 18_433 },
+    })
+    expect(isOverflow({ cfg: {} as ConfigV1.Info, tokens: result.tokens, model })).toBe(false)
   })
 
   test("handles anthropic cache write metadata", () => {

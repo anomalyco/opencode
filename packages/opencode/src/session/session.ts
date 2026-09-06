@@ -358,12 +358,21 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
     ),
   )
 
+  // Bedrock GPT-5.6 Luna includes cached tokens in its input count, while the
+  // AI SDK normalizer adds the cache fields again. Remove that duplicate before
+  // splitting the prompt into cached and non-cached tokens below.
+  const duplicatedBedrockCache =
+    input.model.api.npm === "@ai-sdk/amazon-bedrock" && input.model.api.id.includes("openai.gpt-5.6-luna")
+      ? cacheReadInputTokens + cacheWriteInputTokens
+      : 0
+  const contextTokens = safe(inputTokens - duplicatedBedrockCache)
+
   // AI SDK v6 normalized inputTokens to include cached tokens across all providers
   // (including Anthropic/Bedrock which previously excluded them). Always subtract cache
   // tokens to get the non-cached input count for separate cost calculation.
-  const adjustedInputTokens = safe(inputTokens - cacheReadInputTokens - cacheWriteInputTokens)
+  const adjustedInputTokens = safe(contextTokens - cacheReadInputTokens - cacheWriteInputTokens)
 
-  const total = input.usage.totalTokens
+  const total = duplicatedBedrockCache ? safe(contextTokens + outputTokens) : input.usage.totalTokens
 
   const tokens = {
     total,
@@ -376,7 +385,6 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
     },
   }
 
-  const contextTokens = inputTokens
   const costInfo =
     input.model.cost?.tiers
       ?.filter((item) => item.tier.type === "context" && contextTokens > item.tier.size)
