@@ -53,11 +53,26 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
       project.directories({ projectID: ctx.params.projectID }),
     )
 
+    const remove = Effect.fn("ProjectHttpApi.remove")(function* (ctx: {
+      params: { projectID: ProjectV2.ID }
+      payload: { mode?: "cascade" | "detach" }
+    }) {
+      return yield* svc
+        .remove({ projectID: ctx.params.projectID, mode: ctx.payload.mode ?? "cascade" })
+        .pipe(
+          Effect.catchTag("Project.NotFoundError", (error) =>
+            Effect.fail(new ProjectNotFoundError({ projectID: error.projectID })),
+          ),
+          Effect.asVoid,
+        )
+    })
+
     return handlers
       .handle("list", list)
       .handle("current", current)
       .handle("initGit", initGit)
       .handle("update", update)
       .handle("directories", directories)
+      .handle("remove", remove)
   }),
 )
