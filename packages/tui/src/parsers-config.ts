@@ -1,3 +1,13 @@
+// The committed stub exports `{}`, so dev falls back to pinned URLs. During a build,
+// `build.ts` replaces it with embedded `$bunfs` paths via `import { type: "file" }`.
+import bundled from "./bundled-grammars.gen"
+import { bundledGrammars } from "../../opencode/script/bundled-grammars"
+
+const bundledAsset = (name: string, kind: string) => {
+  const paths = bundled[name]?.queries?.[kind]
+  return paths?.length ? paths : (bundledGrammars[name]?.queries[kind]?.map((asset) => asset.url) ?? [])
+}
+
 export default {
   // NOTE: FOR markdown, javascript and typescript, we use the opentui built-in parsers
   // Warn: when taking queries from the nvim-treesitter repo, make sure to include the query dependencies as well
@@ -6,150 +16,110 @@ export default {
   parsers: [
     {
       filetype: "python",
-      wasm: "https://github.com/tree-sitter/tree-sitter-python/releases/download/v0.23.6/tree-sitter-python.wasm",
+      wasm: bundled["python"]?.wasm ?? bundledGrammars.python.wasm.url,
       queries: {
-        highlights: [
-          // NOTE: This nvim-treesitter query is currently broken, because the parser is not compatible with the query apparently.
-          //       it is using "except" nodes that the parser is complaining about, but it has been in the query for 3+ years.
-          //       Unclear.
-          // "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/python/highlights.scm",
-          "https://github.com/tree-sitter/tree-sitter-python/raw/refs/heads/master/queries/highlights.scm",
-        ],
-        locals: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/python/locals.scm",
-        ],
+        // NOTE: This nvim-treesitter query is currently broken, because the parser is not compatible with the query apparently.
+        //       it is using "except" nodes that the parser is complaining about, but it has been in the query for 3+ years.
+        //       Unclear.
+        // "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/python/highlights.scm",
+        highlights: bundledAsset("python", "highlights"),
+        locals: bundledAsset("python", "locals"),
       },
     },
     {
       filetype: "rust",
-      wasm: "https://github.com/tree-sitter/tree-sitter-rust/releases/download/v0.24.0/tree-sitter-rust.wasm",
+      wasm: bundled["rust"]?.wasm ?? bundledGrammars.rust.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/rust/highlights.scm",
-        ],
-        locals: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/rust/locals.scm",
-        ],
+        highlights: bundledAsset("rust", "highlights"),
+        locals: bundledAsset("rust", "locals"),
       },
     },
     {
       filetype: "go",
-      wasm: "https://github.com/tree-sitter/tree-sitter-go/releases/download/v0.25.0/tree-sitter-go.wasm",
+      wasm: bundled["go"]?.wasm ?? bundledGrammars.go.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/go/highlights.scm",
-        ],
-        locals: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/go/locals.scm",
-        ],
+        highlights: bundledAsset("go", "highlights"),
+        locals: bundledAsset("go", "locals"),
       },
     },
     {
       filetype: "cpp",
-      wasm: "https://github.com/tree-sitter/tree-sitter-cpp/releases/download/v0.23.4/tree-sitter-cpp.wasm",
+      wasm: bundled["cpp"]?.wasm ?? bundledGrammars.cpp.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/cpp/highlights.scm",
-        ],
-        locals: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/cpp/locals.scm",
-        ],
+        highlights: bundledAsset("cpp", "highlights"),
+        locals: bundledAsset("cpp", "locals"),
       },
     },
     {
       filetype: "csharp",
-      wasm: "https://github.com/tree-sitter/tree-sitter-c-sharp/releases/download/v0.23.1/tree-sitter-c_sharp.wasm",
+      wasm: bundled["csharp"]?.wasm ?? bundledGrammars.csharp.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/c_sharp/highlights.scm",
-        ],
-        locals: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/c_sharp/locals.scm",
-        ],
+        highlights: bundledAsset("csharp", "highlights"),
+        locals: bundledAsset("csharp", "locals"),
       },
     },
     {
       filetype: "bash",
-      wasm: "https://github.com/tree-sitter/tree-sitter-bash/releases/download/v0.25.0/tree-sitter-bash.wasm",
+      wasm: bundled["bash"]?.wasm ?? bundledGrammars.bash.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/bash/highlights.scm",
-        ],
+        highlights: bundledAsset("bash", "highlights"),
       },
     },
     {
       filetype: "c",
-      wasm: "https://github.com/tree-sitter/tree-sitter-c/releases/download/v0.24.1/tree-sitter-c.wasm",
+      wasm: bundled["c"]?.wasm ?? bundledGrammars.c.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/c/highlights.scm",
-        ],
-        locals: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/c/locals.scm",
-        ],
+        highlights: bundledAsset("c", "highlights"),
+        locals: bundledAsset("c", "locals"),
       },
     },
     {
       filetype: "java",
-      wasm: "https://github.com/tree-sitter/tree-sitter-java/releases/download/v0.23.5/tree-sitter-java.wasm",
+      wasm: bundled["java"]?.wasm ?? bundledGrammars.java.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/java/highlights.scm",
-        ],
-        locals: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/java/locals.scm",
-        ],
+        highlights: bundledAsset("java", "highlights"),
+        locals: bundledAsset("java", "locals"),
       },
     },
     {
       filetype: "kotlin",
-      wasm: "https://github.com/fwcd/tree-sitter-kotlin/releases/download/0.3.8/tree-sitter-kotlin.wasm",
+      wasm: bundled["kotlin"]?.wasm ?? bundledGrammars.kotlin.wasm.url,
       queries: {
-        highlights: ["https://raw.githubusercontent.com/fwcd/tree-sitter-kotlin/0.3.8/queries/highlights.scm"],
-        locals: ["https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/master/queries/kotlin/locals.scm"],
+        highlights: bundledAsset("kotlin", "highlights"),
+        locals: bundledAsset("kotlin", "locals"),
       },
     },
     {
       filetype: "ruby",
-      wasm: "https://github.com/tree-sitter/tree-sitter-ruby/releases/download/v0.23.1/tree-sitter-ruby.wasm",
+      wasm: bundled["ruby"]?.wasm ?? bundledGrammars.ruby.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/ruby/highlights.scm",
-        ],
-        locals: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/ruby/locals.scm",
-        ],
+        highlights: bundledAsset("ruby", "highlights"),
+        locals: bundledAsset("ruby", "locals"),
       },
     },
     {
       filetype: "php",
-      wasm: "https://github.com/tree-sitter/tree-sitter-php/releases/download/v0.24.2/tree-sitter-php.wasm",
+      wasm: bundled["php"]?.wasm ?? bundledGrammars.php.wasm.url,
       queries: {
-        highlights: [
-          // NOTE: This nvim-treesitter query is currently broken, because the parser is not compatible with the query apparently.
-          // "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/php/highlights.scm",
-          "https://github.com/tree-sitter/tree-sitter-php/raw/refs/heads/master/queries/highlights.scm",
-        ],
+        // NOTE: This nvim-treesitter query is currently broken, because the parser is not compatible with the query apparently.
+        // "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/php/highlights.scm",
+        highlights: bundledAsset("php", "highlights"),
       },
     },
     {
       filetype: "scala",
-      wasm: "https://github.com/tree-sitter/tree-sitter-scala/releases/download/v0.24.0/tree-sitter-scala.wasm",
+      wasm: bundled["scala"]?.wasm ?? bundledGrammars.scala.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/scala/highlights.scm",
-        ],
+        highlights: bundledAsset("scala", "highlights"),
       },
     },
     {
       filetype: "html",
-      wasm: "https://github.com/tree-sitter/tree-sitter-html/releases/download/v0.23.2/tree-sitter-html.wasm",
+      wasm: bundled["html"]?.wasm ?? bundledGrammars.html.wasm.url,
       queries: {
-        highlights: [
-          // NOTE: This nvim-treesitter query is currently broken, because the parser is not compatible with the query apparently.
-          // "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/html/highlights.scm",
-          "https://github.com/tree-sitter/tree-sitter-html/raw/refs/heads/master/queries/highlights.scm",
-        ],
+        // NOTE: This nvim-treesitter query is currently broken, because the parser is not compatible with the query apparently.
+        // "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/html/highlights.scm",
+        highlights: bundledAsset("html", "highlights"),
         // TODO: Injections not working for some reason
         // injections: [
         //   "https://github.com/tree-sitter/tree-sitter-html/raw/refs/heads/master/queries/injections.scm",
@@ -168,218 +138,163 @@ export default {
     },
     {
       filetype: "vue",
-      wasm: "https://github.com/anomalyco/tree-sitter-vue/releases/download/v0.1.2/tree-sitter-vue.wasm",
+      wasm: bundled["vue"]?.wasm ?? bundledGrammars.vue.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/anomalyco/tree-sitter-vue/v0.1.2/queries/html_tags/highlights.scm",
-          "https://raw.githubusercontent.com/anomalyco/tree-sitter-vue/v0.1.2/queries/vue/highlights.scm",
-        ],
+        highlights: bundledAsset("vue", "highlights"),
       },
     },
     {
       filetype: "hcl",
-      wasm: "https://github.com/tree-sitter-grammars/tree-sitter-hcl/releases/download/v1.2.0/tree-sitter-hcl.wasm",
+      wasm: bundled["hcl"]?.wasm ?? bundledGrammars.hcl.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/master/queries/hcl/highlights.scm",
-        ],
+        highlights: bundledAsset("hcl", "highlights"),
       },
     },
     {
       filetype: "json",
-      wasm: "https://github.com/tree-sitter/tree-sitter-json/releases/download/v0.24.8/tree-sitter-json.wasm",
+      wasm: bundled["json"]?.wasm ?? bundledGrammars.json.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/json/highlights.scm",
-        ],
+        highlights: bundledAsset("json", "highlights"),
       },
     },
     {
       filetype: "yaml",
-      wasm: "https://github.com/tree-sitter-grammars/tree-sitter-yaml/releases/download/v0.7.2/tree-sitter-yaml.wasm",
+      wasm: bundled["yaml"]?.wasm ?? bundledGrammars.yaml.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/yaml/highlights.scm",
-        ],
+        highlights: bundledAsset("yaml", "highlights"),
       },
     },
     {
       filetype: "haskell",
-      wasm: "https://github.com/tree-sitter/tree-sitter-haskell/releases/download/v0.23.1/tree-sitter-haskell.wasm",
+      wasm: bundled["haskell"]?.wasm ?? bundledGrammars.haskell.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/haskell/highlights.scm",
-        ],
+        highlights: bundledAsset("haskell", "highlights"),
       },
     },
     {
       filetype: "css",
-      wasm: "https://github.com/tree-sitter/tree-sitter-css/releases/download/v0.25.0/tree-sitter-css.wasm",
+      wasm: bundled["css"]?.wasm ?? bundledGrammars.css.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/css/highlights.scm",
-        ],
+        highlights: bundledAsset("css", "highlights"),
       },
     },
     {
       filetype: "julia",
-      wasm: "https://github.com/tree-sitter/tree-sitter-julia/releases/download/v0.23.1/tree-sitter-julia.wasm",
+      wasm: bundled["julia"]?.wasm ?? bundledGrammars.julia.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/julia/highlights.scm",
-        ],
+        highlights: bundledAsset("julia", "highlights"),
       },
     },
     {
       filetype: "lua",
-      wasm: "https://github.com/tree-sitter-grammars/tree-sitter-lua/releases/download/v0.5.0/tree-sitter-lua.wasm",
+      wasm: bundled["lua"]?.wasm ?? bundledGrammars.lua.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-lua/v0.5.0/queries/highlights.scm",
-        ],
-        locals: ["https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-lua/v0.5.0/queries/locals.scm"],
+        highlights: bundledAsset("lua", "highlights"),
+        locals: bundledAsset("lua", "locals"),
       },
     },
     {
       filetype: "ocaml",
-      wasm: "https://github.com/tree-sitter/tree-sitter-ocaml/releases/download/v0.24.2/tree-sitter-ocaml.wasm",
+      wasm: bundled["ocaml"]?.wasm ?? bundledGrammars.ocaml.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/ocaml/highlights.scm",
-        ],
+        highlights: bundledAsset("ocaml", "highlights"),
       },
     },
     {
       filetype: "clojure",
       // temporarily using fork to fix issues
-      wasm: "https://github.com/anomalyco/tree-sitter-clojure/releases/download/v0.0.1/tree-sitter-clojure.wasm",
+      wasm: bundled["clojure"]?.wasm ?? bundledGrammars.clojure.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/clojure/highlights.scm",
-        ],
+        highlights: bundledAsset("clojure", "highlights"),
       },
     },
     {
       filetype: "swift",
-      wasm: "https://github.com/alex-pinkus/tree-sitter-swift/releases/download/0.7.1/tree-sitter-swift.wasm",
+      wasm: bundled["swift"]?.wasm ?? bundledGrammars.swift.wasm.url,
       queries: {
-        highlights: [
-          // NOTE: Using parser repo queries instead of nvim-treesitter due to incompatible #lua-match? predicates
-          // "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/highlights.scm
-          "https://raw.githubusercontent.com/alex-pinkus/tree-sitter-swift/main/queries/highlights.scm",
-        ],
-        locals: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/swift/locals.scm",
-        ],
+        // NOTE: Using parser repo queries instead of nvim-treesitter due to incompatible #lua-match? predicates
+        // "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/highlights.scm
+        highlights: bundledAsset("swift", "highlights"),
+        locals: bundledAsset("swift", "locals"),
       },
     },
     {
       filetype: "toml",
-      wasm: "https://github.com/tree-sitter-grammars/tree-sitter-toml/releases/download/v0.7.0/tree-sitter-toml.wasm",
+      wasm: bundled["toml"]?.wasm ?? bundledGrammars.toml.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/master/queries/toml/highlights.scm",
-        ],
+        highlights: bundledAsset("toml", "highlights"),
       },
     },
     {
       filetype: "nix",
       // TODO: Replace with official tree-sitter-nix WASM when published
       // See: https://github.com/nix-community/tree-sitter-nix/issues/66
-      wasm: "https://github.com/ast-grep/ast-grep.github.io/raw/40b84530640aa83a0d34a20a2b0623d7b8e5ea97/website/public/parsers/tree-sitter-nix.wasm",
+      wasm: bundled["nix"]?.wasm ?? bundledGrammars.nix.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/nix/highlights.scm",
-        ],
-        locals: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/nix/locals.scm",
-        ],
+        highlights: bundledAsset("nix", "highlights"),
+        locals: bundledAsset("nix", "locals"),
       },
     },
     {
       filetype: "diff",
       aliases: ["udiff", "patch"],
-      wasm: "https://github.com/tree-sitter-grammars/tree-sitter-diff/releases/download/v0.1.0/tree-sitter-diff.wasm",
+      wasm: bundled["diff"]?.wasm ?? bundledGrammars.diff.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-diff/2520c3f934b3179bb540d23e0ef45f75304b5fed/queries/highlights.scm",
-        ],
+        highlights: bundledAsset("diff", "highlights"),
       },
     },
     {
       filetype: "elixir",
-      wasm: "https://github.com/elixir-lang/tree-sitter-elixir/releases/download/v0.3.5/tree-sitter-elixir.wasm",
+      wasm: bundled["elixir"]?.wasm ?? bundledGrammars.elixir.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/elixir/highlights.scm",
-        ],
-        locals: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/elixir/locals.scm",
-        ],
+        highlights: bundledAsset("elixir", "highlights"),
+        locals: bundledAsset("elixir", "locals"),
       },
     },
     {
       filetype: "fsharp",
-      wasm: "https://github.com/ionide/tree-sitter-fsharp/releases/download/0.3.0/tree-sitter-fsharp.wasm",
+      wasm: bundled["fsharp"]?.wasm ?? bundledGrammars.fsharp.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/fsharp/highlights.scm",
-        ],
+        highlights: bundledAsset("fsharp", "highlights"),
       },
     },
     {
       filetype: "r",
-      wasm: "https://github.com/r-lib/tree-sitter-r/releases/download/v1.2.0/tree-sitter-r.wasm",
+      wasm: bundled["r"]?.wasm ?? bundledGrammars.r.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/r/highlights.scm",
-        ],
-        locals: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/r/locals.scm",
-        ],
+        highlights: bundledAsset("r", "highlights"),
+        locals: bundledAsset("r", "locals"),
       },
     },
     {
       filetype: "make",
       aliases: ["makefile"],
-      wasm: "https://github.com/tree-sitter-grammars/tree-sitter-make/releases/download/v1.1.1/tree-sitter-make.wasm",
+      wasm: bundled["make"]?.wasm ?? bundledGrammars.make.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/make/highlights.scm",
-        ],
+        highlights: bundledAsset("make", "highlights"),
       },
     },
     {
       filetype: "vim",
-      wasm: "https://github.com/tree-sitter-grammars/tree-sitter-vim/releases/download/v0.8.1/tree-sitter-vim.wasm",
+      wasm: bundled["vim"]?.wasm ?? bundledGrammars.vim.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/vim/highlights.scm",
-        ],
-        locals: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/vim/locals.scm",
-        ],
+        highlights: bundledAsset("vim", "highlights"),
+        locals: bundledAsset("vim", "locals"),
       },
     },
     {
       filetype: "xml",
-      wasm: "https://github.com/tree-sitter-grammars/tree-sitter-xml/releases/download/v0.7.0/tree-sitter-xml.wasm",
+      wasm: bundled["xml"]?.wasm ?? bundledGrammars.xml.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/xml/highlights.scm",
-        ],
-        locals: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/xml/locals.scm",
-        ],
+        highlights: bundledAsset("xml", "highlights"),
+        locals: bundledAsset("xml", "locals"),
       },
     },
     {
       filetype: "agda",
-      wasm: "https://github.com/tree-sitter/tree-sitter-agda/releases/download/v1.3.3/tree-sitter-agda.wasm",
+      wasm: bundled["agda"]?.wasm ?? bundledGrammars.agda.wasm.url,
       queries: {
-        highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/agda/highlights.scm",
-        ],
+        highlights: bundledAsset("agda", "highlights"),
       },
     },
   ],
