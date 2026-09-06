@@ -147,6 +147,37 @@ describe("prompt input v2 interaction machine", () => {
     expect(selected.commands).toContainEqual({ type: "mention.add", item })
   })
 
+  test("ignores Enter while IME composition is active", () => {
+    const state = {
+      ...createPromptInputV2InteractionState(),
+      popover: { type: "context" as const, query: "", activeID: "first" },
+    }
+    const result = transitionPromptInputV2(
+      state,
+      { type: "key.down", key: "Enter", ctrl: false, composing: true, ids: ["first"] },
+      persisted(),
+    )
+
+    expect(result.handled).toBeFalse()
+    expect(result.commands).toEqual([])
+    expect(result.state.popover).toEqual({ type: "context", query: "", activeID: "first" })
+  })
+
+  test("selects the active suggestion with Enter after composition ends", () => {
+    const state = {
+      ...createPromptInputV2InteractionState(),
+      popover: { type: "context" as const, query: "", activeID: "first" },
+    }
+    const result = transitionPromptInputV2(
+      state,
+      { type: "key.down", key: "Enter", ctrl: false, composing: false, ids: ["first"] },
+      persisted(),
+    )
+
+    expect(result.handled).toBeTrue()
+    expect(result.commands).toContainEqual({ type: "suggestion.select", id: "first" })
+  })
+
   test("loops active popover items with arrow keys", () => {
     const state = {
       ...createPromptInputV2InteractionState(),
