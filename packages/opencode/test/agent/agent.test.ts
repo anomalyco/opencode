@@ -52,7 +52,7 @@ it.instance("returns default native agents when no config", () =>
     expect(names).toContain("plan")
     expect(names).toContain("general")
     expect(names).toContain("explore")
-    expect(names).toContain("compaction")
+    expect(names).not.toContain("compaction")
     expect(names).toContain("title")
     expect(names).toContain("summary")
   }),
@@ -170,15 +170,32 @@ it.instance("general agent denies todo tools", () =>
   }),
 )
 
-it.instance("compaction agent denies all permissions", () =>
+it.instance("compaction agent is absent without configuration", () =>
   Effect.gen(function* () {
     const compaction = yield* load((svc) => svc.get("compaction"))
-    expect(compaction).toBeDefined()
-    expect(compaction?.hidden).toBe(true)
-    expect(evalPerm(compaction, "bash")).toBe("deny")
-    expect(evalPerm(compaction, "edit")).toBe("deny")
-    expect(evalPerm(compaction, "read")).toBe("deny")
+    expect(compaction).toBeUndefined()
   }),
+)
+
+it.instance(
+  "configured compaction agent keeps native defaults",
+  () =>
+    Effect.gen(function* () {
+      const compaction = yield* load((svc) => svc.get("compaction"))
+      expect(compaction).toBeDefined()
+      expect(compaction?.native).toBe(true)
+      expect(compaction?.hidden).toBe(true)
+      expect(evalPerm(compaction, "bash")).toBe("deny")
+      expect(evalPerm(compaction, "edit")).toBe("deny")
+      expect(evalPerm(compaction, "read")).toBe("deny")
+    }),
+  {
+    config: {
+      agent: {
+        compaction: {},
+      },
+    },
+  },
 )
 
 it.instance(
@@ -710,6 +727,9 @@ it.instance(
   {
     config: {
       default_agent: "compaction",
+      agent: {
+        compaction: {},
+      },
     },
   },
 )
