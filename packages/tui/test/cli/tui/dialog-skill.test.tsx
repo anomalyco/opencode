@@ -17,6 +17,22 @@ import { emptyThemeSource } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
+test("resets the initially highlighted skill and shows its current action", async () => {
+  const fixture = await renderSkills("disabled")
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("2. Toggle skills"))
+    fixture.app.mockInput.pressKey("2")
+    const frame = await fixture.app.waitForFrame((frame) => frame.includes("Disabled ○"))
+    expect(frame).toContain("enter enable")
+    fixture.app.mockInput.pressKey("r", { ctrl: true })
+    await fixture.app.waitForFrame((frame) => frame.includes("enter disable") && !frame.includes("Saving"))
+    expect(fixture.state.preference).toBeUndefined()
+    expect(fixture.state.writes).toEqual(["DELETE"])
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
 test("toggles, resets, and selects available skills", async () => {
   const fixture = await renderSkills()
   try {
@@ -77,10 +93,10 @@ test("keeps the skill state and dialog usable after a failed save", async () => 
   }
 })
 
-async function renderSkills() {
+async function renderSkills(preference?: Skill.Activation) {
   const events = createEventStream()
   const state = {
-    preference: undefined as Skill.Activation | undefined,
+    preference,
     writes: [] as string[],
     fail: false,
     selected: "",

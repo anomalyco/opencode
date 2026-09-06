@@ -125,8 +125,7 @@ export function DialogSkillToggle(props: { location?: LocationRef }) {
 
   const [loadError, setLoadError] = createSignal<unknown>()
   const [pending, setPending] = createSignal<string>()
-  const [selected, setSelected] = createSignal<string>()
-  let select: DialogSelectRef<string> | undefined
+  const [select, setSelect] = createSignal<DialogSelectRef<string>>()
   const [loaded] = createResource(
     () => ({ location: props.location, status: client.connection.status() }),
     async () => {
@@ -193,17 +192,14 @@ export function DialogSkillToggle(props: { location?: LocationRef }) {
         </box>
       }
       placeholder="Search skills"
-      ref={(ref) => {
-        select = ref
-      }}
+      ref={setSelect}
       options={options()}
       preserveSelection
       locked={loaded.loading || Boolean(loadError())}
-      onMove={(option) => setSelected(option.value)}
       footerHints={[
         {
           title: "enter",
-          label: preferences().get(selected() ?? "") === "disabled" ? "enable" : "disable",
+          label: preferences().get(select()?.selected?.value ?? "") === "disabled" ? "enable" : "disable",
         },
         { title: "ctrl+r", label: "reset to default" },
       ]}
@@ -212,8 +208,8 @@ export function DialogSkillToggle(props: { location?: LocationRef }) {
           bind: "ctrl+r",
           title: "Reset skill preference",
           run: () => {
-            const id = selected()
-            if (id && select?.filtered.some((option) => option.value === id)) void change(id)
+            const id = select()?.selected?.value
+            if (id) void change(id)
           },
         },
       ]}

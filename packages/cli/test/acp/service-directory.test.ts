@@ -20,6 +20,84 @@ describe("acp service directory behavior", () => {
     })
   })
 
+  test.each([true, false])(
+    "refreshes activation when attaching to a cached catalog (disabled: %s)",
+    async (initial) => {
+      let disabled = initial
+      let created = 0
+      await using fixture = makeACPFixture({
+        fetch(request) {
+          if (request.path === "/api/preferences")
+            return Response.json(
+              disabled ? [{ target: { kind: "skill.activation", id: "verify" }, value: "disabled" }] : [],
+            )
+          if (request.path === "/api/session" && request.method === "POST")
+            return Response.json({ data: makeSession(`ses_${++created}`) })
+          return undefined
+        },
+      })
+      await fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
+      disabled = !initial
+      await fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
+      expect(fixture.updates.at(-1)).toMatchObject({
+        sessionId: "ses_2",
+        update: {
+          sessionUpdate: "available_commands_update",
+          availableCommands: disabled ? [{ name: "review" }] : [{ name: "review" }, { name: "verify" }],
+        },
+      })
+      expect(fixture.requests.filter((request) => request.path === "/api/skill")).toHaveLength(1)
+    },
+  )
+
+  test("updates attached command menus when global skill preferences change", async () => {
+    let disabled = false
+    let changed = false
+    const hidden = Promise.withResolvers<void>()
+    const restored = Promise.withResolvers<void>()
+    await using fixture = makeACPFixture({
+      fetch(request) {
+        if (request.path === "/api/preferences")
+          return Response.json(
+            disabled ? [{ target: { kind: "skill.activation", id: "verify" }, value: "disabled" }] : [],
+          )
+        if (request.path === "/api/session" && request.method === "POST")
+          return Response.json({ data: makeSession("ses_live_preferences") })
+        return undefined
+      },
+      onUpdate({ update }) {
+        if (!changed || update.sessionUpdate !== "available_commands_update") return
+        if (update.availableCommands.some((command) => command.name === "verify")) return restored.resolve()
+        hidden.resolve()
+      },
+    })
+    await fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
+    changed = true
+    disabled = true
+    const event = {
+      id: "evt_preferences",
+      type: "preferences.updated",
+      data: { target: { kind: "skill.activation", id: "verify" } },
+    }
+    fixture.send(event)
+    await hidden.promise
+    expect(fixture.updates.at(-1)).toMatchObject({
+      sessionId: "ses_live_preferences",
+      update: { sessionUpdate: "available_commands_update", availableCommands: [{ name: "review" }] },
+    })
+    disabled = false
+    fixture.send({ ...event, id: "evt_preferences_reset" })
+    await restored.promise
+    expect(fixture.updates.at(-1)).toMatchObject({
+      sessionId: "ses_live_preferences",
+      update: {
+        sessionUpdate: "available_commands_update",
+        availableCommands: [{ name: "review" }, { name: "verify" }],
+      },
+    })
+    expect(fixture.requests.filter((request) => request.path === "/api/skill")).toHaveLength(1)
+  })
+
   test("does not cache an available model before plugin activation settles", async () => {
     const requested = Promise.withResolvers<void>()
     const release = Promise.withResolvers<void>()

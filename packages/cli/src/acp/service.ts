@@ -134,6 +134,56 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
     registeredMcp.delete(sessionID)
   }
 
+  const refreshSkills = async (state: Attached, initial = false) => {
+    const [registered, preferences] = await Promise.all([
+      catalog(state.cwd),
+      input.client.preferences.list({ signal: state.abort.signal }),
+    ])
+    const disabled = new Set(
+      preferences
+        .filter((entry) => entry.target.kind === "skill.activation" && entry.value === "disabled")
+        .map((entry) => entry.target.id),
+    )
+    const skills = registered.skills.filter((skill) => !disabled.has(skill.id))
+    if (
+      !initial &&
+      skills.length === state.catalog.skills.length &&
+      skills.every((skill, i) => skill === state.catalog.skills[i])
+    )
+      return
+    state.catalog = { ...registered, skills }
+    await input.connection.sessionUpdate({
+      sessionId: state.id,
+      update: {
+        sessionUpdate: "available_commands_update",
+        availableCommands: [
+          ...state.catalog.commands,
+          ...skills.filter((skill) => !state.catalog.commands.some((command) => command.name === skill.name)),
+        ].map((command) => ({ name: command.name, description: command.description ?? "" })),
+      },
+    })
+  }
+
+  const watchSkills = (state: Attached) => {
+    const ready = Promise.withResolvers<void>()
+    const signal = input.connection.signal
+      ? AbortSignal.any([state.abort.signal, input.connection.signal])
+      : state.abort.signal
+    // Subscribe before reading preferences so changes during attachment are also observed.
+    void (async () => {
+      for await (const event of input.client.event.subscribe({ signal })) {
+        if (
+          event.type !== "server.connected" &&
+          !(event.type === "preferences.updated" && event.data.target.kind === "skill.activation")
+        )
+          continue
+        await refreshSkills(state, event.type === "server.connected")
+        ready.resolve()
+      }
+    })().then(() => ready.reject(new Error("event stream disconnected before loading skill preferences")), ready.reject)
+    return ready.promise
+  }
+
   const attach = async (session: SessionInfo, cwd: string, mcpServers: readonly McpServer[]) => {
     const currentCatalog = await catalog(cwd)
     sessions.get(session.id)?.abort.abort()
@@ -147,18 +197,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
     }
     sessions.set(session.id, state)
     await registerMcpServers(input.client, registeredMcp, state, mcpServers)
-    await input.connection.sessionUpdate({
-      sessionId: state.id,
-      update: {
-        sessionUpdate: "available_commands_update",
-        availableCommands: [
-          ...state.catalog.commands,
-          ...state.catalog.skills.filter(
-            (skill) => !state.catalog.commands.some((command) => command.name === skill.name),
-          ),
-        ].map((command) => ({ name: command.name, description: command.description ?? "" })),
-      },
-    })
+    await watchSkills(state)
     return state
   }
 
@@ -311,7 +350,6 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         })
       }
       const messageID = SessionMessage.ID.create()
-      const prepared = preparePrompt(state.catalog, params.prompt, messageID)
       const control: TurnControl = { cancelled: false, admission: new AbortController() }
       const extNotification = input.connection.extNotification
       const childSessionUpdate =
@@ -319,20 +357,24 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
           ? (update: ChildSessionUpdate) => extNotification(ChildSessionUpdateMethod, update).then(() => {})
           : undefined
       active.set(state.id, control)
-      const response = await streamTurn({
-        client: input.client,
-        connection: input.connection,
-        sessionID: state.id,
-        cwd: state.cwd,
-        start: prepared.start,
-        writeTextFile: capabilities.writeTextFile,
-        action: prepared.command !== undefined,
-        control,
-        connectionSignal: input.connection.signal,
-        sessionSignal: state.abort.signal,
-        submit: (signal) => submitPrompt(input.client, state, prepared, signal),
-        ...(childSessionUpdate ? { childSessionUpdate } : {}),
-      }).finally(() => {
+      const response = await (async () => {
+        await refreshSkills(state)
+        const prepared = preparePrompt(state.catalog, params.prompt, messageID)
+        return streamTurn({
+          client: input.client,
+          connection: input.connection,
+          sessionID: state.id,
+          cwd: state.cwd,
+          start: prepared.start,
+          writeTextFile: capabilities.writeTextFile,
+          action: prepared.command !== undefined,
+          control,
+          connectionSignal: input.connection.signal,
+          sessionSignal: state.abort.signal,
+          submit: (signal) => submitPrompt(input.client, state, prepared, signal),
+          ...(childSessionUpdate ? { childSessionUpdate } : {}),
+        })
+      })().finally(() => {
         if (active.get(state.id) === control) active.delete(state.id)
       })
       await sendUsageUpdate(input.client, input.connection, state, response.usage?.totalTokens).catch(() => {})
@@ -405,13 +447,12 @@ async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog
   const deadline = Date.now() + 5_000
   let missing = "No models are available"
   while (Date.now() < deadline) {
-    const [modelResult, defaultResult, agentResult, commandResult, skillResult, preferences] = await Promise.all([
+    const [modelResult, defaultResult, agentResult, commandResult, skillResult] = await Promise.all([
       client.model.list({ location }),
       client.model.default({ location }),
       client.agent.list({ location }),
       client.command.list({ location }),
       client.skill.list({ location }),
-      client.preferences.list(),
     ])
     const models = modelResult.data.filter((model) => model.enabled)
     const preferred = defaultResult.data
@@ -422,11 +463,6 @@ async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog
     const agents = agentResult.data.filter((agent) => agent.mode !== "subagent" && !agent.hidden)
     const defaultAgent = agents.find((agent) => agent.mode === "primary") ?? agents[0]
     if (defaultModel && defaultAgent) {
-      const disabled = new Set(
-        preferences
-          .filter((entry) => entry.target.kind === "skill.activation" && entry.value === "disabled")
-          .map((entry) => entry.target.id),
-      )
       return {
         providers: providers(models),
         models,
@@ -438,7 +474,7 @@ async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog
         modes: agents.map((agent) => ({ id: agent.id, name: agent.name, description: agent.description })),
         defaultModeID: defaultAgent.id,
         commands: commandResult.data,
-        skills: skillResult.data.filter((skill) => !disabled.has(skill.id) && skill.slash !== false),
+        skills: skillResult.data.filter((skill) => skill.slash !== false),
       }
     }
     missing = defaultModel ? "No primary agents are available" : "No models are available"
