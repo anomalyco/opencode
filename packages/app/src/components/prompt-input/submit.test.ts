@@ -32,6 +32,9 @@ const sentPrompts: string[] = []
 const promptInputs: unknown[] = []
 const sentCommands: unknown[] = []
 const commands: Array<{ name: string }> = []
+const uploads: Array<{ sessionID: string; name?: string; type: string }> = []
+const order: string[] = []
+const toasts: Array<{ title?: string; description?: string }> = []
 let serverSessionSyncs = 0
 
 let params: { id?: string } = {}
@@ -40,8 +43,24 @@ let selected = "/repo/worktree-a"
 let variant: string | undefined
 let permissionServer = "server-a"
 let createSessionGate: Promise<void> | undefined
+let uploadError:
+  | {
+      _tag: "PayloadTooLargeError"
+      message: string
+      scope: "file" | "session" | "global"
+      maximumBytes: number
+    }
+  | undefined
+let uploadFailure:
+  | {
+      name: string
+      remaining: number
+      error: NonNullable<typeof uploadError>
+    }
+  | undefined
 
 let promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
+let restoredPrompt: Prompt | undefined
 const [promptStore, setPromptStore] = createStore<PromptStore>({
   prompt: promptValue,
   cursor: 0,
@@ -58,7 +77,9 @@ const prompt = {
     set: () => undefined,
   },
   reset: () => undefined,
-  set: () => undefined,
+  set: (value: Prompt) => {
+    restoredPrompt = value
+  },
   context: {
     add: () => undefined,
     remove: () => undefined,
@@ -77,6 +98,7 @@ const clientFor = (directory: string) => {
       session: {
         create: async (input: (typeof sessionCreateInputs)[number]) => {
           await createSessionGate
+          order.push("create")
           const location = input.location?.directory ?? directory
           createdSessions.push(location)
           sessionCreateInputs.push(input)
@@ -93,11 +115,30 @@ const clientFor = (directory: string) => {
           }
         },
         prompt: async (input: unknown) => {
+          order.push("prompt")
           sentPrompts.push(directory)
           promptInputs.push(input)
           return { data: undefined }
         },
+        attachment: async (input: { sessionID: string; file: Blob; name?: string }) => {
+          order.push("upload")
+          uploads.push({ sessionID: input.sessionID, name: input.name, type: input.file.type })
+          const failure = uploadFailure
+          if (failure && failure.name === input.name && failure.remaining > 0) {
+            failure.remaining -= 1
+            throw failure.error
+          }
+          if (uploadError) throw uploadError
+          return {
+            id: `att_${uploads.length}`,
+            uri: `opencode://attachment/att_${uploads.length}`,
+            name: input.name ?? "attachment",
+            mime: input.file.type || "application/octet-stream",
+            size: input.file.size,
+          }
+        },
         command: async (input: unknown) => {
+          order.push("command")
           sentCommands.push(input)
         },
         shell: async (input: { sessionID: string; id?: string; command: string }) => {
@@ -135,6 +176,13 @@ beforeAll(async () => {
   mock.module("@opencode-ai/ui/toast", () => ({
     Toast: { Region: () => null },
     showToast: () => 0,
+  }))
+
+  mock.module("@/utils/toast", () => ({
+    showToast: (input: { title?: string; description?: string }) => {
+      toasts.push(input)
+      return 0
+    },
   }))
 
   mock.module("@opencode-ai/core/util/encode", () => ({
@@ -291,7 +339,11 @@ beforeEach(() => {
   promptInputs.length = 0
   sentCommands.length = 0
   commands.length = 0
+  uploads.length = 0
+  order.length = 0
+  toasts.length = 0
   promptValue = [{ type: "text", content: "ls", start: 0, end: 2 }]
+  restoredPrompt = undefined
   params = {}
   search = {}
   sentShell.length = 0
@@ -300,6 +352,8 @@ beforeEach(() => {
   variant = undefined
   permissionServer = "server-a"
   createSessionGate = undefined
+  uploadError = undefined
+  uploadFailure = undefined
   serverSessionSyncs = 0
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
 })
@@ -442,13 +496,13 @@ describe("prompt submit worktree selection", () => {
       onSubmit: () => undefined,
     })
 
-    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await submit.handleSubmit(new Event("submit"))
 
     expect(promotedDrafts).toEqual([{ draftID: "draft-1", server: "project-server", sessionId: "session-1" }])
   })
 
   test("includes the selected variant on optimistic prompts", async () => {
-    params = { id: "session-1" }
+    params.id = "session-1"
     variant = "high"
 
     const submit = createPromptSubmit({
@@ -498,12 +552,19 @@ describe("prompt submit worktree selection", () => {
     params = { id: "session-1" }
     variant = "high"
     commands.push({ name: "review" })
-    promptValue = [{ type: "text", content: "/review staged changes", start: 0, end: 22 }]
+    const attachment = {
+      type: "image" as const,
+      id: "attachment-command",
+      filename: "notes.txt",
+      mime: "text/plain",
+      blob: { id: "blob-command", url: "data:text/plain;base64,aGVsbG8=" },
+    }
+    promptValue = [{ type: "text", content: "/review staged changes", start: 0, end: 22 }, attachment]
 
     const submit = createPromptSubmit({
       prompt,
       info: () => ({ id: "session-1" }),
-      imageAttachments: () => [],
+      imageAttachments: () => [attachment],
       commentCount: () => 0,
       autoAccept: () => false,
       mode: () => "normal",
@@ -517,7 +578,8 @@ describe("prompt submit worktree selection", () => {
       setPopover: () => undefined,
     })
 
-    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await submit.handleSubmit(new Event("submit"))
+    await Bun.sleep(0)
 
     expect(sentCommands).toEqual([
       {
@@ -527,9 +589,10 @@ describe("prompt submit worktree selection", () => {
         arguments: "staged changes",
         agent: "agent",
         model: { id: "model", providerID: "provider", variant: "high" },
-        files: [],
+        files: [{ uri: "opencode://attachment/att_1", name: "notes.txt", mime: "text/plain" }],
       },
     ])
+    expect(order).toEqual(["upload", "command"])
     expect(serverSessionSyncs).toBe(0)
   })
 
@@ -558,6 +621,7 @@ describe("prompt submit worktree selection", () => {
     })
 
     await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await Bun.sleep(0)
 
     expect(optimistic[0]).toMatchObject({
       message: {
@@ -590,9 +654,162 @@ describe("prompt submit worktree selection", () => {
     const event = { preventDefault: () => undefined } as unknown as Event
 
     await submit.handleSubmit(event)
+    await Bun.sleep(0)
 
     expect(storedSessions["/repo/worktree-a"]).toHaveLength(1)
     expect(storedSessions["/repo/worktree-a"]?.[0]).toMatchObject({ id: "session-1", title: "New session 1" })
     expect(optimisticSeeded).toEqual([true])
+  })
+
+  test("creates the session, uploads arbitrary files, then submits managed references", async () => {
+    const attachment = {
+      type: "image" as const,
+      id: "attachment-1",
+      filename: "report.docx",
+      mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      blob: {
+        id: "blob-1",
+        url: "data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,AAEC",
+      },
+    }
+    promptValue = [{ type: "text", content: "inspect", start: 0, end: 7 }, attachment]
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => undefined,
+      imageAttachments: () => [attachment],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      newSessionWorktree: () => "main",
+    })
+
+    await submit.handleSubmit(new Event("submit"))
+    await Bun.sleep(0)
+
+    expect(order).toEqual(["create", "upload", "prompt"])
+    expect(uploads).toEqual([
+      {
+        sessionID: "session-1",
+        name: "report.docx",
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      },
+    ])
+    expect(promptInputs[0]).toMatchObject({
+      sessionID: "session-1",
+      files: [
+        {
+          uri: "opencode://attachment/att_1",
+          name: "report.docx",
+          mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        },
+      ],
+    })
+    expect(JSON.stringify(promptInputs[0])).not.toContain("base64")
+  })
+
+  test("surfaces quota errors and restores the unsent prompt", async () => {
+    params.id = "session-1"
+    const attachment = {
+      type: "image" as const,
+      id: "attachment-1",
+      filename: "large.bin",
+      mime: "application/octet-stream",
+      blob: { id: "blob-1", url: "data:application/octet-stream;base64,AAEC" },
+    }
+    const original: Prompt = [{ type: "text", content: "keep this text", start: 0, end: 14 }, attachment]
+    promptValue = original
+    uploadError = {
+      _tag: "PayloadTooLargeError",
+      message: "Attachment exceeds the file storage limit",
+      scope: "file",
+      maximumBytes: 25 * 1024 * 1024,
+    }
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [attachment],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+    })
+
+    await submit.handleSubmit(new Event("submit"))
+    await Bun.sleep(0)
+
+    expect(sentPrompts).toEqual([])
+    expect(restoredPrompt).toEqual(original)
+    expect(toasts.at(-1)?.description).toBe("Attachment exceeds the file storage limit")
+  })
+
+  test("reuses successful uploads after a partial multi-file failure", async () => {
+    params.id = "session-1"
+    const first = {
+      type: "image" as const,
+      id: "attachment-first",
+      filename: "first.txt",
+      mime: "text/plain",
+      blob: { id: "blob-first", url: "data:text/plain;base64,Zmlyc3Q=" },
+    }
+    const second = {
+      type: "image" as const,
+      id: "attachment-second",
+      filename: "second.txt",
+      mime: "text/plain",
+      blob: { id: "blob-second", url: "data:text/plain;base64,c2Vjb25k" },
+    }
+    promptValue = [{ type: "text", content: "inspect", start: 0, end: 7 }, first, second]
+    uploadFailure = {
+      name: "second.txt",
+      remaining: 1,
+      error: {
+        _tag: "PayloadTooLargeError",
+        message: "Temporary attachment quota failure",
+        scope: "session",
+        maximumBytes: 100 * 1024 * 1024,
+      },
+    }
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [first, second],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+    })
+
+    await submit.handleSubmit(new Event("submit"))
+    await Bun.sleep(0)
+    await submit.handleSubmit(new Event("submit"))
+    await Bun.sleep(0)
+
+    expect(uploads.map((upload) => upload.name)).toEqual(["first.txt", "second.txt", "second.txt"])
+    expect(promptInputs).toHaveLength(1)
+    expect(promptInputs[0]).toMatchObject({
+      files: [{ uri: "opencode://attachment/att_1" }, { uri: "opencode://attachment/att_3" }],
+    })
   })
 })

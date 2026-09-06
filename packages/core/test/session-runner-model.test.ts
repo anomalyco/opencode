@@ -22,13 +22,13 @@ type Api =
     }
   | { readonly type: "native"; readonly url?: string; readonly settings: Record<string, unknown> }
 
-const model = (api: Api, variants: ModelV2.Info["variants"] = []) =>
+const model = (api: Api, variants: ModelV2.Info["variants"] = [], input: ReadonlyArray<string> = ["text"]) =>
   ModelV2.Info.make({
     id: ModelV2.ID.make("test-model"),
     providerID: ProviderV2.ID.make("test-provider"),
     name: "Test model",
     api: { id: ModelV2.ID.make("api-test-model"), ...api },
-    capabilities: { tools: true, input: ["text"], output: ["text"] },
+    capabilities: { tools: true, input, output: ["text"] },
     request: {
       headers: { "x-test": "header" },
       body: { apiKey: "secret", custom_extension: { enabled: true } },
@@ -44,12 +44,19 @@ const model = (api: Api, variants: ModelV2.Info["variants"] = []) =>
 describe("SessionRunnerModel", () => {
   it.effect("maps catalog OpenAI AI SDK models into native Responses routes", () =>
     Effect.gen(function* () {
-      const resolved = yield* SessionRunnerModel.fromCatalogModel(
-        model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
+      const selection = yield* SessionRunnerModel.fromCatalogModel(
+        model(
+          { type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" },
+          [],
+          ["text", "image", "pdf"],
+        ),
       )
 
-      expect(resolved).toMatchObject({ id: "api-test-model", provider: "test-provider" })
-      expect(resolved.route).toMatchObject({
+      expect(selection).toMatchObject({
+        model: { id: "api-test-model", provider: "test-provider" },
+        inputCapabilities: ["text", "image", "pdf"],
+      })
+      expect(selection.model.route).toMatchObject({
         id: "openai-responses",
         endpoint: { baseURL: "https://openai.example/v1" },
         defaults: {
@@ -63,7 +70,7 @@ describe("SessionRunnerModel", () => {
 
   it.effect("keeps catalog apiKey credentials out of provider JSON", () =>
     Effect.gen(function* () {
-      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+      const { model: resolved } = yield* SessionRunnerModel.fromCatalogModel(
         model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
       )
       const prepared = yield* LLMClient.prepare(LLM.request({ model: resolved, prompt: "Hello" }))
@@ -75,7 +82,7 @@ describe("SessionRunnerModel", () => {
 
   it.effect("uses merged API settings for OpenAI-compatible auth and request defaults", () =>
     Effect.gen(function* () {
-      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+      const { model: resolved } = yield* SessionRunnerModel.fromCatalogModel(
         ModelV2.Info.make({
           ...model({
             type: "aisdk",
@@ -129,7 +136,7 @@ describe("SessionRunnerModel", () => {
         location: { directory: AbsolutePath.make("/project") },
       })
 
-      const resolved = yield* SessionRunnerModel.resolve(session, catalog)
+      const { model: resolved } = yield* SessionRunnerModel.resolve(session, catalog)
 
       expect(resolved.route.defaults.headers).toMatchObject({ "x-test": "header", "x-variant": "high" })
       expect(resolved.route.defaults.http?.body).toEqual({
@@ -165,7 +172,7 @@ describe("SessionRunnerModel", () => {
         location: { directory: AbsolutePath.make("/project") },
       })
 
-      const resolved = yield* SessionRunnerModel.resolve(session, catalog)
+      const { model: resolved } = yield* SessionRunnerModel.resolve(session, catalog)
 
       expect(resolved.route.defaults.http?.body).toEqual({
         custom_extension: { enabled: true },
@@ -225,7 +232,7 @@ describe("SessionRunnerModel", () => {
         location: { directory: AbsolutePath.make("/project") },
       })
 
-      const resolved = yield* SessionRunnerModel.resolve(session, catalog)
+      const { model: resolved } = yield* SessionRunnerModel.resolve(session, catalog)
 
       expect(resolved.route.defaults.http?.body).toEqual({
         custom_extension: { enabled: true },
@@ -236,7 +243,7 @@ describe("SessionRunnerModel", () => {
 
   it.effect("maps catalog Anthropic AI SDK models into native routes", () =>
     Effect.gen(function* () {
-      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+      const { model: resolved } = yield* SessionRunnerModel.fromCatalogModel(
         model({ type: "aisdk", package: "@ai-sdk/anthropic", url: "https://anthropic.example/v1" }),
       )
 
@@ -249,7 +256,7 @@ describe("SessionRunnerModel", () => {
 
   it.effect("uses resolved credentials for bearer auth", () =>
     Effect.gen(function* () {
-      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+      const { model: resolved } = yield* SessionRunnerModel.fromCatalogModel(
         ModelV2.Info.make({
           ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
           request: { headers: {}, body: {} },
@@ -272,7 +279,7 @@ describe("SessionRunnerModel", () => {
   it.effect("prefers stored credentials over configured auth", () =>
     Effect.gen(function* () {
       const credential = Credential.Key.make({ type: "key", key: "stored-secret", metadata: { tenant: "work" } })
-      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+      const { model: resolved } = yield* SessionRunnerModel.fromCatalogModel(
         ModelV2.Info.make({
           ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
           request: { headers: {}, body: { apiKey: "configured-secret" } },
@@ -294,7 +301,7 @@ describe("SessionRunnerModel", () => {
 
   it.effect("does not project OAuth account metadata into the request body", () =>
     Effect.gen(function* () {
-      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+      const { model: resolved } = yield* SessionRunnerModel.fromCatalogModel(
         ModelV2.Info.make({
           ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
           request: { headers: {}, body: {} },
