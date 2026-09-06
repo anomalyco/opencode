@@ -58,6 +58,7 @@ export const dict = {
   "common.cancel": "Abbrechen",
   "common.creating": "Erstelle...",
   "common.create": "Erstellen",
+  "common.contactUs": "Kontaktiere uns",
 
   "common.videoUnsupported": "Dein Browser unterstützt das Video-Tag nicht.",
   "common.figure": "Abb. {{n}}.",
@@ -228,6 +229,9 @@ export const dict = {
   "zen.faq.q8": "Kann ich Zen mit anderen Coding-Agents nutzen?",
   "zen.faq.a8":
     "Während Zen großartig mit OpenCode funktioniert, kannst du Zen mit jedem Agent nutzen. Folge den Einrichtungsanweisungen in deinem bevorzugten Coding-Agent.",
+  "zen.faq.q9": "Kann ich eine Rückerstattung erhalten?",
+  "zen.faq.a9":
+    "Du hast möglicherweise Anspruch auf eine Rückerstattung, wenn die Zahlung innerhalb der letzten 14 Tage erfolgt ist und du das Guthaben aus diesem Kauf nicht verwendet hast. {{contact}}, um eine Rückerstattung anzufordern.",
 
   "zen.cta.start": "Starte mit Zen",
   "zen.pricing.title": "Füge $20 Pay-as-you-go Guthaben hinzu",
@@ -371,6 +375,9 @@ export const dict = {
   "go.faq.q9": "Was ist der Unterschied zwischen kostenlosen Modellen und Go?",
   "go.faq.a9":
     "Kostenlose Modelle beinhalten Big Pickle sowie Werbemodelle, die zum jeweiligen Zeitpunkt verfügbar sind, mit einem Kontingent von 200 Anfragen/Tag. Go bietet eine kuratierte Modellauswahl mit höheren Anfragekontingenten, die über rollierende Zeitfenster (5 Stunden, wöchentlich und monatlich) durchgesetzt werden, grob äquivalent zu Basiskontingenten von $12 pro 5 Stunden, $30 pro Woche und $60 pro Monat; modellspezifische Kontingente können abweichen (tatsächliche Anfragezahlen variieren je nach Modell und Nutzung).",
+  "go.faq.q10": "Kann ich eine Rückerstattung erhalten?",
+  "go.faq.a10":
+    "Du hast möglicherweise Anspruch auf eine Rückerstattung, wenn die Zahlung innerhalb der letzten 14 Tage erfolgt ist und du dein Go-Kontingent in diesem Abrechnungszeitraum nicht genutzt hast. {{contact}}, um eine Rückerstattung anzufordern.",
 
   "zen.api.error.rateLimitExceeded": "Ratenlimit überschritten. Bitte versuche es später erneut.",
   "zen.api.error.modelNotSupported": "Modell {{model}} wird nicht unterstützt",
