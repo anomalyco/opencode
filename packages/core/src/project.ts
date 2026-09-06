@@ -212,6 +212,7 @@ const layer = Layer.effect(
       const row = yield* db
         .update(ProjectTable)
         .set({
+          worktree: input.canonical,
           name: input.name === undefined ? undefined : input.name || null,
           icon_url_override: input.icon?.override === undefined ? undefined : input.icon.override || null,
           icon_color: input.icon?.color === undefined ? undefined : input.icon.color || null,

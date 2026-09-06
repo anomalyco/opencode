@@ -1426,6 +1426,7 @@ export type ProjectListOperation<E = never> = () => Effect.Effect<ProjectListOut
 
 export type ProjectUpdateInput = {
   readonly projectID: Project.ID
+  readonly canonical?: AbsolutePath | undefined
   readonly name?: string | undefined
   readonly icon?: Project.Icon | undefined
   readonly commands?: Project.Commands | undefined

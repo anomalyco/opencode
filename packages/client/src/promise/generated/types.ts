@@ -4672,17 +4672,26 @@ export type ProjectListOutput = Array<Project>
 
 export type ProjectUpdateInput = {
   readonly projectID: { readonly projectID: string }["projectID"]
+  readonly canonical?: {
+    readonly canonical?: string
+    readonly name?: string
+    readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
+    readonly commands?: { readonly start?: string }
+  }["canonical"]
   readonly name?: {
+    readonly canonical?: string
     readonly name?: string
     readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
     readonly commands?: { readonly start?: string }
   }["name"]
   readonly icon?: {
+    readonly canonical?: string
     readonly name?: string
     readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
     readonly commands?: { readonly start?: string }
   }["icon"]
   readonly commands?: {
+    readonly canonical?: string
     readonly name?: string
     readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
     readonly commands?: { readonly start?: string }

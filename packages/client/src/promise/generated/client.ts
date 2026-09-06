@@ -1377,7 +1377,12 @@ export function make(options: ClientOptions) {
           {
             method: "PATCH",
             path: `/api/project/${encodeURIComponent(input.projectID)}`,
-            body: { name: input["name"], icon: input["icon"], commands: input["commands"] },
+            body: {
+              canonical: input["canonical"],
+              name: input["name"],
+              icon: input["icon"],
+              commands: input["commands"],
+            },
             successStatus: 200,
             declaredStatuses: [400, 401, 404],
             empty: false,

@@ -29,7 +29,7 @@ export const ProjectGroup = HttpApiGroup.make("server.project")
       OpenApi.annotations({
         identifier: "v2.project.update",
         summary: "Update project",
-        description: "Update project display metadata and workspace commands.",
+        description: "Update the project canonical directory, display metadata, and workspace commands.",
       }),
     ),
   )

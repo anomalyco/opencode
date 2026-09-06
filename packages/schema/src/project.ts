@@ -50,6 +50,7 @@ export interface Info extends Schema.Schema.Type<typeof Info> {}
 
 export const UpdateInput = Schema.Struct({
   projectID: ID,
+  canonical: optional(AbsolutePath),
   name: optional(Schema.String),
   icon: optional(Icon),
   commands: optional(Commands),
