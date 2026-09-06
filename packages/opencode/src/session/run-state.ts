@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { DatabaseMaintenanceGate } from "@opencode-ai/core/database/maintenance-gate"
 import { InstanceState } from "@/effect/instance-state"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Runner } from "@/effect/runner"
@@ -90,7 +91,7 @@ const layer = Layer.effect(
       onInterrupt: Effect.Effect<SessionV1.WithParts>,
       work: Effect.Effect<SessionV1.WithParts>,
     ) {
-      return yield* (yield* runner(sessionID, onInterrupt)).ensureRunning(work)
+      return yield* DatabaseMaintenanceGate.waitForMutation((yield* runner(sessionID, onInterrupt)).ensureRunning(work))
     })
 
     const startShell = Effect.fn("SessionRunState.startShell")(function* (
@@ -99,9 +100,9 @@ const layer = Layer.effect(
       work: Effect.Effect<SessionV1.WithParts>,
       ready?: Latch.Latch,
     ) {
-      return yield* (yield* runner(sessionID, onInterrupt))
-        .startShell(work, ready)
-        .pipe(Effect.catchTag("RunnerBusy", () => Effect.fail(busyError(sessionID))))
+      return yield* DatabaseMaintenanceGate.waitForMutation(
+        (yield* runner(sessionID, onInterrupt)).startShell(work, ready),
+      ).pipe(Effect.catchTag("RunnerBusy", () => Effect.fail(busyError(sessionID))))
     })
 
     return Service.of({ assertNotBusy, cancel, ensureRunning, startShell })
