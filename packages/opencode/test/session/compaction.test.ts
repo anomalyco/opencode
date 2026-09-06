@@ -1830,6 +1830,19 @@ describe("SessionNs.getUsage", () => {
     expect(result.cost).toBe(0.04473525)
   })
 
+  test("uses typed provider-reported billed cost before token pricing", () => {
+    const result = SessionNs.getUsage({
+      model: createModel({
+        context: 100_000,
+        output: 32_000,
+        cost: { input: 3, output: 15, cache: { read: 0.3, write: 0.3 } },
+      }),
+      usage: usage({ inputTokens: 11_774, outputTokens: 39, totalTokens: 11_813, billedCost: 0.04473525 }),
+    })
+
+    expect(result.cost).toBe(0.04473525)
+  })
+
   test("uses matching context cost tier before over-200k fallback", () => {
     const model = createModel({
       context: 1_000_000,

@@ -545,14 +545,12 @@ describe("session.llm.ai-sdk adapter", () => {
 
     expect(events[0]).toMatchObject({
       type: "step-finish",
-      providerMetadata: {
-        anthropic: { cacheCreationInputTokens: 11_771 },
-        copilot: { totalNanoAiu: 4_473_525_000 },
-      },
+      usage: { billedCost: 0.04473525 },
+      providerMetadata: { anthropic: { cacheCreationInputTokens: 11_771 } },
     })
     expect(events[1]).toMatchObject({ type: "step-finish", providerMetadata: { anthropic: {} } })
     if (events[1].type !== "step-finish") throw new Error("expected step-finish")
-    expect(events[1].providerMetadata?.copilot).toBeUndefined()
+    expect(events[1].usage?.billedCost).toBeUndefined()
   })
 })
 
