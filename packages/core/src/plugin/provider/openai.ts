@@ -263,6 +263,7 @@ export const OpenAIPlugin = define({
       const account = chatgpt.metadata?.accountID
       item.provider.headers = Provider.mergeHeaders(item.provider.headers, {
         originator: "opencode",
+        "x-codex-beta-features": "remote_compaction_v2",
         ...(typeof account === "string" ? { "chatgpt-account-id": account } : {}),
       })
       for (const model of item.models.values()) {
