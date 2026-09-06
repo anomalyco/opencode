@@ -225,6 +225,14 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     }
     renderer.on(CliRenderEvents.THEME_MODE, handle)
 
+    // Re-query terminal palette on focus so the system theme stays current
+    // when the host terminal changes its color scheme (e.g. inside herdr).
+    const handleFocus = () => {
+      if (store.lock) return
+      if (store.active === "system") refreshSystemTheme()
+    }
+    renderer.on("focus", handleFocus)
+
     const handleThemeNotification = (sequence: string) => {
       if (sequence !== "\x1b[?997;1n" && sequence !== "\x1b[?997;2n") return false
       queueMicrotask(() => refreshSystemTheme())
@@ -247,6 +255,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     onCleanup(() => {
       renderer.off(CliRenderEvents.THEME_MODE, handle)
+      renderer.off("focus", handleFocus)
       renderer.removeInputHandler(handleThemeNotification)
       unsubscribeRefresh?.()
       for (const timeout of themeRefreshTimeouts) clearTimeout(timeout)
