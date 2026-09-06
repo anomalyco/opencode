@@ -112,7 +112,6 @@ export const Plugin = {
                 return yield* new ToolFailure({ message: "patch rejected: empty patch" })
               }
               const prepared: Prepared[] = []
-              const updates = new Map<string, string>()
               const resolveTarget = Effect.fnUntraced(function* (value: string) {
                 const target = yield* mutation.resolve({ path: value, kind: "file" })
                 if (!target.externalDirectory) return target
@@ -131,6 +130,11 @@ export const Plugin = {
               for (const hunk of hunks) {
                 yield* Effect.gen(function* () {
                   const target = yield* resolveTarget(hunk.path)
+                  if (prepared.some((change) => change.target.absolute === target.absolute)) {
+                    return yield* new ToolFailure({
+                      message: `patch verification failed: invalid patch: multiple operations target ${target.absolute}`,
+                    })
+                  }
                   if (hunk.type === "add") {
                     const content =
                       hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`
@@ -155,20 +159,15 @@ export const Plugin = {
                     prepared.push({ ...hunk, target, before: content.text, after: "" })
                     return
                   }
-                  const previous = updates.get(target.absolute)
-                  const original =
-                    previous ??
-                    (yield* Effect.gen(function* () {
-                      const content = yield* FileMutation.readText(environment.files, target.absolute).pipe(
-                        Effect.mapError(
-                          (error) =>
-                            new ToolFailure({
-                              message: `patch verification failed: Failed to read file to update ${target.absolute}: ${errorMessage(error)}`,
-                            }),
-                        ),
-                      )
-                      return Bom.join(content.text, content.bom)
-                    }))
+                  const content = yield* FileMutation.readText(environment.files, target.absolute).pipe(
+                    Effect.mapError(
+                      (error) =>
+                        new ToolFailure({
+                          message: `patch verification failed: Failed to read file to update ${target.absolute}: ${errorMessage(error)}`,
+                        }),
+                    ),
+                  )
+                  const original = Bom.join(content.text, content.bom)
                   const before = Bom.split(original).text
                   const update = yield* Effect.try({
                     try: () => Patch.derive(hunk.path, hunk.chunks, original),
@@ -183,7 +182,6 @@ export const Plugin = {
                     after: update.content,
                     moveTarget,
                   })
-                  if (!moveTarget) updates.set(target.absolute, Patch.joinBom(update.content, update.bom))
                 }).pipe(
                   Effect.mapError((error) =>
                     error instanceof ToolFailure
