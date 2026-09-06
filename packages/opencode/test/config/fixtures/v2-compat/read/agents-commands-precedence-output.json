@@ -1,0 +1,29 @@
+{
+  "permission": {
+    "bash": "deny",
+    "*": "ask",
+    "edit": "deny"
+  },
+  "agent": {
+    "reviewer": {
+      "prompt": "Legacy prompt",
+      "permission": {
+        "bash": "deny",
+        "edit": "deny"
+      },
+      "options": {}
+    },
+    "native": {
+      "options": {},
+      "permission": {}
+    }
+  },
+  "command": {
+    "review": {
+      "template": "Legacy review"
+    },
+    "modern": {
+      "template": "Native command"
+    }
+  }
+}
