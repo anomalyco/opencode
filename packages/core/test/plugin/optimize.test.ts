@@ -56,10 +56,8 @@ describe("OptimizePlugin", () => {
     )
   })
 
-  test("preserves prompt plugin IDs and exposes separate lab tool optimizations", () => {
+  test("enables prompt plugins without model-specific tool optimization", () => {
     expect(OptimizePlugin.Plugins.map((plugin) => plugin.id)).toEqual([
-      "opencode.optimize.openai.tools",
-      "opencode.optimize.anthropic.tools",
       "opencode.prompt.openai",
       "opencode.prompt.kimi",
       "opencode.prompt.arcee",
@@ -243,7 +241,7 @@ describe("OptimizePlugin", () => {
     }),
   )
 
-  it.effect("curates tools while preserving an explicit agent system prompt", () =>
+  it.effect("preserves tools and an explicit agent system prompt by default", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service
       const hooks = yield* PluginHooks.Service
@@ -261,7 +259,7 @@ describe("OptimizePlugin", () => {
       yield* hooks.trigger("session", "context", event)
 
       expect(event.system.map((part) => part.text)).toEqual(["Custom agent prompt"])
-      expect(Object.keys(event.tools).sort()).toEqual(["edit", "patch", "read", "shell", "write"])
+      expect(Object.keys(event.tools).sort()).toEqual(["edit", "glob", "grep", "patch", "read", "shell", "write"])
     }),
   )
 
@@ -298,7 +296,7 @@ describe("OptimizePlugin", () => {
     }),
   )
 
-  it.effect("filters tools by model metadata while preserving catalog-ID prompt selection", () =>
+  it.effect("preserves tools for model aliases and catalog-ID prompt selection by default", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
@@ -329,7 +327,7 @@ describe("OptimizePlugin", () => {
             const event = context(id)
             yield* hooks.trigger("session", "context", event)
             expect(event.system[0]?.text).toContain(prompt)
-            expect(Object.keys(event.tools).sort()).toEqual(["edit", "patch", "read", "shell", "write"])
+            expect(Object.keys(event.tools).sort()).toEqual(["edit", "glob", "grep", "patch", "read", "shell", "write"])
           }),
         { discard: true },
       )

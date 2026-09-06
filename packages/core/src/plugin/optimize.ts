@@ -45,14 +45,7 @@ export const MetaPlugin = make("opencode.prompt.meta", (model) => {
   return PROMPT_META.replaceAll("{{MODEL_NAME}}", model.name)
 })
 
-export const Plugins = [
-  OpenAIToolsPlugin,
-  AnthropicToolsPlugin,
-  OpenAIPlugin,
-  KimiPlugin,
-  ArceePlugin,
-  MetaPlugin,
-] as const
+export const Plugins = [OpenAIPlugin, KimiPlugin, ArceePlugin, MetaPlugin] as const
 
 function make(
   id: string,
