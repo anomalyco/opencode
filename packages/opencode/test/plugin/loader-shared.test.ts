@@ -1303,4 +1303,54 @@ export default {
       }
     }),
   )
+
+  it.live("missing reports carry the declaring origin so users know what to fix", () =>
+    withTmp(
+      async (dir) => {
+        const mod = path.join(dir, "mods", "acme-plugin")
+        await fs.mkdir(path.join(mod, "dist"), { recursive: true })
+        await Bun.write(
+          path.join(mod, "package.json"),
+          JSON.stringify(
+            { name: "acme-plugin", version: "1.0.0", exports: { "./tui": "./dist/tui.js" } },
+            null,
+            2,
+          ),
+        )
+        await Bun.write(path.join(mod, "dist", "tui.js"), "export default {}\n")
+        return { mod }
+      },
+      (tmp) =>
+        Effect.gen(function* () {
+          const { missingMessage } = yield* Effect.promise(() => import("../../src/plugin/report"))
+          const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
+          const missing: string[] = []
+
+          try {
+            yield* Effect.promise(() =>
+              PluginLoader.loadExternal({
+                items: [
+                  {
+                    spec: "acme-plugin@1.0.0",
+                    scope: "local" as const,
+                    source: tmp.path,
+                  },
+                ],
+                kind: "server",
+                report: {
+                  missing(candidate, _retry, message) {
+                    missing.push(missingMessage(candidate, message))
+                  },
+                },
+              }),
+            )
+          } finally {
+            install.mockRestore()
+          }
+
+          expect(missing.length).toBe(1)
+          expect(missing[0]).toStartWith(`Plugin acme-plugin@1.0.0 (local: ${tmp.path}) skipped:`)
+        }),
+    ),
+  )
 })
