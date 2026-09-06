@@ -122,16 +122,17 @@ story("does not mask or pad controls when they fit", async ({ mount }) => {
   await expect(controls).toHaveCSS("padding-inline-end", "0px")
 })
 
-story("raises the docked composer only in dark mode", async ({ mount, page }) => {
-  const component = await mount("opencode-composer-flow--empty-draft")
-  const composer = component.locator('[data-component="composer"]')
-
-  await page.locator("html").evaluate((root) => root.setAttribute("data-color-scheme", "light"))
-  await expect(composer).toHaveCSS("background-color", "rgb(255, 255, 255)")
-
-  await page.locator("html").evaluate((root) => root.setAttribute("data-color-scheme", "dark"))
-  await expect(composer).toHaveCSS("background-color", "rgb(36, 36, 36)")
-})
+// ThemeProvider writes resolved token values into a <style> block, so toggling data-color-scheme by hand
+// leaves every --v2-* variable at its previous value. Switch themes through the Storybook global instead.
+for (const [theme, background] of [
+  ["light", "rgb(255, 255, 255)"],
+  ["dark", "rgb(36, 36, 36)"],
+] as const) {
+  story(`raises the docked composer only in dark mode (${theme})`, async ({ mount }) => {
+    const component = await mount("opencode-composer-flow--empty-draft", { globals: { theme } })
+    await expect(component.locator('[data-component="composer"]')).toHaveCSS("background-color", background)
+  })
+}
 
 story("centers add menu shortcuts in a consistent column", async ({ mount, page }) => {
   const component = await mount("opencode-composer-flow--empty-draft")
