@@ -63,6 +63,40 @@ function unquoteGitPath(input: string) {
   return Buffer.from(bytes).toString()
 }
 
+/** Vendor/generated trees that must not be retained in durable session summaries. */
+const DENIED_SUMMARY_PATH =
+  /(^|\/)(node_modules|\.node-runtime|\.git|dist|build|out|coverage|\.cache|\.venv|venv|target|\.next|\.nuxt|\.turbo|\.vite|vendor|__pycache__|site-packages)(\/|$)/i
+
+/**
+ * Persist only lightweight diff metadata on the user message.
+ * Full `patch` text is reconstructable from snapshots via `diff()` / `computeDiff()`.
+ * Storing full patches in `message.summary.diffs` caused multi-GB `message.updated`
+ * event-log fanout and OOM/Jetsam (see anomalyco/opencode#32005).
+ */
+export function compactSummaryDiffs(diffs: readonly Snapshot.FileDiff[]): Snapshot.FileDiff[] {
+  return diffs.flatMap((diff) => {
+    const file = diff.file?.replaceAll("\\", "/")
+    if (file && DENIED_SUMMARY_PATH.test(file)) return []
+    return [
+      {
+        file: diff.file,
+        additions: diff.additions,
+        deletions: diff.deletions,
+        status: diff.status,
+      },
+    ]
+  })
+}
+
+function mapUnquoted(diffs: readonly Snapshot.FileDiff[]): Snapshot.FileDiff[] {
+  return diffs.map((item) => {
+    if (item.file === undefined) return item
+    const file = unquoteGitPath(item.file)
+    if (file === item.file) return item
+    return { ...item, file }
+  })
+}
+
 export interface Interface {
   readonly summarize: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<void>
   readonly diff: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Snapshot.FileDiff[]>
@@ -122,23 +156,23 @@ const layer = Layer.effect(
       const target = messages.find((m) => m.info.id === input.messageID)
       if (!target || target.info.role !== "user") return
       const msgDiffs = yield* computeDiff({ messages })
-      target.info.summary = { ...target.info.summary, diffs: msgDiffs }
+      target.info.summary = { ...target.info.summary, diffs: compactSummaryDiffs(msgDiffs) }
       yield* sessions.updateMessage(target.info)
     })
 
     const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
       if (!input.messageID) return []
-      const message = (yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)).find(
-        (item) => item.info.id === input.messageID,
+      const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
+      const messages = all.filter(
+        (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
       )
+      const recomputed = yield* computeDiff({ messages })
+      if (recomputed.length) return mapUnquoted(recomputed)
+
+      // Legacy / imported sessions whose snapshots are gone: return stored metadata.
+      const message = all.find((item) => item.info.id === input.messageID)
       if (!message || message.info.role !== "user") return []
-      const diffs = message.info.summary?.diffs ?? []
-      return diffs.map((item) => {
-        if (item.file === undefined) return item
-        const file = unquoteGitPath(item.file)
-        if (file === item.file) return item
-        return { ...item, file }
-      })
+      return mapUnquoted(message.info.summary?.diffs ?? [])
     })
 
     return Service.of({ summarize, diff, computeDiff })
