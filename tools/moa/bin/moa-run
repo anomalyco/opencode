@@ -1,0 +1,214 @@
+#!/usr/bin/env python3
+"""moa-run — local Mixture-of-Agents runner (captain-test preset).
+
+Fans a task prompt out to multiple advisor models in parallel (Aperture /
+Ollama Cloud via the captain's route), collects their analyses, then sends
+them plus the original task to an aggregator model for the final verdict.
+
+Defaults (Hermes captain-test preset):
+  advisors   = ollama-cloud/glm-5.2, ollama-cloud/minimax-m3
+  aggregator = ollama-cloud/deepseek-v4-flash:0731 (reasoning_effort=max)
+
+Route: MOA_BASE_URL (default http://ai.tail492ce8.ts.net/v1, fallback
+OLLAMA_API_BASE) + MOA_API_KEY (fallback OLLAMA_API_KEY; default
+"not-required" — Aperture requires no client auth). Never hardcoded.
+
+Usage:
+    moa-run "task prompt" [--context <text>] [--file <path>]
+            [--out <verdict.json>] [--traces <dir>] [--config <moa.yaml>]
+            [--advisors m1,m2] [--aggregator <model>] [--reasoning <effort>]
+            [--timeout <seconds>] [--max-tokens <n>]
+
+    moa-run --file task.md --out verdict.json --traces traces/
+
+Exit codes:
+    0 = verdict produced (stdout and/or --out file)
+    2 = usage error (unknown flag, bad args, missing prompt)
+    3 = pipeline failure (all advisors failed or aggregator failed)
+
+Audit: one audit-log entry (action=moa-run) appended to the audit JSONL log
+carrying the verdict model, advisor count, and outcome.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+import moa  # noqa: E402
+
+EXIT_OK = 0
+EXIT_USAGE = 2
+EXIT_PIPELINE = 3
+
+
+def _audit(exit_code: int, detail: str) -> None:
+    """Append one best-effort JSONL audit entry (never raises)."""
+    entry = {
+        "ts": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "agent": os.environ.get("USER", os.environ.get("LOGNAME", "agent")),
+        "action": "moa-run",
+        "exit": exit_code,
+        "detail": detail,
+    }
+    try:
+        default_log = Path(__file__).resolve().parent.parent / "audit" / "moa-run.jsonl"
+        log_path = Path(os.environ.get("MOA_AUDIT_LOG", str(default_log)))
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry) + "\n")
+    except Exception as exc:  # noqa: BLE001 - audit must never break the run
+        print(f"[!] audit log write failed: {exc}", file=sys.stderr)
+
+
+def _print_usage() -> None:
+    print(__doc__.strip("\n"))
+
+
+def main() -> int:
+    args = sys.argv[1:]
+
+    if not args or args[0] in ("-h", "--help"):
+        _print_usage()
+        return 0 if args else EXIT_USAGE
+
+    prompt = ""
+    context = ""
+    file_path: str | None = None
+    out_path: str | None = None
+    traces_dir: str | None = None
+    config_path: str | None = None
+    advisors_override: list[str] | None = None
+    aggregator_override: str | None = None
+    reasoning_override: str | None = None
+    timeout_override: float | None = None
+    max_tokens_override: int | None = None
+
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in ("--context", "--file", "--out", "--traces", "--config",
+                   "--advisors", "--aggregator", "--reasoning", "--timeout",
+                   "--max-tokens"):
+            if i + 1 >= len(args):
+                print(f"moa-run: {arg} requires a value", file=sys.stderr)
+                return EXIT_USAGE
+            value = args[i + 1]
+            i += 2
+            if arg == "--context":
+                context = value
+            elif arg == "--file":
+                file_path = value
+            elif arg == "--out":
+                out_path = value
+            elif arg == "--traces":
+                traces_dir = value
+            elif arg == "--config":
+                config_path = value
+            elif arg == "--advisors":
+                advisors_override = [m.strip() for m in value.split(",") if m.strip()]
+                if not advisors_override:
+                    print("moa-run: --advisors must not be empty", file=sys.stderr)
+                    return EXIT_USAGE
+            elif arg == "--aggregator":
+                aggregator_override = value
+            elif arg == "--reasoning":
+                reasoning_override = value
+            elif arg == "--timeout":
+                try:
+                    timeout_override = float(value)
+                except ValueError:
+                    print("moa-run: --timeout must be a number", file=sys.stderr)
+                    return EXIT_USAGE
+            elif arg == "--max-tokens":
+                try:
+                    max_tokens_override = int(value)
+                except ValueError:
+                    print("moa-run: --max-tokens must be an integer", file=sys.stderr)
+                    return EXIT_USAGE
+            continue
+        if arg.startswith("--") and arg != "--":
+            print(f"moa-run: unknown flag: {arg}", file=sys.stderr)
+            return EXIT_USAGE
+        if arg == "--":
+            rest = args[i + 1:]
+            prompt = " ".join(rest)
+            break
+        prompt = arg
+        i += 1
+
+    if file_path:
+        path = Path(file_path)
+        if not path.is_file():
+            print(f"moa-run: --file not found: {path}", file=sys.stderr)
+            return EXIT_USAGE
+        prompt = path.read_text(encoding="utf-8")
+    prompt = prompt.strip()
+    if not prompt:
+        print("moa-run: no prompt (pass text or --file)", file=sys.stderr)
+        return EXIT_USAGE
+
+    config_path = config_path or os.environ.get("MOA_CONFIG") or None
+    try:
+        config = moa.load_config(config_path)
+    except FileNotFoundError as exc:
+        print(f"moa-run: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    except Exception as exc:
+        print(f"moa-run: config error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    if advisors_override:
+        config.advisors = [moa.RoleConfig(model=m, label=m) for m in advisors_override]
+    if aggregator_override:
+        config.aggregator.model = aggregator_override
+        config.aggregator.label = aggregator_override
+    if reasoning_override:
+        config.aggregator.reasoning_effort = reasoning_override
+    if timeout_override is not None:
+        config.timeout = timeout_override
+    if max_tokens_override is not None:
+        config.aggregator.max_tokens = max_tokens_override
+
+    trace_dir = traces_dir or os.environ.get("MOA_TRACES_DIR") or "traces"
+
+    try:
+        result = moa.run_moa(
+            prompt,
+            context=context,
+            config=config,
+            trace_dir=trace_dir,
+        )
+    except moa.MoaError as exc:
+        print(f"moa-run: {exc}", file=sys.stderr)
+        _audit(EXIT_PIPELINE, f"aggregator={config.aggregator.model}; error={exc}")
+        return EXIT_PIPELINE
+
+    if out_path:
+        payload = {
+            "verdict": result["verdict"],
+            "model": result["model"],
+            "reasoning_effort": result.get("reasoning_effort"),
+            "advisors": result["advisors"],
+            "trace_dir": result.get("trace_dir"),
+        }
+        Path(out_path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    print(result["verdict"])
+
+    ok_analyses = [a for a in result["advisors"] if a.get("analysis")]
+    _audit(
+        EXIT_OK,
+        (
+            f"aggregator={result['model']}; advisors={len(result['advisors'])}; "
+            f"analyses={len(ok_analyses)}"
+        ),
+    )
+    return EXIT_OK
+
+
+if __name__ == "__main__":
+    sys.exit(main())
