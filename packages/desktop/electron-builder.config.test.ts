@@ -117,6 +117,19 @@ for (const channel of channels) {
   })
 }
 
+test("hardens the packaged Electron runtime", async () => {
+  const config = (await import("./electron-builder.config.ts?electron-fuses")).default as Configuration
+
+  expect(config.electronFuses).toEqual({
+    runAsNode: false,
+    enableNodeOptionsEnvironmentVariable: false,
+    enableNodeCliInspectArguments: false,
+    enableEmbeddedAsarIntegrityValidation: true,
+    onlyLoadAppFromAsar: true,
+    grantFileProtocolExtraPrivileges: false,
+  })
+})
+
 test("the trimmed Zip.js package can still export compressed logs", async () => {
   const config = (await import("./electron-builder.config.ts")).default
   const dir = await mkdtemp(path.join(os.tmpdir(), "opencode-zip-package-"))
