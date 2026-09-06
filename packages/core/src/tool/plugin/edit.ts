@@ -168,6 +168,12 @@ export const Plugin = {
               const ending = source.includes(crlf) ? crlf : "\n"
               const oldString = input.oldString.replaceAll(crlf, "\n").replaceAll("\n", ending)
               const newString = input.newString.replaceAll(crlf, "\n").replaceAll("\n", ending)
+              // The conversion can turn two different inputs into the same text, which the raw check cannot see.
+              if (oldString === newString) {
+                return yield* new ToolFailure({
+                  message: "No changes to apply: oldString and newString are identical.",
+                })
+              }
               const exact = findOccurrences(source, oldString)
               // These one-to-one mappings preserve offsets into the original source.
               const unicode =
