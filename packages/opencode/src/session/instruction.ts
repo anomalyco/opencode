@@ -33,6 +33,7 @@ function extract(messages: SessionV1.WithParts[]) {
 
 export interface Interface {
   readonly clear: (messageID: MessageID) => Effect.Effect<void>
+  readonly custom: () => Effect.Effect<string | undefined>
   readonly systemPaths: () => Effect.Effect<Set<string>, FSUtil.Error>
   readonly system: () => Effect.Effect<string[], FSUtil.Error>
   readonly find: (dir: string) => Effect.Effect<string | undefined, FSUtil.Error>
@@ -105,6 +106,13 @@ const layer: Layer.Layer<
     const clear = Effect.fn("Instruction.clear")(function* (messageID: MessageID) {
       const s = yield* InstanceState.get(state)
       s.claims.delete(messageID)
+    })
+
+    const custom = Effect.fn("Instruction.custom")(function* () {
+      const config = yield* cfg.get()
+      const text = config.customInstructions?.trim()
+      if (!text) return undefined
+      return [`<custom_instructions>`, text, `</custom_instructions>`].join("\n")
     })
 
     const systemPaths = Effect.fn("Instruction.systemPaths")(function* () {
@@ -220,7 +228,7 @@ const layer: Layer.Layer<
       return results
     })
 
-    return Service.of({ clear, systemPaths, system, find, resolve })
+    return Service.of({ clear, custom, systemPaths, system, find, resolve })
   }),
 )
 
