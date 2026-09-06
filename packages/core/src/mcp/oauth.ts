@@ -27,7 +27,7 @@ export const loggedFetch = (fields: { readonly server: string; readonly director
             // Only retain the SDK's standard error code. Descriptions and raw bodies can echo credentials.
             const error = yield* Effect.tryPromise(async () => parseErrorResponse(await response.clone().text())).pipe(
               Effect.map((error) => error.errorCode),
-              Effect.catch(() => Effect.succeed("unreadable_response")),
+              Effect.orElseSucceed(() => "unreadable_response"),
             )
             yield* Effect.logWarning("mcp oauth request rejected", { ...result, error })
           }
