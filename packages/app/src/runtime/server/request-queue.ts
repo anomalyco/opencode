@@ -1,9 +1,14 @@
-type Entry = { method: string; url: string; at: number }
+type Entry = { method: string; url: string; at: number; slow: boolean }
 
 // Chromium allows six connections per origin. The event stream holds one for the life of the
 // connection and health probes use their own fetch, so the app's API calls stay below that or
 // a burst stalls probes and user actions inside the browser where nothing can observe it.
 export const requestQueueLimit = 4
+
+// Endpoints that shell out to git or walk the filesystem take seconds on a large repository. They
+// may hold at most this many slots, so a session mount's small reads never queue behind them.
+export const requestQueueSlowLimit = 2
+export const slowRequestPaths = ["/api/vcs", "/api/worktree"]
 
 // A mount legitimately fires a dozen requests at once; only a request that has waited this long
 // for a slot indicates the server is not keeping up.
@@ -14,15 +19,21 @@ export const requestStallMs = 2_000
 // instead of wedging every later API call; the body may still stream for as long as it needs.
 export const requestHeadersTimeoutMs = 60_000
 
+export function isSlowRequest(pathname: string) {
+  return slowRequestPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`))
+}
+
 export function createRequestQueue(input: {
   fetch: typeof globalThis.fetch
   limit?: number
+  slowLimit?: number
   stallMs?: number
   headersTimeoutMs?: number
   log?: (message: string, data: Record<string, unknown>) => void
   now?: () => number
 }) {
   const limit = input.limit ?? requestQueueLimit
+  const slowLimit = input.slowLimit ?? requestQueueSlowLimit
   const stallMs = input.stallMs ?? requestStallMs
   const headersTimeoutMs = input.headersTimeoutMs ?? requestHeadersTimeoutMs
   // Call the browser fetch unbound; `input.fetch(...)` would make `this` the options object.
@@ -50,9 +61,17 @@ export function createRequestQueue(input: {
     }
     watcher = setTimeout(watch, stallMs)
   }
+  const canStart = (entry: Entry) => {
+    if (inflight.size >= limit) return false
+    if (!entry.slow) return true
+    return [...inflight].filter((item) => item.slow).length < slowLimit
+  }
+  // FIFO, except a slow request waits its turn behind faster ones while the slow slots are full.
   const release = (entry: Entry) => {
     inflight.delete(entry)
-    waiting.shift()?.start()
+    const index = waiting.findIndex((item) => canStart(item.entry))
+    if (index === -1) return
+    waiting.splice(index, 1)[0]?.start()
   }
   const acquire = (entry: Entry) =>
     new Promise<void>((resolve) => {
@@ -61,7 +80,7 @@ export function createRequestQueue(input: {
         inflight.add(entry)
         resolve()
       }
-      if (inflight.size < limit) return start()
+      if (canStart(entry)) return start()
       waiting.push({ entry, start })
       watcher ??= setTimeout(watch, stallMs)
     })
@@ -69,9 +88,10 @@ export function createRequestQueue(input: {
   const fetch: typeof globalThis.fetch = Object.assign(
     async (resource: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(resource, init)
+      const pathname = new URL(request.url).pathname
       // The event stream is long-lived; never count it against the request budget.
-      if (new URL(request.url).pathname === "/api/event") return base(request)
-      const entry = { method: request.method, url: request.url, at: now() }
+      if (pathname === "/api/event") return base(request)
+      const entry = { method: request.method, url: request.url, at: now(), slow: isSlowRequest(pathname) }
       await acquire(entry)
       if (request.signal.aborted) {
         release(entry)

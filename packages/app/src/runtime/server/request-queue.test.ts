@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { createRequestQueue } from "./request-queue"
+import { createRequestQueue, isSlowRequest } from "./request-queue"
 
-function setup(input?: { limit?: number; stallMs?: number; headersTimeoutMs?: number }) {
+function setup(input?: { limit?: number; slowLimit?: number; stallMs?: number; headersTimeoutMs?: number }) {
   const pending: Array<{ url: string; signal: AbortSignal; resolve: () => void }> = []
   const logs: Array<{ message: string; data: Record<string, unknown> }> = []
   let clock = 0
   const queue = createRequestQueue({
     limit: input?.limit ?? 2,
+    slowLimit: input?.slowLimit,
     stallMs: input?.stallMs,
     headersTimeoutMs: input?.headersTimeoutMs,
     now: () => clock,
@@ -38,6 +39,36 @@ describe("createRequestQueue", () => {
     input.pending.forEach((item) => item.resolve())
     await Promise.all(responses)
     expect(input.queue.inflight()).toBe(0)
+  })
+
+  test("slow endpoints hold at most their share of slots so small reads go first", async () => {
+    const input = setup({ limit: 4, slowLimit: 2 })
+    const paths = ["/api/vcs?location[directory]=%2Fa", "/api/vcs/diff?location[directory]=%2Fa", "/api/worktree", "/api/session/ses_1"]
+    const responses = paths.map((path) => input.queue.fetch(`http://server${path}`))
+    await input.settle()
+    const started = () => input.pending.map((item) => new URL(item.url).pathname)
+    // Two slow requests fill the slow share; the worktree read waits while the session read jumps ahead.
+    expect(started()).toEqual(["/api/vcs", "/api/vcs/diff", "/api/session/ses_1"])
+    expect(input.queue.inflight()).toBe(3)
+    expect(input.queue.queued()).toBe(1)
+    // A fast request finishing does not free a slow slot.
+    input.pending[2]!.resolve()
+    await input.settle()
+    expect(started()).toEqual(["/api/vcs", "/api/vcs/diff", "/api/session/ses_1"])
+    input.pending[0]!.resolve()
+    await input.settle()
+    expect(started()).toEqual(["/api/vcs", "/api/vcs/diff", "/api/session/ses_1", "/api/worktree"])
+    input.pending.forEach((item) => item.resolve())
+    await Promise.all(responses)
+    expect(input.queue.inflight()).toBe(0)
+  })
+
+  test("classifies git and worktree endpoints as slow", () => {
+    expect(isSlowRequest("/api/vcs")).toBe(true)
+    expect(isSlowRequest("/api/vcs/branches")).toBe(true)
+    expect(isSlowRequest("/api/worktree")).toBe(true)
+    expect(isSlowRequest("/api/vcsx")).toBe(false)
+    expect(isSlowRequest("/api/session")).toBe(false)
   })
 
   test("never counts the event stream against the budget", async () => {
