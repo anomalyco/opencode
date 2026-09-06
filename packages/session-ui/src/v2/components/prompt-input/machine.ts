@@ -33,7 +33,7 @@ export type PromptInputV2InteractionEvent =
   | { type: "context.active"; id: string }
 
 export type PromptInputV2InteractionCommand =
-  | { type: "draft.setText"; value: string }
+  | { type: "draft.setText"; value: string; cursor?: number }
   | { type: "mention.add"; item: PromptInputV2Suggestion }
   | { type: "popover.filter"; popover: "command" | "context"; query: string }
   | { type: "suggestion.select"; id: string }
@@ -102,7 +102,7 @@ function inputChanged(
     ])
   }
 
-  const command = value.match(/^\/(\S*)$/)
+  const command = value.slice(0, cursor ?? value.length).match(/(?:^|\s)\/(\S*)$/)
   if (command) {
     const query = command[1] ?? ""
     return changed({ ...state, popover: { type: "command-inline", query }, focus: "editor" }, [
@@ -173,15 +173,23 @@ function suggestionSelected(
   const current = promptText(persisted)
   const commands: PromptInputV2InteractionCommand[] = []
   if (item.kind === "command") {
-    commands.push({
-      type: "draft.setText",
-      value:
-        state.popover.type === "command-menu"
-          ? current.trim()
-            ? `${item.label} ${current.trim()}`
-            : `${item.label} `
-          : replaceTrigger(current, "/", `${item.label} `),
-    })
+    if (state.popover.type === "command-menu") {
+      commands.push({
+        type: "draft.setText",
+        value: current.trim() ? `${item.label} ${current.trim()}` : `${item.label} `,
+      })
+    } else {
+      const end = persisted.cursor ?? current.length
+      const start = triggerStart(current, end)
+      const suffix = current.slice(end)
+      // Only add the trailing space when the token isn't already followed by one.
+      const insert = /^\s/.test(suffix) ? item.label : `${item.label} `
+      commands.push({
+        type: "draft.setText",
+        value: current.slice(0, start) + insert + suffix,
+        cursor: start + insert.length,
+      })
+    }
   } else {
     commands.push({ type: "mention.add", item })
   }
@@ -239,9 +247,19 @@ function populated(persisted: PromptInputV2PersistedState) {
   )
 }
 
-function replaceTrigger(value: string, trigger: "@" | "/", replacement: string) {
-  const index = trigger === "/" ? value.indexOf(trigger) : value.lastIndexOf(trigger)
-  return index < 0 ? replacement : value.slice(0, index) + replacement
+function triggerStart(value: string, cursor?: number) {
+  const end = cursor ?? value.length
+  const token = value.slice(0, end).match(/(?:^|\s)(\/\S*)$/)
+  return token ? end - token[1].length : end
+}
+
+// A slash command occupies the whole prompt when its token starts at the very
+// beginning and nothing but whitespace follows the cursor. Only then may a
+// built-in command execute on select; mid-prompt selections stay pure text.
+export function isWholePromptTrigger(persisted: PromptInputV2PersistedState) {
+  const text = promptText(persisted)
+  const cursor = persisted.cursor ?? text.length
+  return triggerStart(text, cursor) === 0 && text.slice(cursor).trim() === ""
 }
 
 function changed(
