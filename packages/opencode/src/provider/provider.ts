@@ -26,6 +26,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { isRecord } from "@/util/record"
 import { optional } from "@opencode-ai/core/schema"
 import { ProviderTransform } from "./transform"
+import { catalog as commandcodeGoplanCatalog } from "./commandcode-goplan"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
@@ -121,6 +122,7 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
     import("@ai-sdk/google-vertex/anthropic").then((m) => m.createVertexAnthropic),
   "@ai-sdk/openai": () => import("@ai-sdk/openai").then((m) => m.createOpenAI),
   "@ai-sdk/openai-compatible": () => import("@ai-sdk/openai-compatible").then((m) => m.createOpenAICompatible),
+  "commandcode-goplan": () => import("./commandcode-goplan").then((m) => m.createCommandcodeGoplan),
   "@openrouter/ai-sdk-provider": () => import("@openrouter/ai-sdk-provider").then((m) => m.createOpenRouter),
   "@ai-sdk/xai": () => import("@ai-sdk/xai").then((m) => m.createXai),
   "@ai-sdk/mistral": () => import("@ai-sdk/mistral").then((m) => m.createMistral),
@@ -1399,6 +1401,9 @@ const layer = Layer.effect(
         const cfg = yield* config.get()
         const modelsDev = yield* modelsDevSvc.get()
         const catalog = mapValues(modelsDev, fromModelsDevProvider)
+        // Built-in seed: the gateway exposes no list-models endpoint, so the
+        // catalog ships the probed model list (same source as the Go proxy).
+        catalog[ProviderV2.ID.make("commandcode-goplan")] = fromModelsDevProvider(commandcodeGoplanCatalog())
         const database = mapValues(catalog, toPublicInfo)
 
         const providers: Record<ProviderV2.ID, Info> = {} as Record<ProviderV2.ID, Info>
