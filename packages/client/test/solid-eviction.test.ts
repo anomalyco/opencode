@@ -53,12 +53,12 @@ test("evicts a whole family while preserving metadata and attention", async () =
   }
 })
 
-test("evicting an in-flight read leaves the next sync invalidated", async () => {
+test("a transcript read in flight during eviction cannot repopulate the released session", async () => {
   const requested = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
   let requests = 0
-  const setup = fixture(async () => {
-    if (++requests !== 1) return
+  const setup = fixture(async (url) => {
+    if (!url.pathname.endsWith("/message") || ++requests !== 1) return
     requested.resolve()
     await release.promise
   })
@@ -68,9 +68,142 @@ test("evicting an in-flight read leaves the next sync invalidated", async () => 
     setup.data.session.evict("ses_parent")
     release.resolve()
     await initial
+    expect(setup.data.session.message.list("ses_child")).toEqual([])
+    expect(setup.data.session.message.more("ses_child")).toBe(false)
     await setup.data.session.message.sync("ses_child")
     expect(requests).toBe(2)
     expect(setup.data.session.message.list("ses_child")).toHaveLength(1)
+    expect(setup.data.session.message.more("ses_child")).toBe(true)
+  } finally {
+    release.resolve()
+    setup.dispose()
+  }
+})
+
+test("an inbox read in flight during eviction cannot repopulate the released session", async () => {
+  const requested = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  let requests = 0
+  const setup = fixture(async (url) => {
+    if (!url.pathname.endsWith("/inbox") || ++requests !== 1) return
+    requested.resolve()
+    await release.promise
+  })
+  try {
+    const initial = setup.data.session.pending.sync("ses_child")
+    await requested.promise
+    setup.data.session.evict("ses_parent")
+    release.resolve()
+    await initial
+    expect(setup.data.session.pending.list("ses_child")).toEqual([])
+    expect(setup.data.session.input.list("ses_child")).toEqual([])
+    expect(setup.data.session.message.list("ses_child")).toEqual([])
+    await setup.data.session.pending.sync("ses_child")
+    expect(requests).toBe(2)
+    expect(setup.data.session.pending.list("ses_child")).toHaveLength(1)
+    expect(setup.data.session.message.list("ses_child")).toHaveLength(1)
+  } finally {
+    release.resolve()
+    setup.dispose()
+  }
+})
+
+test("an older page load in flight during eviction does not publish a partial transcript", async () => {
+  const requested = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const setup = fixture(async (url) => {
+    if (!url.searchParams.has("cursor")) return
+    requested.resolve()
+    await release.promise
+  })
+  try {
+    await setup.data.session.message.sync("ses_child")
+    expect(setup.data.session.message.more("ses_child")).toBe(true)
+    const older = setup.data.session.message.loadMore("ses_child")
+    await requested.promise
+    setup.data.session.evict("ses_parent")
+    release.resolve()
+    await older
+    expect(setup.data.session.message.list("ses_child")).toEqual([])
+    expect(setup.data.session.message.more("ses_child")).toBe(false)
+    expect(setup.data.session.message.loading("ses_child")).toBe(false)
+    await setup.data.session.message.sync("ses_child")
+    expect(setup.data.session.message.list("ses_child").map((item) => item.id)).toEqual(["msg_page"])
+    expect(setup.data.session.message.more("ses_child")).toBe(true)
+  } finally {
+    release.resolve()
+    setup.dispose()
+  }
+})
+
+for (const collection of ["message", "pending"] as const) {
+  test.each([false, true])(
+    `queued ${collection} sync cannot survive close-reopen-close (reopen early: %s)`,
+    async (early) => {
+      const requested = Promise.withResolvers<void>()
+      const release = Promise.withResolvers<void>()
+      let requests = 0
+      const setup = fixture(async (url) => {
+        if (!url.pathname.endsWith(collection === "message" ? "/message" : "/inbox")) return
+        if (++requests !== 1) return
+        requested.resolve()
+        await release.promise
+      })
+      try {
+        const read = () => setup.data.session[collection].sync("ses_child")
+        const initial = read()
+        await requested.promise
+        setup.data.session.evict("ses_parent")
+        const obsolete = read()
+        setup.data.session.evict("ses_parent")
+        // A genuine reopen can itself queue behind the obsolete callback.
+        const fresh = early ? read() : undefined
+        release.resolve()
+        await Promise.all([initial, obsolete])
+        if (!early) {
+          expect(setup.data.session.message.list("ses_child")).toEqual([])
+          expect(setup.data.session.pending.list("ses_child")).toEqual([])
+          expect(requests).toBe(1)
+        }
+        await (fresh ?? read())
+        expect(requests).toBe(2)
+        expect(setup.data.session[collection].list("ses_child")).toHaveLength(1)
+        // Only the genuine reopen completes the cache entry.
+        await read()
+        expect(requests).toBe(2)
+      } finally {
+        release.resolve()
+        setup.dispose()
+      }
+    },
+  )
+}
+
+test.each([false, true])("queued older-page load cannot adopt a reopened session (all: %s)", async (all) => {
+  const requested = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  let pages = 0
+  const setup = fixture(async (url) => {
+    if (!url.searchParams.has("cursor")) return
+    if (++pages !== 1) return
+    requested.resolve()
+    await release.promise
+  })
+  try {
+    await setup.data.session.message.sync("ses_child")
+    const initial = setup.data.session.message.loadMore("ses_child")
+    await requested.promise
+    const obsolete = setup.data.session.message.loadMore("ses_child", { all })
+    setup.data.session.evict("ses_parent")
+    await setup.data.session.message.sync("ses_child")
+    release.resolve()
+    await Promise.all([initial, obsolete])
+    expect(pages).toBe(1)
+    expect(setup.data.session.message.more("ses_child")).toBe(true)
+    expect(setup.data.session.message.loading("ses_child")).toBe(false)
+    await setup.data.session.message.loadMore("ses_child", { all })
+    expect(pages).toBe(2)
+    expect(setup.data.session.message.more("ses_child")).toBe(false)
   } finally {
     release.resolve()
     setup.dispose()

@@ -16,6 +16,7 @@ import { LanguageProvider, UiI18nBridge, type Locale } from "@/runtime/i18n/lang
 import { ServerConnection, ServersProvider } from "@/runtime/server/registry"
 import { SettingsProvider } from "@/settings/model"
 import { TabsProvider } from "@/shell/tabs/tabs"
+import { TabResidency } from "@/shell/tabs/residency"
 import { WslServersProvider } from "@/servers/wsl/context"
 import { ErrorPage } from "@/shell/errors/error"
 import { AppRoutes, File, preloadRoute } from "@/shell/routes/routes"
@@ -107,6 +108,7 @@ export function AppInterface(props: {
     <TabsProvider>
       <GlobalProvider>
         <BodyTypography />
+        <TabResidency />
         <CommandProvider>
           <DesktopCommands />
           <HighlightsProvider>
