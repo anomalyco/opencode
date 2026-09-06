@@ -27,6 +27,8 @@ const ctx = {
   ask: () => Effect.void,
 }
 
+type AskInput = Parameters<Tool.Context["ask"]>[0]
+
 afterEach(async () => {
   await disposeAllInstances()
 })
@@ -168,6 +170,35 @@ describe("tool.write", () => {
 
         expect(result.metadata).toHaveProperty("filepath", filepath)
         expect(result.metadata).toHaveProperty("exists", true)
+      }),
+    )
+
+    it.instance("adds untrimmed patch permission metadata while preserving trimmed diff", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "file.txt")
+        yield* Effect.promise(() => fs.writeFile(filepath, "  old\n", "utf-8"))
+        const asks: AskInput[] = []
+
+        const result = yield* run(
+          { filePath: filepath, content: "  new\n" },
+          {
+            ...ctx,
+            ask: (input) =>
+              Effect.sync(() => {
+                asks.push(input)
+              }),
+          },
+        )
+
+        expect(result.metadata.diff).toContain("-old")
+        expect(result.metadata.diff).not.toContain("-  old")
+        expect(result.metadata.patch).toContain("-  old")
+        expect(result.metadata.patch).toContain("+  new")
+        expect(asks[0]?.metadata.diff).toContain("-old")
+        expect(asks[0]?.metadata.diff).not.toContain("-  old")
+        expect(asks[0]?.metadata.patch).toContain("-  old")
+        expect(asks[0]?.metadata.patch).toContain("+  new")
       }),
     )
   })

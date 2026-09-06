@@ -50,7 +50,8 @@ export const WriteTool = Tool.define(
           const contentOld = source.text
           const contentNew = next.text
 
-          const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, contentNew))
+          const patch = createTwoFilesPatch(filepath, filepath, contentOld, contentNew)
+          const diff = trimDiff(patch)
           yield* ctx.ask({
             permission: "edit",
             patterns: [path.relative(instance.worktree, filepath)],
@@ -58,6 +59,7 @@ export const WriteTool = Tool.define(
             metadata: {
               filepath,
               diff,
+              patch,
             },
           })
 
@@ -95,6 +97,8 @@ export const WriteTool = Tool.define(
               diagnostics,
               filepath,
               exists: exists,
+              diff,
+              patch,
             },
             output,
           }
