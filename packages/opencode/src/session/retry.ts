@@ -29,6 +29,7 @@ export const RETRY_JITTER_FACTOR = 0.25
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
 export const RETRY_MAX_RETRIES = 5
+export const RETRY_MAX_WAIT = 300_000 // longest provider-requested wait worth sleeping through
 
 const RETRYABLE_MESSAGE_PATTERNS = [
   /429|500|502|503|504|524/i,
@@ -200,6 +201,10 @@ export function policy(opts: {
           action: retry.action,
           next: now + wait,
         })
+        // Status is published first so the limit dialog still fires, then we stop: a wait
+        // this long is an exhausted quota window, and sleeping through it leaves the
+        // session pending for hours with no visible error.
+        if (wait > RETRY_MAX_WAIT) return yield* Cause.done(meta.attempt)
         return [meta.attempt, Duration.millis(wait)] as [number, Duration.Duration]
       })
     }),
