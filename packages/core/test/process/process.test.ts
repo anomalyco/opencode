@@ -174,6 +174,20 @@ describe("AppProcess", () => {
       )
 
       it.live(
+        "timeout with combined output settles with the output captured before the deadline",
+        Effect.gen(function* () {
+          const svc = yield* AppProcess.Service
+          const result = yield* svc.run(cmd("-e", "process.stdout.write('partial-marker');setInterval(()=>{},60000)"), {
+            combineOutput: true,
+            timeout: "500 millis",
+          })
+          expect(result.timedOut).toBe(true)
+          expect(result.output?.toString("utf8")).toBe("partial-marker")
+        }),
+        5_000,
+      )
+
+      it.live(
         "fiber interruption cleans up the scoped child process after readiness",
         Effect.acquireUseRelease(
           Effect.promise(() => fs.mkdtemp(path.join(tmpdir(), "opencode-process-interrupt-"))),
