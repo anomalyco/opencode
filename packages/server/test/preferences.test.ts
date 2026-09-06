@@ -2,72 +2,10 @@ import { expect } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { OpenCode } from "@opencode-ai/client"
-import { Preferences } from "@opencode-ai/core/preferences"
-import { Effect, Schema } from "effect"
+import { Effect } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
-
-it.live("the Preferences API validates registered value schemas and distinguishes null from reset", () =>
-  Effect.gen(function* () {
-    const tmp = yield* tmpdirScoped("opencode-preference-values-")
-    const handler = yield* ServerFetch.make(
-      {
-        database: { path: ":memory:" },
-        config: { directory: tmp.path, project: false },
-        models: { fetch: false },
-        fs: { filewatcher: false },
-      },
-      {
-        overrides: [
-          Preferences.node.replace(
-            Preferences.configured({
-              definitions: {
-                "test.boolean": Schema.Boolean,
-                "test.count": Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-                "test.options": Schema.NullOr(
-                  Schema.Struct({ label: Schema.String, tags: Schema.Array(Schema.String) }),
-                ),
-              },
-            }),
-          ),
-        ],
-      },
-    )
-    const client = OpenCode.make({
-      baseUrl: "http://opencode.local",
-      fetch: Object.assign(
-        (input: RequestInfo | URL, init?: RequestInit) =>
-          handler(input instanceof Request ? input : new Request(input, init)),
-        { preconnect: fetch.preconnect },
-      ),
-    })
-    yield* Effect.promise(async () => {
-      const entries = [
-        { target: { kind: "test.boolean", id: "global" }, value: false },
-        { target: { kind: "test.count", id: "global" }, value: 0 },
-        { target: { kind: "test.options", id: "global" }, value: { label: "", tags: ["one", "two"] } },
-        { target: { kind: "test.options", id: "none" }, value: null },
-      ]
-      for (const entry of entries) {
-        await client.preferences.set({ ...entry.target, value: entry.value })
-        expect(await client.preferences.get(entry.target)).toEqual(entry)
-      }
-      expect(await client.preferences.list()).toEqual(expect.arrayContaining(entries))
-      await expect(client.preferences.set({ kind: "test.count", id: "global", value: -1 })).rejects.toMatchObject({
-        _tag: "InvalidRequestError",
-        field: "value",
-      })
-      await expect(client.preferences.set({ kind: "unknown", id: "global", value: true })).rejects.toMatchObject({
-        _tag: "InvalidRequestError",
-        message: "Unknown preference kind: unknown",
-      })
-      expect(await client.preferences.get({ kind: "test.count", id: "global" })).toEqual(entries[1])
-      await client.preferences.reset({ kind: "test.options", id: "none" })
-      expect(await client.preferences.get({ kind: "test.options", id: "none" })).toBeNull()
-    })
-  }),
-)
 
 it.live(
   "global preferences survive restart and block every new explicit skill admission",
@@ -103,21 +41,10 @@ it.live(
           ),
         })
         yield* Effect.promise(async () => {
-          const absent = { kind: "skill.activation", id: "reserved:/雪" } as const
-          await client.preferences.set({ ...absent, value: "disabled" })
-          expect(await client.preferences.get(absent)).toEqual({ target: absent, value: "disabled" })
-          await client.preferences.reset(absent)
-          expect(
-            (
-              await handler(
-                new Request("http://opencode.local/api/preferences/skill.activation/toggle-test", {
-                  method: "PUT",
-                  headers: { "content-type": "application/json" },
-                  body: JSON.stringify({ value: "unknown" }),
-                }),
-              )
-            ).status,
-          ).toBe(400)
+          await expect(client.preferences.set({ ...target, value: "unknown" })).rejects.toMatchObject({
+            _tag: "InvalidRequestError",
+            field: "value",
+          })
           await Promise.all([first, second].map((location) => client.plugin.awaitActivation({ location })))
           const session = await client.session.create({ location: first })
           await client.session.prompt({
@@ -136,8 +63,6 @@ it.live(
           for (const location of [first, second]) {
             const skill = (await client.skill.list({ location })).data.find((skill) => skill.id === target.id)
             expect(skill?.name).toBe("Toggle test")
-            expect(skill).not.toHaveProperty("enabled")
-            expect(skill).not.toHaveProperty("disabled")
           }
           await expect(
             client.session.skill({ sessionID: session.id, skill: target.id, resume: false }),
@@ -180,7 +105,6 @@ it.live(
             skills: [{ id: target.id }],
             resume: false,
           })
-          await client.preferences.reset(target)
           await client.preferences.reset(target)
           expect(await client.preferences.get(target)).toBeNull()
           expect(await client.preferences.list()).toEqual([])

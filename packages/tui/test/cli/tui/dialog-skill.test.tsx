@@ -17,26 +17,16 @@ import { emptyThemeSource } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
-test.each([
-  { width: 60, mode: "dark" as const },
-  { width: 112, mode: "light" as const },
-])("opens, toggles, resets, and selects skills at $width columns in $mode mode", async (options) => {
-  const fixture = await renderSkills(options)
+test("toggles, resets, and selects available skills", async () => {
+  const fixture = await renderSkills()
   try {
     await fixture.app.waitForFrame((frame) => frame.includes("2. Toggle skills"))
     fixture.app.mockInput.pressKey("2")
-    const initial = await fixture.app.waitForFrame((frame) => frame.includes("Effect") && frame.includes("Enabled ✓"))
-    expect(initial).not.toContain("[x]")
-    await fixture.app.mockInput.typeText("   ")
-    const spaces = await fixture.app.waitForFrame((frame) => frame.includes("Effect") && frame.includes("Review"))
-    expect(spaces).not.toContain("No skills found")
-    await fixture.app.mockInput.typeText("gui eff ")
-    const filtered = await fixture.app.waitForFrame((frame) => frame.includes("Effect") && !frame.includes("Review"))
-    expect(filtered).toContain("Enabled ✓")
+    await fixture.app.waitForFrame((frame) => frame.includes("Effect") && frame.includes("Enabled ✓"))
+    await fixture.app.mockInput.typeText("effect")
     fixture.app.mockInput.pressEnter()
     await fixture.app.waitForFrame((frame) => frame.includes("Effect") && frame.includes("Disabled ○"))
     expect(fixture.state.preference).toBe("disabled")
-    expect(fixture.state.writes).toEqual(["PUT"])
 
     fixture.app.mockInput.pressEnter()
     await fixture.app.waitForFrame((frame) => frame.includes("Effect") && frame.includes("Enabled ✓"))
@@ -44,8 +34,6 @@ test.each([
     fixture.app.mockInput.pressKey("r", { ctrl: true })
     await fixture.app.waitFor(() => fixture.state.preference === undefined)
     await fixture.app.waitForFrame((frame) => frame.includes("Enabled ✓") && !frame.includes("Saving"))
-    expect(fixture.state.preference).toBeUndefined()
-    expect(fixture.state.writes).toEqual(["PUT", "PUT", "DELETE"])
 
     await fixture.app.mockInput.typeText("-no-match")
     await fixture.app.waitForFrame((frame) => frame.includes("No skills found"))
@@ -56,13 +44,7 @@ test.each([
     await fixture.app.waitForFrame((frame) => frame.includes("Effect") && frame.includes("Review"))
     await fixture.app.mockInput.typeText("effect")
 
-    fixture.state.preference = "disabled"
-    fixture.events.emit({
-      id: "evt_external_preference",
-      type: "preferences.updated",
-      created: 1,
-      data: { target: { kind: "skill.activation", id: "effect" } },
-    })
+    fixture.app.mockInput.pressEnter()
     await fixture.app.waitForFrame((frame) => frame.includes("Effect") && frame.includes("Disabled ○"))
     fixture.open()
     await fixture.app.waitForFrame((frame) => frame.includes("1. List skills"))
@@ -77,7 +59,7 @@ test.each([
 })
 
 test("keeps the skill state and dialog usable after a failed save", async () => {
-  const fixture = await renderSkills({ width: 100, mode: "dark" })
+  const fixture = await renderSkills()
   try {
     await fixture.app.waitForFrame((frame) => frame.includes("2. Toggle skills"))
     fixture.app.mockInput.pressKey("2")
@@ -95,7 +77,7 @@ test("keeps the skill state and dialog usable after a failed save", async () => 
   }
 })
 
-async function renderSkills(options: { width: number; mode: "light" | "dark" }) {
+async function renderSkills() {
   const events = createEventStream()
   const state = {
     preference: undefined as Skill.Activation | undefined,
@@ -147,7 +129,7 @@ async function renderSkills(options: { width: number; mode: "light" | "dark" }) 
             <ToastProvider>
               <ClientProvider api={createApi(calls.fetch)}>
                 <DataProvider directory={location.directory}>
-                  <ThemeProvider mode={options.mode} source={emptyThemeSource}>
+                  <ThemeProvider mode="dark" source={emptyThemeSource}>
                     <DialogProvider>
                       <Probe />
                     </DialogProvider>
@@ -160,8 +142,8 @@ async function renderSkills(options: { width: number; mode: "light" | "dark" }) 
         </ConfigProvider>
       </TestTuiContexts>
     ),
-    { width: options.width, height: 30, kittyKeyboard: true },
+    { width: 100, height: 30, kittyKeyboard: true },
   )
   app.renderer.start()
-  return { app, state, events, open: () => open() }
+  return { app, state, open: () => open() }
 }

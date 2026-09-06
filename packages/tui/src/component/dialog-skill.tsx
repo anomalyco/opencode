@@ -52,17 +52,10 @@ export function DialogSkillList(props: DialogSkillProps) {
 
   const [loaded] = createResource(
     () => ({ location: props.location, status: client.connection.status() }),
-    () =>
-      Promise.resolve()
-        .then(async () => {
-          setLoadError(undefined)
-          await data.location.skill.sync(props.location)
-          return true
-        })
-        .catch((error) => {
-          setLoadError(error)
-          return undefined
-        }),
+    async () => {
+      setLoadError(undefined)
+      await data.location.skill.sync(props.location).catch(setLoadError)
+    },
   )
 
   const showError = createMemo(() => Boolean(loadError()))
@@ -138,9 +131,7 @@ export function DialogSkillToggle(props: { location?: LocationRef }) {
     () => ({ location: props.location, status: client.connection.status() }),
     async () => {
       setLoadError(undefined)
-      return data.location.skill.sync(props.location).catch((error) => {
-        setLoadError(error)
-      })
+      await data.location.skill.sync(props.location).catch(setLoadError)
     },
   )
   const preferences = createMemo(
@@ -155,7 +146,7 @@ export function DialogSkillToggle(props: { location?: LocationRef }) {
   const change = async (id: string, value?: Skill.Activation) => {
     if (pending() || loaded.loading || loadError()) return
     setPending(id)
-    const target = { kind: "skill.activation", id } as const
+    const target = { kind: "skill.activation", id }
     await (
       value === undefined ? client.api.preferences.reset(target) : client.api.preferences.set({ ...target, value })
     )
@@ -172,8 +163,7 @@ export function DialogSkillToggle(props: { location?: LocationRef }) {
     return (data.location.skill.list(props.location) ?? [])
       .toSorted((a, b) => a.name.localeCompare(b.name))
       .map((skill) => {
-        const preference = preferences().get(skill.id)
-        const enabled = preference !== "disabled"
+        const enabled = preferences().get(skill.id) !== "disabled"
         return {
           title: skill.name,
           value: skill.id,
