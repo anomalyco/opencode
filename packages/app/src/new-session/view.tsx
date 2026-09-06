@@ -75,7 +75,7 @@ export function NewSessionView(props: {
                     fallback={
                       <PromptGitStatus
                         branch={props.workspace.bar.branch()}
-                        noGit={!props.workspace.project.git()}
+                        noGit={!props.workspace.bar.branch() && !props.workspace.project.git()}
                         class="ms-1"
                       />
                     }

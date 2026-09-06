@@ -98,7 +98,10 @@ export function SessionWorkspaceMenu(props: {
                 {language.t("session.new.workspace.local")}
               </Menu.Item>
             </Show>
-            <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move("create")}>
+            <Menu.Item
+              disabled={props.project.vcs !== "git" || !!store.selected || blocked()}
+              onSelect={() => void move("create")}
+            >
               <Icon name="workspace-new" />
               {language.t("workspace.new")}
             </Menu.Item>
