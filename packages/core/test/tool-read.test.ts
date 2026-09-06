@@ -12,7 +12,6 @@ import { Permission } from "@opencode-ai/core/permission"
 import { Session } from "@opencode-ai/core/session"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/util/global"
-import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { FileAccess } from "@opencode-ai/core/file-access"
 import { location } from "./fixture/location"
 import { Tool } from "@opencode-ai/core/tool"
@@ -32,7 +31,6 @@ const readToolNode = makeLocationNode({
     Tool.node,
     ReadToolFileSystem.node,
     FileAccess.node,
-    LocationMutation.node,
     Image.node,
     Permission.node,
     SessionInstructions.node,
@@ -79,13 +77,14 @@ const reader = Layer.succeed(
   }),
 )
 let allow = true
+let deniedResource: string | undefined
 const permission = permissionLayer({
   assert: (input) =>
     Effect.sync(() => {
       assertions.push(input)
     }).pipe(
       Effect.andThen(
-        allow
+        allow && !input.resources.some((resource) => resource === deniedResource)
           ? Effect.void
           : Effect.fail(
               new Permission.BlockedError({
@@ -114,30 +113,6 @@ const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) })),
 )
-const mutation = Layer.succeed(
-  LocationMutation.Service,
-  LocationMutation.Service.of({
-    resolve: (input) => {
-      const absolute = AbsolutePath.make(path.resolve(process.cwd(), input.path))
-      const external = path.isAbsolute(input.path) && !FSUtil.contains(process.cwd(), absolute)
-      const resource = external ? absolute.replaceAll("\\", "/") : path.relative(process.cwd(), absolute) || "."
-      const directory = path.dirname(absolute)
-      const externalResource = path.join(directory, "*").replaceAll("\\", "/")
-      return Effect.succeed({
-        absolute,
-        resource,
-        externalDirectory: external
-          ? {
-              action: "external_directory" as const,
-              directory,
-              resource: externalResource,
-              save: externalResource,
-            }
-          : undefined,
-      })
-    },
-  }),
-)
 const unavailableImage = Layer.mock(Image.Service, {
   normalize: () => Effect.fail(new Image.ResizerUnavailableError()),
 })
@@ -148,7 +123,6 @@ const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
       Permission.node.replace(permission),
       Config.node.replace(config),
       Image.node.replace(imageLayer),
-      LocationMutation.node.replace(mutation),
       FSUtil.node.replace(testFileSystem),
       Location.node.replace(locationLayer),
       Global.node.replace(Global.layerWith({ data: Global.Path.data })),
@@ -167,6 +141,7 @@ describe("ReadTool", () => {
     readCalls.length = 0
     listCalls.length = 0
     allow = true
+    deniedResource = undefined
     resolveFailure = undefined
     directoryEntries = []
     directoryEntryDetails = []
@@ -746,6 +721,31 @@ describe("ReadTool", () => {
         { action: "read", resources: [recovered.replaceAll("\\", "/")] },
       ])
       expect(readCalls.map((call) => call.input)).toEqual([AbsolutePath.make(requested), AbsolutePath.make(recovered)])
+    }),
+  )
+
+  it.effect("does not read a recovered filename denied by its own read rules", () =>
+    Effect.gen(function* () {
+      const requested = path.join(process.cwd(), "report final.txt")
+      const recovered = path.join(process.cwd(), "report\u202ffinal.txt")
+      deniedResource = path.basename(recovered)
+      directoryEntryDetails = [{ name: path.basename(recovered), type: "file" }]
+      readOverride = (input) =>
+        input === requested ? Effect.fail(new Environment.NotFound({ path: requested })) : Effect.succeed(readResult)
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-denied-recovery", name: "read", input: { path: requested } },
+        }),
+      ).toMatchObject({ status: "error", error: { type: "permission.rejected" } })
+      expect(assertions).toMatchObject([
+        { action: "read", resources: [path.basename(requested)] },
+        { action: "read", resources: [path.basename(recovered)] },
+      ])
+      expect(readCalls.map((call) => call.input)).toEqual([AbsolutePath.make(requested)])
     }),
   )
 

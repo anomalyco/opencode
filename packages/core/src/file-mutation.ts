@@ -7,11 +7,9 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Bom } from "@opencode-ai/util/bom"
 import { Environment } from "./environment/index.js"
 import type { Files } from "./environment/index.js"
+import type { FileAccess } from "./file-access.js"
 
-export interface Target {
-  readonly absolute: string
-  readonly resource: string
-}
+export type Target = Pick<FileAccess.Target, "absolute" | "resource">
 
 export interface WriteInput {
   readonly target: Target

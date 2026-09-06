@@ -8,7 +8,7 @@ import { Environment } from "@opencode-ai/core/environment/index"
 import { Formatter } from "@opencode-ai/core/formatter"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { Location } from "@opencode-ai/core/location"
-import { LocationMutation } from "@opencode-ai/core/location-mutation"
+import { FileAccess } from "@opencode-ai/core/file-access"
 import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
@@ -27,7 +27,7 @@ const patchToolNode = makeLocationNode({
   layer: Layer.effectDiscard(registerToolPlugin(PatchTool.Plugin)),
   deps: [
     Tool.node,
-    LocationMutation.node,
+    FileAccess.node,
     FileMutation.node,
     Environment.node,
     Formatter.node,
@@ -99,7 +99,7 @@ const withTool = <A, E, R>(
     return yield* body(yield* Tool.Service)
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(LayerNode.group([Tool.node, LocationMutation.node, FileMutation.node, patchToolNode]), [
+      AppNodeBuilder.build(LayerNode.group([Tool.node, FileAccess.node, FileMutation.node, patchToolNode]), [
         Environment.node.replace(
           transformEnvironmentFiles((files) => ({
             read: (target, range) =>

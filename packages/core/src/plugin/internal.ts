@@ -45,7 +45,6 @@ import { Integration } from "../integration.js"
 import { Job } from "../job.js"
 import { KV } from "../kv.js"
 import { Location } from "../location.js"
-import { LocationMutation } from "../location-mutation.js"
 import { ModelsDev } from "../models-dev.js"
 import { Mcp } from "../mcp/index.js"
 import { Npm } from "@opencode-ai/util/npm"
@@ -117,7 +116,6 @@ const services = [
   Job.Service,
   KV.Service,
   Location.Service,
-  LocationMutation.Service,
   ModelsDev.Service,
   Mcp.Service,
   Npm.Service,
@@ -167,7 +165,6 @@ export const requirements = LayerNode.group([
   Job.node,
   KV.node,
   Location.node,
-  LocationMutation.node,
   ModelsDev.node,
   Mcp.node,
   Npm.node,
