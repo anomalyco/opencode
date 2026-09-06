@@ -1526,6 +1526,15 @@ describe("session.message-v2.fromError", () => {
     })
   })
 
+  test("preserves HTTP status on generic Error wraps so plugins can fallback", () => {
+    const error = Object.assign(new Error("Unexpected server error"), { statusCode: 401 })
+    const result = MessageV2.fromError(error, { providerID })
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    if (!SessionV1.APIError.isInstance(result)) return
+    expect(result.data.statusCode).toBe(401)
+    expect(result.data.message).toContain("Unexpected server error")
+  })
+
   test("classifies ZlibError from fetch as retryable APIError", () => {
     const zlibError = new Error(
       'ZlibError fetching "https://opencode.cloudflare.dev/anthropic/messages". For more information, pass `verbose: true` in the second argument to fetch()',
