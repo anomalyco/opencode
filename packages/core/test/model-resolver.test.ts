@@ -73,6 +73,57 @@ function withConfigEnv<A, E, R>(env: Record<string, string>, effect: () => Effec
 }
 
 describe("ModelResolver", () => {
+  it.effect("routes Merge Gateway images through native Chat without loading an AI SDK", () =>
+    Effect.gen(function* () {
+      const resolved = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("merge-gateway-ai-sdk-provider"), {
+          providerID: Provider.ID.make("merge-gateway"),
+          modelID: "zai/glm-5.3-flash",
+          body: { tags: [{ key: "env", value: "test" }] },
+        }),
+        Credential.Key.make({ type: "key", key: "test-key" }),
+        { loadAISDK: () => Effect.die("Merge Gateway must use the native provider") },
+      )
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: resolved,
+          messages: [
+            Message.user([
+              Message.text("[Image 1] describe this image"),
+              { type: "media", mediaType: "image/png", data: "iVBORw0KGgo=" },
+              { type: "media", mediaType: "image/jpeg", data: "/9j/" },
+            ]),
+          ],
+        }),
+      )
+      expect(prepared.route).toBe("openai-compatible-chat")
+      expect(resolved.route.endpoint.baseURL).toBe("https://api-gateway.merge.dev/v1/ai-sdk")
+      expect(resolved.route.defaults.headers?.["x-test"]).toBe("header")
+      expect(resolved.route.defaults.http?.body).toEqual({ tags: [{ key: "env", value: "test" }] })
+      const headers = yield* resolved.route.auth.apply({
+        request: LLM.request({ model: resolved, prompt: "Hello" }),
+        method: "POST",
+        url: "https://api-gateway.merge.dev/v1/ai-sdk/chat/completions",
+        body: "{}",
+        headers: Headers.empty,
+      })
+      expect(headers.authorization).toBe("Bearer test-key")
+      expect(prepared.body).toMatchObject({
+        model: "zai/glm-5.3-flash",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "[Image 1] describe this image" },
+              { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0KGgo=" } },
+              { type: "image_url", image_url: { url: "data:image/jpeg;base64,/9j/" } },
+            ],
+          },
+        ],
+      })
+    }),
+  )
+
   it.effect("constructs native Azure requests with deployment IDs and projected resource URLs", () =>
     Effect.gen(function* () {
       const responses = yield* ModelResolver.fromCatalogModel(
