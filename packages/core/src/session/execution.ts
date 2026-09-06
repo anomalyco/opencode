@@ -30,7 +30,10 @@ export interface Interface {
    * Returns whether an active execution was interrupted. Compose with `awaitIdle` when
    * settlement matters.
    */
-  readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => Effect.Effect<boolean>
+  readonly interrupt: (
+    sessionID: SessionSchema.ID,
+    options?: { readonly continue?: boolean; readonly reason?: "user" | "inactivity" },
+  ) => Effect.Effect<boolean>
   /** Resolves once this process owns no active execution for the Session. Returns immediately when idle and never starts work. */
   readonly awaitIdle: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
@@ -38,7 +41,7 @@ export interface Interface {
 /** Routes execution from a Session ID to its selected instance's runner. */
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionExecution") {}
 
-type InterruptReason = "user" | "shutdown"
+type InterruptReason = "user" | "shutdown" | "inactivity"
 
 export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?: InterruptReason) {
   if (Exit.isSuccess(exit)) return { type: "succeeded" as const }
@@ -120,9 +123,8 @@ export const layer = Layer.effect(
               return
             }
             if (outcome.type === "interrupted") {
-              // A user cancel releases the claim: the turn must not resurrect at the next
-              // boot. Shutdown interruption keeps it for restart continuity.
-              if (outcome.reason === "user") yield* jobs.cancel(sessionID)
+              // Deliberate stops release the claim; shutdown keeps it for restart continuity.
+              if (outcome.reason !== "shutdown") yield* jobs.cancel(sessionID)
               yield* bus.publish(
                 SessionEvent.Execution.Interrupted,
                 { sessionID, reason: outcome.reason },
@@ -147,7 +149,7 @@ export const layer = Layer.effect(
       isActive: coordinator.isActive,
       interrupt: (sessionID, options) =>
         Effect.gen(function* () {
-          const interrupted = yield* coordinator.interrupt(sessionID, "user")
+          const interrupted = yield* coordinator.interrupt(sessionID, options?.reason ?? "user")
           if (!options?.continue) return interrupted
           // Resume steering input and between-turn control work from the interrupted
           // intent. Queued next-turn prompts stay parked: a steer-scoped drain never
