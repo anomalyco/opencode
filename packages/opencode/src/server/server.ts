@@ -27,6 +27,7 @@ export type Listener = {
 type ServerApp = {
   fetch(request: Request): Response | Promise<Response>
   request(input: string | URL | Request, init?: RequestInit): Response | Promise<Response>
+  dispose(): Promise<void>
 }
 
 type ListenOptions = CorsOptions & {
@@ -54,12 +55,13 @@ class ListenerServerService extends Context.Service<ListenerServerService, Liste
 ) {}
 
 export const Default = lazy(() => {
-  const handler = HttpApiApp.webHandler().handler
+  const web = HttpApiApp.webHandler()
   const app: ServerApp = {
-    fetch: (request: Request) => handler(request, HttpApiApp.context),
+    fetch: (request: Request) => web.handler(request, HttpApiApp.context),
     request(input, init) {
       return app.fetch(input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init))
     },
+    dispose: web.dispose,
   }
   return { app }
 })
