@@ -1,0 +1,137 @@
+---
+title: Politikalar
+description: OpenCode'un hangi yapılandırılmış kaynakları kullanabileceğini kontrol edin.
+---
+
+Politikalar, OpenCode'un adlandırılmış bir kaynak üzerinde bir eylem gerçekleştirip gerçekleştiremeyeceğini kontrol eder. Bu özellik deneyseldir ve `opencode.json` içindeki `experimental.policies` dizisiyle yapılandırılır.
+
+Politikalar [izinlerden](/docs/permissions) ayrıdır. İzinler bir oturum sırasında araçların neler yapabileceğini kontrol ederken, politikalar OpenCode'un bir LLM sağlayıcısı gibi bir kaynağı kullanıp kullanamayacağını kontrol eder.
+
+---
+
+## Yapılandırma
+
+Her politika ifadesinin üç alanı vardır:
+
+- `effect` — `"allow"` veya `"deny"` olabilir.
+- `action` — Kontrol edilen işlem.
+- `resource` — İfadenin geçerli olduğu kaynak kimliği veya joker karakter deseni.
+
+Örneğin, `openai` sağlayıcısının kullanımını reddetmek için:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "openai"
+      }
+    ]
+  }
+}
+```
+
+Politika tarafından reddedilen bir sağlayıcı, kimlik bilgisi olsa veya başka türlü doğru şekilde yapılandırılmış olsa bile model seçimi ve model kullanımı için kullanılamaz.
+
+---
+
+## Kullanılabilir politikalar
+
+OpenCode şu anda tek bir politika action'ını destekler:
+
+| Action           | Resource                       | Açıklama                                      |
+| ---------------- | ------------------------------ | --------------------------------------------- |
+| `provider.use`   | Sağlayıcı kimliği, örneğin `openai` | Bir LLM sağlayıcısının kullanımına izin verin veya reddedin. |
+
+Gelecekte daha fazla politika action'ı eklenebilir.
+
+---
+
+## Eşleştirme
+
+`resource` alanı joker karakter eşleştirmeyi destekler. Sıfır veya daha fazla karakteri eşleştirmek için `*`, tek bir karakteri eşleştirmek için `?` kullanın.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "company-*"
+      }
+    ]
+  }
+}
+```
+
+Bu, `company-us` ve `company-eu` gibi sağlayıcıları reddeder.
+
+---
+
+## Kural sırası
+
+Birden fazla ifade eşleştiğinde, son eşleşen ifade kazanır. Geniş kuralları başa, daha spesifik istisnaları ise onların arkasına koyun.
+
+Örneğin, yalnızca Anthropic'e izin vermek için:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "*"
+      },
+      {
+        "effect": "allow",
+        "action": "provider.use",
+        "resource": "anthropic"
+      }
+    ]
+  }
+}
+```
+
+Bir sağlayıcıyla eşleşen politika yoksa, sağlayıcının kullanımı varsayılan olarak izinlidir.
+
+Politikalar hem genel config'inizde hem de proje config'inde ayarlanabilir. Her iki konumdaki politikalar aynı sağlayıcıyla eşleşirse, genel politikanız proje politikasından öncelik alır. Bu, bir repository'nin genel olarak reddettiğiniz bir sağlayıcıyı yeniden etkinleştirmesini engeller.
+
+---
+
+## Sağlayıcı listeleri
+
+Sağlayıcı erişimini kontrol ederken eski `disabled_providers` ve `enabled_providers` ayarları yerine politikaları kullanın.
+
+`disabled_providers` yerine geçecek şekilde:
+
+```json title="opencode.json"
+{
+  "experimental": {
+    "policies": [
+      { "effect": "deny", "action": "provider.use", "resource": "openai" },
+      { "effect": "deny", "action": "provider.use", "resource": "google" }
+    ]
+  }
+}
+```
+
+`enabled_providers` yerine geçecek şekilde, önce tüm sağlayıcıları reddedin ve ardından seçilen sağlayıcılara izin verin:
+
+```json title="opencode.json"
+{
+  "experimental": {
+    "policies": [
+      { "effect": "deny", "action": "provider.use", "resource": "*" },
+      { "effect": "allow", "action": "provider.use", "resource": "anthropic" },
+      { "effect": "allow", "action": "provider.use", "resource": "openai" }
+    ]
+  }
+}
+```

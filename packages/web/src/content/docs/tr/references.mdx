@@ -1,0 +1,157 @@
+---
+title: References
+description: Yerel dizinleri ve Git repository'lerini proje referansı olarak ekleyin.
+---
+
+References, OpenCode'a geçerli projenin dışındaki dizinlere erişim sağlar. Çalışırken dokümantasyonu, paylaşılan kütüphaneleri, örnekleri veya başka bir repository'yi kullanılabilir hale getirmek için bunları kullanabilirsiniz.
+
+References, `opencode.json` veya `opencode.jsonc` içinde alias ile yapılandırılır.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Ürün davranışı ve dokümantasyon kuralları için kullanın",
+    },
+    "sdk": {
+      "repository": "anomalyco/opencode-sdk-js",
+      "branch": "main",
+      "description": "JavaScript SDK implementasyon detayları için kullanın",
+    },
+  },
+}
+```
+
+---
+
+## Yerel dizinler
+
+Yerel bir dizine referans vermek için `path` kullanın.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+    },
+  },
+}
+```
+
+Path'ler şunlar olabilir:
+
+- Referansı tanımlayan yapılandırma dosyasına göre göreli
+- `/home/user/docs` gibi mutlak
+- `~/docs` gibi home dizininize göre göreli
+
+String kısaltmasını da kullanabilirsiniz:
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": "../docs",
+  },
+}
+```
+
+---
+
+## Git repository'leri
+
+Git repository'sine referans vermek için `repository` kullanın. OpenCode, repository'yi yerel repository cache'inde materialize eder ve checkout edilen kaynağı bir referans dizini olarak kullanılabilir hale getirir.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+`repository`, Git URL'lerini, host/path referanslarını ve GitHub `owner/repo` kısaltmasını kabul eder. İsteğe bağlı `branch` alanı bir branch veya ref seçer. `branch` verilmediğinde OpenCode, repository'nin varsayılan branch'ini kullanır.
+
+Branch, description veya başka bir seçeneğe ihtiyacınız yoksa string kısaltmasını kullanabilirsiniz:
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+  },
+}
+```
+
+:::note
+Git reference'ları asenkron olarak yenilenir. Yeni yapılandırılan bir repository'nin clone veya güncelleme işlemini tamamlaması biraz zaman alabilir.
+:::
+
+---
+
+## Kullanımı tanımlama
+
+Bir agent'ın bir reference'ı ne zaman kullanacağını açıklamak için `description` ekleyin.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "UI bileşenleri veya design token'ları implemente ederken kullanın",
+    },
+  },
+}
+```
+
+OpenCode, description'ı olan reference'ları agent bağlamına ekler. Description'lar, benzer içeriğe sahip reference'ları birbirinden ayırt edecek kadar kısa ve spesifik olmalıdır. Description'ı olmayan reference'lar otomatik tamamlama ve doğrudan kullanım üzerinden erişilebilir kalır, ancak agent'lara tanıtılmaz.
+
+---
+
+## Otomatik tamamlama kayıtlarını gizleme
+
+Bir reference'ı TUI'deki `@` otomatik tamamlama listesinden çıkarmak için `hidden` değerini `true` yapın.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Dahili implementasyon detayları için kullanın",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` yalnızca otomatik tamamlamayı etkiler. Description'a sahip gizli bir reference, agent bağlamına eklenmeye devam eder.
+
+---
+
+## Reference'ları kullanma
+
+Yapılandırılan reference'lar TUI'deki `@` otomatik tamamlamada görünür. Reference kökünü eklemek için `@alias`, içindeki dosyaları aramak için `@alias/` yazın.
+
+```text
+Compare this implementation with @sdk/src/client.ts
+```
+
+Agent'lar, description'ı olan yapılandırılmış reference'ların çözümlenmiş path'lerini ve description'larını sistem bağlamlarında alır; böylece manuel olarak eklemeniz gerekmeden, ilgili olduğunda bir reference'ı inceleyebilirler.
+
+OpenCode, reference dizinlerini external-directory izin sınırı üzerinden otomatik olarak izinli hale getirir. Normal araç izinleri aynen geçerlidir; örneğin, dosya düzenleyemeyen bir agent, bir dizin reference olarak yapılandırıldığı için düzenleme erişimi kazanmaz.
+
+---
+
+## Alanları yapılandırma
+
+| Alan           | Yerel | Git | Açıklama                                             |
+| -------------- | ----- | --- | ---------------------------------------------------- |
+| `path`         | Evet  | Hayır | Yerel reference dizini                              |
+| `repository`   | Hayır | Evet | Git URL'si, host/path veya GitHub `owner/repo` değeri |
+| `branch`       | Hayır | Evet | İsteğe bağlı Git branch veya ref                     |
+| `description`  | Evet  | Evet | Reference'ın ne zaman kullanılacağını açıklayan yönlendirme |
+| `hidden`       | Evet  | Evet | Reference'ı TUI `@` otomatik tamamlamadan gizle      |
+
+Reference alias'ları boş olamaz veya `/`, boşluk, backtick veya virgül içeremez.
