@@ -56,18 +56,40 @@ const client = Layer.mock(LLMClient.Service)({
     Effect.sync(() => {
       requests.push(request)
       options.push(requestOptions)
-      const response = LLMResponse.fromEvents([
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.textStart({ id: "generate" }),
-        LLMEvent.textDelta({ id: "generate", text: "Transient answer" }),
-        LLMEvent.textEnd({ id: "generate" }),
-        LLMEvent.stepFinish({
-          index: 0,
-          reason: { normalized: "stop" },
-          usage: { inputTokens: 100, outputTokens: 10 },
-        }),
-        LLMEvent.finish({ reason: { normalized: "stop" } }),
-      ])
+      const prompt = request.messages
+        .at(-1)
+        ?.content.flatMap((part) => (part.type === "text" ? [part.text] : []))
+        .join("")
+      const events = (() => {
+        if (prompt === "Filtered privately")
+          return [
+            LLMEvent.stepStart({ index: 0 }),
+            LLMEvent.stepFinish({ index: 0, reason: { normalized: "content-filter", raw: "content_filtered" } }),
+            LLMEvent.finish({ reason: { normalized: "content-filter", raw: "content_filtered" } }),
+          ]
+        if (prompt === "Reason privately")
+          return [
+            LLMEvent.stepStart({ index: 0 }),
+            LLMEvent.reasoningStart({ id: "generate-reasoning" }),
+            LLMEvent.reasoningDelta({ id: "generate-reasoning", text: "Thinking without an answer" }),
+            LLMEvent.reasoningEnd({ id: "generate-reasoning" }),
+            LLMEvent.stepFinish({ index: 0, reason: { normalized: "length", raw: "max_tokens" } }),
+            LLMEvent.finish({ reason: { normalized: "length", raw: "max_tokens" } }),
+          ]
+        return [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "generate" }),
+          LLMEvent.textDelta({ id: "generate", text: "Transient answer" }),
+          LLMEvent.textEnd({ id: "generate" }),
+          LLMEvent.stepFinish({
+            index: 0,
+            reason: { normalized: "stop" },
+            usage: { inputTokens: 100, outputTokens: 10 },
+          }),
+          LLMEvent.finish({ reason: { normalized: "stop" } }),
+        ]
+      })()
+      const response = LLMResponse.fromEvents(events)
       if (!response) throw new Error("Incomplete generate response")
       return response
     }),
@@ -339,6 +361,43 @@ it.effect(
       expect(requests[0]?.tools).toMatchObject([{ name: "lookup", description: "Lookup" }])
       expect(requests[0]?.toolChoice).toBeUndefined()
       expect(options[0]?.webSocket).toBeUndefined()
+      expect(yield* durableState(db, sessionID)).toEqual(before)
+    }),
+  { timeout: 15_000 },
+)
+
+it.effect(
+  "fails transient generation when the provider filters or exhausts output before answering",
+  () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      options.length = 0
+      instruction = "Initial context"
+      const { db, bus, instructions, session, instances } = yield* setup
+      yield* InstructionState.prepare(db, bus, instructions, sessionID)
+      const before = yield* durableState(db, sessionID)
+
+      for (const failure of [
+        {
+          prompt: "Filtered privately",
+          reason: { _tag: "ContentPolicy", message: "Provider blocked the response" },
+        },
+        {
+          prompt: "Reason privately",
+          reason: {
+            _tag: "InvalidProviderOutput",
+            message: "The model reached its output limit before producing text or a tool call",
+          },
+        },
+      ]) {
+        const error = yield* SessionGenerate.generate({ session, prompt: failure.prompt }).pipe(
+          Effect.provideService(Instance.Service, instances),
+          Effect.flip,
+        )
+        expect(error).toMatchObject({ _tag: "AI.Error", reason: failure.reason })
+      }
+
+      expect(requests).toHaveLength(2)
       expect(yield* durableState(db, sessionID)).toEqual(before)
     }),
   { timeout: 15_000 },
