@@ -236,6 +236,28 @@ describe("query keys", () => {
     expect([...loadProvidersQuery(remote, null, api).queryKey]).toEqual(["https://debian.example", null, "providers"])
   })
 
+  test("asks for the connected providers only unless the full catalog is requested", async () => {
+    const calls: unknown[] = []
+    const legacy = {
+      provider: {
+        list: async (input: unknown) => {
+          calls.push(input)
+          return { data: { all: [], connected: [], default: {} } }
+        },
+      },
+    } as unknown as Parameters<typeof loadProvidersQuery>[3]
+    const api = {} as CatalogApi
+    const protocol = Promise.resolve("v1" as const) as Parameters<typeof loadProvidersQuery>[4]
+
+    // The default matters: every consumer shares this query key, and one that mounts before the
+    // bootstrap wrote its result fetches on its own. Defaulting to the full catalog made that lone
+    // consumer pull the whole thing and undid the saving.
+    await new QueryClient().fetchQuery(loadProvidersQuery(ServerScope.local, "/repo", api, legacy, protocol))
+    await new QueryClient().fetchQuery(loadProvidersQuery(ServerScope.local, "/repo", api, legacy, protocol, false))
+
+    expect(calls).toEqual([{ connected: true }, undefined])
+  })
+
   test("loads the current provider and model catalog", async () => {
     const calls: unknown[] = []
     const api = {
