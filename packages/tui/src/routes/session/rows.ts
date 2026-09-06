@@ -52,11 +52,8 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     )
     const visible = queued.size === 0 ? messages : messages.filter((message) => !queued.has(message.id))
     const boundary = revertBoundary()
-    const rows = reduceSessionRows(
-      boundary ? visible.filter((message) => message.id < boundary) : visible,
-      inputs,
-      turnTokens(),
-    )
+    const cutoff = boundary ? visible.findIndex((message) => message.id === boundary) : -1
+    const rows = reduceSessionRows(cutoff === -1 ? visible : visible.slice(0, cutoff), inputs, turnTokens())
     partitionPending(rows, pendingPermissions())
     const position = rows.findIndex((row) => row.type === "message" && inputs.has(row.messageID))
     rows.splice(

@@ -1,6 +1,6 @@
 export * as SessionProjector from "./projector.js"
 
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
+import { and, desc, eq, gt, gte, inArray, isNull, lt, lte, notInArray, or, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema, Stream } from "effect"
 import path from "path"
 import { Database } from "../database/database.js"
@@ -24,6 +24,7 @@ import { Project } from "@opencode-ai/schema/project"
 import { AbsolutePath, RelativePath } from "../schema.js"
 import type { SessionSchema } from "./schema.js"
 import { ProjectTable } from "../project/sql.js"
+import { Timeline } from "./timeline.js"
 
 type DatabaseService = Database.Interface["db"]
 type MessageEvent = Exclude<
@@ -115,39 +116,33 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     .pipe(Effect.orDie)
   if (!parent) return yield* Effect.die(new Error(`Fork parent session not found: ${event.data.parentID}`))
   const boundary = yield* db
-    .select({ seq: SessionMessageTable.seq })
+    .select()
     .from(SessionMessageTable)
-    .where(
-      and(
-        eq(SessionMessageTable.session_id, event.data.parentID),
-        eq(SessionMessageTable.id, event.data.boundary.messageID),
-      ),
-    )
+    .where(eq(SessionMessageTable.id, event.data.boundary.messageID))
     .get()
     .pipe(Effect.orDie)
   if (!boundary)
     return yield* Effect.die(new Error(`Fork boundary message not found: ${event.data.boundary.messageID}`))
-  const copied = yield* db
-    .select({ seq: SessionMessageTable.seq })
-    .from(SessionMessageTable)
-    .where(
-      and(
-        eq(SessionMessageTable.session_id, event.data.parentID),
-        event.data.boundary.type === "before"
-          ? lt(SessionMessageTable.seq, boundary.seq)
-          : lte(SessionMessageTable.seq, boundary.seq),
-      ),
-    )
-    .orderBy(desc(SessionMessageTable.seq))
-    .limit(1)
-    .get()
-    .pipe(Effect.orDie)
+  const ranges = yield* Timeline.ranges(db, boundary.timeline_id)
+  const end = boundary.seq + (event.data.boundary.type === "through" ? 1 : 0)
+  const [copied] = yield* Timeline.rows(db, ranges, { where: lt(SessionMessageTable.seq, end), limit: 1 })
   const copiedSeq = copied?.seq
+  const excluded = event.data.excluded ?? []
+  const [unsettled] = excluded.length
+    ? yield* Timeline.rows(db, ranges, {
+        where: inArray(SessionMessageTable.id, [...excluded]),
+        order: "asc",
+        limit: 1,
+      })
+    : []
+  const base = yield* Timeline.prefix(db, ranges, Math.min(end, unsettled?.seq ?? end))
+  const timelineID = yield* Timeline.create(db, Timeline.root(event.data.sessionID), base)
 
   const stored = yield* db
     .insert(SessionTable)
     .values({
       id: event.data.sessionID,
+      timeline_id: timelineID,
       parent_id: null,
       fork_session_id: event.data.parentID,
       fork_boundary: event.data.boundary,
@@ -179,26 +174,19 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
   if (event.data.instructionEntries)
     yield* InstructionEntry.initialize(db, event.data.sessionID, event.data.instructionEntries, event.created)
 
-  let cursor = -1
-  while (copiedSeq !== undefined) {
-    const rows = yield* db
-      .select()
-      .from(SessionMessageTable)
-      .where(
-        and(
-          eq(SessionMessageTable.session_id, event.data.parentID),
-          gt(SessionMessageTable.seq, cursor),
-          lt(SessionMessageTable.seq, copiedSeq + 1),
-          // Terminal events for active projections stay on the parent, so forks copy only settled history.
-          sql`${SessionMessageTable.type} != 'assistant' or json_extract(${SessionMessageTable.data}, '$.time.completed') is not null`,
-          sql`${SessionMessageTable.type} != 'shell' or json_extract(${SessionMessageTable.data}, '$.status') != 'running'`,
-          sql`${SessionMessageTable.type} != 'compaction' or json_extract(${SessionMessageTable.data}, '$.status') != 'running'`,
-        ),
-      )
-      .orderBy(asc(SessionMessageTable.seq))
-      .limit(ForkBatchSize)
-      .all()
-      .pipe(Effect.orDie)
+  // Active forks only copy the settled suffix after the first omitted message;
+  // the preceding immutable prefix is shared.
+  let cursor = (unsettled?.seq ?? end) - 1
+  while (cursor < (copiedSeq ?? -1)) {
+    const rows = yield* Timeline.rows(db, ranges, {
+      where: and(
+        gt(SessionMessageTable.seq, cursor),
+        lt(SessionMessageTable.seq, end),
+        excluded.length ? notInArray(SessionMessageTable.id, [...excluded]) : undefined,
+      ),
+      order: "asc",
+      limit: ForkBatchSize,
+    })
     if (rows.length === 0) break
 
     yield* db
@@ -207,6 +195,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
         rows.map((row) => ({
           id: SessionMessage.ID.make(`${SessionMessage.ID.fromEvent(event.id)}_${row.seq}`),
           session_id: event.data.sessionID,
+          timeline_id: timelineID,
           type: row.type,
           seq: row.seq,
           time_created: row.time_created,
@@ -301,7 +290,10 @@ function run(db: DatabaseService, event: MessageEvent) {
             .select()
             .from(SessionMessageTable)
             .where(
-              and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "assistant")),
+              and(
+                eq(SessionMessageTable.timeline_id, Timeline.current(event.data.sessionID)),
+                eq(SessionMessageTable.type, "assistant"),
+              ),
             )
             .orderBy(desc(SessionMessageTable.seq))
             .limit(1)
@@ -359,7 +351,7 @@ function run(db: DatabaseService, event: MessageEvent) {
             .from(SessionMessageTable)
             .where(
               and(
-                eq(SessionMessageTable.session_id, event.data.sessionID),
+                eq(SessionMessageTable.timeline_id, Timeline.current(event.data.sessionID)),
                 eq(SessionMessageTable.type, "compaction"),
                 sql`json_extract(${SessionMessageTable.data}, '$.status') = 'running'`,
               ),
@@ -390,6 +382,7 @@ function insertMessage(db: DatabaseService, event: SessionEvent.DurableEvent, me
     .values({
       id: SessionMessage.ID.make(id),
       session_id: event.data.sessionID,
+      timeline_id: Timeline.current(event.data.sessionID),
       type,
       seq: event.durable.seq,
       time_created: DateTime.toEpochMillis(message.time.created),
@@ -436,10 +429,12 @@ const layer = Layer.effectDiscard(
     const db = (yield* Database.Service).db
     yield* bus.project(SessionEvent.Created, (event) =>
       Effect.gen(function* () {
+        const timelineID = yield* Timeline.create(db, Timeline.root(event.data.sessionID))
         const stored = yield* db
           .insert(SessionTable)
           .values({
             id: event.data.sessionID,
+            timeline_id: timelineID,
             project_id: event.data.projectID,
             workspace_id: event.data.location.workspaceID ? Workspace.ID.make(event.data.location.workspaceID) : null,
             parent_id: event.data.parentID,
@@ -539,7 +534,10 @@ const layer = Layer.effectDiscard(
       }),
     )
     yield* bus.project(SessionEvent.Deleted, (event) =>
-      db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie),
+      Effect.gen(function* () {
+        yield* db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie)
+        yield* Timeline.collect(db)
+      }),
     )
     yield* bus.project(SessionEvent.AgentSelected, (event) =>
       Effect.gen(function* () {
@@ -720,20 +718,14 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.RevertEvent.Committed, (event) =>
       Effect.gen(function* () {
-        const boundary = yield* db
-          .select({ seq: SessionMessageTable.seq })
-          .from(SessionMessageTable)
-          .where(
-            and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.id, event.data.to)),
-          )
-          .get()
-          .pipe(Effect.orDie)
+        const boundary = yield* Timeline.find(db, event.data.sessionID, event.data.to)
         if (!boundary) return yield* Effect.die(new Error(`Revert boundary message not found: ${event.data.to}`))
+        const base = yield* Timeline.prefix(db, yield* Timeline.ranges(db, boundary.timeline_id), boundary.seq)
+        const timelineID = yield* Timeline.create(db, Timeline.fromEvent(event.id), base)
         yield* db
-          .delete(SessionMessageTable)
-          .where(
-            and(eq(SessionMessageTable.session_id, event.data.sessionID), gte(SessionMessageTable.seq, boundary.seq)),
-          )
+          .update(SessionTable)
+          .set({ timeline_id: timelineID, revert: null, time_updated: event.created })
+          .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
         yield* db
@@ -744,12 +736,6 @@ const layer = Layer.effectDiscard(
               gte(SessionInboxTable.enqueued_seq, boundary.seq),
             ),
           )
-          .run()
-          .pipe(Effect.orDie)
-        yield* db
-          .update(SessionTable)
-          .set({ revert: null, time_updated: event.created })
-          .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
         yield* InstructionState.reset(db, event.data.sessionID)

@@ -1032,16 +1032,17 @@ export function createData(config: CreateDataInput) {
         if (store.session.info[event.data.sessionID]) {
           setStore("session", "info", event.data.sessionID, "revert", undefined)
         }
-        // The projector also deletes inbox items enqueued at or after the boundary without a cancel event.
-        setStore(
-          "session",
-          "pending",
-          event.data.sessionID,
-          (store.session.pending[event.data.sessionID] ?? []).filter((item) => item.id < event.data.to),
-        )
+        // Inbox ordering is server-owned; IDs do not encode delivery order.
+        result.session.pending.invalidate(event.data.sessionID)
+        if (store.session.pending[event.data.sessionID]?.length)
+          refresh(() => result.session.pending.sync(event.data.sessionID))
         message.update(event.data.sessionID, (draft, index) => {
-          const position = draft.findIndex((item) => item.id >= event.data.to)
-          if (position === -1) return
+          const position = draft.findIndex((item) => item.id === event.data.to)
+          if (position === -1) {
+            result.session.message.invalidate(event.data.sessionID)
+            refresh(() => result.session.message.sync(event.data.sessionID))
+            return
+          }
           for (const item of draft.splice(position)) index.delete(item.id)
         })
         return

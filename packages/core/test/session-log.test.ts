@@ -1,3 +1,4 @@
+import { Timeline } from "@opencode-ai/core/session/timeline"
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Schema, Stream } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
@@ -106,6 +107,7 @@ describe("Session.log", () => {
       yield* db
         .insert(SessionTable)
         .values({
+          timeline_id: yield* Timeline.create(db, Timeline.root(sessionID)),
           id: sessionID,
           project_id: Project.ID.global,
           slug: "empty-log",

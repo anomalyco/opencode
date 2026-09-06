@@ -1,3 +1,4 @@
+import { Timeline } from "@opencode-ai/core/session/timeline"
 import { describe, expect } from "bun:test"
 import { and, asc, eq } from "drizzle-orm"
 import { Effect, Schema } from "effect"
@@ -52,6 +53,7 @@ const setup = (sessionID: SessionSchema.ID) =>
     yield* db
       .insert(SessionTable)
       .values({
+        timeline_id: yield* Timeline.create(db, Timeline.root(sessionID)),
         id: sessionID,
         project_id: Project.ID.global,
         slug: "instruction-state-test",

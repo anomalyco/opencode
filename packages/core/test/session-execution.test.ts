@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { Timeline } from "@opencode-ai/core/session/timeline"
 import { AIError, TransportError } from "@opencode-ai/ai"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -1282,11 +1283,13 @@ function seedSessions(
       .onConflictDoNothing()
       .run()
       .pipe(Effect.orDie)
+    yield* Effect.forEach(sessionIDs, (id) => Timeline.create(database.db, Timeline.root(id)), { discard: true })
     yield* database.db
       .insert(SessionTable)
       .values(
         sessionIDs.map((id) => ({
           id,
+          timeline_id: Timeline.root(id),
           project_id: Project.ID.global,
           slug: id,
           directory: "/project",

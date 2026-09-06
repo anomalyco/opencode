@@ -1087,6 +1087,19 @@ test("removes committed revert messages from local state", async () => {
   const sessionID = "session-revert"
   const calls = createFetch((url) => {
     if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+    if (url.pathname === `/api/session/${sessionID}/inbox`)
+      return json({
+        data: [
+          {
+            id: "msg_001",
+            sessionID,
+            type: "user",
+            payload: { text: "msg_001" },
+            delivery: "steer",
+            timeCreated: 0,
+          },
+        ],
+      })
   }, events)
   let data!: ReturnType<typeof useData>
 
@@ -1132,6 +1145,7 @@ test("removes committed revert messages from local state", async () => {
     expect(data.session.message.get(sessionID, "msg_002")).toBeUndefined()
     expect(data.session.message.get(sessionID, "msg_003")).toBeUndefined()
     // The projector also drops inbox items enqueued at or after the boundary, without a cancel event.
+    await wait(() => data.session.pending.list(sessionID).length === 1)
     expect(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["msg_001"])
     expect(data.session.input.list(sessionID)).toEqual(["msg_001"])
     expect(data.session.input.has(sessionID, "msg_002")).toBe(false)

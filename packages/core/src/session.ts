@@ -4,7 +4,7 @@ export * from "./session/schema.js"
 import { Effect, Layer, Schema, Context, Stream } from "effect"
 import { LLMClient } from "@opencode-ai/ai"
 import { ListAnchor } from "@opencode-ai/schema/session"
-import { and, desc, eq } from "drizzle-orm"
+import { and, eq, lte } from "drizzle-orm"
 import { Project } from "./project.js"
 import { Model } from "@opencode-ai/schema/model"
 import { Location } from "./location.js"
@@ -14,7 +14,7 @@ import { Bus } from "./bus.js"
 import { Instance } from "./instance/service.js"
 import { Database } from "./database/database.js"
 import { SessionProjector } from "./session/projector.js"
-import { SessionMessageTable } from "./session/sql.js"
+import { SessionMessageTable, unsettled } from "./session/sql.js"
 import { SessionSchema } from "./session/schema.js"
 import { RelativePath } from "./schema.js"
 import { Agent } from "@opencode-ai/schema/agent"
@@ -63,6 +63,7 @@ import { Job } from "./job.js"
 import type { Command } from "./command.js"
 import { SessionEnvironment } from "./session/environment.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
+import { Timeline } from "./session/timeline.js"
 
 // get project -> project.locations
 //
@@ -292,25 +293,20 @@ const layer = Layer.effect(
       }),
       fork: Effect.fn("Session.fork")(function* (input) {
         const parent = yield* result.get(input.sessionID)
-        const boundary = yield* db
-          .select({ id: SessionMessageTable.id })
-          .from(SessionMessageTable)
-          .where(
-            and(
-              eq(SessionMessageTable.session_id, input.sessionID),
-              input.boundary.type === "before" ? eq(SessionMessageTable.id, input.boundary.messageID) : undefined,
-            ),
-          )
-          .orderBy(desc(SessionMessageTable.seq))
-          .limit(1)
-          .get()
-          .pipe(Effect.orDie)
+        const ranges = yield* Timeline.forSession(db, input.sessionID)
+        const [boundary] = yield* Timeline.rows(db, ranges, {
+          where: input.boundary.type === "before" ? eq(SessionMessageTable.id, input.boundary.messageID) : undefined,
+          limit: 1,
+        })
         if (!boundary && input.boundary.type === "before")
           return yield* new MessageNotFoundError({
             sessionID: input.sessionID,
             messageID: input.boundary.messageID,
           })
         if (!boundary) return yield* new ForkEmptyError({ sessionID: input.sessionID })
+        const excluded = yield* Timeline.rows(db, ranges, {
+          where: and(lte(SessionMessageTable.seq, boundary.seq), unsettled(SessionMessageTable)),
+        })
         const sessionID = SessionSchema.ID.create()
         const inherited = yield* db
           .transaction(() =>
@@ -327,6 +323,7 @@ const layer = Layer.effect(
           sessionID,
           parentID: parent.id,
           boundary: { ...input.boundary, messageID: boundary.id },
+          ...(excluded.length ? { excluded: excluded.map((row) => row.id) } : {}),
           ...inherited,
         })
         return yield* result.get(sessionID).pipe(Effect.orDie)

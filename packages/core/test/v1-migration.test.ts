@@ -8,13 +8,11 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Project } from "@opencode-ai/core/project"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/util/global"
 import { Effect, Fiber, Layer, Logger, Schedule, Schema, Scope } from "effect"
-import { eq, sql } from "drizzle-orm"
+import { sql } from "drizzle-orm"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
-import { tmpdir } from "./fixture/tmpdir"
+import { Timeline } from "@opencode-ai/core/session/timeline"
 import path from "path"
 
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
@@ -32,6 +30,7 @@ const session = (
   overrides: Partial<V1Migration.TransformInput["session"]> = {},
 ): V1Migration.TransformInput["session"] => ({
   id: SessionSchema.ID.make("ses_test"),
+  timeline_id: Timeline.root(SessionSchema.ID.make("ses_test")),
   project_id: Project.ID.global,
   workspace_id: null,
   parent_id: null,
@@ -831,179 +830,6 @@ describe("V1Migration database workflow", () => {
     )
   })
 
-  test("imports previous V2 sessions and messages containing apostrophes", async () => {
-    await using tmp = await tmpdir()
-    const filename = path.join(tmp.path, "opencode-next.db")
-    const sqlite = await import("bun:sqlite")
-    const source = new sqlite.Database(filename)
-    source.run(`
-      CREATE TABLE project (
-        id text PRIMARY KEY, worktree text NOT NULL, vcs text, name text, icon_url text, icon_url_override text,
-        icon_color text, time_created integer NOT NULL, time_updated integer NOT NULL, time_initialized integer,
-        sandboxes text NOT NULL, commands text
-      );
-      CREATE TABLE session (
-        id text PRIMARY KEY, project_id text NOT NULL, workspace_id text, parent_id text, fork_session_id text,
-        fork_boundary text, slug text NOT NULL, directory text NOT NULL, path text, title text, version text NOT NULL,
-        share_url text, summary_additions integer, summary_deletions integer, summary_files integer, summary_diffs text,
-        metadata text, cost real DEFAULT 0 NOT NULL, tokens_input integer DEFAULT 0 NOT NULL,
-        tokens_output integer DEFAULT 0 NOT NULL, tokens_reasoning integer DEFAULT 0 NOT NULL,
-        tokens_cache_read integer DEFAULT 0 NOT NULL, tokens_cache_write integer DEFAULT 0 NOT NULL, revert text,
-        permission text, agent text, model text, time_created integer NOT NULL, time_updated integer NOT NULL,
-        time_compacting integer, time_archived integer, time_suspended integer
-      );
-      CREATE TABLE session_message (
-        id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, seq integer NOT NULL,
-        time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL
-      );
-      INSERT INTO project VALUES (
-        'next-project', 'C:/Users/sewer', 'git', 'Source project', NULL, NULL, NULL, 1, 2, NULL, '[]', NULL
-      );
-      INSERT INTO session (
-        id, project_id, slug, directory, title, version, agent, model, time_created, time_updated
-      ) VALUES
-        ('ses_next', 'next-project', 'next', 'C:/Users/sewer', 'Imported', '2', 'build',
-          '{"id":"model","providerID":"provider"}', 10, 20),
-        ('ses_existing', 'next-project', 'source-existing', '/tmp/next', 'Source existing', '2', NULL, NULL, 11, 21),
-        ('ses_orphan', 'missing-project', 'orphan', '/tmp/orphan', 'Orphan', '2', NULL, NULL, 12, 22);
-      INSERT INTO session_message VALUES
-        ('msg_next', 'ses_next', 'user', 4, 12, 13, '{"text":"from next''s history","time":{"created":12}}'),
-        ('msg_source_existing', 'ses_existing', 'user', 2, 12, 13, '{"text":"source","time":{"created":12}}'),
-        ('msg_orphan', 'ses_orphan', 'user', 0, 12, 13, '{"text":"orphan","time":{"created":12}}');
-    `)
-    source.close()
-
-    await database(
-      Effect.gen(function* () {
-        const { db } = yield* Database.Service
-        yield* db.run(sql`
-          INSERT INTO project (id, worktree, name, time_created, time_updated, sandboxes)
-          VALUES ('next-project', '/tmp/current', 'Current project', 1, 2, '[]')
-        `)
-        yield* db.run(sql`
-          INSERT INTO session_v2 (id, project_id, slug, directory, title, version, time_created, time_updated)
-          VALUES ('ses_existing', 'next-project', 'current-existing', '/tmp/current', 'Current existing', '2', 1, 2)
-        `)
-        yield* db.run(sql`
-          INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
-          VALUES ('msg_current_existing', 'ses_existing', 'user', 0, 1, 2, '{"text":"current","time":{"created":1}}')
-        `)
-
-        expect(yield* V1Migration.status()).toEqual({
-          status: "required",
-        })
-        expect(yield* V1Migration.run({ nextDatabasePath: filename })).toEqual({ status: "completed" })
-        expect(yield* V1Migration.status()).toEqual({
-          status: "completed",
-        })
-        expect(yield* db.get(sql`SELECT title, agent, model FROM session_v2 WHERE id = 'ses_next'`)).toEqual({
-          title: "Imported",
-          agent: "build",
-          model: '{"id":"model","providerID":"provider"}',
-        })
-        expect(
-          yield* db
-            .select({ directory: SessionTable.directory })
-            .from(SessionTable)
-            .where(eq(SessionTable.id, SessionSchema.ID.make("ses_next")))
-            .get(),
-        ).toEqual({ directory: process.platform === "win32" ? "C:\\Users\\sewer" : "C:/Users/sewer" })
-        expect(yield* db.all(sql`SELECT id, seq, data FROM session_message WHERE session_id = 'ses_next'`)).toEqual([
-          {
-            id: "msg_next",
-            seq: 4,
-            data: '{"text":"from next\'s history","time":{"created":12}}',
-          },
-        ])
-        expect(yield* db.get(sql`SELECT seq, owner_id FROM event_sequence WHERE aggregate_id = 'ses_next'`)).toEqual({
-          seq: 4,
-          owner_id: null,
-        })
-        expect(yield* db.get(sql`SELECT title FROM session_v2 WHERE id = 'ses_existing'`)).toEqual({
-          title: "Current existing",
-        })
-        expect(yield* db.all(sql`SELECT id FROM session_message WHERE session_id = 'ses_existing'`)).toEqual([
-          { id: "msg_current_existing" },
-        ])
-        expect(yield* db.get(sql`SELECT project_id FROM session_v2 WHERE id = 'ses_orphan'`)).toEqual({
-          project_id: "global",
-        })
-        expect(yield* db.get(sql`SELECT name, worktree FROM project WHERE id = 'next-project'`)).toEqual({
-          name: "Current project",
-          worktree: "/tmp/current",
-        })
-        yield* db.run(sql`UPDATE project SET worktree = 'C:/Users/sewer' WHERE id = 'next-project'`)
-        expect(
-          yield* db
-            .select({ worktree: ProjectTable.worktree })
-            .from(ProjectTable)
-            .where(eq(ProjectTable.id, Project.ID.make("next-project")))
-            .get(),
-        ).toEqual({
-          worktree: AbsolutePath.make(process.platform === "win32" ? "C:\\Users\\sewer" : "C:/Users/sewer"),
-        })
-        expect(yield* db.get(sql`SELECT value FROM kv WHERE key = 'migration.v1-v2'`)).toEqual({
-          value: '{"phase":"completed"}',
-        })
-      }),
-    )
-  })
-
-  test("imports previous V2 databases missing newer nullable columns", async () => {
-    await using tmp = await tmpdir()
-    const filename = path.join(tmp.path, "opencode-next.db")
-    const sqlite = await import("bun:sqlite")
-    const source = new sqlite.Database(filename)
-    source.run(`
-      CREATE TABLE project (
-        id text PRIMARY KEY, worktree text NOT NULL, vcs text, name text, icon_url text,
-        time_created integer NOT NULL, time_updated integer NOT NULL, time_initialized integer,
-        sandboxes text NOT NULL
-      );
-      CREATE TABLE session (
-        id text PRIMARY KEY, project_id text NOT NULL, workspace_id text, parent_id text, fork_session_id text,
-        slug text NOT NULL, directory text NOT NULL, path text, title text, version text NOT NULL,
-        share_url text, summary_additions integer, summary_deletions integer, summary_files integer, summary_diffs text,
-        metadata text, cost real DEFAULT 0 NOT NULL, tokens_input integer DEFAULT 0 NOT NULL,
-        tokens_output integer DEFAULT 0 NOT NULL, tokens_reasoning integer DEFAULT 0 NOT NULL,
-        tokens_cache_read integer DEFAULT 0 NOT NULL, tokens_cache_write integer DEFAULT 0 NOT NULL, revert text,
-        permission text, agent text, model text, time_created integer NOT NULL, time_updated integer NOT NULL,
-        time_compacting integer, time_archived integer
-      );
-      CREATE TABLE session_message (
-        id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, seq integer NOT NULL,
-        time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL
-      );
-      INSERT INTO project VALUES (
-        'next-project', '/tmp/next', 'git', 'Source project', 'https://example.com/icon.png', 1, 2, NULL, '[]'
-      );
-      INSERT INTO session (
-        id, project_id, slug, directory, title, version, time_created, time_updated
-      ) VALUES ('ses_next', 'next-project', 'next', '/tmp/next', 'Imported', '2', 10, 20);
-    `)
-    source.close()
-
-    await database(
-      Effect.gen(function* () {
-        const database = yield* Database.Service
-        expect(yield* V1Migration.run({ nextDatabasePath: filename })).toEqual({ status: "completed" })
-        expect(
-          yield* database.db.get(sql`SELECT fork_boundary, time_suspended FROM session_v2 WHERE id = 'ses_next'`),
-        ).toEqual({ fork_boundary: null, time_suspended: null })
-        expect(
-          yield* database.db.get(
-            sql`SELECT icon_url, icon_url_override, icon_color, commands FROM project WHERE id = 'next-project'`,
-          ),
-        ).toEqual({
-          icon_url: "https://example.com/icon.png",
-          icon_url_override: "https://example.com/icon.png",
-          icon_color: null,
-          commands: null,
-        })
-      }),
-    )
-  })
-
   test("derives required status from the durable cursor", async () => {
     await database(
       Effect.gen(function* () {
@@ -1071,8 +897,9 @@ describe("V1Migration database workflow", () => {
         yield* db.run(
           sql`INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES ('prt_1', ${source.id}, 'ses_test', 1, 2, ${sourcePart.data})`,
         )
+        const timelineID = yield* Timeline.create(db, Timeline.root(SessionSchema.ID.make("ses_test")))
         yield* db.run(
-          sql`INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES ('msg_stale', 'ses_test', 'user', 0, 1, 1, '{"text":"stale","time":{"created":1}}')`,
+          sql`INSERT INTO session_message (id, session_id, timeline_id, type, seq, time_created, time_updated, data) VALUES ('msg_stale', 'ses_test', ${timelineID}, 'user', 0, 1, 1, '{"text":"stale","time":{"created":1}}')`,
         )
         yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('ses_test', 9)`)
         yield* db.run(
@@ -1142,8 +969,9 @@ describe("V1Migration database workflow", () => {
         yield* db.run(
           sql`CREATE TRIGGER fail_b BEFORE UPDATE ON session_v2 WHEN NEW.id = 'ses_b' BEGIN SELECT RAISE(ABORT, 'stop'); END`,
         )
+        const timelineID = yield* Timeline.create(db, Timeline.root(SessionSchema.ID.make("ses_b")))
         yield* db.run(
-          sql`INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES ('msg_stale_b', 'ses_b', 'user', 0, 7, 8, '{"text":"stale","time":{"created":7}}')`,
+          sql`INSERT INTO session_message (id, session_id, timeline_id, type, seq, time_created, time_updated, data) VALUES ('msg_stale_b', 'ses_b', ${timelineID}, 'user', 0, 7, 8, '{"text":"stale","time":{"created":7}}')`,
         )
         yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq, owner_id) VALUES ('ses_b', 7, 'owner')`)
         yield* db.run(

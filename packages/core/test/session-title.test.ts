@@ -1,3 +1,4 @@
+import { Timeline } from "@opencode-ai/core/session/timeline"
 import { beforeEach, expect } from "bun:test"
 import { AIError, LLMClient, LLMEvent, LanguageModel, TransportError, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
@@ -139,6 +140,7 @@ const insertSession = (id: Session.ID, title?: string, created?: number, model?:
     yield* db
       .insert(SessionTable)
       .values({
+        timeline_id: yield* Timeline.create(db, Timeline.root(id)),
         id,
         project_id: Project.ID.global,
         slug: id,
@@ -339,6 +341,7 @@ it.effect("generates a title for an explicitly requested child session", () =>
     yield* db
       .insert(SessionTable)
       .values({
+        timeline_id: yield* Timeline.create(db, Timeline.root(sessionID)),
         id: sessionID,
         project_id: Project.ID.global,
         parent_id: Session.ID.make("ses_title_parent"),

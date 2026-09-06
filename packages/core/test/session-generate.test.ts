@@ -1,3 +1,4 @@
+import { Timeline } from "@opencode-ai/core/session/timeline"
 import { expect } from "bun:test"
 import { LLMClient, LLMEvent, LLMResponse, LanguageModel, ToolDefinition, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
@@ -209,6 +210,7 @@ const setup = Effect.gen(function* () {
   yield* db
     .insert(SessionTable)
     .values({
+      timeline_id: yield* Timeline.create(db, Timeline.root(sessionID)),
       id: sessionID,
       project_id: (yield* projects.resolve(AbsolutePath.make("/project"))).id,
       slug: "generate-test",

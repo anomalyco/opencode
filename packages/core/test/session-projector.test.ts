@@ -1,3 +1,4 @@
+import { Timeline } from "@opencode-ai/core/session/timeline"
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Fiber, Option, Schema, Stream } from "effect"
 import { asc, eq, sql } from "drizzle-orm"
@@ -59,7 +60,15 @@ const assistantRow = (
   } = encodeMessage(
     SessionMessage.Assistant.make({ id, type: "assistant", agent: build, model, content: [], time, ...usage }),
   )
-  return { id, session_id: sessionID, type, seq, time_created: DateTime.toEpochMillis(time.created), data }
+  return {
+    id,
+    session_id: sessionID,
+    timeline_id: Timeline.root(sessionID),
+    type,
+    seq,
+    time_created: DateTime.toEpochMillis(time.created),
+    data,
+  }
 }
 
 const seedSession = (overrides?: Partial<typeof SessionTable.$inferInsert>) =>
@@ -72,6 +81,7 @@ const seedSession = (overrides?: Partial<typeof SessionTable.$inferInsert>) =>
     yield* db
       .insert(SessionTable)
       .values({
+        timeline_id: yield* Timeline.create(db, Timeline.root(sessionID)),
         id: sessionID,
         project_id: Project.ID.global,
         slug: "test",
@@ -190,9 +200,9 @@ describe("SessionProjector", () => {
         sessionID,
         to: boundary,
       })
-      expect(
-        (yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all()).map((row) => row.id),
-      ).toEqual([earlier])
+      expect((yield* Timeline.rows(db, yield* Timeline.forSession(db, sessionID))).map((row) => row.id)).toEqual([
+        earlier,
+      ])
       expect(yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get()).toMatchObject({
         cost: Money.USD.make(1.25),
         tokens_input: 10,
@@ -271,6 +281,7 @@ describe("SessionProjector", () => {
         .values({
           id: messageID,
           session_id: sessionID,
+          timeline_id: Timeline.root(sessionID),
           type: "user",
           seq: 0,
           data: { text: "valid before corruption", time: { created: 0 } },
@@ -476,7 +487,15 @@ describe("SessionProjector", () => {
       const { id: _, type, ...data } = encodeMessage({ id, type: "synthetic", text: "existing", time: { created } })
       yield* db
         .insert(SessionMessageTable)
-        .values({ id, session_id: sessionID, type, seq: 0, time_created: 0, data })
+        .values({
+          id,
+          session_id: sessionID,
+          timeline_id: Timeline.root(sessionID),
+          type,
+          seq: 0,
+          time_created: 0,
+          data,
+        })
         .run()
 
       const exit = yield* bus

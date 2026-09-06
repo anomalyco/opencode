@@ -1,3 +1,4 @@
+import { Timeline } from "@opencode-ai/core/session/timeline"
 import { describe, expect } from "bun:test"
 import { asc, eq } from "drizzle-orm"
 import { Effect, Schema } from "effect"
@@ -43,6 +44,7 @@ describe("Session tool progress", () => {
       yield* db
         .insert(SessionTable)
         .values({
+          timeline_id: yield* Timeline.create(db, Timeline.root(sessionID)),
           id: sessionID,
           project_id: Project.ID.global,
           slug: "progress",

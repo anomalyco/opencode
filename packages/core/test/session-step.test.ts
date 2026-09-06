@@ -1,3 +1,4 @@
+import { Timeline } from "@opencode-ai/core/session/timeline"
 import { expect } from "bun:test"
 import { LanguageModel, LLM, LLMEvent } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols/openai-chat"
@@ -66,7 +67,14 @@ for (const fixture of [
         .run()
       yield* db
         .insert(SessionTable)
-        .values({ id: sessionID, project_id: Project.ID.global, slug: "step", directory: "/project", version: "test" })
+        .values({
+          timeline_id: yield* Timeline.create(db, Timeline.root(sessionID)),
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "step",
+          directory: "/project",
+          version: "test",
+        })
         .run()
       const model = SessionRunnerModel.resolved(
         LanguageModel.make({ id: "test-model", provider: "test", route: OpenAIChat.route }),

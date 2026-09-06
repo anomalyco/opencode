@@ -10,10 +10,9 @@ import { KVTable } from "../kv/sql.js"
 import { EventSequenceTable } from "../event/sql.js"
 import { eq, sql } from "drizzle-orm"
 import { Global } from "@opencode-ai/util/global"
-import { existsSync } from "node:fs"
 import path from "node:path"
-import type { Database as SQLiteDatabase } from "bun:sqlite"
 import { Project } from "@opencode-ai/schema/project"
+import { Timeline } from "../session/timeline.js"
 
 export type SourceMessage = {
   readonly id: string
@@ -88,128 +87,12 @@ type RunResult = {
   readonly status: "completed"
 }
 
-type Options = {
-  readonly nextDatabasePath?: string
-}
-
 type MigrationState = { readonly phase: "sessions"; readonly cursor?: string } | { readonly phase: "completed" }
 
 type RuntimeState =
   | { readonly status: "idle" }
   | { readonly status: "running"; readonly progress: Progress }
   | { readonly status: "error"; readonly error: string }
-
-type NextProject = {
-  readonly id: string
-  readonly worktree: string
-  readonly vcs: string | null
-  readonly name: string | null
-  readonly icon_url: string | null
-  readonly icon_url_override: string | null
-  readonly icon_color: string | null
-  readonly time_created: number
-  readonly time_updated: number
-  readonly time_initialized: number | null
-  readonly sandboxes: string
-  readonly commands: string | null
-}
-
-type NextColumns<A> = Record<keyof A, "required" | "nullable" | { readonly fallback: keyof A & string }>
-
-const NEXT_PROJECT_COLUMNS = {
-  id: "required",
-  worktree: "required",
-  vcs: "nullable",
-  name: "nullable",
-  icon_url: "nullable",
-  icon_url_override: { fallback: "icon_url" },
-  icon_color: "nullable",
-  time_created: "required",
-  time_updated: "required",
-  time_initialized: "nullable",
-  sandboxes: "required",
-  commands: "nullable",
-} satisfies NextColumns<NextProject>
-
-type NextSession = {
-  readonly id: string
-  readonly project_id: string
-  readonly workspace_id: string | null
-  readonly parent_id: string | null
-  readonly fork_session_id: string | null
-  readonly fork_boundary: string | null
-  readonly slug: string
-  readonly directory: string
-  readonly path: string | null
-  readonly title: string | null
-  readonly version: string
-  readonly share_url: string | null
-  readonly summary_additions: number | null
-  readonly summary_deletions: number | null
-  readonly summary_files: number | null
-  readonly summary_diffs: string | null
-  readonly metadata: string | null
-  readonly cost: number
-  readonly tokens_input: number
-  readonly tokens_output: number
-  readonly tokens_reasoning: number
-  readonly tokens_cache_read: number
-  readonly tokens_cache_write: number
-  readonly revert: string | null
-  readonly permission: string | null
-  readonly agent: string | null
-  readonly model: string | null
-  readonly time_created: number
-  readonly time_updated: number
-  readonly time_compacting: number | null
-  readonly time_archived: number | null
-  readonly time_suspended: number | null
-}
-
-const NEXT_SESSION_COLUMNS = {
-  id: "required",
-  project_id: "required",
-  workspace_id: "nullable",
-  parent_id: "nullable",
-  fork_session_id: "nullable",
-  fork_boundary: "nullable",
-  slug: "required",
-  directory: "required",
-  path: "nullable",
-  title: "nullable",
-  version: "required",
-  share_url: "nullable",
-  summary_additions: "nullable",
-  summary_deletions: "nullable",
-  summary_files: "nullable",
-  summary_diffs: "nullable",
-  metadata: "nullable",
-  cost: "required",
-  tokens_input: "required",
-  tokens_output: "required",
-  tokens_reasoning: "required",
-  tokens_cache_read: "required",
-  tokens_cache_write: "required",
-  revert: "nullable",
-  permission: "nullable",
-  agent: "nullable",
-  model: "nullable",
-  time_created: "required",
-  time_updated: "required",
-  time_compacting: "nullable",
-  time_archived: "nullable",
-  time_suspended: "nullable",
-} satisfies NextColumns<NextSession>
-
-type NextMessage = {
-  readonly id: string
-  readonly session_id: string
-  readonly type: string
-  readonly seq: number
-  readonly time_created: number
-  readonly time_updated: number
-  readonly data: string
-}
 
 const lock = Semaphore.makeUnsafe(1)
 const MIGRATION_STATE_KEY = "migration.v1-v2"
@@ -513,7 +396,7 @@ function updateProgress(progress: Progress) {
   if (runtimeState.status === "running") runtimeState = { status: "running", progress }
 }
 
-export function run(options: Options = {}): Effect.Effect<RunResult, never, Database.Service | Global.Service> {
+export function run(): Effect.Effect<RunResult, never, Database.Service | Global.Service> {
   return lock.withPermit(
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
@@ -546,7 +429,6 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
             }),
           )
           .pipe(Effect.orDie)
-      const sourceTotal = yield* countNextSessions(nextPath(options, global.data))
       const legacyTotal = (yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM session`))?.value ?? 0
       const cursor = state?.phase === "sessions" ? state.cursor : undefined
       const migrated =
@@ -554,12 +436,7 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
           ? ((yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM session WHERE id >= ${cursor}`))
               ?.value ?? 0)
           : 0
-      const denominator = sourceTotal + legacyTotal
-      updateProgress({ label: "Migrating sessions", numerator: migrated, denominator })
-      yield* importNextDatabase(db, nextPath(options, global.data), (completed) => {
-        updateProgress({ label: "Migrating sessions", numerator: migrated + completed, denominator })
-      })
-      updateProgress({ label: "Migrating sessions", numerator: migrated + sourceTotal, denominator })
+      updateProgress({ label: "Migrating sessions", numerator: migrated, denominator: legacyTotal })
       const projects = new Set(
         (yield* db.all<{ id: string }>(sql`SELECT id FROM project`)).map((project) => project.id),
       )
@@ -589,15 +466,16 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
                   sessionID: nextID.id,
                   projectID: nextID.project_id,
                 })
+              const timelineID = yield* Timeline.create(tx, Timeline.root(SessionSchema.ID.make(nextID.id)))
               yield* tx.run(sql`
                   INSERT OR IGNORE INTO session_v2 (
-                    id, project_id, workspace_id, parent_id, slug, directory, path, title, version, share_url,
+                    id, timeline_id, project_id, workspace_id, parent_id, slug, directory, path, title, version, share_url,
                     summary_additions, summary_deletions, summary_files, summary_diffs, metadata, cost,
                     tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write,
                     revert, permission, agent, model, time_created, time_updated, time_compacting, time_archived
                   )
                   SELECT
-                    id, ${projectID}, workspace_id, parent_id, slug, directory, path, title, version, share_url,
+                    id, ${timelineID}, ${projectID}, workspace_id, parent_id, slug, directory, path, title, version, share_url,
                     summary_additions, summary_deletions, summary_files, summary_diffs, metadata, cost,
                     tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write,
                     revert, permission, agent, model, time_created, time_updated, time_compacting, time_archived
@@ -627,6 +505,7 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
                   .values({
                     id: SessionMessage.ID.make(message.id),
                     session_id: SessionSchema.ID.make(message.session_id),
+                    timeline_id: next.timeline_id,
                     type: message.type,
                     seq: message.seq,
                     time_created: message.time_created,
@@ -657,7 +536,7 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
             progress: {
               label: "Migrating sessions",
               numerator: (runtimeState.progress.numerator ?? 0) + 1,
-              denominator,
+              denominator: legacyTotal,
             },
           }
         yield* Effect.yieldNow
@@ -679,182 +558,6 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
       return { status: "completed" as const }
     }).pipe(Effect.orDie),
   )
-}
-
-function nextPath(options: Options, data: string) {
-  if (options.nextDatabasePath) return options.nextDatabasePath
-  if (process.env.OPENCODE_DB === ":memory:") return undefined
-  return path.join(data, "opencode-next.db")
-}
-
-function openNextDatabase(sourcePath: string) {
-  return Effect.acquireRelease(
-    Effect.gen(function* () {
-      const sqlite = yield* Effect.promise(() => import("bun:sqlite"))
-      return new sqlite.Database(sourcePath, { readonly: true, strict: true })
-    }),
-    (source) => Effect.sync(() => source.close()),
-  )
-}
-
-function countNextSessions(sourcePath: string | undefined) {
-  if (!sourcePath || !existsSync(sourcePath)) return Effect.succeed(0)
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const source = yield* openNextDatabase(sourcePath)
-      if (!isNextDatabase(source)) return 0
-      return source.query<{ value: number }, []>("SELECT COUNT(*) AS value FROM session").get()?.value ?? 0
-    }),
-  )
-}
-
-function importNextDatabase(
-  db: Database.Interface["db"],
-  sourcePath: string | undefined,
-  onProgress: (completed: number) => void,
-): Effect.Effect<void, unknown> {
-  if (!sourcePath || !existsSync(sourcePath)) return Effect.void
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const source = yield* openNextDatabase(sourcePath)
-      if (!isNextDatabase(source)) {
-        yield* Effect.logWarning("Skipped incompatible opencode-next.db", { path: sourcePath })
-        return
-      }
-      source.run("BEGIN")
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          if (source.inTransaction) source.run("ROLLBACK")
-        }),
-      )
-      const projects = new Map(
-        selectNextRows<NextProject>(source, "project", NEXT_PROJECT_COLUMNS).map((project) => [project.id, project]),
-      )
-      const sessions = selectNextRows<NextSession>(source, "session", NEXT_SESSION_COLUMNS)
-      for (const [index, session] of sessions.entries()) {
-        const project = projects.get(session.project_id)
-        const projectID = project ? session.project_id : Project.ID.global
-        if (!project) {
-          yield* Effect.logWarning("Reassigned previous V2 session with missing project", {
-            sessionID: session.id,
-            projectID: session.project_id,
-          })
-        }
-        const messages = source
-          .query<
-            NextMessage,
-            [string]
-          >("SELECT id, session_id, type, seq, time_created, time_updated, data FROM session_message WHERE session_id = ? ORDER BY seq")
-          .all(session.id)
-        yield* db
-          .transaction((tx) =>
-            Effect.gen(function* () {
-              if (project)
-                yield* tx.run(sql`
-                  INSERT OR IGNORE INTO project (
-                    id, worktree, vcs, name, icon_url, icon_url_override, icon_color,
-                    time_created, time_updated, time_initialized, sandboxes, commands
-                  ) VALUES (
-                    ${project.id}, ${project.worktree}, ${project.vcs}, ${project.name}, ${project.icon_url},
-                    ${project.icon_url_override}, ${project.icon_color}, ${project.time_created}, ${project.time_updated},
-                    ${project.time_initialized}, ${project.sandboxes}, ${project.commands}
-                  )
-                `)
-              const existing = yield* tx
-                .select({ id: SessionTable.id })
-                .from(SessionTable)
-                .where(eq(SessionTable.id, SessionSchema.ID.make(session.id)))
-                .get()
-              if (existing) return
-              yield* tx.run(sql`
-                INSERT INTO session_v2 (
-                  id, project_id, workspace_id, parent_id, fork_session_id, fork_boundary, slug, directory,
-                  path, title, version, share_url, summary_additions, summary_deletions, summary_files,
-                  summary_diffs, metadata, cost, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read,
-                  tokens_cache_write, revert, permission, agent, model, time_created, time_updated, time_compacting,
-                  time_archived, time_suspended
-                ) VALUES (
-                  ${session.id}, ${projectID}, ${session.workspace_id}, ${session.parent_id},
-                  ${session.fork_session_id}, ${session.fork_boundary}, ${session.slug}, ${session.directory},
-                  ${session.path}, ${session.title}, ${session.version}, ${session.share_url},
-                  ${session.summary_additions}, ${session.summary_deletions}, ${session.summary_files},
-                  ${session.summary_diffs}, ${session.metadata}, ${session.cost}, ${session.tokens_input},
-                  ${session.tokens_output}, ${session.tokens_reasoning}, ${session.tokens_cache_read},
-                  ${session.tokens_cache_write}, ${session.revert}, ${session.permission}, ${session.agent},
-                  ${session.model}, ${session.time_created}, ${session.time_updated}, ${session.time_compacting},
-                  ${session.time_archived}, ${session.time_suspended}
-                )
-              `)
-              yield* Effect.forEach(messages, (message) =>
-                tx
-                  .insert(SessionMessageTable)
-                  .values({
-                    id: SessionMessage.ID.make(message.id),
-                    session_id: SessionSchema.ID.make(message.session_id),
-                    type: message.type as SessionMessage.Type,
-                    seq: message.seq,
-                    time_created: message.time_created,
-                    time_updated: message.time_updated,
-                    data: sql`${message.data}`,
-                  })
-                  .run(),
-              )
-              yield* tx
-                .insert(EventSequenceTable)
-                .values({ aggregate_id: session.id, seq: messages.at(-1)?.seq ?? -1 })
-                .onConflictDoUpdate({
-                  target: EventSequenceTable.aggregate_id,
-                  set: { seq: messages.at(-1)?.seq ?? -1, owner_id: null },
-                })
-                .run()
-            }),
-          )
-          .pipe(Effect.orDie)
-        onProgress(index + 1)
-        yield* Effect.yieldNow
-      }
-      source.run("COMMIT")
-    }),
-  )
-}
-
-function isNextDatabase(source: SQLiteDatabase) {
-  const tables = new Set(
-    source
-      .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type = 'table'")
-      .all()
-      .map((table) => table.name),
-  )
-  return tables.has("project") && tables.has("session") && tables.has("session_message")
-}
-
-function selectNextRows<A>(source: SQLiteDatabase, table: "project" | "session", definition: NextColumns<A>) {
-  const columns = new Set(
-    source
-      .query<{ name: string }, [string]>("SELECT name FROM pragma_table_info(?)")
-      .all(table)
-      .map((column) => column.name),
-  )
-  const missing = Object.entries(definition)
-    .filter(([column, strategy]) => strategy === "required" && !columns.has(column))
-    .map(([column]) => column)
-  if (missing.length)
-    throw new Error(`Incompatible opencode-next.db: ${table} is missing required columns: ${missing.join(", ")}`)
-  const projection = Object.entries(definition).map(([column, strategy]) => {
-    if (columns.has(column)) return `"${column}"`
-    if (
-      typeof strategy === "object" &&
-      strategy !== null &&
-      "fallback" in strategy &&
-      typeof strategy.fallback === "string" &&
-      columns.has(strategy.fallback)
-    )
-      return `"${strategy.fallback}" AS "${column}"`
-    return `NULL AS "${column}"`
-  })
-  return source
-    .query<A, []>(`SELECT ${projection.join(", ")} FROM "${table}"${table === "session" ? ' ORDER BY "id" DESC' : ""}`)
-    .all()
 }
 
 function row(

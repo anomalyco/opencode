@@ -1,3 +1,4 @@
+import { Timeline } from "@opencode-ai/core/session/timeline"
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Exit, Fiber, Stream } from "effect"
 import { eq } from "drizzle-orm"
@@ -37,6 +38,7 @@ const seed = Effect.fn(function* (ref: Location.Ref = a) {
   yield* database.db
     .insert(SessionTable)
     .values({
+      timeline_id: yield* Timeline.create(database.db, Timeline.root(id)),
       id,
       project_id: Project.ID.global,
       directory: ref.directory,

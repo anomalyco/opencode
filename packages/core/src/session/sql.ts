@@ -1,5 +1,14 @@
-import { sqliteTable, text, integer, index, primaryKey, real, uniqueIndex } from "drizzle-orm/sqlite-core"
-import { sql } from "drizzle-orm"
+import {
+  sqliteTable,
+  text,
+  integer,
+  index,
+  primaryKey,
+  real,
+  uniqueIndex,
+  type AnySQLiteColumn,
+} from "drizzle-orm/sqlite-core"
+import { sql, type SQLWrapper } from "drizzle-orm"
 import { directoryColumn, pathColumn } from "../database/path.js"
 import { ProjectTable } from "../project/sql.js"
 import type { SessionMessage } from "./message.js"
@@ -15,14 +24,27 @@ import type { Session } from "@opencode-ai/schema/session"
 import type { CompactionPayload, MovePayload, SyntheticPayload, UserPayload } from "@opencode-ai/schema/session-inbox"
 import type { RevertV1 } from "@opencode-ai/schema/session-revert"
 import type { Schema } from "effect"
+import type { Timeline } from "./timeline.js"
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
 type SessionMessageData = DistributiveOmit<(typeof SessionMessage.Info)["Encoded"], "type" | "id">
+
+export const TimelineTable = sqliteTable("timeline", {
+  id: text().$type<Timeline.ID>().primaryKey(),
+  base_id: text()
+    .$type<Timeline.ID>()
+    .references((): AnySQLiteColumn => TimelineTable.id),
+  base_seq: integer(),
+})
 
 export const SessionTable = sqliteTable(
   "session_v2",
   {
     id: text().$type<SessionSchema.ID>().primaryKey(),
+    timeline_id: text()
+      .$type<Timeline.ID>()
+      .notNull()
+      .references(() => TimelineTable.id),
     project_id: text()
       .$type<Project.ID>()
       .notNull()
@@ -80,10 +102,12 @@ export const SessionMessageTable = sqliteTable(
   "session_message",
   {
     id: text().$type<SessionMessage.ID>().primaryKey(),
-    session_id: text()
-      .$type<SessionSchema.ID>()
+    // Provenance survives deletion of the originating session while forks still reference its history.
+    session_id: text().$type<SessionSchema.ID>().notNull(),
+    timeline_id: text()
+      .$type<Timeline.ID>()
       .notNull()
-      .references(() => SessionTable.id, { onDelete: "cascade" }),
+      .references(() => TimelineTable.id, { onDelete: "cascade" }),
     type: text().$type<SessionMessage.Type>().notNull(),
     seq: integer().notNull(),
     ...Timestamps,
@@ -91,11 +115,19 @@ export const SessionMessageTable = sqliteTable(
   },
   (table) => [
     uniqueIndex("session_message_session_seq_idx").on(table.session_id, table.seq),
+    uniqueIndex("session_message_timeline_seq_idx").on(table.timeline_id, table.seq),
+    index("session_message_timeline_type_seq_idx").on(table.timeline_id, table.type, table.seq),
+    index("session_message_unsettled_idx").on(table.timeline_id, table.seq).where(unsettled(table)),
     index("session_message_session_type_seq_idx").on(table.session_id, table.type, table.seq),
     index("session_message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id),
     index("session_message_time_created_idx").on(table.time_created),
   ],
 )
+
+export function unsettled(table: { type: SQLWrapper; data: SQLWrapper }) {
+  return sql`((${table.type} = 'assistant' AND json_extract(${table.data}, '$.time.completed') IS NULL)
+    OR (${table.type} IN ('shell', 'compaction') AND json_extract(${table.data}, '$.status') = 'running'))`
+}
 
 export const SessionPendingTable = sqliteTable(
   "session_pending",

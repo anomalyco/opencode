@@ -500,7 +500,7 @@ describe("Session.create", () => {
     }),
   )
 
-  it.effect("forks a session by replaying a durable fork event into copied projected rows", () =>
+  it.effect("forks a session through shared projected history", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
       const bus = yield* Bus.Service
@@ -523,7 +523,7 @@ describe("Session.create", () => {
       expect(forked).toMatchObject({ title: "Parent (fork #1)", fork: { sessionID: parent.id } })
       expect(forked.parentID).toBeUndefined()
       expect(forkContext).toMatchObject([Expected.user("First"), { type: "synthetic", text: "parent note" }])
-      expect(forkContext.map((message) => message.id)).not.toEqual(parentContext.map((message) => message.id))
+      expect(forkContext.map((message) => message.id)).toEqual(parentContext.map((message) => message.id))
       expect(history).toHaveLength(1)
       expect(history[0]).toMatchObject({
         type: "session.forked",
@@ -533,8 +533,10 @@ describe("Session.create", () => {
       expect(yield* SessionInbox.find(db, forkContext[0].id)).toBeUndefined()
       expect(yield* SessionInbox.find(db, forkContext[1].id)).toBeUndefined()
       expect(
-        yield* session.prompt({ id: forkContext[0].id, sessionID: forked.id, text: "First", resume: false }),
-      ).toMatchObject({ id: forkContext[0].id, type: "user", payload: { text: "First" } })
+        yield* Effect.flip(
+          session.prompt({ id: forkContext[0].id, sessionID: forked.id, text: "First", resume: false }),
+        ),
+      ).toMatchObject({ _tag: "Session.PromptConflictError", messageID: forkContext[0].id })
 
       yield* session.prompt({
         sessionID: parent.id,
@@ -819,7 +821,7 @@ describe("Session.create", () => {
         boundary: { type: "before", messageID: second.id },
       })
       expect(context).toMatchObject([{ text: "First" }])
-      expect(context[0]?.id).not.toBe(first.id)
+      expect(context[0]?.id).toBe(first.id)
       expect(history[0]).toMatchObject({
         data: { boundary: { type: "before", messageID: second.id } },
       })
