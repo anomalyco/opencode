@@ -28,7 +28,7 @@ const locations = Layer.effect(
   LocationServiceMap.Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    return yield* LayerMap.make(
+    const map = yield* LayerMap.make(
       (ref: Location.Ref) =>
         // The fixture only exercises these three Location services.
         // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
@@ -68,6 +68,13 @@ const locations = Layer.effect(
         ) as unknown as Layer.Layer<LocationServices>,
       { idleTimeToLive: Duration.infinity },
     )
+    return {
+      ...map,
+      get: (ref: Location.Ref) => map.get(LocationServiceMap.canonical(ref)),
+      contextEffect: (ref: Location.Ref) => map.contextEffect(LocationServiceMap.canonical(ref)),
+      contextEffectOption: (ref: Location.Ref) => map.contextEffectOption(LocationServiceMap.canonical(ref)),
+      invalidate: (ref: Location.Ref) => map.invalidate(LocationServiceMap.canonical(ref)),
+    }
   }),
 )
 
@@ -94,13 +101,15 @@ const it = testEffect(
 )
 
 describe("LocationActivity eviction", () => {
-  for (const [count, newWork] of [
-    [1, false],
-    [2, false],
-    [1, true],
+  for (const [count, admission] of [
+    [1, "none"],
+    [2, "none"],
+    [1, "other"],
+    [1, "same"],
   ] as const) {
+    const newWork = admission !== "none"
     it.effect(
-      `interrupts ${count} waiting executions before eviction${newWork ? "; preserves new work during cleanup" : ""}`,
+      `interrupts ${count} waiting executions before eviction (${admission} session admitted during cleanup)`,
       () =>
         Effect.gen(function* () {
           const db = (yield* Database.Service).db
@@ -111,7 +120,7 @@ describe("LocationActivity eviction", () => {
           const sessionIDs = Array.from({ length: count }, (_, index) =>
             Session.ID.make(`ses_waiting_question_${index}`),
           )
-          const newcomer = Session.ID.make("ses_new_question")
+          const newcomer = admission === "same" ? sessionIDs[0] : Session.ID.make("ses_new_question")
           const ref = LocationServiceMap.canonical({ directory: AbsolutePath.make("/project") })
           const idle = Location.Ref.make({ directory: ref.directory, workspaceID: Workspace.ID.make("wrk_idle") })
           yield* db
@@ -122,7 +131,7 @@ describe("LocationActivity eviction", () => {
           yield* db
             .insert(SessionTable)
             .values(
-              [...sessionIDs, newcomer].map((sessionID) => ({
+              Array.from(new Set([...sessionIDs, newcomer]), (sessionID) => ({
                 id: sessionID,
                 project_id: Project.ID.global,
                 slug: "question",
@@ -175,9 +184,10 @@ describe("LocationActivity eviction", () => {
 
           if (newWork) {
             yield* execution.wake(newcomer)
-            yield* Deferred.await(newCreated)
+            if (admission === "other") yield* Deferred.await(newCreated)
           }
           yield* TestClock.adjust("5 minutes")
+          if (newWork) yield* Deferred.await(newCreated)
           const results = yield* Effect.forEach(running, Fiber.join)
           expect(results.every((exit) => exit._tag === "Failure")).toBe(true)
           expect(Array.from(yield* execution.active)).toEqual(newWork ? [newcomer] : [])
@@ -188,6 +198,16 @@ describe("LocationActivity eviction", () => {
           expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual(newWork ? [ref] : [])
           if (newWork) {
             expect(yield* forms.list({ sessionID: newcomer })).toEqual([pending[count]])
+            if (admission === "same") {
+              const later = LocationServiceMap.canonical({ directory: AbsolutePath.make("/later") })
+              yield* Location.Service.pipe(Effect.provide(map.get(later)), Effect.scoped)
+              yield* TestClock.adjust("30 minutes")
+              // Keep fresh work active while a different graph reaches its own deadline.
+              yield* bus.publish(SessionEvent.Execution.Started, { sessionID: newcomer }, { location: ref })
+              yield* TestClock.adjust("32 minutes")
+              expect(Array.from(yield* execution.active)).toEqual([newcomer])
+              expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([ref])
+            }
             yield* execution.interrupt(newcomer)
             yield* TestClock.adjust("5 minutes")
             yield* execution.awaitIdle(newcomer)

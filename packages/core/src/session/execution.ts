@@ -28,11 +28,16 @@ export interface Interface {
    * Interrupt active work owned by this process. Idle interruption is a no-op. Resolves once
    * the interruption is accepted; cleanup settles asynchronously in the execution fiber.
    * Returns whether an active execution was interrupted. Compose with `awaitIdle` when
-   * settlement matters.
+   * settlement matters. `awaitSettlement` waits only for the interrupted execution,
+   * rather than fresh work admitted during its cleanup.
    */
   readonly interrupt: (
     sessionID: SessionSchema.ID,
-    options?: { readonly continue?: boolean; readonly reason?: "user" | "inactivity" },
+    options?: {
+      readonly continue?: boolean
+      readonly reason?: "user" | "inactivity"
+      readonly awaitSettlement?: boolean
+    },
   ) => Effect.Effect<boolean>
   /** Resolves once this process owns no active execution for the Session. Returns immediately when idle and never starts work. */
   readonly awaitIdle: (sessionID: SessionSchema.ID) => Effect.Effect<void>
@@ -149,7 +154,7 @@ export const layer = Layer.effect(
       isActive: coordinator.isActive,
       interrupt: (sessionID, options) =>
         Effect.gen(function* () {
-          const interrupted = yield* coordinator.interrupt(sessionID, options?.reason ?? "user")
+          const interrupted = yield* coordinator.interrupt(sessionID, options?.reason ?? "user", options)
           if (!options?.continue) return interrupted
           // Resume steering input and between-turn control work from the interrupted
           // intent. Queued next-turn prompts stay parked: a steer-scoped drain never

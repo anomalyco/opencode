@@ -24,7 +24,7 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
       const sessions = yield* SessionStore.Service
       const timeToLive = Duration.toMillis(options.timeToLive ?? "60 minutes")
       const entries = new Map<string, { readonly ref: Location.Ref; expiresAt: number }>()
-      const key = (ref: Location.Ref) => `${ref.directory}\0${ref.workspaceID ?? ""}`
+      const key = (ref: Location.Ref) => `${LocationServiceMap.canonical(ref).directory}\0${ref.workspaceID ?? ""}`
       const touch = (ref: Location.Ref) =>
         Effect.sync(() => {
           entries.set(key(ref), { ref, expiresAt: clock.currentTimeMillisUnsafe() + timeToLive })
@@ -60,10 +60,14 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
               )
               // Invalidation only detaches the cache entry; borrowers retain the old
               // graph. Stop its executions and settle tool cleanup before detaching it.
-              yield* Effect.forEach(owners, (session) => execution.interrupt(session.id, { reason: "inactivity" }), {
-                discard: true,
-              })
-              yield* Effect.forEach(owners, (session) => execution.awaitIdle(session.id), { discard: true })
+              yield* Effect.forEach(
+                owners,
+                (session) => execution.interrupt(session.id, { reason: "inactivity", awaitSettlement: true }),
+                {
+                  discard: true,
+                  concurrency: "unbounded",
+                },
+              )
               const remaining = yield* Effect.forEach(yield* execution.active, (sessionID) => sessions.get(sessionID))
               // New work admitted during cleanup may now own the cached graph.
               if (remaining.some((session) => session && key(session.location) === key(entry.ref))) {
