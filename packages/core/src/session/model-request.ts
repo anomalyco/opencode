@@ -355,7 +355,7 @@ export const layer = Layer.effect(
               Effect.orDie,
             )
           : false
-      const http = hasHttpHooks
+      const hookedHttp = hasHttpHooks
         ? httpMiddleware(hooks, {
             sessionID: session.id,
             agent: input.scope.agentID,
@@ -363,11 +363,14 @@ export const layer = Layer.effect(
             kind: input.kind,
           })
         : undefined
+      const providerHttp = resolved.http
+      const http: StreamOptions["http"] =
+        hookedHttp && providerHttp
+          ? (request, handler) => hookedHttp(request, (sent) => providerHttp(sent, handler))
+          : (providerHttp ?? hookedHttp)
       const options: StreamOptions = {
         ...(http ? { http } : {}),
-        ...(input.webSocket === "session" && webSocket && !hasHttpHooks
-          ? { webSocket: transport.bind(session.id) }
-          : {}),
+        ...(input.webSocket === "session" && webSocket && !http ? { webSocket: transport.bind(session.id) } : {}),
       }
       const executeTool: Prepared["executeTool"] = (input) =>
         tools

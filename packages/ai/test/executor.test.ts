@@ -1,7 +1,14 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Ref, Stream } from "effect"
 import { Headers, HttpClientError, HttpClientRequest } from "effect/unstable/http"
-import { LLM, AIError, HttpContext, InvalidProviderOutputError, TransportError } from "../src/index.js"
+import {
+  LLM,
+  AIError,
+  AuthenticationError,
+  HttpContext,
+  InvalidProviderOutputError,
+  TransportError,
+} from "../src/index.js"
 import { LLMClient, RequestExecutor, WebSocketTransport, type WebSocketChannelExecutor } from "../src/route.js"
 import { route } from "../src/protocols/openai-chat.js"
 import { configure } from "../src/providers/openai.js"
@@ -29,6 +36,14 @@ const expectAIError = (error: unknown) => {
 const largeProviderMessage = `Upstream request failed: ${"validation failed; ".repeat(1_000)}`
 
 describe("RequestExecutor", () => {
+  it.effect("preserves authentication errors from HTTP middleware", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = new AIError({ reason: new AuthenticationError({ message: "Token request failed" }) })
+      expect(yield* executor.execute(request, () => error).pipe(Effect.flip)).toBe(error)
+    }).pipe(Effect.provide(fixedResponse("unused", {}))),
+  )
+
   it.effect("preserves externally captured HTTP errors without inventing response context", () =>
     Effect.sync(() => {
       const cause = new Error("upstream request failed")

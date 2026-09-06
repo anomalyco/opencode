@@ -4,13 +4,16 @@ import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { TestLLM } from "@opencode-ai/ai/testing"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Config } from "@opencode-ai/core/config"
 import { Generate } from "@opencode-ai/core/generate"
 import { Integration } from "@opencode-ai/core/integration"
 import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import { ID, Info, Ref } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
+import { ProviderOAuth } from "@opencode-ai/core/provider-oauth"
 import { Npm } from "@opencode-ai/util/npm"
 import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { testEffect } from "./lib/effect"
 
 const selected = Info.make({
@@ -67,7 +70,8 @@ const aisdk = Layer.mock(AISDK.Service, {
 })
 const client = TestLLM.testLayer({ fallback: TestLLM.text("OK", "generate") })
 
-const resolver = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk)))
+const oauth = ProviderOAuth.layer.pipe(Layer.provide(Layer.merge(Config.testLayer(), FetchHttpClient.layer)))
+const resolver = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk, oauth)))
 const it = testEffect(Generate.layer.pipe(Layer.provide(Layer.merge(resolver, client))))
 const resolverIt = testEffect(resolver)
 
