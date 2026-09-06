@@ -8,10 +8,12 @@ import { Workspace } from "@opencode-ai/schema/workspace"
 import { Context, Effect, Encoding, Result, Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
+  AttachmentNotFoundError,
   ConflictError,
   InvalidCursorError,
   InvalidRequestError,
   MessageNotFoundError,
+  PayloadTooLargeError,
   ServiceUnavailableError,
   SessionNotFoundError,
   UnknownError,
@@ -21,6 +23,7 @@ import { Model } from "@opencode-ai/schema/model"
 import { Location } from "@opencode-ai/schema/location"
 import { Revert } from "@opencode-ai/schema/revert"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
+import { Attachment } from "@opencode-ai/schema/attachment"
 
 const SessionsQueryFields = {
   workspace: Workspace.ID.pipe(Schema.optional),
@@ -202,6 +205,24 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         ),
     )
     .add(
+      HttpApiEndpoint.post("session.attachment", "/api/session/:sessionID/attachment", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({ file: Schema.Unknown }).pipe(
+          HttpApiSchema.asMultipartStream({ maxParts: 1, maxFileSize: Attachment.MAX_FILE_BYTES }),
+        ),
+        success: Schema.Struct({ data: Attachment.Info }),
+        error: [InvalidRequestError, PayloadTooLargeError, SessionNotFoundError, UnknownError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.attachment",
+            summary: "Upload session attachment",
+            description: "Stream one file into managed storage for a later Session prompt.",
+          }),
+        ),
+    )
+    .add(
       HttpApiEndpoint.post("session.prompt", "/api/session/:sessionID/prompt", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({
@@ -211,7 +232,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: SessionInput.Admitted }),
-        error: [ConflictError, SessionNotFoundError],
+        error: [AttachmentNotFoundError, ConflictError, SessionNotFoundError, UnknownError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
