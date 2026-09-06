@@ -73,6 +73,8 @@ export type CreateDataInput = {
 
 const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
 const messagePageLimit = 20
+// Trailing window for event bursts that each ask for the same refetch.
+export const settleMs = 150
 
 // Global MCP elicitations temporarily use "global" instead of a real session ID, so the
 // server cannot recover their Location when settling them. Preserve the event Location
@@ -141,12 +143,18 @@ function formRequestOptions(sessionID: string, ref?: LocationRef) {
 }
 
 function createSync() {
-  type Pending = { promise: Promise<void>; invalidated: boolean }
+  // `started` is false while a reload waits for the load it replaces. Invalidations that land in
+  // that window are already covered, since the reload has not read anything yet.
+  type Pending = { promise: Promise<void>; invalidated: boolean; started: boolean }
   const state = new Map<string, true | Pending>()
   const start = (key: string, load: () => Promise<void>, wait?: Promise<void>) => {
-    const entry: Pending = { promise: Promise.resolve(), invalidated: false }
+    const entry: Pending = { promise: Promise.resolve(), invalidated: false, started: !wait }
     state.set(key, entry)
-    entry.promise = (wait ? wait.catch(() => undefined).then(load) : load())
+    const run = () => {
+      entry.started = true
+      return load()
+    }
+    entry.promise = (wait ? wait.catch(() => undefined).then(run) : run())
       .then(() => {
         if (state.get(key) === entry && !entry.invalidated) state.set(key, true)
       })
@@ -178,12 +186,12 @@ function createSync() {
       if (key) {
         const active = state.get(key)
         if (active === true) state.delete(key)
-        if (active !== undefined && active !== true) active.invalidated = true
+        if (active !== undefined && active !== true && active.started) active.invalidated = true
         return
       }
       state.forEach((active, current) => {
         if (active === true) state.delete(current)
-        if (active !== true) active.invalidated = true
+        if (active !== true && active.started) active.invalidated = true
       })
     },
   }
@@ -201,6 +209,20 @@ export function createData(config: CreateDataInput) {
       if (config.onError) return config.onError(error)
       console.error("Failed to refresh client data", error)
     })
+  }
+
+  // Runs `load` once a burst of same-key events goes quiet, so N events cost one refetch.
+  const settling = new Map<string, ReturnType<typeof setTimeout>>()
+  onCleanup(() => settling.forEach((timer) => clearTimeout(timer)))
+  function settle(key: string, load: () => Promise<unknown>) {
+    clearTimeout(settling.get(key))
+    settling.set(
+      key,
+      setTimeout(() => {
+        settling.delete(key)
+        refresh(load)
+      }, settleMs),
+    )
   }
 
   const [store, setStore] = createStore<Store>({
@@ -1226,10 +1248,11 @@ export function createData(config: CreateDataInput) {
         refresh(() => result.location.websearch.refresh(location))
         break
       // Authenticating an MCP integration reconnects its server, which emits mcp.status.changed,
-      // so the mcp list syncs here rather than off integration.updated.
+      // so the mcp list syncs here rather than off integration.updated. The server emits one event
+      // per MCP server as each settles, so a location booting nine servers emitted nine refetches.
       case "mcp.status.changed":
         result.location.mcp.server.invalidate(location)
-        refresh(() => result.location.mcp.server.sync(location))
+        settle(`mcp.status:${locationKey(location)}`, () => result.location.mcp.server.sync(location))
         break
       case "mcp.resources.changed":
         result.location.mcp.resource.invalidate(location)
