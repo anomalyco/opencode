@@ -85,7 +85,7 @@
           line-height: 1.4;
 
           @media (max-width: 40rem) {
-            font-size: var(--font-size-xs);
+            font-size: var(--font-size-x-small);
             padding: var(--space-2-5);
           }
         }
@@ -103,7 +103,7 @@
           @media (max-width: 40rem) {
             justify-content: center;
             padding: var(--space-2-5) var(--space-3);
-            font-size: var(--font-size-xs);
+            font-size: var(--font-size-x-small);
             min-width: 96px;
           }
         }

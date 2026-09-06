@@ -864,6 +864,10 @@ export const dict = {
   "settings.general.row.terminalFont.description": "Personalize a fonte usada no terminal",
   "settings.general.row.uiFont.title": "Fonte da interface",
   "settings.general.row.uiFont.description": "Personalize a fonte usada em toda a interface",
+  "settings.general.row.fontSize.title": "Tamanho da fonte",
+  "settings.general.row.fontSize.description": "Personalize o tamanho de fonte base usado em todo o app",
+  "settings.general.row.lineHeight.title": "Altura da linha",
+  "settings.general.row.lineHeight.description": "Personalize a altura da linha para texto e código legíveis",
   "settings.general.row.followup.title": "Comportamento de acompanhamento",
   "settings.general.row.followup.description":
     "Escolha se os prompts de acompanhamento orientam imediatamente ou esperam na fila",

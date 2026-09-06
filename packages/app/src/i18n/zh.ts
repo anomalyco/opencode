@@ -912,8 +912,20 @@ export const dict = {
   "settings.general.row.terminalFont.description": "自定义终端使用的字体",
   "settings.general.row.uiFont.title": "界面字体",
   "settings.general.row.uiFont.description": "自定义整个界面使用的字体",
+<<<<<<< HEAD
   "settings.general.row.followup.title": "后续消息行为",
   "settings.general.row.followup.description": "选择后续提示是立即引导当前会话还是排队等待",
+||||||| parent of 32cbfa95c1 (feat: Added adjustable font size and line height support for desktop and web.)
+  "settings.general.row.followup.title": "跟进消息行为",
+  "settings.general.row.followup.description": "选择跟进提示是立即引导还是在队列中等待",
+=======
+  "settings.general.row.fontSize.title": "字体大小",
+  "settings.general.row.fontSize.description": "自定义整个应用使用的基础字体大小",
+  "settings.general.row.lineHeight.title": "行高",
+  "settings.general.row.lineHeight.description": "自定义文本和代码的行高以提高可读性",
+  "settings.general.row.followup.title": "跟进消息行为",
+  "settings.general.row.followup.description": "选择跟进提示是立即引导还是在队列中等待",
+>>>>>>> 32cbfa95c1 (feat: Added adjustable font size and line height support for desktop and web.)
   "settings.general.row.followup.option.queue": "排队",
   "settings.general.row.followup.option.steer": "引导",
   "settings.general.row.showFileTree.title": "文件树",
