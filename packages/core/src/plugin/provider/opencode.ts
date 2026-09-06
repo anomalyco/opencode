@@ -25,6 +25,7 @@ const Token = Schema.Struct({
   access_token: Schema.String,
   refresh_token: Schema.String,
   expires_in: Schema.Number,
+  org_id: Schema.optional(Schema.NullOr(Schema.String)),
 })
 const TokenPending = Schema.Struct({ error: Schema.String })
 const DeviceToken = Schema.Union([Token, TokenPending])
@@ -59,20 +60,32 @@ function oauth(http: HttpClient.HttpClient) {
           callback: poll(http, server, device.device_code, Duration.seconds(device.interval)),
         }
       }),
-    refresh: (credential) =>
+    refresh: (current) =>
       Effect.gen(function* () {
-        const server = typeof credential.metadata?.server === "string" ? credential.metadata.server : defaultServer
+        const server = typeof current.metadata?.server === "string" ? current.metadata.server : defaultServer
         const token = yield* post(
           http,
           `${server}/auth/device/token`,
-          { grant_type: "refresh_token", refresh_token: credential.refresh, client_id: clientID },
+          { grant_type: "refresh_token", refresh_token: current.refresh, client_id: clientID },
           Token,
         )
+        // Persist rotated tokens without depending on discovery requests.
         return {
-          ...credential,
+          ...current,
           access: token.access_token,
           refresh: token.refresh_token,
           expires: Date.now() + token.expires_in * 1000,
+          metadata:
+            token.org_id == null
+              ? current.metadata
+              : {
+                  ...current.metadata,
+                  orgID: token.org_id,
+                  orgName:
+                    current.metadata?.orgID === token.org_id && typeof current.metadata.orgName === "string"
+                      ? current.metadata.orgName
+                      : token.org_id,
+                },
         }
       }),
     label: (credential) => (typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined),
@@ -302,7 +315,13 @@ function credential(http: HttpClient.HttpClient, server: string, token: typeof T
       ],
       { concurrency: 2 },
     )
-    const org = orgs.toSorted((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))[0]
+    const org =
+      token.org_id == null
+        ? orgs.toSorted((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))[0]
+        : orgs.find((org) => org.id === token.org_id)
+    if (token.org_id != null && !org) {
+      return yield* Effect.fail(new Error(`OpenCode organization not found: ${token.org_id}`))
+    }
     return Credential.OAuth.make({
       type: "oauth" as const,
       methodID,
