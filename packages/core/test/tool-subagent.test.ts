@@ -207,9 +207,22 @@ describe("SubagentTool", () => {
         })
         expect(Object.keys(context.tools.subagent.input.properties ?? {})).toContain("sessionID")
         expect(Object.keys(context.tools.subagent.input.properties ?? {}).includes("fork")).toBe(enabled === true)
-        // Hiding it on this request must not mutate the registry's shared schema.
-        expect(Object.keys(definition.inputSchema.properties ?? {})).toContain("fork")
+        expect(context.tools.subagent.input).toEqual(definition.inputSchema)
+        expect(Object.keys(definition.inputSchema.properties ?? {}).includes("fork")).toBe(enabled === true)
         if (enabled === true) return
+        expect(Object.keys(definition.inputSchema.properties ?? {})).toEqual([
+          "agent",
+          "description",
+          "prompt",
+          "sessionID",
+          "background",
+        ])
+        expect(definition.description).toBe(SubagentTool.description)
+        expect(definition.description).toContain(
+          "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
+        )
+        expect(JSON.stringify(context.tools.subagent)).not.toMatch(/fork/i)
+        // An unknown field keeps the original schema's behavior; it cannot enable forking or advertise it.
         const result = yield* executeTool(registry, {
           sessionID: parent.id,
           ...toolIdentity,
@@ -220,11 +233,24 @@ describe("SubagentTool", () => {
             input: { agent: "reviewer", description: "review", prompt: "review", fork: true },
           },
         })
-        expect(result).toMatchObject({
-          status: "error",
-          error: { message: "Forking is disabled. Enable experimental.subagent_fork to use fork." },
+        expect(result.status).toBe("completed")
+        const childID = outputSessionID(result.metadata)
+        expect((yield* sessions.get(childID)).fork).toBeUndefined()
+        expect((yield* sessions.inbox(childID)).find((message) => message.type === "user")?.payload.text).toBe(
+          "You are a subagent spawned by another session.\nreview",
+        )
+        const continued = yield* executeTool(registry, {
+          sessionID: parent.id,
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: "call-disabled-fork-continuation",
+            name: SubagentTool.name,
+            input: { agent: "reviewer", description: "review", prompt: "continue", fork: true, sessionID: childID },
+          },
         })
-        expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(0)
+        expect(continued.status).toBe("completed")
+        expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(1)
       }),
     )
   }

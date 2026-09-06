@@ -5,6 +5,7 @@ import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Job } from "../../job.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
@@ -28,9 +29,6 @@ export const Input = Schema.Struct({
   agent: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
   description: Schema.String.annotate({ description: "A short 3-5 word label for the task, displayed to the user" }),
   prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
-  fork: Schema.optionalKey(Schema.Boolean).annotate({
-    description: "Give the subagent your conversation history before this response.",
-  }),
   sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
     description:
       "Continue a specific previous subagent conversation by passing its sessionID. Calls without a sessionID start a new conversation.",
@@ -38,6 +36,13 @@ export const Input = Schema.Struct({
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
       "Run the subagent in the background and return immediately. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress.",
+  }),
+})
+
+const ForkInput = Schema.Struct({
+  ...Input.fields,
+  fork: Schema.optionalKey(Schema.Boolean).annotate({
+    description: "Give the subagent your conversation history before this response.",
   }),
 })
 
@@ -49,7 +54,7 @@ export const Output = Schema.Struct({
 export const description = [
   "Spawns an agent in a child session to work on the specified task.",
   "The output includes a sessionID you can pass back later to continue that specific conversation with the subagent.",
-  "New child sessions start with fresh context by default, so include the context needed for the task.",
+  "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
   "Foreground (default) runs the subagent to completion and returns its final response.",
   "Background mode (background=true) launches it asynchronously and returns immediately; you are notified when it finishes.",
   "Use background only for independent work that can run while you continue elsewhere.",
@@ -64,24 +69,26 @@ export const Plugin = {
     const config = yield* Config.Service
     const permission = yield* Permission.Service
     const subagents = yield* SubagentJob.make
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
 
     yield* ctx.tool
-      .transform((editor) =>
+      .transform((editor) => {
+        const fork = Config.latest(loaded.entries, "experimental")?.subagent_fork === true
         editor.add({
           name,
           options: { codemode: false },
-          description,
-          input: Input,
+          description: fork
+            ? description.replace(
+                "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
+                "New child sessions start with fresh context by default, so include the context needed for the task.",
+              )
+            : description,
+          input: fork ? ForkInput : Input,
           output: Output,
-          execute: (input, context) =>
+          execute: (input: typeof ForkInput.Type, context) =>
             Effect.gen(function* () {
-              if (input.fork !== undefined && input.sessionID !== undefined)
+              if (fork && input.fork !== undefined && input.sessionID !== undefined)
                 return yield* new ToolFailure({ message: "Cannot use fork with sessionID. Omit one of them." })
-              const experimental = Config.latest(yield* config.entries(), "experimental")
-              if (input.fork !== undefined && experimental?.subagent_fork !== true)
-                return yield* new ToolFailure({
-                  message: "Forking is disabled. Enable experimental.subagent_fork to use fork.",
-                })
               const parent = yield* sessions
                 .get(context.sessionID)
                 .pipe(
@@ -101,7 +108,7 @@ export const Plugin = {
                     ),
                   )
               }
-              const limit = experimental?.subagent_depth ?? 1
+              const limit = Config.latest(yield* config.entries(), "experimental")?.subagent_depth ?? 1
               if (depth >= limit)
                 return yield* new ToolFailure({
                   message: `Subagent depth limit reached (${limit}). Increase "experimental.subagent_depth" to allow nested subagents.`,
@@ -161,7 +168,7 @@ export const Plugin = {
               const child =
                 existing ??
                 (yield* (
-                  input.fork
+                  fork && input.fork
                     ? sessions.fork({
                         sessionID: context.sessionID,
                         boundary: { type: "before", messageID: context.messageID },
@@ -170,12 +177,19 @@ export const Plugin = {
                     : sessions.create({
                         parentID: context.sessionID,
                         title: input.description,
-                        agent: agent.id,
+                        agent: Agent.ID.make(input.agent),
                         model,
                       })
                 ).pipe(
                   Effect.mapError(
-                    (error) => new ToolFailure({ message: `Failed to create subagent: ${error.message}`, error }),
+                    (error) =>
+                      new ToolFailure({
+                        message:
+                          fork && input.fork
+                            ? `Failed to create subagent: ${error.message}`
+                            : `Parent session not found: ${context.sessionID}`,
+                        error,
+                      }),
                   ),
                 ))
 
@@ -190,7 +204,7 @@ export const Plugin = {
                   text:
                     existing === undefined
                       ? [
-                          input.fork
+                          fork && input.fork
                             ? "You are a forked subagent. Use the inherited history as context and perform only the task below."
                             : "You are a subagent spawned by another session.",
                           input.prompt,
@@ -251,19 +265,14 @@ export const Plugin = {
                 metadata: { sessionID: output.sessionID, status: output.status },
               })),
             ),
-        }),
-      )
+        })
+      })
       .pipe(Effect.orDie)
 
     yield* ctx.session.hook("context", (event) =>
       Effect.gen(function* () {
         const tool = event.tools[name]
         if (!tool) return
-        if (Config.latest(yield* config.entries(), "experimental")?.subagent_fork !== true) {
-          tool.input.properties = Object.fromEntries(
-            Object.entries(tool.input.properties ?? {}).filter(([key]) => key !== "fork"),
-          )
-        }
         const selected = yield* agents.resolve(event.agent)
         if (!selected) return
         const available = (yield* agents.list())
