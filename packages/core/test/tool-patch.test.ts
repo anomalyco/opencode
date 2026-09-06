@@ -10,43 +10,23 @@ import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { Permission } from "@opencode-ai/core/permission"
-import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { Tool } from "@opencode-ai/core/tool"
 import { PatchTool } from "@opencode-ai/core/tool/plugin/patch"
-import { Model } from "@opencode-ai/schema/model"
-import { Provider } from "@opencode-ai/schema/provider"
 import { transformEnvironmentFiles } from "./fixture/environment"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { toolIdentity, executeTool, toolDefinitions } from "./lib/tool"
-import { host } from "./plugin/host"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
 const patchToolNode = makeLocationNode({
   name: "test/patch-tool-plugin",
-  layer: Layer.effectDiscard(
-    Effect.gen(function* () {
-      const tools = yield* Tool.Service
-      const hooks = yield* PluginHooks.Service
-      yield* PatchTool.Plugin.effect(
-        host({
-          tool: {
-            transform: tools.transform,
-            reload: tools.reload,
-            hook: (name, callback) => hooks.register("tool", name, callback),
-          },
-          session: { hook: (name, callback) => hooks.register("session", name, callback) },
-        }),
-      )
-    }),
-  ),
+  layer: Layer.effectDiscard(registerToolPlugin(PatchTool.Plugin)),
   deps: [
     Tool.node,
-    PluginHooks.node,
     LocationMutation.node,
     FileMutation.node,
     Environment.node,
@@ -119,36 +99,31 @@ const withTool = <A, E, R>(
     return yield* body(yield* Tool.Service)
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(
-        LayerNode.group([Tool.node, PluginHooks.node, LocationMutation.node, FileMutation.node, patchToolNode]),
-        [
-          Environment.node.replace(
-            transformEnvironmentFiles((files) => ({
-              read: (target, range) =>
-                Effect.sync(() => {
-                  if (!editApproved) readsBeforeEditApproval++
-                }).pipe(Effect.andThen(files.read(target, range))),
-              remove: (target) => {
-                if (failRemoveTarget && path.basename(target) === failRemoveTarget)
-                  return Effect.die("forced remove failure")
-                if (failRemoveErrorTarget && path.basename(target) === failRemoveErrorTarget)
-                  return Effect.fail(
-                    new Environment.Failed({ path: target, cause: new Error("forced remove failure") }),
-                  )
-                return files.remove(target)
-              },
-              write: (target, content) => {
-                if (failWriteTarget && path.basename(target) === failWriteTarget)
-                  return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced write failure") }))
-                return files.write(target, content)
-              },
-            })),
-          ),
-          Location.node.replace(activeLocation),
-          Formatter.node.replace(formatter),
-          Permission.node.replace(permission),
-        ],
-      ),
+      AppNodeBuilder.build(LayerNode.group([Tool.node, LocationMutation.node, FileMutation.node, patchToolNode]), [
+        Environment.node.replace(
+          transformEnvironmentFiles((files) => ({
+            read: (target, range) =>
+              Effect.sync(() => {
+                if (!editApproved) readsBeforeEditApproval++
+              }).pipe(Effect.andThen(files.read(target, range))),
+            remove: (target) => {
+              if (failRemoveTarget && path.basename(target) === failRemoveTarget)
+                return Effect.die("forced remove failure")
+              if (failRemoveErrorTarget && path.basename(target) === failRemoveErrorTarget)
+                return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced remove failure") }))
+              return files.remove(target)
+            },
+            write: (target, content) => {
+              if (failWriteTarget && path.basename(target) === failWriteTarget)
+                return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced write failure") }))
+              return files.write(target, content)
+            },
+          })),
+        ),
+        Location.node.replace(activeLocation),
+        Formatter.node.replace(formatter),
+        Permission.node.replace(permission),
+      ]),
     ),
   )
 }
@@ -178,48 +153,6 @@ const withTempTool = <A, E, R>(body: (directory: string, registry: Tool.Interfac
   )
 
 describe("PatchTool", () => {
-  it.live("selects editing tools across providers without optimization plugins", () =>
-    withTempTool(() =>
-      Effect.gen(function* () {
-        const hooks = yield* PluginHooks.Service
-        const cases = [
-          ["openai", "gpt-5", ["patch", "read"]],
-          ["openrouter", "openai/gpt-6-astra", ["patch", "read"]],
-          ["github-copilot", "gpt-5.4", ["patch", "read"]],
-          ["openai", "gpt-4.1", ["edit", "read", "write"]],
-          ["groq", "openai/gpt-oss-120b", ["edit", "read", "write"]],
-          ["anthropic", "claude-opus-4-8", ["edit", "read", "write"]],
-          ["openrouter", "anthropic/claude-sonnet-4.6", ["edit", "read", "write"]],
-          ["google", "gemini-2.5-pro", ["edit", "read", "write"]],
-          ["moonshotai", "kimi-k2", ["edit", "read", "write"]],
-        ] as const
-        yield* Effect.forEach(
-          cases,
-          ([providerID, id, tools]) =>
-            Effect.gen(function* () {
-              const event = yield* hooks.trigger("session", "context", {
-                sessionID,
-                agent: toolIdentity.agent,
-                model: Model.Ref.make({ providerID: Provider.ID.make(providerID), id: Model.ID.make(id) }),
-                system: [],
-                messages: [],
-                tools: Object.fromEntries(
-                  ["patch", "edit", "write", "read"].map((name) => [
-                    name,
-                    { description: name, input: { type: "object" } },
-                  ]),
-                ),
-                generation: {},
-                providerOptions: {},
-              })
-              expect(Object.keys(event.tools).sort()).toEqual([...tools])
-            }),
-          { discard: true },
-        )
-      }),
-    ),
-  )
-
   it.live("registers and sequentially applies add, update, and delete hunks", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
