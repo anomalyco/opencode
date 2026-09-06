@@ -1,7 +1,7 @@
 import type { useLocal } from "@/context/local"
 import type { Prompt, usePrompt } from "@/context/prompt"
 import type { PromptInputHistory } from "./history-store"
-import type { FollowupDraft } from "./submit"
+import type { FollowupDelivery, FollowupDraft } from "./submit"
 
 export type PromptInputState = ReturnType<typeof usePrompt>
 
@@ -51,6 +51,7 @@ export interface PromptInputProps {
   edit?: { id: string; prompt: Prompt; context: FollowupDraft["context"] }
   onEditLoaded?: () => void
   shouldQueue?: () => boolean
+  getDelivery?: () => FollowupDelivery
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
