@@ -49,6 +49,8 @@ export interface ExecuteResult<M extends Metadata = Metadata> {
   title: string
   metadata: M
   output: string
+  /** Stop the current assistant turn after this tool result is recorded. */
+  stopAfterToolResult?: boolean
   attachments?: Omit<SessionV1.FilePart, "id" | "sessionID" | "messageID">[]
 }
 
