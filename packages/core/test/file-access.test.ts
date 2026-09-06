@@ -11,7 +11,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { tempLocationLayer } from "./fixture/location"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { toolIdentity } from "./lib/tool"
@@ -137,10 +137,7 @@ describe("FileAccess.authorizeRead", () => {
   it.live("batches external resources in first-seen order and preserves broader repository saves", () => {
     const requests: Permission.AssertInput[] = []
     return Effect.gen(function* () {
-      const external = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const external = yield* tmpdirScoped()
       const git = path.join(external.path, "git")
       const hg = path.join(external.path, "hg")
       yield* Effect.promise(async () => {

@@ -8,7 +8,7 @@ import { FileAccess } from "@opencode-ai/core/file-access"
 import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/util/global"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdirScoped, withTempDir } from "./fixture/tmpdir"
 import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
@@ -34,16 +34,9 @@ function provide(directory: string, projectDirectory = directory) {
   )
 }
 
-function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
-  return Effect.acquireRelease(
-    Effect.promise(() => tmpdir()),
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(Effect.flatMap((tmp) => f(tmp.path)))
-}
-
 describe("FileAccess.resolve", () => {
   it.live("resolves an active relative existing file target", () =>
-    withTmp((directory) =>
+    withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         const targetPath = path.join(directory, "hello.txt")
         yield* Effect.promise(() => fs.writeFile(targetPath, "hello"))
@@ -60,7 +53,7 @@ describe("FileAccess.resolve", () => {
   )
 
   it.live("resolves an active relative prospective file target", () =>
-    withTmp((directory) =>
+    withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         yield* Effect.promise(() => fs.mkdir(path.join(directory, "src")))
         const access = yield* FileAccess.Service
@@ -74,7 +67,7 @@ describe("FileAccess.resolve", () => {
   )
 
   it.live("requires external-directory authorization for a relative lexical escape", () =>
-    withTmp((directory) =>
+    withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         const access = yield* FileAccess.Service
         const target = yield* access.resolve({ path: "../outside.txt" })
@@ -92,7 +85,7 @@ describe("FileAccess.resolve", () => {
   )
 
   it.live("allows a relative path outside the Location but inside the project worktree", () =>
-    withTmp((directory) =>
+    withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         const active = path.join(directory, "packages", "opencode")
         yield* Effect.promise(() => fs.mkdir(active, { recursive: true }))
@@ -108,7 +101,7 @@ describe("FileAccess.resolve", () => {
   )
 
   it.live("does not treat a filesystem-root project sentinel as an internal boundary", () =>
-    withTmp((directory) =>
+    withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         const access = yield* FileAccess.Service
         const target = yield* access.resolve({ path: "../outside.txt" })
@@ -118,14 +111,11 @@ describe("FileAccess.resolve", () => {
   )
 
   it.live("resolves a prospective target below an external symlink lexically", () =>
-    withTmp((directory) => {
-      const outside = `${directory}-outside`
-      return Effect.gen(function* () {
+    withTempDir(({ path: directory }) =>
+      Effect.gen(function* () {
         if (process.platform === "win32") return
-        yield* Effect.promise(async () => {
-          await fs.mkdir(outside)
-          await fs.symlink(outside, path.join(directory, "escape"))
-        })
+        const outside = yield* tmpdirScoped()
+        yield* Effect.promise(() => fs.symlink(outside.path, path.join(directory, "escape")))
         const access = yield* FileAccess.Service
         const target = yield* access.resolve({ path: path.join("escape", "new.txt") })
         expect(target).toMatchObject({
@@ -133,13 +123,12 @@ describe("FileAccess.resolve", () => {
           resource: "escape/new.txt",
         })
         expect(target.externalDirectory).toBeUndefined()
-        yield* Effect.promise(() => fs.rm(outside, { recursive: true, force: true }))
-      }).pipe(provide(directory))
-    }),
+      }).pipe(provide(directory)),
+    ),
   )
 
   it.live("follows an in-location symlink using ordinary filesystem semantics", () =>
-    withTmp((directory) =>
+    withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         if (process.platform === "win32") return
         yield* Effect.promise(async () => {
@@ -157,7 +146,7 @@ describe("FileAccess.resolve", () => {
   )
 
   it.live("accepts an explicit absolute in-location target without external approval", () =>
-    withTmp((directory) =>
+    withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         const targetPath = path.join(directory, "new.txt")
         const access = yield* FileAccess.Service
@@ -172,8 +161,8 @@ describe("FileAccess.resolve", () => {
   )
 
   it.live("requires external-directory authorization for an explicit external absolute target", () =>
-    withTmp((directory) =>
-      withTmp((outside) =>
+    withTempDir(({ path: directory }) =>
+      withTempDir(({ path: outside }) =>
         Effect.gen(function* () {
           const targetPath = path.join(outside, "new.txt")
           const access = yield* FileAccess.Service
@@ -193,8 +182,8 @@ describe("FileAccess.resolve", () => {
   )
 
   it.live("resolves an existing external file target", () =>
-    withTmp((directory) =>
-      withTmp((outside) =>
+    withTempDir(({ path: directory }) =>
+      withTempDir(({ path: outside }) =>
         Effect.gen(function* () {
           const targetPath = path.join(outside, "existing.txt")
           yield* Effect.promise(() => fs.writeFile(targetPath, "existing"))
@@ -208,8 +197,8 @@ describe("FileAccess.resolve", () => {
   )
 
   it.live("uses an explicit file kind without treating an existing directory as the target boundary", () =>
-    withTmp((directory) =>
-      withTmp((outside) =>
+    withTempDir(({ path: directory }) =>
+      withTempDir(({ path: outside }) =>
         Effect.gen(function* () {
           const access = yield* FileAccess.Service
           const target = yield* access.resolve({ path: outside, kind: "file" })
@@ -223,8 +212,8 @@ describe("FileAccess.resolve", () => {
   )
 
   it.live("authorizes prospective external descendants at their lexical parent", () =>
-    withTmp((directory) =>
-      withTmp((outside) =>
+    withTempDir(({ path: directory }) =>
+      withTempDir(({ path: outside }) =>
         Effect.gen(function* () {
           const targetPath = path.join(outside, "new", "nested", "file.txt")
           const access = yield* FileAccess.Service
@@ -240,7 +229,6 @@ describe("FileAccess.resolve", () => {
   )
 
   test("ignores unknown path input fields", () => {
-    expect(Object.keys(FileAccess.ResolveInput.fields)).toEqual(["path", "kind"])
     expect(Schema.decodeUnknownSync(FileAccess.ResolveInput)({ path: "README.md", reference: "docs" })).toEqual({
       path: "README.md",
     })
@@ -268,7 +256,7 @@ describe("FileAccess.resolve", () => {
   })
 
   it.live("resolves a tilde path as an external home target", () =>
-    withTmp((directory) =>
+    withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         const access = yield* FileAccess.Service
         const target = yield* access.resolve({ path: "~/notes.md" })

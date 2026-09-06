@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect } from "bun:test"
 import path from "path"
-import { Effect, Exit, Layer } from "effect"
+import { Effect, Exit, Layer, Result } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -47,7 +47,7 @@ const readCalls: {
   page: ReadToolFileSystem.PageInput
 }[] = []
 const listCalls: AbsolutePath[] = []
-let resolveFailure: unknown
+let readDefect: unknown
 let directoryEntries: string[] = []
 let directoryEntryDetails: Environment.DirEntry[] = []
 let readResult: ReadToolFileSystem.FileContent | ReadToolFileSystem.TextPage | ReadToolFileSystem.ListPage = {
@@ -69,7 +69,7 @@ const reader = Layer.succeed(
     },
     read: (input, resource, page = {}) => {
       readCalls.push({ input, page })
-      if (resolveFailure !== undefined) return Effect.die(resolveFailure)
+      if (readDefect !== undefined) return Effect.die(readDefect)
       if (readOverride) return readOverride(input, resource, page)
       if (readFailure !== undefined) return Effect.fail(readFailure)
       return Effect.succeed(readResult)
@@ -142,7 +142,7 @@ describe("ReadTool", () => {
     listCalls.length = 0
     allow = true
     deniedResource = undefined
-    resolveFailure = undefined
+    readDefect = undefined
     directoryEntries = []
     directoryEntryDetails = []
     readResult = {
@@ -597,18 +597,21 @@ describe("ReadTool", () => {
 
   it.effect("preserves unexpected filesystem defects", () =>
     Effect.gen(function* () {
-      resolveFailure = new Error("unexpected")
+      readDefect = new Error("unexpected")
       const registry = yield* Tool.Service
 
-      expect(
-        Exit.isFailure(
-          yield* executeTool(registry, {
-            sessionID,
-            ...toolIdentity,
-            call: { type: "tool-call", id: "call-defect", name: "read", input: { path: "README.md" } },
-          }).pipe(Effect.exit),
-        ),
-      ).toBe(true)
+      const exit = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-defect", name: "read", input: { path: "README.md" } },
+      }).pipe(Effect.exit)
+      expect(Result.getOrThrow(Exit.findDefect(exit))).toBe(readDefect)
+      expect(readCalls).toEqual([
+        {
+          input: AbsolutePath.make(path.join(process.cwd(), "README.md")),
+          page: { offset: undefined, limit: undefined },
+        },
+      ])
     }),
   )
 
@@ -885,30 +888,6 @@ describe("ReadTool", () => {
         }),
       ).toEqual({ status: "error", error: { type: "permission.rejected", message: "Permission denied: read" } })
       expect(readCalls).toEqual([])
-    }),
-  )
-
-  it.effect("preserves unexpected resolution defects", () =>
-    Effect.gen(function* () {
-      const registry = yield* Tool.Service
-
-      resolveFailure = new Error("missing")
-      expect(
-        Exit.isFailure(
-          yield* executeTool(registry, {
-            sessionID,
-            ...toolIdentity,
-            call: { type: "tool-call", id: "call-missing", name: "read", input: { path: "missing.txt" } },
-          }).pipe(Effect.exit),
-        ),
-      ).toBe(true)
-
-      expect(readCalls).toEqual([
-        {
-          input: AbsolutePath.make(path.join(process.cwd(), "missing.txt")),
-          page: { offset: undefined, limit: undefined },
-        },
-      ])
     }),
   )
 

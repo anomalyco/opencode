@@ -12,7 +12,7 @@ import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { type EnvironmentFilesTransform, transformEnvironmentFiles } from "./fixture/environment"
 import { location } from "./fixture/location"
-import { tmpdir } from "./fixture/tmpdir"
+import { withTempDir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 
@@ -30,16 +30,9 @@ function provide(directory: string, transformFiles: EnvironmentFilesTransform = 
   )
 }
 
-function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
-  return Effect.acquireRelease(
-    Effect.promise(() => tmpdir()),
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(Effect.flatMap((tmp) => f(tmp.path)))
-}
-
 describe("FileMutation", () => {
   it.live("writes an existing internal file and returns a stable result", () =>
-    withTmp((directory) =>
+    withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         const targetPath = path.join(directory, "hello.txt")
         yield* Effect.promise(() => fs.writeFile(targetPath, "before"))
@@ -58,7 +51,7 @@ describe("FileMutation", () => {
   )
 
   it.live("writes a prospective internal file and creates parent directories", () =>
-    withTmp((directory) =>
+    withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         const access = yield* FileAccess.Service
         const target = yield* access.resolve({
@@ -78,7 +71,7 @@ describe("FileMutation", () => {
   )
 
   it.live("preserves exactly one BOM for text writes and normalizes created text", () =>
-    withTmp((directory) =>
+    withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         const preservedPath = path.join(directory, "preserved.txt")
         yield* Effect.promise(() => fs.writeFile(preservedPath, "\uFEFFbefore"))
@@ -97,8 +90,8 @@ describe("FileMutation", () => {
   )
 
   it.live("writes an explicitly resolved external target", () =>
-    withTmp((directory) =>
-      withTmp((outside) =>
+    withTempDir(({ path: directory }) =>
+      withTempDir(({ path: outside }) =>
         Effect.gen(function* () {
           const targetPath = path.join(outside, "external.txt")
           const access = yield* FileAccess.Service
@@ -118,7 +111,7 @@ describe("FileMutation", () => {
   )
 
   it.live("serializes concurrent writes to the same absolute target", () =>
-    withTmp((directory) =>
+    withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         const targetPath = path.join(directory, "shared.txt")
         yield* Effect.promise(() => fs.writeFile(targetPath, "initial"))
@@ -161,7 +154,7 @@ describe("FileMutation", () => {
   )
 
   it.live("shares transaction locks across Location service instances", () =>
-    withTmp((directory) =>
+    withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         const firstStarted = yield* Deferred.make<void>()
         const releaseFirst = yield* Deferred.make<void>()
@@ -190,7 +183,7 @@ describe("FileMutation", () => {
   )
 
   it.live("allows transaction locks for distinct resolved paths to proceed independently", () =>
-    withTmp((directory) =>
+    withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         const firstStarted = yield* Deferred.make<void>()
         const releaseFirst = yield* Deferred.make<void>()
@@ -212,7 +205,7 @@ describe("FileMutation", () => {
   )
 
   it.live("allows distinct absolute targets to proceed independently", () =>
-    withTmp((directory) =>
+    withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         const firstStarted = yield* Deferred.make<void>()
         const releaseFirst = yield* Deferred.make<void>()
