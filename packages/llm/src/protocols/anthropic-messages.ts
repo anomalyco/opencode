@@ -55,6 +55,17 @@ const AnthropicImageBlock = Schema.Struct({
 })
 type AnthropicImageBlock = Schema.Schema.Type<typeof AnthropicImageBlock>
 
+const AnthropicDocumentBlock = Schema.Struct({
+  type: Schema.tag("document"),
+  source: Schema.Struct({
+    type: Schema.tag("base64"),
+    media_type: Schema.Literal("application/pdf"),
+    data: Schema.String,
+  }),
+  cache_control: Schema.optional(AnthropicCacheControl),
+})
+type AnthropicDocumentBlock = Schema.Schema.Type<typeof AnthropicDocumentBlock>
+
 const AnthropicThinkingBlock = Schema.Struct({
   type: Schema.tag("thinking"),
   thinking: Schema.String,
@@ -116,7 +127,12 @@ const AnthropicToolResultBlock = Schema.Struct({
   cache_control: Schema.optional(AnthropicCacheControl),
 })
 
-const AnthropicUserBlock = Schema.Union([AnthropicTextBlock, AnthropicImageBlock, AnthropicToolResultBlock])
+const AnthropicUserBlock = Schema.Union([
+  AnthropicTextBlock,
+  AnthropicImageBlock,
+  AnthropicDocumentBlock,
+  AnthropicToolResultBlock,
+])
 type AnthropicUserBlock = Schema.Schema.Type<typeof AnthropicUserBlock>
 const AnthropicAssistantBlock = Schema.Union([
   AnthropicTextBlock,
@@ -320,6 +336,19 @@ const lowerImage = Effect.fn("AnthropicMessages.lowerImage")(function* (part: Me
   } satisfies AnthropicImageBlock
 })
 
+const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (part: MediaPart) {
+  if (part.mediaType.toLowerCase() !== "application/pdf") return yield* lowerImage(part)
+  const media = yield* ProviderShared.validateMedia(
+    "Anthropic Messages",
+    part,
+    new Set<string>(ProviderShared.PDF_MIMES),
+  )
+  return {
+    type: "document" as const,
+    source: { type: "base64" as const, media_type: "application/pdf" as const, data: media.base64 },
+  } satisfies AnthropicDocumentBlock
+})
+
 // Tool results may carry structured text/images. Keep media as provider-native
 // content instead of JSON-stringifying base64 into a prompt string.
 const lowerToolResultContentItem = Effect.fn("AnthropicMessages.lowerToolResultContentItem")(function* (
@@ -430,7 +459,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
           continue
         }
         if (part.type === "media") {
-          content.push(yield* lowerImage(part))
+          content.push(yield* lowerMedia(part))
           continue
         }
         return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text", "media"])
@@ -831,6 +860,7 @@ const step = (state: ParserState, event: AnthropicEvent) => {
  */
 export const protocol = Protocol.make({
   id: ADAPTER,
+  media: ProviderShared.mediaAdmission({ image: ProviderShared.IMAGE_MIMES, pdf: ProviderShared.PDF_MIMES }),
   body: {
     schema: AnthropicMessagesBody,
     from: fromRequest,
