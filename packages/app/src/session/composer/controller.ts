@@ -1,4 +1,5 @@
 import { createEffect, createMemo, on, type Accessor } from "solid-js"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import type { ComposerControls } from "@/composer/adapter"
 import { setCursorPosition } from "@/composer/editor/dom"
 import { createComposerModel } from "@/composer/model"
@@ -12,6 +13,7 @@ export function createSessionComposerController(input: {
   controls: Accessor<ComposerControls>
   dock: Parameters<typeof createSessionComposerRegionController>[0]
 }) {
+  const dialog = useDialog()
   const settings = useSettings()
   const region = createSessionComposerRegionController(input.dock)
   let editor: HTMLDivElement | undefined
@@ -40,6 +42,12 @@ export function createSessionComposerController(input: {
   })
   const composer = createComposerModel(adapter, { queue })
   const editable = createMemo(() => region.showComposer() && !region.child())
+  createEffect(
+    on(adapter.ready, (ready) => {
+      if (!ready || !editable() || dialog.active) return
+      composer.restoreFocus()
+    }),
+  )
   // Requests hide the view without disposing its draft or queue edit.
   createEffect(on(editable, () => composer.onDragLeave()))
 
