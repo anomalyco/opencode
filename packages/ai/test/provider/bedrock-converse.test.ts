@@ -136,7 +136,7 @@ const captureHeaders = (target: LanguageModel) =>
 const model = AmazonBedrock.configure({
   baseURL: "https://bedrock-runtime.test",
   apiKey: "test-bearer",
-}).model("anthropic.claude-3-5-sonnet-20240620-v1:0")
+}).model("anthropic.claude-sonnet-4-5-20250929-v1:0")
 
 const baseRequest = LLM.request({
   id: "req_1",
@@ -155,7 +155,7 @@ describe("Bedrock Converse route", () => {
       const prepared = yield* compileRequest(baseRequest)
 
       expect(prepared.body).toEqual({
-        modelId: "anthropic.claude-3-5-sonnet-20240620-v1:0",
+        modelId: "anthropic.claude-sonnet-4-5-20250929-v1:0",
         system: [{ text: "You are concise." }],
         messages: [{ role: "user", content: [{ text: "Say hello." }] }],
         inferenceConfig: { maxTokens: 64, temperature: 0 },
