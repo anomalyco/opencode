@@ -98,7 +98,12 @@ for (const mode of ["automatic", "completed", "pending", "failed", "disconnect",
                                 : "response.incomplete",
                             response: {
                               id: "resp_1",
-                              output: mode === "pending" || mode === "async" ? [...output, call] : output,
+                              output:
+                                mode === "pending" || mode === "async"
+                                  ? [...output, call]
+                                  : mode === "completed"
+                                    ? []
+                                    : output,
                               ...(mode === "automatic" || mode === "async"
                                 ? { incomplete_details: { reason: "steered" } }
                                 : {}),

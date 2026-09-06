@@ -299,7 +299,8 @@ export const driver = (input: DriverInput): WebSocketChannelDriver => {
               request,
               pendingInput,
               // Completion can re-encrypt reasoning. Callers replay the item already emitted by output_item.done.
-              output: event.response?.output
+              // ChatGPT may send output: [] at completion after streaming all items separately.
+              output: event.response?.output?.length
                 ? event.response.output.map((item) =>
                     item.type === "reasoning" && item.id !== undefined
                       ? (output.find((done) => done.type === item.type && done.id === item.id) ?? item)

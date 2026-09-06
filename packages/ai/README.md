@@ -47,7 +47,9 @@ Plain-text prompts sent with `delivery: "steer"` are persisted before `response.
 
 One update is in flight per response. Additional updates, attachments, skills, moves, and compaction use the existing step-boundary inbox path. A rejected steer remains in canonical history; disconnect recovery rebuilds from that history rather than assuming connection-local steering survived. Changes to the request settings during handoff also require a full-context recovery.
 
-Monitoring blocks are classified by `misalignment_policy_violation`, stop pending local work, and are not automatically retried. Fixture and local-server tests cover the transport and runner; these tests do not establish availability on a particular API account or ChatGPT plan.
+Monitoring blocks are classified by `misalignment_policy_violation`, stop pending local work, and are not automatically retried. Fixture and local-server tests cover the transport and runner. Live ChatGPT OAuth checks also covered ordinary replies, async shell execution, accepted steering with automatic continuation, and delivery of deferred tool results after steering. Availability still depends on the account and plan.
+
+Steering acceptance does not guarantee immediate interruption: the server may finish the current response before starting its automatic successor. The Astra system prompt tells the model to end its response when it needs a pending async result, allowing the runner to deliver that result instead of waiting inside generation.
 
 API references: [async tool calling](https://developers.openai.com/api/docs/guides/async-tool-calling), [mid-turn steering](https://developers.openai.com/api/docs/guides/steering), [monitoring stops](https://developers.openai.com/api/docs/guides/safety-checks/misalignment-monitoring).
 
