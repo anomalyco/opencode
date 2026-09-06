@@ -1,5 +1,5 @@
 import { $ } from "bun"
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { ConfigProvider, Deferred, Duration, Effect, Fiber, Layer, Option, Stream } from "effect"
@@ -16,6 +16,14 @@ import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 
 const describeWatcher = Watcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
+
+test("normalizeEventPath converts backslashes on Windows", () => {
+  if (process.platform !== "win32") {
+    expect(Watcher.normalizeEventPath("foo/bar")).toBe("foo/bar")
+    return
+  }
+  expect(Watcher.normalizeEventPath("foo\\bar\\baz.txt")).toBe("foo/bar/baz.txt")
+})
 
 type WatcherEvent = { file: string; event: "add" | "change" | "unlink" }
 
