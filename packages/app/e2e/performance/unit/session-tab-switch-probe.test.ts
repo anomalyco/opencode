@@ -21,7 +21,7 @@ function input(run: () => Promise<void>) {
     destinationIDs: ["destination"],
     sourceIDs: ["source"],
     lastID: "destination",
-    href: "/session/destination",
+    triggerSelector: 'a[href="/session/destination"]',
     switch: run,
   }
 }

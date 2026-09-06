@@ -880,6 +880,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Vymazať oznámenia",
   "sidebar.empty.title": "Nie sú otvorené žiadne projekty",
   "sidebar.empty.description": "Otvorte projekt pre začiatok",
+  "sidebar.history.runningChat": "Beží: {{title}}",
   "debugBar.ariaLabel": "Diagnostika výkonu vývoja",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

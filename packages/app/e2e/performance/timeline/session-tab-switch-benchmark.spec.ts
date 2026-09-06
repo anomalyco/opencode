@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test"
-import { expectSessionTitle } from "../../utils/waits"
+import { expectSessionTitle, switchHistorySession } from "../../utils/waits"
 import { benchmark, expect, withBenchmarkPage } from "../benchmark"
 import { fixture } from "./session-timeline-stress.fixture"
 import {
@@ -66,7 +66,7 @@ async function trial(
     await page.goto(stressSessionHref(fixture.targetID))
     await expectSessionTitle(page, fixture.expected.targetTitle)
     await waitForStableTimeline(page, fixture.expected.targetMessageIDs.at(-1)!)
-    await switchSession(page, fixture.sourceID, fixture.expected.sourceTitle)
+    await switchHistorySession(page, fixture.sourceID, fixture.expected.sourceTitle)
   } else {
     await page.goto(stressSessionHref(fixture.sourceID))
     await expectSessionTitle(page, fixture.expected.sourceTitle)
@@ -80,13 +80,12 @@ async function trial(
   const destinationIDs = fixture.messages[fixture.targetID].map((message) => message.info.id)
   const sourceIDs = fixture.messages[fixture.sourceID].map((message) => message.info.id)
   const lastID = fixture.expected.targetMessageIDs.at(-1)!
-  const href = stressSessionHref(fixture.targetID)
   const result = await measureSessionSwitch(page, {
     destinationIDs,
     sourceIDs,
     lastID,
-    href,
-    switch: () => switchSession(page, fixture.targetID, fixture.expected.targetTitle),
+    triggerSelector: `[data-component="session-history-row"][data-session-id="${fixture.targetID}"]`,
+    switch: () => switchHistorySession(page, fixture.targetID, fixture.expected.targetTitle),
   })
   return result
 }
@@ -120,14 +119,6 @@ function summarizeReviewPane(results: Record<"closed" | "open", Record<"cold" | 
       summarize(values as Record<"cold" | "hot", Result[]>),
     ]),
   )
-}
-
-async function switchSession(page: Page, sessionID: string, title: string) {
-  const href = stressSessionHref(sessionID)
-  const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`).first()
-  await expect(tab).toBeVisible()
-  await tab.click()
-  await expectSessionTitle(page, title)
 }
 
 async function openReviewPane(page: Page) {

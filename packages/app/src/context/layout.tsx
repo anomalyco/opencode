@@ -296,6 +296,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         mobileSidebar: {
           opened: false,
         },
+        historyTree: {
+          opened: true,
+        },
         sessionTabs: {} as Record<string, SessionTabs>,
         sessionView: {} as Record<string, SessionView>,
         handoff: {
@@ -761,6 +764,30 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         toggle() {
           setStore("mobileSidebar", "opened", (x) => !x)
+        },
+      },
+      historyTree: {
+        opened: createMemo(() => store.historyTree?.opened ?? true),
+        open() {
+          if (!store.historyTree) {
+            setStore("historyTree", { opened: true })
+            return
+          }
+          setStore("historyTree", "opened", true)
+        },
+        close() {
+          if (!store.historyTree) {
+            setStore("historyTree", { opened: false })
+            return
+          }
+          setStore("historyTree", "opened", false)
+        },
+        toggle() {
+          if (!store.historyTree) {
+            setStore("historyTree", { opened: false })
+            return
+          }
+          setStore("historyTree", "opened", !(store.historyTree.opened ?? true))
         },
       },
       pendingMessage: {

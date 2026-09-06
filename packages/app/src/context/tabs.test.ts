@@ -4,6 +4,7 @@ import { createTabMemory } from "./tab-memory"
 import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed-tabs"
 import type { SessionTab, Tab } from "./tabs"
 import { migrateTabs } from "./tab-migration"
+import { existingUnusedDraft } from "./unused-draft"
 import type { ServerConnection } from "./server"
 
 const server = "local\nhttp://localhost:4096" as ServerConnection.Key
@@ -121,5 +122,28 @@ describe("closed tab stack", () => {
     expect(nextTabAfterClose(tabs, 1, false)).toBeUndefined()
     expect(nextTabAfterClose(tabs, 1, true)).toEqual(sessionTab("c"))
     expect(nextTabAfterClose([sessionTab("a")], 0, true)).toBeNull()
+  })
+})
+
+describe("unused drafts", () => {
+  const draft = (id: string, directory = "/opencode"): Tab => ({
+    type: "draft",
+    draftID: id,
+    server,
+    directory,
+  })
+
+  test("reuses a draft for the same directory before any other unused draft", () => {
+    const tabs = [sessionTab("a"), draft("one", "/a"), draft("two", "/b")]
+    expect(existingUnusedDraft(tabs, { server, directory: "/b" })?.draftID).toBe("two")
+  })
+
+  test("falls back to the first unused draft when no directory matches", () => {
+    const tabs = [draft("one", "/a"), sessionTab("a")]
+    expect(existingUnusedDraft(tabs, { server, directory: "/b" })?.draftID).toBe("one")
+  })
+
+  test("returns nothing when there is no unused draft", () => {
+    expect(existingUnusedDraft([sessionTab("a")], { server, directory: "/a" })).toBeUndefined()
   })
 })

@@ -876,6 +876,7 @@ export const dict: Record<string, string> = {
   "sidebar.project.clearNotifications": "বিজ্ঞপ্তিগুলি সাফ করুন",
   "sidebar.empty.title": "কোনো প্রকল্প খোলা নেই",
   "sidebar.empty.description": "শুরু করতে একটি প্রকল্প খুলুন",
+  "sidebar.history.runningChat": "চলছে: {{title}}",
   "debugBar.ariaLabel": "উন্নয়ন কর্মক্ষমতা ডায়গনিস্টিক",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "এনএভি",

@@ -39,6 +39,9 @@ export type PromptInputV2ComposerProps = {
   borderUnderlay?: boolean
 }
 
+export const PROMPT_INPUT_V2_SURFACE_CLASS =
+  "[&_[data-component=prompt-input-v2]]:bg-v2-background-bg-layer-01 [&_[data-component=prompt-input-v2]]:shadow-[inset_0_0_0_0.5px_var(--v2-border-border-muted),var(--v2-elevation-raised)]"
+
 export type PromptInputV2ControllerProps = Omit<PromptInputProps, "class" | "submission">
 export type PromptInputV2ComposerController = PromptInputV2Interaction & {
   readonly model: PromptInputProps["controls"]["model"]
