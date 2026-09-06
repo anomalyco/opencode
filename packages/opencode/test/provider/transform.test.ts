@@ -2001,6 +2001,82 @@ describe("ProviderTransform.schema - openai supported schema subset", () => {
   })
 })
 
+describe("ProviderTransform.schema - anthropic root combinators", () => {
+  const anthropicModel = {
+    providerID: "anthropic",
+    id: "claude-sonnet-4",
+    api: {
+      id: "claude-sonnet-4",
+      npm: "@ai-sdk/anthropic",
+    },
+  } as any
+
+  test.each([
+    ["anthropic", "claude-sonnet-4", "@ai-sdk/anthropic"],
+    ["github-copilot", "github-copilot/claude-haiku-4.5", "@ai-sdk/github-copilot"],
+    ["google", "claude-sonnet-4", "@ai-sdk/google-vertex/anthropic"],
+  ])("flattens root-level %s combinators for %s", (_label, id, npm) => {
+    const result = ProviderTransform.schema(
+      {
+        providerID: npm.split("/")[0],
+        id,
+        api: { id, npm },
+      } as any,
+      {
+        type: "object",
+        properties: { a: { type: "string" }, b: { type: "string" } },
+        anyOf: [{ required: ["a"] }, { required: ["b"] }],
+        oneOf: [{ required: ["a"] }, { required: ["b"] }],
+        allOf: [{ properties: { c: { type: "number" } } }],
+        required: [],
+      } as any,
+    ) as any
+
+    expect(result.anyOf).toBeUndefined()
+    expect(result.oneOf).toBeUndefined()
+    expect(result.allOf).toBeUndefined()
+    // Content from folded branches survives in the root object.
+    expect(result.properties.c).toEqual({ type: "number" })
+    expect(result.properties.a).toEqual({ type: "string" })
+  })
+
+  test("keeps nested combinators inside properties", () => {
+    const result = ProviderTransform.schema(anthropicModel, {
+      type: "object",
+      properties: {
+        value: {
+          type: "string",
+          anyOf: [{ type: "string" }, { type: "null" }],
+        },
+      },
+    } as any) as any
+
+    expect(result.properties.value.anyOf).toEqual([{ type: "string" }, { type: "null" }])
+  })
+
+  test("preserves sibling keywords and non-combinator content", () => {
+    const result = ProviderTransform.schema(anthropicModel, {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          pattern: "^https://",
+        },
+      },
+    } as any) as any
+
+    expect(result).toEqual({
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          pattern: "^https://",
+        },
+      },
+    })
+  })
+})
+
 describe("ProviderTransform.schema - moonshot $ref siblings", () => {
   const moonshotModel = {
     providerID: "moonshotai",
