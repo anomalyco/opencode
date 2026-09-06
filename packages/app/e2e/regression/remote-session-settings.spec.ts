@@ -1,7 +1,7 @@
 import { base64Encode } from "@opencode-ai/util/encode"
 import { expect, test, type Page, type Route } from "@playwright/test"
 import { installSseTransport } from "../utils/sse-transport"
-import { currentSession } from "../utils/mock-server"
+import { catalog, currentSession } from "../utils/mock-server"
 
 const serverA = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 const serverB = "http://127.0.0.1:4097"
@@ -342,17 +342,22 @@ async function mockServers(
     if (route.request().method() === "GET" && sessionPermission)
       return json(route, { data: options.sessionPending?.[sessionPermission[1]!] ?? [] })
     if (requestDirectory && requestDirectory !== directory) return json(route, { name: "InvalidDirectory" }, 500)
-    if (url.pathname === "/api/provider")
+    const providers = [
+      {
+        id: remote ? "server-b" : "server-a",
+        name: remote ? "Server B Provider" : "Server A Provider",
+        package: "test",
+      },
+    ]
+    if (url.pathname === "/api/location/catalog")
       return json(route, {
-        location: { directory },
-        data: [
-          {
-            id: remote ? "server-b" : "server-a",
-            name: remote ? "Server B Provider" : "Server A Provider",
-            package: "test",
-          },
-        ],
+        location: {
+          directory,
+          project: { id: remote ? sessionB.projectID : "project-server-a", directory, canonical: directory },
+        },
+        data: catalog({ provider: providers, model: [model(remote)] }),
       })
+    if (url.pathname === "/api/provider") return json(route, { location: { directory }, data: providers })
     if (url.pathname === "/api/model") return json(route, { location: { directory }, data: [model(remote)] })
     if (url.pathname === "/api/model/default") return json(route, { location: { directory }, data: model(remote) })
     if (url.pathname === "/api/agent") return json(route, { location: { directory }, data: [] })

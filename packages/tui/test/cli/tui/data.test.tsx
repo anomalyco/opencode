@@ -282,7 +282,8 @@ test("syncs MCP status when a connection settles during bootstrap", async () => 
   ))
 
   try {
-    await wait(() => data.location.mcp.server.list()?.[0]?.status.status === "pending")
+    // The catalog read is still in flight (models are held) when the status event arrives.
+    await wait(() => mcpRequests === 1)
     emitEvent(events, {
       id: "evt_mcp_connected",
       created: 1,
@@ -291,7 +292,11 @@ test("syncs MCP status when a connection settles during bootstrap", async () => 
     })
     await wait(() => data.location.mcp.server.list()?.[0]?.status.status === "connected")
     expect(mcpRequests).toBe(2)
+    // The older catalog response must not overwrite the newer status read when it lands.
     resolveModels(json({ location: { directory, project: { id: "proj_test", directory } }, data: [] }))
+    await wait(() => data.location.model.list() !== undefined)
+    expect(data.location.mcp.server.list()?.[0]?.status.status).toBe("connected")
+    expect(mcpRequests).toBe(2)
   } finally {
     app.renderer.destroy()
   }

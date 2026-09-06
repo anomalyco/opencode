@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { response } from "../location"
+import { LocationCatalog } from "../location-catalog"
 
 const notFound = <A, R>(effect: Effect.Effect<A, Mcp.NotFoundError, R>) =>
   effect.pipe(Effect.mapError((error) => new McpServerNotFoundError({ server: error.server, message: error.message })))
@@ -11,21 +12,7 @@ const notFound = <A, R>(effect: Effect.Effect<A, Mcp.NotFoundError, R>) =>
 export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
   Effect.gen(function* () {
     return handlers
-      .handle(
-        "mcp.list",
-        Effect.fn(function* () {
-          const service = yield* Mcp.Service
-          return yield* response(
-            service
-              .servers()
-              .pipe(
-                Effect.map((servers) =>
-                  servers.map((info) => ({ name: info.name, status: info.status, integrationID: info.integrationID })),
-                ),
-              ),
-          )
-        }),
-      )
+      .handle("mcp.list", () => response(LocationCatalog.mcpServers))
       .handle(
         "mcp.add",
         Effect.fn(function* (ctx) {

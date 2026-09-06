@@ -10,6 +10,113 @@ export type AgentColor = string
 
 export type PermissionEffect = "allow" | "deny" | "ask"
 
+export type CommandInfo = { name: string; description?: string }
+
+export type FormWhen = {
+  key: string
+  op: "eq" | "neq"
+  value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+}
+
+export type FormOption = { value: string; label: string; description?: string }
+
+export type FormExternalField = { key: string; type: "external"; url: string; title?: string; description?: string }
+
+export type IntegrationCommandMethod = { id: string; type: "command"; label: string; command: Array<string> }
+
+export type IntegrationEnvMethod = { type: "env"; names: Array<string> }
+
+export type ConnectionCredentialInfo = { type: "credential"; id: string; label: string }
+
+export type ConnectionEnvInfo = { type: "env"; name: string }
+
+export type McpStatusConnected = { status: "connected" }
+
+export type McpStatusPending = { status: "pending" }
+
+export type McpStatusDisabled = { status: "disabled" }
+
+export type McpStatusFailed = { status: "failed"; error: string }
+
+export type McpStatusNeedsAuth = { status: "needs_auth" }
+
+export type McpResource = { server: string; name: string; uri: string; description?: string; mimeType?: string }
+
+export type McpResourceTemplate = {
+  server: string
+  name: string
+  uriTemplate: string
+  description?: string
+  mimeType?: string
+}
+
+export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
+
+export type ModelMaxTokensField = "max_completion_tokens" | "max_tokens"
+
+export type ModelCapabilities = {
+  tools: boolean
+  input: Array<string>
+  output: Array<string>
+  responsesWebsockets?: boolean
+}
+
+export type ModelVariant = {
+  id: string
+  settings?: { [x: string]: any }
+  headers?: { [x: string]: string }
+  body?: { [x: string]: any }
+}
+
+export type MoneyUSDPerMillionTokens = number
+
+export type ProviderInfo = {
+  id: string
+  canonical?: string
+  integrationID?: string
+  name: string
+  activation: "auto" | "enabled" | "disabled"
+  package: string
+  settings?: { [x: string]: any }
+  headers?: { [x: string]: string }
+  body?: { [x: string]: any }
+}
+
+export type ReferenceLocalSource = { type: "local"; path: string; description?: string; hidden?: boolean }
+
+export type ReferenceGitSource = {
+  type: "git"
+  repository: string
+  branch?: string
+  description?: string
+  hidden?: boolean
+}
+
+export type SkillInfo = {
+  id: string
+  name: string
+  description?: string
+  slash?: boolean
+  autoinvoke?: boolean
+  location: string
+  content: string
+}
+
+export type ShellInfo = {
+  id: string
+  status: "running" | "exited" | "timeout" | "killed"
+  command: string
+  cwd: string
+  shell: string
+  file: string
+  pid?: number
+  exit?: number
+  metadata: { [x: string]: JsonValue }
+  time: { started: number; completed?: number }
+}
+
+export type FormMetadata = { [x: string]: JsonValue }
+
 export type PluginSource =
   | { type: "builtin" }
   | { type: "package"; target: string; version?: string; outdated?: true; updating?: true }
@@ -152,7 +259,7 @@ export type SessionGenerateResponse = { data: { text: string } }
 
 export type SessionInboxSyntheticPayload1 = { text: string; description?: string; metadata?: { [x: string]: any } }
 
-export type ShellInfo = {
+export type ShellInfo1 = {
   id: string
   status: "running" | "exited" | "timeout" | "killed"
   command: string
@@ -179,57 +286,7 @@ export type EventLogSynced = { type: "log.synced"; aggregateID: string; seq?: nu
 
 export type SessionInterruptResponse = { interrupted: boolean }
 
-export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
-
-export type ModelMaxTokensField = "max_completion_tokens" | "max_tokens"
-
-export type ModelCapabilities = {
-  tools: boolean
-  input: Array<string>
-  output: Array<string>
-  responsesWebsockets?: boolean
-}
-
-export type ModelVariant = {
-  id: string
-  settings?: { [x: string]: any }
-  headers?: { [x: string]: string }
-  body?: { [x: string]: any }
-}
-
-export type MoneyUSDPerMillionTokens = number
-
 export type GenerateTextResponse = { data: { text: string } }
-
-export type ProviderInfo = {
-  id: string
-  canonical?: string
-  integrationID?: string
-  name: string
-  activation: "auto" | "enabled" | "disabled"
-  package: string
-  settings?: { [x: string]: any }
-  headers?: { [x: string]: string }
-  body?: { [x: string]: any }
-}
-
-export type FormWhen = {
-  key: string
-  op: "eq" | "neq"
-  value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-}
-
-export type FormOption = { value: string; label: string; description?: string }
-
-export type FormExternalField = { key: string; type: "external"; url: string; title?: string; description?: string }
-
-export type IntegrationCommandMethod = { id: string; type: "command"; label: string; command: Array<string> }
-
-export type IntegrationEnvMethod = { type: "env"; names: Array<string> }
-
-export type ConnectionCredentialInfo = { type: "credential"; id: string; label: string }
-
-export type ConnectionEnvInfo = { type: "env"; name: string }
 
 export type IntegrationAttemptStatus =
   | {
@@ -275,26 +332,6 @@ export type IntegrationCommandAttemptStatus =
       time: { created: number | "Infinity" | "-Infinity" | "NaN"; expires: number | "Infinity" | "-Infinity" | "NaN" }
     }
 
-export type McpStatusConnected = { status: "connected" }
-
-export type McpStatusPending = { status: "pending" }
-
-export type McpStatusDisabled = { status: "disabled" }
-
-export type McpStatusFailed = { status: "failed"; error: string }
-
-export type McpStatusNeedsAuth = { status: "needs_auth" }
-
-export type McpResource = { server: string; name: string; uri: string; description?: string; mimeType?: string }
-
-export type McpResourceTemplate = {
-  server: string
-  name: string
-  uriTemplate: string
-  description?: string
-  mimeType?: string
-}
-
 export type ProjectVcs = string
 
 export type ProjectIcon = { url?: string; override?: string; color?: string }
@@ -305,8 +342,6 @@ export type ProjectTime = { created: number; updated: number; initialized?: numb
 
 export type ProjectCurrent = { id: string; directory: string; canonical: string }
 
-export type FormMetadata = { [x: string]: JsonValue }
-
 export type FormValue = string | number | boolean | Array<string>
 
 export type PermissionSource = { type: "tool"; messageID: string; id: string }
@@ -314,18 +349,6 @@ export type PermissionSource = { type: "tool"; messageID: string; id: string }
 export type PermissionSavedInfo = { id: string; projectID: string; action: string; resource: string }
 
 export type FileSystemEntry = { path: string; type: "file" | "directory" }
-
-export type CommandInfo = { name: string; description?: string }
-
-export type SkillInfo = {
-  id: string
-  name: string
-  description?: string
-  slash?: boolean
-  autoinvoke?: boolean
-  location: string
-  content: string
-}
 
 export type RpcOutput = { output?: any }
 
@@ -384,29 +407,6 @@ export type PersistentPtyReadResult = {
 
 export type PersistentPtyHandoff = { directory: string; instanceID: string; ticket: string; expiresAt: number }
 
-export type ShellInfo1 = {
-  id: string
-  status: "running" | "exited" | "timeout" | "killed"
-  command: string
-  cwd: string
-  shell: string
-  file: string
-  pid?: number
-  exit?: number
-  metadata: { [x: string]: JsonValue }
-  time: { started: number; completed?: number }
-}
-
-export type ReferenceLocalSource = { type: "local"; path: string; description?: string; hidden?: boolean }
-
-export type ReferenceGitSource = {
-  type: "git"
-  repository: string
-  branch?: string
-  description?: string
-  hidden?: boolean
-}
-
 export type WorktreeDirectory = { directory: string; strategy?: string }
 
 export type WorktreeInfo = { directory: string }
@@ -439,6 +439,98 @@ export type ProviderRequest = {
 }
 
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
+
+export type FormNumberField = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: Array<FormWhen>
+  type: "number"
+  minimum?: number | "Infinity" | "-Infinity" | "NaN"
+  maximum?: number | "Infinity" | "-Infinity" | "NaN"
+  default?: number | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type FormIntegerField = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: Array<FormWhen>
+  type: "integer"
+  minimum?: number | "Infinity" | "-Infinity" | "NaN"
+  maximum?: number | "Infinity" | "-Infinity" | "NaN"
+  default?: number | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type FormBooleanField = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: Array<FormWhen>
+  type: "boolean"
+  default?: boolean
+}
+
+export type FormStringField = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: Array<FormWhen>
+  type: "string"
+  format?: "email" | "uri" | "date" | "date-time"
+  minLength?: number
+  maxLength?: number
+  pattern?: string
+  placeholder?: string
+  default?: string
+  options?: Array<FormOption>
+  custom?: boolean
+}
+
+export type FormMultiselectField = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  when?: Array<FormWhen>
+  type: "multiselect"
+  options: Array<FormOption>
+  minItems?: number
+  maxItems?: number
+  custom?: boolean
+  default?: Array<string>
+}
+
+export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
+
+export type McpServer = {
+  name: string
+  status: McpStatusConnected | McpStatusPending | McpStatusDisabled | McpStatusFailed | McpStatusNeedsAuth
+  integrationID?: string
+}
+
+export type McpResourceCatalog = { resources: Array<McpResource>; templates: Array<McpResourceTemplate> }
+
+export type ModelCompatibility = {
+  reasoningField?: ModelReasoningField
+  requireReasoning?: boolean
+  maxTokensField?: ModelMaxTokensField
+  requireFinishReason?: boolean
+  requireAssistantAfterTool?: boolean
+}
+
+export type ModelCost = {
+  tier?: { type: "context"; size: number }
+  input: MoneyUSDPerMillionTokens
+  output: MoneyUSDPerMillionTokens
+  cache: { read: MoneyUSDPerMillionTokens; write: MoneyUSDPerMillionTokens }
+}
+
+export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
 
 export type PluginInfo = { id?: string; source: PluginSource; features: PluginFeatures; state: PluginState }
 
@@ -1219,7 +1311,7 @@ export type SessionShellStarted = {
   type: "session.shell.started"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; shell: ShellInfo }
+  data: { sessionID: string; shell: ShellInfo1 }
 }
 
 export type SessionShellEnded = {
@@ -1231,7 +1323,7 @@ export type SessionShellEnded = {
   location?: LocationRef
   data: {
     sessionID: string
-    shell: ShellInfo
+    shell: ShellInfo1
     output: { output: string; cursor: number; size: number; truncated: boolean }
   }
 }
@@ -1242,7 +1334,7 @@ export type ShellCreated = {
   metadata?: { [x: string]: any }
   type: "shell.created"
   location?: LocationRef
-  data: { info: ShellInfo }
+  data: { info: ShellInfo1 }
 }
 
 export type SessionStepEnded = {
@@ -1372,96 +1464,6 @@ export type SessionMessageAssistantReasoning1 = {
 }
 
 export type ToolContent1 = ToolTextContent | ToolFileContent1
-
-export type ModelCompatibility = {
-  reasoningField?: ModelReasoningField
-  requireReasoning?: boolean
-  maxTokensField?: ModelMaxTokensField
-  requireFinishReason?: boolean
-  requireAssistantAfterTool?: boolean
-}
-
-export type ModelCost = {
-  tier?: { type: "context"; size: number }
-  input: MoneyUSDPerMillionTokens
-  output: MoneyUSDPerMillionTokens
-  cache: { read: MoneyUSDPerMillionTokens; write: MoneyUSDPerMillionTokens }
-}
-
-export type FormNumberField = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: Array<FormWhen>
-  type: "number"
-  minimum?: number | "Infinity" | "-Infinity" | "NaN"
-  maximum?: number | "Infinity" | "-Infinity" | "NaN"
-  default?: number | "Infinity" | "-Infinity" | "NaN"
-}
-
-export type FormIntegerField = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: Array<FormWhen>
-  type: "integer"
-  minimum?: number | "Infinity" | "-Infinity" | "NaN"
-  maximum?: number | "Infinity" | "-Infinity" | "NaN"
-  default?: number | "Infinity" | "-Infinity" | "NaN"
-}
-
-export type FormBooleanField = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: Array<FormWhen>
-  type: "boolean"
-  default?: boolean
-}
-
-export type FormStringField = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: Array<FormWhen>
-  type: "string"
-  format?: "email" | "uri" | "date" | "date-time"
-  minLength?: number
-  maxLength?: number
-  pattern?: string
-  placeholder?: string
-  default?: string
-  options?: Array<FormOption>
-  custom?: boolean
-}
-
-export type FormMultiselectField = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  when?: Array<FormWhen>
-  type: "multiselect"
-  options: Array<FormOption>
-  minItems?: number
-  maxItems?: number
-  custom?: boolean
-  default?: Array<string>
-}
-
-export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
-
-export type McpServer = {
-  name: string
-  status: McpStatusConnected | McpStatusPending | McpStatusDisabled | McpStatusFailed | McpStatusNeedsAuth
-  integrationID?: string
-}
-
-export type McpResourceCatalog = { resources: Array<McpResource>; templates: Array<McpResourceTemplate> }
 
 export type Project = {
   id: string
@@ -1640,13 +1642,48 @@ export type SessionStatusUpdated = {
   data: { sessionID: string; status: SessionStatus }
 }
 
-export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
-
 export type WorktreeList = Array<WorktreeDirectory>
 
 export type VcsInfo = { branch: VcsBranch }
 
 export type PermissionRuleset = Array<PermissionRule>
+
+export type FormField =
+  | FormStringField
+  | FormNumberField
+  | FormIntegerField
+  | FormBooleanField
+  | FormMultiselectField
+  | FormExternalField
+
+export type ModelInfo = {
+  id: string
+  modelID: string
+  providerID: string
+  canonical?: string
+  family?: string
+  name: string
+  compatibility?: ModelCompatibility
+  package?: string
+  settings?: { [x: string]: any }
+  headers?: { [x: string]: string }
+  body?: { [x: string]: any }
+  capabilities: ModelCapabilities
+  variants: Array<ModelVariant>
+  time: { released: number }
+  cost: Array<ModelCost>
+  status: "alpha" | "beta" | "deprecated" | "active"
+  enabled: boolean
+  limit: { context: number; input?: number; output: number }
+}
+
+export type ReferenceInfo = {
+  name: string
+  path: string
+  description?: string
+  hidden?: boolean
+  source: ReferenceSource
+}
 
 export type SessionInboxMove = {
   id: string
@@ -1815,35 +1852,6 @@ export type SessionMessageToolStateError1 = {
   metadata?: { [x: string]: JsonValue }
 }
 
-export type ModelInfo = {
-  id: string
-  modelID: string
-  providerID: string
-  canonical?: string
-  family?: string
-  name: string
-  compatibility?: ModelCompatibility
-  package?: string
-  settings?: { [x: string]: any }
-  headers?: { [x: string]: string }
-  body?: { [x: string]: any }
-  capabilities: ModelCapabilities
-  variants: Array<ModelVariant>
-  time: { released: number }
-  cost: Array<ModelCost>
-  status: "alpha" | "beta" | "deprecated" | "active"
-  enabled: boolean
-  limit: { context: number; input?: number; output: number }
-}
-
-export type FormField =
-  | FormStringField
-  | FormNumberField
-  | FormIntegerField
-  | FormBooleanField
-  | FormMultiselectField
-  | FormExternalField
-
 export type FormState = { status: "pending" } | { status: "answered"; answer: FormAnswer } | { status: "cancelled" }
 
 export type FormReplied = {
@@ -1862,14 +1870,6 @@ export type FormField1 =
   | FormBooleanField1
   | FormMultiselectField1
   | FormExternalField
-
-export type ReferenceInfo = {
-  name: string
-  path: string
-  description?: string
-  hidden?: boolean
-  source: ReferenceSource
-}
 
 export type AgentInfo = {
   id: string
@@ -2053,6 +2053,8 @@ export type ConfigEntry =
   | { type: "agents"; path: string }
   | { type: "claude"; path: string }
 
+export type FormFields = [FormField, ...Array<FormField>]
+
 export type SessionsResponse = { data: Array<SessionInfo>; cursor: { previous?: string | null; next?: string | null } }
 
 export type SessionInboxUser = {
@@ -2100,9 +2102,13 @@ export type SessionMessageAssistantTool1 = {
   time: { created: number; ran?: number; completed?: number }
 }
 
-export type FormFields = [FormField, ...Array<FormField>]
-
 export type FormFields2 = [FormField1, ...Array<FormField1>]
+
+export type IntegrationOAuthMethod = { id: string; type: "oauth"; label: string; form?: FormFields }
+
+export type IntegrationKeyMethod = { type: "key"; label?: string; form?: FormFields }
+
+export type FormInfo = { id: string; sessionID: string; title: string; metadata?: FormMetadata; fields: FormFields }
 
 export type SessionInboxInfo = SessionInboxUser | SessionInboxSynthetic | SessionInboxCompaction | SessionInboxMove
 
@@ -2139,13 +2145,13 @@ export type SessionMessageAssistantContentEncoded =
   | SessionMessageAssistantReasoning1
   | SessionMessageAssistantTool1
 
-export type IntegrationOAuthMethod = { id: string; type: "oauth"; label: string; form?: FormFields }
-
-export type IntegrationKeyMethod = { type: "key"; label?: string; form?: FormFields }
-
-export type FormInfo = { id: string; sessionID: string; title: string; metadata?: FormMetadata; fields: FormFields }
-
 export type FormInfo1 = { id: string; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields2 }
+
+export type IntegrationMethod =
+  | IntegrationOAuthMethod
+  | IntegrationCommandMethod
+  | IntegrationKeyMethod
+  | IntegrationEnvMethod
 
 export type SessionMessageInfo =
   | SessionMessageAgentSelected
@@ -2169,12 +2175,6 @@ export type SessionMessageContentUpdated = {
   data: { sessionID: string; messageID: string; content: Array<SessionMessageAssistantContentEncoded> }
 }
 
-export type IntegrationMethod =
-  | IntegrationOAuthMethod
-  | IntegrationCommandMethod
-  | IntegrationKeyMethod
-  | IntegrationEnvMethod
-
 export type FormCreated = {
   id: string
   created: number
@@ -2182,6 +2182,14 @@ export type FormCreated = {
   type: "form.created"
   location?: LocationRef
   data: { form: FormInfo1 }
+}
+
+export type IntegrationInfo = {
+  id: string
+  name: string
+  metadata?: { [x: string]: any }
+  methods: Array<IntegrationMethod>
+  connections: Array<ConnectionInfo>
 }
 
 export type SessionTransferData = { info: SessionInfo; messages: Array<SessionMessageInfo> }
@@ -2235,14 +2243,6 @@ export type SessionEventDurable =
   | SessionRevertCommitted
   | SessionMessageContentUpdated
   | SessionUsageRecorded
-
-export type IntegrationInfo = {
-  id: string
-  name: string
-  metadata?: { [x: string]: any }
-  methods: Array<IntegrationMethod>
-  connections: Array<ConnectionInfo>
-}
 
 export type V2Event =
   | ModelsDevRefreshed
@@ -2337,6 +2337,20 @@ export type V2Event =
   | V2EventRpc
   | V2EventServerConnected
 
+export type LocationCatalog = {
+  agent: Array<AgentInfo>
+  command: Array<CommandInfo>
+  integration: Array<IntegrationInfo>
+  mcp: Array<McpServer>
+  mcpResource: McpResourceCatalog
+  model: Array<ModelInfo>
+  provider: Array<ProviderInfo>
+  reference: Array<ReferenceInfo>
+  skill: Array<SkillInfo>
+  shell: Array<ShellInfo>
+  form: Array<FormInfo>
+}
+
 export type SessionLogItem = SessionEventDurable | EventLogSynced
 
 export type InvalidRequestError = {
@@ -2352,14 +2366,6 @@ export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly m
 export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnauthorizedError"
 
-export type AgentNotFoundError = {
-  readonly _tag: "AgentNotFoundError"
-  readonly agentID: string
-  readonly message: string
-}
-export const isAgentNotFoundError = (value: unknown): value is AgentNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "AgentNotFoundError"
-
 export type ServiceUnavailableError = {
   readonly _tag: "ServiceUnavailableError"
   readonly message: string
@@ -2367,6 +2373,14 @@ export type ServiceUnavailableError = {
 }
 export const isServiceUnavailableError = (value: unknown): value is ServiceUnavailableError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ServiceUnavailableError"
+
+export type AgentNotFoundError = {
+  readonly _tag: "AgentNotFoundError"
+  readonly agentID: string
+  readonly message: string
+}
+export const isAgentNotFoundError = (value: unknown): value is AgentNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "AgentNotFoundError"
 
 export type InvalidCursorError = { readonly _tag: "InvalidCursorError"; readonly message: string }
 export const isInvalidCursorError = (value: unknown): value is InvalidCursorError =>
@@ -2552,6 +2566,17 @@ export type LocationGetOutput = {
   directory: string
   workspaceID?: string
   project: { id: string; directory: string; canonical: string }
+}
+
+export type LocationCatalogInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type LocationCatalogOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: LocationCatalog
 }
 
 export type AgentListInput = {
@@ -5973,7 +5998,7 @@ export type ShellListInput = {
 
 export type ShellListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
-  data: Array<ShellInfo1>
+  data: Array<ShellInfo>
 }
 
 export type ShellCreateInput = {
@@ -6008,7 +6033,7 @@ export type ShellCreateInput = {
 
 export type ShellCreateOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
-  data: ShellInfo1
+  data: ShellInfo
 }
 
 export type ShellGetInput = {
@@ -6020,7 +6045,7 @@ export type ShellGetInput = {
 
 export type ShellGetOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
-  data: ShellInfo1
+  data: ShellInfo
 }
 
 export type ShellTimeoutInput = {
@@ -6033,7 +6058,7 @@ export type ShellTimeoutInput = {
 
 export type ShellTimeoutOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
-  data: ShellInfo1
+  data: ShellInfo
 }
 
 export type ShellOutputInput = {

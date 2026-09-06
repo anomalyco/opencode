@@ -41,6 +41,49 @@ export interface MockServerConfig {
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" }) => void
 }
 
+const agents = [
+  {
+    id: "build",
+    name: "Build",
+    mode: "primary",
+    hidden: false,
+    request: { settings: {}, headers: {}, body: {} },
+    permissions: [],
+  },
+]
+
+const catalogPaths = {
+  agent: "/api/agent",
+  command: "/api/command",
+  integration: "/api/integration",
+  mcp: "/api/mcp",
+  mcpResource: "/api/mcp/resource",
+  model: "/api/model",
+  provider: "/api/provider",
+  reference: "/api/reference",
+  skill: "/api/skill",
+  shell: "/api/shell",
+  form: "/api/form/request",
+}
+
+// The `/api/location/catalog` payload: every per-location list in one response, empty by default.
+export function catalog(overrides: Record<string, unknown> = {}) {
+  return {
+    agent: [],
+    command: [],
+    integration: [],
+    mcp: [],
+    mcpResource: { resources: [], templates: [] },
+    model: [],
+    provider: [],
+    reference: [],
+    skill: [],
+    shell: [],
+    form: [],
+    ...overrides,
+  }
+}
+
 type MockStreamWindow = Window & {
   __testSseTransport?: unknown
   __mockServerStream?: { push: (payloads: unknown[]) => void }
@@ -148,6 +191,50 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (route.request().method() === "OPTIONS") {
       return route.fulfill({ status: 204, headers: corsHeaders })
     }
+    // `location.sync` reads one catalog. Compose it from fetches issued inside the page so the
+    // per-endpoint routes a spec registers (`**/api/skill?*`, …) still shape what the app sees.
+    if (url.pathname === "/api/location/catalog") {
+      // The page can navigate or the test can end while the sub-reads run; that is not a test error,
+      // the request simply fails like a dropped connection would.
+      const composed = await page
+        .evaluate(
+          async (input) => {
+            const read = async (pathname: string) => {
+              const target = new URL(input.href)
+              target.pathname = pathname
+              const response = await fetch(target.toString())
+              if (!response.ok) throw response.status
+              return response.json() as Promise<{ data: unknown }>
+            }
+            try {
+              const [location, ...parts] = await Promise.all([
+                read("/api/location"),
+                ...input.paths.map(([, pathname]) => read(pathname)),
+              ])
+              return {
+                status: 200,
+                body: {
+                  location,
+                  data: Object.fromEntries(input.paths.map(([field], index) => [field, parts[index]!.data])),
+                },
+              }
+            } catch (status) {
+              // A failing list endpoint fails the whole catalog, as on the real server.
+              return { status: typeof status === "number" ? status : 500, body: {} }
+            }
+          },
+          { href: url.toString(), paths: Object.entries(catalogPaths) },
+        )
+        .catch(() => undefined)
+      if (!composed) return route.abort("failed").catch(() => undefined)
+      return route
+        .fulfill({
+          status: composed.status,
+          headers: { "content-type": "application/json", ...corsHeaders },
+          body: JSON.stringify(composed.body),
+        })
+        .catch(() => undefined)
+    }
 
     const body = route.request().postDataBuffer()
     const response = await transport.handler(
@@ -219,20 +306,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
             },
             data: [],
           }),
-        agent: () =>
-          Effect.succeed({
-            location: location(config),
-            data: [
-              {
-                id: "build",
-                name: "Build",
-                mode: "primary",
-                hidden: false,
-                request: { settings: {}, headers: {}, body: {} },
-                permissions: [],
-              },
-            ],
-          }),
+        agent: () => Effect.succeed({ location: location(config), data: agents }),
         provider: () => Effect.succeed({ location: location(config), data: currentProviders(providerConfig(config)) }),
         model: () => Effect.succeed({ location: location(config), data: currentModels(providerConfig(config)) }),
         modelDefault: () =>
@@ -287,6 +361,16 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         worktreeRemove: () => noContent,
         worktreeRefresh: () => noContent,
         location: () => Effect.succeed(location(config)),
+        locationCatalog: () =>
+          Effect.succeed({
+            location: location(config),
+            data: catalog({
+              agent: agents,
+              model: currentModels(providerConfig(config)),
+              provider: currentProviders(providerConfig(config)),
+              form: typeof config.forms === "function" ? config.forms() : (config.forms ?? []),
+            }),
+          }),
         permissionRequests: () =>
           Effect.succeed({
             location: location(config),

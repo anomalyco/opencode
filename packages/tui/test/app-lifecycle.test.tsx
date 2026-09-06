@@ -1075,11 +1075,8 @@ test("new session inherits the active session model", async () => {
 test("keeps the prompt display stable while a new location catalog loads", async () => {
   const source = process.cwd()
   const target = path.join(path.parse(source).root, "opencode-target")
-  const locationCatalog = Promise.withResolvers<void>()
   const catalog = Promise.withResolvers<void>()
-  const providerCatalog = Promise.withResolvers<void>()
-  const locationRequested = Promise.withResolvers<void>()
-  const modelRequested = Promise.withResolvers<void>()
+  const catalogRequested = Promise.withResolvers<void>()
   await using setup = await createAppFixture({
     fetch: async (url) => {
       const requestedDirectory = url.searchParams.get("location[directory]") ?? source
@@ -1091,29 +1088,23 @@ test("keeps the prompt display stable while a new location catalog loads", async
           canonical: requestedDirectory,
         },
       }
-      if (url.pathname === "/api/location") {
-        if (requestedDirectory === target) {
-          locationRequested.resolve()
-          await locationCatalog.promise
-        }
-        return json(location)
+      if (url.pathname === "/api/location") return json(location)
+      // Hold the target's catalog read; the fixture composes it from the endpoints below once released.
+      if (url.pathname === "/api/location/catalog" && requestedDirectory === target) {
+        catalogRequested.resolve()
+        await catalog.promise
+        return undefined
       }
       if (url.pathname === "/api/agent") {
-        if (requestedDirectory === target) await catalog.promise
         return json({
           location,
           data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }],
         })
       }
       if (url.pathname === "/api/provider") {
-        if (requestedDirectory === target) await providerCatalog.promise
         return json({ location, data: [{ id: "provider", name: "Provider" }] })
       }
       if (url.pathname === "/api/model") {
-        if (requestedDirectory === target) {
-          modelRequested.resolve()
-          await catalog.promise
-        }
         return json({
           location,
           data: [
@@ -1146,36 +1137,23 @@ test("keeps the prompt display stable while a new location catalog loads", async
     setup.mockInput.pressEscape()
     setup.mockInput.pressEnter()
     await Promise.race([
-      locationRequested.promise,
+      catalogRequested.promise,
       Bun.sleep(2_000).then(() => {
-        throw new Error("target location was not requested")
+        throw new Error("target location catalog was not requested")
       }),
     ])
     await setup.renderOnce()
     expect(setup.captureCharFrame()).toContain(target)
 
-    locationCatalog.resolve()
-    await Promise.race([
-      modelRequested.promise,
-      Bun.sleep(2_000).then(() => {
-        throw new Error("target model catalog was not requested")
-      }),
-    ])
-    await setup.renderOnce()
-
+    // The prompt keeps the source selection until the target catalog has fully loaded.
     expect(setup.captureCharFrame()).toContain("Build · Source Model Provider")
     expect(agentSpan()?.fg.toInts()).toEqual(sourceAgentColor)
 
     catalog.resolve()
-    const resolved = await setup.waitForFrame((frame) => frame.includes("Build · Target Model provider"))
+    const resolved = await setup.waitForFrame((frame) => frame.includes("Build · Target Model Provider"))
     expect(resolved).not.toContain("Source Model")
-
-    providerCatalog.resolve()
-    await setup.waitForFrame((frame) => frame.includes("Build · Target Model Provider"))
   } finally {
-    locationCatalog.resolve()
     catalog.resolve()
-    providerCatalog.resolve()
   }
 })
 
