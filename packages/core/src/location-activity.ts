@@ -5,6 +5,8 @@ import { Bus } from "./bus.js"
 import { Location } from "./location.js"
 import { LocationServiceMap } from "./location-service-map.js"
 import { SessionEvent } from "./session/event.js"
+import { SessionExecution } from "./session/execution.js"
+import { SessionStore } from "./session/store.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 
 const isSessionEvent = Schema.is(SessionEvent.Durable)
@@ -18,6 +20,8 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
       const clock = yield* Clock.Clock
       const bus = yield* Bus.Service
       const locations = yield* LocationServiceMap.Service
+      const execution = yield* SessionExecution.Service
+      const sessions = yield* SessionStore.Service
       const timeToLive = Duration.toMillis(options.timeToLive ?? "60 minutes")
       const entries = new Map<string, { readonly ref: Location.Ref; expiresAt: number }>()
       const key = (ref: Location.Ref) => `${ref.directory}\0${ref.workspaceID ?? ""}`
@@ -39,19 +43,21 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
         yield* Effect.sleep(options.sweepInterval ?? "1 minute")
         const refs = Array.from(yield* RcMap.keys(locations.rcMap))
         const cached = new Set(refs.map(key))
-        yield* Effect.forEach(
-          refs,
-          (ref) => (entries.has(key(ref)) ? Effect.void : touch(ref)),
-          { discard: true },
-        )
+        yield* Effect.forEach(refs, (ref) => (entries.has(key(ref)) ? Effect.void : touch(ref)), { discard: true })
         for (const id of entries.keys()) {
           if (!cached.has(id)) entries.delete(id)
         }
         const now = clock.currentTimeMillisUnsafe()
         const expired = Array.from(entries.values()).filter((entry) => entry.expiresAt <= now)
+        if (expired.length === 0) return
+        const active = yield* Effect.forEach(yield* execution.active, (sessionID) => sessions.get(sessionID))
+        const occupied = new Set(active.flatMap((session) => (session ? [key(session.location)] : [])))
         yield* Effect.forEach(
           expired,
           (entry) => {
+            // Waiting for a question or a long-running tool emits no activity.
+            // Invalidating a borrowed graph would strand it behind a new cache entry.
+            if (occupied.has(key(entry.ref))) return touch(entry.ref)
             entries.delete(key(entry.ref))
             return Effect.logInfo("location services evicted", {
               directory: entry.ref.directory,
@@ -70,5 +76,5 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
 export const node = makeGlobalNode({
   service: Service,
   layer: layer(),
-  deps: [Bus.node, LocationServiceMap.node],
+  deps: [Bus.node, LocationServiceMap.node, SessionExecution.node, SessionStore.node],
 })
