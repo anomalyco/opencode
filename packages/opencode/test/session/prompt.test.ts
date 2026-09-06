@@ -1,6 +1,8 @@
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
+import { EventTable } from "@opencode-ai/core/event/sql"
+import { MessageTable } from "@opencode-ai/core/session/sql"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { eq } from "drizzle-orm"
@@ -2467,4 +2469,50 @@ noLLMServer.instance(
       }
     }),
   30_000,
+)
+
+it.instance("full prompt loop writes projections but no durable snapshot events (gate OFF)", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const { db } = yield* Database.Service
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.text("world")
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const messageRows = yield* db
+      .select()
+      .from(MessageTable)
+      .where(eq(MessageTable.session_id, chat.id))
+      .all()
+      .pipe(Effect.orDie)
+    const snapshots = yield* db
+      .select()
+      .from(EventTable)
+      .where(eq(EventTable.type, "message.updated.1"))
+      .all()
+      .pipe(Effect.orDie)
+    const partSnapshots = yield* db
+      .select()
+      .from(EventTable)
+      .where(eq(EventTable.type, "message.part.updated.1"))
+      .all()
+      .pipe(Effect.orDie)
+
+    expect(messageRows.length).toBeGreaterThan(0)
+    expect(snapshots).toHaveLength(0)
+    expect(partSnapshots).toHaveLength(0)
+  }),
+  60_000,
 )

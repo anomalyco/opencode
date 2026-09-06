@@ -3,7 +3,7 @@ export * as EventV2 from "./event"
 import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
-import { and, asc, eq, gt, inArray } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
@@ -121,6 +121,13 @@ export interface PublishOptions {
   readonly location?: Location.Ref
   /** Local operational projection committed atomically with a new durable event. Not replayed or serialized. */
   readonly commit?: (seq: number) => Effect.Effect<void>
+  /**
+   * When false, the durable event is projected locally but NOT persisted to the
+   * event table or sequence. The payload is still notified to in-process
+   * listeners (SSE, UI) but carries no `durable` envelope, so cross-instance
+   * sync does not observe it. Defaults to true (full event sourcing).
+   */
+  readonly persist?: boolean
 }
 
 export interface Interface {
@@ -212,6 +219,7 @@ export const layerWith = (options?: LayerOptions) =>
           readonly strictOwner?: boolean
         },
         commit?: (seq: number) => Effect.Effect<void>,
+        persist = true,
       ) {
         return Effect.gen(function* () {
           const durable = definition?.durable
@@ -234,6 +242,35 @@ export const layerWith = (options?: LayerOptions) =>
                 )
               }
               const list = projectors.get(event.type) ?? []
+              if (!persist) {
+                // Local-only publish: project the event into the operational
+                // tables (MessageTable/PartTable/SessionTable) atomically, but
+                // do not append to the durable event log or advance the
+                // aggregate sequence. Returning undefined signals the caller to
+                // notify listeners with no `durable` envelope, so cross-instance
+                // sync never observes this event.
+                return yield* Effect.uninterruptible(
+                  Effect.gen(function* () {
+                    yield* db
+                      .transaction(
+                        () =>
+                          Effect.gen(function* () {
+                            const committed = {
+                              ...event,
+                              durable: { aggregateID, seq: -1, version: durable.version },
+                            } as Payload
+                            for (const projector of list) {
+                              yield* projector(committed)
+                            }
+                            return
+                          }),
+                        { behavior: "immediate" },
+                      )
+                      .pipe(Effect.orDie)
+                    return undefined
+                  }),
+                )
+              }
               return yield* Effect.uninterruptible(
                 Effect.gen(function* () {
                   const committed = yield* db
@@ -366,7 +403,12 @@ export const layerWith = (options?: LayerOptions) =>
         })
       }
 
-      function publishEvent<D extends Definition>(definition: D, event: Payload<D>, commit?: PublishOptions["commit"]) {
+      function publishEvent<D extends Definition>(
+        definition: D,
+        event: Payload<D>,
+        commit?: PublishOptions["commit"],
+        persist = true,
+      ) {
         return Effect.gen(function* () {
           if (!definition?.durable && commit)
             return yield* Effect.die(
@@ -376,7 +418,7 @@ export const layerWith = (options?: LayerOptions) =>
               }),
             )
           if (definition?.durable) {
-            const committed = yield* commitDurableEvent(definition, event as Payload, undefined, commit)
+            const committed = yield* commitDurableEvent(definition, event as Payload, undefined, commit, persist)
             if (committed) {
               event = {
                 ...event,
@@ -434,6 +476,7 @@ export const layerWith = (options?: LayerOptions) =>
               data,
             } as Payload<D>,
             options?.commit,
+            options?.persist ?? true,
           )
         })
       }
@@ -636,3 +679,84 @@ export const layerWith = (options?: LayerOptions) =>
 
 const layer = layerWith()
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [Database.node] })
+
+export const SNAPSHOT_TYPES = ["message.updated", "message.part.updated"] as const
+
+/**
+ * Compact snapshot-like durable events, keeping only the latest occurrence per
+ * (aggregate, type, entity) and deleting intermediate full-state copies.
+ *
+ * These events carry the complete message/part payload on every update, so a
+ * single message renders N rows whose payloads are total supersets of their
+ * predecessors. Replaying the retained latest row reproduces the identical
+ * final projection (the projector upserts by id), while intermediate rows are
+ * pure write amplification.
+ *
+ * Deleting rows leaves `seq` gaps; sequence stream readers (`readAfter`,
+ * `history`) use `seq > after` so gaps are transparent. Replay packets are
+ * re-cost in the sender and validated against their own emitted `seq` order,
+ * not against DB adjacency, so gaps are also safe for sync replay.
+ *
+ * Non-snapshot lifecycle rows (`session.created`, `message.removed`,
+ * `message.part.delta`, ...) are never touched, and `event_sequence` is left
+ * at its current high-water mark.
+ */
+export const compactSnapshotEvents = Effect.fn("EventV2.compactSnapshotEvents")(function* (
+  db: Database.Interface["db"],
+) {
+  const snapshotTypes = SNAPSHOT_TYPES.map((type) => versionedType(type, 1))
+  const stats = yield* db
+    .select({
+      rows: sql<number>`count(*)`,
+      bytes: sql<number>`sum(length(data))`,
+    })
+    .from(EventTable)
+    .where(inArray(EventTable.type, snapshotTypes))
+    .get()
+    .pipe(Effect.orDie)
+  yield* db
+    .run(
+      sql.raw(`
+        DELETE FROM "event"
+        WHERE "type" IN ('message.updated.1', 'message.part.updated.1')
+          AND "id" NOT IN (
+            SELECT "id" FROM (
+              SELECT
+                "id",
+                ROW_NUMBER() OVER (
+                  PARTITION BY "aggregate_id", "type", "entity"
+                  ORDER BY "seq" DESC
+                ) AS "rn"
+              FROM (
+                SELECT
+                  "id",
+                  "aggregate_id",
+                  "type",
+                  "seq",
+                  CASE "type"
+                    WHEN 'message.updated.1' THEN json_extract("data", '$.info.id')
+                    WHEN 'message.part.updated.1' THEN json_extract("data", '$.part.id')
+                  END AS "entity"
+                FROM "event"
+                WHERE "type" IN ('message.updated.1', 'message.part.updated.1')
+              )
+            )
+            WHERE "rn" = 1
+          )
+      `),
+    )
+    .pipe(Effect.orDie)
+  const remaining = yield* db
+    .select({
+      rows: sql<number>`count(*)`,
+      bytes: sql<number>`sum(length(data))`,
+    })
+    .from(EventTable)
+    .where(inArray(EventTable.type, snapshotTypes))
+    .get()
+    .pipe(Effect.orDie)
+  return {
+    removed: (stats?.rows ?? 0) - (remaining?.rows ?? 0),
+    bytes: (stats?.bytes ?? 0) - (remaining?.bytes ?? 0),
+  }
+})

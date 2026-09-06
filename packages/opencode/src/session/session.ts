@@ -628,17 +628,25 @@ const layer: Layer.Layer<
 
     const updateMessage = <T extends SessionV1.Info>(msg: T): Effect.Effect<T> =>
       Effect.gen(function* () {
-        yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID: msg.sessionID, info: msg })
+        yield* events.publish(
+          SessionV1.Event.MessageUpdated,
+          { sessionID: msg.sessionID, info: msg },
+          { persist: flags.experimentalWorkspaces },
+        )
         return msg
       }).pipe(Effect.withSpan("Session.updateMessage"))
 
     const updatePart = <T extends SessionV1.Part>(part: T): Effect.Effect<T> =>
       Effect.gen(function* () {
-        yield* events.publish(SessionV1.Event.PartUpdated, {
-          sessionID: part.sessionID,
-          part: structuredClone(part),
-          time: Date.now(),
-        })
+        yield* events.publish(
+          SessionV1.Event.PartUpdated,
+          {
+            sessionID: part.sessionID,
+            part: structuredClone(part),
+            time: Date.now(),
+          },
+          { persist: flags.experimentalWorkspaces },
+        )
         return part
       }).pipe(Effect.withSpan("Session.updatePart"))
 
