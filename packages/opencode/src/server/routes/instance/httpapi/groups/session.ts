@@ -70,6 +70,7 @@ export const SummarizePayload = Schema.Struct({
 export const PromptPayload = Schema.Struct(Struct.omit(SessionPrompt.PromptInput.fields, ["sessionID"]))
 export const CommandPayload = Schema.Struct(Struct.omit(SessionPrompt.CommandInput.fields, ["sessionID"]))
 export const ShellPayload = Schema.Struct(Struct.omit(SessionPrompt.ShellInput.fields, ["sessionID"]))
+export const SideQuestionPayload = Schema.Struct(Struct.omit(SessionPrompt.SideQuestionInput.fields, ["sessionID"]))
 export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput.fields, ["sessionID"]))
 export const PermissionResponsePayload = Schema.Struct({
   response: PermissionV1.Reply,
@@ -92,6 +93,7 @@ export const SessionPaths = {
   share: `${root}/:sessionID/share`,
   init: `${root}/:sessionID/init`,
   summarize: `${root}/:sessionID/summarize`,
+  sideQuestion: `${root}/:sessionID/side-question`,
   prompt: `${root}/:sessionID/message`,
   promptAsync: `${root}/:sessionID/prompt_async`,
   command: `${root}/:sessionID/command`,
@@ -311,6 +313,20 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.summarize",
             summary: "Summarize session",
             description: "Generate a concise summary of the session using AI compaction to preserve key information.",
+          }),
+        ),
+        HttpApiEndpoint.post("sideQuestion", SessionPaths.sideQuestion, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: SideQuestionPayload,
+          success: described(Schema.String, "Side question answer"),
+          error: [HttpApiError.BadRequest, HttpApiError.InternalServerError, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.side_question",
+            summary: "Ask side question",
+            description:
+              "Answer one tool-free question from the session context without changing the session history or active execution.",
           }),
         ),
         HttpApiEndpoint.post("prompt", SessionPaths.prompt, {
