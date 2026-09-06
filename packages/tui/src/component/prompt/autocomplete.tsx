@@ -604,12 +604,16 @@ export function Autocomplete(props: {
           let score = objResults.score
           const prefix = store.visible === "reference" ? "@" : store.visible === "command" ? "/" : ""
           if (displayResult && displayResult.target.startsWith(prefix + searchValue)) {
-            score *= 2
+            // Descriptions should not reorder equally matching command names.
+            score = (store.visible === "command" ? displayResult.score : score) * 2
           }
           const frecencyScore = objResults.obj.path ? frecency.getFrecency(objResults.obj.path) : 0
           return score * (1 + frecencyScore)
         },
       })
+      .toSorted(
+        (a, b) => b.score - a.score || (store.visible === "command" ? a.obj.display.localeCompare(b.obj.display) : 0),
+      )
       .map((arr) => arr.obj)
 
     return [...fuzziedNonFiles, ...fileOptions].slice(0, 10)
