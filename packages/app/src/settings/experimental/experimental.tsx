@@ -37,6 +37,7 @@ export const SettingsExperimental: Component = () => {
                 data-action="settings-tab-layout"
                 options={tabLayoutOptions}
                 current={tabLayoutOptions.find((option) => option === settings.appearance.tabLayout())}
+                aria-label={language.t("settings.appearance.row.tabs.title")}
                 placement="bottom-end"
                 gutter={6}
                 label={(option) =>

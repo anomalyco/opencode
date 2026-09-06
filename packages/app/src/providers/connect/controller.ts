@@ -175,7 +175,7 @@ export function createProviderConnectionController(options: {
     }
     if (selected.type !== "oauth") return
     if (selected.form?.some((field) => field.type !== "string")) {
-      dispatch({ type: "auth.error", error: "This authentication form contains unsupported fields" })
+      dispatch({ type: "auth.error", error: language.t("provider.connect.error.unsupportedFields") })
       return
     }
     dispatch({ type: "auth.pending" })
