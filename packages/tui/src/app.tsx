@@ -242,7 +242,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
         if (renderer.isDestroyed) return
 
-        await render(() => {
+        process.stderr.write("MOUNT-BEGIN\n"); await render(() => {
           return (
             <ExitProvider
               exit={(reason) => {
@@ -348,7 +348,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
               </EpilogueProvider>
             </ExitProvider>
           )
-        }, renderer)
+        }, renderer).catch((e) => { process.stderr.write("RENDER-CAUGHT " + (e && e.stack ? e.stack : e) + "\n"); }); process.stderr.write("MOUNT-DONE\n")
       })
       yield* Deferred.await(shutdown)
       return { epilogue: exit.epilogue, reason: exit.reason }

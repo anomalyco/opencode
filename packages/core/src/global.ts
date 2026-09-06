@@ -1,5 +1,5 @@
 import path from "path"
-import fs from "fs/promises"
+import { mkdirSync } from "node:fs"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import os from "os"
 import { Context, Effect, Layer } from "effect"
@@ -32,15 +32,9 @@ export const Path = paths
 
 Flock.setGlobal({ state })
 
-await Promise.all([
-  fs.mkdir(Path.data, { recursive: true }),
-  fs.mkdir(Path.config, { recursive: true }),
-  fs.mkdir(Path.state, { recursive: true }),
-  fs.mkdir(Path.tmp, { recursive: true }),
-  fs.mkdir(Path.log, { recursive: true }),
-  fs.mkdir(Path.bin, { recursive: true }),
-  fs.mkdir(Path.repos, { recursive: true }),
-])
+for (const dir of [Path.data, Path.config, Path.state, Path.tmp, Path.log, Path.bin, Path.repos]) {
+  mkdirSync(dir, { recursive: true })
+}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Global") {}
 
