@@ -161,6 +161,7 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
   supportsStore: Schema.optional(Schema.Boolean),
   supportsUsageInStreaming: Schema.optional(Schema.Boolean),
   supportsStrictMode: Schema.optional(Schema.Boolean),
+  supportsFreeformTools: Schema.optional(Schema.Boolean),
   zaiToolStream: Schema.optional(Schema.Boolean),
   requireSignature: Schema.optional(Schema.Boolean),
 }) {}
