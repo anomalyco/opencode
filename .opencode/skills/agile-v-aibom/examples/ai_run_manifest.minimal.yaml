@@ -1,0 +1,110 @@
+# Example: Minimal AI Run Manifest (L0 task)
+# Use case: AI helped draft a README section (low-risk, local agent)
+
+aibom_schema_version: "0.1"
+manifest_type: "agile-v-agent-run-bom"
+
+identity:
+  task_id: "AAV-0042"
+  run_id: "RUN-0001"
+  created_at: "2026-07-14T10:00:00Z"
+  created_by: "claude-code-agent"
+  repository: "acme-corp/firmware-hub"
+  commit_sha: "abc123def456"
+  branch: "feature/docs-update"
+  pull_request: ""
+
+risk:
+  agile_v_risk_level: "L0"
+  ai_influence_level: "assistive"
+  regulated_context: false
+  human_approval_required: false
+
+models:
+  - name: "claude-sonnet-4"
+    provider: "Anthropic"
+    model_id: "claude-sonnet-4"
+    model_version: ""
+    endpoint_or_deployment: "api.anthropic.com"
+    inference_runtime: "Anthropic API"
+    runtime_version: ""
+    context_window: 200000
+    temperature: null
+    top_p: null
+    tool_calling_enabled: true
+    confidence: "declared"
+    evidence_locator: "agent session metadata"
+
+agent_runtime:
+  agent_name: "Claude Code"
+  agent_framework: "Claude Code (Anthropic)"
+  framework_version: ""
+  execution_environment: "local"
+  sandbox_image: ""
+  sandbox_image_digest: ""
+  orchestrator: ""
+  confidence: "declared"
+  evidence_locator: "agent session"
+
+agile_v_skills:
+  - skill: "agile-v-core"
+    version: "1.4"
+    source: "repository"
+    commit_sha: ""
+    confidence: "declared"
+    evidence_locator: "AGENTS.md"
+
+tools:
+  - name: "filesystem"
+    type: "filesystem"
+    version: ""
+    allowed: true
+    used: true
+    confidence: "declared"
+    evidence_locator: "agent tool log"
+
+rag_and_context:
+  sources: []
+  embedding_model:
+    name: ""
+    version: ""
+    confidence: "declared"
+  vector_store:
+    name: ""
+    version: ""
+    collection: ""
+    confidence: "declared"
+
+external_services: []
+
+runtime_inventory:
+  source: "manual"
+  imported_bom: ""
+  imported_bom_hash: ""
+  confidence: "declared"
+
+security_and_privacy:
+  secrets_redacted: true
+  hidden_chain_of_thought_excluded: true
+  pii_redacted: true
+  prompt_capture_policy: "metadata_only"
+
+evidence_links:
+  sbom: ""
+  ml_bom: ""
+  agent_log: ""
+  test_results: ""
+  evidence_bundle: ""
+  verification_report: ""
+  release_package: ""
+
+change_control:
+  baseline_manifest: ""
+  bom_diff_required: false
+  revalidation_required: false
+  revalidation_reason: ""
+
+summary:
+  unresolved_items: []
+  verifier_notes: "L0 task — model name captured, full identity not required."
+  human_approval: "not_required"

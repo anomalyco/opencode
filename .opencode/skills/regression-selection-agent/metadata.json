@@ -1,0 +1,47 @@
+{
+  "name": "regression-selection-agent",
+  "version": "1.1.0",
+  "description": "Selects and prioritizes regression tests from the impact map and graph dependency relationships. Identifies gaps in regression coverage before the Red Team step.",
+  "category": "testing",
+  "lifecycle_position": "post-impact",
+  "inputs": [
+    ".agile-v/phases/01-impact/impact_map.md",
+    ".agile-v/phases/01-impact/affected_components.json",
+    "test inventory",
+    ".agile-v/phases/00-understanding/normalized_graph.json",
+    "previous test results"
+  ],
+  "outputs": [
+    "required_regression_tests.md",
+    "selected_tests.json",
+    "regression_coverage_rationale.md",
+    "missing_regression_tests.md"
+  ],
+  "output_dir": ".agile-v/phases/03-regression/",
+  "triggers": [
+    "regression risk",
+    "existing tests",
+    "what tests need to run",
+    "select regression tests",
+    "test coverage gaps"
+  ],
+  "dependencies": [
+    "system-understanding-agent",
+    "impact-analysis-agent"
+  ],
+  "evidence_level": "supporting",
+  "evidence_section": "05_tests",
+  "human_gate_required": false,
+  "blocks_on_low_confidence": false,
+  "compatible_frameworks": [
+    "Claude Code",
+    "Codex",
+    "Cursor",
+    "Copilot",
+    "Gemini CLI",
+    "OpenCode",
+    "Cline"
+  ],
+  "previous_skill": "impact-analysis-agent",
+  "next_skill": "test-designer"
+}

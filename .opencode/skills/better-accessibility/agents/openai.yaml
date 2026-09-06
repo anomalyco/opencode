@@ -1,0 +1,3 @@
+interface:
+  display_name: "Better Accessibility"
+  short_description: "Focus, keyboard, ARIA, forms and screen readers"

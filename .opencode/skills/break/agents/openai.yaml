@@ -1,0 +1,5 @@
+interface:
+  display_name: "Break"
+  short_description: "Render one component under hostile inputs and report what breaks"
+policy:
+  allow_implicit_invocation: false

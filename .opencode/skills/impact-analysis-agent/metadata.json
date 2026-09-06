@@ -1,0 +1,47 @@
+{
+  "name": "impact-analysis-agent",
+  "version": "1.1.0",
+  "description": "Maps a change request to affected graph nodes, files, and tests. Produces an impact map and regression-test candidates before any code is written.",
+  "category": "understanding",
+  "lifecycle_position": "gate-0-post",
+  "inputs": [
+    "change_request.md",
+    ".agile-v/phases/00-understanding/system_overview.md",
+    ".agile-v/phases/00-understanding/normalized_graph.json",
+    ".understand-anything/diff-overlay.json"
+  ],
+  "outputs": [
+    "impact_map.md",
+    "affected_components.json",
+    "regression_test_candidates.md",
+    "change_risk_assessment.md",
+    "impact_confidence.md"
+  ],
+  "output_dir": ".agile-v/phases/01-impact/",
+  "triggers": [
+    "what will this impact",
+    "what could break",
+    "regression risk",
+    "multi-file change",
+    "after system-understanding-agent"
+  ],
+  "dependencies": [
+    "system-understanding-agent"
+  ],
+  "evidence_level": "primary",
+  "evidence_section": "01_impact",
+  "human_gate_required": true,
+  "human_gate_name": "Gate 1: Requirement Revision and Findings Approval",
+  "blocks_on_low_confidence": false,
+  "compatible_frameworks": [
+    "Claude Code",
+    "Codex",
+    "Cursor",
+    "Copilot",
+    "Gemini CLI",
+    "OpenCode",
+    "Cline"
+  ],
+  "previous_skill": "system-understanding-agent",
+  "next_skill": "requirement-architect"
+}

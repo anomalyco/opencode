@@ -1,0 +1,24 @@
+{
+  "evidence_type": "ai_bom",
+  "schema_version": "0.1",
+  "task_id": "AAV-0117",
+  "run_id": "RUN-0042",
+  "risk_level": "L2",
+  "ai_influence_level": "substantial",
+  "manifest_path": ".agile-v/aibom/AAV-0117/AI_RUN_MANIFEST.yaml",
+  "manifest_hash": "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+  "cyclonedx_export_path": ".agile-v/aibom/AAV-0117/agent_run.cdx.json",
+  "cyclonedx_export_hash": "sha256:b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3",
+  "sbom_link": ".agile-v/evidence/AAV-0117/sbom.cdx.json",
+  "observed_runtime_inventory": {
+    "source": "openhands-hook",
+    "path": ".agile-v/aibom/AAV-0117/openhands_session.log",
+    "hash": "sha256:c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"
+  },
+  "unresolved_items": [],
+  "revalidation_required": false,
+  "revalidation_reason": "",
+  "verifier_status": "passed",
+  "human_approval_required": false,
+  "human_approval_status": "not_required"
+}

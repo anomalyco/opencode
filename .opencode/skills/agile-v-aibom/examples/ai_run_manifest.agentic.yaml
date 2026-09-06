@@ -1,0 +1,148 @@
+# Example: Agentic Software Run Manifest (L2 task)
+# Use case: AI modified production authentication code (substantial influence)
+
+aibom_schema_version: "0.1"
+manifest_type: "agile-v-agent-run-bom"
+
+identity:
+  task_id: "AAV-0117"
+  run_id: "RUN-0042"
+  created_at: "2026-07-14T14:23:00Z"
+  created_by: "openhands-agent"
+  repository: "acme-corp/api-service"
+  commit_sha: "f7e3a1b9c4d2"
+  branch: "feature/auth-refactor"
+  pull_request: "https://github.com/acme-corp/api-service/pull/88"
+
+risk:
+  agile_v_risk_level: "L2"
+  ai_influence_level: "substantial"
+  regulated_context: false
+  human_approval_required: false
+
+models:
+  - name: "claude-sonnet-4"
+    provider: "Anthropic"
+    model_id: "claude-sonnet-4"
+    model_version: "20261001"
+    endpoint_or_deployment: "api.anthropic.com/v1/messages"
+    inference_runtime: "Anthropic API"
+    runtime_version: ""
+    context_window: 200000
+    temperature: 0.0
+    top_p: null
+    tool_calling_enabled: true
+    confidence: "declared"
+    evidence_locator: "OpenHands session config: .openhands/config.toml"
+
+agent_runtime:
+  agent_name: "OpenHands"
+  agent_framework: "OpenHands"
+  framework_version: "0.38.0"
+  execution_environment: "container"
+  sandbox_image: "docker.all-hands.dev/all-hands-ai/runtime:0.38-nikolaik"
+  sandbox_image_digest: "sha256:a1b2c3d4e5f6..."
+  orchestrator: ""
+  confidence: "verified"
+  evidence_locator: "docker inspect + .openhands/config.toml"
+
+agile_v_skills:
+  - skill: "agile-v-core"
+    version: "1.4"
+    source: "repository"
+    commit_sha: "abc123"
+    confidence: "declared"
+    evidence_locator: "AGENTS.md"
+  - skill: "build-agent"
+    version: "1.3"
+    source: "repository"
+    commit_sha: "abc123"
+    confidence: "declared"
+    evidence_locator: "AGENTS.md"
+  - skill: "agile-v-aibom"
+    version: "1.0"
+    source: "repository"
+    commit_sha: "abc123"
+    confidence: "declared"
+    evidence_locator: "AGENTS.md"
+
+tools:
+  - name: "filesystem"
+    type: "filesystem"
+    version: ""
+    allowed: true
+    used: true
+    confidence: "declared"
+    evidence_locator: "OpenHands tool log"
+  - name: "bash"
+    type: "shell"
+    version: ""
+    allowed: true
+    used: true
+    confidence: "declared"
+    evidence_locator: "OpenHands tool log"
+  - name: "git"
+    type: "git"
+    version: "2.43.0"
+    allowed: true
+    used: true
+    confidence: "declared"
+    evidence_locator: "OpenHands tool log"
+
+rag_and_context:
+  sources:
+    - name: "acme-corp/api-service repository"
+      type: "repo"
+      version_or_hash: "f7e3a1b9c4d2"
+      retrieved_at: "2026-07-14T14:20:00Z"
+      confidence: "verified"
+      evidence_locator: "git log HEAD"
+  embedding_model:
+    name: ""
+    version: ""
+    confidence: "declared"
+  vector_store:
+    name: ""
+    version: ""
+    collection: ""
+    confidence: "declared"
+
+external_services:
+  - name: "Anthropic API"
+    type: "llm_api"
+    version: ""
+    endpoint_class: "public"
+    confidence: "declared"
+    evidence_locator: ".openhands/config.toml"
+
+runtime_inventory:
+  source: "openhands-hook"
+  imported_bom: ""
+  imported_bom_hash: ""
+  confidence: "declared"
+
+security_and_privacy:
+  secrets_redacted: true
+  hidden_chain_of_thought_excluded: true
+  pii_redacted: true
+  prompt_capture_policy: "metadata_only"
+
+evidence_links:
+  sbom: ".agile-v/evidence/AAV-0117/sbom.cdx.json"
+  ml_bom: ".agile-v/aibom/AAV-0117/agent_run.cdx.json"
+  agent_log: ".agile-v/aibom/AAV-0117/openhands_session.log"
+  test_results: ".agile-v/evidence/AAV-0117/test_results.xml"
+  evidence_bundle: ".agile-v/evidence/AAV-0117/EVIDENCE_BUNDLE.json"
+  verification_report: ".agile-v/evidence/AAV-0117/VERIFICATION_SUMMARY.md"
+  release_package: ""
+
+change_control:
+  baseline_manifest: ".agile-v/aibom/AAV-0117/baseline/AI_RUN_MANIFEST.yaml"
+  bom_diff_required: true
+  revalidation_required: false
+  revalidation_reason: ""
+
+summary:
+  unresolved_items: []
+  verifier_notes: "L2 task. All model and runtime fields resolved. BOM diff shows no change from baseline."
+  human_approval: "not_required"

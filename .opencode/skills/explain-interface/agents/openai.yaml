@@ -1,0 +1,5 @@
+interface:
+  display_name: "Explain Interface"
+  short_description: "How was this built? From a URL or a screenshot"
+policy:
+  allow_implicit_invocation: false

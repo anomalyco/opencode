@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang=en>
+  <head>
+    <meta charset=utf-8>
+    <title>Showing hoisting</title>
+  </head>
+  <body>
+    <div id="body"></div>
+  </body>
+  <script>
+    console.log(typeof variable); // undefined
+    // console.log(variable); // Raises: ReferenceError: variable is not defined
+
+    function hoist() {
+      a = 20;
+      var b = 100;
+    }
+
+    hoist();
+
+    // 20, accessible as a global variable outside of hoist
+    console.log(a);
+
+    // Raises: ReferenceError: b is not defined
+    // console.log(b);
+
+    document.getElementById("body").innerHTML = "Hello JavaScript!";
+  </script>
+</html>

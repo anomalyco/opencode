@@ -1,0 +1,51 @@
+{
+  "name": "graph-traceability-agent",
+  "version": "1.1.0",
+  "description": "Links Agile V requirements to knowledge graph nodes, changed files, and test evidence. Produces the graph traceability matrix for the evidence bundle.",
+  "category": "traceability",
+  "lifecycle_position": "post-build",
+  "inputs": [
+    ".agile-v/REQUIREMENTS.md",
+    ".agile-v/phases/01-impact/impact_map.md",
+    ".agile-v/phases/01-impact/affected_components.json",
+    "implementation diff",
+    "test results",
+    ".agile-v/phases/00-understanding/normalized_graph.json"
+  ],
+  "outputs": [
+    "graph_traceability_matrix.md",
+    "req_to_component_links.json",
+    "component_to_test_links.json",
+    "traceability_gaps.md"
+  ],
+  "output_dir": ".agile-v/traceability/",
+  "triggers": [
+    "traceability matrix",
+    "link requirements to components",
+    "link requirements to tests",
+    "audit evidence",
+    "orphan requirements",
+    "orphan changes"
+  ],
+  "dependencies": [
+    "system-understanding-agent",
+    "impact-analysis-agent",
+    "requirement-architect",
+    "build-agent"
+  ],
+  "evidence_level": "primary",
+  "evidence_section": "07_traceability",
+  "human_gate_required": false,
+  "blocks_on_low_confidence": false,
+  "compatible_frameworks": [
+    "Claude Code",
+    "Codex",
+    "Cursor",
+    "Copilot",
+    "Gemini CLI",
+    "OpenCode",
+    "Cline"
+  ],
+  "previous_skill": "build-agent",
+  "next_skill": "red-team-verifier"
+}

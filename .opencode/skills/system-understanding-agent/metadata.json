@@ -1,0 +1,52 @@
+{
+  "name": "system-understanding-agent",
+  "version": "1.1.0",
+  "description": "Consumes Understand Anything knowledge graphs and produces Agile V system-understanding artifacts. Implements Gate 0 of the integrated Agile V lifecycle.",
+  "category": "understanding",
+  "lifecycle_position": "gate-0",
+  "inputs": [
+    "change_request.md",
+    ".understand-anything/knowledge-graph.json",
+    ".understand-anything/diff-overlay.json"
+  ],
+  "outputs": [
+    "system_overview.md",
+    "architecture_map.md",
+    "domain_flow_summary.md",
+    "knowledge_graph_summary.md",
+    "known_constraints.md",
+    "system_understanding_confidence.md",
+    "understanding_gate_decision.md",
+    "normalized_graph.json",
+    "knowledge_graph_hash.txt"
+  ],
+  "output_dir": ".agile-v/phases/00-understanding/",
+  "triggers": [
+    "existing codebase",
+    "impact analysis",
+    "onboarding",
+    "knowledge graph available",
+    "multi-file change",
+    "unknown architecture",
+    "what does this system do",
+    "what will this affect"
+  ],
+  "dependencies": [
+    "optional: Lum1104/Understand-Anything"
+  ],
+  "evidence_level": "supporting",
+  "evidence_section": "00_understanding",
+  "human_gate_required": true,
+  "human_gate_name": "Gate 0: System Understanding Gate",
+  "blocks_on_low_confidence": true,
+  "compatible_frameworks": [
+    "Claude Code",
+    "Codex",
+    "Cursor",
+    "Copilot",
+    "Gemini CLI",
+    "OpenCode",
+    "Cline"
+  ],
+  "next_skill": "impact-analysis-agent"
+}

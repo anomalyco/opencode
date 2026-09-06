@@ -1,0 +1,51 @@
+{
+  "name": "diff-evidence-agent",
+  "version": "1.1.0",
+  "description": "Creates evidence comparing the predicted impact map to the actual implementation diff. Closes the pre-change to post-change evidence loop for audit and Red Team verification.",
+  "category": "evidence",
+  "lifecycle_position": "post-traceability",
+  "inputs": [
+    "implementation diff",
+    ".agile-v/phases/01-impact/impact_map.md",
+    ".agile-v/phases/01-impact/change_risk_assessment.md",
+    ".agile-v/REQUIREMENTS.md",
+    ".agile-v/traceability/graph_traceability_matrix.md",
+    "test results",
+    ".understand-anything/diff-overlay.json"
+  ],
+  "outputs": [
+    "diff_impact_report.md",
+    "risk_delta.md",
+    "release_impact_summary.md",
+    "changed_node_list.json"
+  ],
+  "output_dir": ".agile-v/traceability/",
+  "triggers": [
+    "what actually changed",
+    "predicted vs actual",
+    "diff evidence",
+    "unexpected changes",
+    "risk delta",
+    "release evidence"
+  ],
+  "dependencies": [
+    "impact-analysis-agent",
+    "graph-traceability-agent",
+    "build-agent"
+  ],
+  "evidence_level": "primary",
+  "evidence_section": "07_traceability",
+  "human_gate_required": false,
+  "blocks_on_low_confidence": false,
+  "compatible_frameworks": [
+    "Claude Code",
+    "Codex",
+    "Cursor",
+    "Copilot",
+    "Gemini CLI",
+    "OpenCode",
+    "Cline"
+  ],
+  "previous_skill": "graph-traceability-agent",
+  "next_skill": "red-team-verifier"
+}
