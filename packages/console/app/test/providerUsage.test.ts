@@ -3,7 +3,7 @@ import type { ZenData } from "@opencode-ai/console-core/model.js"
 import type { ProviderHelper } from "../src/routes/zen/util/provider/provider"
 import { anthropicHelper } from "../src/routes/zen/util/provider/anthropic"
 import { googleHelper } from "../src/routes/zen/util/provider/google"
-import { oaCompatHelper } from "../src/routes/zen/util/provider/openai-compatible"
+import { fromOaCompatibleRequest, oaCompatHelper } from "../src/routes/zen/util/provider/openai-compatible"
 import { openaiHelper } from "../src/routes/zen/util/provider/openai"
 
 const providers = {
@@ -96,5 +96,47 @@ describe("provider usage extraction", () => {
       cacheWrite5mTokens: 3,
       cacheWrite1hTokens: undefined,
     })
+  })
+})
+
+describe("OpenAI-compatible request normalization", () => {
+  test("adds object type to root oneOf tool parameter schemas", () => {
+    const request = fromOaCompatibleRequest({
+      model: "deepseek-v4-flash",
+      messages: [{ role: "user", content: "schema compatibility probe" }],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "automation_update",
+            parameters: {
+              $defs: {
+                stringValue: { type: "string" },
+              },
+              oneOf: [
+                {
+                  type: "object",
+                  properties: {
+                    mode: { type: "string", enum: ["view"] },
+                    id: { $ref: "#/$defs/stringValue" },
+                  },
+                  required: ["mode", "id"],
+                },
+                {
+                  type: "object",
+                  properties: {
+                    mode: { type: "string", enum: ["delete"] },
+                    id: { $ref: "#/$defs/stringValue" },
+                  },
+                  required: ["mode", "id"],
+                },
+              ],
+            },
+          },
+        },
+      ],
+    })
+
+    expect(request.tools?.[0]?.function.parameters?.type).toBe("object")
   })
 })
