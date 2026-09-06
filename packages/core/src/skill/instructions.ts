@@ -5,6 +5,7 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { Agent } from "../agent.js"
 import { Skill } from "../skill.js"
 import { Instructions } from "../instructions/index.js"
+import { Preferences } from "../preferences.js"
 
 const Summary = Schema.Struct({
   id: Skill.ID,
@@ -66,14 +67,20 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const skills = yield* Skill.Service
+    const preferences = yield* Preferences.Service
 
     return Service.of({
       load: Effect.fn("SkillInstructions.load")(function* (selection) {
         const agent = selection.info
         if (!agent) return Instructions.empty
+        const disabled = new Set(
+          (yield* preferences.list())
+            .filter((entry) => entry.target.kind === "skill.activation" && entry.value === "disabled")
+            .map((entry) => entry.target.id),
+        )
         const available = Skill.available(yield* skills.list(), agent)
           .flatMap((skill) =>
-            skill.description === undefined || skill.autoinvoke === false
+            disabled.has(skill.id) || skill.description === undefined || skill.autoinvoke === false
               ? []
               : [{ id: skill.id, name: skill.name, description: skill.description }],
           )
@@ -93,4 +100,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Skill.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Skill.node, Preferences.node] })

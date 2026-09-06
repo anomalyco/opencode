@@ -6,6 +6,8 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Skill } from "@opencode-ai/core/skill"
 import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
+import { Preferences } from "@opencode-ai/core/preferences"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { it } from "../lib/effect"
 import { readInitial, readUpdate } from "../lib/instructions"
 
@@ -45,6 +47,38 @@ const layer = (list: () => Skill.Info[]) =>
   ])
 
 describe("SkillInstructions", () => {
+  it.effect("applies live preferences without overriding autoinvoke or permissions", () =>
+    Effect.gen(function* () {
+      const skills = yield* Skill.Service
+      const preferences = yield* Preferences.Service
+      const instructions = yield* SkillInstructions.Service
+      const agent = Agent.Info.make({
+        ...Agent.Info.default(build),
+        permissions: [{ action: "skill", resource: "denied", effect: "deny" }],
+      })
+      yield* skills.transform((editor) => [effect, manual, denied].forEach(editor.add))
+      yield* preferences.set({ kind: "skill.activation", id: manual.id }, "enabled")
+      yield* preferences.set({ kind: "skill.activation", id: denied.id }, "enabled")
+      const initial = yield* instructions.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(readInitial))
+      expect(initial.text).toContain("<id>effect</id>")
+      expect(initial.text).not.toContain("<id>manual</id>")
+      expect(initial.text).not.toContain("<id>denied</id>")
+      expect(yield* skills.get(manual.id)).toEqual(manual)
+
+      yield* preferences.set({ kind: "skill.activation", id: effect.id }, "disabled")
+      const removed = yield* instructions
+        .load({ id: agent.id, info: agent })
+        .pipe(Effect.flatMap((current) => readUpdate(current, initial)))
+      expect(removed.text).toContain("Do not use any previously listed skill")
+      yield* preferences.reset({ kind: "skill.activation", id: effect.id })
+      expect(
+        (yield* instructions.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(readInitial))).text,
+      ).toContain("<id>effect</id>")
+    }).pipe(
+      Effect.provide(AppNodeBuilder.build(LayerNode.group([Skill.node, SkillInstructions.node, Preferences.node]))),
+    ),
+  )
+
   it.effect("renders described agent skills and updates the complete available list", () => {
     const agent = Agent.Info.make({
       ...Agent.Info.default(build),

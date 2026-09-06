@@ -3,11 +3,12 @@ export * as Skill from "./skill.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import type { FSUtil } from "@opencode-ai/util/fs-util"
 import path from "path"
-import { Context, Effect, Layer, Types } from "effect"
+import { Context, Effect, Layer, Schema, Types } from "effect"
 import type { Agent } from "@opencode-ai/schema/agent"
 import { Skill } from "@opencode-ai/schema/skill"
 import { Bus } from "./bus.js"
 import { Permission } from "./permission.js"
+import { Preferences } from "./preferences.js"
 import { State } from "./state.js"
 
 export const DirectorySource = Skill.DirectorySource
@@ -30,6 +31,12 @@ export const Name = Skill.Name
 export type Name = Skill.Name
 
 export { Event } from "@opencode-ai/schema/skill"
+
+export class DisabledError extends Schema.TaggedError<DisabledError>()("Skill.DisabledError", { id: ID }) {
+  override get message() {
+    return `Skill "${this.id}" is disabled. Re-enable it using /skills → Toggle skills.`
+  }
+}
 
 export const available = (skills: ReadonlyArray<Info>, agent: Agent.Info) =>
   skills.filter((skill) => Permission.evaluate("skill", skill.id, agent.permissions).effect !== "deny")
@@ -81,7 +88,7 @@ export type Editor = {
 }
 
 export interface Interface extends State.Transformable<Editor> {
-  readonly get: (id: ID) => Effect.Effect<Info | undefined>
+  readonly get: (id: ID) => Effect.Effect<Info | undefined, DisabledError>
   readonly list: () => Effect.Effect<Info[]>
 }
 
@@ -91,6 +98,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const preferences = yield* Preferences.Service
 
     const state = State.create<Data, Editor>({
       name: "skill",
@@ -118,7 +126,11 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       get: Effect.fn("Skill.get")(function* (id) {
-        return state.get().skills.get(id)
+        const skill = state.get().skills.get(id)
+        if (!skill) return undefined
+        if ((yield* preferences.get({ kind: "skill.activation", id })) === "disabled")
+          return yield* new DisabledError({ id })
+        return skill
       }),
       list: Effect.fn("Skill.list")(function* () {
         return Array.from(state.get().skills.values())
@@ -130,5 +142,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node],
+  deps: [Bus.node, Preferences.node],
 })

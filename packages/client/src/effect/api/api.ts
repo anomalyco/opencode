@@ -35,6 +35,7 @@ import type { Pty } from "@opencode-ai/schema/pty"
 import type { PtyTicket } from "@opencode-ai/schema/pty-ticket"
 import type { Reference } from "@opencode-ai/schema/reference"
 import type { Worktree } from "@opencode-ai/schema/worktree"
+import type { Preferences } from "@opencode-ai/schema/preferences"
 import type { Vcs } from "@opencode-ai/schema/vcs"
 import type { FileDiff } from "@opencode-ai/schema/file-diff"
 import type { WebSearch } from "@opencode-ai/schema/websearch"
@@ -1991,6 +1992,30 @@ export interface WorkspaceApi<E = never> {
   readonly destroy: WorkspaceDestroyOperation<E>
 }
 
+export type PreferencesListOutput = ReadonlyArray<Preferences.Entry>
+export type PreferencesListOperation<E = never> = () => Effect.Effect<PreferencesListOutput, E>
+
+export type PreferencesGetInput = { readonly kind: string; readonly id: string }
+export type PreferencesGetOutput = Preferences.Entry | null
+export type PreferencesGetOperation<E = never> = (input: PreferencesGetInput) => Effect.Effect<PreferencesGetOutput, E>
+
+export type PreferencesSetInput = { readonly kind: string; readonly id: string; readonly value: Preferences.Value }
+export type PreferencesSetOutput = void
+export type PreferencesSetOperation<E = never> = (input: PreferencesSetInput) => Effect.Effect<PreferencesSetOutput, E>
+
+export type PreferencesResetInput = { readonly kind: string; readonly id: string }
+export type PreferencesResetOutput = void
+export type PreferencesResetOperation<E = never> = (
+  input: PreferencesResetInput,
+) => Effect.Effect<PreferencesResetOutput, E>
+
+export interface PreferencesApi<E = never> {
+  readonly list: PreferencesListOperation<E>
+  readonly get: PreferencesGetOperation<E>
+  readonly set: PreferencesSetOperation<E>
+  readonly reset: PreferencesResetOperation<E>
+}
+
 export type VcsGetInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
@@ -2128,6 +2153,7 @@ export interface AppApi<E = never> {
   readonly reference: ReferenceApi<E>
   readonly worktree: WorktreeApi<E>
   readonly workspace: WorkspaceApi<E>
+  readonly preferences: PreferencesApi<E>
   readonly vcs: VcsApi<E>
   readonly debug: DebugApi<E>
   readonly migration: MigrationApi<E>

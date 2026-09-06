@@ -255,6 +255,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         credentialRemove: () => noContent,
         command: () => Effect.succeed({ location: location(config), data: [] }),
         skill: () => Effect.succeed({ location: location(config), data: [] }),
+        preferences: () => Effect.succeed([]),
         plugin: () => Effect.succeed({ location: location(config), data: [] }),
         mcp: () => Effect.succeed({ location: location(config), data: [] }),
         mcpResource: () => Effect.succeed({ location: location(config), data: { resources: [], templates: [] } }),

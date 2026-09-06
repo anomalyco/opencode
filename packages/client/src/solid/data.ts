@@ -20,6 +20,7 @@ import type {
   PermissionSavedInfo,
   PermissionRequest,
   PermissionReplyInput,
+  PreferencesEntry,
   Project,
   ProviderInfo,
   ReferenceInfo,
@@ -102,6 +103,7 @@ type LocationData = {
 }
 
 type Store = {
+  preferences?: PreferencesEntry[]
   session: {
     info: Record<string, SessionInfo>
     // Family index keyed by a family's root (or furthest-known-ancestor when the
@@ -1171,6 +1173,12 @@ export function createData(config: CreateDataInput) {
       return
     }
 
+    if (event.type === "preferences.updated") {
+      result.preferences.invalidate()
+      refresh(() => result.preferences.sync())
+      return
+    }
+
     if (!event.location) return
     const location = event.location
     switch (event.type) {
@@ -1287,6 +1295,7 @@ export function createData(config: CreateDataInput) {
   }
 
   const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
+  const skills = locationResource("skill", (location) => api().skill.list({ location }))
   const shells = locationResource("shell", async (location) => {
     const response = await api().shell.list({ location })
     const ref = { directory: response.location.directory, workspaceID: response.location.workspaceID }
@@ -1299,6 +1308,14 @@ export function createData(config: CreateDataInput) {
   const result = {
     on: config.event.on,
     listen: config.event.listen,
+    preferences: {
+      list: () => store.preferences,
+      sync: () =>
+        sync.run("preferences", async () => {
+          setStore("preferences", await api().preferences.list())
+        }),
+      invalidate: () => sync.invalidate("preferences"),
+    },
     session: {
       list() {
         return sessions()
@@ -1860,7 +1877,22 @@ export function createData(config: CreateDataInput) {
           setStore("location", key, { websearch: providers.data })
         },
       },
-      skill: locationResource("skill", (location) => api().skill.list({ location })),
+      skill: {
+        list: skills.list,
+        invalidate: skills.invalidate,
+        async sync(location?: LocationRef) {
+          await Promise.all([skills.sync(location), result.preferences.sync()])
+        },
+        available(location?: LocationRef) {
+          if (store.preferences === undefined) return undefined
+          const disabled = new Set(
+            store.preferences
+              .filter((entry) => entry.target.kind === "skill.activation" && entry.value === "disabled")
+              .map((entry) => entry.target.id),
+          )
+          return skills.list(location)?.filter((skill) => !disabled.has(skill.id))
+        },
+      },
     },
   }
 

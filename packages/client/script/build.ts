@@ -16,6 +16,7 @@ import { Location } from "@opencode-ai/schema/location"
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { Model } from "@opencode-ai/schema/model"
 import { Permission } from "@opencode-ai/schema/permission"
+import { Preferences } from "@opencode-ai/schema/preferences"
 import { PermissionSaved } from "@opencode-ai/schema/permission-saved"
 import { Plugin } from "@opencode-ai/schema/plugin"
 import { Project } from "@opencode-ai/schema/project"
@@ -57,6 +58,7 @@ const effectTypeReferences = [
   ...namespaceTypes("Mcp", "@opencode-ai/schema/mcp", Mcp),
   ...namespaceTypes("Model", "@opencode-ai/schema/model", Model),
   ...namespaceTypes("Permission", "@opencode-ai/schema/permission", Permission),
+  ...namespaceTypes("Preferences", "@opencode-ai/schema/preferences", Preferences),
   ...namespaceTypes("PermissionSaved", "@opencode-ai/schema/permission-saved", PermissionSaved),
   ...namespaceTypes("Plugin", "@opencode-ai/schema/plugin", Plugin),
   ...namespaceTypes("Project", "@opencode-ai/schema/project", Project),

@@ -454,7 +454,7 @@ export function Autocomplete(props: {
   })
 
   const skillOptions = createMemo(() =>
-    (data.location.skill.list(location.current) ?? []).map(
+    (data.location.skill.available(location.current) ?? []).map(
       (skill): AutocompleteOption => ({
         display: "@" + skill.id,
         description: skill.description,
@@ -523,7 +523,7 @@ export function Autocomplete(props: {
     }
 
     for (const skill of data.location.skill
-      .list(location.current)
+      .available(location.current)
       ?.filter((skill) => skill.slash === true && !commandNames.has(skill.id)) ?? []) {
       results.push({
         display: "/" + skill.id,

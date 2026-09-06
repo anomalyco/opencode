@@ -1147,7 +1147,7 @@ export function Prompt(props: PromptProps) {
     const isSkill =
       !(store.prompt.skills?.length ?? 0) &&
       slashHead !== undefined &&
-      (data.location.skill.list(currentLocation.ref) ?? []).some(
+      (data.location.skill.available(currentLocation.ref) ?? []).some(
         (skill) => skill.slash === true && skill.id === slashHead.name,
       )
     const isCommand =

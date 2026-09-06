@@ -246,6 +246,13 @@ import type {
   WorkspaceCreateOutput,
   WorkspaceDestroyInput,
   WorkspaceDestroyOutput,
+  PreferencesListOutput,
+  PreferencesGetInput,
+  PreferencesGetOutput,
+  PreferencesSetInput,
+  PreferencesSetOutput,
+  PreferencesResetInput,
+  PreferencesResetOutput,
   VcsGetInput,
   VcsGetOutput,
   VcsBaseInput,
@@ -738,7 +745,7 @@ export function make(options: ClientOptions) {
             path: `/api/session/${encodeURIComponent(input.sessionID)}/skill`,
             body: { id: input["id"], skill: input["skill"], resume: input["resume"] },
             successStatus: 204,
-            declaredStatuses: [400, 401, 404],
+            declaredStatuses: [400, 401, 404, 409],
             empty: true,
           },
           requestOptions,
@@ -2049,6 +2056,47 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [400, 401, 500],
             empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    preferences: {
+      list: (requestOptions?: RequestOptions) =>
+        request<PreferencesListOutput>(
+          { method: "GET", path: `/api/preferences`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          requestOptions,
+        ),
+      get: (input: PreferencesGetInput, requestOptions?: RequestOptions) =>
+        request<PreferencesGetOutput>(
+          {
+            method: "GET",
+            path: `/api/preferences/${encodeURIComponent(input.kind)}/${encodeURIComponent(input.id)}`,
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      set: (input: PreferencesSetInput, requestOptions?: RequestOptions) =>
+        request<PreferencesSetOutput>(
+          {
+            method: "PUT",
+            path: `/api/preferences/${encodeURIComponent(input.kind)}/${encodeURIComponent(input.id)}`,
+            body: { value: input["value"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      reset: (input: PreferencesResetInput, requestOptions?: RequestOptions) =>
+        request<PreferencesResetOutput>(
+          {
+            method: "DELETE",
+            path: `/api/preferences/${encodeURIComponent(input.kind)}/${encodeURIComponent(input.id)}`,
+            successStatus: 204,
+            declaredStatuses: [400, 401],
+            empty: true,
           },
           requestOptions,
         ),
