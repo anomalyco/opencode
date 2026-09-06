@@ -509,6 +509,21 @@
         "typescript": "catalog:",
       },
     },
+    "packages/ghes-exchange": {
+      "name": "@opencode-ai/ghes-exchange",
+      "version": "0.0.1",
+      "dependencies": {
+        "@octokit/auth-app": "8.0.1",
+        "@octokit/rest": "catalog:",
+        "hono": "catalog:",
+        "jose": "6.0.11",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/http-recorder": {
       "name": "@opencode-ai/http-recorder",
       "version": "1.18.29",
@@ -1972,6 +1987,8 @@
     "@opencode-ai/enterprise": ["@opencode-ai/enterprise@workspace:packages/enterprise"],
 
     "@opencode-ai/function": ["@opencode-ai/function@workspace:packages/function"],
+
+    "@opencode-ai/ghes-exchange": ["@opencode-ai/ghes-exchange@workspace:packages/ghes-exchange"],
 
     "@opencode-ai/http-recorder": ["@opencode-ai/http-recorder@workspace:packages/http-recorder"],
 
