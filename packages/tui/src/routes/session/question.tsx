@@ -98,12 +98,18 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   }
 
   function selectTab(index: number) {
+    // Re-clicking the active tab must not disturb an open custom-answer editor.
+    if (index === store.tab) return
     setStore("tab", index)
     setStore("selected", 0)
+    // Mouse handlers switch tabs while the custom-answer editor is open; stale editing
+    // state would keep Return bound to the editor on the new tab.
+    setStore("editing", false)
   }
 
   function selectOption() {
     if (other()) {
+      // Opens the editor; must return before any unconditional editing reset below.
       if (!multi()) {
         setStore("editing", true)
         return
@@ -118,6 +124,9 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
     }
     const opt = options()[store.selected]
     if (!opt) return
+    // Mouse handlers reach this while the custom-answer editor is open; leaving it enabled
+    // keeps Return bound to the editor instead of submit/confirm.
+    setStore("editing", false)
     if (multi()) {
       toggle(opt.label)
       return
