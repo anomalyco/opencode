@@ -5,7 +5,7 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
+import { OptimizePlugin } from "@opencode-ai/core/plugin/optimize"
 import { Session } from "@opencode-ai/core/session"
 import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
 import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
@@ -26,17 +26,22 @@ const makeHost = Effect.gen(function* () {
 })
 
 const context = (id: string, system = fallback): SessionHooks["context"] => ({
-  sessionID: Session.ID.make("ses_system_prompt"),
+  sessionID: Session.ID.make("ses_model_optimization"),
   agent: Agent.ID.make("build"),
   model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make(id) }),
   system: [SystemPart.make(system)],
   messages: [],
-  tools: {},
+  tools: Object.fromEntries(
+    ["shell", "read", "grep", "glob", "edit", "write", "patch"].map((name) => [
+      name,
+      { description: name, input: { type: "object" } },
+    ]),
+  ),
   generation: {},
   providerOptions: {},
 })
 
-describe("SystemPromptPlugin", () => {
+describe("OptimizePlugin", () => {
   test("uses current vocabulary in the Meta prompt", () => {
     expect(PROMPT_META).toContain("`webfetch` tool")
     expect(PROMPT_META).toContain("`subagent` tool")
@@ -51,8 +56,10 @@ describe("SystemPromptPlugin", () => {
     )
   })
 
-  test("uses granular IDs with a common prefix", () => {
-    expect(SystemPromptPlugin.Plugins.map((plugin) => plugin.id)).toEqual([
+  test("preserves prompt plugin IDs and exposes separate lab tool optimizations", () => {
+    expect(OptimizePlugin.Plugins.map((plugin) => plugin.id)).toEqual([
+      "opencode.optimize.openai.tools",
+      "opencode.optimize.anthropic.tools",
       "opencode.prompt.openai",
       "opencode.prompt.kimi",
       "opencode.prompt.arcee",
@@ -72,7 +79,7 @@ describe("SystemPromptPlugin", () => {
           model.name = "Muse Spark"
         })
       })
-      yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
+      yield* Effect.forEach(OptimizePlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
         discard: true,
       })
       const cases = [
@@ -106,7 +113,7 @@ describe("SystemPromptPlugin", () => {
     }),
   )
 
-  it.effect("renders the OpenAI prompt and preserves project instructions", () =>
+  it.effect("renders the OpenAI prompt without changing tools or project instructions", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
@@ -114,7 +121,7 @@ describe("SystemPromptPlugin", () => {
       yield* catalog.transform((editor) =>
         editor.model.update(Provider.ID.make("test"), Model.ID.make("gpt-5"), () => {}),
       )
-      yield* SystemPromptPlugin.OpenAIPlugin.effect(pluginHost)
+      yield* OptimizePlugin.OpenAIPlugin.effect(pluginHost)
       const event = context("gpt-5")
       event.system.push(SystemPart.make("Project instructions"))
       event.tools.shell = { description: "Run a command", input: { type: "object" } }
@@ -128,6 +135,73 @@ describe("SystemPromptPlugin", () => {
       expect(event.system[0]?.text).toStartWith("You are an AI agent powered by OpenCode")
       expect(event.system[0]?.text).toContain("Prefer dedicated tools over shell commands")
       expect(event.system[0]?.text).not.toContain("${OPENCODE_TOOL_GUIDANCE}")
+      expect(event.system[0]?.text).toContain("Use the write tool")
+      expect(event.system[0]?.text).toContain("Use the edit tool")
+      expect(Object.keys(event.tools).sort()).toEqual(["edit", "glob", "grep", "patch", "read", "shell", "write"])
+    }),
+  )
+
+  it.effect("curates search tools across providers without changing editing tools", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      const pluginHost = yield* makeHost
+      yield* OptimizePlugin.OpenAIToolsPlugin.effect(pluginHost)
+      yield* OptimizePlugin.AnthropicToolsPlugin.effect(pluginHost)
+      const cases = [
+        ["openai", "gpt-5", ["edit", "patch", "read", "shell", "write"]],
+        ["openrouter", "openai/gpt-6-astra", ["edit", "patch", "read", "shell", "write"]],
+        ["azure", "GPT-4.1", ["edit", "patch", "read", "shell", "write"]],
+        ["groq", "openai/gpt-oss-120b", ["edit", "patch", "read", "shell", "write"]],
+        ["anthropic", "claude-opus-4-8", ["edit", "patch", "read", "shell", "write"]],
+        ["amazon-bedrock", "us.anthropic.Claude-sonnet-4-6", ["edit", "patch", "read", "shell", "write"]],
+        ["github-copilot", "claude-sonnet-4.6", ["edit", "patch", "read", "shell", "write"]],
+        ["google", "gemini-2.5-pro", ["edit", "glob", "grep", "patch", "read", "shell", "write"]],
+        ["moonshotai", "kimi-k2", ["edit", "glob", "grep", "patch", "read", "shell", "write"]],
+        ["openai", "o3", ["edit", "glob", "grep", "patch", "read", "shell", "write"]],
+        ["anthropic", "other-model", ["edit", "glob", "grep", "patch", "read", "shell", "write"]],
+      ] as const
+
+      yield* Effect.forEach(
+        cases,
+        ([providerID, id, tools]) =>
+          Effect.gen(function* () {
+            const event = {
+              ...context(id),
+              model: Model.Ref.make({ providerID: Provider.ID.make(providerID), id: Model.ID.make(id) }),
+            }
+            yield* hooks.trigger("session", "context", event)
+            expect(Object.keys(event.tools).sort()).toEqual([...tools])
+            expect(event.system.map((part) => part.text)).toEqual([fallback])
+          }),
+        { discard: true },
+      )
+    }),
+  )
+
+  it.effect("can disable OpenAI tool optimization while retaining its prompt and Anthropic tool optimization", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      const pluginHost = yield* makeHost
+      yield* OptimizePlugin.OpenAIPlugin.effect(pluginHost)
+      yield* OptimizePlugin.AnthropicToolsPlugin.effect(pluginHost)
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* OptimizePlugin.OpenAIToolsPlugin.effect(pluginHost)
+          const event = context("gpt-5")
+          yield* hooks.trigger("session", "context", event)
+          expect(event.system[0]?.text).toContain("# Delegation")
+          expect(Object.keys(event.tools).sort()).toEqual(["edit", "patch", "read", "shell", "write"])
+        }),
+      )
+
+      const event = context("gpt-5")
+      yield* hooks.trigger("session", "context", event)
+      expect(event.system[0]?.text).toContain("# Delegation")
+      expect(Object.keys(event.tools).sort()).toEqual(["edit", "glob", "grep", "patch", "read", "shell", "write"])
+      const claude = context("claude-sonnet-4-6")
+      yield* hooks.trigger("session", "context", claude)
+      expect(claude.system.map((part) => part.text)).toEqual([fallback])
+      expect(Object.keys(claude.tools).sort()).toEqual(["edit", "patch", "read", "shell", "write"])
     }),
   )
 
@@ -148,7 +222,7 @@ describe("SystemPromptPlugin", () => {
             model.name = name
           })
       })
-      yield* SystemPromptPlugin.MetaPlugin.effect(pluginHost)
+      yield* OptimizePlugin.MetaPlugin.effect(pluginHost)
 
       yield* Effect.forEach(
         cases,
@@ -169,7 +243,7 @@ describe("SystemPromptPlugin", () => {
     }),
   )
 
-  it.effect("preserves an explicit agent system prompt", () =>
+  it.effect("curates tools while preserving an explicit agent system prompt", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service
       const hooks = yield* PluginHooks.Service
@@ -179,7 +253,7 @@ describe("SystemPromptPlugin", () => {
         }),
       )
       const pluginHost = yield* makeHost
-      yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
+      yield* Effect.forEach(OptimizePlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
         discard: true,
       })
       const event = context("gpt-5", "Custom agent prompt")
@@ -187,29 +261,32 @@ describe("SystemPromptPlugin", () => {
       yield* hooks.trigger("session", "context", event)
 
       expect(event.system.map((part) => part.text)).toEqual(["Custom agent prompt"])
+      expect(Object.keys(event.tools).sort()).toEqual(["edit", "patch", "read", "shell", "write"])
     }),
   )
 
-  it.effect("skips the hook when agent lookup fails", () =>
+  it.effect("still curates tools when agent lookup fails", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
-      yield* SystemPromptPlugin.OpenAIPlugin.effect(pluginHost)
+      yield* OptimizePlugin.OpenAIPlugin.effect(pluginHost)
+      yield* OptimizePlugin.OpenAIToolsPlugin.effect(pluginHost)
       yield* agents.transform((editor) => editor.remove(Agent.ID.make("build")))
       const event = context("gpt-5")
 
       yield* hooks.trigger("session", "context", event)
 
       expect(event.system.map((part) => part.text)).toEqual([fallback])
+      expect(Object.keys(event.tools).sort()).toEqual(["edit", "patch", "read", "shell", "write"])
     }),
   )
 
-  it.effect("allows one model-lab prompt plugin to be enabled independently", () =>
+  it.effect("allows one model-lab optimization plugin to be enabled independently", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
-      yield* SystemPromptPlugin.KimiPlugin.effect(pluginHost)
+      yield* OptimizePlugin.KimiPlugin.effect(pluginHost)
       const gemini = context("gemini-2.5-pro")
       const kimi = context("kimi-k2")
 
@@ -221,35 +298,41 @@ describe("SystemPromptPlugin", () => {
     }),
   )
 
-  it.effect("selects against the catalog ID rather than the physical model ID or family", () =>
+  it.effect("filters tools by model metadata while preserving catalog-ID prompt selection", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
+      const cases = [
+        ["gpt-5-alias", "custom-model", undefined, "# Delegation"],
+        ["gpt-6-alias", "custom-model", undefined, "Do not settle for a partial"],
+        ["openai-alias", "GPT-5", undefined, fallback],
+        ["codex-family-alias", "custom-deployment", "GPT-CODEX", fallback],
+        ["astra-api-alias", "gpt-6-astra", undefined, fallback],
+        ["astra-family-alias", "custom-deployment", "gpt-6", fallback],
+        ["claude-catalog-alias", "custom-model", undefined, fallback],
+        ["anthropic-api-alias", "Claude-Opus-4-8", undefined, fallback],
+        ["anthropic-family-alias", "custom-deployment", "CLAUDE-SONNET", fallback],
+      ] as const
       yield* catalog.transform((editor) => {
-        editor.model.update(Provider.ID.make("test"), Model.ID.make("openai-alias"), (model) => {
-          model.modelID = Model.ID.make("gpt-5")
-        })
-        editor.model.update(Provider.ID.make("test"), Model.ID.make("gpt-5-alias"), (model) => {
-          model.modelID = Model.ID.make("custom-model")
-        })
-        editor.model.update(Provider.ID.make("test"), Model.ID.make("codex-family-alias"), (model) => {
-          model.modelID = Model.ID.make("custom-deployment")
-          model.family = Model.Family.make("gpt-codex")
-        })
+        for (const [id, modelID, family] of cases)
+          editor.model.update(Provider.ID.make("test"), Model.ID.make(id), (model) => {
+            model.modelID = Model.ID.make(modelID)
+            if (family) model.family = Model.Family.make(family)
+          })
       })
-      yield* SystemPromptPlugin.OpenAIPlugin.effect(pluginHost)
-      const physicalOpenAI = context("openai-alias")
-      const physicalCustom = context("gpt-5-alias")
-      const familyOpenAI = context("codex-family-alias")
-
-      yield* hooks.trigger("session", "context", physicalOpenAI)
-      yield* hooks.trigger("session", "context", physicalCustom)
-      yield* hooks.trigger("session", "context", familyOpenAI)
-
-      expect(physicalOpenAI.system.map((part) => part.text)).toEqual([fallback])
-      expect(physicalCustom.system.map((part) => part.text)).toEqual([expect.stringContaining("# Delegation")])
-      expect(familyOpenAI.system.map((part) => part.text)).toEqual([fallback])
+      yield* Effect.forEach(OptimizePlugin.Plugins, (plugin) => plugin.effect(pluginHost), { discard: true })
+      yield* Effect.forEach(
+        cases,
+        ([id, , , prompt]) =>
+          Effect.gen(function* () {
+            const event = context(id)
+            yield* hooks.trigger("session", "context", event)
+            expect(event.system[0]?.text).toContain(prompt)
+            expect(Object.keys(event.tools).sort()).toEqual(["edit", "patch", "read", "shell", "write"])
+          }),
+        { discard: true },
+      )
     }),
   )
 })
