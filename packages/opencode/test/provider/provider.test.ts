@@ -809,6 +809,71 @@ it.instance("getSmallModel skips inferred models for Azure Cognitive Services", 
   }),
 )
 
+const azureTestConfig = {
+  provider: {
+    azure: {
+      npm: "@ai-sdk/azure",
+      options: { resourceName: "test-resource", apiKey: "test-key" },
+      models: {
+        "deepseek-v4-pro": { name: "DeepSeek V4 Pro" },
+        "gpt-5": { name: "GPT-5" },
+      },
+    },
+  },
+}
+
+it.instance(
+  "azure deepseek deployments select the DeepSeek adapter",
+  Effect.gen(function* () {
+    yield* set("AZURE_RESOURCE_NAME", "test-resource")
+    yield* set("AZURE_API_KEY", "test-key")
+    const provider = yield* Provider.Service
+    const model = yield* provider.getModel(ProviderV2.ID.azure, ModelV2.ID.make("deepseek-v4-pro"))
+    const language = yield* provider.getLanguage(model)
+    expect(language.provider).toBe("azure.deepseek")
+  }),
+  { config: azureTestConfig },
+)
+
+it.instance(
+  "azure deepseek deployments keep the DeepSeek adapter with useCompletionUrls",
+  Effect.gen(function* () {
+    yield* set("AZURE_RESOURCE_NAME", "test-resource")
+    yield* set("AZURE_API_KEY", "test-key")
+    const provider = yield* Provider.Service
+    const model = yield* provider.getModel(ProviderV2.ID.azure, ModelV2.ID.make("deepseek-v4-pro"))
+    const language = yield* provider.getLanguage({ ...model, options: { ...model.options, useCompletionUrls: true } })
+    expect(language.provider).toBe("azure.deepseek")
+  }),
+  { config: azureTestConfig },
+)
+
+it.instance(
+  "azure non-deepseek deployments keep responses routing",
+  Effect.gen(function* () {
+    yield* set("AZURE_RESOURCE_NAME", "test-resource")
+    yield* set("AZURE_API_KEY", "test-key")
+    const provider = yield* Provider.Service
+    const model = yield* provider.getModel(ProviderV2.ID.azure, ModelV2.ID.make("gpt-5"))
+    const language = yield* provider.getLanguage(model)
+    expect(language.provider).toBe("azure.responses")
+  }),
+  { config: azureTestConfig },
+)
+
+it.instance(
+  "azure non-deepseek deployments keep chat routing with useCompletionUrls",
+  Effect.gen(function* () {
+    yield* set("AZURE_RESOURCE_NAME", "test-resource")
+    yield* set("AZURE_API_KEY", "test-key")
+    const provider = yield* Provider.Service
+    const model = yield* provider.getModel(ProviderV2.ID.azure, ModelV2.ID.make("gpt-5"))
+    const language = yield* provider.getLanguage({ ...model, options: { ...model.options, useCompletionUrls: true } })
+    expect(language.provider).toBe("azure.chat")
+  }),
+  { config: azureTestConfig },
+)
+
 it.instance(
   "getSmallModel respects config small_model override",
   Effect.gen(function* () {

@@ -158,6 +158,14 @@ type CustomDep = {
 }
 
 function selectAzureLanguageModel(sdk: any, modelID: string, useChat: boolean) {
+  // Azure DeepSeek deployments need the DeepSeek-specific adapter for reasoning
+  // effort and reasoning_content across agentic turns; it is chat-completions
+  // based, so it also applies when useCompletionUrls is set.
+  // Note: this predicate (any "deepseek" deployment) deliberately differs from
+  // the "deepseek-v4" gate in transform.ts reasoningVariants, which only
+  // exposes a max effort for v4 models.
+  // Keep in sync with packages/core/src/plugin/provider/azure.ts selectLanguage.
+  if (modelID.toLowerCase().includes("deepseek") && sdk.deepseek) return sdk.deepseek(modelID)
   if (useChat && sdk.chat) return sdk.chat(modelID)
   if (sdk.responses) return sdk.responses(modelID)
   if (sdk.messages) return sdk.messages(modelID)
