@@ -10,6 +10,8 @@ export interface Coordinator<Key, E> {
   readonly run: (key: Key) => Effect.Effect<void, E>
   /** Registers one coalesced follow-up after newly recorded work. */
   readonly wake: (key: Key) => Effect.Effect<void>
+  /** Registers one coalesced forced follow-up from existing durable history. */
+  readonly retry: (key: Key) => Effect.Effect<void>
   /** Stops active execution and waits for its cleanup. */
   readonly interrupt: (key: Key) => Effect.Effect<void>
 }
@@ -18,6 +20,7 @@ type Entry<E> = {
   readonly done: Deferred.Deferred<void, E>
   owner?: Fiber.Fiber<void, never>
   pendingWake: boolean
+  pendingForce: boolean
   stopping: boolean
 }
 
@@ -31,6 +34,7 @@ export const make = <Key, E>(options: {
     const makeEntry = (): Entry<E> => ({
       done: Deferred.makeUnsafe<void, E>(),
       pendingWake: false,
+      pendingForce: false,
       stopping: false,
     })
 
@@ -49,17 +53,20 @@ export const make = <Key, E>(options: {
     }
 
     const settle = (key: Key, entry: Entry<E>, exit: Exit.Exit<void, E>) => {
-      if (Exit.isSuccess(exit) && !entry.stopping && entry.pendingWake) {
+      if (Exit.isSuccess(exit) && !entry.stopping && (entry.pendingWake || entry.pendingForce)) {
+        const force = entry.pendingForce
         entry.pendingWake = false
-        start(key, entry, false, true)
+        entry.pendingForce = false
+        start(key, entry, force, true)
         return
       }
 
-      const successor = entry.pendingWake ? makeEntry() : undefined
+      const force = entry.pendingForce
+      const successor = entry.pendingWake || force ? makeEntry() : undefined
       if (successor === undefined) active.delete(key)
       else {
         active.set(key, successor)
-        start(key, successor, false, true)
+        start(key, successor, force, true)
       }
       Deferred.doneUnsafe(entry.done, exit)
     }
@@ -91,14 +98,28 @@ export const make = <Key, E>(options: {
         start(key, next, false)
       })
 
+    const retry = (key: Key) =>
+      Effect.sync(() => {
+        const entry = active.get(key)
+        if (entry !== undefined) {
+          entry.pendingForce = true
+          return
+        }
+
+        const next = makeEntry()
+        active.set(key, next)
+        start(key, next, true)
+      })
+
     const interrupt = (key: Key): Effect.Effect<void> =>
       Effect.suspend(() => {
         const entry = active.get(key)
         if (entry?.owner === undefined) return Effect.void
         entry.stopping = true
         entry.pendingWake = false
+        entry.pendingForce = false
         return Fiber.interrupt(entry.owner)
       })
 
-    return { active: Effect.sync(() => new Set(active.keys())), run, wake, interrupt }
+    return { active: Effect.sync(() => new Set(active.keys())), run, wake, retry, interrupt }
   })
