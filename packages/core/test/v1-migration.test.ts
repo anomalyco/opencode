@@ -65,7 +65,7 @@ const session = (
   idle_outcome: null,
   time_compacting: 3,
   time_archived: null,
-  time_suspended: null,
+  execution_claimed_at: null,
   resume_attempts: 0,
   ...overrides,
 })
@@ -870,6 +870,7 @@ describe("V1Migration database workflow", () => {
         ('msg_next', 'ses_next', 'user', 4, 12, 13, '{"text":"from next''s history","time":{"created":12}}'),
         ('msg_source_existing', 'ses_existing', 'user', 2, 12, 13, '{"text":"source","time":{"created":12}}'),
         ('msg_orphan', 'ses_orphan', 'user', 0, 12, 13, '{"text":"orphan","time":{"created":12}}');
+      UPDATE session SET time_suspended = 1234 WHERE id = 'ses_next';
     `)
     source.close()
 
@@ -901,6 +902,9 @@ describe("V1Migration database workflow", () => {
           agent: "build",
           model: '{"id":"model","providerID":"provider"}',
         })
+        expect(
+          yield* db.get(sql`SELECT execution_claimed_at, resume_attempts FROM session_v2 WHERE id = 'ses_next'`),
+        ).toEqual({ execution_claimed_at: 1234, resume_attempts: 0 })
         expect(
           yield* db
             .select({ directory: SessionTable.directory })
@@ -988,8 +992,8 @@ describe("V1Migration database workflow", () => {
         const database = yield* Database.Service
         expect(yield* V1Migration.run({ nextDatabasePath: filename })).toEqual({ status: "completed" })
         expect(
-          yield* database.db.get(sql`SELECT fork_boundary, time_suspended FROM session_v2 WHERE id = 'ses_next'`),
-        ).toEqual({ fork_boundary: null, time_suspended: null })
+          yield* database.db.get(sql`SELECT fork_boundary, execution_claimed_at FROM session_v2 WHERE id = 'ses_next'`),
+        ).toEqual({ fork_boundary: null, execution_claimed_at: null })
         expect(
           yield* database.db.get(
             sql`SELECT icon_url, icon_url_override, icon_color, commands FROM project WHERE id = 'next-project'`,

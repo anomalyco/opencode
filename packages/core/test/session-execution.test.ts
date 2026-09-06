@@ -63,10 +63,10 @@ describe("SessionExecution lifecycle", () => {
       const parent = Session.ID.make("ses_recover_parent")
       const child = Session.ID.make("ses_recover_child")
       const idle = Session.ID.make("ses_recover_idle")
-      yield* seedSessions(database, [parent], { time_suspended: Date.now() })
+      yield* seedSessions(database, [parent], { execution_claimed_at: Date.now() })
       yield* seedSessions(database, [idle])
       // Children recover through background Job records, never through the root claim sweep.
-      yield* seedSessions(database, [child], { time_suspended: Date.now(), parent_id: parent })
+      yield* seedSessions(database, [child], { execution_claimed_at: Date.now(), parent_id: parent })
 
       expect(yield* store.listSuspended()).toEqual([parent])
 
@@ -224,7 +224,7 @@ describe("SessionExecution lifecycle", () => {
     Effect.gen(function* () {
       const database = yield* Database.Service
       const sessionIDs = Array.from({ length: 5 }, (_, index) => Session.ID.make(`ses_resume_concurrent_${index}`))
-      yield* seedSessions(database, sessionIDs, { time_suspended: Date.now() })
+      yield* seedSessions(database, sessionIDs, { execution_claimed_at: Date.now() })
 
       const fourStarted = yield* Deferred.make<void>()
       const started: Session.ID[] = []
@@ -251,7 +251,7 @@ describe("SessionExecution lifecycle", () => {
       const bus = yield* Bus.Service
       const first = Session.ID.make("ses_resume_first")
       const second = Session.ID.make("ses_resume_second")
-      yield* seedSessions(database, [first, second], { time_suspended: Date.now() })
+      yield* seedSessions(database, [first, second], { execution_claimed_at: Date.now() })
 
       const drained: string[] = []
       const bothDraining = yield* Deferred.make<void>()
@@ -297,7 +297,7 @@ describe("SessionExecution lifecycle", () => {
       const bus = yield* Bus.Service
       const sessionID = Session.ID.make("ses_resume_exhausted")
       // A claim from a dead process, already resumed twice without completing.
-      yield* seedSessions(database, [sessionID], { time_suspended: Date.now(), resume_attempts: 2 })
+      yield* seedSessions(database, [sessionID], { execution_claimed_at: Date.now(), resume_attempts: 2 })
 
       const drained: string[] = []
       const failures: SessionEvent.Execution.Failed[] = []
@@ -322,7 +322,7 @@ describe("SessionExecution lifecycle", () => {
     Effect.gen(function* () {
       const database = yield* Database.Service
       const sessionID = Session.ID.make("ses_resume_counted")
-      yield* seedSessions(database, [sessionID], { time_suspended: Date.now() })
+      yield* seedSessions(database, [sessionID], { execution_claimed_at: Date.now() })
 
       const draining = yield* Deferred.make<void>()
       const scope = yield* Scope.make()
@@ -388,7 +388,7 @@ describe("SessionRestart background recovery", () => {
       const parent = Session.ID.make("ses_background_recovery_parent")
       const child = Session.ID.make("ses_background_recovery_child")
       yield* seedSessions(database, [parent])
-      yield* seedSessions(database, [child], { parent_id: parent, time_suspended: Date.now() })
+      yield* seedSessions(database, [child], { parent_id: parent, execution_claimed_at: Date.now() })
       yield* seedBackground(jobs, parent, [
         { id: "sh_background_orphan", shellID: "sh_background_orphan", command: "sleep 60" },
       ])
@@ -600,7 +600,7 @@ describe("SessionRestart background recovery", () => {
       const store = yield* SessionStore.Service
       const bus = yield* Bus.Service
       const parent = Session.ID.make("ses_background_claimed_parent")
-      yield* seedSessions(database, [parent], { time_suspended: Date.now() })
+      yield* seedSessions(database, [parent], { execution_claimed_at: Date.now() })
       yield* seedBackground(jobs, parent, [{ id: "call-claimed-shell", shellID: "sh_claimed", command: "sleep 60" }])
 
       const observed = yield* Deferred.make<string[]>()
@@ -641,7 +641,7 @@ describe("SessionRestart background recovery", () => {
       const database = yield* Database.Service
       const jobs = yield* Job.Service
       const sessionID = Session.ID.make("ses_shell_recovery_exhausted")
-      yield* seedSessions(database, [sessionID], { time_suspended: Date.now(), resume_attempts: 2 })
+      yield* seedSessions(database, [sessionID], { execution_claimed_at: Date.now(), resume_attempts: 2 })
       yield* seedBackground(jobs, sessionID, [
         { id: "call-exhausted-shell", shellID: "sh_exhausted", command: "sleep 60" },
       ])
@@ -688,7 +688,7 @@ describe("SessionRestart background recovery", () => {
             yield* seedSessions(database, [parent])
             yield* seedSessions(database, [child], {
               parent_id: parent,
-              time_suspended: Date.now(),
+              execution_claimed_at: Date.now(),
               resume_attempts: resumeAttempts,
             })
             const shell = seedBackground(jobs, child, [
@@ -782,8 +782,8 @@ describe("SessionRestart background recovery", () => {
       const parent = Session.ID.make("ses_subagent_recovery_parent")
       const child = Session.ID.make("ses_subagent_recovery_child")
       const unrelated = Session.ID.make("ses_subagent_unrelated_child")
-      yield* seedSessions(database, [parent], { time_suspended: Date.now(), resume_attempts: 1 })
-      yield* seedSessions(database, [child, unrelated], { parent_id: parent, time_suspended: Date.now() })
+      yield* seedSessions(database, [parent], { execution_claimed_at: Date.now(), resume_attempts: 1 })
+      yield* seedSessions(database, [child, unrelated], { parent_id: parent, execution_claimed_at: Date.now() })
       yield* jobs.start({
         id: child,
         type: "subagent",
@@ -959,7 +959,7 @@ describe("SessionRestart background recovery", () => {
           Session.ID.make("ses_subagent_budget_child_1"),
           Session.ID.make("ses_subagent_budget_child_2"),
         ]
-        yield* seedSessions(database, [parent], { time_suspended: Date.now(), resume_attempts: resumeAttempts })
+        yield* seedSessions(database, [parent], { execution_claimed_at: Date.now(), resume_attempts: resumeAttempts })
         yield* seedSessions(database, children, { parent_id: parent })
         const complete = yield* Deferred.make<string>()
         for (const child of children) {
@@ -1033,7 +1033,11 @@ describe("SessionRestart background recovery", () => {
       const parent = Session.ID.make("ses_subagent_exhausted_parent")
       const child = Session.ID.make("ses_subagent_exhausted_child")
       yield* seedSessions(database, [parent])
-      yield* seedSessions(database, [child], { parent_id: parent, time_suspended: Date.now(), resume_attempts: 2 })
+      yield* seedSessions(database, [child], {
+        parent_id: parent,
+        execution_claimed_at: Date.now(),
+        resume_attempts: 2,
+      })
       yield* jobs.start({
         id: child,
         type: "subagent",
@@ -1273,7 +1277,9 @@ function seedInbox(
 function seedSessions(
   database: Database.Service["Service"],
   sessionIDs: ReadonlyArray<Session.ID>,
-  values: Partial<Pick<typeof SessionTable.$inferInsert, "time_suspended" | "resume_attempts" | "parent_id">> = {},
+  values: Partial<
+    Pick<typeof SessionTable.$inferInsert, "execution_claimed_at" | "resume_attempts" | "parent_id">
+  > = {},
 ) {
   return Effect.gen(function* () {
     yield* database.db
@@ -1302,7 +1308,7 @@ function seedSessions(
 
 function claims(database: Database.Service["Service"]) {
   return database.db
-    .select({ id: SessionTable.id, claimed: SessionTable.time_suspended })
+    .select({ id: SessionTable.id, claimed: SessionTable.execution_claimed_at })
     .from(SessionTable)
     .all()
     .pipe(
