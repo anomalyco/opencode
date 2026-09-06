@@ -3,7 +3,7 @@ import { Permission } from "@/permission"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { PermissionNotFoundError } from "../errors"
+import { PermissionAutoLeaseNotFoundError, PermissionNotFoundError } from "../errors"
 
 export const permissionHandlers = HttpApiBuilder.group(InstanceHttpApi, "permission", (handlers) =>
   Effect.gen(function* () {
@@ -36,6 +36,43 @@ export const permissionHandlers = HttpApiBuilder.group(InstanceHttpApi, "permiss
       return true
     })
 
-    return handlers.handle("list", list).handle("reply", reply)
+    const autoList = Effect.fn("PermissionHttpApi.autoList")(function* () {
+      return yield* svc.autoList()
+    })
+
+    const autoAcquire = Effect.fn("PermissionHttpApi.autoAcquire")(function* (ctx: {
+      payload: PermissionV1.AutoAcquireBody
+    }) {
+      return yield* svc.autoAcquire(ctx.payload)
+    })
+
+    const autoRenew = Effect.fn("PermissionHttpApi.autoRenew")(function* (ctx: {
+      params: { leaseID: PermissionV1.AutoLeaseID }
+    }) {
+      return yield* svc.autoRenew(ctx.params.leaseID).pipe(
+        Effect.catchTag("Permission.AutoLeaseNotFoundError", (error) =>
+          Effect.fail(
+            new PermissionAutoLeaseNotFoundError({
+              leaseID: String(error.leaseID),
+              message: `Permission auto lease not found: ${error.leaseID}`,
+            }),
+          ),
+        ),
+      )
+    })
+
+    const autoRelease = Effect.fn("PermissionHttpApi.autoRelease")(function* (ctx: {
+      params: { leaseID: PermissionV1.AutoLeaseID }
+    }) {
+      return yield* svc.autoRelease(ctx.params.leaseID)
+    })
+
+    return handlers
+      .handle("list", list)
+      .handle("autoList", autoList)
+      .handle("autoAcquire", autoAcquire)
+      .handle("autoRenew", autoRenew)
+      .handle("autoRelease", autoRelease)
+      .handle("reply", reply)
   }),
 )

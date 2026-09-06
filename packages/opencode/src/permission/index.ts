@@ -2,10 +2,12 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { InstanceState } from "@/effect/instance-state"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
-import { Deferred, Effect, Layer, Context } from "effect"
+import { Clock, Deferred, Effect, Layer, Context } from "effect"
 import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { Session } from "@/session/session"
+import type { SessionID } from "@/session/schema"
 
 export const Event = PermissionV1.Event
 
@@ -13,6 +15,12 @@ export interface Interface {
   readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<void, PermissionV1.Error>
   readonly reply: (input: PermissionV1.ReplyInput) => Effect.Effect<void, PermissionV1.NotFoundError>
   readonly list: () => Effect.Effect<ReadonlyArray<PermissionV1.Request>>
+  readonly autoList: () => Effect.Effect<ReadonlyArray<PermissionV1.AutoLease>>
+  readonly autoAcquire: (input: PermissionV1.AutoAcquireBody) => Effect.Effect<PermissionV1.AutoLease>
+  readonly autoRenew: (
+    leaseID: PermissionV1.AutoLeaseID,
+  ) => Effect.Effect<PermissionV1.AutoLease, PermissionV1.AutoLeaseNotFoundError>
+  readonly autoRelease: (leaseID: PermissionV1.AutoLeaseID) => Effect.Effect<boolean>
 }
 
 interface PendingEntry {
@@ -23,6 +31,7 @@ interface PendingEntry {
 interface State {
   pending: Map<PermissionV1.ID, PendingEntry>
   approved: PermissionV1.Rule[]
+  leases: Map<PermissionV1.AutoLeaseID, PermissionV1.AutoLease>
 }
 
 export function evaluate(permission: string, pattern: string, ...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule {
@@ -43,12 +52,14 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
+    const sessions = yield* Session.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
         void ctx
-        const state = {
+        const state: State = {
           pending: new Map<PermissionV1.ID, PendingEntry>(),
           approved: [],
+          leases: new Map<PermissionV1.AutoLeaseID, PermissionV1.AutoLease>(),
         }
 
         yield* Effect.addFinalizer(() =>
@@ -65,12 +76,12 @@ const layer = Layer.effect(
     )
 
     const ask = Effect.fn("Permission.ask")(function* (input: PermissionV1.AskInput) {
-      const { approved, pending } = yield* InstanceState.get(state)
+      const current = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
       let needsAsk = false
 
       for (const pattern of request.patterns) {
-        const rule = evaluate(request.permission, pattern, ruleset, approved)
+        const rule = evaluate(request.permission, pattern, ruleset, current.approved)
         yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "deny") {
           return yield* new PermissionV1.DeniedError({
@@ -82,6 +93,16 @@ const layer = Layer.effect(
       }
 
       if (!needsAsk) return
+
+      // Every pattern has been evaluated, so an explicit `deny` has already won.
+      // Only now may an auto lease turn the remaining `ask` outcomes into an
+      // approval, and it resolves the request without publishing
+      // `permission.asked` or `permission.replied` — integrations depend on
+      // those events meaning a human was involved.
+      if (yield* leased(current, request.sessionID)) {
+        yield* Effect.logInfo("auto approved", { permission: request.permission, patterns: request.patterns })
+        return
+      }
 
       const id = request.id ?? PermissionV1.ID.ascending()
       const info: PermissionV1.Request = {
@@ -96,12 +117,12 @@ const layer = Layer.effect(
       yield* Effect.logInfo("asking", { id, permission: info.permission, patterns: info.patterns })
 
       const deferred = yield* Deferred.make<void, PermissionV1.RejectedError | PermissionV1.CorrectedError>()
-      pending.set(id, { info, deferred })
+      current.pending.set(id, { info, deferred })
       yield* events.publish(Event.Asked, info)
       return yield* Effect.ensuring(
         Deferred.await(deferred),
         Effect.sync(() => {
-          pending.delete(id)
+          current.pending.delete(id)
         }),
       )
     })
@@ -171,7 +192,84 @@ const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.info)
     })
 
-    return Service.of({ ask, reply, list })
+    // Drops leases whose owner stopped renewing. Expiry is evaluated lazily on
+    // every read instead of from a timer fiber, so a lease that outlives its
+    // owner can never cover a request even if nothing else touches the map.
+    const activeLeases = Effect.fn("Permission.activeLeases")(function* (current: State) {
+      const now = yield* Clock.currentTimeMillis
+      for (const [id, lease] of current.leases) {
+        if (lease.expires > now) continue
+        current.leases.delete(id)
+        yield* Effect.logInfo("auto lease expired", { leaseID: id })
+      }
+      return current.leases
+    })
+
+    // A session-scoped lease covers the session it names plus every session
+    // descended from it, so subagents spawned by `opencode run --auto` are
+    // covered while sessions belonging to other clients are not.
+    const leased = Effect.fn("Permission.leased")(function* (current: State, sessionID: SessionID) {
+      const leases = yield* activeLeases(current)
+      if (leases.size === 0) return false
+
+      const roots = new Set<SessionID>()
+      for (const lease of leases.values()) {
+        if (lease.scope.type === "instance") return true
+        roots.add(lease.scope.sessionID)
+      }
+
+      let cursor: SessionID | undefined = sessionID
+      while (cursor) {
+        if (roots.has(cursor)) return true
+        const info: Session.Info | undefined = yield* sessions
+          .get(cursor)
+          .pipe(Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)))
+        cursor = info?.parentID
+      }
+      return false
+    })
+
+    const autoList = Effect.fn("Permission.autoList")(function* () {
+      return Array.from((yield* activeLeases(yield* InstanceState.get(state))).values())
+    })
+
+    const autoAcquire = Effect.fn("Permission.autoAcquire")(function* (input: PermissionV1.AutoAcquireBody) {
+      // Requests already pending are deliberately left alone: they were raised
+      // while a human was still expected to answer, and some other client may be
+      // showing that prompt right now.
+      const leases = yield* activeLeases(yield* InstanceState.get(state))
+      const ttl = Math.min(
+        Math.max(input.ttl ?? PermissionV1.AUTO_LEASE_TTL_DEFAULT, PermissionV1.AUTO_LEASE_TTL_MIN),
+        PermissionV1.AUTO_LEASE_TTL_MAX,
+      )
+      const lease: PermissionV1.AutoLease = {
+        id: PermissionV1.AutoLeaseID.ascending(),
+        scope: input.scope,
+        ttl,
+        expires: (yield* Clock.currentTimeMillis) + ttl,
+      }
+      leases.set(lease.id, lease)
+      yield* Effect.logInfo("auto lease acquired", { leaseID: lease.id, scope: lease.scope, ttl })
+      return lease
+    })
+
+    const autoRenew = Effect.fn("Permission.autoRenew")(function* (leaseID: PermissionV1.AutoLeaseID) {
+      const leases = yield* activeLeases(yield* InstanceState.get(state))
+      const existing = leases.get(leaseID)
+      if (!existing) return yield* new PermissionV1.AutoLeaseNotFoundError({ leaseID })
+      const renewed = { ...existing, expires: (yield* Clock.currentTimeMillis) + existing.ttl }
+      leases.set(leaseID, renewed)
+      return renewed
+    })
+
+    const autoRelease = Effect.fn("Permission.autoRelease")(function* (leaseID: PermissionV1.AutoLeaseID) {
+      const leases = yield* activeLeases(yield* InstanceState.get(state))
+      const removed = leases.delete(leaseID)
+      if (removed) yield* Effect.logInfo("auto lease released", { leaseID })
+      return removed
+    })
+
+    return Service.of({ ask, reply, list, autoList, autoAcquire, autoRenew, autoRelease })
   }),
 )
 
@@ -218,6 +316,6 @@ export function visibleTools<T>(tools: Record<string, T>, ruleset: PermissionV1.
   return Object.fromEntries(Object.entries(tools).filter(([name]) => !hidden.has(name)))
 }
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node] })
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node, Session.node] })
 
 export * as Permission from "."
