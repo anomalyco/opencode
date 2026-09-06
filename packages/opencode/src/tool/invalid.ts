@@ -6,6 +6,14 @@ export const Parameters = Schema.Struct({
   error: Schema.String,
 })
 
+export function formatInvalidToolError(error: string) {
+  const match = /unavailable\s+tool\s+['"]([^'"]+)['"]/i.exec(error)
+  if (match) {
+    return `The arguments provided to the tool are invalid: Tool '${match[1]}' is not available. See the system prompt for the list of available tools.`
+  }
+  return `The arguments provided to the tool are invalid: ${error.replace(/\s*Available tools:\s*[\s\S]*$/i, "").trim()}`
+}
+
 export const InvalidTool = Tool.define(
   "invalid",
   Effect.succeed({
@@ -14,7 +22,7 @@ export const InvalidTool = Tool.define(
     execute: (params: { tool: string; error: string }) =>
       Effect.succeed({
         title: "Invalid Tool",
-        output: `The arguments provided to the tool are invalid: ${params.error}`,
+        output: formatInvalidToolError(params.error),
         metadata: {},
       }),
   }),
