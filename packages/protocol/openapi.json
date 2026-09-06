@@ -14589,7 +14589,8 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["random"]
+                "enum": ["random"],
+                "description": "Reuse a randomly selected provider until it is rate limited, then switch to another available provider."
               },
               {
                 "type": "string"

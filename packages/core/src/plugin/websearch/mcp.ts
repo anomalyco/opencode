@@ -52,7 +52,7 @@ export const call = <F extends Schema.Struct.Fields, R extends Schema.Struct.Fie
       }),
     )
     return yield* Effect.gen(function* () {
-      const response = yield* HttpClient.filterStatusOk(http).execute(request)
+      const response = yield* HttpClient.withScope(HttpClient.filterStatusOk(http)).execute(request)
       const body = yield* collectBoundedResponseBody(
         response,
         MAX_RESPONSE_BYTES,
@@ -60,6 +60,7 @@ export const call = <F extends Schema.Struct.Fields, R extends Schema.Struct.Fie
       )
       return yield* parseResponse(body.toString("utf8"), schema.output)
     }).pipe(
+      Effect.scoped,
       Effect.timeoutOrElse({
         duration: Duration.seconds(25),
         orElse: () => Effect.fail(new Error(`${tool} request timed out`)),

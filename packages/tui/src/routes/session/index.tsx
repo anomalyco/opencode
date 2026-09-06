@@ -47,8 +47,8 @@ import {
   primitiveInputSummary,
   toolDisplayContent,
   toolDisplayMetadata,
-  webSearchProviderLabel,
 } from "../../util/tool-display"
+import { RetryProvider } from "../../component/retry-provider"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useClient } from "../../context/client"
 import { useEditorContext } from "../../context/editor"
@@ -3374,9 +3374,26 @@ function WebFetch(props: ToolProps) {
 }
 
 function WebSearch(props: ToolProps) {
+  const ctx = use()
+  const provider = createMemo(() => stringValue(props.metadata.provider))
   return (
     <InlineTool icon="◈" pending="Searching web…" complete={stringValue(props.input.query)} part={props.part}>
-      {webSearchProviderLabel(props.metadata.provider)} "{stringValue(props.input.query)}"
+      <Show when={provider()} fallback="Web Search">
+        {(value) => (
+          <>
+            Web Search via{" "}
+            <RetryProvider
+              value={{
+                id: `${ctx.sessionID}:${props.part.time.created}:${props.part.id}`,
+                provider: value(),
+                running: props.part.state.status === "running",
+              }}
+              enabled={ctx.config.animations ?? true}
+            />
+          </>
+        )}
+      </Show>{" "}
+      "{stringValue(props.input.query)}"
     </InlineTool>
   )
 }
