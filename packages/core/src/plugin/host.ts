@@ -4,9 +4,11 @@ import { Plugin } from "@opencode-ai/plugin/effect"
 import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
 import type { Event } from "@opencode-ai/schema/event"
+import type { Session as SchemaSession } from "@opencode-ai/schema/session"
 import { ServerConfig } from "@opencode-ai/schema/mcp"
 import { App } from "../app.js"
-import { Effect, Schema, Stream } from "effect"
+import path from "path"
+import { Effect, Queue, Ref, Schema, Stream } from "effect"
 import { Agent } from "../agent.js"
 import { AISDK } from "../aisdk.js"
 import { Catalog } from "../catalog.js"
@@ -17,6 +19,8 @@ import { Integration } from "../integration.js"
 import { KV } from "../kv.js"
 import { Location } from "../location.js"
 import { LocationServiceMap } from "../location-service-map.js"
+import { permissionForSession } from "./permission.js"
+import { SessionListInputError } from "@opencode-ai/plugin/effect/session"
 import { Model } from "../model.js"
 import { Mcp } from "../mcp/index.js"
 import { Session } from "../session.js"
@@ -33,6 +37,7 @@ import { WebSearch } from "../websearch.js"
 import { Worktree } from "../worktree.js"
 import { Generate } from "../generate.js"
 import { Permission } from "../permission.js"
+import { Form } from "../form.js"
 import { PluginHooks } from "./hooks.js"
 import type { Interface } from "../plugin.js"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -44,6 +49,14 @@ type RpcEvent = Event.Payload & {
   readonly data: Readonly<Record<string, unknown>>
 }
 const isRpcEvent = (event: Event.Payload): event is RpcEvent => event.type.startsWith("rpc.")
+
+// Backpressure cap for the global event bridge. Dropping the tail (rather than
+// blocking the bus) is intentional: the bridge is a loss-tolerant observer hub
+// for always-on plugins (e.g. Telegram), and a subscriber that can't keep up
+// must not stall event publication for every other consumer. 4096 events is
+// comfortably above any realistic burst without buffering unboundedly.
+const GLOBAL_EVENT_QUEUE_CAPACITY = 4096
+
 export const make = Effect.fn("PluginHost.make")(function* (
   plugin: Pick<Interface, "list">,
   pluginID: string = "test",
@@ -124,6 +137,22 @@ export const make = Effect.fn("PluginHost.make")(function* (
   )
 
   // Keep the instance graph's inferred types independent of Session handles.
+  // Permission state is location-scoped while sessions are global, so every
+  // session-keyed permission op resolves the session's own Permission
+  // instance first (see `./permission.ts`); without this, requests asked in
+  // another directory are invisible here and every reply fails "not found".
+  const permissionScoped = (ref: Location.Ref) =>
+    Effect.gen(function* () {
+      return yield* Permission.Service
+    }).pipe(
+      Effect.provide(locations.get(ref)),
+      Effect.orDie,
+    )
+  const permissionIn = <A, E>(
+    sessionID: SchemaSession.ID,
+    use: (permission: Permission.Interface) => Effect.Effect<A, E, never>,
+  ) => permissionForSession({ sessions, scoped: permissionScoped, ambient: permission, sessionID, use })
+
   const context: Plugin.Context = {
     app,
     location: locationInfo(),
@@ -255,6 +284,52 @@ export const make = Effect.fn("PluginHost.make")(function* (
                 EventManifest.isServer(event) || isRpcEvent(event),
             ),
           ),
+      /**
+       * Global (location-unfiltered) event stream. `ctx.event.subscribe()` is
+       * scoped to the plugin's ambient Location, so a cross-location observer
+       * (e.g. a Telegram bot that /cd's between projects) would silently miss
+       * events for sessions in other directories. This variant feeds from the
+       * bus's unfiltered channel and delivers every server event (plus rpc
+       * events, matching `subscribe`). The bounded dropping queue keeps a slow
+       * consumer from stalling publication; overflows are dropped with a
+       * cumulative count in the warning. Consumers that need gap-free delivery
+       * must use the durable `log`, not this loss-tolerant live bridge.
+       */
+      subscribeGlobal: () =>
+        Stream.scoped(
+          Stream.unwrap(
+            Effect.gen(function* () {
+              const queue = yield* Queue.dropping<Event.Payload>(GLOBAL_EVENT_QUEUE_CAPACITY)
+              const dropped = yield* Ref.make(0)
+              yield* bus.subscribeGlobal().pipe(
+                Stream.runForEach((event: Event.Payload) =>
+                  Queue.offer(queue, event).pipe(
+                    Effect.flatMap((accepted) =>
+                      accepted
+                        ? Effect.void
+                        : Ref.updateAndGet(dropped, (total) => total + 1).pipe(
+                            Effect.flatMap((total) =>
+                              Effect.logWarning("Plugin global event buffer full, dropping event", {
+                                type: event.type,
+                                droppedTotal: total,
+                              }),
+                            ),
+                          ),
+                    ),
+                  ),
+                ),
+                Effect.forkScoped,
+              )
+              yield* Effect.addFinalizer(() => Queue.shutdown(queue))
+              return Stream.fromQueue(queue).pipe(
+                Stream.filter(
+                  (event): event is EventManifest.ServerEvent | RpcEvent =>
+                    EventManifest.isServer(event) || isRpcEvent(event),
+                ),
+              )
+            }),
+          ),
+        ),
     },
     experimental: {
       terminal: {
@@ -383,27 +458,31 @@ export const make = Effect.fn("PluginHost.make")(function* (
     },
     permission: {
       hook: (name, callback) => hooks.register("permission", name, callback),
-      list: (input) => permission.forSession(input.sessionID),
+      list: (input) => permissionIn(input.sessionID, (permission) => permission.forSession(input.sessionID)),
       get: (input) =>
-        permission
-          .get(input.requestID)
-          .pipe(
-            Effect.flatMap((request) =>
-              request?.sessionID === input.sessionID
-                ? Effect.succeed(request)
-                : Effect.fail(new Error(`Permission request not found: ${input.requestID}`)),
+        permissionIn(input.sessionID, (permission) =>
+          permission
+            .get(input.requestID)
+            .pipe(
+              Effect.flatMap((request) =>
+                request?.sessionID === input.sessionID
+                  ? Effect.succeed(request)
+                  : Effect.fail(new Error(`Permission request not found: ${input.requestID}`)),
+              ),
             ),
-          ),
+        ),
       reply: (input) =>
-        permission
-          .get(input.requestID)
-          .pipe(
-            Effect.flatMap((request) =>
-              request?.sessionID === input.sessionID
-                ? permission.reply({ requestID: input.requestID, reply: input.reply, message: input.message })
-                : Effect.fail(new Error(`Permission request not found: ${input.requestID}`)),
+        permissionIn(input.sessionID, (permission) =>
+          permission
+            .get(input.requestID)
+            .pipe(
+              Effect.flatMap((request) =>
+                request?.sessionID === input.sessionID
+                  ? permission.reply({ requestID: input.requestID, reply: input.reply, message: input.message })
+                  : Effect.fail(new Error(`Permission request not found: ${input.requestID}`)),
+              ),
             ),
-          ),
+        ),
     },
     plugin: {
       list: () => response(plugin.list()),
@@ -503,6 +582,32 @@ export const make = Effect.fn("PluginHost.make")(function* (
     },
     session: {
       hook: (name, callback, options) => hooks.register("session", name, callback, options),
+      list: (input) => {
+        if (input?.directory !== undefined && !path.isAbsolute(input.directory))
+          return Effect.fail(
+            new SessionListInputError({
+              field: "directory",
+              message: `session.list directory must be absolute: ${input.directory}`,
+            }),
+          )
+        if (input?.order !== undefined && input.order !== "asc" && input.order !== "desc")
+          return Effect.fail(
+            new SessionListInputError({ field: "order", message: `session.list order must be "asc" or "desc": ${input.order}` }),
+          )
+        if (input?.limit !== undefined && (!Number.isInteger(input.limit) || input.limit <= 0))
+          return Effect.fail(
+            new SessionListInputError({
+              field: "limit",
+              message: `session.list limit must be a positive integer: ${input.limit}`,
+            }),
+          )
+        return sessions.list({
+          ...(input?.directory === undefined ? {} : { directory: AbsolutePath.make(input.directory) }),
+          search: input?.search,
+          limit: input?.limit,
+          order: input?.order,
+        })
+      },
       create: (input) =>
         sessions.create({
           id: input?.id,
@@ -527,6 +632,21 @@ export const make = Effect.fn("PluginHost.make")(function* (
           .pipe(Effect.map((interrupted) => ({ interrupted }))),
       wait: (input) => sessions.wait(input.sessionID),
       context: (input) => sessions.context(input.sessionID),
+      compact: sessions.compact,
+      skill: sessions.skill,
+      revert: {
+        stage: sessions.revert.stage,
+        clear: (input) => sessions.revert.clear(input.sessionID),
+        commit: (input) => sessions.revert.commit(input.sessionID),
+      },
+      // Form list surfaces pending forms only, matching Form.Service semantics.
+      form: {
+        list: (input: { sessionID: string }) => sessions.form.list({ sessionID: input.sessionID }),
+        get: (input: { sessionID: string; formID: Form.ID }) => sessions.form.get(input),
+        state: (input: { sessionID: string; formID: Form.ID }) => sessions.form.state(input),
+        reply: (input: { sessionID: string; formID: Form.ID; answer: Form.Answer }) => sessions.form.reply(input),
+        cancel: (input: { sessionID: string; formID: Form.ID }) => sessions.form.cancel(input),
+      },
     },
   }
   return context

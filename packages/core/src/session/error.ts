@@ -121,3 +121,20 @@ export class InboxConflictError extends Schema.TaggedError<InboxConflictError>()
 export class SkillNotFoundError extends Schema.TaggedError<SkillNotFoundError>()("Session.SkillNotFoundError", {
   skill: Skill.ID,
 }) {}
+
+/**
+ * The given string is not a well-formed session ID, so no store lookup was
+ * attempted. Takes a plain string (not Session.ID) precisely because the
+ * input failed ID validation — a TaggedError carrying Session.ID could not
+ * even be constructed for it.
+ */
+export class InvalidSessionIDError extends Schema.TaggedError<InvalidSessionIDError>()(
+  "Session.InvalidSessionIDError",
+  {
+    sessionID: Schema.String,
+  },
+) {
+  override get message() {
+    return `Invalid session ID: ${this.sessionID}`
+  }
+}
