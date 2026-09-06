@@ -578,27 +578,43 @@ describe("Session.create", () => {
     }),
   )
 
-  for (const child of [
-    undefined,
-    {
-      title: "Child",
-      agent: Agent.ID.make("reviewer"),
-      model: Model.Ref.make({ id: Model.ID.make("child"), providerID: Provider.ID.make("test") }),
-    },
-  ]) {
-    it.effect(`replays a ${child ? "child " : ""}fork with stable projected identities`, () =>
+  for (const ownership of ["none", "source", "other"] as const) {
+    it.effect(`replays a fork with ${ownership} ownership and stable projected identities`, () =>
       Effect.gen(function* () {
         const session = yield* Session.Service
         const bus = yield* Bus.Service
         const { db } = yield* Database.Service
-        const parent = yield* session.create({ location, title: "Parent" })
-        yield* session.prompt({ sessionID: parent.id, text: "First", resume: false })
-        yield* SessionInbox.promote(db, bus, parent.id, "steer")
-        yield* session.synthetic({ sessionID: parent.id, text: "Second", resume: false })
-        yield* SessionInbox.promote(db, bus, parent.id, "steer")
-        const forked = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" }, child })
-        expect(forked.parentID).toBe(child ? parent.id : undefined)
-        if (child) expect(forked).toMatchObject(child)
+        const source = yield* session.create({
+          location,
+          title: "Source",
+          agent: Agent.ID.make("build"),
+          model: Model.Ref.make({ id: Model.ID.make("source"), providerID: Provider.ID.make("test") }),
+          metadata: { source: true },
+        })
+        const parentID =
+          ownership === "none"
+            ? undefined
+            : ownership === "source"
+              ? source.id
+              : (yield* session.create({
+                  location: Location.Ref.make({ directory: AbsolutePath.make("/owner") }),
+                  title: "Owner",
+                  metadata: { owner: true },
+                })).id
+        yield* session.prompt({ sessionID: source.id, text: "First", resume: false })
+        yield* SessionInbox.promote(db, bus, source.id, "steer")
+        yield* session.synthetic({ sessionID: source.id, text: "Second", resume: false })
+        yield* SessionInbox.promote(db, bus, source.id, "steer")
+        const forked = yield* session.fork({ sessionID: source.id, boundary: { type: "through" }, parentID })
+        expect(forked.parentID).toBe(parentID)
+        expect(forked).toMatchObject({
+          title: "Source (fork #1)",
+          agent: source.agent,
+          model: source.model,
+          metadata: source.metadata,
+          location: source.location,
+          fork: { sessionID: source.id },
+        })
         const original = (yield* session.context(forked.id)).map((message) => message.id)
         const recorded = yield* db
           .select()
@@ -608,7 +624,7 @@ describe("Session.create", () => {
           .all()
           .pipe(Effect.orDie)
         expect(recorded.map((event) => event.type)).toEqual(
-          child ? ["session.created.1", "session.forked.2"] : ["session.forked.2"],
+          parentID ? ["session.created.1", "session.forked.2"] : ["session.forked.2"],
         )
 
         yield* bus.remove(forked.id)

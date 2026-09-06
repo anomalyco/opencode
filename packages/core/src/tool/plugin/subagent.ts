@@ -171,8 +171,8 @@ export const Plugin = {
                   fork && input.fork
                     ? sessions.fork({
                         sessionID: context.sessionID,
+                        parentID: context.sessionID,
                         boundary: { type: "before", messageID: context.messageID },
-                        child: { title: input.description, agent: agent.id, model },
                       })
                     : sessions.create({
                         parentID: context.sessionID,
@@ -192,6 +192,15 @@ export const Plugin = {
                       }),
                   ),
                 ))
+
+              if (fork && input.fork)
+                yield* sessions.rename({ sessionID: child.id, title: input.description }).pipe(
+                  Effect.andThen(sessions.switchAgent({ sessionID: child.id, agent: agent.id })),
+                  Effect.andThen(model ? sessions.switchModel({ sessionID: child.id, model }) : Effect.void),
+                  Effect.mapError(
+                    (error) => new ToolFailure({ message: `Failed to configure subagent: ${child.id}`, error }),
+                  ),
+                )
 
               const background = input.background === true
               yield* context.progress({ sessionID: child.id, status: "running" })
