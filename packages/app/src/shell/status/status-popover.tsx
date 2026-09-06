@@ -20,6 +20,7 @@ export function StatusPopover() {
   const sdk = useWorkspaceLocation()
   const settings = useSettings()
   const desktop = createMediaQuery("(min-width: 768px)")
+  const sidebar = () => desktop() && settings.appearance.tabLayout() === "vertical"
   const [shown, setShown] = createSignal(false)
   const serverHealth = () => global.servers.health[server.key]?.healthy
   const mcp = () => data.location.mcp.server.list({ directory: sdk().directory })
@@ -41,8 +42,9 @@ export function StatusPopover() {
     serverHealth: serverHealth(),
     attention: attention(),
     issue: issue(),
-    placement: desktop() && settings.appearance.tabLayout() === "vertical" ? "top-start" : "bottom-end",
-    shift: desktop() && settings.appearance.tabLayout() === "vertical" ? 0 : -168,
+    sidebar: sidebar(),
+    placement: sidebar() ? "top-start" : "bottom-end",
+    shift: sidebar() ? 0 : -168,
     label: language.t("status.popover.trigger"),
     onOpenChange: setShown,
     body: () => (
@@ -61,6 +63,7 @@ type StatusPopoverState = {
   serverHealth: boolean | undefined
   attention: boolean
   issue: boolean
+  sidebar: boolean
   placement: "top-start" | "bottom-end"
   shift: number
   label: string
@@ -93,21 +96,37 @@ function StatusPopoverView(props: { state: StatusPopoverState }) {
     <Popover
       open={props.state.shown}
       onOpenChange={props.state.onOpenChange}
-      triggerAs={IconButton}
-      triggerProps={{
-        variant: "ghost-muted",
-        size: "large",
-        class: "!w-9 shrink-0",
-        state: props.state.shown ? "pressed" : undefined,
-        "aria-label": props.state.label,
-      }}
+      triggerAs={props.state.sidebar ? "button" : IconButton}
+      triggerProps={
+        props.state.sidebar
+          ? {
+              type: "button",
+              class:
+                "flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base data-[state=pressed]:bg-v2-background-bg-layer-02 data-[state=pressed]:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02 [app-region:no-drag]",
+              "data-state": props.state.shown ? "pressed" : undefined,
+              "aria-label": props.state.label,
+            }
+          : {
+              variant: "ghost-muted",
+              size: "large",
+              class: "!w-9 shrink-0",
+              state: props.state.shown ? "pressed" : undefined,
+              "aria-label": props.state.label,
+            }
+      }
       trigger={
-        <div class="relative size-4">
-          <Icon name={props.state.shown ? "status-active" : "status"} />
-          <div
-            class={`absolute -top-1 -right-1 size-2 rounded-full border border-[var(--v2-background-bg-deep)] ${serverStatusDotClass(props.state)}`}
-          />
-        </div>
+        <>
+          <div class="relative size-4 shrink-0">
+            <Icon name={props.state.shown ? "status-active" : "status"} />
+            <div
+              data-slot="status-indicator"
+              class={`absolute -top-1 -end-1 size-2 rounded-full border border-[var(--v2-background-bg-deep)] ${serverStatusDotClass(props.state)}`}
+            />
+          </div>
+          <Show when={props.state.sidebar}>
+            <span class="min-w-0 truncate">{props.state.label}</span>
+          </Show>
+        </>
       }
       {...popoverProps}
     >
