@@ -4,6 +4,7 @@ import { MessageV2 } from "../../session/message-v2"
 import { SessionID } from "../../session/schema"
 import { effectCmd, fail } from "../effect-cmd"
 import { UI } from "../ui"
+import { CancelledError } from "../cancelled-error"
 import * as prompts from "@clack/prompts"
 import { EOL } from "os"
 import { Effect } from "effect"
@@ -270,7 +271,7 @@ const run = Effect.fn("Cli.export.body")(function* (args: { sessionID?: string; 
     )
 
     if (prompts.isCancel(selectedSession)) {
-      return yield* Effect.die(new UI.CancelledError())
+      return yield* Effect.die(new CancelledError())
     }
 
     sessionID = selectedSession
