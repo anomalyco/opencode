@@ -278,6 +278,8 @@ export interface ClientOptions {
 export interface RequestOptions {
   readonly signal?: AbortSignal
   readonly headers?: RequestInit["headers"]
+  /** Reports every chunk a streaming response receives, including keepalive comments that yield no event. */
+  readonly onActivity?: () => void
 }
 
 interface RequestDescriptor {
@@ -369,6 +371,7 @@ export function make(options: ClientOptions) {
           } catch (cause) {
             throw new ClientError("Transport", { cause })
           }
+          if (!next.done) requestOptions?.onActivity?.()
           buffer += decoder.decode(next.value, { stream: !next.done })
           if (buffer.length > maxSseEventBytes) throw new ClientError("SseEventTooLarge")
           const trailingCarriageReturn = !next.done && buffer.endsWith("\r")
