@@ -1465,6 +1465,62 @@ In this example:
 
 ---
 
+### llmman
+
+You can configure opencode to use local models through [llmman](https://github.com/llmmanorg/llmman). llmman stores models as OCI artifacts and serves them from `llmman serve`, which exposes an OpenAI-compatible API on `http://127.0.0.1:17434/v1` by default.
+
+:::tip
+llmman can automatically configure itself for OpenCode. Run `llmman launch opencode --model qwen3.8` to start the server, pull the model if needed, and open OpenCode with it selected.
+:::
+
+1. Pull a model. Short names resolve to `docker.io/ai/<name>`; Hugging Face repos and full OCI references also work.
+
+   ```bash
+   llmman pull qwen3.8
+   ```
+
+2. Start the server.
+
+   ```bash
+   llmman serve
+   ```
+
+3. Add the provider to your config.
+
+   ```json title="opencode.json" "llmman" {5, 6, 8, 10-14}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "llmman": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "llmman (local)",
+         "options": {
+           "baseURL": "http://127.0.0.1:17434/v1"
+         },
+         "models": {
+           "qwen3.8": {
+             "name": "Qwen3.8 (local)"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+In this example:
+
+- `llmman` is the custom provider ID. This can be any string you want.
+- `npm` specifies the package to use for this provider. Here, `@ai-sdk/openai-compatible` is used for any OpenAI-compatible API.
+- `name` is the display name for the provider in the UI.
+- `options.baseURL` is the endpoint for the local server. If you set `LLMMAN_HOST` when running `llmman serve`, use that address instead.
+- `models` is a map of model IDs to their configurations. Use the same reference you passed to `llmman pull`, for example `qwen3.8`, `hf.co/unsloth/Qwen3.5-0.8B-GGUF`, or `docker.io/ai/qwen3.8:latest`. `llmman list` shows what is available.
+
+:::tip
+llmman can also route requests to hosted providers through the same endpoint. Use a model ID of the form `llmman.provider/<provider>/<model>`, such as `llmman.provider/openrouter/qwen/qwen3-coder`, and give `llmman serve` the provider's API key, either through its environment variable (for example `OPENROUTER_API_KEY`) or with `llmman config set providers.openrouter.api_key <key>`. See the [llmman providers docs](https://github.com/llmmanorg/llmman/blob/main/docs/providers.md) for details.
+:::
+
+---
+
 ### IO.NET
 
 IO.NET offers 17 models optimized for various use cases:
