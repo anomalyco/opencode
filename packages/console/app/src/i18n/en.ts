@@ -48,6 +48,7 @@ export const dict = {
   "user.logout": "Logout",
 
   "auth.callback.error.codeMissing": "No authorization code found.",
+  "auth.callback.error.oauth": "OAuth authorization failed.",
 
   "workspace.select": "Select workspace",
   "workspace.createNew": "+ Create New Workspace",
