@@ -1,5 +1,6 @@
 import type { BrowserWindow } from "electron"
-import { addRendererHeaders } from "./headers"
+import { SidecarCredentials } from "../service/sidecar-credentials"
+import { addRendererHeaders, hasHeader, upsertHeader } from "./headers"
 import { isRendererUrl } from "./protocol"
 
 const rendererPermissions = new Set(["clipboard-sanitized-write", "notifications"])
@@ -31,6 +32,19 @@ export function wireNavigationPolicy(win: BrowserWindow, openExternalURL: (url: 
 }
 
 export function wireRendererHeaders(win: BrowserWindow) {
+  // The renderer sends sidecar requests without credentials, so its GETs are CORS-simple and need no
+  // preflight. Electron applies these listeners in Chromium's extraHeaders mode, after the CORS
+  // decision, so adding Authorization here does not reintroduce one.
+  win.webContents.session.webRequest.onBeforeSendHeaders(
+    { urls: ["http://127.0.0.1/*", "http://localhost/*"] },
+    (details, callback) => {
+      const authorization = SidecarCredentials.authorization(SidecarCredentials.get(), details.url)
+      if (authorization && !hasHeader(details.requestHeaders, "Authorization")) {
+        upsertHeader(details.requestHeaders, "Authorization", authorization)
+      }
+      callback({ requestHeaders: details.requestHeaders })
+    },
+  )
   win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = details.responseHeaders ?? {}
     addRendererHeaders(responseHeaders, { document: isRendererUrl(details.url, true) })

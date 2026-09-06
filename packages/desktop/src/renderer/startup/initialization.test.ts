@@ -55,7 +55,7 @@ describe("desktop renderer initialization", () => {
       update: (next) => updates.push(next),
     })
 
-    expect(await resolve(new AbortController().signal)).toEqual(sidecar)
+    expect(await resolve(new AbortController().signal)).toEqual({ url: sidecar.url })
     expect(updates).toEqual([sidecar])
   })
 
@@ -68,7 +68,7 @@ describe("desktop renderer initialization", () => {
       update: (next) => updates.push(next),
     })
 
-    expect(await resolve(new AbortController().signal)).toEqual(sidecar)
+    expect(await resolve(new AbortController().signal)).toEqual({ url: sidecar.url })
     expect(updates).toEqual([])
   })
 

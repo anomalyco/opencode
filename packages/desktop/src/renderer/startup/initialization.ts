@@ -7,11 +7,10 @@ export function initializationData<A>(state: (() => A | undefined) & { error: un
   return state()
 }
 
+// No password: the main process adds Authorization to sidecar requests (`wireRendererHeaders`), so
+// the renderer's GETs carry only CORS-safelisted headers and skip the preflight round trip.
 export function sidecarHttp(data: SidecarData) {
-  return {
-    url: data.url,
-    password: data.password ?? undefined,
-  }
+  return { url: data.url }
 }
 
 export function createSidecarResolver(input: {
