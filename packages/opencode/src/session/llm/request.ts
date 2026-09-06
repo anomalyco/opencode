@@ -98,18 +98,16 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   }
   if (isOpenaiOauth) options.instructions = system.join("\n")
 
-  const messages =
-    isOpenaiOauth || input.isWorkflow
-      ? input.messages
-      : [
-          ...system.map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
-          ),
-          ...input.messages,
-        ]
+  const isWorkersAi =
+    input.model.providerID === "cloudflare-workers-ai" ||
+    (input.model.providerID === "cloudflare-ai-gateway" &&
+      (input.model.api.id.startsWith("workers-ai/") || input.model.api.id.startsWith("@cf/")))
+
+  const systemMessages: ModelMessage[] =
+    isWorkersAi && system.length
+      ? [{ role: "system", content: system.join("\n\n") }]
+      : system.map((x): ModelMessage => ({ role: "system", content: x }))
+  const messages = isOpenaiOauth || input.isWorkflow ? input.messages : [...systemMessages, ...input.messages]
 
   const params = yield* input.plugin.trigger(
     "chat.params",

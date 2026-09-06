@@ -6209,3 +6209,103 @@ describe("ProviderTransform.options - kimi family adaptive thinking", () => {
     expect(result.thinking).toBeUndefined()
   })
 })
+
+describe("LLMRequestPrep.prepare - system messages", () => {
+  const sessionID = "test-session-123"
+
+  function prepareWith(providerID: string, modelID: string) {
+    return Effect.runPromise(
+      LLMRequestPrep.prepare({
+        user: {
+          id: "msg_user-test",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "test",
+          model: { providerID, modelID },
+        } as any,
+        sessionID,
+        model: {
+          id: `${providerID}/${modelID}`,
+          providerID,
+          api: { id: modelID, url: "https://example.com", npm: "@ai-sdk/openai-compatible" },
+          name: modelID,
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: false,
+            toolcall: true,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          limit: { context: 262_144, output: 262_144 },
+          status: "active",
+          options: {},
+          headers: {},
+        } as any,
+        agent: {
+          name: "test",
+          mode: "primary",
+          prompt: "base prompt",
+          options: {},
+          permission: [],
+        } as any,
+        system: [],
+        messages: [{ role: "user", content: "Hello" }],
+        tools: {},
+        provider: { id: providerID, options: {} } as any,
+        auth: undefined,
+        plugin: {
+          trigger: (name: string, _input: unknown, output: unknown) => {
+            if (name !== "experimental.chat.system.transform") return Effect.succeed(output)
+            return Effect.sync(() => {
+              ;(output as { system: string[] }).system.push("dynamic suffix")
+              return output
+            })
+          },
+          list: () => Effect.succeed([]),
+          init: () => Effect.void,
+        } as any,
+        flags: { outputTokenMax: 32_000, client: "test" } as any,
+        isWorkflow: false,
+      }),
+    )
+  }
+
+  test("Workers AI merges system prompts into a single leading message", async () => {
+    const result = await prepareWith("cloudflare-workers-ai", "@cf/qwen/qwen3.8-27b")
+    const systemMessages = result.messages.filter((m) => m.role === "system")
+    expect(systemMessages).toHaveLength(1)
+    expect(result.messages[0]).toEqual({ role: "system", content: "base prompt\n\ndynamic suffix" })
+    expect(result.messages.at(-1)).toEqual({ role: "user", content: "Hello" })
+  })
+
+  test("Workers AI through the Cloudflare gateway merges system prompts", async () => {
+    const result = await prepareWith("cloudflare-ai-gateway", "workers-ai/@cf/qwen/qwen3.8-27b")
+    expect(result.messages.filter((m) => m.role === "system")).toEqual([
+      { role: "system", content: "base prompt\n\ndynamic suffix" },
+    ])
+  })
+
+  test("bare Workers AI IDs through the Cloudflare gateway merge system prompts", async () => {
+    const result = await prepareWith("cloudflare-ai-gateway", "@cf/qwen/qwen3.8-27b")
+    expect(result.messages.filter((m) => m.role === "system")).toEqual([
+      { role: "system", content: "base prompt\n\ndynamic suffix" },
+    ])
+  })
+
+  test("other Cloudflare gateway models keep one system message per entry", async () => {
+    const result = await prepareWith("cloudflare-ai-gateway", "anthropic/claude-sonnet-4-5")
+    const systemMessages = result.messages.filter((m) => m.role === "system")
+    expect(systemMessages.map((m) => m.content)).toEqual(["base prompt", "dynamic suffix"])
+  })
+
+  test("other providers keep one system message per entry", async () => {
+    const result = await prepareWith("anthropic", "claude-sonnet-4-5")
+    const systemMessages = result.messages.filter((m) => m.role === "system")
+    expect(systemMessages).toHaveLength(2)
+    expect(systemMessages.map((m) => m.content)).toEqual(["base prompt", "dynamic suffix"])
+  })
+})
