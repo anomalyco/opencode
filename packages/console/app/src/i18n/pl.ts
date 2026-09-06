@@ -57,6 +57,7 @@ export const dict = {
   "common.cancel": "Anuluj",
   "common.creating": "Tworzenie...",
   "common.create": "Utwórz",
+  "common.contactUs": "Skontaktuj się z nami",
 
   "common.videoUnsupported": "Twoja przeglądarka nie obsługuje znacznika wideo.",
   "common.figure": "Rys. {{n}}.",
@@ -227,6 +228,9 @@ export const dict = {
   "zen.faq.q8": "Czy mogę używać Zen z innymi agentami kodującymi?",
   "zen.faq.a8":
     "Chociaż Zen świetnie działa z OpenCode, możesz używać Zen z dowolnym agentem. Postępuj zgodnie z instrukcjami konfiguracji w swoim preferowanym agencie.",
+  "zen.faq.q9": "Czy mogę otrzymać zwrot pieniędzy?",
+  "zen.faq.a9":
+    "Możesz kwalifikować się do zwrotu, jeśli opłata została pobrana w ciągu ostatnich 14 dni i nie wykorzystano żadnych środków z tego zakupu. {{contact}}, aby poprosić o zwrot.",
 
   "zen.cta.start": "Zacznij korzystać z Zen",
   "zen.pricing.title": "Dodaj 20$ salda Pay as you go",
@@ -255,7 +259,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "następującymi wyjątkami",
 
   "go.title": "OpenCode Go | Niskokosztowe modele do kodowania dla każdego",
-  "go.banner.text": "Ox Alpha Free jest dostępny w Go przez ograniczony czas",
+  "go.banner.text": "GLM-5.3-Flash oferuje 2x wyższe limity użycia przez ograniczony czas",
   "go.meta.description":
     "Go kosztuje $10/miesiąc, oferując hojne limity użycia i niezawodny dostęp do wiodących modeli do kodowania.",
   "go.hero.title": "Niskokosztowe modele do kodowania dla każdego",
@@ -353,7 +357,7 @@ export const dict = {
   "go.faq.a5.gptRetention":
     "Dzienniki monitorowania nadużyć są generowane dla każdego użycia funkcji API i przechowywane przez maksymalnie 30 dni.",
   "go.faq.a5.learnMore": "Dowiedz się więcej",
-  "go.faq.a5.deepseekRetention": "Umowa ZDR jest odnawiana co miesiąc. Obecna umowa obowiązuje do 31 sierpnia 2026 r.",
+  "go.faq.a5.deepseekRetention": "Umowa ZDR jest odnawiana co miesiąc. Obecna umowa obowiązuje do 30 września 2026 r.",
   "go.faq.a5.museRetention":
     "Znacznie obniżone ceny tokenów w zamian za zgodę na wykorzystanie Twoich promptów i odpowiedzi do trenowania przyszłych modeli Meta.",
 
@@ -370,7 +374,10 @@ export const dict = {
 
   "go.faq.q9": "Jaka jest różnica między darmowymi modelami a Go?",
   "go.faq.a9":
-    "Darmowe modele obejmują Big Pickle oraz modele promocyjne dostępne w danym momencie, z limitem 200 zapytań/dzień. Go oferuje starannie dobrany zestaw modeli z wyższymi limitami zapytań egzekwowanymi w oknach kroczących (5-godzinnych, tygodniowych i miesięcznych), odpowiadającymi w przybliżeniu $12 na 5 godzin, $30 tygodniowo i $60 miesięcznie (rzeczywista liczba zapytań zależy od modelu i użycia).",
+    "Darmowe modele obejmują Big Pickle oraz modele promocyjne dostępne w danym momencie, z limitem 200 zapytań/dzień. Go oferuje starannie dobrany zestaw modeli z wyższymi limitami zapytań egzekwowanymi w oknach kroczących (5-godzinnych, tygodniowych i miesięcznych), odpowiadającymi w przybliżeniu bazowym limitom $12 na 5 godzin, $30 tygodniowo i $60 miesięcznie; limity mogą się różnić zależnie od modelu (rzeczywista liczba zapytań zależy od modelu i użycia).",
+  "go.faq.q10": "Czy mogę otrzymać zwrot pieniędzy?",
+  "go.faq.a10":
+    "Możesz kwalifikować się do zwrotu, jeśli opłata została pobrana w ciągu ostatnich 14 dni i nie wykorzystano żadnej części limitu Go w tym okresie rozliczeniowym. {{contact}}, aby poprosić o zwrot.",
 
   "zen.api.error.rateLimitExceeded": "Przekroczono limit zapytań. Spróbuj ponownie później.",
   "zen.api.error.modelNotSupported": "Model {{model}} nie jest obsługiwany",

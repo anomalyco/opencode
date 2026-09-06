@@ -1,0 +1,24 @@
+{
+  "agent": {
+    "reviewer": {
+      "description": "Reviews changes",
+      "mode": "subagent",
+      "hidden": true,
+      "color": "#123abc",
+      "steps": 4,
+      "prompt": "Review carefully.",
+      "disable": true,
+      "model": "anthropic/claude-sonnet",
+      "variant": "thinking",
+      "options": {},
+      "permission": {}
+    },
+    "quick": {
+      "disable": false,
+      "model": "openai/gpt-4.1",
+      "variant": "fast",
+      "options": {},
+      "permission": {}
+    }
+  }
+}

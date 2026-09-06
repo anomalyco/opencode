@@ -58,6 +58,7 @@ export const dict = {
   "common.cancel": "İptal",
   "common.creating": "Oluşturuluyor...",
   "common.create": "Oluştur",
+  "common.contactUs": "Bize ulaşın",
 
   "common.videoUnsupported": "Tarayıcınız video etiketini desteklemiyor.",
   "common.figure": "Şekil {{n}}.",
@@ -227,6 +228,9 @@ export const dict = {
   "zen.faq.q8": "Zen'i diğer kodlama ajanlarıyla kullanabilir miyim?",
   "zen.faq.a8":
     "Zen OpenCode ile harika çalışır, ama Zen'i herhangi bir ajan ile kullanabilirsiniz. Tercih ettiğiniz kodlama ajanında kurulum talimatlarını izleyin.",
+  "zen.faq.q9": "Para iadesi alabilir miyim?",
+  "zen.faq.a9":
+    "Ücret son 14 gün içinde tahsil edildiyse ve bu satın alımdan gelen kredilerin hiçbirini kullanmadıysanız para iadesine hak kazanabilirsiniz. {{contact}} ve para iadesi talep edin.",
 
   "zen.cta.start": "Zen'i kullanmaya başlayın",
   "zen.pricing.title": "20$ Kullandıkça öde bakiyesi ekle",
@@ -256,7 +260,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "aşağıdaki istisnalar",
 
   "go.title": "OpenCode Go | Herkes için düşük maliyetli kodlama modelleri",
-  "go.banner.text": "Ox Alpha Free sınırlı bir süre için Go'da kullanılabilir",
+  "go.banner.text": "GLM-5.3-Flash sınırlı bir süre için 2x kullanım limiti sunuyor",
   "go.meta.description":
     "Go ayda 10$'dır; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",
   "go.hero.title": "Herkes için düşük maliyetli kodlama modelleri",
@@ -355,7 +359,7 @@ export const dict = {
     "Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır.",
   "go.faq.a5.learnMore": "Daha fazla bilgi",
   "go.faq.a5.deepseekRetention":
-    "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 31 Ağustos 2026 tarihine kadar geçerlidir.",
+    "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 30 Eylül 2026 tarihine kadar geçerlidir.",
   "go.faq.a5.museRetention":
     "İstemlerinizi ve tamamlamalarınızı gelecekteki Meta modellerini eğitmek için kullanma izni karşılığında büyük ölçüde indirimli token fiyatları.",
 
@@ -372,7 +376,10 @@ export const dict = {
 
   "go.faq.q9": "Ücretsiz modeller ve Go arasındaki fark nedir?",
   "go.faq.a9":
-    "Ücretsiz modeller, günlük 200 istek kotasıyla Big Pickle'ı ve o sırada mevcut olan promosyonel modelleri içerir. Go ise kayan zaman aralıklarında (5 saatlik, haftalık ve aylık) uygulanan daha yüksek istek kotalarıyla özenle seçilmiş model seçenekleri sunar. Bu kotalar kabaca her 5 saatte 12$, haftada 30$ ve ayda 60$ değerine eşdeğerdir (gerçek istek sayıları modele ve kullanıma göre değişir).",
+    "Ücretsiz modeller, günlük 200 istek kotasıyla Big Pickle'ı ve o sırada mevcut olan promosyonel modelleri içerir. Go ise kayan zaman aralıklarında (5 saatlik, haftalık ve aylık) uygulanan daha yüksek istek kotalarıyla özenle seçilmiş model seçenekleri sunar. Bu kotalar kabaca her 5 saatte 12$, haftada 30$ ve ayda 60$ değerindeki temel kullanım haklarına eşdeğerdir; modele özgü kullanım hakları farklılık gösterebilir (gerçek istek sayıları modele ve kullanıma göre değişir).",
+  "go.faq.q10": "Para iadesi alabilir miyim?",
+  "go.faq.a10":
+    "Ücret son 14 gün içinde tahsil edildiyse ve ilgili faturalandırma döneminde Go kullanım hakkınızı hiç kullanmadıysanız para iadesine hak kazanabilirsiniz. {{contact}} ve para iadesi talep edin.",
 
   "zen.api.error.rateLimitExceeded": "İstek limiti aşıldı. Lütfen daha sonra tekrar deneyin.",
   "zen.api.error.modelNotSupported": "{{model}} modeli desteklenmiyor",
