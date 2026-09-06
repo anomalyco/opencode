@@ -11,9 +11,32 @@ const sessionA = session("ses_server_a", directoryA, "Server A session")
 const childSessionA = { ...session("ses_server_a_child", directoryA, "Server A child session"), parentID: sessionA.id }
 const sessionB = session("ses_server_b", directoryB, "Server B session")
 
-test("session settings use the remote server context", async ({ page }) => {
+test("auto-accept setting works without a session", async ({ page }) => {
   const permissionRequests: string[] = []
   await mockServers(page, permissionRequests)
+  await configureServers(page)
+
+  await page.goto("/")
+  await page.keyboard.press("Control+,")
+
+  const input = page
+    .locator(".settings-v2-dialog")
+    .locator('[data-action="settings-auto-accept-permissions"]')
+    .getByRole("switch")
+  await expect(input).toBeEnabled()
+  await input.click()
+  await expect(input).toBeChecked()
+})
+
+test("session settings use the remote server context", async ({ page }) => {
+  const permissionRequests: string[] = []
+  const permissionResponses: PermissionResponse[] = []
+  const pendingB: MockPermission[] = []
+  const permissionID = "permission-pending-b"
+  await mockServers(page, permissionRequests, permissionResponses, {
+    pending: { [serverB]: pendingB },
+    replyFailures: { [permissionID]: 1 },
+  })
   await configureServers(page)
 
   await page.goto(`/server/${base64Encode(serverB)}/session/${sessionB.id}`)
@@ -26,6 +49,7 @@ test("session settings use the remote server context", async ({ page }) => {
   await expect(autoAccept).toBeVisible()
   await expect(input).toBeEnabled()
   permissionRequests.length = 0
+  pendingB.push(pendingPermission(permissionID, sessionB.id))
   await autoAccept.locator('[data-slot="switch-control"]').click()
   await expect(input).toBeChecked()
   await expect
@@ -36,7 +60,17 @@ test("session settings use the remote server context", async ({ page }) => {
       }),
     )
     .toBe(true)
-  expect(permissionRequests.every((request) => new URL(request).origin === serverB)).toBe(true)
+  await expect
+    .poll(() => permissionResponses)
+    .toEqual([
+      {
+        origin: serverB,
+        directory: directoryB,
+        sessionID: sessionB.id,
+        permissionID,
+        body: { response: "once" },
+      },
+    ])
 
   await dialog.getByRole("tab", { name: "Models" }).click()
   await expect(dialog.getByRole("switch", { name: "Server B Model" })).toBeEnabled()
@@ -150,6 +184,19 @@ type PermissionResponse = {
   body: unknown
 }
 
+type MockPermission = {
+  id: string
+  sessionID: string
+  permission: string
+  patterns: string[]
+  metadata: Record<string, unknown>
+  always: string[]
+}
+
+function pendingPermission(id: string, sessionID: string): MockPermission {
+  return { id, sessionID, permission: "bash", patterns: ["git status"], metadata: {}, always: [] }
+}
+
 async function configureServers(page: Page, tabs: { type: "session"; server: string; sessionId: string }[] = []) {
   await page.addInitScript(
     ({ serverB, tabs }) => {
@@ -161,7 +208,15 @@ async function configureServers(page: Page, tabs: { type: "session"; server: str
   )
 }
 
-async function mockServers(page: Page, permissionRequests: string[], permissionResponses: PermissionResponse[] = []) {
+async function mockServers(
+  page: Page,
+  permissionRequests: string[],
+  permissionResponses: PermissionResponse[] = [],
+  options: {
+    pending?: Record<string, MockPermission[]>
+    replyFailures?: Record<string, number>
+  } = {},
+) {
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
     if (url.origin !== serverA && url.origin !== serverB) return route.fallback()
@@ -171,6 +226,11 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
     const requestDirectory = url.searchParams.get("directory")
     const response = url.pathname.match(/^\/session\/([^/]+)\/permissions\/([^/]+)$/)
     if (route.request().method() === "POST" && response) {
+      const failures = options.replyFailures?.[response[2]!] ?? 0
+      if (failures > 0) {
+        options.replyFailures![response[2]!] = failures - 1
+        return json(route, { name: "Internal" }, 500)
+      }
       permissionResponses.push({
         origin: url.origin,
         directory: requestDirectory ?? undefined,
@@ -218,7 +278,7 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
     if (/^\/session\/[^/]+\/(children|todo|diff)$/.test(url.pathname)) return json(route, [])
     if (url.pathname === "/permission") {
       permissionRequests.push(url.toString())
-      return json(route, [])
+      return json(route, options.pending?.[url.origin] ?? [])
     }
     if (["/skill", "/command", "/lsp", "/formatter", "/question", "/vcs/diff", "/pty/shells"].includes(url.pathname))
       return json(route, [])
