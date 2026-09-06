@@ -163,6 +163,7 @@ export const MAX_MEDIA_ENCODED_BYTES = 28 * 1024 * 1024
 export const MAX_MEDIA_DECODED_BYTES = 20 * 1024 * 1024
 
 const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
+const dataUrlPattern = /^data:([^;,]+);base64,([A-Za-z0-9+/]*={0,2})$/si
 
 export interface ValidatedMedia {
   readonly mime: string
@@ -184,8 +185,8 @@ export const validateMedia = Effect.fn("ProviderShared.validateMedia")(function*
     if (part.data.byteLength > MAX_MEDIA_DECODED_BYTES)
       return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_DECODED_BYTES} byte decoded limit`)
     base64 = Buffer.from(part.data).toString("base64")
-  } else if (part.data.startsWith("data:")) {
-    const match = /^data:([^;,]+);base64,([A-Za-z0-9+/]*={0,2})$/s.exec(part.data)
+  } else if (dataUrlPattern.test(part.data)) {
+    const match = dataUrlPattern.exec(part.data)
     if (!match) return yield* invalidRequest(`${route} media data URL must contain valid base64`)
     if (match[1]!.toLowerCase() !== mime)
       return yield* invalidRequest(`${route} media type ${part.mediaType} does not match data URL type ${match[1]}`)
