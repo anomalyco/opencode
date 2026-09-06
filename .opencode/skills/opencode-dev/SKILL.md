@@ -141,7 +141,11 @@ grep 'role=server' ~/.local/share/opencode/log/opencode-local.log
 
 ## Heap snapshots
 
-The CLI installs a `SIGUSR1` listener on non-Windows processes in `packages/cli/src/heap.ts`. Use it to capture the installed `opencode2` server without restarting it or attaching an inspector.
+Run `opencode2 debug heap-dump` on Windows, Linux, or macOS to capture the installed background server without restarting it or attaching an inspector. The command discovers an existing server, requests an authenticated dump, waits for completion, and prints the saved path. It never starts or replaces a server. Snapshots pause JavaScript execution and may contain credentials, prompts, and file contents; keep them private.
+
+The CLI's Unix-only `SIGUSR1` listener in `packages/cli/src/heap.ts` remains available and shares the writer in `packages/util/src/heap-snapshot.ts` with the server API. OS signal-triggered snapshots are unsupported on Windows; use the command instead.
+
+For the Unix signal alternative:
 
 1. Find the processes and inspect their roles and memory:
 

@@ -20,6 +20,10 @@
     "./*": "./src/*.ts"
   },
   "imports": {
+    "#heap-snapshot": {
+      "workerd": "./src/heap-snapshot.workerd.ts",
+      "default": "./src/heap-snapshot.node.ts"
+    },
     "#global-roots": {
       "workerd": "./src/global-roots.workerd.ts",
       "default": "./src/global-roots.ts"
