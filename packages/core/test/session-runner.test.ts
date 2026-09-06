@@ -2692,6 +2692,32 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.context).not.toContainEqual(expect.objectContaining({ type: "compaction" }))
   })
 
+  scenario("projects the resolved output limit into the request while preserving hook overrides", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    s.currentModel = recoveryModel
+    yield* s.llm.push(TestLLM.text("Answer", "text-output-limit-default"))
+    yield* s.runPrompt("Hello")
+
+    // Without hooks the catalog limit reaches the provider instead of an implicit budget.
+    expect(s.requests).toHaveLength(1)
+    expect(s.requests[0]?.generation).toEqual({ maxTokens: 1_000 })
+
+    const hook = yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        event.generation.maxTokens = 250
+        event.generation.temperature = 0.2
+      }),
+    )
+    s.requests.length = 0
+    yield* s.llm.push(TestLLM.text("Answer", "text-output-limit-hook"))
+    yield* s.runPrompt("Hello again")
+
+    // A hook value wins over the catalog limit; other generation fields are preserved.
+    expect(s.requests).toHaveLength(1)
+    expect(s.requests[0]?.generation).toEqual({ maxTokens: 250, temperature: 0.2 })
+    yield* hook.dispose
+  })
+
   scenario("stops after required automatic compaction fails", function* (s) {
     yield* s.llm.push(TestLLM.textWithUsage("Earlier answer", "text-before-failed-compaction", 3_950))
     yield* s.runPrompt("Earlier question ".repeat(180))
@@ -2706,7 +2732,7 @@ describe("SessionRunnerLLM", () => {
     expect(yield* Effect.exit(s.resume)).toMatchObject({ _tag: "Failure" })
 
     expect(s.requests).toHaveLength(1)
-    expect(s.requests[0]?.generation).toBeUndefined()
+    expect(s.requests[0]?.generation).toEqual({ maxTokens: 50 })
     expect(yield* s.context).toContainEqual(
       expect.objectContaining({
         type: "compaction",

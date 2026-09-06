@@ -382,7 +382,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       "x-opencode-session": sessionID,
       "x-opencode-client": "opencode",
     })
-    expect(requests[0]?.generation).toBeUndefined()
+    expect(requests[0]?.generation).toEqual({ maxTokens: 32_000 })
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("Use Effect services and generators.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("User shell pwd completed: /project")
