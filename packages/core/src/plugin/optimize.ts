@@ -48,11 +48,12 @@ function make(
     effect: Effect.fn(`OptimizePlugin.${id}`)(function* (ctx) {
       yield* ctx.session.hook("context", (event) =>
         Effect.gen(function* () {
-          const model = (yield* ctx.catalog.model.list()).data.find(
-            (model) => model.providerID === event.model.providerID && model.id === event.model.id,
-          )
+          const model =
+            (yield* ctx.catalog.model.list()).data.find(
+              (model) => model.providerID === event.model.providerID && model.id === event.model.id,
+            ) ?? Model.Info.default(event.model.providerID, event.model.id)
           // Curate tools before rendering their guidance, including for agents with a custom system prompt.
-          const template = optimize(model ?? Model.Info.default(event.model.providerID, event.model.id), event.tools)
+          const template = optimize(model, event.tools)
           if (!template) return
           if ((yield* ctx.agent.get({ agentID: event.agent })).data.system) return
           const system = event.system[0]
