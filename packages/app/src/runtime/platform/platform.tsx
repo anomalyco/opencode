@@ -98,6 +98,15 @@ type PlatformBase = {
   /** Allow native pinch/Ctrl-scroll zoom gestures (desktop only) */
   setPinchZoomEnabled?(enabled: boolean): Promise<void> | void
 
+  /** Get the application-wide preference for keeping running session tabs awake. */
+  getKeepAwakeEnabled?(this: void): Promise<boolean>
+
+  /** Opt in to preventing idle system sleep while any window has a running session tab. */
+  setKeepAwakeEnabled?(this: void, enabled: boolean): Promise<void>
+
+  /** Report whether this window has running session tabs, independent of the preference. */
+  setKeepAwakeActive?(this: void, active: boolean): Promise<void>
+
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void
 

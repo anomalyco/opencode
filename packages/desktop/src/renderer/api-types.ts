@@ -28,6 +28,9 @@ export type ElectronAPI = {
   consumeInitialDeepLinks(): Promise<string[]>
   getDefaultServerUrl(): Promise<string | null>
   setDefaultServerUrl(url: string | null): Promise<void>
+  getKeepAwakeEnabled(): Promise<boolean>
+  setKeepAwakeEnabled(enabled: boolean): Promise<void>
+  setKeepAwakeActive(active: boolean): Promise<void>
   isFirstLaunchOnboardingPending(): Promise<boolean>
   finishFirstLaunchOnboarding(createDefaultProject: boolean): Promise<string | null>
   checkAppExists(appName: string): Promise<boolean>

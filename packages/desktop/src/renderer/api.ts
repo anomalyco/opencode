@@ -70,6 +70,9 @@ export const api: ElectronAPI = {
   consumeInitialDeepLinks: () => invoke("AppConsumeInitialDeepLinks").then(mutable),
   getDefaultServerUrl: () => invoke("AppGetDefaultServerUrl"),
   setDefaultServerUrl: (url) => invoke("AppSetDefaultServerUrl", { url }),
+  getKeepAwakeEnabled: () => invoke("AppGetKeepAwakeEnabled"),
+  setKeepAwakeEnabled: (enabled) => invoke("AppSetKeepAwakeEnabled", { enabled }),
+  setKeepAwakeActive: (active) => invoke("AppSetKeepAwakeActive", { active }),
   isFirstLaunchOnboardingPending: () => invoke("AppIsFirstLaunchOnboardingPending"),
   finishFirstLaunchOnboarding: (createDefaultProject) =>
     invoke("AppFinishFirstLaunchOnboarding", { createDefaultProject }),
