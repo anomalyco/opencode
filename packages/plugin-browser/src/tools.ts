@@ -8,7 +8,7 @@ import { BrowserFiles } from "./files.js"
 import { Browser } from "./rpc.js"
 
 export const register = Effect.fn("BrowserTools.register")(function* (
-  ctx: Pick<Context, "tool" | "location">,
+  ctx: Pick<Context, "tool" | "location" | "permission">,
   connection: BrowserConnection.Connection,
 ) {
   const execute = Effect.fn("BrowserTools.execute")(function* (
@@ -21,12 +21,21 @@ export const register = Effect.fn("BrowserTools.register")(function* (
       catch: (error) => new Tool.Error({ message: invalidURL, error }),
     })
     const target = yield* connection.target(tool.sessionID, action)
-    const uploads =
-      action.type === "files.upload" || action.type === "files.drop"
-        ? yield* BrowserFiles.read(action.paths, ctx.location.directory)
-        : []
-    const response = yield* target.request(uploads)
+    const authorize = permissionCheck(ctx.permission, action, target.tab, tool)
+    const url = action.type === "navigate" || action.type === "tabs.open" ? action.url : target.tab?.url
+    const inspected = target.tab && !action.type.startsWith("tabs.") ? yield* target.inspect() : undefined
+    const resources = inspected?.resources ?? (url ? [url] : [])
+    if (resources.length && !(action.type === "tabs.open" && url === "about:blank"))
+      yield* authorize("browser", resources)
+    const uploads = yield* prepareUploads(action, ctx.location.directory, authorize)
+    const response = yield* target.request(uploads, inspected)
     const output = yield* Effect.fromResult(decodeResult(operation, response))
+    if (action.type === "network.get" && "request" in output && !resources.includes(output.request.url))
+      yield* authorize("browser", [output.request.url])
+    if (response.files.length && !("files" in output))
+      return yield* new Tool.Error({
+        message: `Browser returned unexpected files for browser.${operation.name}; no files were exported. Check desktop/server plugin compatibility and report the invalid response. Do not repeat the action to repair a protocol error.`,
+      })
     return yield* exportResult(output, response.files)
   })
 
@@ -56,6 +65,49 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     })
     .pipe(Effect.orDie)
 })
+
+function permissionCheck(
+  permission: Context["permission"],
+  action: Browser.Action,
+  tab: Browser.Tab | undefined,
+  tool: Tool.Context,
+) {
+  return (name: string, resources: readonly string[]) =>
+    permission
+      .assert({
+        action: name,
+        resources,
+        sessionID: tool.sessionID,
+        agent: tool.agent,
+        metadata: { type: action.type, ...(tab ? { tabID: tab.id } : {}) },
+        source: { type: "tool", messageID: tool.messageID, id: tool.id },
+      })
+      .pipe(
+        Effect.mapError((error) => {
+          const feedback = Schema.decodeUnknownOption(Schema.Struct({ feedback: Schema.String }))(error)
+          const detail =
+            feedback._tag === "Some"
+              ? `User feedback: ${feedback.value.feedback}`
+              : error instanceof Error
+                ? error.message
+                : String(error)
+          return new Tool.Error({
+            message: `[browser.permission_denied] Permission "${name}" was not granted for browser.${action.type}. Do not retry through another tool or change the target to bypass this decision. Follow the user's feedback or ask for an approved action. ${detail}`,
+            error,
+          })
+        }),
+      )
+}
+
+function prepareUploads(action: Browser.Action, directory: string, authorize: ReturnType<typeof permissionCheck>) {
+  return Effect.gen(function* () {
+    if (action.type !== "files.upload" && action.type !== "files.drop") return []
+    const resolved = yield* BrowserFiles.resolve(action.paths, directory)
+    if (resolved.external.length) yield* authorize("external_directory", resolved.external)
+    yield* authorize("read", resolved.paths)
+    return yield* BrowserFiles.read(resolved.paths, directory)
+  })
+}
 
 function decodeResult(operation: Browser.Operation, result: Browser.Result) {
   return Result.gen(function* () {
