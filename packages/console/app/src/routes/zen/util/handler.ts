@@ -346,6 +346,7 @@ export async function handler(
 
     // Handle streaming response
     const streamConverter = createStreamPartConverter(providerInfo.format, opts.format)
+    const convertStreamParts = providerInfo.format !== opts.format || providerInfo.format === "oa-compat"
     const usageParser = providerInfo.createUsageParser()
     const binaryDecoder = providerInfo.createBinaryStreamDecoder()
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
@@ -420,13 +421,13 @@ export async function handler(
                 part = part.trim()
                 usageParser.parse(part)
 
-                if (providerInfo.format !== opts.format) {
+                if (convertStreamParts) {
                   part = streamConverter(part)
                   c.enqueue(encoder.encode(part + "\n\n"))
                 }
               }
 
-              if (providerInfo.format === opts.format) {
+              if (!convertStreamParts) {
                 c.enqueue(value)
               }
 
