@@ -872,7 +872,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             name: "cloudflare-ai-gateway",
             baseURL: `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`,
             apiKey: apiToken,
-            headers: { "cf-aig-gateway-id": gateway },
+            headers: aiGatewayRestHeaders(gateway, opts.headers["User-Agent"], opts),
           })(modelID)
         },
         options: {},
@@ -1251,6 +1251,33 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
 // passthrough SDKs (Responses / Messages APIs). Resolving the native npm before
 // variants are computed makes reasoning variants produce payloads the native
 // SDKs understand (e.g. anthropic `effort` instead of compat `reasoningEffort`).
+/**
+ * Per-request AI Gateway controls for the catalog REST API. That endpoint cannot
+ * take the aigateway wrapper's options bag, so the gateway evaluates these
+ * cf-aig-* request headers instead.
+ */
+export function aiGatewayRestHeaders(
+  gateway: string,
+  userAgent: string,
+  control: {
+    metadata?: unknown
+    cacheTtl?: number | string
+    cacheKey?: string
+    skipCache?: boolean
+    collectLog?: boolean
+  },
+) {
+  return {
+    "cf-aig-gateway-id": gateway,
+    "User-Agent": userAgent,
+    ...(control.metadata !== undefined ? { "cf-aig-metadata": JSON.stringify(control.metadata) } : {}),
+    ...(control.cacheTtl !== undefined ? { "cf-aig-cache-ttl": String(control.cacheTtl) } : {}),
+    ...(control.cacheKey !== undefined ? { "cf-aig-cache-key": String(control.cacheKey) } : {}),
+    ...(control.skipCache !== undefined ? { "cf-aig-skip-cache": String(control.skipCache) } : {}),
+    ...(control.collectLog !== undefined ? { "cf-aig-collect-log": String(control.collectLog) } : {}),
+  }
+}
+
 function cloudflareGatewayNpm(providerID: string, modelID: string) {
   if (providerID !== "cloudflare-ai-gateway") return undefined
   if (modelID.startsWith("openai/")) return "@ai-sdk/openai"
