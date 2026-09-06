@@ -1254,6 +1254,45 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("preserves mixed cache TTL usage when the terminal delta only reports aggregate writes", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "message_start",
+                message: {
+                  usage: {
+                    input_tokens: 5,
+                    cache_creation_input_tokens: 10_000,
+                    cache_creation: { ephemeral_5m_input_tokens: 2_000, ephemeral_1h_input_tokens: 8_000 },
+                  },
+                },
+              },
+              {
+                type: "message_delta",
+                delta: { stop_reason: "end_turn" },
+                usage: { input_tokens: 5, cache_creation_input_tokens: 10_000, output_tokens: 8 },
+              },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({
+        inputTokens: 10_005,
+        cacheWriteInputTokens: 10_000,
+        providerMetadata: {
+          anthropic: {
+            cache_creation: { ephemeral_5m_input_tokens: 2_000, ephemeral_1h_input_tokens: 8_000 },
+          },
+        },
+      })
+    }),
+  )
+
   it.effect("maps nullable input tokens and preserves unknown Anthropic usage fields", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
