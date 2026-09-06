@@ -5,6 +5,7 @@ import { pathToFileURL } from "url"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { FileSystem } from "../filesystem"
 import { FSUtil } from "../fs-util"
+import { Office } from "../office"
 import { makeLocationNode } from "../effect/app-node"
 import { AbsolutePath, PositiveInt, RelativePath } from "../schema"
 
@@ -209,7 +210,28 @@ export const read = Effect.fn("ReadTool.read")(function* (
           mime,
         }
       }
-      if (startsWith(first, [0x25, 0x50, 0x44, 0x46]) || extensions.has(path.extname(resource).toLowerCase()))
+      if (startsWith(first, [0x25, 0x50, 0x44, 0x46])) return yield* Effect.fail(new BinaryFileError({ resource }))
+      const office = Office.officeMimeForFile(resource)
+      if (office) {
+        if (info.size > Office.MAX_OFFICE_BYTES)
+          return yield* Effect.fail(new MediaIngestLimitError({ resource, maximumBytes: Office.MAX_OFFICE_BYTES }))
+        const chunks = [first]
+        while (true) {
+          const chunk = yield* file.readAlloc(64 * 1024)
+          if (Option.isNone(chunk)) break
+          chunks.push(chunk.value)
+        }
+        // Office files always arrive as one extracted text page, never paged lines.
+        const extracted = yield* Effect.promise(() => Office.extractOfficeText(Buffer.concat(chunks), office))
+        return new TextPage({
+          type: "text-page",
+          content: extracted?.text ?? Office.extractionStub(path.basename(resource)),
+          mime: "text/plain",
+          offset: 1,
+          truncated: extracted?.truncated ?? false,
+        })
+      }
+      if (extensions.has(path.extname(resource).toLowerCase()))
         return yield* Effect.fail(new BinaryFileError({ resource }))
       const paged = info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
       if (!paged) {

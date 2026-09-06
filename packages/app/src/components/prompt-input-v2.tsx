@@ -372,6 +372,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
           description: language.t("prompt.toast.pasteUnsupported.description"),
         }),
       duplicate: () => showToast({ title: language.t("prompt.toast.attachmentDuplicate.title") }),
+      oversize: () => showToast({ title: language.t("prompt.toast.attachmentTooLarge.title") }),
       onError: (error) =>
         showToast({
           variant: "error",

@@ -9,6 +9,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { Office } from "@opencode-ai/core/office"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -321,6 +322,26 @@ export const ReadTool = Tool.define<
               url: `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`,
             },
           ],
+        }
+      }
+
+      const office = Office.officeMimeForFile(filepath)
+      if (office) {
+        if (Number(stat.size) > Office.MAX_OFFICE_BYTES)
+          return yield* Effect.fail(
+            new Error(`Office file exceeds ${Office.MAX_OFFICE_BYTES_LABEL} limit: ${filepath}`),
+          )
+        const bytes = yield* fs.readFile(filepath)
+        const extracted = yield* Effect.promise(() => Office.extractOfficeText(bytes, office))
+        const text = extracted?.text ?? Office.extractionStub(path.basename(filepath))
+        return {
+          title,
+          output: [`<path>${filepath}</path>`, `<type>file</type>`, `<content>\n${text}\n</content>`].join("\n"),
+          metadata: {
+            preview: text.split("\n").slice(0, 20).join("\n"),
+            truncated: extracted?.truncated ?? false,
+            loaded: loaded.map((item) => item.filepath),
+          },
         }
       }
 

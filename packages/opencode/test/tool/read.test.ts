@@ -26,6 +26,7 @@ import {
   tmpdirScoped,
 } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { docxBytes } from "../lib/office"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
@@ -603,6 +604,29 @@ describe("tool.read binary detection", () => {
 
       const err = yield* fail(dir, { filePath: path.join(dir, "module.wasm") })
       expect(err.message).toContain("Cannot read binary file")
+    }),
+  )
+})
+
+describe("tool.read office files", () => {
+  it.live("extracts text from office attachments instead of failing as binary", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "notes.docx"), yield* Effect.promise(() => docxBytes("Quarterly numbers")))
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "notes.docx") })
+      expect(result.output).toContain("Quarterly numbers")
+      expect(result.metadata.truncated).toBe(false)
+    }),
+  )
+
+  it.live("fails oversized office files with a clear limit message", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "huge.xlsx"), Buffer.alloc(10 * 1024 * 1024 + 1, 0x70))
+
+      const err = yield* fail(dir, { filePath: path.join(dir, "huge.xlsx") })
+      expect(err.message).toContain("10 MiB")
     }),
   )
 })

@@ -6,6 +6,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { ReadToolFileSystem } from "@opencode-ai/core/tool/read-filesystem"
 import { testEffect } from "./lib/effect"
+import { docxBytes } from "./lib/office"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, LayerNodePlatform.filesystem])))
 const fixture = Effect.gen(function* () {
@@ -113,6 +114,54 @@ describe("ReadToolFileSystem", () => {
       expect(error.message).toBe(
         `Media exceeds ${ReadToolFileSystem.MAX_MEDIA_INGEST_BYTES} byte ingestion limit: oversized.png`,
       )
+    }),
+  )
+})
+
+describe("ReadToolFileSystem office files", () => {
+  it.effect("reads office files as one extracted text page", () =>
+    Effect.gen(function* () {
+      const { fs, files, directory } = yield* fixture
+      const file = path.join(directory, "notes.docx")
+      yield* files.writeFile(file, yield* Effect.promise(() => docxBytes("Spreadsheet read")))
+
+      const page = yield* ReadToolFileSystem.read(fs, file, "notes.docx")
+
+      if (!(page instanceof ReadToolFileSystem.TextPage)) return yield* Effect.fail(new Error("expected text page"))
+      expect(page.content).toContain("Spreadsheet read")
+      expect(page.offset).toBe(1)
+      expect(page.truncated).toBe(false)
+    }),
+  )
+
+  it.effect("unreadable office files become an extraction stub page", () =>
+    Effect.gen(function* () {
+      const { fs, files, directory } = yield* fixture
+      const file = path.join(directory, "broken.docx")
+      yield* files.writeFile(
+        file,
+        Buffer.from([0x50, 0x4b, 0x03, 0x04, 0xff, 0xfe, 0xff, 0xfe, 0x00, 0x01, 0x02, 0x03]),
+      )
+
+      const page = yield* ReadToolFileSystem.read(fs, file, "broken.docx")
+
+      if (!(page instanceof ReadToolFileSystem.TextPage)) return yield* Effect.fail(new Error("expected text page"))
+      expect(page.content).toContain("text could not be extracted")
+    }),
+  )
+
+  it.effect("oversized office files fail the ingestion limit", () =>
+    Effect.gen(function* () {
+      const { fs, files, directory } = yield* fixture
+      const file = path.join(directory, "huge.docx")
+      yield* files.writeFile(file, new Uint8Array(1024 * 1024))
+      yield* files.truncate(file, 0)
+      const huge = Buffer.alloc(10 * 1024 * 1024 + 1, 0x70)
+      yield* files.writeFile(file, huge)
+
+      const error = yield* ReadToolFileSystem.read(fs, file, "huge.docx").pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(ReadToolFileSystem.MediaIngestLimitError)
     }),
   )
 })

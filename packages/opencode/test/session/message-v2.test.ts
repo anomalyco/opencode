@@ -9,6 +9,7 @@ import { SessionID, MessageID, PartID } from "../../src/session/schema"
 import { Question } from "../../src/question"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { docxBytes } from "../lib/office"
 
 const sessionID = SessionID.make("session")
 const providerID = ProviderV2.ID.make("test")
@@ -1725,5 +1726,59 @@ describe("session.message-v2.latest", () => {
 
     expect(state.tasks).toHaveLength(1)
     expect(state.tasks[0]).toMatchObject({ type: "subtask", prompt: "inspect" })
+  })
+})
+
+describe("session.message-v2.office-attachments", () => {
+  const officeMessage = (url: string, filename: string) =>
+    [
+      {
+        info: userInfo("m-office"),
+        parts: [
+          {
+            ...basePart("m-office", "p-file"),
+            type: "file",
+            mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            filename,
+            url,
+          },
+        ] as SessionV1.Part[],
+      },
+    ] as SessionV1.WithParts[]
+
+  test("extracts office attachment text for providers without document blocks", async () => {
+    const uri = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${Buffer.from(
+      await docxBytes("Quarterly numbers"),
+    ).toString("base64")}`
+    const messages = await MessageV2.toModelMessages(officeMessage(uri, "q.docx"), model)
+    expect(messages).toHaveLength(1)
+    expect((messages[0] as { content: { type: string; text?: string }[] }).content[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("Quarterly numbers"),
+    })
+  })
+
+  test("passes office files through to Amazon Bedrock", async () => {
+    const bedrock: Provider.Model = {
+      ...model,
+      api: { ...model.api, npm: "@ai-sdk/amazon-bedrock" },
+    }
+    const url = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${Buffer.from(
+      await docxBytes("Quarterly numbers"),
+    ).toString("base64")}`
+    const messages = await MessageV2.toModelMessages(officeMessage(url, "q.docx"), bedrock)
+    expect((messages[0] as { content: { type: string; mediaType?: string }[] }).content[0]).toMatchObject({
+      type: "file",
+      mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    })
+  })
+
+  test("unreadable office attachments become a model-facing stub", async () => {
+    const junk = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${Buffer.from("not a docx").toString("base64")}`
+    const messages = await MessageV2.toModelMessages(officeMessage(junk, "broken.docx"), model)
+    expect((messages[0] as { content: { type: string; text?: string }[] }).content[0]).toMatchObject({
+      type: "text",
+      text: "[attachment broken.docx: text could not be extracted]",
+    })
   })
 })
