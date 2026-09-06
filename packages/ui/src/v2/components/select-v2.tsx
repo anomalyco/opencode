@@ -1,5 +1,5 @@
 import { Select as Kobalte } from "@kobalte/core/select"
-import { Show, createMemo, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
+import { Show, createMemo, createSignal, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
 import "./select-v2.css"
 
 function groupOptions<T>(options: T[], groupBy?: (x: T) => string): { category: string; options: T[] }[] {
@@ -117,93 +117,107 @@ export function SelectV2<T>(props: SelectV2Props<T>) {
 
   const grouped = createMemo(() => groupOptions(local.options, local.groupBy))
 
+  // Kobalte's <Portal> enters a broken state after the first item selection: the
+  // next open fires onOpenChange(true) but the content never mounts to the DOM,
+  // so dropdowns (theme, color scheme, language, shell, ...) stop reopening until
+  // the component is recreated. Remounting a fresh instance after every selection
+  // gives the portal a clean state so the next open always renders.
+  const [mounted, setMounted] = createSignal(true)
+  const remount = () => {
+    setMounted(false)
+    setTimeout(() => setMounted(true), 0)
+  }
+
   return (
-    <Kobalte<T, { category: string; options: T[] }>
-      {...others}
-      multiple={false}
-      allowDuplicateSelectionEvents={false}
-      disabled={local.disabled}
-      data-component="select-v2-root"
-      placement={local.placement ?? (inline() ? "bottom-end" : "bottom-start")}
-      gutter={local.gutter ?? 4}
-      sameWidth={local.sameWidth ?? !inline()}
-      flip={local.flip ?? true}
-      slide={local.slide ?? true}
-      fitViewport={local.fitViewport ?? false}
-      value={local.current}
-      options={grouped()}
-      optionValue={(x) => (local.value ? local.value(x) : String(x as string))}
-      optionTextValue={(x) => (local.label ? local.label(x) : String(x as string))}
-      optionGroupChildren="options"
-      placeholder={local.placeholder}
-      sectionComponent={(sectionProps) => (
-        <Kobalte.Section>
-          <Show when={sectionProps.section.rawValue.category}>
-            <div data-slot="menu-v2-group-label">{sectionProps.section.rawValue.category}</div>
-          </Show>
-        </Kobalte.Section>
-      )}
-      itemComponent={(itemProps) => (
-        <Kobalte.Item
-          {...itemProps}
-          data-component="menu-v2-item"
-          onPointerEnter={() => move(itemProps.item.rawValue)}
-          onPointerMove={() => move(itemProps.item.rawValue)}
-          onFocus={() => move(itemProps.item.rawValue)}
-        >
-          <Kobalte.ItemLabel data-slot="menu-v2-item-content" as="span">
-            {local.children
-              ? local.children(itemProps.item.rawValue)
-              : local.label
-                ? local.label(itemProps.item.rawValue)
-                : String(itemProps.item.rawValue as string)}
-          </Kobalte.ItemLabel>
-          <Kobalte.ItemIndicator data-slot="menu-v2-item-indicator" forceMount>
-            <CheckSmall />
-          </Kobalte.ItemIndicator>
-        </Kobalte.Item>
-      )}
-      onChange={(next) => {
-        const v = next == null ? null : Array.isArray(next) ? ((next[0] as T) ?? null) : (next as T)
-        local.onSelect?.(v)
-        stop()
-      }}
-      onOpenChange={(open) => {
-        local.onOpenChange?.(open)
-        if (!open) stop()
-      }}
-    >
-      <Kobalte.Trigger
-        as="div"
-        data-component="select-v2"
-        data-appearance={local.appearance ?? "base"}
-        data-invalid={local.invalid ? "" : undefined}
-        data-numeric={local.numeric ? "" : undefined}
+    <Show when={mounted()}>
+      <Kobalte<T, { category: string; options: T[] }>
+        {...others}
+        multiple={false}
+        allowDuplicateSelectionEvents={false}
         disabled={local.disabled}
-        data-disabled={local.disabled ? "" : undefined}
-        classList={{
-          ...local.classList,
-          [local.class ?? ""]: !!local.class,
+        data-component="select-v2-root"
+        placement={local.placement ?? (inline() ? "bottom-end" : "bottom-start")}
+        gutter={local.gutter ?? 4}
+        sameWidth={local.sameWidth ?? !inline()}
+        flip={local.flip ?? true}
+        slide={local.slide ?? true}
+        fitViewport={local.fitViewport ?? false}
+        value={local.current}
+        options={grouped()}
+        optionValue={(x) => (local.value ? local.value(x) : String(x as string))}
+        optionTextValue={(x) => (local.label ? local.label(x) : String(x as string))}
+        optionGroupChildren="options"
+        placeholder={local.placeholder}
+        sectionComponent={(sectionProps) => (
+          <Kobalte.Section>
+            <Show when={sectionProps.section.rawValue.category}>
+              <div data-slot="menu-v2-group-label">{sectionProps.section.rawValue.category}</div>
+            </Show>
+          </Kobalte.Section>
+        )}
+        itemComponent={(itemProps) => (
+          <Kobalte.Item
+            {...itemProps}
+            data-component="menu-v2-item"
+            onPointerEnter={() => move(itemProps.item.rawValue)}
+            onPointerMove={() => move(itemProps.item.rawValue)}
+            onFocus={() => move(itemProps.item.rawValue)}
+          >
+            <Kobalte.ItemLabel data-slot="menu-v2-item-content" as="span">
+              {local.children
+                ? local.children(itemProps.item.rawValue)
+                : local.label
+                  ? local.label(itemProps.item.rawValue)
+                  : String(itemProps.item.rawValue as string)}
+            </Kobalte.ItemLabel>
+            <Kobalte.ItemIndicator data-slot="menu-v2-item-indicator" forceMount>
+              <CheckSmall />
+            </Kobalte.ItemIndicator>
+          </Kobalte.Item>
+        )}
+        onChange={(next) => {
+          const v = next == null ? null : Array.isArray(next) ? ((next[0] as T) ?? null) : (next as T)
+          local.onSelect?.(v)
+          stop()
+          remount()
+        }}
+        onOpenChange={(open) => {
+          local.onOpenChange?.(open)
+          if (!open) stop()
         }}
       >
-        <div data-slot="select-v2-value">
-          <Kobalte.Value<T> data-slot="select-v2-value-text" class={local.valueClass}>
-            {(st) => {
-              const selected = st.selectedOption()
-              if (local.label && selected != null) return local.label(selected)
-              return selected != null ? (selected as string) : ""
-            }}
-          </Kobalte.Value>
-        </div>
-        <span data-slot="select-v2-chevron" aria-hidden="true">
-          <ChevronDown />
-        </span>
-      </Kobalte.Trigger>
-      <Kobalte.Portal>
-        <Kobalte.Content data-component="menu-v2-content" data-slot="select-v2-content">
-          <Kobalte.Listbox data-slot="select-v2-listbox" />
-        </Kobalte.Content>
-      </Kobalte.Portal>
-    </Kobalte>
+        <Kobalte.Trigger
+          as="div"
+          data-component="select-v2"
+          data-appearance={local.appearance ?? "base"}
+          data-invalid={local.invalid ? "" : undefined}
+          data-numeric={local.numeric ? "" : undefined}
+          disabled={local.disabled}
+          data-disabled={local.disabled ? "" : undefined}
+          classList={{
+            ...local.classList,
+            [local.class ?? ""]: !!local.class,
+          }}
+        >
+          <div data-slot="select-v2-value">
+            <Kobalte.Value<T> data-slot="select-v2-value-text" class={local.valueClass}>
+              {(st) => {
+                const selected = st.selectedOption()
+                if (local.label && selected != null) return local.label(selected)
+                return selected != null ? (selected as string) : ""
+              }}
+            </Kobalte.Value>
+          </div>
+          <span data-slot="select-v2-chevron" aria-hidden="true">
+            <ChevronDown />
+          </span>
+        </Kobalte.Trigger>
+        <Kobalte.Portal>
+          <Kobalte.Content data-component="menu-v2-content" data-slot="select-v2-content">
+            <Kobalte.Listbox data-slot="select-v2-listbox" />
+          </Kobalte.Content>
+        </Kobalte.Portal>
+      </Kobalte>
+    </Show>
   )
 }
