@@ -21,6 +21,18 @@ describe("terminalWebSocketURL", () => {
     expect(url.searchParams.has("auth_token")).toBe(false)
   })
 
+  test("normalizes a trailing slash in the server URL", () => {
+    const url = terminalWebSocketURL({
+      url: "https://app.example.test/",
+      id: "pty_test",
+      directory: "/tmp/project",
+      cursor: 0,
+      ticket: "connect-ticket",
+    })
+
+    expect(url.pathname).toBe("/api/pty/pty_test/connect")
+  })
+
   test("uses query auth without embedding credentials in websocket URL for v1", () => {
     const url = terminalWebSocketURL({
       protocol: "v1",
