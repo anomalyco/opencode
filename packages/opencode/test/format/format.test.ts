@@ -232,4 +232,35 @@ describe("Format", () => {
       },
     },
   )
+
+  it.instance(
+    "times out a formatter that hangs",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const file = `${test.directory}/test.hang`
+        yield* Effect.promise(() => Bun.write(file, "x"))
+
+        const start = Date.now()
+        yield* Format.Service.use((fmt) =>
+          Effect.gen(function* () {
+            yield* fmt.init()
+            expect(yield* fmt.file(file)).toBe(true)
+          }),
+        )
+
+        expect(Date.now() - start).toBeLessThan(10_000)
+      }),
+    {
+      config: {
+        formatter: {
+          hanging: {
+            command: ["sh", "-c", "sleep 60"],
+            extensions: [".hang"],
+            timeout: 1,
+          },
+        },
+      },
+    },
+  )
 })
