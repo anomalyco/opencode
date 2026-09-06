@@ -328,53 +328,55 @@ async function sendCommand(
   })
 }
 
-async function sendPrompt(session: ComposerSession, value: ComposerSubmission) {
-  const request = await buildSubmissionRequest(session, value)
-  // Switching agent or model reconfigures the session immediately, and with it
-  // the remainder of a running turn. A steer targets that turn, so its
-  // selection applies now; a queued follow-up must not reconfigure the turn it
-  // waits behind, so it runs with the session selection at delivery time (the
-  // intended selection stays recorded in its metadata).
-  if (value.delivery === "steer") {
-    const current = session.current()
-    if (current?.agent !== value.selection.agent) {
-      await session.api.switchAgent({ sessionID: session.id, agent: value.selection.agent })
+function sendPrompt(session: ComposerSession, value: ComposerSubmission) {
+  return session.data.session.mutate(session.id, async (mutation) => {
+    const request = await buildSubmissionRequest(session, value)
+    // Switching agent or model reconfigures the session immediately, and with it
+    // the remainder of a running turn. A steer targets that turn, so its
+    // selection applies now; a queued follow-up must not reconfigure the turn it
+    // waits behind, so it runs with the session selection at delivery time (the
+    // intended selection stays recorded in its metadata).
+    if (value.delivery === "steer") {
+      const current = session.current()
+      if (current?.agent !== value.selection.agent) {
+        await session.api.switchAgent({ sessionID: session.id, agent: value.selection.agent })
+      }
+      if (
+        current?.model?.providerID !== value.selection.model.providerID ||
+        current.model.id !== value.selection.model.modelID ||
+        (current.model.variant ?? "default") !== (value.selection.variant ?? "default")
+      ) {
+        await session.api.switchModel({
+          sessionID: session.id,
+          model: {
+            id: value.selection.model.modelID,
+            providerID: value.selection.model.providerID,
+            variant: value.selection.variant,
+          },
+        })
+      }
     }
-    if (
-      current?.model?.providerID !== value.selection.model.providerID ||
-      current.model.id !== value.selection.model.modelID ||
-      (current.model.variant ?? "default") !== (value.selection.variant ?? "default")
-    ) {
-      await session.api.switchModel({
-        sessionID: session.id,
-        model: {
-          id: value.selection.model.modelID,
-          providerID: value.selection.model.providerID,
-          variant: value.selection.variant,
-        },
-      })
-    }
-  }
 
-  const admission = {
-    id: value.id,
-    sessionID: session.id,
-    delivery: value.delivery,
-    text: request.text,
-    files: request.files.map((file) => ({ uri: file.uri, name: file.name, mention: file.mention })),
-    agents: request.agents,
-    skills: request.skills,
-    metadata: {
-      displayText: request.displayText,
-      comments: request.comments,
-      agent: value.selection.agent,
-      model: {
-        ...value.selection.model,
-        ...(value.selection.variant ? { variant: value.selection.variant } : {}),
+    const admission = {
+      id: value.id,
+      sessionID: session.id,
+      delivery: value.delivery,
+      text: request.text,
+      files: request.files.map((file) => ({ uri: file.uri, name: file.name, mention: file.mention })),
+      agents: request.agents,
+      skills: request.skills,
+      metadata: {
+        displayText: request.displayText,
+        comments: request.comments,
+        agent: value.selection.agent,
+        model: {
+          ...value.selection.model,
+          ...(value.selection.variant ? { variant: value.selection.variant } : {}),
+        },
       },
-    },
-  }
-  await session.data.session.prompt(admission).catch(() => session.data.session.prompt(admission))
+    }
+    await mutation.prompt(admission).catch(() => mutation.prompt(admission))
+  })
 }
 
 async function buildSubmissionRequest(session: ComposerSession, value: ComposerSubmission) {

@@ -4,12 +4,67 @@ import { createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
   cacheReuseDrop,
+  loadRevertMessages,
   messageBoundaryIDs,
+  partitionRevertMessages,
   reduceSessionRows,
   sessionRowID,
   turnDuration,
   turnTokensPerSecond,
 } from "../../../src/routes/session/rows"
+
+test("fails closed when the staged revert boundary is outside the loaded page", () => {
+  const messages: SessionMessageInfo[] = [{ type: "user", id: "user-newer", text: "Newer", time: { created: 2 } }]
+
+  expect(partitionRevertMessages(messages, "user-boundary")).toEqual({ before: [], from: [] })
+})
+
+test("loads older pages before selecting another undo boundary", async () => {
+  const messages: SessionMessageInfo[] = [{ type: "user", id: "user-newer", text: "Newer", time: { created: 3 } }]
+  const pages: SessionMessageInfo[][] = [
+    [
+      { type: "user", id: "user-previous", text: "Previous", time: { created: 1 } },
+      { type: "user", id: "user-boundary", text: "Boundary", time: { created: 2 } },
+    ],
+  ]
+
+  const result = await loadRevertMessages({
+    boundary: "user-boundary",
+    messages: () => messages,
+    more: () => pages.length > 0,
+    loadMore: async () => {
+      messages.unshift(...(pages.shift() ?? []))
+    },
+  })
+
+  expect(result?.map((message) => message.id)).toEqual(["user-previous", "user-boundary", "user-newer"])
+})
+
+test("loads past a page-leading boundary to find an eligible undo target", async () => {
+  const messages: SessionMessageInfo[] = [
+    { type: "user", id: "user-boundary", text: "Boundary", time: { created: 2 } },
+    { type: "user", id: "user-newer", text: "Newer", time: { created: 3 } },
+  ]
+  const pages: SessionMessageInfo[][] = [
+    [{ type: "user", id: "user-target", text: "Target", time: { created: 1 } }, assistant("assistant-empty", [])],
+  ]
+
+  const result = await loadRevertMessages({
+    boundary: "user-boundary",
+    messages: () => messages,
+    more: () => pages.length > 0,
+    loadMore: async () => {
+      messages.unshift(...(pages.shift() ?? []))
+    },
+  })
+
+  expect(result?.map((message) => message.id)).toEqual([
+    "user-target",
+    "assistant-empty",
+    "user-boundary",
+    "user-newer",
+  ])
+})
 
 test("measures turn duration from the user prompt across assistant steps", () => {
   const first = assistant("assistant-1", [])

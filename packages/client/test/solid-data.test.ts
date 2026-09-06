@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { getEventListeners } from "node:events"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
-import { OpenCode, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
+import { OpenCode, type OpenCodeEvent, type Project, type SessionInfo, type SessionMessageUser } from "../src/promise"
 
 const session = (viewed: number): SessionInfo => ({
   id: "ses_refresh",
@@ -598,7 +598,270 @@ test("reports optimistic sessions as creating until the request settles", async 
   }
 })
 
-test("loads bounded message pages", async () => {
+test("serializes revert mutations before prompt admission", async () => {
+  const releaseStage = Promise.withResolvers<void>()
+  const releaseClear = Promise.withResolvers<void>()
+  const requests: string[] = []
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      if (request.url.endsWith("/revert/stage")) {
+        requests.push("stage:start")
+        await releaseStage.promise
+        requests.push("stage:end")
+        return Response.json({ data: { messageID: "msg_boundary", files: [] } })
+      }
+      if (request.url.endsWith("/revert/clear")) {
+        requests.push("clear:start")
+        await releaseClear.promise
+        requests.push("clear:end")
+        return new Response(null, { status: 204 })
+      }
+      if (request.url.endsWith("/prompt")) {
+        requests.push("prompt")
+        return Response.json({
+          data: {
+            id: "msg_replacement",
+            sessionID: "ses_refresh",
+            timeCreated: 0,
+            type: "user",
+            payload: { text: "replacement" },
+            delivery: "steer",
+          },
+        })
+      }
+      throw new Error(`Unexpected request: ${request.url}`)
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: { on: () => () => {}, listen: () => () => {} },
+    }),
+    dispose,
+  }))
+
+  try {
+    const stage = setup.data.session.revert.stage({ sessionID: "ses_refresh", messageID: "msg_boundary" })
+    await wait(() => requests.length === 1)
+    const prompt = setup.data.session.prompt({ id: "msg_replacement", sessionID: "ses_refresh", text: "replacement" })
+    await Bun.sleep(20)
+    expect(requests).toEqual(["stage:start"])
+
+    releaseStage.resolve()
+    await Promise.all([stage, prompt])
+    expect(requests).toEqual(["stage:start", "stage:end", "prompt"])
+
+    const clear = setup.data.session.revert.clear({ sessionID: "ses_refresh" })
+    await wait(() => requests.at(-1) === "clear:start")
+    const next = setup.data.session.prompt({
+      id: "msg_after_clear",
+      sessionID: "ses_refresh",
+      text: "after clear",
+    })
+    await Bun.sleep(20)
+    expect(requests).toEqual(["stage:start", "stage:end", "prompt", "clear:start"])
+
+    releaseClear.resolve()
+    await Promise.all([clear, next])
+    expect(requests).toEqual(["stage:start", "stage:end", "prompt", "clear:start", "clear:end", "prompt"])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("retries one prepared prompt before releasing its session mutation reservation", async () => {
+  const retryEntered = Promise.withResolvers<void>()
+  const releaseRetry = Promise.withResolvers<void>()
+  const requests: string[] = []
+  const bodies: unknown[] = []
+  let prepared = 0
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      if (request.url.endsWith("/prompt")) {
+        const body = await request.json()
+        bodies.push(body)
+        requests.push(bodies.length === 1 ? "prompt:first" : "prompt:retry")
+        if (bodies.length === 1) throw new Error("response lost")
+        retryEntered.resolve()
+        await releaseRetry.promise
+        return Response.json({
+          data: {
+            id: "msg_retry",
+            sessionID: "ses_refresh",
+            timeCreated: 0,
+            type: "user",
+            payload: { text: "retry" },
+            delivery: "steer",
+          },
+        })
+      }
+      if (request.url.endsWith("/revert/stage")) {
+        requests.push("stage")
+        return Response.json({ data: { messageID: "msg_boundary", files: [] } })
+      }
+      throw new Error(`Unexpected request: ${request.url}`)
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: { on: () => () => {}, listen: () => () => {} },
+    }),
+    dispose,
+  }))
+
+  try {
+    const prompt = setup.data.session.prompt({
+      id: "msg_retry",
+      sessionID: "ses_refresh",
+      text: "retry",
+      prepare: async () => {
+        prepared++
+        return { context: { id: "msg_context", text: "context" } }
+      },
+    })
+    await retryEntered.promise
+    const stage = setup.data.session.revert.stage({ sessionID: "ses_refresh", messageID: "msg_boundary" })
+    await Bun.sleep(20)
+    expect(requests).toEqual(["prompt:first", "prompt:retry"])
+
+    releaseRetry.resolve()
+    await Promise.all([prompt, stage])
+    expect(requests).toEqual(["prompt:first", "prompt:retry", "stage"])
+    expect(prepared).toBe(1)
+    expect(bodies).toEqual([
+      { id: "msg_retry", text: "retry", context: { id: "msg_context", text: "context" } },
+      { id: "msg_retry", text: "retry", context: { id: "msg_context", text: "context" } },
+    ])
+  } finally {
+    releaseRetry.resolve()
+    setup.dispose()
+  }
+})
+
+test("holds one session mutation reservation across multiple prompt admissions", async () => {
+  const release = Promise.withResolvers<void>()
+  const requests: string[] = []
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      if (request.url.endsWith("/prompt")) {
+        const body: unknown = await request.json()
+        if (
+          typeof body !== "object" ||
+          body === null ||
+          !("id" in body) ||
+          typeof body.id !== "string" ||
+          !("text" in body) ||
+          typeof body.text !== "string"
+        )
+          throw new Error("Invalid prompt request")
+        requests.push(body.text)
+        return Response.json({
+          data: {
+            id: body.id,
+            sessionID: "ses_refresh",
+            timeCreated: 0,
+            type: "user",
+            payload: { text: body.text },
+            delivery: "queue",
+          },
+        })
+      }
+      if (request.url.endsWith("/revert/stage")) {
+        requests.push("stage")
+        return Response.json({ data: { messageID: "msg_boundary", files: [] } })
+      }
+      throw new Error(`Unexpected request: ${request.url}`)
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: { on: () => () => {}, listen: () => () => {} },
+    }),
+    dispose,
+  }))
+
+  try {
+    const rewrite = setup.data.session.mutate("ses_refresh", async (mutation) => {
+      await mutation.prompt({ id: "msg_first", sessionID: "ses_refresh", text: "first", delivery: "queue" })
+      requests.push("gap")
+      await release.promise
+      await mutation.prompt({ id: "msg_second", sessionID: "ses_refresh", text: "second", delivery: "queue" })
+    })
+    await wait(() => requests.at(-1) === "gap")
+    const stage = setup.data.session.revert.stage({ sessionID: "ses_refresh", messageID: "msg_boundary" })
+    await Bun.sleep(20)
+    expect(requests).toEqual(["first", "gap"])
+
+    release.resolve()
+    await Promise.all([rewrite, stage])
+    expect(requests).toEqual(["first", "gap", "second", "stage"])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("continues session mutations after a revert request fails", async () => {
+  const requests: string[] = []
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      if (request.url.endsWith("/revert/clear")) {
+        requests.push("clear")
+        return Response.json({ message: "failed" }, { status: 500 })
+      }
+      if (request.url.endsWith("/prompt")) {
+        requests.push("prompt")
+        return Response.json({
+          data: {
+            id: "msg_after_failure",
+            sessionID: "ses_refresh",
+            timeCreated: 0,
+            type: "user",
+            payload: { text: "after failure" },
+            delivery: "steer",
+          },
+        })
+      }
+      throw new Error(`Unexpected request: ${request.url}`)
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: { on: () => () => {}, listen: () => () => {} },
+    }),
+    dispose,
+  }))
+
+  try {
+    const clear = setup.data.session.revert.clear({ sessionID: "ses_refresh" }).catch(() => undefined)
+    const prompt = setup.data.session.prompt({
+      id: "msg_after_failure",
+      sessionID: "ses_refresh",
+      text: "after failure",
+    })
+    await Promise.all([clear, prompt])
+    expect(requests).toEqual(["clear", "prompt"])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("loads bounded message pages and joins an active page request", async () => {
+  const release = Promise.withResolvers<void>()
   const requests: URL[] = []
   const api = OpenCode.make({
     baseUrl: "http://opencode.local",
@@ -606,6 +869,7 @@ test("loads bounded message pages", async () => {
       const request = input instanceof Request ? input : new Request(input, init)
       const url = new URL(request.url)
       requests.push(url)
+      if (requests.length === 2) await release.promise
       return Response.json({ data: [], cursor: requests.length === 1 ? { next: "next" } : {} })
     },
   })
@@ -620,9 +884,16 @@ test("loads bounded message pages", async () => {
 
   try {
     await setup.data.session.message.sync("ses_refresh")
-    await setup.data.session.message.loadMore("ses_refresh")
+    const first = setup.data.session.message.loadMore("ses_refresh")
+    await wait(() => requests.length === 2)
+    let joined = false
+    const second = setup.data.session.message.loadMore("ses_refresh").then(() => (joined = true))
+    await Bun.sleep(20)
 
     expect(requests).toHaveLength(2)
+    expect(joined).toBe(false)
+    release.resolve()
+    await Promise.all([first, second])
     expect(Object.fromEntries(requests[0].searchParams)).toEqual({ limit: "20", order: "desc" })
     expect(Object.fromEntries(requests[1].searchParams)).toEqual({ cursor: "next", limit: "20" })
   } finally {
@@ -940,6 +1211,133 @@ function activityFixture(read: () => Response | Promise<Response>) {
     dispose,
   }))
 }
+
+test("reloads messages when a committed revert boundary is outside the loaded page", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const messages = (id: string): SessionMessageUser => ({
+    id,
+    type: "user",
+    text: id,
+    time: { created: 0 },
+  })
+  let messageRequests = 0
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      if (url.pathname === "/api/session/ses_refresh/inbox") return Response.json({ data: [] })
+      if (url.pathname !== "/api/session/ses_refresh/message") throw new Error(`Unexpected request: ${request.url}`)
+      messageRequests++
+      return Response.json({
+        data: messageRequests === 1 ? [messages("msg_newer")] : [messages("msg_survivor")],
+        cursor: {},
+      })
+    },
+  })
+  const event: CreateDataInput["event"] = {
+    on: () => () => {},
+    listen(handler) {
+      listeners.add(handler)
+      return () => listeners.delete(handler)
+    },
+  }
+  const setup = createRoot((dispose) => ({
+    data: createData({ api: () => api, directory: "/project", event, connection: { status: () => "connected" } }),
+    dispose,
+  }))
+
+  try {
+    setup.data.session.remember(session(0))
+    await setup.data.session.message.sync("ses_refresh")
+    const committed: OpenCodeEvent = {
+      id: "evt_revert_committed",
+      created: 2,
+      type: "session.revert.committed",
+      durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
+      data: { sessionID: "ses_refresh", to: "msg_boundary" },
+    }
+    listeners.forEach((listener) => listener({ name: committed.type, details: committed }))
+
+    await wait(() => setup.data.session.message.get("ses_refresh", "msg_survivor") !== undefined)
+    expect(messageRequests).toBe(2)
+    expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual(["msg_survivor"])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("restores surviving pending work after a committed revert", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const queued = {
+    id: "msg_queued",
+    sessionID: "ses_refresh",
+    timeCreated: 1,
+    type: "user" as const,
+    payload: { text: "Queued first" },
+    delivery: "queue" as const,
+  }
+  let pendingRequests = 0
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      if (url.pathname === "/api/session/ses_refresh/inbox") {
+        pendingRequests++
+        return Response.json({ data: [queued] })
+      }
+      if (url.pathname === "/api/session/ses_refresh/message")
+        return Response.json({
+          data: [{ id: "msg_boundary", type: "user", text: "Boundary", time: { created: 2 } }],
+          cursor: {},
+        })
+      throw new Error(`Unexpected request: ${request.url}`)
+    },
+  })
+  const event: CreateDataInput["event"] = {
+    on: () => () => {},
+    listen(handler) {
+      listeners.add(handler)
+      return () => listeners.delete(handler)
+    },
+  }
+  const setup = createRoot((dispose) => ({
+    data: createData({ api: () => api, directory: "/project", event, connection: { status: () => "connected" } }),
+    dispose,
+  }))
+
+  try {
+    setup.data.session.remember(session(0))
+    await setup.data.session.message.sync("ses_refresh")
+    const enqueued: OpenCodeEvent = {
+      id: "evt_inbox_enqueued",
+      created: 1,
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
+      data: {
+        sessionID: "ses_refresh",
+        inboxID: queued.id,
+        item: { type: "user", payload: queued.payload, delivery: queued.delivery },
+      },
+    }
+    const committed: OpenCodeEvent = {
+      id: "evt_revert_committed",
+      created: 3,
+      type: "session.revert.committed",
+      durable: { aggregateID: "ses_refresh", seq: 3, version: 1 },
+      data: { sessionID: "ses_refresh", to: "msg_boundary" },
+    }
+    listeners.forEach((listener) => listener({ name: enqueued.type, details: enqueued }))
+    listeners.forEach((listener) => listener({ name: committed.type, details: committed }))
+
+    await wait(() => setup.data.session.pending.list("ses_refresh").some((item) => item.id === queued.id))
+    expect(pendingRequests).toBe(1)
+    expect(setup.data.session.input.list("ses_refresh")).toEqual([queued.id])
+  } finally {
+    setup.dispose()
+  }
+})
 
 async function wait(check: () => boolean) {
   const started = Date.now()

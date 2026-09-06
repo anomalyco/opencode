@@ -734,8 +734,8 @@ describe("Session-owned handles", () => {
       yield* handle.revert.clear()
 
       expect(captures).toEqual([source, destination])
-      expect(fixture.locations).toEqual([source, destination, destination])
-      expect(fixture.activationWaits).toEqual([])
+      expect(fixture.locations).toEqual([source, source, destination, destination, destination, destination])
+      expect(fixture.activationWaits).toEqual([source, destination, destination])
       expect((yield* handle.get()).revert).toBeUndefined()
     }),
   )

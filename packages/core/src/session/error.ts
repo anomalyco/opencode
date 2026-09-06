@@ -101,6 +101,10 @@ export class AttachmentError extends Schema.TaggedError<AttachmentError>()("Sess
   message: Schema.String,
 }) {}
 
+export class ContextDeliveryError extends Schema.TaggedError<ContextDeliveryError>()("Session.ContextDeliveryError", {
+  sessionID: SessionSchema.ID,
+}) {}
+
 export class CompactionConflictError extends Schema.TaggedError<CompactionConflictError>()(
   "Session.CompactionConflictError",
   {

@@ -19,6 +19,11 @@ const messages = [
   { id: "msg_4", type: "user", text: "reverted", time: { created: 4 } },
 ] satisfies SessionMessageInfo[]
 
+const nonChronological = messages.map((message, index) => ({
+  ...message,
+  id: ["msg_fff", "msg_aaa", "msg_zzz", "msg_000"][index],
+})) satisfies SessionMessageInfo[]
+
 describe("visibleTimelineMessages", () => {
   const steer = {
     id: "msg_3",
@@ -133,7 +138,7 @@ describe("visibleTimelineMessages", () => {
   test("hides queued inputs until delivery", () => {
     const pending = [
       {
-        id: "msg_3",
+        id: "msg_zzz",
         sessionID: "ses_1",
         timeCreated: 3,
         type: "user",
@@ -142,16 +147,20 @@ describe("visibleTimelineMessages", () => {
       },
     ] satisfies SessionInboxInfo[]
 
-    expect(visibleTimelineMessages(messages, pending).map((message) => message.id)).toEqual(["msg_1", "msg_2", "msg_4"])
+    expect(visibleTimelineMessages(nonChronological, pending).map((message) => message.id)).toEqual([
+      "msg_fff",
+      "msg_aaa",
+      "msg_000",
+    ])
   })
 
   test("hides the staged revert boundary and later messages", () => {
-    expect(visibleTimelineMessages(messages, [], "msg_4").map((message) => message.id)).toEqual([
-      "msg_1",
-      "msg_2",
-      "msg_3",
+    expect(visibleTimelineMessages(nonChronological, [], "msg_000").map((message) => message.id)).toEqual([
+      "msg_fff",
+      "msg_aaa",
+      "msg_zzz",
     ])
-    expect(visibleTimelineMessages(messages, [], "msg_0")).toEqual([])
+    expect(visibleTimelineMessages(nonChronological, [], "msg_missing")).toEqual([])
   })
 })
 

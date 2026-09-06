@@ -1,18 +1,22 @@
 export * as Session from "./session.js"
 
-import { DateTime, Effect, Fiber, Schema, Scope } from "effect"
+import { DateTime, Deferred, Effect, Fiber, Schema, Scope } from "effect"
 import type { Agent } from "@opencode-ai/schema/agent"
+import type { Location } from "@opencode-ai/schema/location"
 import type { Model } from "@opencode-ai/schema/model"
 import { Event } from "@opencode-ai/schema/event"
 import { FSUtil } from "@opencode-ai/util/fs-util"
+import { PluginActivation } from "@opencode-ai/plugin/effect/activation"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
+import { Plugin } from "../plugin/service.js"
 import { ShellResult } from "../shell/result.js"
 import type { Skill } from "../skill.js"
 import {
   BusyError,
   CompactionConflictError,
+  ContextDeliveryError,
   InboxConflictError,
   MessageIncompleteError,
   MessageNotAssistantError,
@@ -51,6 +55,9 @@ export const make = Effect.fn("Session.make")(function* () {
   const admission = yield* SessionInbox.Service
   const fs = yield* FSUtil.Service
   const scope = yield* Scope.Scope
+  const operationTails = new Map<SessionSchema.ID, { readonly wait: Effect.Effect<void> }>()
+  const pluginWaiters = new Map<SessionSchema.ID, Set<Location.Ref>>()
+  const promptPreparations = new Map<SessionSchema.ID, Set<PluginActivation.PromptPreparation>>()
 
   const get = Effect.fn("Session.get")(function* (sessionID: SessionSchema.ID) {
     const session = yield* store.get(sessionID)
@@ -100,6 +107,7 @@ export const make = Effect.fn("Session.make")(function* () {
     input: { agent: Agent.ID },
   ) {
     const session = yield* get(sessionID)
+    if (session.agent === input.agent) return
     yield* bus.publish(SessionEvent.AgentSelected, { sessionID, agent: input.agent, previous: session.agent })
   })
   const switchModel = Effect.fn("Session.switchModel")(function* (
@@ -151,38 +159,267 @@ export const make = Effect.fn("Session.make")(function* () {
     (sessionID: SessionSchema.ID, inboxID: SessionMessage.ID) => mutatePending(sessionID, inboxID, admission.queue),
     Effect.uninterruptible,
   )
+  const withSessionReservation = <A, E, R>(
+    sessionID: SessionSchema.ID,
+    operation: (wait: Effect.Effect<void>) => Effect.Effect<A, E, R>,
+  ) =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const previous = operationTails.get(sessionID)
+        const done = Deferred.makeUnsafe<void>()
+        const current = {
+          wait: (previous?.wait ?? Effect.void).pipe(Effect.andThen(Deferred.await(done))),
+        }
+        operationTails.set(sessionID, current)
+        return { previous: previous?.wait, done, current }
+      }),
+      (reservation) => operation(reservation.previous ?? Effect.void),
+      (reservation) =>
+        Effect.gen(function* () {
+          yield* Deferred.succeed(reservation.done, undefined)
+          if (operationTails.get(sessionID) !== reservation.current) return
+          yield* reservation.current.wait.pipe(
+            Effect.andThen(
+              Effect.sync(() => {
+                if (operationTails.get(sessionID) === reservation.current) operationTails.delete(sessionID)
+              }),
+            ),
+            Effect.forkIn(scope),
+          )
+        }),
+    )
+  const withSessionOperation = <A, E, R>(sessionID: SessionSchema.ID, effect: Effect.Effect<A, E, R>) =>
+    withSessionReservation(sessionID, (wait) => wait.pipe(Effect.andThen(effect)))
+  const withPluginWaiter = <A, E, R>(
+    sessionID: SessionSchema.ID,
+    location: Location.Ref,
+    effect: Effect.Effect<A, E, R>,
+  ) =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const waiting = pluginWaiters.get(sessionID) ?? new Set<Location.Ref>()
+        waiting.add(location)
+        pluginWaiters.set(sessionID, waiting)
+      }),
+      () => effect,
+      () =>
+        Effect.sync(() => {
+          const waiting = pluginWaiters.get(sessionID)
+          waiting?.delete(location)
+          if (waiting?.size === 0) pluginWaiters.delete(sessionID)
+        }),
+    )
+  const withRevertPlugins = <A, E>(
+    sessionID: SessionSchema.ID,
+    operation: (session: SessionSchema.Info) => Effect.Effect<A, E>,
+  ) =>
+    Effect.gen(function* () {
+      const session = yield* get(sessionID)
+      return yield* withPluginWaiter(
+        sessionID,
+        session.location,
+        Effect.gen(function* () {
+          yield* Plugin.awaitActivation
+          return yield* SessionInbox.serialized(
+            sessionID,
+            Effect.gen(function* () {
+              const latest = yield* get(sessionID)
+              if (
+                latest.location.directory !== session.location.directory ||
+                latest.location.workspaceID !== session.location.workspaceID
+              )
+                return { _tag: "retry" as const }
+              return { _tag: "done" as const, value: yield* operation(latest) }
+            }),
+          )
+        }).pipe(instances.provide(session)),
+      )
+    }).pipe(
+      Effect.repeat({ while: (result): result is { readonly _tag: "retry" } => result._tag === "retry" }),
+      Effect.map((result) => result.value),
+    )
   const prompt = Effect.fn("Session.prompt")((sessionID: SessionSchema.ID, input: PromptRequest) =>
-    Effect.uninterruptibleMask((restore) =>
-      Effect.gen(function* () {
-        const session = yield* get(sessionID)
-        const messageID = input.id ?? SessionMessage.ID.create()
-        const admitted = yield* Effect.gen(function* () {
-          const existing = yield* admission.reconcile({
-            id: messageID,
-            sessionID: session.id,
-            type: "user",
-            delivery: input.delivery ?? "steer",
-          })
-          if (existing) return existing
-          const item = yield* restore(
-            SessionPrompt.prepare({ session, messageID, input }).pipe(
-              Effect.provideService(Instance.Service, instances),
-              Effect.provideService(FSUtil.Service, fs),
+    withSessionReservation(sessionID, (wait) =>
+      Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const messageID = input.id ?? SessionMessage.ID.create()
+          const checked = yield* SessionInbox.serialized(
+            sessionID,
+            Effect.gen(function* () {
+              const session = yield* get(sessionID)
+              const existing = yield* admission.reconcile({
+                id: messageID,
+                sessionID,
+                type: "user",
+                delivery: input.delivery ?? "steer",
+              })
+              if (!existing) return { session, admitted: undefined }
+              if (!session.revert) return { session, admitted: existing }
+              const retained = yield* store.survivesRevert({
+                id: messageID,
+                sessionID,
+                boundaryID: session.revert.messageID,
+              })
+              if (!retained) return { session, admitted: undefined }
+              return { session, admitted: existing }
+            }),
+          )
+          if (checked.admitted) {
+            yield* wait
+            const admitted = yield* SessionInbox.serialized(
+              sessionID,
+              Effect.gen(function* () {
+                const session = yield* get(sessionID)
+                const existing = yield* admission.reconcile({
+                  id: messageID,
+                  sessionID,
+                  type: "user",
+                  delivery: input.delivery ?? "steer",
+                })
+                if (!existing) return
+                if (session.revert) {
+                  const retained = yield* store.survivesRevert({
+                    id: messageID,
+                    sessionID,
+                    boundaryID: session.revert.messageID,
+                  })
+                  if (!retained) return
+                  yield* SessionRevert.commit(bus, session)
+                }
+                if (input.resume !== false) yield* execution.wake(sessionID)
+                return existing
+              }),
+            )
+            if (admitted) return admitted
+          }
+          const prepared = yield* restore(
+            withPluginWaiter(
+              sessionID,
+              checked.session.location,
+              Effect.gen(function* () {
+                const reservation: PluginActivation.PromptPreparation = {
+                  active: true,
+                  fiberID: yield* Effect.fiberId,
+                  token: {},
+                  sessionID,
+                  wait,
+                }
+                return yield* Effect.acquireUseRelease(
+                  Effect.sync(() => {
+                    const preparations = promptPreparations.get(sessionID) ?? new Set()
+                    preparations.add(reservation)
+                    promptPreparations.set(sessionID, preparations)
+                  }),
+                  () =>
+                    // prepare awaits plugin activation under its own Instance span.
+                    SessionPrompt.prepare({ session: checked.session, messageID, input }).pipe(
+                      Effect.provideService(Instance.Service, instances),
+                      Effect.provideService(FSUtil.Service, fs),
+                      Effect.provideService(PluginActivation.PromptPreparationCurrent, reservation),
+                    ),
+                  () =>
+                    Effect.sync(() => {
+                      reservation.active = false
+                      const preparations = promptPreparations.get(sessionID)
+                      preparations?.delete(reservation)
+                      if (preparations?.size === 0) promptPreparations.delete(sessionID)
+                    }),
+                )
+              }),
             ),
           )
-          // Commit a staged revert only after preparation succeeds, before admitting new work.
-          if (session.revert) yield* SessionRevert.commit(bus, session)
-          return yield* admission.admit({
-            id: messageID,
-            sessionID: session.id,
-            item,
-          })
+          if (input.context && prepared.delivery === "queue") return yield* new ContextDeliveryError({ sessionID })
+          const context = input.context
+            ? {
+                id: input.context.id,
+                item: SessionInbox.Item.make({
+                  type: "synthetic",
+                  payload: SessionInbox.SyntheticPayload.make({
+                    text: input.context.text,
+                    description: input.context.description,
+                    metadata: input.context.metadata,
+                  }),
+                  delivery: "steer",
+                }),
+              }
+            : undefined
+          yield* wait
+          return yield* SessionInbox.serialized(
+            sessionID,
+            Effect.gen(function* () {
+              const session = yield* get(sessionID)
+              const existing = yield* admission.reconcile({
+                id: messageID,
+                sessionID,
+                type: "user",
+                delivery: prepared.delivery,
+              })
+              if (existing) {
+                if (!session.revert) {
+                  if (input.resume !== false) yield* execution.wake(sessionID)
+                  return existing
+                }
+                const retained = yield* store.survivesRevert({
+                  id: messageID,
+                  sessionID,
+                  boundaryID: session.revert.messageID,
+                })
+                if (retained) {
+                  yield* SessionRevert.commit(bus, session)
+                  if (input.resume !== false) yield* execution.wake(sessionID)
+                  return existing
+                }
+              }
+              const enqueued = yield* Effect.gen(function* () {
+                if (session.revert) {
+                  if (context) {
+                    const events = yield* bus.publishAll([
+                      [SessionEvent.RevertEvent.Committed, { sessionID, to: session.revert.messageID }],
+                      [SessionEvent.InboxEnqueued, { inboxID: context.id, sessionID, item: context.item }],
+                      [SessionEvent.InboxEnqueued, { inboxID: messageID, sessionID, item: prepared }],
+                    ])
+                    return events[2]
+                  }
+                  const events = yield* bus.publishAll([
+                    [SessionEvent.RevertEvent.Committed, { sessionID, to: session.revert.messageID }],
+                    [SessionEvent.InboxEnqueued, { inboxID: messageID, sessionID, item: prepared }],
+                  ])
+                  return events[1]
+                }
+                if (!context) return undefined
+                const events = yield* bus.publishAll([
+                  [SessionEvent.InboxEnqueued, { inboxID: context.id, sessionID, item: context.item }],
+                  [SessionEvent.InboxEnqueued, { inboxID: messageID, sessionID, item: prepared }],
+                ])
+                return events[1]
+              })
+              const recorded = enqueued
+                ? SessionInbox.User.make({
+                    id: messageID,
+                    sessionID,
+                    timeCreated: DateTime.makeUnsafe(enqueued.created),
+                    type: "user",
+                    payload: prepared.payload,
+                    delivery: prepared.delivery,
+                  })
+                : yield* admission.admit({ id: messageID, sessionID, item: prepared })
+              if (recorded.type !== "user") return yield* new PromptConflictError({ sessionID, messageID })
+              if (input.resume !== false) yield* execution.wake(sessionID)
+              return recorded
+            }),
+          )
         }).pipe(
-          Effect.catchTag("SessionInbox.LifecycleConflict", () => new PromptConflictError({ sessionID, messageID })),
-        )
-        if (input.resume !== false) yield* execution.wake(sessionID)
-        return admitted
-      }),
+          Effect.catchTag(
+            "SessionInbox.LifecycleConflict",
+            (error) => new PromptConflictError({ sessionID, messageID: error.id }),
+          ),
+          Effect.catchDefect((defect) =>
+            defect instanceof SessionInbox.LifecycleConflict
+              ? new PromptConflictError({ sessionID, messageID: defect.id })
+              : Effect.die(defect),
+          ),
+        ),
+      ),
     ),
   )
   const shell = Effect.fn("Session.shell")(function* (
@@ -192,6 +429,8 @@ export const make = Effect.fn("Session.make")(function* () {
     const session = yield* get(sessionID)
     // The server owns completion recording even if the submitting client disconnects.
     const running = yield* Effect.gen(function* () {
+      // Plugin-provided shell hooks and configuration only exist after activation.
+      yield* Plugin.awaitActivation.pipe(instances.provide(session))
       const started = yield* SessionShell.start({ session, command: input.command }).pipe(
         Effect.provideService(Instance.Service, instances),
         Effect.tapError((error) =>
@@ -256,8 +495,15 @@ export const make = Effect.fn("Session.make")(function* () {
     sessionID: SessionSchema.ID,
     input: { id?: SessionMessage.ID; delivery?: SessionInbox.Delivery },
   ) {
-    const session = yield* get(sessionID)
-    if (session.revert) yield* SessionRevert.commit(bus, session)
+    // Commit inside the inbox lock so it cannot interleave with serialized revert
+    // mutations; admitCompaction takes the same non-reentrant lock itself.
+    yield* SessionInbox.serialized(
+      sessionID,
+      Effect.gen(function* () {
+        const session = yield* get(sessionID)
+        if (session.revert) yield* SessionRevert.commit(bus, session)
+      }),
+    )
     const inputID = input.id ?? SessionMessage.ID.create()
     const admitted = yield* admission
       .admitCompaction({
@@ -279,48 +525,74 @@ export const make = Effect.fn("Session.make")(function* () {
     yield* get(sessionID)
     yield* execution.resume(sessionID)
   })
-  const synthetic = Effect.fn("Session.synthetic")(
-    (
-      sessionID: SessionSchema.ID,
-      input: {
-        id?: SessionMessage.ID
-        text: string
-        description?: string
-        metadata?: Record<string, unknown>
-        delivery?: SessionInbox.Delivery
-        resume?: boolean
-      },
-    ) =>
-      Effect.uninterruptible(
-        Effect.gen(function* () {
-          yield* get(sessionID)
-          const inputID = input.id ?? SessionMessage.ID.create()
-          const admittedInput = {
-            type: "synthetic",
-            payload: SessionInbox.SyntheticPayload.make({
-              text: input.text,
-              description: input.description,
-              metadata: input.metadata,
-            }),
-            delivery: SessionInbox.Delivery.make(input.delivery ?? "steer"),
-          } satisfies SessionInbox.Item
-          const admitted = yield* admission
-            .admit({
-              id: inputID,
-              sessionID,
-              item: admittedInput,
-            })
-            .pipe(
-              Effect.catchTag(
-                "SessionInbox.LifecycleConflict",
-                () => new SyntheticConflictError({ sessionID, inputID }),
-              ),
-            )
-          if (input.resume !== false && !(yield* get(sessionID)).revert) yield* execution.wake(sessionID)
-          return admitted
-        }),
-      ),
-  )
+  const synthetic = Effect.fn("Session.synthetic")((
+    sessionID: SessionSchema.ID,
+    input: {
+      id?: SessionMessage.ID
+      text: string
+      description?: string
+      metadata?: Record<string, unknown>
+      delivery?: SessionInbox.Delivery
+      resume?: boolean
+    },
+  ) => {
+    const effect = SessionInbox.serialized(
+      sessionID,
+      Effect.gen(function* () {
+        yield* get(sessionID)
+        const inputID = input.id ?? SessionMessage.ID.create()
+        const admittedInput = {
+          type: "synthetic",
+          payload: SessionInbox.SyntheticPayload.make({
+            text: input.text,
+            description: input.description,
+            metadata: input.metadata,
+          }),
+          delivery: SessionInbox.Delivery.make(input.delivery ?? "steer"),
+        } satisfies SessionInbox.Item
+        const admitted = yield* admission
+          .admit({
+            id: inputID,
+            sessionID,
+            item: admittedInput,
+          })
+          .pipe(
+            Effect.catchTag("SessionInbox.LifecycleConflict", () => new SyntheticConflictError({ sessionID, inputID })),
+          )
+        if (input.resume !== false && !(yield* get(sessionID)).revert) yield* execution.wake(sessionID)
+        return admitted
+      }),
+    )
+    return Effect.uninterruptible(
+      Effect.gen(function* () {
+        const current = yield* PluginActivation.PromptPreparationCurrent
+        const bridgedPreparation = yield* PluginActivation.PromptPreparationBridged
+        const preparation =
+          current?.active && current.sessionID === sessionID && current.fiberID === (yield* Effect.fiberId)
+            ? current
+            : Array.from(promptPreparations.get(sessionID) ?? []).find(
+                (candidate) => candidate.active && candidate.token === bridgedPreparation,
+              )
+        if (preparation) {
+          yield* preparation.wait
+          return yield* effect
+        }
+        const activation = yield* PluginActivation.Current
+        const waiting = pluginWaiters.get(sessionID)
+        const bridged = yield* PluginActivation.Bridged
+        if (
+          activation?.active &&
+          (activation.fiberID === (yield* Effect.fiberId) || bridged === activation.token) &&
+          Array.from(waiting ?? []).some(
+            (location) =>
+              location.directory === activation.directory && location.workspaceID === activation.workspaceID,
+          )
+        )
+          return yield* effect
+        return yield* withSessionOperation(sessionID, effect)
+      }),
+    )
+  })
   const interrupt = Effect.fn("Session.interrupt")(
     (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) =>
       Effect.uninterruptible(execution.interrupt(sessionID, options)),
@@ -329,27 +601,47 @@ export const make = Effect.fn("Session.make")(function* () {
     sessionID: SessionSchema.ID,
     input: { messageID: SessionMessage.ID; files?: boolean },
   ) {
-    const session = yield* get(sessionID)
-    if (yield* execution.isActive(sessionID)) return yield* new BusyError({ sessionID })
-    return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
-      Effect.provideService(Instance.Service, instances),
-      Effect.provideService(Database.Service, database),
-      Effect.provideService(Bus.Service, bus),
+    return yield* withSessionOperation(
+      sessionID,
+      withRevertPlugins(sessionID, (session) =>
+        Effect.gen(function* () {
+          if (yield* execution.isActive(sessionID)) return yield* new BusyError({ sessionID })
+          return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
+            Effect.provideService(Instance.Service, instances),
+            Effect.provideService(Database.Service, database),
+            Effect.provideService(Bus.Service, bus),
+          )
+        }),
+      ),
     )
   })
   const clear = Effect.fn("Session.revert.clear")(function* (sessionID: SessionSchema.ID) {
-    const session = yield* get(sessionID)
-    if (yield* execution.isActive(sessionID)) return yield* new BusyError({ sessionID })
-    yield* SessionRevert.clear(session).pipe(
-      Effect.provideService(Instance.Service, instances),
-      Effect.provideService(Bus.Service, bus),
+    return yield* withSessionOperation(
+      sessionID,
+      withRevertPlugins(sessionID, (session) =>
+        Effect.gen(function* () {
+          if (yield* execution.isActive(sessionID)) return yield* new BusyError({ sessionID })
+          yield* SessionRevert.clear(session).pipe(
+            Effect.provideService(Instance.Service, instances),
+            Effect.provideService(Bus.Service, bus),
+          )
+          return yield* execution.wake(sessionID)
+        }),
+      ),
     )
-    return yield* execution.wake(sessionID)
   })
   const commit = Effect.fn("Session.revert.commit")(function* (sessionID: SessionSchema.ID) {
-    const session = yield* get(sessionID)
-    if (yield* execution.isActive(sessionID)) return yield* new BusyError({ sessionID })
-    return yield* SessionRevert.commit(bus, session)
+    return yield* withSessionOperation(
+      sessionID,
+      SessionInbox.serialized(
+        sessionID,
+        Effect.gen(function* () {
+          const session = yield* get(sessionID)
+          if (yield* execution.isActive(sessionID)) return yield* new BusyError({ sessionID })
+          return yield* SessionRevert.commit(bus, session)
+        }),
+      ),
+    )
   })
   const revert = { stage, clear, commit }
   const operations = {

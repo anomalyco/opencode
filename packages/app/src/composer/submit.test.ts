@@ -112,6 +112,13 @@ function session(input: {
       location: { command: { list: () => [] } },
       session: {
         setStatus: (_sessionID, status) => input.statuses?.push(status),
+        mutate: async (_sessionID, operation) =>
+          operation({
+            prompt: async (value) => {
+              input.calls.push("prompt")
+              await input.prompt(value)
+            },
+          }),
         prompt: async (value) => {
           input.calls.push("prompt")
           await input.prompt(value)
@@ -257,6 +264,45 @@ describe("Composer submission", () => {
       model: { providerID: "provider-1", modelID: "model-1", variant: "balanced" },
     })
     expect(state.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
+  })
+
+  test("reserves prompt admission before later session mutations", async () => {
+    const state = createMemoryComposerState({ prompt: "replace history" }).capture()
+    const calls: string[] = []
+    const target = session({
+      calls,
+      current: () => ({ agent: "build", model: { id: "model-1", providerID: "provider-1", variant: "balanced" } }),
+      prompt: async () => undefined,
+    })
+    const prompt = target.data.session.prompt
+    let previous = Promise.resolve<unknown>(undefined)
+    target.data.session.mutate = (sessionID, operation) => {
+      const request = previous.then(() => operation({ prompt }))
+      previous = request.then(
+        () => undefined,
+        () => undefined,
+      )
+      return request
+    }
+    const adapter: ActiveComposerAdapter = {
+      kind: "active-session",
+      state,
+      ready: () => true,
+      controls,
+      working: () => false,
+      session: () => target,
+      interrupt: async () => undefined,
+      submitted() {},
+      setEditor() {},
+    }
+
+    const submitted = submitInput(adapter).submit(new Event("submit"))
+    const redo = target.data.session.mutate(target.id, async () => {
+      calls.push("redo")
+    })
+    await Promise.all([submitted, redo])
+
+    expect(calls).toEqual(["prompt", "redo"])
   })
 
   test("starts and promotes a New Session once before admitting its first prompt", async () => {

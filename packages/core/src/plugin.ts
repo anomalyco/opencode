@@ -11,6 +11,8 @@ import { KV } from "./kv.js"
 import { PluginHost } from "./plugin/host.js"
 import { type Failure, type Generation, Service } from "./plugin/service.js"
 import { State } from "./state.js"
+import { Location } from "./location.js"
+import { PluginActivation } from "@opencode-ai/plugin/effect/activation"
 
 export { awaitActivation, type Generation, type Interface, Service } from "./plugin/service.js"
 
@@ -19,6 +21,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const kv = yield* KV.Service
+    const location = yield* Location.Service
     const scope = yield* Scope.make()
     // One slot per requested definition in activation order, including ones whose setup failed, so
     // the prefix diff below stays index-aligned and a failed revision is not retried until it changes.
@@ -47,6 +50,13 @@ const layer = Layer.effect(
     const load = Effect.fnUntraced(function* (plugin: Generation) {
       const activation: Activation = { plugin, scope: yield* Scope.fork(scope) }
       const inherit = yield* State.inherit()
+      const capability = {
+        active: true,
+        fiberID: yield* Effect.fiberId,
+        token: {},
+        directory: location.directory,
+        workspaceID: location.workspaceID,
+      }
       const grouped = State.group((failure, refresh) => {
         activation.failure = {
           error: `Plugin disabled after ${failure.state}.transform failed. Check server logs for details.`,
@@ -70,9 +80,11 @@ const layer = Layer.effect(
           Context.make(Scope.Scope, activation.scope).pipe(
             Context.add(Logger.CurrentLoggers, Context.get(context, Logger.CurrentLoggers)),
             Context.add(References.MinimumLogLevel, Context.get(context, References.MinimumLogLevel)),
+            Context.add(PluginActivation.Current, capability),
           ),
         ),
         Effect.withSpan("Plugin.load", { attributes: { "plugin.id": plugin.id } }),
+        Effect.ensuring(Effect.sync(() => (capability.active = false))),
         Effect.onExit((exit) =>
           Exit.isFailure(exit) && !activation.failure ? Scope.close(activation.scope, exit) : Effect.void,
         ),

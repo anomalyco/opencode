@@ -24,6 +24,7 @@ import { useSessionTabs } from "../../context/session-tabs"
 import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
 import { normalizePromptContent, openEditor } from "../../editor"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { useExit } from "../../context/exit"
 import { promptOffsetWidth } from "../../prompt/display"
 import { expandPromptInputPastedText, realignPromptInputMentions } from "../../prompt/mention"
@@ -69,6 +70,13 @@ import { directoryRecentValue } from "../../prompt/directory-completion"
 import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
 import { truncateFilePath } from "../../ui/file-path"
 import { PromptMetadataRow } from "./metadata"
+import {
+  acknowledgePromptRetry,
+  markPromptRetryRestored,
+  releasePromptRetry,
+  rememberPromptRetry,
+  takePromptRetry,
+} from "./retry"
 
 export type PromptProps = {
   sessionID?: string
@@ -335,18 +343,20 @@ export function Prompt(props: PromptProps) {
   let promptPartTypeId = 0
   const event = useEvent()
 
-  event.on("tui.prompt.append", (evt, { workspace }) => {
-    if (workspace !== (currentLocation.current?.workspaceID ?? data.location.default().workspaceID)) return
-    if (!input || input.isDestroyed) return
-    input.insertText(evt.data.text)
-    setTimeout(() => {
-      // setTimeout is a workaround and needs to be addressed properly
+  onCleanup(
+    event.on("tui.prompt.append", (evt, { workspace }) => {
+      if (workspace !== (currentLocation.current?.workspaceID ?? data.location.default().workspaceID)) return
       if (!input || input.isDestroyed) return
-      input.getLayoutNode().markDirty()
-      input.gotoBufferEnd()
-      renderer.requestRender()
-    }, 0)
-  })
+      input.insertText(evt.data.text)
+      setTimeout(() => {
+        // setTimeout is a workaround and needs to be addressed properly
+        if (!input || input.isDestroyed) return
+        input.getLayoutNode().markDirty()
+        input.gotoBufferEnd()
+        renderer.requestRender()
+      }, 0)
+    }),
+  )
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
@@ -1158,8 +1168,11 @@ export function Prompt(props: PromptProps) {
       return false
     }
     const editorSelection = editorContext()
-    const pendingEditorSelection = editorSelection && editor.labelState() === "pending" ? editorSelection : undefined
-    if (delivery === "queue" && pendingEditorSelection) {
+    const pendingEditorContext =
+      editorSelection && editor.labelState() === "pending"
+        ? { key: editorSelectionKey(editorSelection), text: formatEditorContext(editorSelection) }
+        : undefined
+    if (delivery === "queue" && pendingEditorContext) {
       toast.show({ message: "Editor context cannot be queued", variant: "warning" })
       return false
     }
@@ -1191,12 +1204,13 @@ export function Prompt(props: PromptProps) {
     resetComposer()
     props.onSubmit?.()
     const restoreEntry = () => {
-      if (disposed || input.isDestroyed || input.plainText !== "") return
+      if (disposed || input.isDestroyed || input.plainText !== "") return false
       input.setText(entry.text)
       setStore("prompt", entry)
       setStore("mode", entry.mode ?? "normal")
       restoreExtmarksFromPrompt(entry)
       input.cursorOffset = entry.text.length
+      return true
     }
 
     const variant = selection.variant
@@ -1267,9 +1281,15 @@ export function Prompt(props: PromptProps) {
         await data.session.sync(target)
         session = data.session.get(target)
       }
-      if (session?.agent !== agent.id) {
-        await client.api.session.switchAgent({ sessionID: target, agent: agent.id })
-      }
+      const commit = local.agent.trackSessionCommit(target, session?.agent, agent.id)
+      if (!commit) return
+      await client.api.session.switchAgent({ sessionID: target, agent: agent.id }).then(
+        () => commit.succeed(),
+        (error) => {
+          commit.fail()
+          throw error
+        },
+      )
     }
     const commitModel = () => {
       const model = { providerID: selection.providerID, id: selection.modelID, variant }
@@ -1316,72 +1336,82 @@ export function Prompt(props: PromptProps) {
       dispatch(() => client.api.session.skill({ sessionID: target, skill: slashHead.name }))
     } else {
       move.startSubmit()
-      try {
-        await prepareAgent()
-      } catch (error) {
-        toast.show({ title: "Failed to prepare session", message: errorMessage(error), variant: "error" })
-        restoreEntry()
-        return true
+      const retryInput = {
+        prompt: entry,
+        agent: agent.id,
+        providerID: selection.providerID,
+        modelID: selection.modelID,
+        variant,
+        delivery,
+        contextKey: pendingEditorContext?.key,
       }
-      if (session?.revert) {
-        const error = await client.api.session.revert.commit({ sessionID: target }).then(
-          () => undefined,
-          (error) => error,
-        )
-        if (error) {
-          toast.show({ title: "Failed to commit revert", message: errorMessage(error), variant: "error" })
-          restoreEntry()
-          return false
-        }
-      }
-      if (pendingEditorSelection) {
-        // Keep editor context hidden while admitting it before the corresponding user prompt.
-        const send = () =>
-          client.api.session.synthetic({
-            sessionID: target,
-            text: formatEditorContext(pendingEditorSelection),
-            resume: false,
-          })
-        if (newSession) {
-          // Fold into the setup gate so the context still admits before the
-          // user prompt once the session exists.
-          newSession.gate = newSession.gate.then(send)
-        } else {
-          const error = await send().then(
-            () => undefined,
-            (error) => error,
-          )
-          if (error) {
-            toast.show({ title: "Failed to send editor context", message: errorMessage(error), variant: "error" })
-            restoreEntry()
-            return false
+      const retry = takePromptRetry(target, retryInput)
+      const messageID = retry?.id ?? SessionMessage.ID.create()
+      const contextID = pendingEditorContext ? (retry?.contextID ?? SessionMessage.ID.create()) : undefined
+      let contextIncluded = false
+      const request = data.session.prompt({
+        id: messageID,
+        sessionID: target,
+        text: inputText,
+        files: entry.files,
+        agents: entry.agents,
+        skills: entry.skills?.length ? entry.skills : undefined,
+        delivery,
+        gate: newSession?.gate,
+        prepare: async () => {
+          await prepareAgent()
+          await commitModel()
+          const context =
+            pendingEditorContext &&
+            contextID &&
+            editor.labelState() === "pending" &&
+            editorSelectionKey(editor.selection()) === pendingEditorContext.key
+              ? { id: contextID, text: pendingEditorContext.text }
+              : undefined
+          contextIncluded = context !== undefined
+          return { context }
+        },
+      })
+      void request.then(
+        () => {
+          acknowledgePromptRetry(target, messageID)
+          if (contextIncluded && pendingEditorContext) editor.markSelectionSent(pendingEditorContext.key)
+        },
+        (error) => {
+          if (
+            data.session.input.has(target, messageID) ||
+            data.session.message.get(target, messageID)?.type === "user"
+          ) {
+            acknowledgePromptRetry(target, messageID)
+            if (contextIncluded && pendingEditorContext) editor.markSelectionSent(pendingEditorContext.key)
+            return
           }
-        }
-      }
-      // The data layer admits optimistically: the prompt renders immediately
-      // and rolls back if the server rejects it, so submission does not wait
-      // on the network. On rejection the row is already rolled back; restore
-      // the composer unless the user has started typing something new.
-      data.session
-        .prompt({
-          sessionID: target,
-          text: inputText,
-          files: entry.files,
-          agents: entry.agents,
-          skills: entry.skills?.length ? entry.skills : undefined,
-          delivery,
-          gate: newSession?.gate,
-          // Commit the captured selection after earlier admissions, including
-          // compaction setup. Cached state may still precede their SSE echoes;
-          // the server makes an unchanged selection a no-op.
-          prepare: commitModel,
-        })
-        .catch((error) => {
-          if (newSession) return newSession.recover(error)
+          if (newSession && !data.session.get(target)) {
+            releasePromptRetry(target, messageID)
+            return newSession.recover(error)
+          }
+          const remembered = rememberPromptRetry(target, { id: messageID, contextID, contextIncluded, ...retryInput })
+          if (!remembered) {
+            if (contextIncluded && pendingEditorContext) editor.markSelectionSent(pendingEditorContext.key)
+            return
+          }
           toast.show({ title: "Failed to send prompt", message: errorMessage(error), variant: "error" })
-          restoreEntry()
-        })
-      if (pendingEditorSelection) editor.markSelectionSent()
+          if (newSession) {
+            const active =
+              route.data.type === "session" && route.data.sessionID === target ? promptRef.current : undefined
+            if (active && !active.current.text) {
+              active.set(entry)
+              markPromptRetryRestored(target, messageID)
+            }
+            if (!active) {
+              saveDraft(target, { prompt: entry, cursor: entry.text.length })
+              markPromptRetryRestored(target, messageID)
+            }
+            return
+          }
+          if (restoreEntry()) markPromptRetryRestored(target, messageID)
+        },
+      )
     }
 
     sessionTabs.promote(target)
@@ -1389,7 +1419,7 @@ export function Prompt(props: PromptProps) {
     // Optimistic admission puts the message in the store synchronously, so
     // the session view renders it on arrival.
     if (!props.sessionID) {
-      if (pendingEditorSelection) editor.preserveSelectionFromNewSession()
+      if (pendingEditorContext) editor.preserveSelectionFromNewSession()
       // Text typed while session creation was in flight lives in this (home)
       // prompt, which unmounts on navigation and would stash it under the
       // home key. Re-stash it under the new session so that composer restores

@@ -7,6 +7,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { extractPromptComments, extractPromptFromMessage } from "@/composer/prompt"
 import { showToast } from "@/shell/notifications/toast"
 import type { SessionModel } from "./model"
+import { loadRevertBoundary, loadUndoTarget } from "./session-domain"
 
 export function createSessionRevert(input: {
   session: SessionModel
@@ -46,9 +47,7 @@ export function createSessionRevert(input: {
     )
   }
 
-  const stage = async (message: SessionMessageUser, previous: SessionMessageUser | undefined) => {
-    const sessionID = input.session.identity.params.id
-    if (!sessionID) return
+  const stage = async (sessionID: string, message: SessionMessageUser, previous: SessionMessageUser | undefined) => {
     const owner = input.session.ownership.capture()
     const target = prompt.capture()
     if (data.session.status(sessionID) === "running") {
@@ -82,40 +81,73 @@ export function createSessionRevert(input: {
   }
 
   const to = async (messageID: string) => {
+    const sessionID = input.session.identity.params.id
+    if (!sessionID) return
     const messages = input.session.history.userMessages()
     const index = messages.findIndex((message) => message.id === messageID)
     const message = messages[index]
     if (!message) return
-    await stage(message, messages[index - 1])
+    await data.session.mutate(sessionID, () => stage(sessionID, message, messages[index - 1]))
   }
 
   const undo = async () => {
-    const messages = input.session.history.userMessages()
-    const reverted = input.session.data.revertMessageID()
-    const boundary = reverted ? messages.findIndex((message) => message.id === reverted) : messages.length
-    if (boundary <= 0) return
-    const message = messages[boundary - 1]
-    if (message) await stage(message, messages[boundary - 2])
+    const sessionID = input.session.identity.params.id
+    if (!sessionID) return
+    await data.session.mutate(sessionID, async () => {
+      const reverted = input.session.data.revertMessageID()
+      const messages = input.session.history.userMessages()
+      if (!reverted) {
+        const message = messages.at(-1)
+        if (message) await stage(sessionID, message, messages.at(-2))
+        return
+      }
+      const target = await loadUndoTarget({
+        messageID: reverted,
+        messages: input.session.history.userMessages,
+        more: () => data.session.message.more(sessionID),
+        loadMore: () => data.session.message.loadMore(sessionID),
+      }).catch((error) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: error instanceof Error ? error.message : String(error),
+        })
+        return undefined
+      })
+      if (target) await stage(sessionID, target.message, target.previous)
+    })
   }
 
   const redo = async () => {
     const sessionID = input.session.identity.params.id
     const reverted = input.session.data.revertMessageID()
     if (!sessionID || !reverted) return
-    const messages = input.session.history.userMessages()
-    const boundary = messages.findIndex((message) => message.id === reverted)
-    if (boundary < 0) return
-    const next = messages[boundary + 1]
-    if (next) {
-      await stage(next, messages[boundary])
-      return
-    }
-    const owner = input.session.ownership.capture()
-    const target = prompt.capture()
-    if (!(await request(() => server.api.session.revert.clear({ sessionID })))) return
-    target.reset()
-    target.context.replaceComments([])
-    owner.run(() => input.setActiveMessage(messages.at(-1)))
+    await data.session.mutate(sessionID, async () => {
+      const messages = await loadRevertBoundary({
+        messageID: reverted,
+        messages: input.session.history.userMessages,
+        more: () => data.session.message.more(sessionID),
+        loadMore: () => data.session.message.loadMore(sessionID),
+      }).catch((error) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: error instanceof Error ? error.message : String(error),
+        })
+        return undefined
+      })
+      if (!messages) return
+      const boundary = messages.findIndex((message) => message.id === reverted)
+      const next = messages[boundary + 1]
+      if (next) {
+        await stage(sessionID, next, messages[boundary])
+        return
+      }
+      const owner = input.session.ownership.capture()
+      const target = prompt.capture()
+      if (!(await request(() => server.api.session.revert.clear({ sessionID })))) return
+      target.reset()
+      target.context.replaceComments([])
+      owner.run(() => input.setActiveMessage(messages.at(-1)))
+    })
   }
 
   return { to, undo, redo }

@@ -137,6 +137,7 @@ test.each(["first", "second"])(
             time: { released: 0 },
           })),
         })
+      if (url.pathname === `/api/session/${sessionID}/agent`) return new Response(null, { status: 204 })
       if (url.pathname === `/api/session/${sessionID}/model`) {
         session.model = (await request.json()).model
         mutations.push(`model:${session.model.id}`)
@@ -233,3 +234,116 @@ test.each(["first", "second"])(
     }
   },
 )
+
+test("a following prompt commits its selected agent when session events are delayed", async () => {
+  await using state = await tmpdir()
+  const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const ready = Promise.withResolvers<void>()
+  const first = Promise.withResolvers<void>()
+  const firstRequested = Promise.withResolvers<void>()
+  const secondRequested = Promise.withResolvers<string>()
+  const events = createEventStream()
+  const sessionID = "ses_agent_order"
+  const location = { directory, project: { id: "project", directory, canonical: directory } }
+  const session = {
+    id: sessionID,
+    projectID: "project",
+    title: "Agent ordering fixture",
+    agent: "build",
+    model: { providerID: "demo", id: "model" },
+    location: { directory },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0 },
+  }
+  const mutations: string[] = []
+  const calls = createFetch(async (url, request) => {
+    if (url.pathname === `/api/session/${sessionID}`) return json({ data: session })
+    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+    if (url.pathname === `/api/session/${sessionID}/inbox` || url.pathname === `/api/session/${sessionID}/permission`)
+      return json({ data: [] })
+    if (url.pathname === "/api/agent")
+      return json({
+        location,
+        data: ["build", "plan"].map((id) => ({ id, mode: "primary", hidden: false, permissions: [] })),
+      })
+    if (url.pathname === "/api/provider") return json({ location, data: [{ id: "demo", name: "Demo" }] })
+    if (url.pathname === "/api/model")
+      return json({ location, data: [{ id: "model", providerID: "demo", name: "Demo Model", variants: [] }] })
+    if (url.pathname === `/api/session/${sessionID}/agent`) {
+      session.agent = (await request.json()).agent
+      mutations.push(`agent:${session.agent}`)
+      return new Response(null, { status: 204 })
+    }
+    if (url.pathname === `/api/session/${sessionID}/model`) return new Response(null, { status: 204 })
+    if (url.pathname === `/api/session/${sessionID}/prompt`) {
+      const body = await request.json()
+      mutations.push(`prompt:${body.text}:${session.agent}`)
+      if (body.text === "First prompt") {
+        firstRequested.resolve()
+        await first.promise
+      }
+      if (body.text === "Second prompt") secondRequested.resolve(session.agent)
+      return json({
+        data: {
+          id: body.id,
+          sessionID,
+          type: "user",
+          timeCreated: 10,
+          payload: { text: body.text },
+          delivery: "steer",
+        },
+      })
+    }
+    return undefined
+  }, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+  const { run } = await import("../src/app")
+  const task = Effect.runPromise(
+    run({
+      app: { name: "test", version: "test", channel: "test" },
+      server: { endpoint: { url: server.url.toString() } },
+      config: { get: async () => ({ animations: false }), update: async () => ({}) },
+      packages: { prepare: async () => ({ directory: "" }) },
+      terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
+      args: { sessionID },
+      log: () => {},
+    }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+  )
+  const selectAgent = async (id: string) => {
+    await setup.mockInput.typeText("/agents")
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame(
+      (frame) => frame.includes("Select agent") && setup.renderer.currentFocusedRenderable instanceof InputRenderable,
+    )
+    await setup.mockInput.typeText(id)
+    await setup.renderOnce()
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame(
+      (frame) => frame.includes(id[0].toUpperCase() + id.slice(1)) && !frame.includes("Select agent"),
+    )
+  }
+  try {
+    await ready.promise
+    await setup.waitForFrame((frame) => frame.includes("Build"))
+    await selectAgent("plan")
+    await setup.mockInput.typeText("First prompt")
+    setup.mockInput.pressEnter()
+    await firstRequested.promise
+    await selectAgent("build")
+    await setup.mockInput.typeText("Second prompt")
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((frame) => frame.split("\n").slice(0, 20).join("\n").includes("Second prompt"))
+    expect(mutations).toEqual(["agent:plan", "prompt:First prompt:plan"])
+
+    first.resolve()
+    expect(await secondRequested.promise).toBe("build")
+    expect(mutations).toEqual(["agent:plan", "prompt:First prompt:plan", "agent:build", "prompt:Second prompt:build"])
+  } finally {
+    first.resolve()
+    setup.renderer.destroy()
+    await task
+    await server.stop()
+  }
+})

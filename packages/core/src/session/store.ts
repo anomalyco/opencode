@@ -11,7 +11,7 @@ import { SessionHistory } from "./history.js"
 import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
 import { Session } from "@opencode-ai/schema/session"
-import { SessionMessageTable, SessionTable } from "./sql.js"
+import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { fromRow } from "./info.js"
 
 const ListInputBase = {
@@ -57,6 +57,11 @@ export interface Interface {
   readonly message: (
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
+  readonly survivesRevert: (input: {
+    readonly id: SessionMessage.ID
+    readonly sessionID: Session.ID
+    readonly boundaryID: SessionMessage.ID
+  }) => Effect.Effect<boolean>
   /**
    * Top-level Sessions holding an execution claim. Recoverable background
    * children are resumed separately through their durable Job records.
@@ -186,6 +191,29 @@ const layer = Layer.effect(
               message: yield* SessionHistory.decodeMessageRow(row).pipe(Effect.orDie),
             }
           : undefined
+      }),
+      survivesRevert: Effect.fn("SessionStore.survivesRevert")(function* (input) {
+        const boundary = yield* db
+          .select({ seq: SessionMessageTable.seq })
+          .from(SessionMessageTable)
+          .where(and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, input.boundaryID)))
+          .get()
+          .pipe(Effect.orDie)
+        if (!boundary) return yield* Effect.die(new Error(`Revert boundary message not found: ${input.boundaryID}`))
+        const pending = yield* db
+          .select({ seq: SessionInboxTable.enqueued_seq, sessionID: SessionInboxTable.session_id })
+          .from(SessionInboxTable)
+          .where(eq(SessionInboxTable.id, input.id))
+          .get()
+          .pipe(Effect.orDie)
+        if (pending) return pending.sessionID === input.sessionID && pending.seq < boundary.seq
+        const message = yield* db
+          .select({ seq: SessionMessageTable.seq, sessionID: SessionMessageTable.session_id })
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.id, input.id))
+          .get()
+          .pipe(Effect.orDie)
+        return message?.sessionID === input.sessionID && message.seq < boundary.seq
       }),
       listSuspended: Effect.fn("SessionStore.listSuspended")(function* () {
         return yield* db

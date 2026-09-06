@@ -298,6 +298,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 files: ctx.payload.files,
                 agents: ctx.payload.agents,
                 skills: ctx.payload.skills,
+                context: ctx.payload.context,
                 metadata: ctx.payload.metadata,
                 delivery: ctx.payload.delivery,
                 resume: ctx.payload.resume,
@@ -314,6 +315,11 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 ),
                 Effect.catchTag("Session.AttachmentError", (error) =>
                   Effect.fail(new InvalidRequestError({ message: error.message, field: "files" })),
+                ),
+                Effect.catchTag("Session.ContextDeliveryError", () =>
+                  Effect.fail(
+                    new InvalidRequestError({ message: "Prompt context cannot use queue delivery", field: "delivery" }),
+                  ),
                 ),
                 Effect.catchTag("Session.SkillNotFoundError", (error) =>
                   Effect.fail(new InvalidRequestError({ message: `Skill not found: ${error.skill}`, field: "skills" })),

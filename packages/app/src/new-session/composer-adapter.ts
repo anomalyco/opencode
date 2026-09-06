@@ -138,6 +138,16 @@ export function createNewSessionComposerAdapter(props: {
             location: data.location,
             session: {
               setStatus: data.session.setStatus,
+              mutate: (sessionID, operation) =>
+                data.session.mutate(sessionID, (mutation) =>
+                  operation({
+                    prompt: (input) =>
+                      mutation.prompt({
+                        ...input,
+                        gate: Promise.all([input.gate, afterCreation(async () => undefined)]),
+                      }),
+                  }),
+                ),
               prompt: (input) =>
                 data.session.prompt({
                   ...input,

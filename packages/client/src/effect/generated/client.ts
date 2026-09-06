@@ -490,6 +490,7 @@ const EndpointSessionPrompt = (raw: RawClient["server.session"]) => (input: Sess
         files: input["files"],
         agents: input["agents"],
         skills: input["skills"],
+        context: input["context"],
         metadata: input["metadata"],
         delivery: input["delivery"],
         resume: input["resume"],
