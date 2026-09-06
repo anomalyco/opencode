@@ -246,6 +246,8 @@ export function convertHTMLToMarkdown(html: string) {
         block()
         return
       }
+      // No amount of trimming can make the empty fenced block fit.
+      if (!payload) return
       const excess = valueBytes - Math.max(0, CONTENT_BYTES - outputBytes)
       payload = sliceBytes(payload, Math.max(0, encoder.encode(payload).byteLength - Math.ceil(excess)))
     }
