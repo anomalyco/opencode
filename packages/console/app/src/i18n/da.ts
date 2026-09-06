@@ -58,6 +58,7 @@ export const dict = {
   "common.cancel": "Annuller",
   "common.creating": "Opretter...",
   "common.create": "Opret",
+  "common.contactUs": "Kontakt os",
 
   "common.videoUnsupported": "Din browser understøtter ikke video-tagget.",
   "common.figure": "Fig {{n}}.",
@@ -226,6 +227,9 @@ export const dict = {
   "zen.faq.q8": "Kan jeg bruge Zen med andre kodningsagenter?",
   "zen.faq.a8":
     "Selvom Zen fungerer godt med OpenCode, kan du bruge Zen med enhver agent. Følg opsætningsinstruktionerne i din foretrukne kodningsagent.",
+  "zen.faq.q9": "Kan jeg få en refusion?",
+  "zen.faq.a9":
+    "Du kan muligvis få en refusion, hvis opkrævningen blev foretaget inden for de seneste 14 dage, og du ikke har brugt kreditten fra dette køb. {{contact}} for at anmode om en refusion.",
 
   "zen.cta.start": "Kom godt i gang med Zen",
   "zen.pricing.title": "Tilføj $20 Pay as you go-saldo",
@@ -369,6 +373,9 @@ export const dict = {
   "go.faq.q9": "Hvad er forskellen på gratis modeller og Go?",
   "go.faq.a9":
     "Gratis modeller inkluderer Big Pickle plus kampagnemodeller, der er tilgængelige på det pågældende tidspunkt, med en kvote på 200 forespørgsler/dag. Go tilbyder et kurateret modeludvalg med højere forespørgselskvoter håndhævet over rullende perioder (5 timer, ugentligt og månedligt), omtrent svarende til basiskvoter på $12 pr. 5 timer, $30 pr. uge og $60 pr. måned; modelspecifikke kvoter kan variere (det faktiske antal forespørgsler varierer efter model og brug).",
+  "go.faq.q10": "Kan jeg få en refusion?",
+  "go.faq.a10":
+    "Du kan muligvis få en refusion, hvis opkrævningen blev foretaget inden for de seneste 14 dage, og du ikke har brugt din Go-kvote i den pågældende faktureringsperiode. {{contact}} for at anmode om en refusion.",
 
   "zen.api.error.rateLimitExceeded": "Hastighedsgrænse overskredet. Prøv venligst igen senere.",
   "zen.api.error.modelNotSupported": "Model {{model}} understøttes ikke",

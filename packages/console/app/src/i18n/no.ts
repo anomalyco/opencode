@@ -58,6 +58,7 @@ export const dict = {
   "common.cancel": "Avbryt",
   "common.creating": "Oppretter...",
   "common.create": "Opprett",
+  "common.contactUs": "Kontakt oss",
 
   "common.videoUnsupported": "Nettleseren din støtter ikke video-taggen.",
   "common.figure": "Fig {{n}}.",
@@ -226,6 +227,9 @@ export const dict = {
   "zen.faq.q8": "Kan jeg bruke Zen med andre kodeagenter?",
   "zen.faq.a8":
     "Selv om Zen fungerer veldig bra med OpenCode, kan du bruke Zen med hvilken som helst agent. Følg oppsettinstruksjonene i din foretrukne kodeagent.",
+  "zen.faq.q9": "Kan jeg få refusjon?",
+  "zen.faq.a9":
+    "Du kan ha rett på refusjon hvis belastningen ble gjort i løpet av de siste 14 dagene og du ikke har brukt noe av kreditten fra kjøpet. {{contact}} for å be om refusjon.",
 
   "zen.cta.start": "Kom i gang med Zen",
   "zen.pricing.title": "Legg til $20 Pay as you go-saldo",
@@ -370,6 +374,9 @@ export const dict = {
   "go.faq.q9": "Hva er forskjellen mellom gratis modeller og Go?",
   "go.faq.a9":
     "Gratis modeller inkluderer Big Pickle pluss kampanjemodeller som er tilgjengelige på det tidspunktet, med en kvote på 200 forespørsler/dag. Go tilbyr et kuratert modellutvalg med høyere forespørselskvoter som håndheves over rullerende vinduer (5 timer, ukentlig og månedlig), omtrent tilsvarende basiskvoter på $12 per 5 timer, $30 per uke og $60 per måned; modellspesifikke kvoter kan variere (faktiske forespørselsantall varierer etter modell og bruk).",
+  "go.faq.q10": "Kan jeg få refusjon?",
+  "go.faq.a10":
+    "Du kan ha rett på refusjon hvis belastningen ble gjort i løpet av de siste 14 dagene og du ikke har brukt noe av Go-kvoten i den faktureringsperioden. {{contact}} for å be om refusjon.",
 
   "zen.api.error.rateLimitExceeded": "Rate limit overskredet. Vennligst prøv igjen senere.",
   "zen.api.error.modelNotSupported": "Modell {{model}} støttes ikke",

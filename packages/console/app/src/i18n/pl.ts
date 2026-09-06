@@ -57,6 +57,7 @@ export const dict = {
   "common.cancel": "Anuluj",
   "common.creating": "Tworzenie...",
   "common.create": "Utwórz",
+  "common.contactUs": "Skontaktuj się z nami",
 
   "common.videoUnsupported": "Twoja przeglądarka nie obsługuje znacznika wideo.",
   "common.figure": "Rys. {{n}}.",
@@ -227,6 +228,9 @@ export const dict = {
   "zen.faq.q8": "Czy mogę używać Zen z innymi agentami kodującymi?",
   "zen.faq.a8":
     "Chociaż Zen świetnie działa z OpenCode, możesz używać Zen z dowolnym agentem. Postępuj zgodnie z instrukcjami konfiguracji w swoim preferowanym agencie.",
+  "zen.faq.q9": "Czy mogę otrzymać zwrot pieniędzy?",
+  "zen.faq.a9":
+    "Możesz kwalifikować się do zwrotu, jeśli opłata została pobrana w ciągu ostatnich 14 dni i nie wykorzystano żadnych środków z tego zakupu. {{contact}}, aby poprosić o zwrot.",
 
   "zen.cta.start": "Zacznij korzystać z Zen",
   "zen.pricing.title": "Dodaj 20$ salda Pay as you go",
@@ -371,6 +375,9 @@ export const dict = {
   "go.faq.q9": "Jaka jest różnica między darmowymi modelami a Go?",
   "go.faq.a9":
     "Darmowe modele obejmują Big Pickle oraz modele promocyjne dostępne w danym momencie, z limitem 200 zapytań/dzień. Go oferuje starannie dobrany zestaw modeli z wyższymi limitami zapytań egzekwowanymi w oknach kroczących (5-godzinnych, tygodniowych i miesięcznych), odpowiadającymi w przybliżeniu bazowym limitom $12 na 5 godzin, $30 tygodniowo i $60 miesięcznie; limity mogą się różnić zależnie od modelu (rzeczywista liczba zapytań zależy od modelu i użycia).",
+  "go.faq.q10": "Czy mogę otrzymać zwrot pieniędzy?",
+  "go.faq.a10":
+    "Możesz kwalifikować się do zwrotu, jeśli opłata została pobrana w ciągu ostatnich 14 dni i nie wykorzystano żadnej części limitu Go w tym okresie rozliczeniowym. {{contact}}, aby poprosić o zwrot.",
 
   "zen.api.error.rateLimitExceeded": "Przekroczono limit zapytań. Spróbuj ponownie później.",
   "zen.api.error.modelNotSupported": "Model {{model}} nie jest obsługiwany",

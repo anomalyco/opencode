@@ -362,6 +362,15 @@ export default function Home() {
               <li>
                 <Faq question={i18n.t("go.faq.q8")}>{i18n.t("go.faq.a8")}</Faq>
               </li>
+              <li>
+                <Faq question={i18n.t("go.faq.q10")}>
+                  <For each={i18n.t("go.faq.a10").split(/(\{\{contact\}\})/g)}>
+                    {(part) =>
+                      part === "{{contact}}" ? <a href="mailto:help@anoma.ly">{i18n.t("common.contactUs")}</a> : part
+                    }
+                  </For>
+                </Faq>
+              </li>
             </ul>
           </section>
 
