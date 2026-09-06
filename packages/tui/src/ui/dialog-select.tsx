@@ -38,7 +38,7 @@ export interface DialogSelectProps<T> {
   preserveSelection?: boolean
   actions?: {
     command: string
-    title: string
+    title: string | ((option: DialogSelectOption<T> | undefined) => string)
     side?: "left" | "right"
     hidden?: boolean
     disabled?: boolean | ((option: DialogSelectOption<T> | undefined) => boolean)
@@ -435,7 +435,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         ...visible.map((item) => ({
           name: item.command,
-          title: item.title,
+          title: actionTitle(item),
           category: "Dialog",
           run() {
             if (props.locked) return
@@ -517,6 +517,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     return typeof item.disabled === "function" ? item.disabled(selected()) : item.disabled
   }
 
+  // Actions may label themselves from the highlighted option, so a toggle can read
+  // "archive" or "unarchive" instead of a static both-ways label.
+  function actionTitle(item: { title: Action["title"] }) {
+    return typeof item.title === "function" ? item.title(selected()) : item.title
+  }
+
   function isActionFocused(item: VisibleAction) {
     if (props.locked) return false
     if (!isActionItem(item)) return false
@@ -528,7 +534,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       return (
         <text>
           <span style={{ fg: theme.text }}>
-            <b>{action.item.title}</b>{" "}
+            <b>{actionTitle(action.item)}</b>{" "}
           </span>
           <span style={{ fg: theme.textMuted }}>{action.item.label}</span>
         </text>
@@ -547,7 +553,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           fg={disabled() ? theme.textMuted : active() ? fg : theme.text}
           attributes={active() ? TextAttributes.BOLD : undefined}
         >
-          {item.title}
+          {actionTitle(item)}
         </text>
         <text fg={disabled() ? theme.textMuted : active() ? fg : theme.textMuted}> {item.label}</text>
       </box>

@@ -8,6 +8,7 @@ export const dict = {
   "command.category.provider": "Provider",
   "command.category.server": "Server",
   "command.category.session": "Session",
+  "command.category.session.archived": "Archived",
   "command.category.theme": "Theme",
   "command.category.language": "Language",
   "command.category.file": "File",
@@ -38,6 +39,7 @@ export const dict = {
   "command.session.previous.unseen": "Previous unread session",
   "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Archive session",
+  "command.session.unarchive": "Unarchive session",
 
   "command.palette": "Command palette",
 
@@ -814,6 +816,7 @@ export const dict = {
   "common.export": "Export",
   "common.reset": "Reset",
   "common.archive": "Archive",
+  "common.unarchive": "Unarchive",
   "common.delete": "Delete",
   "common.close": "Close",
   "common.edit": "Edit",

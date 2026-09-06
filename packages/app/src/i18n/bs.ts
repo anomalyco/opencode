@@ -105,6 +105,7 @@ export const dict = {
   "command.category.provider": "Provajder",
   "command.category.server": "Server",
   "command.category.session": "Sesija",
+  "command.category.session.archived": "Arhivirano",
   "command.category.theme": "Tema",
   "command.category.language": "Jezik",
   "command.category.file": "Datoteka",
@@ -135,6 +136,7 @@ export const dict = {
   "command.session.previous.unseen": "Prethodna nepročitana sesija",
   "command.session.next.unseen": "Sljedeća nepročitana sesija",
   "command.session.archive": "Arhiviraj sesiju",
+  "command.session.unarchive": "Vrati sesiju iz arhive",
 
   "command.palette": "Paleta komandi",
 
@@ -871,6 +873,7 @@ export const dict = {
   "common.export": "Izvezi",
   "common.reset": "Vrati na početno stanje",
   "common.archive": "Arhiviraj",
+  "common.unarchive": "Vrati iz arhive",
   "common.delete": "Izbriši",
   "common.close": "Zatvori",
   "common.edit": "Uredi",

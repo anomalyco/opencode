@@ -20,7 +20,7 @@ type LegacyClient = OpencodeClient
 type LegacyFor = (directory?: string) => LegacyClient
 type CompatibleSessionApi = Omit<
   SessionApi,
-  "prompt" | "command" | "shell" | "compact" | "rename" | "archive" | "remove"
+  "prompt" | "command" | "shell" | "compact" | "rename" | "archive" | "remove" | "list"
 > & {
   prompt: (input: SessionPromptInput & LegacyPrompt) => Promise<SessionPromptOutput>
   command: (input: SessionCommandInput) => Promise<SessionCommandOutput>
@@ -29,6 +29,13 @@ type CompatibleSessionApi = Omit<
   rename: (input: Parameters<SessionApi["rename"]>[0] & LegacyLocation) => ReturnType<SessionApi["rename"]>
   // archive: (input: Parameters<SessionApi["archive"]>[0] & LegacyLocation) => ReturnType<SessionApi["archive"]>
   remove: (input: Parameters<SessionApi["remove"]>[0] & LegacyLocation) => ReturnType<SessionApi["remove"]>
+  // `archived` is only honoured on the search path, which routes to
+  // /experimental/session — the only list endpoint that accepts it. Directory
+  // listings intentionally ignore it so default lists stay archive-free.
+  list: (
+    input?: Parameters<SessionApi["list"]>[0] & { parentID?: string | null; archived?: boolean },
+    options?: Parameters<SessionApi["list"]>[1],
+  ) => ReturnType<SessionApi["list"]>
 }
 type CompatiblePermissionApi = Omit<ServerApi["permission"], "reply"> & {
   reply: (
@@ -138,7 +145,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
     session: {
       ...input.current.session,
       async list(
-        value?: Parameters<ServerApi["session"]["list"]>[0],
+        value?: Parameters<ServerApi["session"]["list"]>[0] & { parentID?: string | null; archived?: boolean },
         options?: Parameters<ServerApi["session"]["list"]>[1],
       ) {
         if (!value?.directory && value?.search !== undefined) {
@@ -147,6 +154,9 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
               roots: value.parentID === null ? true : undefined,
               search: value.search,
               limit: value.limit,
+              // Include archived sessions in search results so an archived session
+              // can be found and restored. Default lists still exclude them.
+              archived: value.archived ? true : undefined,
             },
             options,
           )
