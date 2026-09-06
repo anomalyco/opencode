@@ -100,6 +100,27 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ---
 
+## Inject dynamic context
+
+Skills support inline shell directives with Claude-compatible syntax:
+
+```markdown
+Branch: !`git branch --show-current`
+Recent commits:
+!`git log --oneline -5`
+```
+
+When a skill is loaded via the `skill` tool:
+
+- Each `!`command`` is executed
+- The directive is replaced with the command stdout
+- Commands run from the skill directory (`.../<skill-name>/`)
+- Command failures are included as command output (non-throwing behavior)
+
+Use this for short, deterministic context snapshots. Avoid long-running or interactive commands.
+
+---
+
 ## Recognize tool description
 
 OpenCode lists available skills in the `skill` tool description.
