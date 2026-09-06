@@ -524,8 +524,8 @@ export function make(input: {
             ),
           "session",
         )
-        yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-        return yield* promptResponse(response.info, params.messageId)
+        const messages = yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
+        return yield* promptResponse(response.info, messages, params.messageId)
       }
 
       const known = snapshot.availableCommands.find((item) => item.name === command.name)
@@ -548,8 +548,8 @@ export function make(input: {
             ),
           "session",
         )
-        yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-        return yield* promptResponse(response.info, params.messageId)
+        const messages = yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
+        return yield* promptResponse(response.info, messages, params.messageId)
       }
 
       if (command.name === "compact") {
@@ -571,7 +571,7 @@ export function make(input: {
       }
 
       yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-      return yield* promptResponse(undefined, params.messageId)
+      return yield* promptResponse(undefined, undefined, params.messageId)
     }),
     cancel,
   }
@@ -638,17 +638,17 @@ function makeUsageService(sdk: OpencodeClient) {
         Effect.logError("failed to fetch messages for usage update", { error: error }).pipe(Effect.as(undefined)),
       ),
     )
-    if (!messages) return
+    if (!messages) return undefined
 
     const message = UsageService.latestAssistantMessage(messages)
-    if (!message?.providerID || !message.modelID) return
+    if (!message?.providerID || !message.modelID) return messages
 
     const size = yield* contextLimit({
       directory: params.directory,
       providerID: ProviderV2.ID.make(message.providerID),
       modelID: ModelV2.ID.make(message.modelID),
     })
-    if (!size) return
+    if (!size) return messages
 
     yield* Effect.promise(() =>
       params.connection
@@ -663,6 +663,7 @@ function makeUsageService(sdk: OpencodeClient) {
         })
         .catch(() => {}),
     )
+    return messages
   })
 
   return UsageService.Service.of({
@@ -823,19 +824,33 @@ function detectSlashCommand(parts: ReturnType<typeof promptContentToParts>) {
 
 const promptResponse = Effect.fn("ACP.promptResponse")(function* (
   info: AssistantInfo,
+  messages: readonly UsageService.SessionMessage[] | undefined,
   messageId: string | null | undefined,
 ) {
-  if (!info?.error) {
+  if (!info) {
     return {
       stopReason: "end_turn" as const,
-      ...(info ? { usage: UsageService.buildUsage(info) } : {}),
+      ...(messageId ? { userMessageId: messageId } : {}),
+      _meta: {},
+    }
+  }
+
+  // PromptResponse.usage is the turn's usage, and a turn emits one assistant
+  // message per tool-call step — so sum the turn's messages rather than report
+  // the final one. The final message is the fallback when the list is missing.
+  const usage = (messages ? UsageService.turnUsage(messages) : undefined) ?? UsageService.buildUsage(info)
+
+  if (!info.error) {
+    return {
+      stopReason: "end_turn" as const,
+      usage,
       ...(messageId ? { userMessageId: messageId } : {}),
       _meta: {},
     }
   }
 
   const base = {
-    usage: UsageService.buildUsage(info),
+    usage,
     ...(messageId ? { userMessageId: messageId } : {}),
     _meta: {},
   }
@@ -884,7 +899,7 @@ function sendUsageUpdate(
   sessionID: string,
   directory: string,
 ) {
-  if (!connection) return Effect.void
+  if (!connection) return Effect.succeed(undefined)
   return (usage ?? makeUsageService(sdk)).sendUpdate({
     connection,
     sessionID,
