@@ -33,7 +33,7 @@ test("Promise host uses the embedded router", async () => {
   }
 })
 
-test("Promise event streams support cancellation", async () => {
+test("aborting a Promise event subscription completes it", async () => {
   await using directory = await tmpdir("opencode-promise-stream-")
   const config = join(directory.path, "config")
   await mkdir(config)
@@ -44,8 +44,7 @@ test("Promise event streams support cancellation", async () => {
     expect(await events.next()).toMatchObject({ value: { type: "server.connected" }, done: false })
     const pending = events.next()
     controller.abort()
-    const error = await pending.catch((error: unknown) => error)
-    expect(error).toMatchObject({ name: "ClientError", reason: "Transport" })
+    expect(await pending).toEqual({ done: true, value: undefined })
     await events.return?.()
   }
 })
