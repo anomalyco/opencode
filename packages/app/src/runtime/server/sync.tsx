@@ -17,9 +17,11 @@ import type { ServerScope } from "@/runtime/server/scope"
 import { persisted } from "@/runtime/persistence/storage"
 import type { ServerApi } from "@/runtime/server/api"
 import { toggleMcp } from "./global-sync/mcp"
-import { createConnectionSync } from "./server-sync/connection"
+import { createConnectionSync, reconnectOrder } from "./server-sync/connection"
 import { usePlatform } from "@/runtime/platform/platform"
 import type { Data } from "@opencode-ai/client/solid"
+import { createWorktreeInventory, withWorktreeInventory } from "@/workspaces/inventory"
+import { sameDirectory } from "@/workspaces/paths"
 
 type GlobalStore = {
   path: Path
@@ -79,6 +81,17 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   })
 
   const queryClient = useQueryClient()
+  const worktrees = createWorktreeInventory({
+    scope: serverSDK.scope,
+    queryClient,
+    api: () => serverSDK.api.worktree,
+    updated: (directory, items) =>
+      setGlobalStore("project", (projects) =>
+        projects.map((project) =>
+          sameDirectory(project.worktree, directory) ? withWorktreeInventory(project, items) : project,
+        ),
+      ),
+  })
   const bootstrap = useQuery(() => ({
     queryKey: [serverSDK.scope, "bootstrap"],
     queryFn: async () => {
@@ -149,12 +162,11 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     },
     connected: (info) => {
       if (bootstrap.data !== undefined && !bootstrap.isFetching) void bootstrap.refetch()
-      Object.keys(children.children)
-        .filter(children.active)
-        .forEach((directory) => {
-          queue.push(directory)
-          void data.location.sync({ directory }).catch(() => undefined)
-        })
+      // The refresh queue re-syncs two directories at a time, held ones first. Syncing every active
+      // directory here as well sent the whole catalog fan-out for all of them at once.
+      reconnectOrder(Object.keys(children.children).filter(children.active), children.pinned).forEach(
+        (directory) => queue.push(directory),
+      )
     },
   })
 
@@ -197,17 +209,27 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
 
   function applyProjectUpdate(update: Parameters<typeof updateProjectInfo>[1]) {
     setGlobalStore("project", (projects) =>
-      projects.map((project) => (project.id === update.id ? updateProjectInfo(project, update) : project)),
+      projects.map((project) =>
+        project.id === update.id
+          ? // The wire payload carries no worktrees; keep the inventory this project already loaded.
+            withWorktreeInventory(updateProjectInfo(project, update), worktrees.cached(update.canonical))
+          : project,
+      ),
     )
   }
 
   const unsub = serverSDK.event.listen((event) => {
     connection.handleEvent({ type: event.type })
     if (event.type === "project.updated") applyProjectUpdate(event.data)
+    if (event.type === "worktree.updated") {
+      const root = globalStore.project.find((project) => project.id === event.data.projectID)?.worktree
+      if (root) void worktrees.refresh(root)
+      void bootstrap.refetch()
+      return
+    }
 
     if (!event.location) {
-      if (event.type === "config.updated" || event.type === "agent.updated" || event.type === "worktree.updated")
-        bootstrap.refetch()
+      if (event.type === "config.updated" || event.type === "agent.updated") bootstrap.refetch()
       return
     }
 
@@ -216,7 +238,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     if (!children.children[key]) return
     children.mark(key)
     if (event.type === "config.updated" || event.type === "agent.updated") queue.push(key)
-    if (event.type === "worktree.updated") void bootstrap.refetch()
   })
 
   onCleanup(unsub)
@@ -261,6 +282,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     // bootstrap,
     updateConfig: updateConfigMutation.mutateAsync,
     project: projectApi,
+    worktrees,
     mcp: {
       toggle: async (directory: string, name: string) => {
         const key = directoryKey(directory)

@@ -20,3 +20,8 @@ export function createConnectionSync(input: {
 
   return { handleEvent }
 }
+
+// Directories a mounted view holds refresh first; the rest keep their existing order behind them.
+export function reconnectOrder(directories: string[], held: (directory: string) => boolean) {
+  return [...directories.filter(held), ...directories.filter((directory) => !held(directory))]
+}

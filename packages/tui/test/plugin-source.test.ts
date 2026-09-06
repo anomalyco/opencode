@@ -45,6 +45,15 @@ test("tracks transitive imports through the Solid runtime transform", async () =
   expect(after.module).toMatchObject({ default: "after" })
 })
 
+test("an explicit local entrypoint inside node_modules still reloads", async () => {
+  await using sources = await fixture()
+  const entry = new URL("node_modules/local-plugin/index.ts", sources.url)
+  await Bun.write(entry, 'export default "before"')
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: "before" })
+  await Bun.write(entry, 'export default "after"')
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: "after" })
+})
+
 test("unchanged bytes are a no-op, reverted bytes get a fresh module", async () => {
   await using sources = await fixture()
   const entry = new URL("tui.ts", sources.url)

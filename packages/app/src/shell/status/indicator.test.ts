@@ -21,6 +21,19 @@ describe("serverStatusDotClass", () => {
     expect(serverStatusDotClass({ ready: true, serverHealth: false, issue: true })).toBe("bg-icon-critical-base")
   })
 
+  test("pulses the neutral dot while the event stream is reconnecting", () => {
+    expect(serverStatusDotClass({ ready: true, serverHealth: true, issue: false, connecting: true })).toBe(
+      "bg-border-weak-base animate-pulse",
+    )
+    expect(serverStatusDotClass({ ready: false, serverHealth: undefined, issue: false, connecting: true })).toBe(
+      "bg-border-weak-base animate-pulse",
+    )
+    // A server that is known to be down stays critical rather than looking like a routine reconnect.
+    expect(serverStatusDotClass({ ready: true, serverHealth: false, issue: false, connecting: true })).toBe(
+      "bg-icon-critical-base",
+    )
+  })
+
   test("stays neutral before status is ready", () => {
     expect(serverStatusDotClass({ ready: false, serverHealth: true, issue: false })).toBe("bg-border-weak-base")
     expect(serverStatusDotClass({ ready: false, serverHealth: undefined, issue: false })).toBe("bg-border-weak-base")

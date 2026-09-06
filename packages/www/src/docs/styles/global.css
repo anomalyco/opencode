@@ -904,6 +904,10 @@ main {
   border-top: 1px solid var(--border);
 }
 
+.docs-table-scroll {
+  overflow-x: auto;
+}
+
 .prose table {
   width: 100%;
   margin-bottom: 1.5rem;

@@ -1,4 +1,5 @@
-import { createEffect, createMemo, createSignal, For, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -56,6 +57,23 @@ export function ComposerEditor(props: ComposerEditorProps) {
   const view = props.controller.view
   let editor: HTMLDivElement | undefined
   let viewport: HTMLDivElement | undefined
+  let controlsViewport!: HTMLDivElement
+  let controlsContent!: HTMLDivElement
+  const [overflow, setOverflow] = createStore({ start: false, end: false })
+  const updateOverflow = () => {
+    const offset = Math.abs(controlsViewport.scrollLeft)
+    setOverflow({
+      start: offset > 1,
+      end: controlsViewport.scrollWidth - controlsViewport.clientWidth - offset > 1,
+    })
+  }
+  onMount(() => {
+    const observer = new ResizeObserver(updateOverflow)
+    observer.observe(controlsViewport)
+    observer.observe(controlsContent)
+    updateOverflow()
+    onCleanup(() => observer.disconnect())
+  })
   let localInput = false
   const updateCursor = () => {
     if (!editor || !window.getSelection()?.isCollapsed) return
@@ -226,7 +244,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
 
         <div class="flex h-11 items-center px-2">
           <div
-            class="flex min-w-0 flex-1 items-center gap-1"
+            class="flex shrink-0 items-center"
             aria-hidden={state.mode === "shell"}
             inert={state.mode === "shell" ? true : undefined}
             style={buttons()}
@@ -245,64 +263,80 @@ export function ComposerEditor(props: ComposerEditorProps) {
               onContext={props.controller.openContext}
               onShell={props.controller.openShell}
             />
-            <Show when={view.agent} keyed>
-              {(control) => (
-                <ComposerEditorConfiguredSelect
-                  title={i18n.t("ui.promptInput.chooseAgent")}
-                  keybind={["Mod", "."]}
-                  control={control}
-                />
-              )}
-            </Show>
-            <Show when={props.modelControlsVisible ?? true}>
-              {props.modelControl}
-              <Show when={view.variant} keyed>
+          </div>
+          <div
+            ref={controlsViewport}
+            data-slot="composer-controls"
+            data-overflow-start={overflow.start}
+            data-overflow-end={overflow.end}
+            class="ms-1 me-3 h-full min-w-0 flex-1 overflow-x-auto overscroll-x-contain no-scrollbar"
+            onScroll={updateOverflow}
+            aria-hidden={state.mode === "shell"}
+            inert={state.mode === "shell" ? true : undefined}
+            style={buttons()}
+          >
+            <div ref={controlsContent} class="flex h-full w-max min-w-full items-center gap-1">
+              <Show when={view.agent} keyed>
                 {(control) => (
-                  <Show when={control.options().length > 1}>
-                    <ComposerEditorConfiguredSelect
-                      title={i18n.t("ui.promptInput.chooseVariant")}
-                      keybind={["Shift", "Mod", "D"]}
-                      control={control}
-                      class={control.current() === "default" ? "composer-variant-default" : undefined}
-                    />
-                  </Show>
+                  <ComposerEditorConfiguredSelect
+                    title={i18n.t("ui.promptInput.chooseAgent")}
+                    keybind={["Mod", "."]}
+                    control={control}
+                  />
                 )}
               </Show>
-            </Show>
+              <Show when={props.modelControlsVisible ?? true}>
+                {props.modelControl}
+                <Show when={view.variant} keyed>
+                  {(control) => (
+                    <Show when={control.options().length > 1}>
+                      <ComposerEditorConfiguredSelect
+                        title={i18n.t("ui.promptInput.chooseVariant")}
+                        keybind={["Shift", "Mod", "D"]}
+                        control={control}
+                        class={control.current() === "default" ? "composer-variant-default" : undefined}
+                      />
+                    </Show>
+                  )}
+                </Show>
+              </Show>
+            </div>
           </div>
-          <Show when={state.mode === "normal"}>
-            <ComposerEditorAlternateDelivery
-              controller={props.controller}
-              keybind={props.alternateKeybind ?? ["Mod", "Enter"]}
+          <div data-slot="composer-actions" class="flex shrink-0 items-center">
+            <Show when={state.mode === "normal"}>
+              <ComposerEditorAlternateDelivery
+                controller={props.controller}
+                keybind={props.alternateKeybind ?? ["Mod", "Enter"]}
+              />
+            </Show>
+            <Show when={state.mode === "shell"}>
+              <Button
+                data-action="composer-exit-shell"
+                type="button"
+                variant="ghost-faint"
+                size="small"
+                class="me-3 gap-1.5 px-1.5"
+                onClick={() => {
+                  props.controller.dispatch({ type: "mode.normal" })
+                  props.controller.restoreFocus()
+                }}
+              >
+                {i18n.t("ui.promptInput.exitShell")}
+                <span class="hidden sm:block">
+                  <Keybind keys={props.exitShellKeybind ?? ["ESC"]} variant="neutral" />
+                </span>
+              </Button>
+            </Show>
+            <ComposerEditorSubmitButton
+              mode={state.mode}
+              stopping={view.submit.stopping()}
+              disabled={!props.controller.canSubmit()}
+              sendLabel={i18n.t("ui.promptInput.send")}
+              stopLabel={i18n.t("ui.promptInput.stop")}
+              onSubmit={() => props.controller.submit()}
+              onStop={props.controller.stop}
             />
-          </Show>
-          <Show when={state.mode === "shell"}>
-            <Button
-              data-action="composer-exit-shell"
-              type="button"
-              variant="ghost-faint"
-              size="small"
-              class="me-3 gap-1.5 px-1.5"
-              onClick={() => {
-                props.controller.dispatch({ type: "mode.normal" })
-                props.controller.restoreFocus()
-              }}
-            >
-              {i18n.t("ui.promptInput.exitShell")}
-              <span class="hidden sm:block">
-                <Keybind keys={props.exitShellKeybind ?? ["ESC"]} variant="neutral" />
-              </span>
-            </Button>
-          </Show>
-          <ComposerEditorSubmitButton
-            mode={state.mode}
-            stopping={view.submit.stopping()}
-            disabled={!props.controller.canSubmit()}
-            sendLabel={i18n.t("ui.promptInput.send")}
-            stopLabel={i18n.t("ui.promptInput.stop")}
-            onSubmit={() => props.controller.submit()}
-            onStop={props.controller.stop}
-          />
+          </div>
         </div>
       </form>
     </div>
@@ -808,11 +842,7 @@ export function ComposerEditorSubmitButton(props: {
         tabIndex={props.mode === "normal" ? undefined : -1}
         icon={<Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />}
         variant="contrast"
-        class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
-        style={{
-          "background-image":
-            "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
-        }}
+        class="size-7 rounded-md p-[6px] disabled:opacity-50"
         aria-label={props.stopping ? props.stopLabel : props.sendLabel}
         onClick={(event) => {
           event.preventDefault()

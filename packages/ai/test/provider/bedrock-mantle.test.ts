@@ -7,6 +7,7 @@ import { model } from "../../src/providers/amazon-bedrock/mantle.js"
 import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
 import { compileRequest, LLMClient } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
+import { withProcessEnv } from "../lib/env.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 import { recordedTests } from "../recorded-test.js"
@@ -80,6 +81,36 @@ describe("Amazon Bedrock Mantle provider", () => {
       expect(seen[0]?.url).toBe("https://bedrock-mantle.us-west-1.api.aws/v1/responses")
       expect(seen[0]?.authorization).toContain("/us-west-1/bedrock-mantle/aws4_request")
     }),
+  )
+
+  it.effect("signs with the Mantle service using default-chain credentials", () =>
+    Effect.gen(function* () {
+      const seen: Array<string | undefined> = []
+      const model = AmazonBedrockMantle.configure({ region: "us-west-1" }).responses("openai.gpt-oss-120b")
+      yield* LLMClient.generate(LLM.request({ model, prompt: "Hi" })).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              const request = yield* HttpClientRequest.toWeb(input.request)
+              seen.push(request.headers.get("authorization") ?? undefined)
+              return input.respond("", { headers: { "content-type": "text/event-stream" } })
+            }),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(seen[0]).toContain("Credential=AKIACHAINEXAMPLE/")
+      expect(seen[0]).toContain("/us-west-1/bedrock-mantle/aws4_request")
+    }).pipe(
+      withProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: undefined,
+        AWS_PROFILE: undefined,
+        AWS_ACCESS_KEY_ID: "AKIACHAINEXAMPLE",
+        AWS_SECRET_ACCESS_KEY: "chain-secret",
+        AWS_SESSION_TOKEN: undefined,
+      }),
+    ),
   )
 
   it.effect("supports bearer authentication and custom base URLs", () =>

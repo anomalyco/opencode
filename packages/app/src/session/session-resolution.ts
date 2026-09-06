@@ -7,6 +7,9 @@ type SessionStore<T> = {
   message: {
     sync: (id: string) => Promise<unknown>
   }
+  pending: {
+    sync: (id: string) => Promise<unknown>
+  }
 }
 
 type Resolution<T> = { id: string; store: SessionStore<T> } & (
@@ -52,8 +55,11 @@ export function createSessionResolution<T>(
       onCleanup(() => {
         stale = true
       })
-      // The timeline owns message errors; metadata resolution stays independent.
+      // The timeline owns message errors; metadata resolution stays independent. Queued inputs
+      // ride along so a reconnect refreshes them with the transcript instead of leaving the
+      // pre-disconnect queue on screen.
       void store.message.sync(id).catch(() => undefined)
+      void store.pending.sync(id).catch(() => undefined)
       if (cached() && !options?.children && !options?.connected) {
         setStatus({ id, store, state: "settled" })
         return

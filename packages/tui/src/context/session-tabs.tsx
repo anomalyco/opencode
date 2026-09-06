@@ -197,7 +197,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           if (state().tabs.some((tab) => tab.sessionID === sessionID)) return
           const fallback = newTab() ? NEW_SESSION_TAB_TITLE : undefined
           const replaced = permanent ? undefined : previewID()
-          if (replaced) scrollAnchors.delete(replaced)
+          if (replaced) family(replaced).forEach((id) => scrollAnchors.delete(id))
           if (!permanent) setPreview(sessionID)
           update((draft) => {
             if (cancelledTabs.has(sessionID)) return
@@ -341,7 +341,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     function remove(sessionID: string, navigate: boolean) {
       const target = root(sessionID)
       cancelledTabs.add(target)
-      scrollAnchors.delete(target)
+      family(target).forEach((id) => scrollAnchors.delete(id))
       if (previewID() === target) setPreview(undefined)
       const closed = closeSessionTab(state().tabs, target)
       const selected = navigate && current() === target
@@ -379,17 +379,17 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       scrollAnchor(sessionID: string) {
         const target = root(sessionID)
         if (!state().tabs.some((tab) => tab.sessionID === target)) return
-        return scrollAnchors.get(target)
+        return scrollAnchors.get(sessionID)
       },
       setScrollAnchor(sessionID: string, anchor: ScrollAnchor | undefined) {
         const target = root(sessionID)
         if (anchor === undefined || !state().tabs.some((tab) => tab.sessionID === target)) {
-          scrollAnchors.delete(target)
+          scrollAnchors.delete(sessionID)
           return
         }
-        const current = scrollAnchors.get(target)
+        const current = scrollAnchors.get(sessionID)
         if (current?.messageID === anchor.messageID && current.screenY === anchor.screenY) return
-        scrollAnchors.set(target, anchor)
+        scrollAnchors.set(sessionID, anchor)
       },
       select(sessionID: string) {
         if (!enabled()) return

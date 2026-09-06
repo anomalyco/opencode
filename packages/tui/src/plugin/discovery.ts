@@ -1,6 +1,6 @@
 import { readdir, stat } from "node:fs/promises"
 import path from "node:path"
-import { pathToFileURL } from "node:url"
+export { localSource } from "@opencode-ai/plugin/source"
 import { isMissingPath, localProjectDirectory, projectConfigDirectories } from "../util/config-directories"
 
 export async function localPluginDirectories(cwd: string, configDirectory: string) {
@@ -48,11 +48,4 @@ export async function discoverPluginTargets(directories: string[]) {
       }),
     )
   ).flat()
-}
-
-export function localSource(spec: string, directory: string) {
-  if (spec.startsWith("file://")) return new URL(spec)
-  if (spec.startsWith("./") || spec.startsWith("../") || path.isAbsolute(spec))
-    return pathToFileURL(path.resolve(directory, spec))
-  return undefined
 }

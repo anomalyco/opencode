@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "../component/prompt"
-import { createEffect, createMemo, createSignal, Match, onMount, Show, Switch, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, onMount, Show, untrack } from "solid-js"
 import { Logo } from "../component/logo"
 import { useArgs } from "../context/args"
 import { useRouteData } from "../context/route"
@@ -11,11 +11,10 @@ import { useLocation } from "../context/location"
 import { FormPrompt } from "./session/form"
 import { Slot } from "../plugin/render"
 import { useTerminalDimensions } from "@opentui/solid"
-import { TextAttributes, type RGBA } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useUpdateNotification } from "../context/update-notification"
+import { useExit } from "../context/exit"
 import { FadeInText } from "../component/fade-in-text"
-import { stringWidth } from "../util/string-width"
 
 let once = false
 const placeholder = {
@@ -33,6 +32,7 @@ export function Home() {
   const data = useData()
   const location = useLocation()
   const dimensions = useTerminalDimensions()
+  const [logoWidth, setLogoWidth] = createSignal(0)
   // Global MCP elicitations can arrive without a session route, so keep them reachable from Home.
   const currentLocation = () => route.location ?? data.location.default()
   const forms = createMemo(() => data.session.form.list("global", currentLocation()) ?? [])
@@ -87,15 +87,18 @@ export function Home() {
       >
         <box flexGrow={1} minHeight={0} />
         <box height={3} minHeight={0} flexShrink={1} />
-        <box flexShrink={0}>
+        <box
+          flexShrink={0}
+          onSizeChange={function () {
+            setLogoWidth(this.width)
+          }}
+        >
           <Logo />
         </box>
-        <box height={1} minHeight={0} flexShrink={1} />
+        <box height={1} flexShrink={0} />
+        <UpdateNotification width={logoWidth()} />
         <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0} position="relative">
           <Prompt ref={bind} placeholders={placeholder} disabled={forms().length > 0} />
-          <box position="absolute" top="100%" left={0} right={0} alignItems="center">
-            <UpdateNotification />
-          </box>
         </box>
         <box flexGrow={1} minHeight={0} />
       </box>
@@ -118,87 +121,55 @@ export function Home() {
   )
 }
 
-function UpdateNotification() {
+function UpdateNotification(props: { width: number }) {
   const update = useUpdateNotification()
+  const exit = useExit()
   const theme = useTheme()
-  const remoteMessage = "A remote server cannot be updated from here. Updating it is recommended."
-  const [hovered, setHovered] = createSignal<"primary" | "close">()
+  const [hovered, setHovered] = createSignal(false)
+  const backdrop = () => (hovered() ? theme.background.action.primary.hovered : theme.background.default)
   createEffect(() => {
     update.notification()
-    setHovered(undefined)
+    setHovered(false)
   })
 
   return (
     <Show when={update.notification()} keyed>
-      {(state) => (
-        <box flexShrink={0} marginTop={4} alignItems="center">
-          <Switch>
-            <Match when={state.source === "client" || !state.remote}>
-              <box
-                alignItems="center"
-                paddingLeft={1}
-                paddingRight={1}
-                backgroundColor={hovered() === "primary" ? theme.background.action.primary.hovered : undefined}
-                onMouseOver={() => setHovered("primary")}
-                onMouseOut={() => setHovered(undefined)}
-                onMouseUp={() => update.open?.("notification")}
-              >
-                <UpdateMessage
-                  title={state.type === "installed" ? "Update installed" : "Update available"}
-                  description={`Version ${state.version} is ${state.type === "installed" ? "installed" : "available"}. /update for more details`}
-                  backdrop={
-                    hovered() === "primary" ? theme.background.action.primary.hovered : theme.background.default
-                  }
-                />
-              </box>
-            </Match>
-            <Match when={state.type === "available" && state.source === "server" && state.remote}>
-              <box alignItems="center">
-                <UpdateMessage
-                  title="Server update available"
-                  description={remoteMessage}
-                  backdrop={theme.background.default}
-                />
-                <FadeInText
-                  fg={theme.text.subdued}
-                  backdrop={hovered() === "close" ? theme.background.action.primary.hovered : theme.background.default}
-                  sweepWidth={stringWidth(remoteMessage)}
-                  sweepOffset={Math.floor((stringWidth(remoteMessage) - stringWidth("Close")) / 2)}
-                  marginTop={1}
-                  paddingLeft={1}
-                  paddingRight={1}
-                  bg={hovered() === "close" ? theme.background.action.primary.hovered : undefined}
-                  onMouseOver={() => setHovered("close")}
-                  onMouseOut={() => setHovered(undefined)}
-                  onMouseUp={update.dismiss}
-                >
-                  Close
-                </FadeInText>
-              </box>
-            </Match>
-          </Switch>
-        </box>
-      )}
+      {(state) => {
+        const remote = state.source === "server" && state.remote
+        return (
+          <Show when={!remote || state.type === "available"}>
+            <box
+              flexShrink={0}
+              flexDirection="row"
+              justifyContent="center"
+              width={props.width}
+              maxWidth="100%"
+              gap={1}
+              backgroundColor={hovered() ? theme.background.action.primary.hovered : undefined}
+              onMouseOver={() => setHovered(true)}
+              onMouseOut={() => setHovered(false)}
+              onMouseUp={() => {
+                if (remote) return update.dismiss()
+                if (state.type === "installed") return exit()
+                update.open?.("notification")
+              }}
+            >
+              <FadeInText fg={theme.text.subdued} backdrop={backdrop()}>
+                <Show when={!remote}>
+                  <span style={{ fg: theme.text.action.primary.selected }}>
+                    {state.type === "installed" ? "/exit" : "/update"}
+                  </span>
+                </Show>
+                {remote
+                  ? "remote server update available"
+                  : state.type === "installed"
+                    ? ` restart to use v${state.version}`
+                    : ` to install v${state.version}`}
+              </FadeInText>
+            </box>
+          </Show>
+        )
+      }}
     </Show>
-  )
-}
-
-function UpdateMessage(props: { title: string; description: string; backdrop: RGBA }) {
-  const theme = useTheme()
-  const titleWidth = stringWidth(props.title)
-  const descriptionWidth = stringWidth(props.description)
-  const width = Math.max(titleWidth, descriptionWidth)
-  return (
-    <FadeInText width={width} height={2} wrapMode="none" fg={theme.text.default} backdrop={props.backdrop}>
-      <span style={{ fg: theme.text.action.primary.selected, attributes: TextAttributes.BOLD }}>
-        {" ".repeat(Math.floor((width - titleWidth) / 2))}
-        {props.title}
-      </span>
-      {"\n"}
-      <span style={{ fg: theme.text.subdued }}>
-        {" ".repeat(Math.floor((width - descriptionWidth) / 2))}
-        {props.description}
-      </span>
-    </FadeInText>
   )
 }

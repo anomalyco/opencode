@@ -14,6 +14,7 @@ import { ApplicationLifecycle } from "../lifecycle"
 import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "../lifecycle/onboarding"
 import { BackgroundService } from "../service/background-service"
 import { DesktopCli } from "../service/desktop-cli"
+import { SidecarCredentials } from "../service/sidecar-credentials"
 import { getDefaultServerUrl, setDefaultServerUrl } from "../service/server-settings"
 import { Updater } from "../updater"
 import { getLastFocusedWindow, setBackgroundColor } from "../windows"
@@ -29,8 +30,8 @@ export const appHandlers = AppRpcs.toLayer(
     const logging = yield* DesktopLogging.Service
     const runFork = Effect.runForkWith(yield* Effect.context())
     return AppRpcs.of({
-      AppAwaitInitialization: () => background.connection,
-      AppReconnectService: () => background.reconnect,
+      AppAwaitInitialization: () => background.connection.pipe(Effect.map(SidecarCredentials.ready)),
+      AppReconnectService: () => background.reconnect.pipe(Effect.map(SidecarCredentials.ready)),
       AppConsumeInitialDeepLinks: () => Effect.sync(lifecycle.consumeInitialDeepLinks),
       AppGetDefaultServerUrl: () => Effect.sync(getDefaultServerUrl),
       AppSetDefaultServerUrl: ({ url }) => Effect.sync(() => setDefaultServerUrl(url)),

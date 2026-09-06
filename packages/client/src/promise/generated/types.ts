@@ -710,7 +710,7 @@ export type SessionExecutionInterrupted = {
   type: "session.execution.interrupted"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; reason: "user" | "shutdown" | "superseded" }
+  data: { sessionID: string; reason: "user" | "shutdown" | "superseded" | "inactivity" }
 }
 
 export type SessionInstructionsUpdated = {

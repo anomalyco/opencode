@@ -7,7 +7,8 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { sessionPermissionRequest, sessionQuestionForm } from "@/session/requests/session-request-tree"
+import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
+import { createWebSearchRequest } from "./websearch"
 import { createSessionBackground } from "@/session/requests/background"
 import { useData } from "@/runtime/server/current"
 
@@ -24,12 +25,40 @@ export function createSessionRequestModel() {
     void Promise.all([
       data.shell.sync({ directory: sdk().directory }),
       data.session.permission.sync(id),
-      data.session.form.sync(id),
     ]).catch(() => undefined)
   })
+  createEffect(() => {
+    const id = params.id
+    if (!id || serverSDK.connection.status() !== "connected") return
+    void Promise.all(
+      sessionTreeIDs(data.session.list(), id).map((sessionID) => data.session.form.sync(sessionID)),
+    ).catch(() => undefined)
+  })
 
-  const questionRequest = createMemo((): FormInfo | undefined => {
-    return sessionQuestionForm(data.session.list(), data.session.form.list, params.id)
+  const formRequest = createMemo((): FormInfo | undefined => {
+    return sessionFormRequest(data.session.list(), data.session.form.list, params.id)
+  })
+  const websearch = createWebSearchRequest({
+    owner: () => params.id,
+    connected: () => serverSDK.connection.status() === "connected",
+    request: () => {
+      const form = formRequest()
+      return form?.metadata?.kind === "websearch.provider" ? form : undefined
+    },
+    providers: async (sessionID) => {
+      const session = data.session.get(sessionID) ?? (await serverSDK.api.session.get({ sessionID }))
+      const result = await serverSDK.api.websearch.providers({
+        location: { directory: session.location.directory, workspace: session.location.workspaceID },
+      })
+      return result.data.map((provider) => ({ value: provider.id, label: provider.name }))
+    },
+    reply: (input) => data.session.form.reply(input),
+    events: serverSDK.event,
+  })
+  const questionRequest = createMemo(() => {
+    if (websearch.request()) return
+    const form = formRequest()
+    return form?.metadata?.kind === "question" ? form : undefined
   })
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
@@ -40,7 +69,7 @@ export function createSessionRequestModel() {
   const blocked = createMemo(() => {
     const id = params.id
     if (!id) return false
-    return !!permissionRequest() || !!questionRequest()
+    return !!permissionRequest() || !!questionRequest() || !!websearch.request()
   })
 
   const primary = () => {
@@ -96,6 +125,7 @@ export function createSessionRequestModel() {
   return {
     blocked,
     questionRequest,
+    websearch,
     permissionRequest,
     permissionResponding,
     background: {

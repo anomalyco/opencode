@@ -1,4 +1,4 @@
-import { Component } from "solid-js"
+import { Component, Show } from "solid-js"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -61,6 +61,22 @@ export const SettingsExperimental: Component = () => {
                 </Switch>
               </div>
             </SettingsRow>
+            <Show when={import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
+              <SettingsRow
+                title={language.t("settings.general.row.showProjectIcon.title")}
+                description={language.t("settings.general.row.showProjectIcon.description")}
+              >
+                <div data-action="settings-show-project-icon">
+                  <Switch
+                    checked={settings.general.showProjectIcon()}
+                    onChange={settings.general.setShowProjectIcon}
+                    hideLabel
+                  >
+                    {language.t("settings.general.row.showProjectIcon.title")}
+                  </Switch>
+                </div>
+              </SettingsRow>
+            </Show>
           </SettingsList>
         </div>
       </div>

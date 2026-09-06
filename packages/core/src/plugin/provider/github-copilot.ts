@@ -261,6 +261,7 @@ export const GithubCopilotPlugin = define({
             .pipe(Effect.orElseSucceed(() => undefined))
           const interaction = interactionType(evt.kind, session?.parentID !== undefined)
           evt.headers["X-Interaction-Type"] = interaction
+          evt.headers["X-Interaction-Id"] = evt.sessionID
           if (interaction !== "conversation-agent") evt.headers["x-initiator"] = "agent"
         }),
       { providerID: Provider.ID.githubCopilot },
