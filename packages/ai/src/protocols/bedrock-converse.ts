@@ -235,7 +235,7 @@ const lowerTools = (
   const result: BedrockTool[] = []
   for (const tool of tools) {
     result.push(lowerToolSpec(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, compatibility)))
-    const cachePoint = BedrockCache.block(breakpoints, tool.cache, "tools")
+    const cachePoint = BedrockCache.block(breakpoints, tool.cache)
     if (cachePoint) result.push(cachePoint)
   }
   return result
@@ -426,7 +426,7 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
   const flattened = ProviderShared.flattenToolRequest(request)
   const generation = request.generation
-  // Supported models share a 4-breakpoint cap. Spend the budget in
+  // Bedrock-Claude shares Anthropic's 4-breakpoint cap. Spend the budget in
   // tools → system → messages order to favour the highest-impact prefixes.
   const breakpoints = BedrockCache.breakpoints(request.model.id)
   const toolConfig = (() => {
