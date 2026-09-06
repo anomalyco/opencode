@@ -1,11 +1,11 @@
-import { Effect } from "effect"
+import { Duration, Effect, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { Auth } from "../auth.js"
 import { render as renderEndpoint } from "../endpoint.js"
 import { Framing } from "../framing.js"
 import type { HttpMiddleware, Transport, TransportPrepareInput } from "./index.js"
 import * as ProviderShared from "../../protocols/shared.js"
-import { mergeJsonRecords, type LLMRequest } from "../../schema/index.js"
+import { AIError, mergeJsonRecords, TransportError, type LLMRequest } from "../../schema/index.js"
 import { RequestExecutor } from "../executor.js"
 
 export type JsonRequestInput<Body> = TransportPrepareInput<Body>
@@ -87,11 +87,36 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
         middleware: prepareInput.middleware,
       }
     }),
-  execute: (prepared, _request, runtime) =>
+  execute: (prepared, request, runtime) =>
     Effect.gen(function* () {
       const response = yield* runtime.http.execute(prepared.request, prepared.middleware)
+      const chunkTimeout = request.http?.chunkTimeout
+      const bytes = RequestExecutor.responseStream(response)
+      const guarded =
+        chunkTimeout === undefined || chunkTimeout <= 0
+          ? bytes
+          : bytes.pipe(
+              // A stalled provider stream that sends nothing is otherwise bounded only by the
+              // OS socket; abort once no chunk arrives within the configured window.
+              Stream.timeoutOrElse({
+                duration: Duration.millis(chunkTimeout),
+                orElse: () =>
+                  Stream.fail(
+                    new AIError({
+                      reason: new TransportError({
+                        message: `No data received from ${response.request.url} within the ${chunkTimeout}ms chunkTimeout; the stream may be stalled`,
+                        transport: "http",
+                        operation: "read",
+                        code: "chunk-timeout",
+                        url: response.request.url,
+                        phase: "receive",
+                      }),
+                    }),
+                  ),
+              }),
+            )
       return {
-        frames: prepared.framing.frame(RequestExecutor.responseStream(response)),
+        frames: prepared.framing.frame(guarded),
         http: RequestExecutor.responseHttp(response),
         body: prepared.framing.body,
       }

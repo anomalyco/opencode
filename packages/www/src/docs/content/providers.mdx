@@ -33,7 +33,7 @@ The `providers` object is keyed by provider ID. Each provider accepts these fiel
 | `name`     | Display name.                                                   |
 | `env`      | Ordered environment variable names that provide a connection.   |
 | `package`  | Runtime provider package.                                       |
-| `settings` | JSON settings passed to the runtime package, such as `baseURL`. |
+| `settings` | JSON settings passed to the runtime package, such as `baseURL` and `chunkTimeout`. |
 | `headers`  | String-valued HTTP headers added to requests.                   |
 | `body`     | JSON fields merged into request bodies.                         |
 | `models`   | Models to add or override, keyed by catalog model ID.           |
@@ -113,7 +113,9 @@ models, and connection continue to apply:
 }
 ```
 
-`settings` is package-specific. A field only has an effect when the selected package supports it.
+`settings` is package-specific. A field only has an effect when the selected package supports it. Packages that
+support `chunkTimeout` abort a stream when no data chunk arrives within the given number of milliseconds, guarding
+against a stalled provider.
 
 ## Headers and body
 
