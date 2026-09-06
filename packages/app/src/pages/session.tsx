@@ -35,9 +35,14 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
+import { DocumentPreview } from "@opencode-ai/session-ui/document-preview"
 import { Button } from "@opencode-ai/ui/button"
+import { listPlugins, pluginInvoke, setPluginServer, type OfficePreviewResult } from "@/utils/plugin-invoke"
+import { OfficePreview } from "@opencode-ai/session-ui/office-preview"
+import { previewTabKey, setPreviewPayload, type PreviewPayload } from "@/pages/session/document-preview-tab"
 import { showToast } from "@/utils/toast"
 import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
+import { OFFICE_FILE_TYPES } from "@/constants/file-picker"
 import { useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { ErrorPage } from "@/pages/error"
@@ -361,6 +366,8 @@ export default function Page() {
   const language = useLanguage()
   const sdk = useSDK()
   const serverSDK = useServerSDK()
+  const server = useServer()
+  createEffect(() => setPluginServer(server.current?.http))
   const settings = useSettings()
   const platform = usePlatform()
   const prompt = usePrompt()
@@ -1906,21 +1913,110 @@ export default function Page() {
     const download = () => {
       const anchor = document.createElement("a")
       anchor.href = file.url
-      anchor.download = getFilename(file.filename) || "attachment"
+      anchor.download = getFilename(file.filename) || language.t("common.attachment")
       anchor.click()
     }
     const path = file.filename ?? ""
     const absolute = path.startsWith("/") || path.startsWith("\\\\") || /^[a-zA-Z]:[\\/]/.test(path)
-    if (platform.revealPath && absolute) {
-      void platform.revealPath(path).then(
-        (revealed) => {
-          if (!revealed) download()
-        },
-        () => download(),
-      )
+    const filename = getFilename(file.filename) || language.t("common.attachment")
+    const openInApp = () => void platform.openInApp?.(path)
+    const kind =
+      file.mime === "application/pdf"
+        ? "pdf"
+        : file.mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+            /\.docx$/i.test(filename)
+          ? "docx"
+          : file.mime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+              /\.xlsx$/i.test(filename)
+            ? "xlsx"
+            : file.mime === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+                /\.pptx$/i.test(filename)
+              ? "pptx"
+              : file.mime === "text/markdown" || /\.md$/i.test(filename)
+                ? "markdown"
+                : null
+    const actions = (
+      <>
+        <Show when={platform.openInApp && absolute}>
+          <Button variant="ghost" onClick={openInApp}>
+            {language.t("session.attachment.openInApp")}
+          </Button>
+        </Show>
+        <Button variant="primary" onClick={download}>
+          {language.t("session.attachment.download")}
+        </Button>
+      </>
+    )
+    const openInPanel = (payload: PreviewPayload) => {
+      const key = previewTabKey(payload.filename)
+      setPreviewPayload(key, payload)
+      openReviewPanel()
+      void tabs().open(key)
+      // ponytail: Kobalte falls back to the first tab (firing onChange→setActive) before the new trigger registers; re-assert after it settles
+      queueMicrotask(() => tabs().setActive(key))
+    }
+    const openPreview = () => {
+      if (kind) {
+        if (isDesktop()) {
+          openInPanel({ source: "builtin", filename, kind, url: file.url, path: absolute ? path : undefined })
+          return
+        }
+        dialog.show(() => <DocumentPreview filename={filename} kind={kind} url={file.url} actions={actions} />)
+        return
+      }
+      if (platform.revealPath && absolute) {
+        void platform.revealPath(path).then(
+          (revealed) => {
+            if (!revealed) download()
+          },
+          () => download(),
+        )
+        return
+      }
+      download()
+    }
+    const sessionID = params.id
+    const openManaged = async (sessionID: string) => {
+      let found: { plugin: { id: string; invokes: string[] }; result: OfficePreviewResult } | undefined
+      try {
+        const plugins = await listPlugins()
+        const plugin = plugins.find((entry) => entry.invokes.includes("office.preview"))
+        if (plugin) {
+          const result = await pluginInvoke<OfficePreviewResult>(plugin.id, "office.preview", {
+            filePath: path,
+            sessionID,
+          })
+          if (result?.managed) found = { plugin, result }
+        }
+      } catch {
+        // detection failed; fall through to the built-in preview
+      }
+      if (found) {
+        const { plugin, result } = found
+        if (isDesktop()) {
+          openInPanel({ source: "plugin", filename: result.filename, pluginId: plugin.id, result, path, sessionID })
+          return
+        }
+        const invoke = <T,>(name: string, input?: Record<string, unknown>) =>
+          pluginInvoke<T>(plugin.id, name, { filePath: path, sessionID, ...input })
+        dialog.show(() => (
+          <OfficePreview
+            result={result}
+            invoke={invoke}
+            openInApp={platform.openInApp ? openInApp : undefined}
+            download={download}
+          />
+        ))
+        return
+      }
+      openPreview()
+    }
+    if (!OFFICE_FILE_TYPES.includes(file.mime) || !absolute || !sessionID) {
+      openPreview()
       return
     }
-    download()
+    // ponytail: detection is silent; any failure (plugin absent, HTTP error, timeout) falls back to the built-in preview
+    void openManaged(sessionID)
   }
 
   const actions = { revert, openAttachment }
