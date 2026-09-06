@@ -18,6 +18,12 @@ export type Resolved = {
   readonly service?: ReturnType<typeof managedService>
 }
 
+export function requestUrl(endpoint: Endpoint, path: string) {
+  const base = new URL(endpoint.url)
+  base.pathname = base.pathname.replace(/\/$/, "") + "/"
+  return new URL(path.replace(/^\//, ""), base)
+}
+
 export const resolve = Effect.fn("cli.server-connection.resolve")(function* (args: Args) {
   if (args.server !== undefined && args.standalone)
     return yield* Effect.fail(new Error("--server and --standalone cannot be combined"))
