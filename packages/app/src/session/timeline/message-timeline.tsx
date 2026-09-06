@@ -315,7 +315,9 @@ export function SessionSummaryPanel(props: {
           </div>
         </div>
       </div>
-      <Show when={props.local && props.diffs && props.diffs.length > 0 && props.moveEligible}>
+      <Show
+        when={props.local && props.diffs && props.diffs.length > 0 && props.moveEligible && props.project.vcs === "git"}
+      >
         <WorkspaceMoveAction
           variant="panel"
           mobile={props.mobile}

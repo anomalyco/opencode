@@ -33,8 +33,8 @@ export function resolveNewSessionBranch(input: {
   return input.worktreeBranch(directory)
 }
 
-export function resolveNewSessionGit(input: { projectVcs?: string; branch?: string }) {
-  return input.projectVcs === "git" || input.branch !== undefined
+export function resolveNewSessionGit(input: { projectVcs?: string }) {
+  return input.projectVcs === "git"
 }
 
 export function createNewSessionWorkspaceController(input: {
@@ -59,7 +59,6 @@ export function createNewSessionWorkspaceController(input: {
   const visible = createMemo(() =>
     resolveNewSessionGit({
       projectVcs: currentProject()?.vcs,
-      branch: data.location.vcs.info({ directory: sdk().directory })?.branch.current,
     }),
   )
   const selected = createMemo(() => {

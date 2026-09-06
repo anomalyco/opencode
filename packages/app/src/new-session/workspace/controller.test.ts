@@ -7,6 +7,7 @@ describe("new session workspace selection", () => {
       resolveNewSessionWorktree({
         enabled: false,
         selected: "/project/feature",
+        fallback: "create",
       }),
     ).toBe("main")
   })
@@ -59,9 +60,10 @@ describe("new session workspace selection", () => {
     ).toBe("release")
   })
 
-  test("uses location VCS state when the project inventory is stale", () => {
-    expect(resolveNewSessionGit({ branch: "dev" })).toBe(true)
+  test("requires Git project metadata before enabling worktree creation", () => {
     expect(resolveNewSessionGit({ projectVcs: "git" })).toBe(true)
+    expect(resolveNewSessionGit({ projectVcs: "hg" })).toBe(false)
+    expect(resolveNewSessionGit({ projectVcs: "custom" })).toBe(false)
     expect(resolveNewSessionGit({})).toBe(false)
   })
 })
