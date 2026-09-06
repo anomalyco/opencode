@@ -42,6 +42,7 @@ export function StatusPopover() {
     serverHealth: serverHealth(),
     attention: attention(),
     issue: issue(),
+    connecting: server.ctx.sdk.connection.status() !== "connected",
     sidebar: sidebar(),
     placement: sidebar() ? "top-start" : "bottom-end",
     shift: sidebar() ? 0 : -168,
@@ -63,6 +64,7 @@ type StatusPopoverState = {
   serverHealth: boolean | undefined
   attention: boolean
   issue: boolean
+  connecting: boolean
   sidebar: boolean
   placement: "top-start" | "bottom-end"
   shift: number
