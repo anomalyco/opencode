@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/util/encode"
-import { currentSession } from "../utils/mock-server"
+import { catalog, currentSession } from "../utils/mock-server"
 
 const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 const sessionA = session("ses_tab_a", "Tab A session")
@@ -610,6 +610,14 @@ async function mockServer(page: Page) {
     if (sessions.some((item) => url.pathname === `/api/session/${item.id}/message`))
       return json(route, { data: [], cursor: {} })
     if (sessions.some((item) => url.pathname === `/api/session/${item.id}/inbox`)) return json(route, { data: [] })
+    if (url.pathname === "/api/location/catalog")
+      return json(route, {
+        location: {
+          directory: sessionA.directory,
+          project: { id: sessionA.projectID, directory: sessionA.directory, canonical: sessionA.directory },
+        },
+        data: catalog(),
+      })
     if (["/api/agent", "/api/provider", "/api/model", "/api/command", "/api/reference"].includes(url.pathname))
       return json(route, { location: { directory: sessionA.directory }, data: [] })
     if (url.pathname === "/api/model/default")

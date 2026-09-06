@@ -3,6 +3,8 @@ import type {
   ServerGetOutput,
   LocationGetInput,
   LocationGetOutput,
+  LocationCatalogInput,
+  LocationCatalogOutput,
   AgentListInput,
   AgentListOutput,
   AgentGetInput,
@@ -431,6 +433,18 @@ export function make(options: ClientOptions) {
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      catalog: (input?: LocationCatalogInput, requestOptions?: RequestOptions) =>
+        request<LocationCatalogOutput>(
+          {
+            method: "GET",
+            path: `/api/location/catalog`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 503],
             empty: false,
           },
           requestOptions,

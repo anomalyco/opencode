@@ -66,15 +66,45 @@ export function createEventStream() {
 
 export type FetchHandler = (url: URL, request: Request) => Response | undefined | Promise<Response | undefined>
 
+const catalogPaths = {
+  agent: "/api/agent",
+  command: "/api/command",
+  integration: "/api/integration",
+  mcp: "/api/mcp",
+  mcpResource: "/api/mcp/resource",
+  model: "/api/model",
+  provider: "/api/provider",
+  reference: "/api/reference",
+  skill: "/api/skill",
+  shell: "/api/shell",
+  form: "/api/form/request",
+}
+
 export function createFetch(override?: FetchHandler, events?: ReturnType<typeof createEventStream>) {
   const session = [] as URL[]
-  async function fetch(input: RequestInfo | URL, init?: RequestInit) {
+  // Explicit because the catalog branch below calls `fetch` recursively.
+  async function fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const request = input instanceof Request ? input : new Request(input, init)
     const url = new URL(request.url)
     if (url.pathname === "/session") session.push(url)
     const overridden = await override?.(url, request)
     if (overridden) return overridden
     if (url.pathname === "/api/event" && events) return events.v2()
+    // `location.sync` reads one catalog; compose it from the per-endpoint mocks so tests keep
+    // stubbing and observing `/api/agent`, `/api/model`, and friends individually.
+    if (url.pathname === "/api/location/catalog") {
+      const read = async (pathname: string) => {
+        const target = new URL(url)
+        target.pathname = pathname
+        const response = await fetch(target, { headers: request.headers })
+        return (await response.json()) as { location: unknown; data: unknown }
+      }
+      const [location, ...parts] = await Promise.all([
+        read("/api/location"),
+        ...Object.entries(catalogPaths).map(async ([field, pathname]) => [field, await read(pathname)] as const),
+      ])
+      return json({ location, data: Object.fromEntries(parts.map(([field, part]) => [field, part.data])) })
+    }
 
     if (
       [

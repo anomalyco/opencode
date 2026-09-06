@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { OpenCodeEvent } from "@opencode-ai/client/promise"
 import { base64Encode } from "@opencode-ai/util/encode"
-import { currentSession, mockOpenCodeServer } from "../utils/mock-server"
+import { catalog, currentSession, mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible } from "../utils/waits"
 
 const directory = "C:/OpenCode/WorkspacePending"
@@ -533,20 +533,34 @@ async function openDraft(
       headers,
     })
   })
+  const agents = [
+    {
+      id: "build",
+      name: "Build",
+      mode: "primary",
+      hidden: false,
+      request: { settings: {}, headers: {}, body: {} },
+      permissions: [],
+    },
+  ]
+  const commands = options?.command ? [{ name: "review", description: "Review changes" }] : []
+  await page.route("**/api/location/catalog?**", (route) =>
+    route.fulfill({
+      json: {
+        location: {
+          directory: new URL(route.request().url()).searchParams.get("location[directory]") ?? directory,
+          project: { id: projectID, directory, canonical: directory },
+        },
+        data: catalog({ agent: agents, command: commands }),
+      },
+      headers,
+    }),
+  )
   await page.route("**/api/agent?**", (route) =>
     route.fulfill({
       json: {
         location: { directory: new URL(route.request().url()).searchParams.get("location[directory]") ?? directory },
-        data: [
-          {
-            id: "build",
-            name: "Build",
-            mode: "primary",
-            hidden: false,
-            request: { settings: {}, headers: {}, body: {} },
-            permissions: [],
-          },
-        ],
+        data: agents,
       },
       headers,
     }),
@@ -556,7 +570,7 @@ async function openDraft(
       route.fulfill({
         json: {
           location: { directory: new URL(route.request().url()).searchParams.get("location[directory]") ?? directory },
-          data: [{ name: "review", description: "Review changes" }],
+          data: commands,
         },
         headers,
       }),

@@ -4,7 +4,7 @@ import { fixture } from "../smoke/session-timeline.fixture"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { installSseTransport } from "../utils/sse-transport"
 
-for (const endpoint of ["/api/location", "/api/agent"]) {
+for (const endpoint of ["/api/location/catalog"]) {
   for (const recover of [false, true]) {
     test(`keeps the composer when ${endpoint} ${recover ? "recovers on retry" : "fails"}`, async ({ page }) => {
       const recovery = recoveryRequests(page)
@@ -59,7 +59,7 @@ for (const endpoint of ["/api/location", "/api/agent"]) {
   }
 }
 
-test("follows a live session move while the agent catalog is still loading", async ({ page }) => {
+test("follows a live session move while the location catalog is still loading", async ({ page }) => {
   const recovery = recoveryRequests(page)
   const directory = "/projects/old-tree"
   const destination = "/projects/current-tree"
@@ -86,7 +86,7 @@ test("follows a live session move while the agent catalog is still loading", asy
   })
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url())
-    if (url.pathname === "/api/agent" && url.searchParams.get("location[directory]") === directory) {
+    if (url.pathname === "/api/location/catalog" && url.searchParams.get("location[directory]") === directory) {
       requested.resolve()
       await release.promise
     }
@@ -101,7 +101,11 @@ test("follows a live session move while the agent catalog is still loading", asy
   await transport.waitForConnection()
   const resolved = page.waitForResponse((response) => {
     const url = new URL(response.url())
-    return url.pathname === "/api/agent" && url.searchParams.get("location[directory]") === destination && response.ok()
+    return (
+      url.pathname === "/api/location/catalog" &&
+      url.searchParams.get("location[directory]") === destination &&
+      response.ok()
+    )
   })
   session.directory = destination
   await transport.send({
@@ -114,7 +118,11 @@ test("follows a live session move while the agent catalog is still loading", asy
   await resolved
   const delayed = page.waitForResponse((response) => {
     const url = new URL(response.url())
-    return url.pathname === "/api/agent" && url.searchParams.get("location[directory]") === directory && response.ok()
+    return (
+      url.pathname === "/api/location/catalog" &&
+      url.searchParams.get("location[directory]") === directory &&
+      response.ok()
+    )
   })
   release.resolve()
   await delayed
@@ -152,7 +160,9 @@ test("refreshes a session moved during disconnection without losing the draft", 
   const resolved = page.waitForResponse((response) => {
     const url = new URL(response.url())
     return (
-      url.pathname === "/api/location" && url.searchParams.get("location[directory]") === destination && response.ok()
+      url.pathname === "/api/location/catalog" &&
+      url.searchParams.get("location[directory]") === destination &&
+      response.ok()
     )
   })
   session.directory = destination
@@ -183,7 +193,7 @@ test("ignores an old failed location read after reconnecting", async ({ page }) 
     pageMessages: () => ({ items: [] }),
   })
   let requests = 0
-  await page.route("**/api/location?**", async (route) => {
+  await page.route("**/api/location/catalog?**", async (route) => {
     if (new URL(route.request().url()).searchParams.get("location[directory]") !== directory) return route.fallback()
     requests++
     if (requests > 1) return route.fallback()
@@ -205,7 +215,9 @@ test("ignores an old failed location read after reconnecting", async ({ page }) 
   const resolved = page.waitForResponse((response) => {
     const url = new URL(response.url())
     return (
-      url.pathname === "/api/location" && url.searchParams.get("location[directory]") === directory && response.ok()
+      url.pathname === "/api/location/catalog" &&
+      url.searchParams.get("location[directory]") === directory &&
+      response.ok()
     )
   })
   await transport.close()
