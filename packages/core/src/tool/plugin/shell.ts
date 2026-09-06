@@ -8,7 +8,7 @@ import { Deferred, Effect, Schema, Scope } from "effect"
 import { Config } from "../../config.js"
 import { Environment } from "../../environment/index.js"
 import { Job } from "../../job.js"
-import { LocationMutation } from "../../location-mutation.js"
+import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
 import { NonNegativeInt } from "../../schema.js"
 import { Session } from "../../session.js"
@@ -104,7 +104,7 @@ export const Plugin = {
     const jobs = yield* Job.Service
     const scope = yield* Scope.Scope
     const environment = yield* Environment.Service
-    const mutation = yield* LocationMutation.Service
+    const access = yield* FileAccess.Service
     const shell = yield* Shell.Service
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
@@ -117,30 +117,18 @@ export const Plugin = {
         messageID: context.messageID,
         id: context.id,
       }
-      const target = yield* mutation.resolve({ path: invocation.cwd, kind: "directory" })
+      const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
       invocation.cwd = target.absolute
       const timeout = invocation.timeout
       const portable = Config.latest(yield* config.entries(), "experimental")?.portable_shell_scanner === true
       const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute, { portable })
       const directories = yield* Effect.forEach(parsed.directories, (directory) =>
-        mutation.resolve({
-          path: LocationMutation.resolvePath(target.absolute, directory),
+        access.resolve({
+          path: FileAccess.resolvePath(target.absolute, directory),
           kind: "directory",
         }),
       )
-      const external = [target, ...directories]
-        .map((item) => item.externalDirectory)
-        .filter((item) => item !== undefined)
-        .filter((item, index, items) => items.findIndex((other) => other.resource === item.resource) === index)
-      if (external.length > 0)
-        yield* permission.assert({
-          action: "external_directory",
-          resources: external.map((item) => item.resource),
-          save: external.map((item) => item.save),
-          sessionID: context.sessionID,
-          agent: context.agent,
-          source,
-        })
+      yield* access.authorizeExternal([target, ...directories], context)
       if (parsed.commands.length > 0)
         yield* permission.assert({
           action: name,

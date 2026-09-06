@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect } from "bun:test"
 import path from "path"
-import { Effect, Exit, Layer } from "effect"
+import { Effect, Exit, Layer, Result } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -12,7 +12,7 @@ import { Permission } from "@opencode-ai/core/permission"
 import { Session } from "@opencode-ai/core/session"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/util/global"
-import { LocationMutation } from "@opencode-ai/core/location-mutation"
+import { FileAccess } from "@opencode-ai/core/file-access"
 import { location } from "./fixture/location"
 import { Tool } from "@opencode-ai/core/tool"
 import { ReadTool } from "@opencode-ai/core/tool/plugin/read"
@@ -30,7 +30,7 @@ const readToolNode = makeLocationNode({
   deps: [
     Tool.node,
     ReadToolFileSystem.node,
-    LocationMutation.node,
+    FileAccess.node,
     Image.node,
     Permission.node,
     SessionInstructions.node,
@@ -47,7 +47,7 @@ const readCalls: {
   page: ReadToolFileSystem.PageInput
 }[] = []
 const listCalls: AbsolutePath[] = []
-let resolveFailure: unknown
+let readDefect: unknown
 let directoryEntries: string[] = []
 let directoryEntryDetails: Environment.DirEntry[] = []
 let readResult: ReadToolFileSystem.FileContent | ReadToolFileSystem.TextPage | ReadToolFileSystem.ListPage = {
@@ -69,7 +69,7 @@ const reader = Layer.succeed(
     },
     read: (input, resource, page = {}) => {
       readCalls.push({ input, page })
-      if (resolveFailure !== undefined) return Effect.die(resolveFailure)
+      if (readDefect !== undefined) return Effect.die(readDefect)
       if (readOverride) return readOverride(input, resource, page)
       if (readFailure !== undefined) return Effect.fail(readFailure)
       return Effect.succeed(readResult)
@@ -77,13 +77,14 @@ const reader = Layer.succeed(
   }),
 )
 let allow = true
+let deniedResource: string | undefined
 const permission = permissionLayer({
   assert: (input) =>
     Effect.sync(() => {
       assertions.push(input)
     }).pipe(
       Effect.andThen(
-        allow
+        allow && !input.resources.some((resource) => resource === deniedResource)
           ? Effect.void
           : Effect.fail(
               new Permission.BlockedError({
@@ -112,30 +113,6 @@ const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) })),
 )
-const mutation = Layer.succeed(
-  LocationMutation.Service,
-  LocationMutation.Service.of({
-    resolve: (input) => {
-      const absolute = path.resolve(process.cwd(), input.path)
-      const external = path.isAbsolute(input.path) && !FSUtil.contains(process.cwd(), absolute)
-      const resource = external ? absolute.replaceAll("\\", "/") : path.relative(process.cwd(), absolute) || "."
-      const directory = path.dirname(absolute)
-      const externalResource = path.join(directory, "*").replaceAll("\\", "/")
-      return Effect.succeed({
-        absolute,
-        resource,
-        externalDirectory: external
-          ? {
-              action: "external_directory" as const,
-              directory,
-              resource: externalResource,
-              save: externalResource,
-            }
-          : undefined,
-      })
-    },
-  }),
-)
 const unavailableImage = Layer.mock(Image.Service, {
   normalize: () => Effect.fail(new Image.ResizerUnavailableError()),
 })
@@ -146,7 +123,6 @@ const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
       Permission.node.replace(permission),
       Config.node.replace(config),
       Image.node.replace(imageLayer),
-      LocationMutation.node.replace(mutation),
       FSUtil.node.replace(testFileSystem),
       Location.node.replace(locationLayer),
       Global.node.replace(Global.layerWith({ data: Global.Path.data })),
@@ -165,7 +141,8 @@ describe("ReadTool", () => {
     readCalls.length = 0
     listCalls.length = 0
     allow = true
-    resolveFailure = undefined
+    deniedResource = undefined
+    readDefect = undefined
     directoryEntries = []
     directoryEntryDetails = []
     readResult = {
@@ -620,18 +597,21 @@ describe("ReadTool", () => {
 
   it.effect("preserves unexpected filesystem defects", () =>
     Effect.gen(function* () {
-      resolveFailure = new Error("unexpected")
+      readDefect = new Error("unexpected")
       const registry = yield* Tool.Service
 
-      expect(
-        Exit.isFailure(
-          yield* executeTool(registry, {
-            sessionID,
-            ...toolIdentity,
-            call: { type: "tool-call", id: "call-defect", name: "read", input: { path: "README.md" } },
-          }).pipe(Effect.exit),
-        ),
-      ).toBe(true)
+      const exit = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-defect", name: "read", input: { path: "README.md" } },
+      }).pipe(Effect.exit)
+      expect(Result.getOrThrow(Exit.findDefect(exit))).toBe(readDefect)
+      expect(readCalls).toEqual([
+        {
+          input: AbsolutePath.make(path.join(process.cwd(), "README.md")),
+          page: { offset: undefined, limit: undefined },
+        },
+      ])
     }),
   )
 
@@ -718,6 +698,57 @@ describe("ReadTool", () => {
         AbsolutePath.make(recoveredAbsolute),
       ])
       expect(listCalls).toEqual([AbsolutePath.make(process.cwd())])
+    }),
+  )
+
+  it.effect("recovers an external filename without repeating directory approval", () =>
+    Effect.gen(function* () {
+      const directory = path.join(path.parse(process.cwd()).root, "external-read")
+      const requested = path.join(directory, "report final.txt")
+      const recovered = path.join(directory, "report\u202ffinal.txt")
+      directoryEntryDetails = [{ name: path.basename(recovered), type: "file" }]
+      readOverride = (input) =>
+        input === requested ? Effect.fail(new Environment.NotFound({ path: requested })) : Effect.succeed(readResult)
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-external-recovery", name: "read", input: { path: requested } },
+        }),
+      ).toMatchObject({ status: "completed" })
+      expect(assertions).toMatchObject([
+        { action: "external_directory", resources: [path.join(directory, "*").replaceAll("\\", "/")] },
+        { action: "read", resources: [requested.replaceAll("\\", "/")] },
+        { action: "read", resources: [recovered.replaceAll("\\", "/")] },
+      ])
+      expect(readCalls.map((call) => call.input)).toEqual([AbsolutePath.make(requested), AbsolutePath.make(recovered)])
+    }),
+  )
+
+  it.effect("does not read a recovered filename denied by its own read rules", () =>
+    Effect.gen(function* () {
+      const requested = path.join(process.cwd(), "report final.txt")
+      const recovered = path.join(process.cwd(), "report\u202ffinal.txt")
+      deniedResource = path.basename(recovered)
+      directoryEntryDetails = [{ name: path.basename(recovered), type: "file" }]
+      readOverride = (input) =>
+        input === requested ? Effect.fail(new Environment.NotFound({ path: requested })) : Effect.succeed(readResult)
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-denied-recovery", name: "read", input: { path: requested } },
+        }),
+      ).toMatchObject({ status: "error", error: { type: "permission.rejected" } })
+      expect(assertions).toMatchObject([
+        { action: "read", resources: [path.basename(requested)] },
+        { action: "read", resources: [path.basename(recovered)] },
+      ])
+      expect(readCalls.map((call) => call.input)).toEqual([AbsolutePath.make(requested)])
     }),
   )
 
@@ -857,30 +888,6 @@ describe("ReadTool", () => {
         }),
       ).toEqual({ status: "error", error: { type: "permission.rejected", message: "Permission denied: read" } })
       expect(readCalls).toEqual([])
-    }),
-  )
-
-  it.effect("preserves unexpected resolution defects", () =>
-    Effect.gen(function* () {
-      const registry = yield* Tool.Service
-
-      resolveFailure = new Error("missing")
-      expect(
-        Exit.isFailure(
-          yield* executeTool(registry, {
-            sessionID,
-            ...toolIdentity,
-            call: { type: "tool-call", id: "call-missing", name: "read", input: { path: "missing.txt" } },
-          }).pipe(Effect.exit),
-        ),
-      ).toBe(true)
-
-      expect(readCalls).toEqual([
-        {
-          input: AbsolutePath.make(path.join(process.cwd(), "missing.txt")),
-          page: { offset: undefined, limit: undefined },
-        },
-      ])
     }),
   )
 

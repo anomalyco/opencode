@@ -12,7 +12,7 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { Image } from "@opencode-ai/core/image"
 import { Location } from "@opencode-ai/core/location"
-import { LocationMutation } from "@opencode-ai/core/location-mutation"
+import { FileAccess } from "@opencode-ai/core/file-access"
 import { Model } from "@opencode-ai/core/model"
 import { Permission } from "@opencode-ai/core/permission"
 import { Project } from "@opencode-ai/core/project"
@@ -42,7 +42,7 @@ const readToolNode = makeLocationNode({
   deps: [
     Tool.node,
     ReadToolFileSystem.node,
-    LocationMutation.node,
+    FileAccess.node,
     Image.node,
     Permission.node,
     SessionInstructions.node,
@@ -64,7 +64,7 @@ const testLayer = AppNodeBuilder.build(
     Session.node,
     Location.node,
     FSUtil.node,
-    LocationMutation.node,
+    FileAccess.node,
     ReadToolFileSystem.node,
     readToolNode,
     Tool.node,

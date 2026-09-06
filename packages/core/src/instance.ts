@@ -17,7 +17,7 @@ import { Image } from "./image.js"
 import { LocationWatcher } from "./filesystem/location-watcher.js"
 import { Integration } from "./integration.js"
 import { Location } from "./location.js"
-import { LocationMutation } from "./location-mutation.js"
+import { FileAccess } from "./file-access.js"
 import { ModelResolver } from "./model-resolver.js"
 import { Mcp } from "./mcp/index.js"
 import { Permission } from "./permission.js"
@@ -82,7 +82,7 @@ const nodes = [
   Skill.node,
   InstructionBuiltIns.node,
   InstructionDiscovery.node,
-  LocationMutation.node,
+  FileAccess.node,
   FileMutation.node,
   Formatter.node,
   Mcp.node,

@@ -15,7 +15,7 @@ import { Environment } from "../../environment/index.js"
 import { FileMutation } from "../../file-mutation.js"
 import { Formatter } from "../../formatter.js"
 import { Location } from "../../location.js"
-import { LocationMutation } from "../../location-mutation.js"
+import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
 import { fileDiff } from "./file-diff.js"
 
@@ -109,7 +109,7 @@ const findLineOccurrences = (content: string, search: string) => {
 export const Plugin = {
   id: "opencode.tool.edit",
   effect: Effect.fn("EditTool.Plugin")(function* (ctx: Context) {
-    const mutation = yield* LocationMutation.Service
+    const access = yield* FileAccess.Service
     const fileMutation = yield* FileMutation.Service
     const environment = yield* Environment.Service
     const formatter = yield* Formatter.Service
@@ -143,16 +143,8 @@ export const Plugin = {
                 })
               }
 
-              const target = yield* mutation.resolve({ path: input.path, kind: "file" })
-              const external = target.externalDirectory
-              if (external) {
-                yield* permission.assert({
-                  ...LocationMutation.externalDirectoryPermission(external),
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source: permissionSource,
-                })
-              }
+              const target = yield* access.resolve({ path: input.path, kind: "file" })
+              yield* access.authorizeExternal([target], context)
 
               const original = yield* FileMutation.readText(environment.files, target.absolute).pipe(
                 Effect.catchTag("Environment.NotFound", () =>
@@ -218,7 +210,7 @@ export const Plugin = {
                 replacements,
               } satisfies Output
             }).pipe(
-              fileMutation.withLock([LocationMutation.resolvePath(location.directory, input.path)]),
+              fileMutation.withLock([FileAccess.resolvePath(location.directory, input.path)]),
               Effect.map((output) => ({
                 output,
                 content: `Edited ${output.files[0]?.file} (${output.replacements} replacement${output.replacements === 1 ? "" : "s"})`,
