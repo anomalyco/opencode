@@ -1,16 +1,15 @@
-import { createSignal, Show, type JSX } from "solid-js";
+import { createSignal, createEffect, onCleanup, Show, For, type JSX } from "solid-js";
 import { Button } from "@opencode-ai/ui/button";
 
 export function TeamJulesLiveWatcher(props: { taskId: string }): JSX.Element {
   const [status, setStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const [inviteUrl, setInviteUrl] = createSignal<string | null>(null);
   const [errorMsg, setErrorMsg] = createSignal<string>("");
+  const [peers, setPeers] = createSignal<string[]>([]);
 
   const handleConnect = async () => {
     setStatus("loading");
     try {
-      // In a real OpenCode environment, this would use the @opencode-ai/sdk client
-      // e.g. await client.teamjules.getMeshCapability({ taskId: props.taskId })
       const res = await fetch(`/api/v1/tasks/${props.taskId}/mesh-capability`);
       if (!res.ok) {
         const err = await res.json();
@@ -25,6 +24,27 @@ export function TeamJulesLiveWatcher(props: { taskId: string }): JSX.Element {
       setStatus("error");
     }
   };
+
+  createEffect(() => {
+    if (status() !== "ready") return;
+    
+    let timer: any;
+    const pollPeers = async () => {
+      try {
+        const res = await fetch(`/api/v1/tasks/${props.taskId}/mesh-peers`);
+        if (res.ok) {
+          const data = await res.json();
+          setPeers(data.peers || []);
+        }
+      } catch (e) {
+        // silently ignore polling errors
+      }
+      timer = setTimeout(pollPeers, 3000);
+    };
+    
+    pollPeers();
+    onCleanup(() => clearTimeout(timer));
+  });
 
   const copyCommand = async () => {
     const url = inviteUrl();
@@ -76,6 +96,22 @@ export function TeamJulesLiveWatcher(props: { taskId: string }): JSX.Element {
               </svg>
             </button>
           </div>
+          
+          <Show when={peers().length > 0}>
+            <div class="mt-2 flex flex-col gap-1.5 pt-2 border-t border-border-base">
+              <span class="text-11-medium text-text-weak uppercase tracking-wider">Active Peers</span>
+              <div class="flex flex-wrap gap-2">
+                <For each={peers()}>
+                  {(peer) => (
+                    <div class="flex items-center gap-1.5 px-2 py-1 bg-surface-raised-base rounded border border-border-base">
+                      <div class="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.5)]"></div>
+                      <span class="text-11-medium text-text-strong">{peer}</span>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </div>
+          </Show>
         </div>
       </Show>
     </div>

@@ -9,6 +9,10 @@ export const PigeonMeshResponse = Schema.Struct({
   pigeonInviteUrl: Schema.String,
 });
 
+export const PigeonPeersResponse = Schema.Struct({
+  peers: Schema.Array(Schema.String),
+});
+
 // 2. Define the Protocol / API Group
 export class TeamJulesApi extends HttpApiGroup.make("teamjules")
   .add(
@@ -17,6 +21,10 @@ export class TeamJulesApi extends HttpApiGroup.make("teamjules")
       .addError(Schema.Struct({ error: Schema.String }), { status: 404 })
       .addError(Schema.Struct({ error: Schema.String }), { status: 400 })
       .addError(Schema.Struct({ error: Schema.String }), { status: 503 })
+  )
+  .add(
+    HttpApiEndpoint.get("getMeshPeers", "/api/v1/tasks/:taskId/mesh-peers")
+      .addSuccess(PigeonPeersResponse)
   ) {}
 
 // 3. Define the Server Handler Implementation
@@ -47,4 +55,11 @@ export const makeTeamJulesHandler = (dispatcher: TaskDispatcher) =>
           pigeonInviteUrl: state.pigeonInviteUrl,
         };
       }),
+    getMeshPeers: ({ path }) =>
+      Effect.tryPromise({
+        try: () => dispatcher.getActivePeers(path.taskId),
+        catch: () => ({ error: "Failed to fetch peers" }),
+      }).pipe(
+        Effect.map(peers => ({ peers }))
+      ),
   });
