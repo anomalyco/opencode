@@ -250,6 +250,55 @@ test("focuses a terminal created from the new-terminal button", async ({ page })
   await expect.poll(() => active.evaluate((element) => element.contains(document.activeElement))).toBe(true)
 })
 
+test("focuses terminals created from the new-terminal shortcut", async ({ page }) => {
+  const created = { count: 0 }
+  await page.route("**/api/pty*", (route) => {
+    created.count += 1
+    const next = created.count === 1 ? ptyInfo(ptyID, "Terminal 1") : ptyInfo(newPtyID, "Terminal 2")
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ location: ptyLocation(), data: next }),
+    })
+  })
+  await page.route(`**/api/pty/${newPtyID}*`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ location: ptyLocation(), data: ptyInfo(newPtyID, "Terminal 2") }),
+    }),
+  )
+  await page.route(`**/api/pty/${newPtyID}/connect-token*`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify({ location: ptyLocation(), data: { ticket: "e2e-ticket", expires_in: 60 } }),
+    }),
+  )
+  await page.routeWebSocket(new RegExp(`/api/pty/${newPtyID}/connect`), () => undefined)
+
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
+  await expectSessionTitle(page, "Terminal composer focus")
+
+  const composer = page.locator('[data-component="composer-editor"]')
+  const chatPanel = page.locator('[data-slot="session-chat-panel"]')
+  await composer.fill("keep this draft")
+  await expect(composer).toHaveText("keep this draft")
+
+  await page.keyboard.press("Control+Alt+T")
+  await expect(page.getByRole("tab", { name: "Terminal 1" })).toHaveAttribute("aria-selected", "true")
+  const firstTerminal = page.locator(`#terminal-wrapper-${ptyID} [data-component="terminal"]`)
+  await expect.poll(() => firstTerminal.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+
+  await chatPanel.click({ position: { x: 100, y: 200 } })
+  await page.keyboard.press("Control+Alt+T")
+  await expect(page.getByRole("tab", { name: "Terminal 2" })).toHaveAttribute("aria-selected", "true")
+  const secondTerminal = page.locator(`#terminal-wrapper-${newPtyID} [data-component="terminal"]`)
+  await expect.poll(() => secondTerminal.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+  await expect(composer).toHaveText("keep this draft")
+})
+
 function seedCachedTerminal(page: Page) {
   return page.addInitScript(
     ({ terminalKey, ptyID, tabKey, server, sessionID }) => {
