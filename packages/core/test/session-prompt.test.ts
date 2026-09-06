@@ -19,6 +19,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
@@ -314,17 +315,18 @@ describe("Session.prompt", () => {
     }),
   )
 
-  it.effect("resolves attachment MIME before admission", () =>
+  it.effect("preserves image paths through MIME resolution, admission, and model context", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service
       const uri =
         "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+      const name = path.resolve("/project/image.png")
 
       const message = yield* session.prompt({
         sessionID,
         text: "Inspect this image",
-        files: [{ uri, name: "image.png", mention: { start: 8, end: 17, text: "[Image 1]" } }],
+        files: [{ uri, name, mention: { start: 8, end: 17, text: "[Image 1]" } }],
         resume: false,
       })
 
@@ -333,13 +335,30 @@ describe("Session.prompt", () => {
           data: uri.slice(uri.indexOf(",") + 1),
           mime: "image/png",
           source: { type: "inline" },
-          name: "image.png",
+          name,
           mention: { start: 8, end: 17, text: "[Image 1]" },
         },
       ])
       const stored = yield* admitted(message.id)
       expect(stored?.type).toBe("user")
-      if (stored?.type === "user") expect(stored.payload.files).toEqual(message.payload.files)
+      if (stored?.type !== "user") throw new Error("Expected an admitted user prompt")
+      expect(stored.payload.files).toEqual(message.payload.files)
+      const messages = toLLMMessages(
+        [
+          SessionMessage.User.make({
+            ...stored.payload,
+            id: message.id,
+            type: "user",
+            time: { created: DateTime.makeUnsafe(0) },
+          }),
+        ],
+        Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }),
+      )
+      expect(messages[0]?.content).toMatchObject([
+        { type: "text", text: "Inspect this image" },
+        { type: "text", text: `Attached file: ${name}` },
+        { type: "media", mediaType: "image/png", filename: name },
+      ])
     }),
   )
 
