@@ -60,6 +60,11 @@ const Handlers = Runtime.handlers(Commands, {
     stop: () => import("./commands/handlers/service/stop"),
     get: () => import("./commands/handlers/service/get"),
     set: () => import("./commands/handlers/service/set"),
+    url: {
+      add: () => import("./commands/handlers/service/url/add"),
+      remove: () => import("./commands/handlers/service/url/remove"),
+      list: () => import("./commands/handlers/service/url/list"),
+    },
     unset: () => import("./commands/handlers/service/unset"),
   },
   serve: () => import("./commands/handlers/serve"),

@@ -391,6 +391,24 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
             ),
           },
         }),
+        Spec.make("url", {
+          description: "Manage additional client connection URLs",
+          commands: [
+            Spec.make("add", {
+              description: "Add a client connection URL",
+              params: {
+                url: Argument.string("url").pipe(Argument.withDescription("Client connection URL")),
+              },
+            }),
+            Spec.make("remove", {
+              description: "Remove a client connection URL",
+              params: {
+                url: Argument.string("url").pipe(Argument.withDescription("Client connection URL")),
+              },
+            }),
+            Spec.make("list", { description: "List additional client connection URLs" }),
+          ],
+        }),
         Spec.make("unset", {
           description: "Unset service configuration",
           params: {
@@ -413,6 +431,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           Flag.withSchema(Schema.NonEmptyString),
           Flag.withDescription("Additional allowed CORS origin (repeat for multiple origins)"),
           Flag.atLeast(0),
+        ),
+        url: Flag.string("url").pipe(
+          Flag.withDescription("Additional client connection URL"),
+          Flag.atMost(100),
         ),
         service: Flag.boolean("service").pipe(Flag.withDefault(false)),
         stdio: Flag.boolean("stdio").pipe(Flag.withDefault(false)),
