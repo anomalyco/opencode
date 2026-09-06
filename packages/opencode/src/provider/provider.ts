@@ -1258,6 +1258,14 @@ function cloudflareGatewayNpm(providerID: string, modelID: string) {
   return undefined
 }
 
+// models.dev lists the built-in alibaba provider as @ai-sdk/openai-compatible, but opencode
+// bundles the first-class @ai-sdk/alibaba SDK (BUNDLED_PROVIDERS) and keys alibaba-specific
+// reasoning/caching behavior in ProviderTransform off that npm — resolve the bundled package
+// so that machinery actually engages for catalog-loaded alibaba models.
+function bundledProviderNpm(providerID: string) {
+  return providerID === "alibaba" ? "@ai-sdk/alibaba" : undefined
+}
+
 function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
   const base: Model = {
     id: ModelV2.ID.make(model.id),
@@ -1270,6 +1278,7 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
       npm:
         cloudflareGatewayNpm(provider.id, model.id) ??
         model.provider?.npm ??
+        bundledProviderNpm(provider.id) ??
         provider.npm ??
         "@ai-sdk/openai-compatible",
     },
