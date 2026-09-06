@@ -128,7 +128,8 @@ const layer = Layer.effect(
       get: Effect.fn("Skill.get")(function* (id) {
         const skill = state.get().skills.get(id)
         if (!skill) return undefined
-        if ((yield* preferences.get({ kind: "skill", id })) === "disabled") return yield* new DisabledError({ id })
+        if ((yield* preferences.get({ kind: "skill.activation", id })) === "disabled")
+          return yield* new DisabledError({ id })
         return skill
       }),
       list: Effect.fn("Skill.list")(function* () {

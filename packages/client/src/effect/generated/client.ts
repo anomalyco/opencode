@@ -1527,7 +1527,7 @@ const EndpointPreferencesSet = (raw: RawClient["server.preferences"]) => (input:
   preserveEffect<PreferencesSetOutput>()(
     raw["preferences.set"]({
       params: { kind: input["kind"], id: input["id"] },
-      payload: { state: input["state"] },
+      payload: { value: input["value"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 

@@ -10,7 +10,7 @@ export const PreferencesGroup = HttpApiGroup.make("server.preferences")
       OpenApi.annotations({
         identifier: "preferences.list",
         summary: "List preference overrides",
-        description: "List explicit global activation preferences. Domains own their defaults and availability rules.",
+        description: "List explicit global preference values. Domains own their value schemas, defaults, and behavior.",
       }),
     ),
   )
@@ -22,20 +22,22 @@ export const PreferencesGroup = HttpApiGroup.make("server.preferences")
       OpenApi.annotations({
         identifier: "preferences.get",
         summary: "Get preference override",
-        description: "Read one explicit activation override, or null when the domain default applies.",
+        description:
+          "Read one explicit preference override, or null when the domain default applies. An entry whose value is null is distinct from a missing override.",
       }),
     ),
   )
   .add(
     HttpApiEndpoint.put("preferences.set", "/api/preferences/:kind/:id", {
       params: Preferences.Target.fields,
-      payload: Schema.Struct({ state: Preferences.State }),
+      payload: Schema.Struct({ value: Preferences.Value }),
       success: HttpApiSchema.NoContent,
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "preferences.set",
         summary: "Set preference override",
-        description: "Persist an explicit activation preference across all projects and sessions on this server.",
+        description:
+          "Validate a value against its registered preference kind and persist it across all projects and sessions on this server.",
       }),
     ),
   )

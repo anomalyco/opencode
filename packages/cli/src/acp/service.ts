@@ -424,7 +424,7 @@ async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog
     if (defaultModel && defaultAgent) {
       const disabled = new Set(
         preferences
-          .filter((entry) => entry.target.kind === "skill" && entry.state === "disabled")
+          .filter((entry) => entry.target.kind === "skill.activation" && entry.value === "disabled")
           .map((entry) => entry.target.id),
       )
       return {

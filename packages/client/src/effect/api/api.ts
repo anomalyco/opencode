@@ -1992,15 +1992,15 @@ export interface WorkspaceApi<E = never> {
 export type PreferencesListOutput = ReadonlyArray<Preferences.Entry>
 export type PreferencesListOperation<E = never> = () => Effect.Effect<PreferencesListOutput, E>
 
-export type PreferencesGetInput = { readonly kind: "skill"; readonly id: Skill.ID }
+export type PreferencesGetInput = { readonly kind: string; readonly id: string }
 export type PreferencesGetOutput = Preferences.Entry | null
 export type PreferencesGetOperation<E = never> = (input: PreferencesGetInput) => Effect.Effect<PreferencesGetOutput, E>
 
-export type PreferencesSetInput = { readonly kind: "skill"; readonly id: Skill.ID; readonly state: Preferences.State }
+export type PreferencesSetInput = { readonly kind: string; readonly id: string; readonly value: Preferences.Value }
 export type PreferencesSetOutput = void
 export type PreferencesSetOperation<E = never> = (input: PreferencesSetInput) => Effect.Effect<PreferencesSetOutput, E>
 
-export type PreferencesResetInput = { readonly kind: "skill"; readonly id: Skill.ID }
+export type PreferencesResetInput = { readonly kind: string; readonly id: string }
 export type PreferencesResetOutput = void
 export type PreferencesResetOperation<E = never> = (
   input: PreferencesResetInput,

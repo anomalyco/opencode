@@ -57,20 +57,20 @@ describe("SkillInstructions", () => {
         permissions: [{ action: "skill", resource: "denied", effect: "deny" }],
       })
       yield* skills.transform((editor) => [effect, manual, denied].forEach(editor.add))
-      yield* preferences.set({ kind: "skill", id: manual.id }, "enabled")
-      yield* preferences.set({ kind: "skill", id: denied.id }, "enabled")
+      yield* preferences.set({ kind: "skill.activation", id: manual.id }, "enabled")
+      yield* preferences.set({ kind: "skill.activation", id: denied.id }, "enabled")
       const initial = yield* instructions.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(readInitial))
       expect(initial.text).toContain("<id>effect</id>")
       expect(initial.text).not.toContain("<id>manual</id>")
       expect(initial.text).not.toContain("<id>denied</id>")
       expect(yield* skills.get(manual.id)).toEqual(manual)
 
-      yield* preferences.set({ kind: "skill", id: effect.id }, "disabled")
+      yield* preferences.set({ kind: "skill.activation", id: effect.id }, "disabled")
       const removed = yield* instructions
         .load({ id: agent.id, info: agent })
         .pipe(Effect.flatMap((current) => readUpdate(current, initial)))
       expect(removed.text).toContain("Do not use any previously listed skill")
-      yield* preferences.reset({ kind: "skill", id: effect.id })
+      yield* preferences.reset({ kind: "skill.activation", id: effect.id })
       expect(
         (yield* instructions.load({ id: agent.id, info: agent }).pipe(Effect.flatMap(readInitial))).text,
       ).toContain("<id>effect</id>")

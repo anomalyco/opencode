@@ -41,7 +41,7 @@ describe("SkillTool", () => {
         location: AbsolutePath.make("/skills/effect.md"),
       })
       yield* skills.transform((editor) => editor.add(info))
-      const target = { kind: "skill", id: info.id } as const
+      const target = { kind: "skill.activation", id: info.id } as const
       yield* preferences.set(target, "disabled")
       expect(
         yield* executeTool(registry, {

@@ -75,7 +75,7 @@ const layer = Layer.effect(
         if (!agent) return Instructions.empty
         const disabled = new Set(
           (yield* preferences.list())
-            .filter((entry) => entry.target.kind === "skill" && entry.state === "disabled")
+            .filter((entry) => entry.target.kind === "skill.activation" && entry.value === "disabled")
             .map((entry) => entry.target.id),
         )
         const available = Skill.available(yield* skills.list(), agent)

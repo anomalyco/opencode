@@ -331,7 +331,7 @@ export type RpcOutput = { output?: any }
 
 export type PermissionReply = "once" | "always" | "reject"
 
-export type PreferencesTarget = { kind: "skill"; id: string }
+export type PreferencesTarget = { kind: string; id: string }
 
 export type Pty = {
   id: string
@@ -415,7 +415,7 @@ export type WorktreeInfo = { directory: string }
 
 export type WorkspaceDestroyResult = { destroyed: boolean }
 
-export type PreferencesState = "enabled" | "disabled"
+export type PreferencesValue = JsonValue
 
 export type VcsBranch = { current?: string; default?: string }
 
@@ -1657,7 +1657,7 @@ export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
 
 export type WorktreeList = Array<WorktreeDirectory>
 
-export type PreferencesEntry = { target: PreferencesTarget; state: PreferencesState }
+export type PreferencesEntry = { target: PreferencesTarget; value: PreferencesValue }
 
 export type VcsInfo = { branch: VcsBranch }
 
@@ -6187,23 +6187,23 @@ export type WorkspaceDestroyOutput = WorkspaceDestroyResult
 export type PreferencesListOutput = Array<PreferencesEntry>
 
 export type PreferencesGetInput = {
-  readonly kind: { readonly kind: "skill"; readonly id: string }["kind"]
-  readonly id: { readonly kind: "skill"; readonly id: string }["id"]
+  readonly kind: { readonly kind: string; readonly id: string }["kind"]
+  readonly id: { readonly kind: string; readonly id: string }["id"]
 }
 
 export type PreferencesGetOutput = PreferencesEntry | null
 
 export type PreferencesSetInput = {
-  readonly kind: { readonly kind: "skill"; readonly id: string }["kind"]
-  readonly id: { readonly kind: "skill"; readonly id: string }["id"]
-  readonly state: { readonly state: "enabled" | "disabled" }["state"]
+  readonly kind: { readonly kind: string; readonly id: string }["kind"]
+  readonly id: { readonly kind: string; readonly id: string }["id"]
+  readonly value: { readonly value: JsonValue }["value"]
 }
 
 export type PreferencesSetOutput = void
 
 export type PreferencesResetInput = {
-  readonly kind: { readonly kind: "skill"; readonly id: string }["kind"]
-  readonly id: { readonly kind: "skill"; readonly id: string }["id"]
+  readonly kind: { readonly kind: string; readonly id: string }["kind"]
+  readonly id: { readonly kind: string; readonly id: string }["id"]
 }
 
 export type PreferencesResetOutput = void

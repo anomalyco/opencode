@@ -1887,7 +1887,7 @@ export function createData(config: CreateDataInput) {
           if (store.preferences === undefined) return undefined
           const disabled = new Set(
             store.preferences
-              .filter((entry) => entry.target.kind === "skill" && entry.state === "disabled")
+              .filter((entry) => entry.target.kind === "skill.activation" && entry.value === "disabled")
               .map((entry) => entry.target.id),
           )
           return skills.list(location)?.filter((skill) => !disabled.has(skill.id))

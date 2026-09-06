@@ -7,8 +7,7 @@ import { errorMessage } from "../util/error"
 import { useData } from "../context/data"
 import { useClient } from "../context/client"
 import { useToast } from "../ui/toast"
-import { Skill } from "@opencode-ai/schema/skill"
-import type { Preferences } from "@opencode-ai/schema/preferences"
+import type { Skill } from "@opencode-ai/schema/skill"
 import type { LocationRef } from "@opencode-ai/client"
 
 export type DialogSkillProps = {
@@ -148,16 +147,18 @@ export function DialogSkillToggle(props: { location?: LocationRef }) {
     () =>
       new Map(
         (data.preferences.list() ?? [])
-          .filter((entry) => entry.target.kind === "skill")
-          .map((entry) => [entry.target.id, entry.state]),
+          .filter((entry) => entry.target.kind === "skill.activation")
+          .map((entry) => [entry.target.id, entry.value]),
       ),
   )
 
-  const change = async (id: string, state?: Preferences.State) => {
+  const change = async (id: string, value?: Skill.Activation) => {
     if (pending() || loaded.loading || loadError()) return
     setPending(id)
-    const target = { kind: "skill", id: Skill.ID.make(id) } as const
-    await (state ? client.api.preferences.set({ ...target, state }) : client.api.preferences.reset(target))
+    const target = { kind: "skill.activation", id } as const
+    await (
+      value === undefined ? client.api.preferences.reset(target) : client.api.preferences.set({ ...target, value })
+    )
       .then(async () => {
         data.preferences.invalidate()
         await data.preferences.sync()
@@ -171,7 +172,7 @@ export function DialogSkillToggle(props: { location?: LocationRef }) {
     return (data.location.skill.list(props.location) ?? [])
       .toSorted((a, b) => a.name.localeCompare(b.name))
       .map((skill) => {
-        const preference = preferences().get(Skill.ID.make(skill.id))
+        const preference = preferences().get(skill.id)
         const enabled = preference !== "disabled"
         return {
           title: skill.name,
@@ -212,7 +213,7 @@ export function DialogSkillToggle(props: { location?: LocationRef }) {
       footerHints={[
         {
           title: "enter",
-          label: preferences().get(Skill.ID.make(selected() ?? "")) === "disabled" ? "enable" : "disable",
+          label: preferences().get(selected() ?? "") === "disabled" ? "enable" : "disable",
         },
         { title: "ctrl+r", label: "reset to default" },
       ]}

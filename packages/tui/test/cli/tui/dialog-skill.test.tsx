@@ -2,7 +2,7 @@
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { onMount } from "solid-js"
-import { Preferences } from "@opencode-ai/schema/preferences"
+import { Skill } from "@opencode-ai/schema/skill"
 import { Schema } from "effect"
 import { DialogSkill } from "../../../src/component/dialog-skill"
 import { ConfigProvider } from "../../../src/config"
@@ -61,7 +61,7 @@ test.each([
       id: "evt_external_preference",
       type: "preferences.updated",
       created: 1,
-      data: { target: { kind: "skill", id: "effect" } },
+      data: { target: { kind: "skill.activation", id: "effect" } },
     })
     await fixture.app.waitForFrame((frame) => frame.includes("Effect") && frame.includes("Disabled ○"))
     fixture.open()
@@ -98,7 +98,7 @@ test("keeps the skill state and dialog usable after a failed save", async () => 
 async function renderSkills(options: { width: number; mode: "light" | "dark" }) {
   const events = createEventStream()
   const state = {
-    preference: undefined as Preferences.State | undefined,
+    preference: undefined as Skill.Activation | undefined,
     writes: [] as string[],
     fail: false,
     selected: "",
@@ -113,14 +113,16 @@ async function renderSkills(options: { width: number; mode: "light" | "dark" }) 
   }))
   const calls = createFetch(async (url, request) => {
     if (url.pathname === "/api/preferences")
-      return json(state.preference ? [{ target: { kind: "skill", id: "effect" }, state: state.preference }] : [])
-    if (url.pathname === "/api/preferences/skill/effect") {
+      return json(
+        state.preference ? [{ target: { kind: "skill.activation", id: "effect" }, value: state.preference }] : [],
+      )
+    if (url.pathname === "/api/preferences/skill.activation/effect") {
       if (state.fail) return json({ message: "Save failed" }, { status: 500 })
       state.writes.push(request.method)
       state.preference =
         request.method === "DELETE"
           ? undefined
-          : Schema.decodeUnknownSync(Schema.Struct({ state: Preferences.State }))(await request.json()).state
+          : Schema.decodeUnknownSync(Schema.Struct({ value: Skill.Activation }))(await request.json()).value
       return new Response(null, { status: 204 })
     }
     if (url.pathname === "/api/skill")

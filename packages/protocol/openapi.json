@@ -12577,7 +12577,7 @@
             }
           }
         },
-        "description": "List explicit global activation preferences. Domains own their defaults and availability rules.",
+        "description": "List explicit global preference values. Domains own their value schemas, defaults, and behavior.",
         "summary": "List preference overrides"
       }
     },
@@ -12591,7 +12591,8 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "enum": ["skill"]
+              "minLength": 1,
+              "description": "Registered preference kind, such as skill.activation. Each kind defines its value schema."
             },
             "required": true
           },
@@ -12599,7 +12600,9 @@
             "name": "id",
             "in": "path",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "description": "Subject of the preference. Use global for a preference without an entity-specific subject."
             },
             "required": true
           }
@@ -12644,7 +12647,7 @@
             }
           }
         },
-        "description": "Read one explicit activation override, or null when the domain default applies.",
+        "description": "Read one explicit preference override, or null when the domain default applies. An entry whose value is null is distinct from a missing override.",
         "summary": "Get preference override"
       },
       "put": {
@@ -12656,7 +12659,8 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "enum": ["skill"]
+              "minLength": 1,
+              "description": "Registered preference kind, such as skill.activation. Each kind defines its value schema."
             },
             "required": true
           },
@@ -12664,7 +12668,9 @@
             "name": "id",
             "in": "path",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "description": "Subject of the preference. Use global for a preference without an entity-specific subject."
             },
             "required": true
           }
@@ -12695,7 +12701,7 @@
             }
           }
         },
-        "description": "Persist an explicit activation preference across all projects and sessions on this server.",
+        "description": "Validate a value against its registered preference kind and persist it across all projects and sessions on this server.",
         "summary": "Set preference override",
         "requestBody": {
           "content": {
@@ -12703,11 +12709,11 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "state": {
-                    "$ref": "#/components/schemas/Preferences.State"
+                  "value": {
+                    "$ref": "#/components/schemas/Preferences.Value"
                   }
                 },
-                "required": ["state"],
+                "required": ["value"],
                 "additionalProperties": false
               }
             }
@@ -12724,7 +12730,8 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "enum": ["skill"]
+              "minLength": 1,
+              "description": "Registered preference kind, such as skill.activation. Each kind defines its value schema."
             },
             "required": true
           },
@@ -12732,7 +12739,9 @@
             "name": "id",
             "in": "path",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "description": "Subject of the preference. Use global for a preference without an entity-specific subject."
             },
             "required": true
           }
@@ -17362,31 +17371,31 @@
           "target": {
             "$ref": "#/components/schemas/Preferences.Target"
           },
-          "state": {
-            "$ref": "#/components/schemas/Preferences.State"
+          "value": {
+            "$ref": "#/components/schemas/Preferences.Value"
           }
         },
-        "required": ["target", "state"],
+        "required": ["target", "value"],
         "additionalProperties": false
-      },
-      "Preferences.State": {
-        "type": "string",
-        "enum": ["enabled", "disabled"]
       },
       "Preferences.Target": {
         "type": "object",
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["skill"]
+            "minLength": 1,
+            "description": "Registered preference kind, such as skill.activation. Each kind defines its value schema."
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "description": "Subject of the preference. Use global for a preference without an entity-specific subject."
           }
         },
         "required": ["kind", "id"],
         "additionalProperties": false
       },
+      "Preferences.Value": {},
       "Project": {
         "type": "object",
         "properties": {

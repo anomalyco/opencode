@@ -25,7 +25,7 @@ describe("Skill", () => {
     Effect.gen(function* () {
       const skills = yield* Skill.Service
       const preferences = yield* Preferences.Service
-      const target = { kind: "skill", id: Skill.ID.make("review") } as const
+      const target = { kind: "skill.activation", id: Skill.ID.make("review") } as const
       yield* skills.transform((editor) => editor.add(info("review", "First")))
       yield* preferences.set(target, "disabled")
       yield* skills.transform((editor) => editor.add(info("review", "Override")))

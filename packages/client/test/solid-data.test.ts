@@ -24,7 +24,9 @@ test("global preferences reproject skill availability across locations without r
     fetch: async (input, init) => {
       const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
       if (url.pathname === "/api/preferences")
-        return Response.json(disabled ? [{ target: { kind: "skill", id: skill.id }, state: "disabled" }] : [])
+        return Response.json(
+          disabled ? [{ target: { kind: "skill.activation", id: skill.id }, value: "disabled" }] : [],
+        )
       const location = { directory: url.searchParams.get("location[directory]") ?? "/first" }
       if (url.pathname === "/api/skill") {
         skillReads++
@@ -58,14 +60,14 @@ test("global preferences reproject skill availability across locations without r
       id: "evt_preference",
       type: "preferences.updated",
       created: 1,
-      data: { target: { kind: "skill", id: skill.id } },
+      data: { target: { kind: "skill.activation", id: skill.id } },
     }
     listeners.forEach((listener) => listener({ name: event.type, details: event }))
     await wait(
       () =>
         setup.data.location.skill.available({ directory: "/first" })?.length === 0 &&
         setup.data.location.skill.available({ directory: "/second" })?.length === 0 &&
-        setup.data.preferences.list()?.[0]?.state === "disabled",
+        setup.data.preferences.list()?.[0]?.value === "disabled",
     )
     expect(setup.data.location.skill.list({ directory: "/first" })).toEqual([skill])
 

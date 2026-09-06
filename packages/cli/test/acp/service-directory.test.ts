@@ -8,7 +8,7 @@ describe("acp service directory behavior", () => {
     await using fixture = makeACPFixture({
       fetch(request) {
         if (request.path === "/api/preferences")
-          return Response.json([{ target: { kind: "skill", id: "verify" }, state: "disabled" }])
+          return Response.json([{ target: { kind: "skill.activation", id: "verify" }, value: "disabled" }])
         if (request.path === "/api/session" && request.method === "POST")
           return Response.json({ data: makeSession("ses_preferences") })
         return undefined

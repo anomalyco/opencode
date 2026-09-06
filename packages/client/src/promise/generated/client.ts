@@ -2082,7 +2082,7 @@ export function make(options: ClientOptions) {
           {
             method: "PUT",
             path: `/api/preferences/${encodeURIComponent(input.kind)}/${encodeURIComponent(input.id)}`,
-            body: { state: input["state"] },
+            body: { value: input["value"] },
             successStatus: 204,
             declaredStatuses: [400, 401],
             empty: true,

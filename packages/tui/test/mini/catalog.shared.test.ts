@@ -22,7 +22,7 @@ describe("run catalog shared", () => {
           ],
         })
       if (url.pathname === "/api/preferences")
-        return json([{ target: { kind: "skill", id: "effect" }, state: "disabled" }])
+        return json([{ target: { kind: "skill.activation", id: "effect" }, value: "disabled" }])
       return undefined
     })
     expect(await loadRunCommands(createApi(calls.fetch), location)).toEqual([
