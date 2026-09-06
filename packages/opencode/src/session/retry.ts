@@ -38,6 +38,11 @@ const RETRYABLE_MESSAGE_PATTERNS = [
   /^timeout$|\b(?:request|response|connection|network|stream|read) (?:timeout|timed out|time out)\b/i,
   /try your request again|retry your request|resource exhausted|resource_exhausted/i,
   /\btry again (?:later|in\b)|\b(?:currently|temporarily) at capacity\b/i,
+  // Additional patterns to catch provider-busy messages from self-hosted or gateway
+  // deployments that don't include numeric status codes in their short failure messages.
+  /no eligible device/i,
+  /no available device(s)?/i,
+  /model (?:temporarily )?unavailable/i,
 ]
 
 function cap(ms: number) {
