@@ -155,6 +155,13 @@ export function fromOpenaiRequest(body: any): CommonRequest {
       const c = (m as any).content
       const out: any = { role: "assistant" }
       if (typeof c === "string" && c.length > 0) out.content = c
+      if (Array.isArray(c)) {
+        const text = c
+          .filter((p: any) => p && p.type === "output_text" && typeof p.text === "string")
+          .map((p: any) => p.text)
+          .join("")
+        if (text.length > 0) out.content = text
+      }
       if (Array.isArray((m as any).tool_calls)) out.tool_calls = (m as any).tool_calls
       msgs.push(out)
       continue
