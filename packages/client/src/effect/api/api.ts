@@ -605,7 +605,10 @@ export type SessionLogOutput =
           readonly type: "session.execution.interrupted"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?: Location.Ref | undefined
-          readonly data: { readonly sessionID: Session.ID; readonly reason: "user" | "shutdown" | "superseded" }
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly reason: "user" | "shutdown" | "superseded" | "inactivity"
+          }
         }
       | {
           readonly id: Event.ID
