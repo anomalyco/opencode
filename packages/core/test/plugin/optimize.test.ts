@@ -56,9 +56,10 @@ describe("OptimizePlugin", () => {
     )
   })
 
-  test("preserves prompt plugin IDs and exposes a separate tool optimization", () => {
+  test("preserves prompt plugin IDs and exposes separate lab tool optimizations", () => {
     expect(OptimizePlugin.Plugins.map((plugin) => plugin.id)).toEqual([
-      "opencode.optimize.tools",
+      "opencode.optimize.openai.tools",
+      "opencode.optimize.anthropic.tools",
       "opencode.prompt.openai",
       "opencode.prompt.kimi",
       "opencode.prompt.arcee",
@@ -144,7 +145,8 @@ describe("OptimizePlugin", () => {
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
-      yield* OptimizePlugin.ToolsPlugin.effect(pluginHost)
+      yield* OptimizePlugin.OpenAIToolsPlugin.effect(pluginHost)
+      yield* OptimizePlugin.AnthropicToolsPlugin.effect(pluginHost)
       const cases = [
         ["openai", "gpt-5", ["edit", "patch", "read", "shell", "write"]],
         ["openrouter", "openai/gpt-6-astra", ["edit", "patch", "read", "shell", "write"]],
@@ -176,14 +178,15 @@ describe("OptimizePlugin", () => {
     }),
   )
 
-  it.effect("can disable tool optimization while retaining the OpenAI prompt", () =>
+  it.effect("can disable OpenAI tool optimization while retaining its prompt and Anthropic tool optimization", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       yield* OptimizePlugin.OpenAIPlugin.effect(pluginHost)
+      yield* OptimizePlugin.AnthropicToolsPlugin.effect(pluginHost)
       yield* Effect.scoped(
         Effect.gen(function* () {
-          yield* OptimizePlugin.ToolsPlugin.effect(pluginHost)
+          yield* OptimizePlugin.OpenAIToolsPlugin.effect(pluginHost)
           const event = context("gpt-5")
           yield* hooks.trigger("session", "context", event)
           expect(event.system[0]?.text).toContain("# Delegation")
@@ -195,6 +198,10 @@ describe("OptimizePlugin", () => {
       yield* hooks.trigger("session", "context", event)
       expect(event.system[0]?.text).toContain("# Delegation")
       expect(Object.keys(event.tools).sort()).toEqual(["edit", "glob", "grep", "patch", "read", "shell", "write"])
+      const claude = context("claude-sonnet-4-6")
+      yield* hooks.trigger("session", "context", claude)
+      expect(claude.system.map((part) => part.text)).toEqual([fallback])
+      expect(Object.keys(claude.tools).sort()).toEqual(["edit", "patch", "read", "shell", "write"])
     }),
   )
 
@@ -264,7 +271,7 @@ describe("OptimizePlugin", () => {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       yield* OptimizePlugin.OpenAIPlugin.effect(pluginHost)
-      yield* OptimizePlugin.ToolsPlugin.effect(pluginHost)
+      yield* OptimizePlugin.OpenAIToolsPlugin.effect(pluginHost)
       yield* agents.transform((editor) => editor.remove(Agent.ID.make("build")))
       const event = context("gpt-5")
 

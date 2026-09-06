@@ -18,9 +18,17 @@ export const OpenAIPlugin = make("opencode.prompt.openai", (model) => {
   return id.includes("gpt-6") ? PROMPT_ASTRA : PROMPT_GPT
 })
 
-export const ToolsPlugin = make("opencode.optimize.tools", (model, tools) => {
+export const OpenAIToolsPlugin = make("opencode.optimize.openai.tools", (model, tools) => {
   const ids = [model.id, model.modelID, model.family].join(" ").toLowerCase()
-  if (!ids.includes("gpt") && !ids.includes("claude")) return undefined
+  if (!ids.includes("gpt")) return undefined
+  delete tools.grep
+  delete tools.glob
+  return undefined
+})
+
+export const AnthropicToolsPlugin = make("opencode.optimize.anthropic.tools", (model, tools) => {
+  const ids = [model.id, model.modelID, model.family].join(" ").toLowerCase()
+  if (!ids.includes("claude")) return undefined
   delete tools.grep
   delete tools.glob
   return undefined
@@ -37,7 +45,14 @@ export const MetaPlugin = make("opencode.prompt.meta", (model) => {
   return PROMPT_META.replaceAll("{{MODEL_NAME}}", model.name)
 })
 
-export const Plugins = [ToolsPlugin, OpenAIPlugin, KimiPlugin, ArceePlugin, MetaPlugin] as const
+export const Plugins = [
+  OpenAIToolsPlugin,
+  AnthropicToolsPlugin,
+  OpenAIPlugin,
+  KimiPlugin,
+  ArceePlugin,
+  MetaPlugin,
+] as const
 
 function make(
   id: string,
