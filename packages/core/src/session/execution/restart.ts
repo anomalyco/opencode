@@ -200,7 +200,16 @@ export const layer = (options?: Options) =>
           const suspended = new Set(
             [...(yield* store.listSuspended()), ...children].filter((sessionID) => !active.has(sessionID)),
           )
-          yield* store.releaseChildClaims(children)
+          yield* Effect.forEach(
+            yield* store.listChildClaims(children),
+            (sessionID) =>
+              bus.publish(
+                SessionEvent.Execution.Interrupted,
+                { sessionID, reason: "superseded" },
+                { commit: () => store.release(sessionID) },
+              ),
+            { discard: true },
+          )
           yield* Effect.forEach(
             // Admit shell outcomes before a recovered child can start its first model request.
             pending.toSorted((a, b) => Number(a.recovery.kind === "subagent") - Number(b.recovery.kind === "subagent")),
