@@ -9,6 +9,26 @@ import { CommandMap, Definitions } from "../src/config/v1/keybind"
 
 const decodeInfo = Schema.decodeUnknownSync(Info)
 
+test.each(["targetFps", "maxFps"])("validates optional positive finite %s", (key) => {
+  expect(decodeInfo({})).toEqual({})
+  for (const value of [0.5, 60, 1000]) {
+    expect(decodeInfo({ [key]: value })).toEqual({ [key]: value })
+  }
+  for (const value of [0, -1, NaN, Infinity, -Infinity, "60", null]) {
+    expect(() => decodeInfo({ [key]: value })).toThrow()
+  }
+})
+
+test("resolves independent frame rate settings without imposing defaults", () => {
+  expect(resolve(decodeInfo({ targetFps: 120, maxFps: 30 }), { terminalSuspend: true })).toMatchObject({
+    targetFps: 120,
+    maxFps: 30,
+  })
+  const defaults = resolve({}, { terminalSuspend: true })
+  expect(defaults.targetFps).toBeUndefined()
+  expect(defaults.maxFps).toBeUndefined()
+})
+
 test("validates the three explicit diff source defaults", () => {
   for (const source of ["branch", "committed", "working"] as const) {
     expect(decodeInfo({ diffs: { source } })).toEqual({ diffs: { source } })
