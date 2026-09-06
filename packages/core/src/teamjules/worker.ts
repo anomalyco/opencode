@@ -4,8 +4,10 @@ import * as fs from "node:fs/promises";
 
 export interface TaskLease {
   taskId: string;
+  workspaceId: string;
   repositoryUrl: string;
   branch: string;
+  pigeonCapability?: string; // The pre-assigned GitPigeon mesh for this workspace
 }
 
 export class TeamJulesWorker {
@@ -28,11 +30,16 @@ export class TeamJulesWorker {
     await this.exec("git", ["clone", "-b", lease.branch, lease.repositoryUrl, worktreePath]);
     
     // 2. Initialize GitPigeon in the new worktree
-    console.log(`[TeamJules] Starting GitPigeon mesh sync on ${worktreePath}...`);
-    const pigeonOutput = await this.exec("git", ["pigeon", "init"], { cwd: worktreePath });
-    
-    // 3. Extract the enrollment capability/invite URL from the output
-    const pigeonInviteUrl = this.extractInviteUrl(pigeonOutput);
+    let pigeonInviteUrl = "";
+    if (lease.pigeonCapability) {
+      console.log(`[TeamJules] Joining assigned GitPigeon mesh for workspace ${lease.workspaceId}...`);
+      await this.exec("git", ["pigeon", "init", lease.pigeonCapability, lease.taskId], { cwd: worktreePath });
+      pigeonInviteUrl = lease.pigeonCapability;
+    } else {
+      console.log(`[TeamJules] Starting NEW GitPigeon mesh on ${worktreePath}...`);
+      const pigeonOutput = await this.exec("git", ["pigeon", "init"], { cwd: worktreePath });
+      pigeonInviteUrl = this.extractInviteUrl(pigeonOutput) || "";
+    }
 
     if (!pigeonInviteUrl) {
       console.warn("[TeamJules] Warning: Could not parse GitPigeon invite URL. Sync may not be active.");

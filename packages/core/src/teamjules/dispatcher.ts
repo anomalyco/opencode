@@ -1,4 +1,5 @@
 import { TeamJulesWorker, type TaskLease } from "./worker";
+import { randomBytes, createHash } from "node:crypto";
 
 export interface TaskState {
   status: "pending" | "running" | "completed" | "failed";
@@ -14,6 +15,7 @@ export interface TaskState {
 export class TaskDispatcher {
   private worker: TeamJulesWorker;
   private tasks: Map<string, TaskState> = new Map();
+  private workspaceMeshes: Map<string, string> = new Map(); // Maps workspaceId -> pigeonCapability
 
   constructor(workspaceRoot: string) {
     this.worker = new TeamJulesWorker(workspaceRoot);
@@ -24,6 +26,17 @@ export class TaskDispatcher {
    */
   async dispatchTask(lease: TaskLease): Promise<void> {
     this.tasks.set(lease.taskId, { status: "pending" });
+
+    // Deterministically assign or reuse a unique GitPigeon capability per Workspace
+    if (!lease.pigeonCapability) {
+      if (!this.workspaceMeshes.has(lease.workspaceId)) {
+        // Generate a cryptographically secure, unique mesh ID and secret for this workspace
+        const repoId = createHash('sha256').update(lease.workspaceId).digest('hex').slice(0, 16);
+        const secret = randomBytes(32).toString('hex');
+        this.workspaceMeshes.set(lease.workspaceId, `gitpigeon://sync/${repoId}#${secret}`);
+      }
+      lease.pigeonCapability = this.workspaceMeshes.get(lease.workspaceId)!;
+    }
 
     try {
       // 1. Check out worktree and start GitPigeon
