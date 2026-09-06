@@ -4,6 +4,7 @@ import { Integration } from "@opencode-ai/core/integration"
 import { WebSearch } from "@opencode-ai/core/websearch"
 import { WebSearchExa } from "@opencode-ai/core/plugin/websearch/exa"
 import { WebSearchFirecrawl } from "@opencode-ai/core/plugin/websearch/firecrawl"
+import { WebSearchKeenable } from "@opencode-ai/core/plugin/websearch/keenable"
 import { WebSearchParallel } from "@opencode-ai/core/plugin/websearch/parallel"
 import { WebSearchTavily } from "@opencode-ai/core/plugin/websearch/tavily"
 import { host, integrationHost, webSearchHost } from "./host"
@@ -189,6 +190,87 @@ describe("built-in web search providers", () => {
         },
       })
       expect(JSON.stringify(output)).not.toContain("parallel-secret")
+    }),
+  )
+
+  it.effect("registers Keenable with keyless and keyed Search API access", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          query: "effect typescript",
+          mode: "pro",
+          results: [
+            {
+              title: "Effect",
+              url: "https://effect.website",
+              description: "",
+              snippet: "Effect documentation",
+              published_at: "2026-07-25T00:00:00Z",
+              acquired_at: "2026-08-01T00:00:00Z",
+            },
+            {
+              title: "",
+              url: "https://effect.website/docs",
+              description: "Effect docs index",
+              snippet: "",
+              acquired_at: "2026-08-01T00:00:00Z",
+            },
+          ],
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchKeenable.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect(yield* integrations.get(Integration.ID.make("keenable"))).toMatchObject({
+        id: "keenable",
+        name: "Keenable",
+        methods: [{ type: "key" }, { type: "env", names: ["KEENABLE_API_KEY"] }],
+      })
+      const query = {
+        query: "effect typescript",
+        providerID: WebSearch.ID.make("keenable"),
+      }
+      expect(yield* websearch.query(query)).toEqual(
+        new WebSearch.Response({
+          providerID: WebSearch.ID.make("keenable"),
+          results: [
+            {
+              url: "https://effect.website",
+              title: "Effect",
+              content: "Effect documentation",
+              time: { published: Date.parse("2026-07-25T00:00:00Z") },
+            },
+            {
+              url: "https://effect.website/docs",
+              content: "Effect docs index",
+              time: {},
+            },
+          ],
+        }),
+      )
+      expect(requests[0]).toMatchObject({
+        url: WebSearchKeenable.endpoint,
+        headers: { "x-keenable-title": "opencode" },
+        body: {
+          query: "effect typescript",
+          max_results: 8,
+          snippet_max_length: 1000,
+        },
+      })
+      expect(requests[0]?.headers.authorization).toBeUndefined()
+
+      yield* integrations.connection.key({
+        integrationID: Integration.ID.make("keenable"),
+        key: "keenable-secret",
+      })
+      yield* websearch.query(query)
+      expect(requests[1]).toMatchObject({
+        url: WebSearchKeenable.keyedEndpoint,
+        headers: { authorization: "Bearer keenable-secret", "x-keenable-title": "opencode" },
+      })
     }),
   )
 
