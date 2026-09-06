@@ -36,7 +36,8 @@ ultimate source of truth.
 - [x] Template literals with interpolation.
 - [x] Regular-expression literals.
 - [x] `NaN` and `Infinity` globals.
-- [ ] BigInt literals and in-interpreter BigInt arithmetic; BigInt remains invalid at JSON-like host boundaries.
+- [x] `BigInt(...)`, bigint literals, exact arithmetic, updates, `toString(radix)`, and `valueOf()`; bigint values stay
+      native across tool calls and become precise decimal strings only in final program results.
 - [ ] Arbitrary Symbol primitive values and symbol-keyed properties. The confined `Symbol.iterator` and
       `Symbol.asyncIterator` keys are available only for custom iterator protocols.
 - [ ] Tagged-template calls.

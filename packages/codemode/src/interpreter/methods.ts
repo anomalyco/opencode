@@ -97,6 +97,17 @@ export const invokeIntrinsic = <R>(
   if (typeof ref.receiver === "number") {
     return Effect.succeed(invokeNumberMethod(ref.receiver, ref.name, args, node))
   }
+  if (typeof ref.receiver === "bigint") {
+    if (ref.name === "valueOf") return Effect.succeed(ref.receiver)
+    const radix = args[0]
+    if (radix !== undefined && typeof radix !== "number") {
+      throw new InterpreterRuntimeError("BigInt.toString expects a numeric radix.", node).as("TypeError")
+    }
+    if (typeof radix === "number" && (radix < 2 || radix > 36)) {
+      throw new InterpreterRuntimeError("BigInt.toString radix must be between 2 and 36.", node).as("RangeError")
+    }
+    return Effect.succeed(ref.receiver.toString(radix))
+  }
   if (Array.isArray(ref.receiver)) {
     return invokeArrayMethod(runner, ref.receiver, ref.name, args, node)
   }

@@ -311,6 +311,7 @@ export class Interpreter<R> {
     globalScope.set("Math", { mutable: false, value: new GlobalNamespace("Math") })
     globalScope.set("JSON", { mutable: false, value: new GlobalNamespace("JSON") })
     globalScope.set("Number", { mutable: false, value: new CoercionFunction("Number") })
+    globalScope.set("BigInt", { mutable: false, value: new CoercionFunction("BigInt") })
     globalScope.set("String", { mutable: false, value: new CoercionFunction("String") })
     globalScope.set("Boolean", { mutable: false, value: new CoercionFunction("Boolean") })
     globalScope.set("Array", { mutable: false, value: new GlobalNamespace("Array") })
@@ -1893,18 +1894,18 @@ export class Interpreter<R> {
 
     // CodeMode numeric coercion, not host Number(): null-prototype data objects would make
     // the host throw during ToPrimitive, and opaque runtime references must reject clearly.
-    const operand = (current: unknown): number => {
+    const operand = (current: unknown): number | bigint => {
       if (containsOpaqueReference(current)) {
         throw new InterpreterRuntimeError(`'${operator}' requires a data value.`, argument, "InvalidDataValue")
       }
-      return coerceToNumber(current)
+      return typeof current === "bigint" ? current : coerceToNumber(current)
     }
 
     if (argument.type === "Identifier") {
       return Effect.sync(() => {
         const name = getString(argument, "name")
         const current = operand(this.scopes.get(name, argument))
-        const next = current + increment
+        const next = typeof current === "bigint" ? current + BigInt(increment) : current + increment
         this.scopes.set(name, next, argument)
         return prefix ? next : current
       })
@@ -1913,7 +1914,7 @@ export class Interpreter<R> {
     if (argument.type === "MemberExpression") {
       return this.modifyMember(argument, (current) => {
         const value = operand(current)
-        const next = value + increment
+        const next = typeof value === "bigint" ? value + BigInt(increment) : value + increment
         return Effect.succeed({ write: true, next, result: prefix ? next : value })
       })
     }
@@ -2578,6 +2579,11 @@ export class Interpreter<R> {
 
       if (typeof objectValue === "number") {
         if (typeof key === "string" && numberMethods.has(key)) return new IntrinsicReference(objectValue, key)
+        return new ComputedValue(undefined)
+      }
+
+      if (typeof objectValue === "bigint") {
+        if (key === "toString" || key === "valueOf") return new IntrinsicReference(objectValue, key)
         return new ComputedValue(undefined)
       }
 

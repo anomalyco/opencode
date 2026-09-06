@@ -137,7 +137,7 @@ export class JsonMethodReference {
 }
 
 export class CoercionFunction {
-  constructor(readonly name: "Number" | "String" | "Boolean" | "parseInt" | "parseFloat" | "isFinite" | "isNaN") {}
+  constructor(readonly name: "Number" | "String" | "Boolean" | "BigInt" | "parseInt" | "parseFloat" | "isFinite" | "isNaN") {}
 }
 
 export class UriFunction {

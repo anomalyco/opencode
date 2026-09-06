@@ -27,6 +27,7 @@ const MAX_RENDER_DEPTH = 8
 type RenderContext = {
   readonly definitions: Readonly<Record<string, JsonSchema>>
   readonly pretty: boolean
+  readonly bigints?: WeakSet<JsonSchema>
 }
 
 const hasUnresolvedRef = (
@@ -125,6 +126,7 @@ const renderSchema = (
   seen: ReadonlySet<string> = new Set(),
 ): string => {
   if (depth > MAX_RENDER_DEPTH) return "unknown"
+  if (ctx.bigints?.has(schema)) return "bigint"
   const nested =
     schema.definitions === undefined && schema.$defs === undefined
       ? ctx
@@ -200,14 +202,52 @@ const renderSchema = (
   return "unknown"
 }
 
+const markBigInts = (ast: unknown, schema: JsonSchema, bigints: WeakSet<JsonSchema>): void => {
+  if (ast === null || typeof ast !== "object" || !("_tag" in ast)) return
+  if (ast._tag === "BigInt") {
+    bigints.add(schema)
+    return
+  }
+  if (ast._tag === "Objects" && "propertySignatures" in ast && Array.isArray(ast.propertySignatures)) {
+    for (const field of ast.propertySignatures) {
+      if (typeof field !== "object" || field === null || !("name" in field) || !("type" in field)) continue
+      if (typeof field.name !== "string") continue
+      const property = schema.properties?.[field.name]
+      if (property !== undefined) markBigInts(field.type, property, bigints)
+    }
+    if ("indexSignatures" in ast && Array.isArray(ast.indexSignatures) && typeof schema.additionalProperties === "object") {
+      for (const index of ast.indexSignatures) {
+        if (typeof index === "object" && index !== null && "type" in index) {
+          markBigInts(index.type, schema.additionalProperties, bigints)
+        }
+      }
+    }
+    return
+  }
+  if (ast._tag === "Arrays" && "rest" in ast && Array.isArray(ast.rest) && schema.items !== undefined) {
+    for (const item of ast.rest) markBigInts(item, schema.items, bigints)
+    return
+  }
+  if (ast._tag === "Union" && "types" in ast && Array.isArray(ast.types)) {
+    const alternatives = schema.anyOf ?? schema.oneOf
+    if (alternatives === undefined) return
+    for (const [index, item] of ast.types.entries()) {
+      const alternative = alternatives[index]
+      if (alternative !== undefined) markBigInts(item, alternative, bigints)
+    }
+  }
+}
+
 export const toTypeScript = (schema: Schema.Top, decoded = false, pretty = false): string => {
   try {
-    const visible = decoded ? Schema.toType(schema) : schema
+    const visible = decoded ? Schema.toType(schema) : Schema.toEncoded(schema)
     const document = Schema.toJsonSchemaDocument(visible) as {
       readonly schema: JsonSchema
       readonly definitions?: Readonly<Record<string, JsonSchema>>
     }
-    return renderSchema(document.schema, { definitions: document.definitions ?? {}, pretty })
+    const bigints = new WeakSet<JsonSchema>()
+    markBigInts(visible.ast, document.schema, bigints)
+    return renderSchema(document.schema, { definitions: document.definitions ?? {}, pretty, bigints })
   } catch {
     return "unknown"
   }

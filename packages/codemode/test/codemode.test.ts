@@ -438,6 +438,97 @@ describe("CodeMode console capture", () => {
   })
 })
 
+describe("CodeMode bigint values", () => {
+  test("preserves exact bigint arithmetic and stringifies nested final results", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.execute({
+        code: `
+          const value = BigInt("9007199254740993")
+          return { value, doubled: value * 2n, nested: [value + 1n], hex: value.toString(16) }
+        `,
+      }),
+    )
+
+    expect(result).toStrictEqual({
+      ok: true,
+      value: {
+        value: "9007199254740993",
+        doubled: "18014398509481986",
+        nested: ["9007199254740994"],
+        hex: "20000000000001",
+      },
+      toolCalls: [],
+    })
+    expect(Schema.decodeUnknownSync(CodeMode.Result)(JSON.parse(JSON.stringify(result)))).toStrictEqual(result)
+  })
+
+  test("returns a structured diagnostic when an uncaught object contains bigint values", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.execute({
+        code: `throw { value: 9007199254740993n, nested: [1n] }`,
+      }),
+    )
+
+    expect(result).toStrictEqual({
+      ok: false,
+      error: {
+        kind: "ExecutionFailure",
+        message: 'Uncaught: {"value":"9007199254740993","nested":["1"]}',
+      },
+      toolCalls: [],
+    })
+  })
+
+  test("preserves native bigint values across chained schema-backed tool calls", async () => {
+    const lookup = Tool.make({
+      description: "Look up an exact integer",
+      input: Schema.Struct({}),
+      output: Schema.Struct({ value: Schema.BigIntFromString }),
+      execute: () => Effect.succeed({ value: "9007199254740993" }),
+    })
+    const double = Tool.make({
+      description: "Double an exact integer",
+      input: Schema.Struct({ value: Schema.BigInt }),
+      output: Schema.BigInt,
+      execute: ({ value }) => Effect.succeed(value * 2n),
+    })
+
+    const result = await Effect.runPromise(
+      CodeMode.make({ tools: { lookup, double } }).execute(`
+        const result = await tools.lookup({})
+        return await tools.double({ value: result.value + 1n })
+      `),
+    )
+
+    expect(result).toStrictEqual({
+      ok: true,
+      value: "18014398509481988",
+      toolCalls: [{ name: "lookup" }, { name: "double" }],
+    })
+  })
+
+  test("increments bigint bindings and object properties without losing precision", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.execute({
+        code: `
+          let value = 9007199254740993n
+          const record = { value }
+          value++
+          ++record.value
+          return [value, record.value, typeof value, String(value)]
+        `,
+      }),
+    )
+
+    expect(result.ok ? result.value : result.error).toStrictEqual([
+      "9007199254740994",
+      "9007199254740994",
+      "bigint",
+      "9007199254740994",
+    ])
+  })
+})
+
 describe("CodeMode output budget", () => {
   test("absent maxOutputBytes means no truncation at all", async () => {
     const result = await Effect.runPromise(

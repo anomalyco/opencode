@@ -45,9 +45,9 @@ export const normalizeError = (error: unknown): Diagnostic => {
       message = (value as { message: string }).message
     } else {
       try {
-        message = JSON.stringify(copyOut(value, "json")) ?? String(value)
+        message = JSON.stringify(copyOut(value, "nullify")) ?? coerceToString(value)
       } catch {
-        message = String(value)
+        message = coerceToString(value)
       }
     }
     return { kind: "ExecutionFailure", message: `Uncaught: ${message}` }
