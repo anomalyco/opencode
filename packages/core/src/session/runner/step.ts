@@ -10,7 +10,7 @@ import {
   type ToolCall,
 } from "@opencode-ai/ai"
 import type { Agent } from "@opencode-ai/schema/agent"
-import { Cause, Data, Effect, Exit, Fiber, Option, Stream } from "effect"
+import { Cause, Data, DateTime, Effect, Exit, Fiber, Option, Stream } from "effect"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Bus } from "../../bus.js"
 import { Permission } from "../../permission.js"
@@ -77,6 +77,7 @@ export const make = Effect.gen(function* () {
       model: input.model.ref,
       providerMetadataKey: input.model.model.route.providerMetadataKey ?? input.model.model.provider,
       snapshot: startSnapshot,
+      started: yield* DateTime.now,
     })
     const toolRuns: Array<{
       readonly call: ToolCall

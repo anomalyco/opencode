@@ -77,7 +77,7 @@ import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
 import { ID, Model } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { Provider } from "@opencode-ai/core/provider"
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream } from "effect"
+import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -3123,6 +3123,42 @@ describe("SessionRunnerLLM", () => {
     expect(systemTexts(s.requests[1])).toContain("Replacement context")
   })
 
+  scenario("includes provider wait in the token throughput interval for a buffered reply", function* (s) {
+    yield* s.admit("Hello")
+    const requested = yield* Deferred.make<void>()
+    yield* s.llm.push(
+      Stream.fromEffect(Deferred.succeed(requested, undefined).pipe(Effect.andThen(Effect.sleep(2_690)))).pipe(
+        Stream.flatMap(() => Stream.make(LLMEvent.stepStart({ index: 0 }))),
+        Stream.concat(
+          Stream.fromEffect(Effect.sleep(10)).pipe(
+            Stream.flatMap(() =>
+              Stream.fromIterable(
+                TestLLM.complete(
+                  { reason: { normalized: "stop" }, usage: { inputTokens: 100, outputTokens: 12 } },
+                  LLMEvent.textStart({ id: "text" }),
+                  LLMEvent.textDelta({ id: "text", text: "Hello. What are you working on?" }),
+                  LLMEvent.textEnd({ id: "text" }),
+                ).slice(1),
+              ),
+            ),
+          ),
+        ),
+      ),
+    )
+    const run = yield* Effect.forkChild(s.resume)
+    yield* Deferred.await(requested)
+    yield* TestClock.adjust(2_700)
+    yield* Fiber.join(run)
+
+    const assistant = requireAssistant(yield* s.context)
+    expect(assistant.tokens?.output).toBe(12)
+    expect(DateTime.toEpochMillis(assistant.time.streamed!) - DateTime.toEpochMillis(assistant.time.created)).toBe(
+      2_700,
+    )
+    yield* replaySessionProjection(sessionID)
+    expect(requireAssistant(yield* s.context).time).toEqual(assistant.time)
+  })
+
   scenario("consumes the full provider stream before recording its boundary and settling local tools", function* (s) {
     yield* s.admit("Echo this")
     const tail = yield* Deferred.make<void>()
@@ -4760,14 +4796,18 @@ describe("SessionRunnerLLM", () => {
   scenario("bounds jittered exponential backoff for eligible pre-output failures", function* (s) {
     yield* s.admit("Retry transport")
     yield* s.llm.push(Stream.fail(providerUnavailable()))
-    yield* s.llm.push(TestLLM.text("Recovered", "retry-success"))
+    yield* s.llm.push(
+      Stream.fromEffect(Effect.sleep(400)).pipe(
+        Stream.flatMap(() => Stream.fromIterable(TestLLM.text("Recovered", "retry-success"))),
+      ),
+    )
 
     const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
     yield* Queue.take(scheduled)
     yield* TestClock.adjust("1599 millis")
     expect(s.requests).toHaveLength(1)
-    yield* TestClock.adjust("801 millis")
+    yield* TestClock.adjust("1201 millis")
     yield* Fiber.join(run)
 
     expect(s.requests).toHaveLength(2)
@@ -4780,6 +4820,8 @@ describe("SessionRunnerLLM", () => {
     ])
     yield* replaySessionProjection(sessionID)
     expect((yield* s.context).filter((message) => message.type === "assistant")).toHaveLength(1)
+    const assistant = requireAssistant(yield* s.context)
+    expect(DateTime.toEpochMillis(assistant.time.streamed!) - DateTime.toEpochMillis(assistant.time.created)).toBe(400)
   })
 
   scenario("does not start another physical attempt after interruption during retry backoff", function* (s) {
