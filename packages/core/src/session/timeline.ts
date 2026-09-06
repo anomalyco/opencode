@@ -2,30 +2,26 @@ export * as Timeline from "./timeline.js"
 
 import { and, asc, desc, eq, lt, sql, type SQL } from "drizzle-orm"
 import { Effect, Schema } from "effect"
-import { Event } from "@opencode-ai/schema/event"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
+import { statics } from "@opencode-ai/schema/schema"
 import type { Database } from "../database/database.js"
 import { SessionMessageTable, SessionTable, TimelineTable } from "./sql.js"
 
-export const ID = Schema.String.check(Schema.isStartsWith("tl_")).pipe(Schema.brand("Timeline.ID"))
+export const ID = Schema.String.check(Schema.isStartsWith("tml_")).pipe(
+  Schema.brand("Timeline.ID"),
+  statics((schema) => ({ create: () => schema.make(`tml_${crypto.randomUUID()}`) })),
+)
 export type ID = typeof ID.Type
-
-export const root = (sessionID: Session.ID) => ID.make(`tl_${sessionID}`)
-export const fromEvent = (eventID: Event.ID) => ID.make(`tl_${eventID}`)
 
 type DB = Omit<Database.Interface["db"], "$client">
 
 export type Position = { readonly id: ID; readonly seq: number }
 export type Range = { readonly id: ID; readonly end: number | null }
 
-export const create = Effect.fn("Timeline.create")(function* (db: DB, id: ID, base?: Position) {
-  yield* db
-    .insert(TimelineTable)
-    .values({ id, base_id: base?.id, base_seq: base?.seq })
-    .onConflictDoNothing()
-    .run()
-    .pipe(Effect.orDie)
+export const create = Effect.fn("Timeline.create")(function* (db: DB, base?: Position) {
+  const id = ID.create()
+  yield* db.insert(TimelineTable).values({ id, base_id: base?.id, base_seq: base?.seq }).run().pipe(Effect.orDie)
   return id
 })
 

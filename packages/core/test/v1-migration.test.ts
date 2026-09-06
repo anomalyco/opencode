@@ -30,7 +30,7 @@ const session = (
   overrides: Partial<V1Migration.TransformInput["session"]> = {},
 ): V1Migration.TransformInput["session"] => ({
   id: SessionSchema.ID.make("ses_test"),
-  timeline_id: Timeline.root(SessionSchema.ID.make("ses_test")),
+  timeline_id: Timeline.ID.create(),
   project_id: Project.ID.global,
   workspace_id: null,
   parent_id: null,
@@ -897,7 +897,7 @@ describe("V1Migration database workflow", () => {
         yield* db.run(
           sql`INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES ('prt_1', ${source.id}, 'ses_test', 1, 2, ${sourcePart.data})`,
         )
-        const timelineID = yield* Timeline.create(db, Timeline.root(SessionSchema.ID.make("ses_test")))
+        const timelineID = yield* Timeline.create(db)
         yield* db.run(
           sql`INSERT INTO session_message (id, session_id, timeline_id, type, seq, time_created, time_updated, data) VALUES ('msg_stale', 'ses_test', ${timelineID}, 'user', 0, 1, 1, '{"text":"stale","time":{"created":1}}')`,
         )
@@ -969,7 +969,7 @@ describe("V1Migration database workflow", () => {
         yield* db.run(
           sql`CREATE TRIGGER fail_b BEFORE UPDATE ON session_v2 WHEN NEW.id = 'ses_b' BEGIN SELECT RAISE(ABORT, 'stop'); END`,
         )
-        const timelineID = yield* Timeline.create(db, Timeline.root(SessionSchema.ID.make("ses_b")))
+        const timelineID = yield* Timeline.create(db)
         yield* db.run(
           sql`INSERT INTO session_message (id, session_id, timeline_id, type, seq, time_created, time_updated, data) VALUES ('msg_stale_b', 'ses_b', ${timelineID}, 'user', 0, 7, 8, '{"text":"stale","time":{"created":7}}')`,
         )

@@ -14,7 +14,11 @@ const migration: DatabaseMigration.Migration = {
           \`base_seq\` integer,
           CONSTRAINT \`fk_timeline_base_id_timeline_id_fk\` FOREIGN KEY (\`base_id\`) REFERENCES \`timeline\`(\`id\`)
         );`)
-      yield* tx.run(`INSERT INTO timeline (id) SELECT 'tl_' || id FROM session_v2`)
+      // Use the small Session table to map existing messages to independent roots.
+      // The replacement table below enforces NOT NULL on the backfilled IDs.
+      yield* tx.run(`ALTER TABLE session_v2 ADD timeline_id text`)
+      yield* tx.run(`UPDATE session_v2 SET timeline_id = 'tml_' || lower(hex(randomblob(16)))`)
+      yield* tx.run(`INSERT INTO timeline (id) SELECT timeline_id FROM session_v2`)
       yield* tx.run(`CREATE TABLE \`__new_session_message\` (
           \`id\` text PRIMARY KEY,
           \`session_id\` text NOT NULL,
@@ -27,7 +31,7 @@ const migration: DatabaseMigration.Migration = {
           CONSTRAINT \`fk_session_message_timeline_id_timeline_id_fk\` FOREIGN KEY (\`timeline_id\`) REFERENCES \`timeline\`(\`id\`) ON DELETE CASCADE
         );`)
       yield* tx.run(
-        `INSERT INTO \`__new_session_message\` (\`id\`, \`session_id\`, \`timeline_id\`, \`type\`, \`seq\`, \`time_created\`, \`time_updated\`, \`data\`) SELECT \`id\`, \`session_id\`, 'tl_' || session_id, \`type\`, \`seq\`, \`time_created\`, \`time_updated\`, \`data\` FROM \`session_message\``,
+        `INSERT INTO \`__new_session_message\` (\`id\`, \`session_id\`, \`timeline_id\`, \`type\`, \`seq\`, \`time_created\`, \`time_updated\`, \`data\`) SELECT \`id\`, \`session_id\`, (SELECT timeline_id FROM session_v2 WHERE session_v2.id = session_message.session_id), \`type\`, \`seq\`, \`time_created\`, \`time_updated\`, \`data\` FROM \`session_message\``,
       )
       yield* tx.run(`DROP TABLE \`session_message\``)
       yield* tx.run(`ALTER TABLE \`__new_session_message\` RENAME TO \`session_message\``)
@@ -81,7 +85,7 @@ const migration: DatabaseMigration.Migration = {
           CONSTRAINT \`fk_session_v2_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
         );`)
       yield* tx.run(
-        `INSERT INTO \`__new_session_v2\` (\`id\`, \`timeline_id\`, \`project_id\`, \`workspace_id\`, \`parent_id\`, \`fork_session_id\`, \`fork_boundary\`, \`slug\`, \`directory\`, \`path\`, \`title\`, \`version\`, \`share_url\`, \`summary_additions\`, \`summary_deletions\`, \`summary_files\`, \`summary_diffs\`, \`metadata\`, \`cost\`, \`tokens_input\`, \`tokens_output\`, \`tokens_reasoning\`, \`tokens_cache_read\`, \`tokens_cache_write\`, \`revert\`, \`permission\`, \`agent\`, \`model\`, \`time_created\`, \`time_updated\`, \`time_idle\`, \`time_viewed\`, \`idle_outcome\`, \`time_compacting\`, \`time_archived\`, \`time_suspended\`, \`resume_attempts\`) SELECT \`id\`, 'tl_' || id, \`project_id\`, \`workspace_id\`, \`parent_id\`, \`fork_session_id\`, \`fork_boundary\`, \`slug\`, \`directory\`, \`path\`, \`title\`, \`version\`, \`share_url\`, \`summary_additions\`, \`summary_deletions\`, \`summary_files\`, \`summary_diffs\`, \`metadata\`, \`cost\`, \`tokens_input\`, \`tokens_output\`, \`tokens_reasoning\`, \`tokens_cache_read\`, \`tokens_cache_write\`, \`revert\`, \`permission\`, \`agent\`, \`model\`, \`time_created\`, \`time_updated\`, \`time_idle\`, \`time_viewed\`, \`idle_outcome\`, \`time_compacting\`, \`time_archived\`, \`time_suspended\`, \`resume_attempts\` FROM \`session_v2\``,
+        `INSERT INTO \`__new_session_v2\` (\`id\`, \`timeline_id\`, \`project_id\`, \`workspace_id\`, \`parent_id\`, \`fork_session_id\`, \`fork_boundary\`, \`slug\`, \`directory\`, \`path\`, \`title\`, \`version\`, \`share_url\`, \`summary_additions\`, \`summary_deletions\`, \`summary_files\`, \`summary_diffs\`, \`metadata\`, \`cost\`, \`tokens_input\`, \`tokens_output\`, \`tokens_reasoning\`, \`tokens_cache_read\`, \`tokens_cache_write\`, \`revert\`, \`permission\`, \`agent\`, \`model\`, \`time_created\`, \`time_updated\`, \`time_idle\`, \`time_viewed\`, \`idle_outcome\`, \`time_compacting\`, \`time_archived\`, \`time_suspended\`, \`resume_attempts\`) SELECT \`id\`, \`timeline_id\`, \`project_id\`, \`workspace_id\`, \`parent_id\`, \`fork_session_id\`, \`fork_boundary\`, \`slug\`, \`directory\`, \`path\`, \`title\`, \`version\`, \`share_url\`, \`summary_additions\`, \`summary_deletions\`, \`summary_files\`, \`summary_diffs\`, \`metadata\`, \`cost\`, \`tokens_input\`, \`tokens_output\`, \`tokens_reasoning\`, \`tokens_cache_read\`, \`tokens_cache_write\`, \`revert\`, \`permission\`, \`agent\`, \`model\`, \`time_created\`, \`time_updated\`, \`time_idle\`, \`time_viewed\`, \`idle_outcome\`, \`time_compacting\`, \`time_archived\`, \`time_suspended\`, \`resume_attempts\` FROM \`session_v2\``,
       )
       yield* tx.run(`DROP TABLE \`session_v2\``)
       yield* tx.run(`ALTER TABLE \`__new_session_v2\` RENAME TO \`session_v2\``)
@@ -93,9 +97,7 @@ const migration: DatabaseMigration.Migration = {
       yield* tx.run(`DROP TABLE __timeline_session_inbox`)
       yield* tx.run(`INSERT INTO session_pending SELECT * FROM __timeline_session_pending`)
       yield* tx.run(`DROP TABLE __timeline_session_pending`)
-      yield* tx.run(
-        `CREATE UNIQUE INDEX \`session_message_session_seq_idx\` ON \`session_message\` (\`session_id\`,\`seq\`);`,
-      )
+      yield* tx.run(`CREATE INDEX \`session_message_session_seq_idx\` ON \`session_message\` (\`session_id\`,\`seq\`);`)
       yield* tx.run(
         `CREATE UNIQUE INDEX \`session_message_timeline_seq_idx\` ON \`session_message\` (\`timeline_id\`,\`seq\`);`,
       )

@@ -38,7 +38,7 @@ const seed = Effect.fn(function* (ref: Location.Ref = a) {
   yield* database.db
     .insert(SessionTable)
     .values({
-      timeline_id: yield* Timeline.create(database.db, Timeline.root(id)),
+      timeline_id: yield* Timeline.create(database.db),
       id,
       project_id: Project.ID.global,
       directory: ref.directory,

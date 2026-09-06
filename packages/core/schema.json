@@ -1960,7 +1960,7 @@
           "isExpression": false
         }
       ],
-      "isUnique": true,
+      "isUnique": false,
       "where": null,
       "origin": "manual",
       "name": "session_message_session_seq_idx",

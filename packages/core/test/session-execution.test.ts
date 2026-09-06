@@ -1283,13 +1283,13 @@ function seedSessions(
       .onConflictDoNothing()
       .run()
       .pipe(Effect.orDie)
-    yield* Effect.forEach(sessionIDs, (id) => Timeline.create(database.db, Timeline.root(id)), { discard: true })
+    const timelines = yield* Effect.forEach(sessionIDs, () => Timeline.create(database.db))
     yield* database.db
       .insert(SessionTable)
       .values(
-        sessionIDs.map((id) => ({
+        sessionIDs.map((id, index) => ({
           id,
-          timeline_id: Timeline.root(id),
+          timeline_id: timelines[index],
           project_id: Project.ID.global,
           slug: id,
           directory: "/project",

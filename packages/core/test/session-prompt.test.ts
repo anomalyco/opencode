@@ -114,7 +114,7 @@ const setup = Effect.gen(function* () {
   yield* db
     .insert(SessionTable)
     .values({
-      timeline_id: yield* Timeline.create(db, Timeline.root(sessionID)),
+      timeline_id: yield* Timeline.create(db),
       id: sessionID,
       project_id: Project.ID.global,
       slug: "test",
@@ -167,7 +167,7 @@ const assistantRow = (id: SessionMessage.ID, seq: number) => {
       time: { created: DateTime.makeUnsafe(0) },
     }),
   )
-  return { id, session_id: sessionID, timeline_id: Timeline.root(sessionID), type, seq, time_created: 0, data }
+  return { id, session_id: sessionID, timeline_id: Timeline.current(sessionID), type, seq, time_created: 0, data }
 }
 
 describe("Session.prompt", () => {
@@ -813,7 +813,7 @@ describe("Session.prompt", () => {
       yield* db
         .insert(SessionTable)
         .values({
-          timeline_id: yield* Timeline.create(db, Timeline.root(other)),
+          timeline_id: yield* Timeline.create(db),
           id: other,
           project_id: Project.ID.global,
           slug: "other",
@@ -853,7 +853,7 @@ describe("Session.prompt", () => {
         .values({
           id: messageID,
           session_id: sessionID,
-          timeline_id: Timeline.root(sessionID),
+          timeline_id: Timeline.current(sessionID),
           type,
           seq: 0,
           time_created: 0,

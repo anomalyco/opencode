@@ -150,7 +150,7 @@ testEffect(
     yield* database.db
       .insert(SessionTable)
       .values({
-        timeline_id: yield* Timeline.create(database.db, Timeline.root(sessionID)),
+        timeline_id: yield* Timeline.create(database.db),
         id: sessionID,
         project_id: Project.ID.global,
         slug: "publish",

@@ -133,7 +133,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     limit: 1,
   })
   const base = yield* Timeline.prefix(db, ranges, active?.seq ?? end)
-  const timelineID = yield* Timeline.create(db, Timeline.root(event.data.sessionID), base)
+  const timelineID = yield* Timeline.create(db, base)
 
   const stored = yield* db
     .insert(SessionTable)
@@ -426,7 +426,7 @@ const layer = Layer.effectDiscard(
     const db = (yield* Database.Service).db
     yield* bus.project(SessionEvent.Created, (event) =>
       Effect.gen(function* () {
-        const timelineID = yield* Timeline.create(db, Timeline.root(event.data.sessionID))
+        const timelineID = yield* Timeline.create(db)
         const stored = yield* db
           .insert(SessionTable)
           .values({
@@ -718,7 +718,7 @@ const layer = Layer.effectDiscard(
         const boundary = yield* Timeline.find(db, event.data.sessionID, event.data.to)
         if (!boundary) return yield* Effect.die(new Error(`Revert boundary message not found: ${event.data.to}`))
         const base = yield* Timeline.prefix(db, yield* Timeline.ranges(db, boundary.timeline_id), boundary.seq)
-        const timelineID = yield* Timeline.create(db, Timeline.fromEvent(event.id), base)
+        const timelineID = yield* Timeline.create(db, base)
         yield* db
           .update(SessionTable)
           .set({ timeline_id: timelineID, revert: null, time_updated: event.created })

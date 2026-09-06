@@ -140,7 +140,7 @@ const insertSession = (id: Session.ID, title?: string, created?: number, model?:
     yield* db
       .insert(SessionTable)
       .values({
-        timeline_id: yield* Timeline.create(db, Timeline.root(id)),
+        timeline_id: yield* Timeline.create(db),
         id,
         project_id: Project.ID.global,
         slug: id,
@@ -341,7 +341,7 @@ it.effect("generates a title for an explicitly requested child session", () =>
     yield* db
       .insert(SessionTable)
       .values({
-        timeline_id: yield* Timeline.create(db, Timeline.root(sessionID)),
+        timeline_id: yield* Timeline.create(db),
         id: sessionID,
         project_id: Project.ID.global,
         parent_id: Session.ID.make("ses_title_parent"),

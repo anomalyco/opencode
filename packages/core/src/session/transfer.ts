@@ -99,7 +99,7 @@ const layer = Layer.effect(
           return {
             id: existing.has(message.id) ? SessionMessage.ID.create() : message.id,
             session_id: sessionID,
-            timeline_id: Timeline.root(sessionID),
+            timeline_id: Timeline.current(sessionID),
             type,
             seq: index + 1,
             time_created: DateTime.toEpochMillis(message.time.created),

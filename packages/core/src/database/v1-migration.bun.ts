@@ -466,7 +466,12 @@ export function run(): Effect.Effect<RunResult, never, Database.Service | Global
                   sessionID: nextID.id,
                   projectID: nextID.project_id,
                 })
-              const timelineID = yield* Timeline.create(tx, Timeline.root(SessionSchema.ID.make(nextID.id)))
+              const existing = yield* tx
+                .select({ timelineID: SessionTable.timeline_id })
+                .from(SessionTable)
+                .where(eq(SessionTable.id, SessionSchema.ID.make(nextID.id)))
+                .get()
+              const timelineID = existing?.timelineID ?? (yield* Timeline.create(tx))
               yield* tx.run(sql`
                   INSERT OR IGNORE INTO session_v2 (
                     id, timeline_id, project_id, workspace_id, parent_id, slug, directory, path, title, version, share_url,

@@ -114,7 +114,8 @@ export const SessionMessageTable = sqliteTable(
     data: text({ mode: "json" }).notNull().$type<SessionMessageData>(),
   },
   (table) => [
-    uniqueIndex("session_message_session_seq_idx").on(table.session_id, table.seq),
+    // A restored Session ID may have retained messages in another timeline.
+    index("session_message_session_seq_idx").on(table.session_id, table.seq),
     uniqueIndex("session_message_timeline_seq_idx").on(table.timeline_id, table.seq),
     index("session_message_timeline_type_seq_idx").on(table.timeline_id, table.type, table.seq),
     index("session_message_unsettled_idx").on(table.timeline_id, table.seq).where(unsettled(table)),

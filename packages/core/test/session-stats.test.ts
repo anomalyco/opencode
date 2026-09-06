@@ -47,7 +47,7 @@ describe("SessionStats", () => {
         .values([
           {
             id: sessionID,
-            timeline_id: yield* Timeline.create(db, Timeline.root(sessionID)),
+            timeline_id: yield* Timeline.create(db),
             project_id: projectID,
             slug: "root",
             directory: "/stats",
@@ -55,7 +55,7 @@ describe("SessionStats", () => {
           },
           {
             id: childID,
-            timeline_id: yield* Timeline.create(db, Timeline.root(childID)),
+            timeline_id: yield* Timeline.create(db),
             project_id: projectID,
             parent_id: sessionID,
             slug: "child",
@@ -64,7 +64,7 @@ describe("SessionStats", () => {
           },
           {
             id: forkID,
-            timeline_id: yield* Timeline.create(db, Timeline.root(forkID)),
+            timeline_id: yield* Timeline.create(db),
             project_id: projectID,
             fork_session_id: sessionID,
             slug: "fork",
@@ -74,7 +74,7 @@ describe("SessionStats", () => {
           },
           {
             id: usageOnlyID,
-            timeline_id: yield* Timeline.create(db, Timeline.root(usageOnlyID)),
+            timeline_id: yield* Timeline.create(db),
             project_id: projectID,
             slug: "usage",
             directory: "/stats",
@@ -82,7 +82,7 @@ describe("SessionStats", () => {
           },
           {
             id: otherSessionID,
-            timeline_id: yield* Timeline.create(db, Timeline.root(otherSessionID)),
+            timeline_id: yield* Timeline.create(db),
             project_id: otherProjectID,
             slug: "other",
             directory: "/other",
@@ -312,17 +312,13 @@ function assistant(
   })
 }
 
-function messageRow(
-  sessionID: Session.ID,
-  seq: number,
-  message: SessionMessage.Info,
-): typeof SessionMessageTable.$inferInsert {
+function messageRow(sessionID: Session.ID, seq: number, message: SessionMessage.Info) {
   const encoded = encodeMessage(message)
   const { id, type, ...data } = encoded
   return {
     id: SessionMessage.ID.make(id),
     session_id: sessionID,
-    timeline_id: Timeline.root(sessionID),
+    timeline_id: Timeline.current(sessionID),
     type,
     seq,
     time_created: encoded.time.created,

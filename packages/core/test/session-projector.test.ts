@@ -63,7 +63,7 @@ const assistantRow = (
   return {
     id,
     session_id: sessionID,
-    timeline_id: Timeline.root(sessionID),
+    timeline_id: Timeline.current(sessionID),
     type,
     seq,
     time_created: DateTime.toEpochMillis(time.created),
@@ -81,7 +81,7 @@ const seedSession = (overrides?: Partial<typeof SessionTable.$inferInsert>) =>
     yield* db
       .insert(SessionTable)
       .values({
-        timeline_id: yield* Timeline.create(db, Timeline.root(sessionID)),
+        timeline_id: yield* Timeline.create(db),
         id: sessionID,
         project_id: Project.ID.global,
         slug: "test",
@@ -281,7 +281,7 @@ describe("SessionProjector", () => {
         .values({
           id: messageID,
           session_id: sessionID,
-          timeline_id: Timeline.root(sessionID),
+          timeline_id: Timeline.current(sessionID),
           type: "user",
           seq: 0,
           data: { text: "valid before corruption", time: { created: 0 } },
@@ -490,7 +490,7 @@ describe("SessionProjector", () => {
         .values({
           id,
           session_id: sessionID,
-          timeline_id: Timeline.root(sessionID),
+          timeline_id: Timeline.current(sessionID),
           type,
           seq: 0,
           time_created: 0,

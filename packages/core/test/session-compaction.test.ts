@@ -285,7 +285,7 @@ const insertSession = (id: Session.ID, overrides?: Partial<typeof SessionTable.$
     yield* db
       .insert(SessionTable)
       .values({
-        timeline_id: yield* Timeline.create(db, Timeline.root(id)),
+        timeline_id: yield* Timeline.create(db),
         id,
         project_id: Project.ID.global,
         slug: id,

@@ -210,7 +210,7 @@ const setup = Effect.gen(function* () {
   yield* db
     .insert(SessionTable)
     .values({
-      timeline_id: yield* Timeline.create(db, Timeline.root(sessionID)),
+      timeline_id: yield* Timeline.create(db),
       id: sessionID,
       project_id: (yield* projects.resolve(AbsolutePath.make("/project"))).id,
       slug: "generate-test",
