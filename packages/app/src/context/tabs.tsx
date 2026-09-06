@@ -46,6 +46,20 @@ export const tabHref = (tab: Tab) =>
 
 export const tabKey = (tab: Tab) => (tab.type === "draft" ? `draft:${tab.draftID}` : `${tab.server}\n${tabHref(tab)}`)
 
+/**
+ * Does the recent-tab pointer aim at one of these sessions?
+ *
+ * The caller's `removed` list only covers sessions that still had an open tab. This pointer is
+ * persisted on its own and outlives the tab, so it has to be matched against the deleted ids
+ * directly - otherwise it keeps aiming at a session that is gone and the next start restores it.
+ */
+export function recentKeyPointsAtSession(recentKey: string | undefined, sessionIDs: string[]) {
+  if (!recentKey) return false
+  // The key ends in the tab href, so matching the tail is enough - and it avoids splitting on the
+  // separator, which the server key itself can contain.
+  return sessionIDs.some((sessionID) => recentKey.endsWith(`/session/${sessionID}`))
+}
+
 export function sessionHasOpenTab(tabs: Tab[], server: ServerConnection.Key, session: Session) {
   return tabs.some((tab) => tab.type === "session" && tab.server === server && tab.sessionId === session.id)
 }
@@ -307,8 +321,13 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
           setStore(
             produce((tabs) => {
               const sessionIDs = new Set(input.sessionIDs)
+              // `params.dir` only exists on the legacy `/:dir/session/:id` route. On
+              // `/server/:serverKey/session/:id` there is no directory, so requiring one left
+              // `currentHref` undefined, `removedCurrent` false and the follow-up navigation
+              // below unreached - the deleted session stayed in the address bar and the view
+              // kept trying to load it. `tabHref` builds from server and session id alone.
               const currentHref =
-                targetServer === server.key && params.dir && params.id
+                targetServer === server.key && params.id
                   ? tabHref({
                       type: "session",
                       server: targetServer,
@@ -342,7 +361,8 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
               else navigate("/")
             }),
           )
-          if (recent.key && removed.includes(recent.key)) setRecentKey(undefined)
+          if (recentKeyPointsAtSession(recent.key, input.sessionIDs) || (recent.key && removed.includes(recent.key)))
+            setRecentKey(undefined)
         })
         for (const key of removed) memory.remove(key)
         for (const key of removed) removeInfo(key)
