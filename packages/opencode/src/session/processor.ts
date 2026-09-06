@@ -68,6 +68,7 @@ interface ProcessorContext extends Input {
   toolcalls: Record<string, ToolCall>
   shouldBreak: boolean
   snapshot: string | undefined
+  files: Set<string>
   blocked: boolean
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
@@ -107,6 +108,7 @@ const layer = Layer.effect(
         toolcalls: {},
         shouldBreak: false,
         snapshot: initialSnapshot,
+        files: new Set(),
         blocked: false,
         needsCompaction: false,
         currentText: undefined,
@@ -388,6 +390,7 @@ const layer = Layer.effect(
               return
             }
             const rawOutput = toolResultOutput(value)
+            for (const file of SessionSummary.filesFromToolMetadata(rawOutput.metadata)) ctx.files.add(file)
             const normalized = yield* Effect.forEach(rawOutput.attachments ?? [], (attachment) =>
               attachment.mime.startsWith("image/")
                 ? image.normalize(attachment).pipe(
@@ -469,15 +472,15 @@ const layer = Layer.effect(
             })
             yield* session.updateMessage(ctx.assistantMessage)
             if (ctx.snapshot) {
-              const patch = yield* snapshot.patch(ctx.snapshot)
-              if (patch.files.length) {
+              const files = Array.from(ctx.files)
+              if (files.length) {
                 yield* session.updatePart({
                   id: PartID.ascending(),
                   messageID: ctx.assistantMessage.id,
                   sessionID: ctx.sessionID,
                   type: "patch",
-                  hash: patch.hash,
-                  files: patch.files,
+                  hash: ctx.snapshot,
+                  files,
                 })
               }
               ctx.snapshot = undefined
@@ -552,15 +555,15 @@ const layer = Layer.effect(
 
       const cleanup = Effect.fn("SessionProcessor.cleanup")(function* () {
         if (ctx.snapshot) {
-          const patch = yield* snapshot.patch(ctx.snapshot)
-          if (patch.files.length) {
+          const files = Array.from(ctx.files)
+          if (files.length) {
             yield* session.updatePart({
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
               sessionID: ctx.sessionID,
               type: "patch",
-              hash: patch.hash,
-              files: patch.files,
+              hash: ctx.snapshot,
+              files,
             })
           }
           ctx.snapshot = undefined

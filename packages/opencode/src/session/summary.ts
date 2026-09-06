@@ -6,6 +6,18 @@ import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
 import { SessionID, MessageID } from "./schema"
 import { Config } from "@/config/config"
+import { isRecord } from "@/util/record"
+
+export function filesFromToolMetadata(metadata: unknown): string[] {
+  if (!isRecord(metadata)) return []
+  const files: string[] = []
+  if (typeof metadata.filepath === "string") files.push(metadata.filepath)
+  if (isRecord(metadata.filediff) && typeof metadata.filediff.file === "string") files.push(metadata.filediff.file)
+  if (Array.isArray(metadata.files))
+    for (const item of metadata.files)
+      if (isRecord(item) && typeof item.filePath === "string") files.push(item.filePath)
+  return files
+}
 
 function unquoteGitPath(input: string) {
   if (!input.startsWith('"')) return input
@@ -95,8 +107,13 @@ const layer = Layer.effect(
           if (part.type === "step-finish" && part.snapshot) to = part.snapshot
         }
       }
-      if (from && to) return yield* snapshot.diffFull(from, to)
-      return []
+      if (!from || !to) return []
+      const paths = new Set<string>()
+      for (const item of input.messages)
+        for (const part of item.parts)
+          if (part.type === "tool" && part.state.status === "completed")
+            for (const file of filesFromToolMetadata(part.state.metadata)) paths.add(file)
+      return yield* snapshot.diffFull(from, to, Array.from(paths))
     })
 
     const summarize = Effect.fn("SessionSummary.summarize")(function* (input: {
