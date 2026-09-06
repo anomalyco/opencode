@@ -133,36 +133,45 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
         name={language.t("context.usage.tokens")}
         value={context()?.total.toLocaleString(language.intl()) ?? "0"}
       />
+      <ContextTooltipRow
+        name="TPS"
+        value={context()?.tps !== undefined ? `${context()?.tps} t/s` : "–"}
+      />
     </div>
   )
 
   return (
     <Show when={params.id}>
       <TooltipV2 value={tooltipValue()} placement={props.placement ?? "top"} shift={-8}>
-        <Switch>
-          <Match when={variant() === "indicator"}>{circle()}</Match>
-          <Match when={buttonAppearance() === "v2"}>
-            <IconButtonV2
-              type="button"
-              variant="ghost-muted"
-              size="large"
-              icon={circleV2()}
-              onClick={openContext}
-              aria-label={language.t("context.usage.view")}
-            />
-          </Match>
-          <Match when={true}>
-            <Button
-              type="button"
-              variant="ghost"
-              class="size-6"
-              onClick={openContext}
-              aria-label={language.t("context.usage.view")}
-            >
-              {circle()}
-            </Button>
-          </Match>
-        </Switch>
+        <div class="flex min-w-0 items-center gap-1">
+          <Switch>
+            <Match when={variant() === "indicator"}>{circle()}</Match>
+            <Match when={buttonAppearance() === "v2"}>
+              <IconButtonV2
+                type="button"
+                variant="ghost-muted"
+                size="large"
+                icon={circleV2()}
+                onClick={openContext}
+                aria-label={language.t("context.usage.view")}
+              />
+            </Match>
+            <Match when={true}>
+              <Button
+                type="button"
+                variant="ghost"
+                class="size-6"
+                onClick={openContext}
+                aria-label={language.t("context.usage.view")}
+              >
+                {circle()}
+              </Button>
+            </Match>
+          </Switch>
+          <span class="shrink-0 text-[10px] leading-none tabular-nums text-v2-text-text-muted">
+            {context()?.tps !== undefined ? `${context()?.tps}` : ""}
+          </span>
+        </div>
       </TooltipV2>
     </Show>
   )
