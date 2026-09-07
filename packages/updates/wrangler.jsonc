@@ -17,6 +17,14 @@
       "pattern": "update.opencode.ai",
       "custom_domain": true,
     },
+    {
+      "pattern": "opencode.ai/update",
+      "zone_name": "opencode.ai",
+    },
+    {
+      "pattern": "opencode.ai/update/*",
+      "zone_name": "opencode.ai",
+    },
   ],
   "d1_databases": [
     {

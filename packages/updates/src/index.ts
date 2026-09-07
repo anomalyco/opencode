@@ -39,6 +39,12 @@ const githubKeys = createRemoteJWKSet(new URL("https://token.actions.githubuserc
 export default {
   async fetch(request: Request, env: Env, ctx: Pick<ExecutionContext, "waitUntil">): Promise<Response> {
     const url = new URL(request.url)
+    // The legacy hostname only exposes /admin, covered by its existing Access policy.
+    const prefix =
+      url.hostname !== "update.opencode.ai" && (url.pathname === "/update" || url.pathname.startsWith("/update/"))
+        ? "/update"
+        : ""
+    const pathname = url.pathname.slice(prefix.length) || "/"
     ctx.waitUntil(
       env.EVENTS.send([
         {
@@ -47,7 +53,7 @@ export default {
           timestamp: new Date().toISOString(),
           payload: {
             method: request.method,
-            path: url.pathname,
+            path: pathname,
             useragent: request.headers.get("user-agent"),
             ip: request.headers.get("cf-connecting-ip"),
             cf_country: request.cf?.country,
@@ -57,14 +63,14 @@ export default {
       ]).catch(() => console.error("Failed to send update request event to the data lake")),
     )
 
-    if (url.pathname === "/") return json({ service: "opencode-updates" })
-    if (url.pathname === "/admin" && request.method === "GET") return admin(request, env)
-    if (url.pathname === "/admin/activate" && request.method === "POST") return markArtifact(request, env, "active")
-    if (url.pathname === "/admin/minimum" && request.method === "POST") return markArtifact(request, env, "minimum")
-    if (url.pathname === "/api/publish" && request.method === "POST") return publishArtifact(request, env)
+    if (pathname === "/") return json({ service: "opencode-updates" })
+    if (pathname === "/admin" && request.method === "GET") return admin(request, env, prefix)
+    if (pathname === "/admin/activate" && request.method === "POST") return markArtifact(request, env, "active", prefix)
+    if (pathname === "/admin/minimum" && request.method === "POST") return markArtifact(request, env, "minimum", prefix)
+    if (pathname === "/api/publish" && request.method === "POST") return publishArtifact(request, env)
     if (request.method !== "GET") return new Response("Method not allowed", { status: 405 })
 
-    const [root, ...path] = url.pathname.split("/").filter(Boolean)
+    const [root, ...path] = pathname.split("/").filter(Boolean)
     if (root !== "api" || path.length < 1 || path.length > 3 || !path.every(validIdentifier)) {
       return new Response("Not found", { status: 404 })
     }
@@ -143,7 +149,7 @@ function releaseVersion(input: string) {
   )
 }
 
-async function admin(request: Request, env: Env) {
+async function admin(request: Request, env: Env, prefix: string) {
   const url = new URL(request.url)
   const requestedPage = Number.parseInt(url.searchParams.get("page") ?? "1", 10)
   const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1
@@ -168,7 +174,7 @@ async function admin(request: Request, env: Env) {
           ${
             artifact.active
               ? ""
-              : `<form action="/admin/activate" method="post">
+              : `<form action="${prefix}/admin/activate" method="post">
                   <input type="hidden" name="channel" value="${escape(artifact.channel)}">
                   <input type="hidden" name="name" value="${escape(artifact.name)}">
                   <input type="hidden" name="distribution" value="${escape(artifact.distribution)}">
@@ -176,7 +182,7 @@ async function admin(request: Request, env: Env) {
                   <button class="btn" data-size="sm" data-variant="outline" type="submit">Activate</button>
                 </form>`
           }
-          <form action="/admin/minimum" method="post">
+          <form action="${prefix}/admin/minimum" method="post">
             <input type="hidden" name="channel" value="${escape(artifact.channel)}">
             <input type="hidden" name="name" value="${escape(artifact.name)}">
             <input type="hidden" name="distribution" value="${escape(artifact.distribution)}">
@@ -232,8 +238,8 @@ async function admin(request: Request, env: Env) {
       <footer class="pagination">
         <p>Page ${currentPage} of ${pages} · ${count?.total ?? 0} builds</p>
         <nav aria-label="Pagination">
-          ${currentPage > 1 ? `<a class="btn" data-size="sm" data-variant="outline" href="/admin?page=${currentPage - 1}">Previous</a>` : ""}
-          ${currentPage < pages ? `<a class="btn" data-size="sm" data-variant="outline" href="/admin?page=${currentPage + 1}">Next</a>` : ""}
+          ${currentPage > 1 ? `<a class="btn" data-size="sm" data-variant="outline" href="${prefix}/admin?page=${currentPage - 1}">Previous</a>` : ""}
+          ${currentPage < pages ? `<a class="btn" data-size="sm" data-variant="outline" href="${prefix}/admin?page=${currentPage + 1}">Next</a>` : ""}
         </nav>
       </footer>
     </article>
@@ -270,7 +276,7 @@ async function publishArtifact(request: Request, env: Env) {
   return json({ published: true })
 }
 
-async function markArtifact(request: Request, env: Env, flag: "active" | "minimum") {
+async function markArtifact(request: Request, env: Env, flag: "active" | "minimum", prefix: string) {
   const invalid = validMutation(request)
   if (invalid) return invalid
   const form = await request.formData()
@@ -303,7 +309,7 @@ async function markArtifact(request: Request, env: Env, flag: "active" | "minimu
       `UPDATE artifact SET ${flag} = ?, time_updated = ? WHERE channel = ? AND name = ? AND distribution = ? AND version = ?`,
     ).bind(enabled, Date.now(), key.channel, key.name, key.distribution, key.version),
   ])
-  return Response.redirect(new URL("/admin", request.url), 303)
+  return Response.redirect(new URL(`${prefix}/admin`, request.url), 303)
 }
 
 function activate(db: D1Database, artifacts: ArtifactInput[]) {

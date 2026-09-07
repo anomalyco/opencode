@@ -3,10 +3,13 @@
 The updates Worker serves all selected artifacts for a channel.
 
 ```sh
-curl 'https://update.opencode.ai/api/latest'
-curl 'https://update.opencode.ai/api/latest/cli'
-curl 'https://update.opencode.ai/api/latest/cli/npm'
+curl 'https://opencode.ai/update/api/latest'
+curl 'https://opencode.ai/update/api/latest/cli'
+curl 'https://opencode.ai/update/api/latest/cli/npm'
 ```
+
+The same Worker also serves the original `https://update.opencode.ai` hostname without
+the `/update` prefix. Admin forms, pagination, and redirects preserve the request's mount.
 
 ## Minimum releases
 
@@ -35,13 +38,14 @@ Choose a minimum that older clients can install and that can itself consume the 
 release. For the CLI package migration, retain a package-aware release published as
 `@opencode-ai/cli` as the minimum before activating releases under `@opencode/cli`.
 
-The `/admin*` route must be protected by a Cloudflare Access self-hosted application. Configure the application with:
+Both admin mounts must be protected by the same Cloudflare Access self-hosted application:
 
-- Public hostname: `update.opencode.ai`
-- Path: `admin*`
+- Public hostname/path: `update.opencode.ai/admin*`
+- Public hostname/path: `opencode.ai/update/admin*`
 - Policy: allow the OpenCode team identity group
 
-The Worker has `workers_dev` and preview URLs disabled so the custom hostname is its only public entry point.
+Configure Access before deploying the new Worker route. The Worker has `workers_dev`
+and preview URLs disabled; it is exposed through its custom hostname and the `/update` routes.
 
 ## Request logging
 
@@ -49,7 +53,8 @@ Every request reaching the Worker emits an unsampled event at request start to t
 Cloudflare lake stream through the `EVENTS` Pipelines binding. Events use
 `source: "update"`, `type: "request"`, an ISO `timestamp`, and a `payload` containing
 the method, path, `useragent`, `ip` (from Cloudflare's `CF-Connecting-IP` header),
-country, and Cloudflare colo. Query strings, request bodies, cookies, and authorization
+country, and Cloudflare colo. The path is normalized without `/update` so both mounts
+share the existing analytics paths. Query strings, request bodies, cookies, and authorization
 headers are not included. Response status and duration are not recorded.
 
 Delivery runs in `waitUntil` without delaying the response. Delivery failures are
@@ -63,7 +68,11 @@ has a single public deployment.
 
 ## Publishing
 
-GitHub Actions publishes artifacts through `POST /api/publish` using a short-lived OIDC token with audience `https://update.opencode.ai`. The Worker accepts only tokens signed by GitHub for repository ID `975734319`, owner ID `66570915`, and `.github/workflows/publish.yml` on configured publishing refs.
+GitHub Actions publishes artifacts through `POST https://opencode.ai/update/api/publish`
+using a short-lived OIDC token with audience `https://update.opencode.ai`. The original
+hostname and token audience remain supported. The Worker accepts only tokens signed by
+GitHub for repository ID `975734319`, owner ID `66570915`, and `.github/workflows/publish.yml`
+on configured publishing refs.
 
 Apply migrations and deploy from this directory:
 

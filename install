@@ -167,7 +167,7 @@ else
 
     package_scope="@opencode"
     if [ -z "$requested_version" ]; then
-        metadata=$(curl -fsSL https://update.opencode.ai/api/beta/cli/npm || true)
+        metadata=$(curl -fsSL https://opencode.ai/update/api/beta/cli/npm || true)
         specific_version=$(echo "$metadata" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
         package=$(echo "$metadata" | sed -n 's/.*"package":"\([^"]*\)".*/\1/p')
 

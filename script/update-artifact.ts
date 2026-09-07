@@ -32,7 +32,7 @@ export namespace UpdateArtifact {
       throw new Error("GitHub OIDC response did not include a token")
 
     for (const attempt of [0, 1, 2]) {
-      const response = await fetch("https://update.opencode.ai/api/publish", {
+      const response = await fetch("https://opencode.ai/update/api/publish", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token.value}`,

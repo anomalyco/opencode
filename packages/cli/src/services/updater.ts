@@ -123,7 +123,7 @@ const make = Effect.gen(function* () {
     const response = yield* Effect.tryPromise({
       try: (signal) =>
         fetch(
-          `https://update.opencode.ai/api/${encodeURIComponent(channel)}/${encodeURIComponent(OPENCODE_ARTIFACT)}/npm?current=${encodeURIComponent(OPENCODE_VERSION)}`,
+          `https://opencode.ai/update/api/${encodeURIComponent(channel)}/${encodeURIComponent(OPENCODE_ARTIFACT)}/npm?current=${encodeURIComponent(OPENCODE_VERSION)}`,
           {
             signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
           },
