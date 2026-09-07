@@ -409,12 +409,14 @@ describe("ConfigNormalize", () => {
         experimental: {
           portable_shell_scanner: true,
           subagent_depth: 0,
+          subagent_fork: true,
           policies: [{ action: "provider.use", resource: "custom", effect: "allow" }],
         },
       }).encoded.experimental,
     ).toEqual({
       portable_shell_scanner: true,
       subagent_depth: 0,
+      subagent_fork: true,
       policies: [
         { action: "provider.use", resource: "*", effect: "deny" },
         { action: "provider.use", resource: "anthropic", effect: "allow" },

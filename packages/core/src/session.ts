@@ -93,6 +93,7 @@ type CompactInput = Parameters<Session.Handle["compact"]>[0] & { sessionID: Sess
 type ForkInput = {
   sessionID: SessionSchema.ID
   boundary: SessionSchema.ForkRequestBoundary
+  parentID?: SessionSchema.ID
 }
 
 export {
@@ -311,7 +312,9 @@ const layer = Layer.effect(
             messageID: input.boundary.messageID,
           })
         if (!boundary) return yield* new ForkEmptyError({ sessionID: input.sessionID })
-        const sessionID = SessionSchema.ID.create()
+        const sessionID = input.parentID
+          ? (yield* result.create({ parentID: input.parentID })).id
+          : SessionSchema.ID.create()
         const inherited = yield* db
           .transaction(() =>
             Effect.all({

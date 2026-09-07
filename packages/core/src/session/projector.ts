@@ -1,6 +1,6 @@
 export * as SessionProjector from "./projector.js"
 
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema, Stream } from "effect"
 import path from "path"
 import { Database } from "../database/database.js"
@@ -144,22 +144,25 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     .pipe(Effect.orDie)
   const copiedSeq = copied?.seq
 
+  const inherited = {
+    fork_session_id: event.data.parentID,
+    fork_boundary: event.data.boundary,
+    project_id: parent.project_id,
+    workspace_id: parent.workspace_id,
+    directory: parent.directory,
+    path: parent.path,
+    title: forkTitle(parent.title ?? undefined),
+    agent: parent.agent,
+    model: parent.model,
+    metadata: parent.metadata,
+  }
   const stored = yield* db
     .insert(SessionTable)
     .values({
       id: event.data.sessionID,
       parent_id: null,
-      fork_session_id: event.data.parentID,
-      fork_boundary: event.data.boundary,
-      project_id: parent.project_id,
-      workspace_id: parent.workspace_id,
+      ...inherited,
       slug: Slug.create(),
-      directory: parent.directory,
-      path: parent.path,
-      title: forkTitle(parent.title ?? undefined),
-      agent: parent.agent,
-      model: parent.model,
-      metadata: parent.metadata,
       version: parent.version,
       cost: 0,
       tokens_input: 0,
@@ -170,7 +173,12 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       time_created: event.created,
       time_updated: event.created,
     })
-    .onConflictDoNothing()
+    // Created records optional ownership; Forked supplies the source's history and defaults.
+    .onConflictDoUpdate({
+      target: SessionTable.id,
+      set: { ...inherited, time_updated: event.created },
+      setWhere: and(isNotNull(SessionTable.parent_id), isNull(SessionTable.fork_session_id)),
+    })
     .returning({ sessionID: SessionTable.id })
     .get()
     .pipe(Effect.orDie)

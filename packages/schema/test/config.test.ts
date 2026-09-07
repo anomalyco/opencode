@@ -10,6 +10,17 @@ import { AbsolutePath } from "../src/schema.js"
 import { WebSearch } from "../src/websearch.js"
 
 describe("Config.Entry", () => {
+  test("keeps subagent forking opt-in", () => {
+    const decode = Schema.decodeUnknownSync(Config.Info)
+    const encode = Schema.encodeSync(Config.Info)
+    expect(encode(decode({ experimental: {} }))).toEqual({ experimental: {} })
+    for (const subagent_fork of [false, true]) {
+      const input = { experimental: { subagent_fork } }
+      expect(encode(decode(input))).toEqual(input)
+    }
+    expect(() => decode({ experimental: { subagent_fork: "true" } })).toThrow()
+  })
+
   test("accepts directory-only worktree config and omits it when absent", () => {
     const decode = Schema.decodeUnknownSync(Config.Info)
     const input = { worktree: { directory: "../worktrees" } }

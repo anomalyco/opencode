@@ -5,6 +5,7 @@ import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Job } from "../../job.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
@@ -38,6 +39,13 @@ export const Input = Schema.Struct({
   }),
 })
 
+const ForkInput = Schema.Struct({
+  ...Input.fields,
+  fork: Schema.optionalKey(Schema.Boolean).annotate({
+    description: "Give the subagent your conversation history before this response.",
+  }),
+})
+
 export const Output = Schema.Struct({
   sessionID: SessionSchema.ID,
   status: Schema.Literals(["completed", "running"]),
@@ -61,17 +69,26 @@ export const Plugin = {
     const config = yield* Config.Service
     const permission = yield* Permission.Service
     const subagents = yield* SubagentJob.make
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
 
     yield* ctx.tool
-      .transform((editor) =>
+      .transform((editor) => {
+        const fork = Config.latest(loaded.entries, "experimental")?.subagent_fork === true
         editor.add({
           name,
           options: { codemode: false },
-          description,
-          input: Input,
+          description: fork
+            ? description.replace(
+                "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
+                "New child sessions start with fresh context by default, so include the context needed for the task.",
+              )
+            : description,
+          input: fork ? ForkInput : Input,
           output: Output,
-          execute: (input, context) =>
+          execute: (input: typeof ForkInput.Type, context) =>
             Effect.gen(function* () {
+              if (fork && input.fork !== undefined && input.sessionID !== undefined)
+                return yield* new ToolFailure({ message: "Cannot use fork with sessionID. Omit one of them." })
               const parent = yield* sessions
                 .get(context.sessionID)
                 .pipe(
@@ -150,18 +167,40 @@ export const Plugin = {
               const model = agent.model ?? parent.model
               const child =
                 existing ??
-                (yield* sessions
-                  .create({
-                    parentID: context.sessionID,
-                    title: input.description,
-                    agent: Agent.ID.make(input.agent),
-                    model,
-                  })
-                  .pipe(
-                    Effect.mapError(
-                      (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
-                    ),
-                  ))
+                (yield* (
+                  fork && input.fork
+                    ? sessions.fork({
+                        sessionID: context.sessionID,
+                        parentID: context.sessionID,
+                        boundary: { type: "before", messageID: context.messageID },
+                      })
+                    : sessions.create({
+                        parentID: context.sessionID,
+                        title: input.description,
+                        agent: Agent.ID.make(input.agent),
+                        model,
+                      })
+                ).pipe(
+                  Effect.mapError(
+                    (error) =>
+                      new ToolFailure({
+                        message:
+                          fork && input.fork
+                            ? `Failed to create subagent: ${error.message}`
+                            : `Parent session not found: ${context.sessionID}`,
+                        error,
+                      }),
+                  ),
+                ))
+
+              if (fork && input.fork)
+                yield* sessions.rename({ sessionID: child.id, title: input.description }).pipe(
+                  Effect.andThen(sessions.switchAgent({ sessionID: child.id, agent: agent.id })),
+                  Effect.andThen(model ? sessions.switchModel({ sessionID: child.id, model }) : Effect.void),
+                  Effect.mapError(
+                    (error) => new ToolFailure({ message: `Failed to configure subagent: ${child.id}`, error }),
+                  ),
+                )
 
               const background = input.background === true
               yield* context.progress({ sessionID: child.id, status: "running" })
@@ -173,7 +212,12 @@ export const Plugin = {
                   sessionID: child.id,
                   text:
                     existing === undefined
-                      ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
+                      ? [
+                          fork && input.fork
+                            ? "You are a forked subagent. Use the inherited history as context and perform only the task below."
+                            : "You are a subagent spawned by another session.",
+                          input.prompt,
+                        ].join("\n")
                       : input.prompt,
                   ...(background && existing === undefined ? { resume: false } : {}),
                 })
@@ -230,8 +274,8 @@ export const Plugin = {
                 metadata: { sessionID: output.sessionID, status: output.status },
               })),
             ),
-        }),
-      )
+        })
+      })
       .pipe(Effect.orDie)
 
     yield* ctx.session.hook("context", (event) =>

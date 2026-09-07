@@ -2045,6 +2045,7 @@ export type ConfigEntry =
         experimental?: {
           portable_shell_scanner?: boolean
           subagent_depth?: number
+          subagent_fork?: boolean
           policies?: Array<{ action: "provider.use"; resource: string; effect: "allow" | "deny" }>
         }
       }
