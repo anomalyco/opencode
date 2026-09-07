@@ -3,6 +3,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { Service } from "@opencode-ai/client/effect/service"
 import { ServiceStatus } from "@opencode-ai/protocol/groups/health"
+import { Plugin } from "@opencode-ai/schema/plugin"
 import { Effect, Schema } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"
@@ -49,8 +50,10 @@ try {
     signal: AbortSignal.timeout(5_000),
   })
   if (tokenOpenApi.status !== 200) throw new Error("Compiled application rejected query authentication")
-  if ((await pluginIDs(info.url, headers)).includes("smoke")) throw new Error("Smoke plugin existed before creation")
-  const plugin = path.join(root, ".opencode", "plugins", "smoke.ts")
+  if ((await activePluginIDs(info.url, headers)).some((id) => id === "smoke"))
+    throw new Error("Smoke plugin existed before creation")
+  // A directory exercises runtime resolution; standalone files bypass the resolver.
+  const plugin = path.join(root, ".opencode", "plugins", "smoke", "index.ts")
   await fs.mkdir(path.dirname(plugin), { recursive: true })
   await fs.writeFile(plugin, pluginSource())
   await waitForPlugin(info.url, headers)
@@ -77,9 +80,7 @@ try {
   if (!winner || !loser) throw new Error("Compiled contenders did not elect one registered owner")
   if (!(await exitsWithin(loser, 10_000))) throw new Error("Losing compiled contender did not exit")
 
-  await Effect.runPromise(
-    Service.stop({ file: registration }).pipe(Effect.provide(NodeFileSystem.layer)),
-  )
+  await Effect.runPromise(Service.stop({ file: registration }).pipe(Effect.provide(NodeFileSystem.layer)))
   if (!(await exitsWithin(winner, 10_000))) throw new Error("Compiled service did not stop")
   for (let attempt = 0; attempt < 200 && (await Bun.file(registration).exists()); attempt++) await Bun.sleep(25)
   if (await Bun.file(registration).exists()) throw new Error("Compiled service registration was not removed")
@@ -144,24 +145,21 @@ function pluginSource() {
   return 'export default { id: "smoke", setup: async () => {} }\n'
 }
 
-async function pluginIDs(url: string, headers: HeadersInit) {
+async function activePluginIDs(url: string, headers: HeadersInit) {
   const endpoint = new URL("/api/plugin", url)
   endpoint.searchParams.set("location[directory]", root)
   const response = await fetch(endpoint, { headers, signal: AbortSignal.timeout(5_000) })
-  const body: unknown = await response.json()
-  if (typeof body !== "object" || body === null || !("data" in body) || !Array.isArray(body.data)) {
-    throw new Error("Compiled service returned an invalid plugin list")
-  }
-  return body.data.flatMap((plugin) =>
-    typeof plugin === "object" && plugin !== null && "id" in plugin && typeof plugin.id === "string" ? [plugin.id] : [],
+  const body = await Schema.decodeUnknownPromise(Schema.Struct({ data: Schema.Array(Plugin.Info) }))(
+    await response.json(),
   )
+  return body.data.flatMap((plugin) => (plugin.state.status === "active" && plugin.id ? [plugin.id] : []))
 }
 
 async function waitForPlugin(url: string, headers: HeadersInit) {
   const deadline = Date.now() + 10_000
   while (Date.now() < deadline) {
-    if ((await pluginIDs(url, headers)).includes("smoke")) return
+    if ((await activePluginIDs(url, headers)).some((id) => id === "smoke")) return
     await Bun.sleep(25)
   }
-  throw new Error("Compiled service did not discover the created plugin")
+  throw new Error("Compiled service did not activate the created plugin directory")
 }

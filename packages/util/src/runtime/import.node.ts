@@ -4,6 +4,12 @@ import { statSync } from "node:fs"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 
+// SEA's entry module has no import.meta.resolve. Use a separate ESM module
+// loaded through the main-context loader so bundling cannot inline it into SEA.
+const resolver = (await importModule("data:text/javascript,export default import.meta.resolve")) as {
+  default: (specifier: string) => string
+}
+
 export async function importModule(specifier: string) {
   const imported = (await new Script(`import(${JSON.stringify(specifier)})`, {
     importModuleDynamically: constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
@@ -28,7 +34,7 @@ export function resolveModule(specifier: string, directory: string) {
   })
   try {
     const resolve = (target: string) => {
-      const resolved = import.meta.resolve(path.isAbsolute(target) ? pathToFileURL(target).href : target)
+      const resolved = resolver.default(path.isAbsolute(target) ? pathToFileURL(target).href : target)
       if (resolved.startsWith("file:")) statSync(new URL(resolved))
       return resolved
     }
