@@ -119,12 +119,13 @@ typing after a large paste uploads one chunk per save rather than the paste. Chu
 boundaries never split a surrogate pair, and a failed upload is evicted so the next save
 retries it.
 
-Blob collection is made safe by validation on write, not by timing. Every document write
-reports the referenced blob ids the store does not hold, and the renderer uploads their
-bytes again from the chunk text or the image `Blob` it still holds; because ids are content
-hashes the already-written reference becomes valid without a rewrite. This covers a chunk
-another tab collected, and an image the composer kept in its history long after its blob
-was collected. The desktop host additionally refreshes `touched_at` for every blob a written
+Blob collection is made safe by validation on write, not by timing. A strict document write
+is refused while it references blob ids the store does not hold, so the previous document
+stays visible; the renderer uploads the missing bytes again from the chunk text or the image
+`Blob` it still holds, renames the references to the ids the uploads returned (content hashes
+normally, fresh ids on a store without WebCrypto), and publishes. This covers a chunk another
+tab collected, and an image the composer kept in its history long after its blob was
+collected. The desktop host additionally refreshes `touched_at` for every blob a written
 document references and collects only blobs unreferenced and untouched for `blobGrace`, so
 repairs stay rare.
 `persisted()` hands the draft store the encoded document (`setDocument`) rather than

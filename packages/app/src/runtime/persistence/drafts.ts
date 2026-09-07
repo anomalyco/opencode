@@ -5,8 +5,12 @@ export type BlobReference = { id: string; url: string }
 
 type Driver = {
   get(key: string): Promise<string | null>
-  /** Store the document and report every blob id it references that the store does not hold. */
-  set(key: string, value: string): Promise<readonly string[]>
+  /**
+   * Store the document and report every blob id it references that the store does not hold. A
+   * strict write is refused (nothing stored) when any are missing, so a document is never visible
+   * with dangling references while its blobs are being restored.
+   */
+  set(key: string, value: string, strict: boolean): Promise<readonly string[]>
   remove(key: string): Promise<void>
   putBlob(blob: Blob): Promise<string>
   getBlob(id: string): Promise<Blob | null>
@@ -105,13 +109,15 @@ export function createDraftStore(driver: Driver): DraftStore {
     return remember(chunks, id, blob ? await blob.text() : "")
   }
   // `sources` collects, for every blob id the encoded document references, a way to produce its
-  // bytes again: the chunk text itself, or the object URL an image reference still carries.
-  type Sources = Map<string, () => Promise<Blob>>
+  // bytes again: the chunk text itself, or the image Blob (or object URL) the reference carries.
+  type Sources = Map<string, { blob: () => Promise<Blob>; chunk?: string }>
   const encode = async (value: unknown, sources: Sources): Promise<unknown> => {
     if (typeof value === "string" && value.length >= draftTextThreshold) {
       const pieces = split(value)
       const ids = await externalize(value)
-      ids.forEach((id, index) => sources.set(id, async () => new Blob([pieces[index]!])))
+      ids.forEach((id, index) =>
+        sources.set(id, { blob: async () => new Blob([pieces[index]!]), chunk: pieces[index] }),
+      )
       return { blob: { kind: "text", ids } }
     }
     if (Array.isArray(value)) return Promise.all(value.map((entry) => encode(entry, sources)))
@@ -121,7 +127,7 @@ export function createDraftStore(driver: Driver): DraftStore {
       const blob = await fetch(item.dataUrl).then((response) => response.blob())
       const { dataUrl: _, ...rest } = item
       const id = await driver.putBlob(blob)
-      sources.set(id, async () => blob)
+      sources.set(id, { blob: async () => blob })
       return { ...rest, blob: { id } }
     }
     if ("blob" in item && item.blob && typeof item.blob === "object") {
@@ -130,15 +136,15 @@ export function createDraftStore(driver: Driver): DraftStore {
       if (typeof blob.id === "string" && blob.id.startsWith("data:")) {
         const data = await fetch(blob.id).then((response) => response.blob())
         const id = await driver.putBlob(data)
-        sources.set(id, async () => data)
+        sources.set(id, { blob: async () => data })
         return { ...item, blob: { id } }
       }
       if (typeof blob.id === "string") {
         const id = blob.id
         const kept = held.get(id)
         const url = typeof blob.url === "string" ? blob.url : urls.get(id)
-        if (kept) sources.set(id, async () => kept)
-        else if (url) sources.set(id, () => fetch(url).then((response) => response.blob()))
+        if (kept) sources.set(id, { blob: async () => kept })
+        else if (url) sources.set(id, { blob: () => fetch(url).then((response) => response.blob()) })
       }
       return { ...item, blob: { id: blob.id } }
     }
@@ -164,23 +170,59 @@ export function createDraftStore(driver: Driver): DraftStore {
       await Promise.all(Object.entries(item).map(async ([key, entry]) => [key, await decode(entry)])),
     )
   }
+  // Upload the bytes behind `ids` again and return the ids they were stored under. Ids are
+  // usually content hashes and come back unchanged, but a store without WebCrypto assigns fresh
+  // ones, so callers must rename references rather than assume.
+  const restore = async (ids: readonly string[], sources: Sources) => {
+    const renamed = new Map<string, string>()
+    await Promise.all(
+      ids.map(async (id) => {
+        const source = sources.get(id)
+        if (!source) return
+        const blob = await source.blob()
+        const next = await driver.putBlob(blob)
+        renamed.set(id, next)
+        if (source.chunk !== undefined) {
+          remember(chunkIds, source.chunk, Promise.resolve(next))
+          remember(chunks, next, source.chunk)
+          return
+        }
+        held.set(next, blob)
+        blobUrl(next, blob)
+      }),
+    )
+    return renamed
+  }
+  const rename = (value: unknown, renamed: Map<string, string>): unknown => {
+    if (Array.isArray(value)) return value.map((entry) => rename(entry, renamed))
+    if (!value || typeof value !== "object") return value
+    const item = value as Record<string, unknown>
+    if (item.blob && typeof item.blob === "object") {
+      const ref = item.blob as Record<string, unknown>
+      if (Array.isArray(ref.ids))
+        return { ...item, blob: { ...ref, ids: ref.ids.map((id) => renamed.get(String(id)) ?? id) } }
+      if (typeof ref.id === "string") return { ...item, blob: { ...ref, id: renamed.get(ref.id) ?? ref.id } }
+    }
+    return Object.fromEntries(Object.entries(item).map(([key, entry]) => [key, rename(entry, renamed)]))
+  }
   const setDocument = async (key: string, document: unknown) => {
     const version = (versions.get(key) ?? 0) + 1
     versions.set(key, version)
     const sources: Sources = new Map()
-    const encoded = JSON.stringify(await encode(document, sources))
+    const encoded = await encode(document, sources)
     if (versions.get(key) !== version) return
-    // Ids are content hashes, so uploading the bytes again makes the stored reference valid
-    // without rewriting the document. Covers a blob the store collected while a cache, another
-    // tab, or the composer's history still held its id.
-    const missing = await driver.set(key, encoded)
-    await Promise.all(
-      missing.map(async (id) => {
-        const source = sources.get(id)
-        if (!source) return console.error(`[persistence] draft ${key} references blob ${id} with no bytes to restore`)
-        await driver.putBlob(await source())
-      }),
-    )
+    // The store refuses the write while any referenced blob is missing, so the previous document
+    // stays visible until the bytes are back. Covers a blob collected while a cache, another tab,
+    // or the composer's history still held its id.
+    const missing = await driver.set(key, JSON.stringify(encoded), true)
+    if (missing.length === 0) return
+    const renamed = await restore(missing, sources)
+    if (versions.get(key) !== version) return
+    const unrestored = missing.filter((id) => !renamed.has(id))
+    if (unrestored.length)
+      console.error(`[persistence] draft ${key} references blobs with no bytes to restore`, unrestored)
+    // Anything still missing has no bytes anywhere; the owning codec drops such references on read.
+    await driver.set(key, JSON.stringify(rename(encoded, renamed)), false)
   }
   return {
     getItem: async (key) => {
@@ -260,12 +302,13 @@ export function createBrowserDraftStore(): DraftStore {
   }
   return createDraftStore({
     get: async (key) => ((await get("documents", key)) as string | undefined) ?? null,
-    set: async (key, value) => {
-      await write("documents", key, value)
+    set: async (key, value, strict) => {
       // Another tab may have collected a blob this document still references.
       const ids = [...referenced(value)]
       const present = await Promise.all(ids.map((id) => get("blobs", id)))
-      return ids.filter((_, index) => present[index] === undefined)
+      const missing = ids.filter((_, index) => present[index] === undefined)
+      if (!strict || missing.length === 0) await write("documents", key, value)
+      return missing
     },
     remove: (key) => write("documents", key),
     putBlob: async (blob) => {

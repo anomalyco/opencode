@@ -39,7 +39,7 @@ export type ElectronAPI = {
     cb: (name: string, insert: Record<string, string>, remove: string[], revision: number) => void,
   ): () => void
   draftGet(key: string): Promise<string | null>
-  draftSet(key: string, value: string): Promise<string[]>
+  draftSet(key: string, value: string, strict: boolean): Promise<string[]>
   draftDelete(key: string): Promise<void>
   draftBlobPut(data: ArrayBuffer): Promise<string>
   draftBlobGet(id: string): Promise<ArrayBuffer | null>

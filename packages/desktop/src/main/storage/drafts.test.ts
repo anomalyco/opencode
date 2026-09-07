@@ -96,12 +96,16 @@ describe("draft store", () => {
         { type: "image", blob: { id: "gone-image" } },
       ],
     })
-    expect(drafts.set("doc", document).sort()).toEqual(["gone-chunk", "gone-image"])
-    expect(drafts.set("plain", "not json")).toEqual([])
-    expect(drafts.set("doc", null)).toEqual([])
-    // Once the bytes are uploaded again the same document references nothing missing.
-    drafts.putBlob(new TextEncoder().encode("gone-chunk bytes"))
-    expect(drafts.set("doc", document)).not.toContain(kept)
+    // A strict write with missing blobs is refused: the previous document remains.
+    drafts.set("doc", JSON.stringify({ previous: true }))
+    expect(drafts.set("doc", document, true).sort()).toEqual(["gone-chunk", "gone-image"])
+    expect(drafts.get("doc")).toBe(JSON.stringify({ previous: true }))
+    // A non-strict write stores it anyway and still reports what is missing.
+    expect(drafts.set("doc", document, false).sort()).toEqual(["gone-chunk", "gone-image"])
+    expect(drafts.get("doc")).toBe(document)
+    expect(drafts.set("plain", "not json", true)).toEqual([])
+    expect(drafts.set("doc", null, true)).toEqual([])
+    expect(drafts.set("doc", document, true)).not.toContain(kept)
   })
 
   test("an uploaded attachment survives a due collection before its document is written", () => {

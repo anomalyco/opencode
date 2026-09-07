@@ -81,7 +81,7 @@ export const api: ElectronAPI = {
   onStoreChanged: (cb) =>
     listen("StorageChanged", (event) => cb(event.name, mutable(event.insert), mutable(event.remove), event.revision)),
   draftGet: (key) => invoke("DraftsGet", { key }),
-  draftSet: (key, value) => invoke("DraftsSet", { key, value }).then(mutable),
+  draftSet: (key, value, strict) => invoke("DraftsSet", { key, value, strict }).then(mutable),
   draftDelete: (key) => invoke("DraftsDelete", { key }),
   draftBlobPut: (data) => invoke("DraftsPutBlob", { data: new Uint8Array(data) }),
   draftBlobGet: (id) => invoke("DraftsGetBlob", { id }).then((data) => (data ? toArrayBuffer(data) : null)),

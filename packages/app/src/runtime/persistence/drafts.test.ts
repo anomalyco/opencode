@@ -11,16 +11,18 @@ function memoryDriver() {
     puts: () => puts,
     driver: {
       get: async (key: string) => documents.get(key) ?? null,
-      // Like the real stores: write, then report referenced blobs that are not held.
-      set: async (key: string, value: string) => {
-        documents.set(key, value)
+      // Like the real stores: report referenced blobs that are not held; a strict write with any
+      // missing is refused.
+      set: async (key: string, value: string, strict: boolean) => {
         const ids = new Set<string>()
         JSON.parse(value, (_key, item) => {
           if (item?.blob && typeof item.blob.id === "string") ids.add(item.blob.id)
           if (item?.blob && Array.isArray(item.blob.ids)) item.blob.ids.forEach((id: unknown) => ids.add(String(id)))
           return item
         })
-        return [...ids].filter((id) => !blobs.has(id))
+        const missing = [...ids].filter((id) => !blobs.has(id))
+        if (!strict || missing.length === 0) documents.set(key, value)
+        return missing
       },
       remove: async (key: string) => void documents.delete(key),
       putBlob: async (blob: Blob) => {
@@ -114,6 +116,70 @@ describe("draft store text externalization", () => {
     await store.setDocument("doc", { prompt: [{ type: "image", blob: { id: image.id, url: image.url } }] })
     expect(memory.blobs.has(image.id)).toBe(true)
     expect(new Uint8Array(await memory.blobs.get(image.id)!.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]))
+  })
+
+  test("the previous document stays visible until missing blobs are restored", async () => {
+    const memory = memoryDriver()
+    const store = createDraftStore(memory.driver)
+    await store.setDocument("doc", { prompt: [{ type: "text", content: large }] })
+    await store.setDocument("doc", { prompt: [{ type: "text", content: `${large}!` }] })
+    const before = memory.documents.get("doc")
+    memory.blobs.clear()
+    // Hold the repair upload: while it is pending, another reader must still see the old document.
+    const gate = Promise.withResolvers<void>()
+    const putBlob = memory.driver.putBlob
+    memory.driver.putBlob = async (blob) => {
+      await gate.promise
+      return putBlob(blob)
+    }
+    const saving = store.setDocument("doc", { prompt: [{ type: "text", content: large }] })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(memory.documents.get("doc")).toBe(before)
+    gate.resolve()
+    await saving
+    expect(JSON.parse(memory.documents.get("doc")!).prompt[0].content.blob.ids).toHaveLength(1)
+    const fresh = createDraftStore(memory.driver)
+    expect(JSON.parse((await fresh.getItem("doc"))!).prompt[0].content).toBe(large)
+  })
+
+  test("references are renamed when a restored blob comes back under a different id", async () => {
+    const memory = memoryDriver()
+    // A store without WebCrypto assigns a fresh id to every upload.
+    let counter = 0
+    memory.driver.putBlob = async (blob) => {
+      const id = `random-${counter++}`
+      memory.blobs.set(id, blob)
+      return id
+    }
+    const store = createDraftStore(memory.driver)
+    const image = await store.putBlob(new Blob([new Uint8Array([7])], { type: "image/png" }))
+    await store.setDocument("doc", {
+      prompt: [
+        { type: "text", content: paste },
+        { type: "image", blob: image },
+      ],
+    })
+    const original = JSON.parse(memory.documents.get("doc")!)
+    memory.blobs.clear()
+    await store.setDocument("doc", {
+      prompt: [
+        { type: "text", content: paste },
+        { type: "image", blob: image },
+      ],
+    })
+    const restored = JSON.parse(memory.documents.get("doc")!)
+    expect(restored.prompt[0].content.blob.ids).not.toEqual(original.prompt[0].content.blob.ids)
+    expect(restored.prompt[1].blob.id).not.toBe(original.prompt[1].blob.id)
+    for (const id of [...restored.prompt[0].content.blob.ids, restored.prompt[1].blob.id])
+      expect(memory.blobs.has(id)).toBe(true)
+    const fresh = createDraftStore(memory.driver)
+    const read = JSON.parse((await fresh.getItem("doc"))!)
+    expect(read.prompt[0].content).toBe(paste)
+    expect(read.prompt[1].blob.id).toBe(restored.prompt[1].blob.id)
+    // The renamed chunk ids are what the cache now answers with, so the next save needs no repair.
+    const puts = counter
+    await store.setDocument("doc", { prompt: [{ type: "text", content: paste }], cursor: 1 })
+    expect(counter).toBe(puts)
   })
 
   test("chunk boundaries never split a surrogate pair", async () => {
