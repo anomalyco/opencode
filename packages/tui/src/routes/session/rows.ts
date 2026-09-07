@@ -176,6 +176,20 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       }),
     )
 
+  const completeReasoning = (ref: PartRef) =>
+    setRows(
+      produce((draft) => {
+        if (!hasPart(draft, ref)) append(draft, ref, { type: "reasoning" }, queuedStart(draft))
+        const row = draft.find(
+          (row) =>
+            row.type === "group" &&
+            row.kind === "reasoning" &&
+            row.refs.some((item) => item.messageID === ref.messageID && item.partID === ref.partID),
+        )
+        if (row?.type === "group" && row.kind === "reasoning") row.completed = true
+      }),
+    )
+
   const appendFooter = (messageID: string) =>
     setRows(
       produce((draft) => {
@@ -248,10 +262,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     }),
     data.on("session.reasoning.ended", (event) => {
       if (event.data.sessionID === sessionID() && event.data.text.trim())
-        appendPart(
-          { messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` },
-          { type: "reasoning" },
-        )
+        completeReasoning({ messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` })
     }),
     data.on("session.tool.input.started", (event) => {
       if (event.data.sessionID === sessionID())
@@ -437,17 +448,26 @@ export function resolvePart(message: SessionMessageAssistant, partID: string) {
   return message.content.filter((part) => part.type === match[1])[ordinal]
 }
 
-type AppendPart = { type: "text" } | { type: "reasoning" } | { type: "tool"; name: string }
+type AppendPart =
+  | { type: "text" }
+  | { type: "reasoning"; time?: { completed?: number } }
+  | { type: "tool"; name: string }
 
 function append(rows: SessionRow[], ref: PartRef, part: AppendPart, index = rows.length) {
   if (part.type === "reasoning") {
     const previous = rows[index - 1]
     if (previous?.type === "group" && previous.kind === "reasoning") {
       previous.refs.push(ref)
+      previous.completed &&= part.time?.completed !== undefined
       return
     }
     completePrevious(rows, index)
-    rows.splice(index, 0, { type: "group", kind: "reasoning", refs: [ref], completed: false })
+    rows.splice(index, 0, {
+      type: "group",
+      kind: "reasoning",
+      refs: [ref],
+      completed: part.time?.completed !== undefined,
+    })
     return
   }
   if (part.type === "tool" && exploration(part.name)) {
