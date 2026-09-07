@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { ConfigPluginSource } from "@opencode-ai/core/config/plugin/source"
+import { Config } from "@opencode-ai/core/config"
+import { Document, Info } from "@opencode-ai/schema/config"
 import { Effect, Layer, Stream } from "effect"
 import { SkillPlugin } from "@opencode-ai/core/plugin/skill"
 import { Skill } from "@opencode-ai/core/skill"
@@ -8,10 +9,13 @@ import { testEffect } from "../lib/effect"
 import { host } from "./host"
 
 const it = testEffect(AppNodeBuilder.build(Skill.node))
-const sources = (operations: readonly ConfigPluginSource.Operation[] = []) =>
+const config = (plugins: Info["plugins"] = []) =>
   Layer.succeed(
-    ConfigPluginSource.Service,
-    ConfigPluginSource.Service.of({ operations: () => Effect.succeed(operations), changes: () => Stream.never }),
+    Config.Service,
+    Config.Service.of({
+      entries: () => Effect.succeed([new Document({ type: "document", info: new Info({ plugins }) })]),
+      changes: () => Stream.never,
+    }),
   )
 
 describe("SkillPlugin.Plugin", () => {
@@ -27,7 +31,7 @@ describe("SkillPlugin.Plugin", () => {
             reload: skill.reload,
           },
         }),
-      ).pipe(Effect.provide(sources()))
+      ).pipe(Effect.provide(config()))
       const skills = yield* skill.list()
       const report = skills.find((item) => item.id === "report")
 
@@ -67,11 +71,11 @@ describe("SkillPlugin.Plugin", () => {
       expect(report?.content).toContain("- Active plugins: -disabled, local.ts, package-plugin, package-plugin")
     }).pipe(
       Effect.provide(
-        sources([
-          { type: "add", target: "package-plugin", options: {} },
-          { type: "remove", target: "disabled" },
-          { type: "add", target: "local.ts", options: {}, mtime: 1 },
-          { type: "add", target: "package-plugin", options: { enabled: true } },
+        config([
+          "package-plugin",
+          "-disabled",
+          "local.ts",
+          { package: "package-plugin", options: { enabled: true } },
         ]),
       ),
     ),

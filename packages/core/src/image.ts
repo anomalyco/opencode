@@ -39,11 +39,11 @@ export type Limits = {
   maxBase64Bytes: number
 }
 
-export type Draft = {
+export type Editor = {
   configure: (limits: Partial<Limits>) => void
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly normalize: (
     resource: string,
     content: FileSystem.Content & { readonly encoding: "base64" },
@@ -58,7 +58,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Im
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const state = State.create<Limits, Draft>({
+    const state = State.create<Limits, Editor>({
       name: "image",
       initial: () => ({
         autoResize: true,
@@ -66,12 +66,12 @@ const layer = Layer.effect(
         maxHeight: 2_000,
         maxBase64Bytes: 5 * 1024 * 1024,
       }),
-      draft: (draft) => ({
+      editor: (editor) => ({
         configure: (limits) => {
-          if (limits.autoResize !== undefined) draft.autoResize = limits.autoResize
-          if (limits.maxWidth !== undefined) draft.maxWidth = limits.maxWidth
-          if (limits.maxHeight !== undefined) draft.maxHeight = limits.maxHeight
-          if (limits.maxBase64Bytes !== undefined) draft.maxBase64Bytes = limits.maxBase64Bytes
+          if (limits.autoResize !== undefined) editor.autoResize = limits.autoResize
+          if (limits.maxWidth !== undefined) editor.maxWidth = limits.maxWidth
+          if (limits.maxHeight !== undefined) editor.maxHeight = limits.maxHeight
+          if (limits.maxBase64Bytes !== undefined) editor.maxBase64Bytes = limits.maxBase64Bytes
         },
       }),
     })

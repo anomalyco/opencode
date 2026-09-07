@@ -85,8 +85,6 @@ test("migrates tui and kv config into cli.json", async () => {
         session_delete: false,
         "dialog.select.next": "ctrl+n",
       },
-      plugin: [["example", { mode: "safe" }]],
-      plugin_enabled: { disabled: false },
       leader_timeout: 500,
       scroll_speed: 2,
       scroll_acceleration: { enabled: true },
@@ -135,7 +133,6 @@ test("migrates tui and kv config into cli.json", async () => {
       "session.delete": false,
       "dialog.select.next": "ctrl+n",
     },
-    plugins: [{ package: "example", options: { mode: "safe" } }, "-disabled"],
     leader: { timeout: 500 },
     scroll: { speed: 2, acceleration: true },
     attention: { sound_pack: "custom.pack" },
@@ -486,7 +483,14 @@ test("updates a config draft while preserving JSONC comments", async () => {
       const service = yield* Config.Service
       return yield* service.update((draft) => {
         draft.prompt = { paste: "compact" }
-        draft.mini = { thinking: "hide", shell_output: "hide", turn_summary: "hide", splash: "hide", mono: true }
+        draft.mini = {
+          thinking: "hide",
+          shell_output: "hide",
+          turn_summary: "hide",
+          splash: "hide",
+          work_spinner: "block-low-comet",
+          mono: true,
+        }
       })
     }),
   )
@@ -494,7 +498,14 @@ test("updates a config draft while preserving JSONC comments", async () => {
   expect(config).toEqual({
     animations: true,
     prompt: { paste: "compact" },
-    mini: { thinking: "hide", shell_output: "hide", turn_summary: "hide", splash: "hide", mono: true },
+    mini: {
+      thinking: "hide",
+      shell_output: "hide",
+      turn_summary: "hide",
+      splash: "hide",
+      work_spinner: "block-low-comet",
+      mono: true,
+    },
   })
   expect(await Bun.file(path.join(directory.path, "cli.json")).text()).toContain("// Keep this comment")
 })

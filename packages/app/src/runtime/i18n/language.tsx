@@ -1,6 +1,7 @@
 import { flatten, resolveTemplate, translator, type Flatten } from "@solid-primitives/i18n"
 import { createEffect, createMemo, createResource, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Option, Schema, SchemaGetter } from "effect"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import {
   I18nProvider,
@@ -11,6 +12,7 @@ import {
   type UiPluralCategory,
 } from "@opencode-ai/ui/context/i18n"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { Persistence } from "@/runtime/persistence/schema"
 import en from "@/runtime/i18n/en"
 import { dict } from "@opencode-ai/ui/i18n/en"
 import {
@@ -53,6 +55,16 @@ function cookie(locale: Locale) {
 }
 
 const LOCALES: readonly Locale[] = DESKTOP_NATIVE_LOCALES
+
+const LocaleSchema = Schema.Literals(DESKTOP_NATIVE_LOCALES)
+const StoredLocaleSchema = Schema.Struct({
+  locale: Schema.String.pipe(
+    Schema.decodeTo(LocaleSchema, {
+      decode: SchemaGetter.transform(normalizeLocale),
+      encode: SchemaGetter.transform((locale) => locale),
+    }),
+  ),
+})
 
 const INTL = DESKTOP_NATIVE_LOCALE_TAGS
 
@@ -148,17 +160,21 @@ function detectLocale(): Locale {
 }
 
 export function normalizeLocale(value: string): Locale {
-  return LOCALES.includes(value as Locale) ? (value as Locale) : "en"
+  return Option.getOrElse(Schema.decodeUnknownOption(LocaleSchema)(value), () => "en")
 }
+
+export const languageSchema = Persistence.struct({
+  locale: StoredLocaleSchema.fields.locale,
+})
 
 function readStoredLocale() {
   if (typeof localStorage !== "object") return
   try {
     const raw = localStorage.getItem("opencode.global.dat:language")
     if (!raw) return
-    const next = JSON.parse(raw) as { locale?: string }
-    if (typeof next?.locale !== "string") return
-    return normalizeLocale(next.locale)
+    const next = Schema.decodeUnknownOption(Schema.fromJsonString(StoredLocaleSchema))(raw)
+    if (Option.isNone(next)) return
+    return next.value.locale
   } catch {
     return
   }
@@ -182,14 +198,9 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
   gate: false,
   init: (props: { locale?: Locale; onNativeTranslations?: (bundle: DesktopNativeBundle) => void }) => {
     const initial = props.locale ?? readStoredLocale() ?? detectLocale()
-    const [store, setStore, _, ready] = persisted(
-      Persist.global("language"),
-      createStore({
-        locale: initial,
-      }),
-    )
+    const [store, setStore, _, ready] = persisted(Persist.global("language"), languageSchema, { locale: initial })
 
-    const locale = createMemo<Locale>(() => normalizeLocale(store.locale))
+    const locale = createMemo(() => store.locale)
     const intl = createMemo(() => INTL[locale()])
     const [layout, setLayout] = createStore({ direction: undefined as Direction | undefined })
     const direction = createMemo(() => layout.direction ?? localeDirection(locale()))

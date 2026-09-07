@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { InputRenderable, TextareaRenderable } from "@opentui/core"
+import type { LocationRef } from "@opencode-ai/client"
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { onMount } from "solid-js"
@@ -8,7 +9,7 @@ import { ConfigProvider } from "../../../src/config"
 import { ClientProvider } from "../../../src/context/client"
 import { DataProvider, useData } from "../../../src/context/data"
 import { Keymap } from "../../../src/context/keymap"
-import { LocationProvider } from "../../../src/context/location"
+import { LocationProvider, useLocation } from "../../../src/context/location"
 import { ThemeProvider } from "../../../src/context/theme"
 import { DialogProvider, useDialog } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
@@ -203,9 +204,27 @@ test("hides account rename and delete actions while the add account row is selec
   }
 })
 
-async function renderIntegration() {
+test("uses the active location for integration data and credential requests", async () => {
+  const location = { directory: "/remote/project", workspaceID: "workspace_test" }
+  const fixture = await renderIntegration(location)
+
+  try {
+    fixture.app.mockInput.pressArrow("down")
+    fixture.app.mockInput.pressArrow("down")
+    fixture.app.mockInput.pressEnter()
+
+    await fixture.app.waitFor(() => fixture.requests.length === 1)
+    expect(fixture.locations).toContainEqual(location)
+    expect(fixture.locations.at(-1)).toEqual(location)
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
+async function renderIntegration(activeLocation?: LocationRef) {
   const events = createEventStream()
   const requests: Array<{ method: string; path: string; body?: { label: string } }> = []
+  const locations: LocationRef[] = []
   const reads = { integration: 0, model: 0, provider: 0 }
   let accounts = [
     { type: "credential" as const, id: "cred_personal", label: "Personal" },
@@ -213,12 +232,19 @@ async function renderIntegration() {
   ]
 
   const calls = createFetch(async (url, request) => {
+    const directory =
+      url.searchParams.get("location[directory]") ??
+      decodeURIComponent(request.headers.get("x-opencode-directory") ?? process.cwd())
+    const workspaceID =
+      url.searchParams.get("location[workspace]") ?? request.headers.get("x-opencode-workspace") ?? undefined
+    const requestedLocation = { directory, ...(workspaceID ? { workspaceID } : {}) }
     const location = {
-      directory: process.cwd(),
-      project: { id: "proj_test", directory: process.cwd(), canonical: process.cwd() },
+      ...requestedLocation,
+      project: { id: "proj_test", directory, canonical: directory },
     }
 
     if (url.pathname === "/api/integration") {
+      locations.push(requestedLocation)
       reads.integration++
       return json({
         location,
@@ -244,6 +270,7 @@ async function renderIntegration() {
     }
 
     if (request.method === "POST" && /^\/api\/credential\/[^/]+\/activate$/.test(url.pathname)) {
+      locations.push(requestedLocation)
       const id = url.pathname.split("/")[3]
       const active = accounts.find((account) => account.id === id)
       if (!active) throw new Error(`unknown credential: ${id}`)
@@ -289,9 +316,11 @@ async function renderIntegration() {
   function Probe() {
     const data = useData()
     const dialog = useDialog()
+    const location = useLocation()
     onMount(() => {
+      location.set(activeLocation)
       void data.location.integration
-        .sync()
+        .sync(activeLocation)
         .then(() => dialog.replace(() => <DialogIntegration integrationID="openai" autoConnect />))
     })
     return null
@@ -332,6 +361,7 @@ async function renderIntegration() {
     app,
     reads,
     requests,
+    locations,
     get accounts() {
       return accounts
     },

@@ -1,13 +1,14 @@
-import { Database } from "@opencode-ai/core/database/database"
+import { Instance } from "@opencode-ai/core/instance/service"
 import { Location } from "@opencode-ai/core/location"
-import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { Permission } from "@opencode-ai/core/permission"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
-import { Effect, Option } from "effect"
+import { Session } from "@opencode-ai/core/session"
+import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { PermissionNotFoundError, SessionNotFoundError } from "@opencode-ai/protocol/errors"
-import { response, sessionRef, withLoadedLocationServices } from "../location"
+import { PermissionNotFoundError } from "@opencode-ai/protocol/errors"
+import { response, sessionInfo } from "../location"
+import { missingSession } from "./session-error"
 
 function missingRequest(id: Permission.ID) {
   return new PermissionNotFoundError({ requestID: id, message: `Permission request not found: ${id}` })
@@ -15,8 +16,8 @@ function missingRequest(id: Permission.ID) {
 
 export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", (handlers) =>
   Effect.gen(function* () {
-    const locations = yield* LocationServiceMap.Service
-    const database = yield* Database.Service
+    const instances = yield* Instance.Service
+    const sessions = yield* Session.Service
     const requireOwnedRequest = Effect.fnUntraced(function* (
       sessionID: Permission.Request["sessionID"],
       requestID: Permission.ID,
@@ -51,29 +52,18 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
                 source: ctx.payload.source,
                 agent: ctx.payload.agent,
               })
-              .pipe(
-                Effect.catchTag(
-                  "Session.NotFoundError",
-                  (error) =>
-                    new SessionNotFoundError({
-                      sessionID: error.sessionID,
-                      message: `Session not found: ${error.sessionID}`,
-                    }),
-                ),
-              ),
+              .pipe(Effect.catchTag("Session.NotFoundError", missingSession)),
           }
         }),
       )
       .handle(
         "session.permission.list",
         Effect.fn(function* (ctx) {
-          const ref = yield* sessionRef(database, ctx.params.sessionID)
-          const requests = yield* withLoadedLocationServices(
-            locations,
-            ref,
-            Permission.Service.use((permission) => permission.forSession(ctx.params.sessionID)),
-          )
-          return { data: Option.getOrElse(requests, () => []) }
+          const session = yield* sessionInfo(sessions, ctx.params.sessionID)
+          const requests = yield* Permission.Service.use((permission) =>
+            permission.forSession(ctx.params.sessionID),
+          ).pipe(instances.provide(session))
+          return { data: requests }
         }),
       )
       .handle(

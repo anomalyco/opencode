@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { timelinePresets } from "@opencode-ai/session-ui/timeline/detail"
 import { setupTimeline } from "../performance/timeline-stability/fixture"
 
 for (const width of [1400, 390]) {
@@ -16,6 +17,9 @@ for (const width of [1400, 390]) {
         `\u0645\u0631\u0627\u062c\u0639\u0629 ${command}--reviewed`,
       ]
       await setupTimeline(page, {
+        settings: {
+          timelineDetail: { ...timelinePresets[2].value, notices: { placement: "separate" } },
+        },
         locale: profile.locale,
         viewport: { width, height: 900 },
         sessionMessages: [

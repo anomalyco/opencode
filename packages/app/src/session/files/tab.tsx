@@ -19,7 +19,7 @@ export function SortableTab(props: {
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()
-  const closeTabKeybind = createMemo(() => command.keybindParts("tab.close"))
+  const closeTabKeybind = createMemo(() => command.keybindParts("file.close"))
   const sortable = useSortable({
     get id() {
       return props.tab

@@ -30,7 +30,7 @@ const testGlobal = Global.layerWith({
   log: os.tmpdir(),
 })
 
-const testLayer = LayerNode.compile(EffectFlock.node, [[Global.node, testGlobal]])
+const testLayer = LayerNode.compile(EffectFlock.node, { replacements: [Global.node.replace(testGlobal)] })
 
 async function job() {
   if (msg.ready) await fs.writeFile(msg.ready, String(process.pid))

@@ -1085,7 +1085,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
 
     const perf = large() ? { ...base, ...largeOptions } : base
     if (!mobile()) return perf
-    return { ...perf, disableLineNumbers: true }
+    return { ...perf, disableLineNumbers: props.disableLineNumbers ?? true }
   })
 
   const notify = (done?: VoidFunction) => {

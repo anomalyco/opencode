@@ -16,11 +16,11 @@ export interface CommandDefinition {
   readonly execute: (input: CommandInvocation) => Promise<void>
 }
 
-export interface CommandDraft {
+export interface CommandEditor {
   add(definition: CommandDefinition): void
 }
 
 export interface CommandDomain extends Pick<CommandApi, "list"> {
-  readonly transform: Transform<CommandDraft>
+  readonly transform: Transform<CommandEditor>
   readonly reload: () => Promise<void>
 }

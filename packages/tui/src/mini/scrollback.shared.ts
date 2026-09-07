@@ -32,7 +32,6 @@ export function entryLook(commit: StreamCommit, theme: RunEntryTheme): { fg: Col
   if (commit.phase === "final") {
     return {
       fg: theme.system.body,
-      attrs: TextAttributes.DIM,
     }
   }
 
@@ -49,7 +48,6 @@ export function entryLook(commit: StreamCommit, theme: RunEntryTheme): { fg: Col
   if (commit.kind === "reasoning") {
     return {
       fg: theme.reasoning.body,
-      attrs: TextAttributes.DIM,
     }
   }
 

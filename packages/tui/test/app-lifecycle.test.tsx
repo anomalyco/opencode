@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test"
-import { EmbeddedTerminalRenderable, type Renderable, ScrollBoxRenderable } from "@opentui/core"
+import { EmbeddedTerminalRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/util/global"
 import path from "node:path"
-import { createEventStream, createFetch, directory, json, type FetchHandler } from "./fixture/tui-client"
+import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
-import type { TuiInput } from "../src/app"
-import type { Config } from "../src/config"
+import { createAppFixture } from "./fixture/app"
+import type { PluginInfo } from "@opencode-ai/client"
 
 test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deletions at width %s", async (width) => {
   await using state = await tmpdir()
@@ -239,7 +239,7 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: {},
         log: () => {},
@@ -315,7 +315,7 @@ test("session lifecycle updates the terminal title and prints the epilogue after
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy" },
         log: () => {},
@@ -389,7 +389,7 @@ test("session title generated while an untitled session is loading remains visib
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy" },
         log: () => {},
@@ -490,6 +490,241 @@ test("automatic rename refreshes the displayed title before settling, even witho
   }
 })
 
+test.each([80, 120])("completes custom Markdown and ordinary fences in a session at width %s", async (width) => {
+  await using state = await tmpdir()
+  const session = {
+    id: "ses_markdown",
+    title: "Markdown fixture",
+    projectID: "project",
+    location: { directory },
+    agent: "build",
+    model: { providerID: "fixture", id: "model" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 2 },
+  }
+  const initial =
+    "```mermaid\ngraph LR\n  A[DiagramStart] --> B[DiagramEnd]\n```\n\n```latex\nx^2\n```\n\n```text\ninitial"
+  await using setup = await createAppFixture({
+    width,
+    height: 55,
+    state: state.path,
+    config: { animations: false, tabs: { enabled: false }, session: { sidebar: "hide" } },
+    args: { sessionID: session.id },
+    fetch: (url) => {
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (url.pathname === `/api/session/${session.id}/message`)
+        return json({
+          data: [
+            {
+              id: "msg_markdown",
+              type: "assistant",
+              agent: session.agent,
+              model: session.model,
+              time: { created: 2 },
+              content: [{ type: "text", text: initial }],
+            },
+            {
+              id: "msg_compaction",
+              type: "compaction",
+              time: { created: 1 },
+              status: "completed",
+              reason: "manual",
+              summary: "```latex\ny^2\n```",
+              recent: "msg_markdown",
+            },
+          ],
+          cursor: {},
+        })
+      if (
+        url.pathname === `/api/session/${session.id}/inbox` ||
+        url.pathname === `/api/session/${session.id}/permission`
+      )
+        return json({ data: [] })
+      return undefined
+    },
+  })
+  const streaming = await setup.waitForFrame(
+    (frame) =>
+      frame.includes("initial") &&
+      frame.includes("DiagramStart") &&
+      frame.includes("DiagramEnd") &&
+      frame.includes("x\u00b2") &&
+      frame.includes("y\u00b2"),
+  )
+  expect(streaming).toContain("Compaction")
+  expect(streaming).not.toContain("initial final")
+  expect(streaming).not.toContain("MARKDOWN_END")
+
+  // Queue final text and completion together to exercise TextPart's reactive property order.
+  setup.events.emit({
+    id: "evt_markdown_text_ended",
+    created: 3,
+    type: "session.text.ended",
+    durable: { aggregateID: session.id, seq: 1, version: 1 },
+    data: {
+      sessionID: session.id,
+      assistantMessageID: "msg_markdown",
+      ordinal: 0,
+      text: `${initial} final\n\`\`\`\n\nMARKDOWN_END`,
+    },
+  })
+  setup.events.emit({
+    id: "evt_markdown_step_ended",
+    created: 4,
+    type: "session.step.ended",
+    durable: { aggregateID: session.id, seq: 2, version: 1 },
+    data: {
+      sessionID: session.id,
+      assistantMessageID: "msg_markdown",
+      finish: "stop",
+      cost: 0,
+      tokens: session.tokens,
+    },
+  })
+  const frame = await setup.waitForFrame(
+    (frame) => frame.includes("MARKDOWN_END") && frame.includes("initial final") && frame.includes("2ms"),
+  )
+  expect(frame).toContain("DiagramStart")
+  expect(frame).toContain("DiagramEnd")
+  expect(frame).toContain("x\u00b2")
+  expect(frame).toContain("y\u00b2")
+  expect(frame).toContain("initial final")
+  expect(frame).not.toContain("graph LR")
+  expect(frame).not.toContain("x^2")
+  expect(frame).not.toContain("y^2")
+  expect(frame).not.toContain("```")
+})
+
+test("keeps assistant footer metrics current after prepend, same-length refresh, and revert", async () => {
+  await using state = await tmpdir()
+  const session = {
+    id: "ses_footer",
+    title: "Footer fixture",
+    projectID: "project",
+    location: { directory },
+    agent: "build",
+    model: { providerID: "fixture", id: "model" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 100, updated: 5000 },
+  }
+  let refresh = false
+  await using setup = await createAppFixture({
+    width: 100,
+    height: 40,
+    state: state.path,
+    config: { animations: false, tabs: { enabled: false }, session: { sidebar: "hide", tps: true } },
+    args: { sessionID: session.id },
+    fetch: (url) => {
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (url.pathname === `/api/session/${session.id}/message`) {
+        if (url.searchParams.get("cursor") === "older")
+          return json({
+            data: [
+              {
+                id: "msg_0001",
+                type: "system",
+                text: "Earlier instructions",
+                description: "Prepended instructions",
+                time: { created: 200 },
+              },
+              { id: "msg_0000", type: "user", text: "Prepended input", time: { created: 100 } },
+            ],
+            cursor: {},
+          })
+        return json({
+          data: [
+            ...(refresh
+              ? [
+                  {
+                    id: "msg_0005",
+                    type: "assistant",
+                    agent: session.agent,
+                    model: session.model,
+                    time: { created: 7000, streamed: 8000, completed: 9000 },
+                    finish: "stop",
+                    cost: 0,
+                    tokens: { ...session.tokens, output: 50 },
+                    content: [{ type: "text", text: "Later answer" }],
+                  },
+                  { id: "msg_0004", type: "user", text: "Later input", time: { created: 6000 } },
+                ]
+              : []),
+            {
+              id: "msg_0003",
+              type: "assistant",
+              agent: session.agent,
+              model: session.model,
+              time: { created: 2000, streamed: 3000, completed: 5000 },
+              finish: "stop",
+              cost: 0,
+              tokens: { ...session.tokens, output: 20 },
+              content: [{ type: "text", text: "Original answer" }],
+            },
+            { id: "msg_0002", type: "user", text: "Current input", time: { created: 1000 } },
+          ],
+          cursor: { next: "older" },
+        })
+      }
+      if (
+        url.pathname === `/api/session/${session.id}/inbox` ||
+        url.pathname === `/api/session/${session.id}/permission`
+      )
+        return json({ data: [] })
+      return undefined
+    },
+  })
+
+  const initial = await setup.waitForFrame((frame) => frame.includes("Original answer") && frame.includes("20.0 tok/s"))
+  expect(initial).toContain("Current input")
+  expect(initial).toContain("4.0s \u00b7 20.0 tok/s")
+  expect(initial).not.toContain("Prepended input")
+
+  setup.mockInput.pressKey("g", { ctrl: true })
+  const prepended = await setup.waitForFrame(
+    (frame) =>
+      frame.includes("Prepended input") &&
+      frame.includes("Prepended instructions") &&
+      frame.includes("Original answer") &&
+      frame.includes("20.0 tok/s") &&
+      !frame.includes("Loading session history…"),
+  )
+  expect(prepended).toContain("Current input")
+  expect(prepended).toContain("Original answer")
+  expect(prepended).toContain("4.0s \u00b7 20.0 tok/s")
+
+  // Refresh the latest page: length stays four, but the retained assistant moves from index three to one.
+  refresh = true
+  setup.events.disconnect()
+  const refreshed = await setup.waitForFrame(
+    (frame) =>
+      frame.includes("Later input") &&
+      frame.includes("Later answer") &&
+      !frame.includes("Prepended input") &&
+      !frame.includes("Prepended instructions"),
+    { maxPasses: 120 },
+  )
+  expect(refreshed).toContain("Current input")
+  expect(refreshed).toContain("Original answer")
+  expect(refreshed).toContain("4.0s \u00b7 20.0 tok/s")
+  expect(refreshed).toContain("3.0s \u00b7 50.0 tok/s")
+
+  setup.events.emit({
+    id: "evt_footer_reverted",
+    created: 10000,
+    type: "session.revert.committed",
+    durable: { aggregateID: session.id, seq: 1, version: 1 },
+    data: { sessionID: session.id, to: "msg_0004" },
+  })
+  const reverted = await setup.waitForFrame(
+    (frame) => frame.includes("Original answer") && !frame.includes("Later input") && !frame.includes("Later answer"),
+  )
+  expect(reverted).toContain("Current input")
+  expect(reverted).toContain("4.0s \u00b7 20.0 tok/s")
+  expect(reverted).not.toContain("50.0 tok/s")
+})
+
 test("session startup prompt is submitted exactly once", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   const events = createEventStream()
@@ -540,7 +775,7 @@ test("session startup prompt is submitted exactly once", async () => {
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy", prompt: "RESUME_READY" },
         log: () => {},
@@ -684,66 +919,6 @@ test("error investigations repeatedly seed editable home drafts without creating
 
   setup.mockInput.pressKey("c", { ctrl: true })
   await setup.waitForFrame((frame) => !frame.includes("Beta initialization failed"))
-})
-
-test("shows jump to latest after scrolling one line above the final message", async () => {
-  const session = {
-    id: "dummy",
-    title: "Demo session",
-    projectID: "project",
-    location: { directory },
-    agent: "build",
-    model: { providerID: "provider", id: "model" },
-    cost: 0,
-    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    time: { created: 0, updated: 0 },
-  }
-  const messages = Array.from({ length: 8 }, (_, index) => ({
-    id: `message-${index}`,
-    type: "user",
-    text: index === 7 ? "Final visible message" : `Earlier message ${index}`,
-    time: { created: index },
-  }))
-  await using setup = await createAppFixture({
-    width: 80,
-    height: 20,
-    config: { animations: false, keybinds: { "session.line.up": "f6", "session.line.down": "f7" } },
-    args: { sessionID: "dummy" },
-    fetch: (url) => {
-      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
-      if (url.pathname === "/api/session/dummy") return json({ data: session })
-      if (url.pathname === "/api/session/dummy/message") return json({ data: messages.toReversed(), cursor: {} })
-      if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
-      if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
-    },
-  })
-
-  await setup.waitForFrame((frame) => frame.includes("Final visible message"))
-  const findScrollBox = (root: Renderable): ScrollBoxRenderable | undefined =>
-    root instanceof ScrollBoxRenderable && root.getRenderable("message-7")
-      ? root
-      : root.getChildren().map(findScrollBox).find(Boolean)
-  const scroll = findScrollBox(setup.renderer.root)
-  expect(scroll).toBeDefined()
-  if (!scroll) throw new Error("session transcript scrollbox was not found")
-  const maximum = () => Math.max(0, scroll.scrollHeight - scroll.viewport.height)
-
-  expect(scroll.scrollTop).toBe(maximum())
-  const initial = setup.captureCharFrame().split("\n")
-  expect(initial.find((line) => line.includes("Jump to latest"))).toBeUndefined()
-  expect(initial[initial.findIndex((line) => line.includes("Final visible message")) + 1]).toContain("┃")
-
-  setup.mockInput.pressKey("F6")
-  const clipped = (await setup.waitForFrame((frame) => frame.includes("Jump to latest"))).split("\n")
-  expect(scroll.scrollTop).toBe(maximum() - 1)
-  expect(clipped.find((line) => line.includes("Jump to latest"))).toBeDefined()
-  expect(clipped[clipped.findIndex((line) => line.includes("Final visible message")) + 1]).not.toContain("┃")
-
-  setup.mockInput.pressKey("F7")
-  const restored = (await setup.waitForFrame((frame) => !frame.includes("Jump to latest"))).split("\n")
-  expect(scroll.scrollTop).toBe(maximum())
-  expect(restored.find((line) => line.includes("Jump to latest"))).toBeUndefined()
-  expect(restored[restored.findIndex((line) => line.includes("Final visible message")) + 1]).toContain("┃")
 })
 
 test("completed user shell output replaces a partial live read when the final read fails", async () => {
@@ -1053,7 +1228,7 @@ test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => 
 })
 
 test.each(["manual", "select"] as const)(
-  "selection copy and dismissal respect %s mode in the prompt and terminal pane",
+  "selection copy and pane management respect %s mode in the prompt and terminal pane",
   async (copy) => {
     const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
     setup.renderer.start()
@@ -1134,7 +1309,7 @@ test.each(["manual", "select"] as const)(
             }),
             update: async () => ({}),
           },
-          packages: { resolve: async () => undefined },
+          packages: { prepare: async () => ({ directory: "" }) },
           args: { sessionID: session.id },
           terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
           log: () => {},
@@ -1184,6 +1359,19 @@ test.each(["manual", "select"] as const)(
       expect(setup.renderer.hasSelection).toBeFalse()
       expect(setup.renderer.isDestroyed).toBeFalse()
 
+      setup.mockInput.pressKey("x", { ctrl: true })
+      setup.mockInput.pressArrow("up")
+      await setup.waitFor(() => terminal.isDestroyed)
+      expect(setup.renderer.currentFocusedEditor?.plainText).toBe("")
+      setup.mockInput.pressKey("x", { ctrl: true })
+      setup.mockInput.pressKey("t")
+      await setup.waitForFrame((frame) => frame.includes("alpha beta gamma"))
+      expect(setup.renderer.currentFocusedRenderable).toBeInstanceOf(EmbeddedTerminalRenderable)
+      setup.mockInput.pressKey("x", { ctrl: true })
+      setup.mockInput.pressArrow("down")
+      await setup.waitForFrame((frame) => frame.includes("Subagents") && frame.includes("Terminals"))
+      expect(setup.renderer.currentFocusedRenderable).not.toBeInstanceOf(EmbeddedTerminalRenderable)
+
       setup.renderer.destroy()
       await task
     } finally {
@@ -1193,53 +1381,256 @@ test.each(["manual", "select"] as const)(
   },
 )
 
-async function createAppFixture(
-  input: {
-    width?: number
-    height?: number
-    state?: string
-    config?: Config.Info
-    args?: TuiInput["args"]
-    fetch?: FetchHandler
-  } = {},
-) {
-  const { run } = await import("../src/app")
-  const setup = await createTestRenderer({
-    width: input.width ?? 100,
-    height: input.height ?? 30,
-    useThread: false,
-    kittyKeyboard: true,
-  })
-  setup.renderer.start()
-  const ready = Promise.withResolvers<void>()
-  const events = createEventStream()
-  const calls = createFetch(input.fetch, events)
-  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
-  const task = Effect.runPromise(
-    run({
-      app: { name: "test", version: "test", channel: "test" },
-      server: { endpoint: { url: server.url.toString() } },
-      config: { get: async () => input.config ?? { animations: false }, update: async () => ({}) },
-      packages: { resolve: async () => undefined },
-      terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
-      args: input.args ?? {},
-      log: () => {},
-    }).pipe(
-      Effect.provide(input.state ? Global.layerWith({ state: input.state }) : AppNodeBuilder.build(Global.node)),
-      Effect.provide(FileSystem.layerNoop({})),
-    ),
-  )
-  return {
-    ...setup,
-    events,
-    ready: ready.promise,
-    async [Symbol.asyncDispose]() {
-      try {
-        if (!setup.renderer.isDestroyed) setup.renderer.destroy()
-        await task
-      } finally {
-        await server.stop()
-      }
-    },
+test.each([100, 44])(
+  "execution failure keeps the empty session composer and draft usable at width %s",
+  async (width) => {
+    await using state = await tmpdir()
+    const session = {
+      id: "ses_failure",
+      projectID: "proj_test",
+      location: { directory },
+      title: "Failure fixture",
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 1, updated: 1 },
+    }
+    await using setup = await createAppFixture({
+      width,
+      state: state.path,
+      args: { sessionID: session.id },
+      config: { animations: false, tabs: { enabled: false } },
+      fetch: (url) => {
+        if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+        if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+        if (url.pathname === `/api/session/${session.id}/message`) return json({ data: [], cursor: {} })
+        if ([`/api/session/${session.id}/inbox`, `/api/session/${session.id}/permission`].includes(url.pathname))
+          return json({ data: [] })
+        return undefined
+      },
+    })
+    await setup.ready
+    await setup.waitForFrame((frame) => frame.includes("commands"))
+    setup.mockInput.pressKey("u", { ctrl: true })
+    await setup.mockInput.typeText("Keep this draft")
+    await setup.waitForFrame((frame) => frame.includes("Keep this draft"))
+    setup.events.emit({
+      id: "evt_execution_failed",
+      created: 2,
+      type: "session.execution.failed",
+      durable: { aggregateID: session.id, seq: 1, version: 1 },
+      data: {
+        sessionID: session.id,
+        error: { type: "unknown", message: 'Plugin "broken-skills" failed during skill.transform.' },
+      },
+    })
+    await setup.waitForFrame((frame) => frame.includes("Session failed"))
+    expect(setup.captureCharFrame()).toContain("broken-skills")
+    expect(setup.captureCharFrame()).toContain("skill.transform")
+    expect(setup.captureCharFrame()).toContain("Keep this draft")
+    expect(setup.captureCharFrame()).not.toContain("Select directory")
+    await setup.mockInput.typeText(" intact")
+    await setup.waitForFrame((frame) => frame.includes("Keep this draft intact"))
+  },
+)
+
+test.each([
+  [100, true],
+  [44, true],
+  [100, false],
+  [44, false],
+] as const)("server plugin failures are visible at width %s (already failed: %s)", async (width, initial) => {
+  await using state = await tmpdir()
+  const failure: PluginInfo["state"] = {
+    status: "failed",
+    error: "Plugin disabled after command.transform failed. Check server logs for details.",
+    ref: "err_fixture",
   }
-}
+  let inventory: PluginInfo[] = [
+    {
+      id: "broken",
+      source: { type: "builtin" },
+      features: { server: true },
+      state: initial ? failure : { status: "active" },
+    },
+    { id: "healthy", source: { type: "builtin" }, features: { server: true }, state: { status: "active" } },
+  ]
+  let requests = 0
+  await using setup = await createAppFixture({
+    width,
+    state: state.path,
+    fetch: (url) => {
+      if (url.pathname !== "/api/plugin") return undefined
+      requests++
+      return json({
+        location: { directory, project: { id: "proj_test", directory, canonical: directory } },
+        data: inventory,
+      })
+    },
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("commands"))
+  if (!initial) {
+    expect(setup.captureCharFrame()).not.toContain("Plugin failed")
+    inventory = inventory.map((plugin) => (plugin.id === "broken" ? { ...plugin, state: failure } : plugin))
+    setup.events.emit({ id: "evt_failure", created: 1, type: "plugin.updated", data: {} })
+  }
+  await setup.waitForFrame((frame) => frame.includes("Plugin failed:") && frame.includes("broken"))
+  expect(setup.captureCharFrame()).toContain("/plugins")
+  expect(setup.captureCharFrame()).toContain("1 plugin failed")
+
+  const lines = setup.captureCharFrame().split("\n")
+  const row = lines.findIndex((line) => line.includes("Open plugins"))
+  expect(row).toBeGreaterThanOrEqual(0)
+  const line = lines[row]
+  if (!line) throw new Error("Open plugins action is missing")
+  await setup.mockMouse.click(line.indexOf("Open plugins"), row)
+  await setup.waitForFrame((frame) => frame.includes("ctrl+a") && frame.includes("broken"))
+  expect(setup.captureCharFrame()).toContain("broken")
+  expect(setup.captureCharFrame()).not.toContain("healthy")
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("Server plugin error") && frame.includes("transform failed"))
+  expect(setup.captureCharFrame()).toContain("Plugin disabled")
+  expect(setup.captureCharFrame()).toContain("transform failed")
+  expect(setup.captureCharFrame()).toContain("err_fixture")
+  setup.mockInput.pressEscape()
+  await setup.waitForFrame((frame) => frame.includes("ctrl+a"))
+  setup.mockInput.pressEscape()
+  await setup.waitForFrame((frame) => !frame.includes("ctrl+a"))
+  expect(setup.captureCharFrame()).toContain("1 plugin failed")
+
+  const seen = requests
+  setup.events.emit({ id: "evt_repeat", created: 2, type: "plugin.updated", data: {} })
+  setup.events.emit({ id: "evt_reconnect", type: "server.connected", data: {} })
+  await setup.waitFor(() => requests >= seen + 2)
+  await setup.flush()
+  expect(setup.captureCharFrame()).not.toContain("Plugin failed:")
+
+  inventory = inventory.map((plugin) => ({ ...plugin, state: { status: "active" } }))
+  setup.events.emit({ id: "evt_recovered", created: 3, type: "plugin.updated", data: {} })
+  await setup.waitForFrame((frame) => !frame.includes("1 plugin failed"))
+  inventory = inventory.map((plugin) => (plugin.id === "broken" ? { ...plugin, state: failure } : plugin))
+  setup.events.emit({ id: "evt_failed_again", created: 4, type: "plugin.updated", data: {} })
+  await setup.waitForFrame((frame) => frame.includes("Plugin failed:") && frame.includes("broken"))
+})
+
+test("server plugin failures share one notice and use source names before an ID is known", async () => {
+  await using state = await tmpdir()
+  await using setup = await createAppFixture({
+    state: state.path,
+    fetch: (url) =>
+      url.pathname === "/api/plugin"
+        ? json({
+            location: { directory, project: { id: "proj_test", directory, canonical: directory } },
+            data: [
+              {
+                source: { type: "package", target: "missing-package" },
+                features: {},
+                state: { status: "failed", error: "Package missing" },
+              },
+              {
+                source: { type: "local", path: "/fixture/broken.ts" },
+                features: {},
+                state: { status: "failed", error: "Invalid plugin" },
+              },
+            ],
+          })
+        : undefined,
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("2 plugins failed"))
+  expect(setup.captureCharFrame()).toContain("missing-package")
+  expect(setup.captureCharFrame()).toContain("/fixture/broken.ts")
+  expect(setup.captureCharFrame()).toContain("Open plugins")
+})
+
+test.each([44, 100])(
+  "retry countdown updates and clears with the retry lifecycle at width %s",
+  async (width) => {
+    await using state = await tmpdir()
+    const session = {
+      id: "ses_countdown",
+      projectID: "proj_test",
+      location: { directory },
+      title: "Retry countdown",
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 1, updated: 1 },
+    }
+    const model = { id: "model", providerID: "provider" }
+    const error = { type: "provider.transport" as const, message: "Provider unavailable" }
+    await using setup = await createAppFixture({
+      width,
+      state: state.path,
+      args: { sessionID: session.id },
+      config: { animations: false, tabs: { enabled: false } },
+      fetch: (url) => {
+        if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+        if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+        if (url.pathname === `/api/session/${session.id}/message`)
+          return json({
+            data: [
+              {
+                id: "msg_countdown",
+                type: "assistant",
+                agent: "build",
+                model,
+                content: [],
+                error,
+                retry: { attempt: 2, at: Date.now() + 2_500, error },
+                time: { created: 1 },
+              },
+            ],
+            cursor: {},
+          })
+        if ([`/api/session/${session.id}/inbox`, `/api/session/${session.id}/permission`].includes(url.pathname))
+          return json({ data: [] })
+        return undefined
+      },
+    })
+    await setup.ready
+    await setup.waitForFrame((frame) => frame.includes("Retrying in 3s"))
+    expect(setup.captureCharFrame()).toContain("attempt 2")
+    expect(setup.captureCharFrame()).toContain("Provider unavailable")
+    expect(setup.captureCharFrame()).not.toContain("Error:")
+    await setup.waitForFrame((frame) => frame.includes("Retrying in 2s"), { maxPasses: 200 })
+    await setup.waitForFrame((frame) => frame.includes("Retrying in 1s"), { maxPasses: 200 })
+    await setup.waitForFrame((frame) => frame.includes("Retry due"), { maxPasses: 200 })
+    expect(setup.captureCharFrame()).not.toContain("in 0s")
+
+    setup.events.emit({
+      id: "evt_countdown_rescheduled",
+      created: 2,
+      type: "session.retry.scheduled",
+      durable: { aggregateID: session.id, seq: 1, version: 1 },
+      data: { sessionID: session.id, assistantMessageID: "msg_countdown", attempt: 3, at: Date.now() + 10_500, error },
+    })
+    await setup.waitForFrame((frame) => frame.includes("Retrying in 11s") && frame.includes("attempt 3"))
+    setup.events.emit({
+      id: "evt_countdown_started",
+      created: 3,
+      type: "session.step.started",
+      durable: { aggregateID: session.id, seq: 2, version: 1 },
+      data: { sessionID: session.id, assistantMessageID: "msg_countdown", agent: "build", model },
+    })
+    await setup.waitForFrame((frame) => !frame.includes("Retrying") && !frame.includes("Retry due"))
+
+    setup.events.emit({
+      id: "evt_countdown_expired",
+      created: 4,
+      type: "session.retry.scheduled",
+      durable: { aggregateID: session.id, seq: 3, version: 1 },
+      data: { sessionID: session.id, assistantMessageID: "msg_countdown", attempt: 4, at: Date.now() - 1_000, error },
+    })
+    await setup.waitForFrame((frame) => frame.includes("Retry due") && frame.includes("attempt 4"))
+    expect(setup.captureCharFrame()).not.toContain("in -")
+    setup.events.emit({
+      id: "evt_countdown_interrupted",
+      created: 5,
+      type: "session.execution.interrupted",
+      durable: { aggregateID: session.id, seq: 4, version: 1 },
+      data: { sessionID: session.id, reason: "shutdown" },
+    })
+    await setup.waitForFrame((frame) => !frame.includes("Retrying") && !frame.includes("Retry due"))
+  },
+  15_000,
+)

@@ -95,7 +95,7 @@ export function convertHTMLToMarkdown(html: string) {
     const remaining = limit - outputBytes
     const next = bytes.byteLength <= remaining ? value : sliceBytes(value, remaining)
     output.push(next)
-    outputBytes += encoder.encode(next).byteLength
+    outputBytes += bytes.byteLength <= remaining ? bytes.byteLength : encoder.encode(next).byteLength
     last = next.at(-1) ?? last
   }
   const appendRaw = (value: string) => {

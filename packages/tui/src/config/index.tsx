@@ -26,6 +26,24 @@ export const AttentionSoundName = Schema.Literals([
 export type AttentionSoundName = Schema.Schema.Type<typeof AttentionSoundName>
 export type AttentionSoundPaths = Partial<Record<AttentionSoundName, string>>
 
+export const MiniWorkSpinner = Schema.Literals([
+  "block-soft-slide",
+  "block-soft-sweep",
+  "block-low-comet",
+  "block-low-duet",
+  "block-shuttle",
+  "block-bridge",
+  "block-squeeze",
+  "small-toggle",
+  "square-toggle",
+  "grow-shrink",
+  "quadrant-orbit",
+  "crosshatch",
+  "density-wave",
+  "seed",
+])
+export type MiniWorkSpinner = Schema.Schema.Type<typeof MiniWorkSpinner>
+
 export const Plugin = Schema.Union([
   Schema.String,
   Schema.Struct({
@@ -185,6 +203,9 @@ export const Info = Schema.Struct({
       splash: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide the entry and exit splash banners",
       }),
+      work_spinner: Schema.optional(MiniWorkSpinner).annotate({
+        description: "Work spinner animation in the Mini footer (default: block-soft-slide)",
+      }),
       mono: Schema.optional(Schema.Boolean).annotate({
         description: "Use monochrome ASCII output",
       }),
@@ -244,12 +265,6 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
 
 export function resolve(input: Info, options: { terminalSuspend: boolean }): Resolved {
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
-  if (input.session?.terminal) {
-    if (input.keybinds?.["terminal.toggle"] === undefined && input.keybinds?.["theme.switch"] === undefined) {
-      keybinds["terminal.toggle"] = "<leader>t"
-      keybinds["theme.switch"] = "none"
-    }
-  }
   if (!options.terminalSuspend) {
     keybinds["terminal.suspend"] = "none"
     if (keybinds["input.undo"] === undefined) {
@@ -284,6 +299,8 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
     session: {
       ...input.session,
       new_location: input.session?.new_location ?? "launch",
+      // Persistent terminal panes need the opencode-pty daemon, which does not ship Windows binaries.
+      terminal: input.session?.terminal ?? process.platform !== "win32",
       tps: input.session?.tps ?? true,
     },
     tabs: {

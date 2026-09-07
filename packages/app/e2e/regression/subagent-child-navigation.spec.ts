@@ -22,8 +22,7 @@ test("navigates to a subagent child session missing from the session list", asyn
   await expectSessionTitle(page, taskDescription)
   await expect(page.getByRole("heading", { name: parentTitle })).toHaveCount(0)
 
-  const titlebarRight = page.locator("#opencode-titlebar-right")
-  await expect(titlebarRight.getByRole("button", { name: "Toggle review" })).toHaveCount(1)
+  await expect(page.getByRole("button", { name: "Toggle review", exact: true })).toBeVisible()
 })
 
 test("returns to the parent session with Escape", async ({ page }) => {
@@ -141,7 +140,7 @@ test("shows the not found fallback when the viewed session is deleted", async ({
   })
 
   await expect(page.getByText("This session cannot be found")).toBeVisible()
-  await expect(page.getByRole("button", { name: "Close Tab" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Close Tab", exact: true })).toBeVisible()
   await expect(page.getByRole("heading", { name: taskDescription })).toHaveCount(0)
 })
 

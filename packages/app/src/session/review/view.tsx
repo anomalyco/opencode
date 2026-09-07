@@ -2,51 +2,137 @@ import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-
 import { SessionReviewV2SidebarToggle } from "@opencode-ai/session-ui/v2/session-review-v2"
 import { Select } from "@opencode-ai/ui/select"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { Match, Show, Suspense, Switch } from "solid-js"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Menu } from "@opencode-ai/ui/menu"
+import { For, Match, Show, Suspense, Switch, lazy, createEffect, onCleanup, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
+import { useSettings } from "@/settings/model"
 import { SessionSidePanel } from "../files/session-side-panel"
 import { ReviewPanel } from "./panel"
 import { SessionReviewTab } from "./review-tab"
 import type { ChangeMode, SessionReviewModel } from "./model"
 
-export function SessionMobileTabs(props: { review: SessionReviewModel; compact?: boolean; bottom?: boolean }) {
+const StatusDrawer = lazy(async () => {
+  const { StatusDrawer } = await import("@/shell/status/status-drawer")
+  return { default: StatusDrawer }
+})
+
+const MobilePanelDrawer = lazy(async () => {
+  const { MobilePanelDrawer } = await import("@/shell/mobile-panel-drawer")
+  return { default: MobilePanelDrawer }
+})
+
+export function SessionMobileViewTabs(props: {
+  current: "session" | "changes" | "files" | "usage" | "terminal"
+  onSelect: (view: "session" | "changes" | "files" | "usage" | "terminal") => void
+  details?: (close: () => void) => JSX.Element
+  onDetailsOpenChange?: (open: boolean) => void
+}) {
   const language = useLanguage()
+  const [store, setStore] = createStore({
+    menu: false,
+    status: false,
+    statusLoaded: false,
+    details: false,
+    detailsLoaded: false,
+    pending: undefined as "status" | "details" | undefined,
+  })
+  createEffect(() => props.onDetailsOpenChange?.(store.details))
+  onCleanup(() => props.onDetailsOpenChange?.(false))
+  let trigger: HTMLButtonElement | undefined
   return (
-    <Tabs value={props.review.mobile.tab()} class="h-auto">
-      <Tabs.List
-        classList={{
-          "!h-9": props.compact,
-          "[&::after]:!border-b-0 [&::after]:!border-t [&::after]:!border-border-weak-base": props.bottom,
-        }}
+    <div
+      class="relative flex shrink-0 items-center before:pointer-events-none before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-v2-border-border-base before:content-['']"
+      data-slot="session-mobile-view-navigation"
+    >
+      <Tabs value={props.current} variant="line" class="!h-auto min-w-0 flex-1" data-slot="session-mobile-view-tabs">
+        <Tabs.List aria-label={language.t("session.view.select")} class="!h-9 !gap-0 !px-0 before:!hidden">
+          <For each={["session", "changes", "files", "terminal"] as const}>
+            {(view) => (
+              <Tabs.Trigger
+                value={view}
+                class="min-w-0 flex-1"
+                classes={{ button: "w-full justify-center" }}
+                onClick={() => props.onSelect(view)}
+              >
+                {view === "session"
+                  ? language.t("session.tab.session")
+                  : view === "changes"
+                    ? language.plural("session.review.change", 0)
+                    : view === "files"
+                      ? language.t("session.tab.files")
+                      : language.t("terminal.title")}
+              </Tabs.Trigger>
+            )}
+          </For>
+        </Tabs.List>
+      </Tabs>
+      <Menu
+        appearance="standard"
+        modal={false}
+        placement="bottom-end"
+        gutter={4}
+        open={store.menu}
+        onOpenChange={(open) => setStore("menu", open)}
       >
-        <Tabs.Trigger
-          value="session"
-          classes={{ button: props.compact ? "w-full !py-2" : "w-full" }}
-          classList={{
-            "!w-1/2 !max-w-none": true,
-            "!border-b-0 !border-t !border-border-weak-base [&:has([data-selected])]:!border-t-transparent":
-              props.bottom,
+        <Menu.Trigger
+          as={IconButton}
+          ref={(element: HTMLButtonElement) => {
+            trigger = element
           }}
-          onClick={() => props.review.mobile.setTab("session")}
-        >
-          {language.t("session.tab.session")}
-        </Tabs.Trigger>
-        <Tabs.Trigger
-          value="changes"
-          classes={{ button: props.compact ? "w-full !py-2" : "w-full" }}
-          classList={{
-            "!w-1/2 !max-w-none !border-r-0": true,
-            "!border-b-0 !border-t !border-border-weak-base [&:has([data-selected])]:!border-t-transparent":
-              props.bottom,
-          }}
-          onClick={() => props.review.mobile.setTab("changes")}
-        >
-          {props.review.hasChanges()
-            ? language.t("session.review.filesChanged", { count: props.review.count() })
-            : language.plural("session.review.change", 0)}
-        </Tabs.Trigger>
-      </Tabs.List>
-    </Tabs>
+          icon={<Icon name="menu" />}
+          variant="ghost-muted"
+          size="normal"
+          class="mx-1.5 shrink-0"
+          state={props.current === "usage" || store.menu ? "pressed" : undefined}
+          aria-label={language.t("common.moreOptions")}
+        />
+        <Menu.Portal>
+          <Menu.Content
+            onCloseAutoFocus={(event) => {
+              if (!store.pending) return
+              event.preventDefault()
+              if (store.pending === "status") setStore({ status: true, statusLoaded: true })
+              if (store.pending === "details") setStore({ details: true, detailsLoaded: true })
+              setStore("pending", undefined)
+            }}
+          >
+            <Menu.Item onSelect={() => props.onSelect("usage")}>{language.t("session.tab.usage")}</Menu.Item>
+            <Show when={props.details}>
+              <Menu.Item onSelect={() => setStore({ pending: "details", menu: false })}>
+                {language.t("session.summary.title")}
+              </Menu.Item>
+            </Show>
+            <Menu.Item onSelect={() => setStore({ pending: "status", menu: false })}>
+              {language.t("status.popover.trigger")}
+            </Menu.Item>
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu>
+      <Show when={store.statusLoaded}>
+        <Suspense>
+          <StatusDrawer
+            open={store.status}
+            onOpenChange={(open) => setStore("status", open)}
+            returnFocus={() => trigger}
+          />
+        </Suspense>
+      </Show>
+      <Show when={store.detailsLoaded}>
+        <Suspense>
+          <MobilePanelDrawer
+            title={language.t("session.summary.title")}
+            open={store.details}
+            onOpenChange={(open) => setStore("details", open)}
+            returnFocus={() => trigger}
+          >
+            {props.details?.(() => setStore("details", false))}
+          </MobilePanelDrawer>
+        </Suspense>
+      </Show>
+    </div>
   )
 }
 
@@ -88,14 +174,22 @@ export function SessionDesktopReview(props: { review: SessionReviewModel; presen
 }
 
 function ReviewContent(props: { review: SessionReviewModel }) {
+  const settings = useSettings()
   return (
     <Show when={!props.review.deferRender()}>
       <SessionReviewTab
         title={<ReviewTitle review={props.review} />}
-        empty={<ReviewEmpty review={props.review} loadingClass="px-4 py-4 text-text-weak" />}
+        empty={<ReviewEmpty review={props.review} loadingClass="px-2 py-2 text-text-weak" />}
         diffs={props.review.diffs()}
         view={props.review.view()}
         diffStyle="unified"
+        changeSummary
+        disableLineNumbers={false}
+        overflow={settings.general.mobileDiffWrap() ? "wrap" : "scroll"}
+        onViewFile={(file) => {
+          props.review.openFile(file)
+          props.review.mobile.setTab("files")
+        }}
         onScrollRef={props.review.setScroll}
         focusedFile={props.review.activeFile()}
         onLineComment={props.review.comments.add}
@@ -106,11 +200,11 @@ function ReviewContent(props: { review: SessionReviewModel }) {
         comments={props.review.comments.all()}
         focusedComment={props.review.comments.focus()}
         onFocusedCommentChange={props.review.comments.setFocus}
-        onViewFile={props.review.openFile}
         classes={{
-          root: "pb-8 [&_[data-slot=session-review-list]]:pb-0",
-          header: "px-4 !h-16 !pb-4",
-          container: "px-4",
+          root: "[&_[data-slot=session-review-list]]:pb-0 [&_[data-slot=accordion-trigger]]:!rounded-none [&_[data-slot=accordion-trigger]]:!border-x-0 [&_[data-slot=accordion-item]:first-child_[data-slot=accordion-trigger]]:!border-t-0 [&_[data-slot=accordion-item]:last-child:not([data-expanded])_[data-slot=accordion-trigger]]:!border-b-0 [&_[data-slot=accordion-item]:last-child_[data-slot=accordion-content]]:!border-b-0 [&_[data-slot=accordion-item]:last-child_[data-slot=session-review-diff-placeholder]]:!border-b-0 [&_[data-slot=accordion-content]]:!rounded-none [&_[data-slot=accordion-content]]:!border-x-0 [&_[data-slot=session-review-diff-placeholder]]:!rounded-none [&_[data-slot=session-review-diff-placeholder]]:!border-x-0",
+          header:
+            "!px-2 !h-10 !pb-0 relative before:pointer-events-none before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-v2-border-border-base before:content-['']",
+          container: "!px-0",
         }}
       />
     </Show>

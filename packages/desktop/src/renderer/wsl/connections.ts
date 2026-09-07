@@ -12,7 +12,6 @@ export function readyWslConnections(state?: WslServersState, label = "WSL") {
         distro: item.config.distro,
         http: {
           url: item.runtime.url,
-          username: item.runtime.username ?? undefined,
           password: item.runtime.password ?? undefined,
         },
       },

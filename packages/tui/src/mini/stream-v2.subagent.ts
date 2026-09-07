@@ -21,9 +21,11 @@ import type {
   PermissionRequest,
   SessionMessageAssistantTool,
   SessionMessageInfo,
+  SessionMessageUser,
 } from "@opencode-ai/client/promise"
 import { Locale } from "../util/locale"
 import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
+import { toolImageCommits, userImageCommits } from "./stream-v2.image"
 import type {
   FooterSubagentDetail,
   FooterSubagentState,
@@ -115,7 +117,7 @@ type ChildState = {
   permissions: MiniPermissionRequest[]
   forms: MiniFormRequest[]
   messageIDs: Set<string>
-  prompts: Map<string, string>
+  prompts: Map<string, Pick<SessionMessageUser, "text" | "files">>
   hydrated: boolean
   detailStale: boolean
   blockersHydrated: boolean
@@ -287,16 +289,19 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     if (meta.background === true) child.background = true
   }
 
-  const userFrame = (child: ChildState, messageID: string, value: string) => {
+  const userFrame = (child: ChildState, messageID: string, prompt: Pick<SessionMessageUser, "text" | "files">) => {
     if (child.messageIDs.has(messageID)) return false
     child.messageIDs.add(messageID)
-    setFrame(child, `user:${messageID}`, {
-      kind: "user",
-      source: "system",
-      text: value,
-      phase: "start",
-      messageID,
-    })
+    if (prompt.text.trim())
+      setFrame(child, `user:${messageID}`, {
+        kind: "user",
+        source: "system",
+        text: prompt.text,
+        phase: "start",
+        messageID,
+      })
+    for (const commit of userImageCommits(messageID, prompt.files))
+      setFrame(child, sourceKey(messageID, commit.partID), commit)
     return true
   }
 
@@ -325,12 +330,14 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     }
     child.finishedTools.add(key)
     child.tools.delete(key)
-    if (part.state.status === "error" && output) {
-      setFrame(child, frame, toolCommit(part, messageID, "progress", output, input.directory))
-      setFrame(child, `${frame}:final`, toolCommit(part, messageID, "final", undefined, input.directory))
-      return
-    }
-    setFrame(child, frame, toolCommit(part, messageID, toolFinalPhase(part), undefined, input.directory))
+    const partial = part.state.status === "error" && output
+    if (partial) setFrame(child, frame, toolCommit(part, messageID, "progress", output, input.directory))
+    setFrame(
+      child,
+      partial ? `${frame}:final` : frame,
+      toolCommit(part, messageID, toolFinalPhase(part), undefined, input.directory),
+    )
+    for (const commit of toolImageCommits(part, messageID)) setFrame(child, sourceKey(messageID, commit.partID), commit)
   }
 
   const rebuild = (child: ChildState, messages: SessionMessageInfo[]) => {
@@ -342,7 +349,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     for (const message of messages) {
       if (message.type === "user") {
         child.prompts.delete(message.id)
-        userFrame(child, message.id, message.text)
+        userFrame(child, message.id, message)
         continue
       }
       if (message.type !== "assistant") continue
@@ -398,9 +405,11 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     const pendingPrompts = new Map(child.prompts)
     const pendingTools = new Map(child.tools)
     let retry = false
-    const task = sdk.message
-      .list({ sessionID: child.sessionID, limit: CHILD_MESSAGE_LIMIT, order: "desc" }, { signal })
-      .then((response) => {
+    const task = Promise.all([
+      sdk.message.list({ sessionID: child.sessionID, limit: CHILD_MESSAGE_LIMIT, order: "desc" }, { signal }),
+      sdk.session.inbox.list({ sessionID: child.sessionID }, { signal }),
+    ])
+      .then(([response, pending]) => {
         if (!active(signal)) return
         const buffered = hydrationEvents.get(child.sessionID) ?? []
         hydrationEvents.delete(child.sessionID)
@@ -409,6 +418,9 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
           retry = true
           notifyDetail(child)
           return
+        }
+        for (const item of pending) {
+          if (item.type === "user") child.prompts.set(item.id, item.payload)
         }
         for (const [id, prompt] of pendingPrompts) {
           if (!child.prompts.has(id)) child.prompts.set(id, prompt)
@@ -645,7 +657,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
 
   const reduce = (child: ChildState, event: V2Event) => {
     if (event.type === "session.inbox.enqueued") {
-      if (event.data.item.type === "user") child.prompts.set(event.data.inboxID, event.data.item.payload.text)
+      if (event.data.item.type === "user") child.prompts.set(event.data.inboxID, event.data.item.payload)
       return
     }
     if (event.type === "session.inbox.delivered") {

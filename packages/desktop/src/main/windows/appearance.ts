@@ -99,6 +99,11 @@ export function getPinchZoomEnabled() {
   return getStore().get(PINCH_ZOOM_ENABLED_KEY) === true
 }
 
+export function setZoomFactor(win: BrowserWindow, factor: number) {
+  win.webContents.setZoomFactor(clampZoom(factor))
+  updateZoom(win)
+}
+
 export function wireZoom(win: BrowserWindow) {
   pinchZoomEnabled.set(win, getPinchZoomEnabled())
   win.webContents.setZoomFactor(1)

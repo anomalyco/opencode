@@ -3,7 +3,7 @@ export * as InstancePlugins from "./instance.js"
 import type { Plugin } from "@opencode-ai/plugin/effect/plugin"
 import { Context, Layer } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import type { Versioned } from "../plugin.js"
+import type { Generation } from "../plugin.js"
 
 /**
  * Holds the plugins one instance is born with. Unlike the host-global
@@ -13,16 +13,13 @@ import type { Versioned } from "../plugin.js"
  * for the instance's lifetime; runtime dynamism lives inside plugins through
  * the container transform/reload APIs.
  *
- * Limitations: `vcs` marker declarations in an instance list are not seen by
- * `ProjectMarkers` (it is global and runs during project resolution, before
- * the instance exists — unlike `SdkPlugins`, whose declarations it consumes
- * directly), and config plugin operations may disable instance plugins by id,
- * matching `SdkPlugins` behavior.
+ * Config plugin operations may disable instance plugins by id, matching
+ * `SdkPlugins` behavior.
  */
 export type List = readonly Plugin[]
 
 export interface Interface {
-  readonly all: () => readonly Versioned[]
+  readonly all: () => readonly Generation[]
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/InstancePlugins") {}
@@ -33,8 +30,8 @@ export const node = makeLocationNode({
   deps: [],
 })
 
-// The constant version is load-bearing: the plugin registry treats an
-// unchanged (id, version) pair as the same plugin across activations, which
+// The constant revision is load-bearing: the plugin registry treats an
+// unchanged (id, revision) pair as the same plugin across activations, which
 // is only correct because a bound list never changes after creation.
 // `source: "sdk"` means host-contributed; an instance list is the
 // per-instance form of the same channel.
@@ -43,8 +40,6 @@ export function bound(plugins: List) {
   if (duplicates.length > 0) {
     throw new Error(`duplicate instance plugin ids: ${duplicates.map((plugin) => plugin.id).join(", ")}`)
   }
-  const stamped = plugins.map(
-    (plugin): Versioned => ({ ...plugin, version: "instance", source: { type: "sdk" } }),
-  )
+  const stamped = plugins.map((plugin): Generation => ({ ...plugin, revision: "instance", source: { type: "sdk" } }))
   return Layer.succeed(Service, Service.of({ all: () => stamped }))
 }

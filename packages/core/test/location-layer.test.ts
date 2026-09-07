@@ -4,11 +4,13 @@ import { describe, expect } from "bun:test"
 import { Config } from "@opencode-ai/schema/config"
 import { Money } from "@opencode-ai/schema/money"
 import {
+  Cause,
   DateTime,
   Deferred,
   Duration,
   Effect,
   Equal,
+  Exit,
   Fiber,
   Hash,
   Layer,
@@ -16,10 +18,10 @@ import {
   Option,
   RcMap,
   Schema,
+  Scope,
   Stream,
 } from "effect"
 import { TestClock } from "effect/testing"
-import { Plugin as EffectPlugin } from "@opencode-ai/plugin/effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -28,11 +30,9 @@ import { Global } from "@opencode-ai/util/global"
 import { LocationServiceMap, type LocationServices } from "@opencode-ai/core/location-services"
 import { LocationActivity } from "@opencode-ai/core/location-activity"
 import { Location } from "@opencode-ai/core/location"
+import { LocationWatcher } from "@opencode-ai/core/filesystem/location-watcher"
 import { Plugin } from "@opencode-ai/core/plugin"
-import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Model } from "@opencode-ai/core/model"
-import { Mcp } from "@opencode-ai/core/mcp/index"
 import { Project } from "@opencode-ai/core/project"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -40,8 +40,9 @@ import { Session } from "@opencode-ai/core/session"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
+import { offlineModels } from "./fixture/models"
 import { testEffect } from "./lib/effect"
 import { toolDefinitions } from "./lib/tool"
 import { Database } from "../src/database/database"
@@ -51,12 +52,8 @@ import { Tool } from "../src/tool"
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
-    [Global.node, tempGlobalLayer],
-  ]),
-)
-const itWithSdk = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
-    [Global.node, tempGlobalLayer],
+    Global.node.replace(tempGlobalLayer),
+    offlineModels,
   ]),
 )
 const activityLocations = Layer.effect(
@@ -77,11 +74,182 @@ const activityLocations = Layer.effect(
 )
 const itWithActivity = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node, LocationActivity.node]), [
-    [LocationServiceMap.node, activityLocations],
+    LocationServiceMap.node.replace(activityLocations),
   ]),
 )
 
 describe("LocationServiceMap", () => {
+  for (const failure of ["file", "permissions", "config reference"] as const) {
+    for (const invalidate of [false, true]) {
+      // The file-path fixture boots on Windows rather than failing during
+      // discovery. The config-reference case covers repair on every OS.
+      // Windows does not enforce POSIX directory modes, and root bypasses them.
+      const test =
+        (failure === "file" && process.platform === "win32") ||
+        (failure === "permissions" && (process.platform === "win32" || process.getuid?.() === 0))
+          ? it.live.skip
+          : it.live
+      test(`retries after repairing ${failure}${invalidate ? " with explicit invalidation" : ""}`, () =>
+        Effect.gen(function* () {
+          const dir = yield* tmpdirScoped()
+          const directory = path.join(dir.path, "repaired")
+          const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
+          const locations = yield* LocationServiceMap.Service
+          const load = Location.Service.pipe(Effect.provide(locations.get(ref)), Effect.scoped)
+
+          if (failure === "file") yield* Effect.promise(() => fs.writeFile(directory, "file"))
+          if (failure === "permissions") {
+            yield* Effect.promise(() => fs.mkdir(directory, { mode: 0o000 }))
+            yield* Effect.addFinalizer(() => Effect.promise(() => fs.chmod(directory, 0o755)))
+          }
+          if (failure === "config reference") {
+            yield* Effect.promise(() => fs.mkdir(directory))
+            yield* Effect.promise(() =>
+              fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify({ username: "{file:username.txt}" })),
+            )
+          }
+          const first = yield* Effect.exit(load)
+          expect(Exit.isFailure(first)).toBe(true)
+          if (failure === "config reference" && Exit.isFailure(first)) {
+            expect(Cause.squash(first.cause)).toMatchObject({
+              name: "ConfigInvalidError",
+              data: { message: expect.stringContaining('bad file reference: "{file:username.txt}"') },
+            })
+          }
+          if (!invalidate) expect(yield* locations.contextEffectOption(ref).pipe(Effect.scoped)).toEqual(Option.none())
+
+          if (failure === "file") {
+            yield* Effect.promise(() => fs.rm(directory))
+            yield* Effect.promise(() => fs.mkdir(directory))
+          }
+          if (failure === "permissions") yield* Effect.promise(() => fs.chmod(directory, 0o755))
+          if (failure === "config reference") {
+            yield* Effect.promise(() => fs.writeFile(path.join(directory, "username.txt"), "test-user"))
+          }
+          expect((yield* Effect.promise(() => fs.stat(directory))).isDirectory()).toBe(true)
+          if (invalidate) yield* locations.invalidate(ref)
+          const repaired = yield* Effect.exit(load)
+          expect(Exit.isSuccess(repaired)).toBe(true)
+          // A successful graph remains cached after its last borrower releases.
+          expect(yield* load).toBe(yield* repaired)
+        }))
+    }
+  }
+
+  for (const failure of ["file", "missing", "config reference"] as const) {
+    // A file-path Location boots on Windows; use the missing config reference there.
+    const test = failure === "file" && process.platform === "win32" ? it.live.skip : it.live
+    test(`keeps the repaired graph after concurrent ${failure} failures release`, () =>
+      Effect.gen(function* () {
+        const dir = yield* tmpdirScoped()
+        const directory = path.join(dir.path, "concurrent")
+        const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
+        const locations = yield* LocationServiceMap.Service
+        if (failure === "file") yield* Effect.promise(() => fs.writeFile(directory, "file"))
+        if (failure === "config reference") {
+          yield* Effect.promise(() => fs.mkdir(directory))
+          yield* Effect.promise(() =>
+            fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify({ username: "{file:username.txt}" })),
+          )
+        }
+
+        const scopes = yield* Effect.forEach(Array.from({ length: 8 }), () =>
+          Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void)),
+        )
+        const failures = yield* Effect.forEach(
+          scopes,
+          (scope) => locations.contextEffect(ref).pipe(Scope.provide(scope), Effect.exit),
+          { concurrency: "unbounded" },
+        )
+        expect(failures.every(Exit.isFailure)).toBe(true)
+        if (failure === "file") yield* Effect.promise(() => fs.rm(directory))
+        if (failure !== "config reference") yield* Effect.promise(() => fs.mkdir(directory))
+        if (failure === "config reference") {
+          yield* Effect.promise(() => fs.writeFile(path.join(directory, "username.txt"), "test-user"))
+        }
+        const repaired = yield* locations.contextEffect(ref)
+
+        yield* Effect.forEach(scopes, (scope) => Scope.close(scope, Exit.void))
+        expect(yield* locations.contextEffect(ref)).toBe(repaired)
+        expect(Option.getOrThrow(yield* locations.contextEffectOption(ref))).toBe(repaired)
+      }))
+  }
+
+  for (const disposition of ["retry", "invalidate", "interrupt"] as const) {
+    testEffect(Layer.empty).live(
+      disposition === "invalidate"
+        ? "does not let an invalidated boot failure evict its replacement"
+        : disposition === "interrupt"
+          ? "finishes a failed boot after its acquisition scopes close"
+          : "shares a failed boot across acquisition APIs and retries",
+      () =>
+        Effect.gen(function* () {
+          const entered = yield* Deferred.make<void>()
+          const release = yield* Deferred.make<void>()
+          const builds = { started: 0 }
+          const finalized: number[] = []
+          const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
+            Global.node.replace(tempGlobalLayer),
+            offlineModels,
+            LocationWatcher.node.replace(
+              LocationWatcher.node.mapLayer((layer) =>
+                layer.pipe(
+                  Layer.tap(() =>
+                    Effect.gen(function* () {
+                      const build = ++builds.started
+                      yield* Effect.addFinalizer(() => Effect.sync(() => finalized.push(build)))
+                      if (build !== 1) return
+                      yield* Deferred.succeed(entered, undefined)
+                      yield* Deferred.await(release)
+                      yield* Effect.die("first boot failed")
+                    }),
+                  ),
+                ),
+              ),
+            ),
+          ])
+          yield* Effect.gen(function* () {
+            const dir = yield* tmpdirScoped()
+            const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+            const locations = yield* LocationServiceMap.Service
+            const first = yield* locations.contextEffect(ref).pipe(Effect.scoped, Effect.exit, Effect.forkScoped)
+            yield* Effect.addFinalizer(() => Deferred.succeed(release, undefined))
+            yield* Deferred.await(entered)
+            const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void))
+            const second = yield* Location.Service.pipe(
+              Effect.provide(locations.get(ref)),
+              Effect.exit,
+              Effect.forkScoped({ startImmediately: true }),
+            )
+            const third = yield* locations
+              .contextEffectOption(ref)
+              .pipe(Scope.provide(scope), Effect.exit, Effect.forkScoped({ startImmediately: true }))
+            if (disposition === "invalidate") yield* locations.invalidate(ref)
+            if (disposition === "interrupt") {
+              yield* Fiber.interrupt(first)
+              yield* Fiber.interrupt(second)
+              yield* Scope.close(scope, Exit.void)
+            }
+            const replacement = disposition === "invalidate" ? yield* locations.contextEffect(ref) : undefined
+            yield* Deferred.succeed(release, undefined)
+            if (disposition !== "interrupt") {
+              expect(Exit.isFailure(yield* Fiber.join(first))).toBe(true)
+              expect(Exit.isFailure(yield* Fiber.join(second))).toBe(true)
+            }
+            expect(Exit.isFailure(yield* Fiber.join(third).pipe(Effect.timeout("2 seconds")))).toBe(true)
+            expect(finalized).toEqual([1])
+            expect(builds.started).toBe(disposition === "invalidate" ? 2 : 1)
+            const recovered = yield* locations.contextEffect(ref)
+            if (replacement) expect(recovered).toBe(replacement)
+            yield* Scope.close(scope, Exit.void)
+            expect(yield* locations.contextEffect(ref)).toBe(recovered)
+            expect(builds.started).toBe(2)
+          }).pipe(Effect.provide(layer))
+          expect(finalized).toEqual([1, 2])
+        }),
+    )
+  }
+
   itWithActivity.effect("does not refresh lifetime from inferred Session routing", () =>
     Effect.gen(function* () {
       const locations = yield* LocationServiceMap.Service
@@ -171,426 +339,10 @@ describe("LocationServiceMap", () => {
           expect(location.directory).toBe(directory)
           expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([workspaceRef])
 
-          // A local ref with the same missing directory keeps the existing
-          // behavior: dropped as soon as it goes idle so a retry can rebuild it.
+          // A local ref with the same missing directory is dropped after its
+          // boot failure so a retry can rebuild it.
           yield* Location.Service.pipe(Effect.provide(locations.get(localRef)), Effect.scoped, Effect.exit)
           expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([workspaceRef])
-        }),
-      ),
-    ),
-  )
-
-  itWithSdk.live("preserves embedded SDK plugins after Location eviction", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          const sdk = yield* SdkPlugins.Service
-          const locations = yield* LocationServiceMap.Service
-          const id = Agent.ID.make("persistent-sdk-agent")
-          const plugin = EffectPlugin.define({
-            id: "persistent-sdk-plugin",
-            effect: (ctx) => ctx.agent.transform((agents) => agents.update(id, () => {})),
-          })
-          yield* sdk.register(plugin)
-
-          const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
-          const read = Effect.gen(function* () {
-            const supervisor = yield* PluginSupervisor.Service
-            yield* supervisor.flush
-            const agents = yield* Agent.Service
-            return yield* agents.get(id)
-          })
-
-          expect(yield* read.pipe(Effect.scoped, Effect.provide(locations.get(ref)))).toBeDefined()
-          yield* locations.invalidate(ref)
-          expect(yield* read.pipe(Effect.scoped, Effect.provide(locations.get(ref)))).toBeDefined()
-        }),
-      ),
-    ),
-  )
-
-  itWithSdk.live("waits for explorer activation to complete", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          const started = yield* Deferred.make<void>()
-          const release = yield* Deferred.make<void>()
-          const sdk = yield* SdkPlugins.Service
-          yield* sdk.register(
-            EffectPlugin.define({
-              id: "blocked-initial-activation",
-              effect: () => Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release))),
-            }),
-          )
-
-          const locations = yield* LocationServiceMap.Service
-          const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
-          yield* Deferred.await(started)
-
-          const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
-            Effect.provide(context),
-            Effect.forkChild,
-          )
-          expect(flushFiber.pollUnsafe()).toBeUndefined()
-          yield* Deferred.succeed(release, undefined)
-          yield* Fiber.join(flushFiber)
-          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
-            Effect.provide(context),
-            Effect.timeout("1 second"),
-          )
-
-          const explorer = yield* Effect.gen(function* () {
-            const agents = yield* Agent.Service
-            return yield* agents.resolve("explore")
-          }).pipe(Effect.provide(context))
-
-          expect(explorer).toBeDefined()
-          expect(explorer?.permissions.length).toBeGreaterThan(0)
-        }),
-      ),
-    ),
-  )
-
-  itWithSdk.live("reruns activation for SDK plugins registered during startup", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          const firstStarted = yield* Deferred.make<void>()
-          const releaseFirst = yield* Deferred.make<void>()
-          const secondStarted = yield* Deferred.make<void>()
-          const releaseSecond = yield* Deferred.make<void>()
-          const sdk = yield* SdkPlugins.Service
-          yield* sdk.register(
-            EffectPlugin.define({
-              id: "fixed-target-first-plugin",
-              effect: () =>
-                Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst))),
-            }),
-          )
-
-          const locations = yield* LocationServiceMap.Service
-          const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
-          yield* Deferred.await(firstStarted)
-
-          const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
-            Effect.provide(context),
-            Effect.forkChild({ startImmediately: true }),
-          )
-          yield* Effect.yieldNow
-          yield* sdk.register(
-            EffectPlugin.define({
-              id: "fixed-target-second-plugin",
-              effect: () =>
-                Deferred.succeed(secondStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseSecond))),
-            }),
-          )
-
-          yield* Deferred.succeed(releaseFirst, undefined)
-          yield* Deferred.await(secondStarted)
-          expect(flushFiber.pollUnsafe()).toBeUndefined()
-
-          yield* Deferred.succeed(releaseSecond, undefined)
-          yield* Fiber.join(flushFiber)
-        }),
-      ),
-    ),
-  )
-
-  itWithSdk.live("reruns activation for Config updates during startup", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          const activations = { count: 0 }
-          const file = path.join(dir.path, "opencode.json")
-          yield* Effect.promise(() => fs.writeFile(file, "{}"))
-          const firstStarted = yield* Deferred.make<void>()
-          const releaseFirst = yield* Deferred.make<void>()
-          const secondStarted = yield* Deferred.make<void>()
-          const releaseSecond = yield* Deferred.make<void>()
-          const sdk = yield* SdkPlugins.Service
-          yield* sdk.register(
-            EffectPlugin.define({
-              id: "blocked-config-reload",
-              effect: () =>
-                Effect.sync(() => ++activations.count).pipe(
-                  Effect.flatMap((activation) =>
-                    activation === 1
-                      ? Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst)))
-                      : Deferred.succeed(secondStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseSecond))),
-                  ),
-                ),
-            }),
-          )
-
-          const locations = yield* LocationServiceMap.Service
-          const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
-          yield* Deferred.await(firstStarted)
-
-          const bus = yield* Bus.Service
-          const updated = yield* bus.subscribe(Config.Event.Updated).pipe(
-            Stream.filter((event) => event.location?.directory === dir.path),
-            Stream.runHead,
-            Effect.forkChild({ startImmediately: true }),
-          )
-          yield* Effect.promise(() =>
-            fs.writeFile(
-              file,
-              JSON.stringify({ plugins: [path.join(import.meta.dir, "plugin/fixtures/config-effect-plugin.ts")] }),
-            ),
-          )
-          yield* Fiber.join(updated)
-
-          const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
-            Effect.provide(context),
-            Effect.forkChild,
-          )
-          yield* Deferred.succeed(releaseFirst, undefined)
-          yield* Deferred.await(secondStarted)
-          expect(flushFiber.pollUnsafe()).toBeUndefined()
-          yield* Deferred.succeed(releaseSecond, undefined)
-          yield* Fiber.join(flushFiber)
-          expect(activations.count).toBe(2)
-        }),
-      ),
-    ),
-  )
-
-  itWithSdk.live("keeps flush pending while startup updates continue", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          const locations = yield* LocationServiceMap.Service
-          const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
-          const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
-            Effect.provide(context),
-            Effect.forkChild({ startImmediately: true }),
-          )
-          const bus = yield* Bus.Service
-
-          yield* Effect.forEach(
-            Array.from({ length: 5 }),
-            () => bus.publish(SdkPlugins.Updated, {}).pipe(Effect.andThen(Effect.sleep("50 millis"))),
-            { discard: true },
-          )
-          expect(flushFiber.pollUnsafe()).toBeUndefined()
-          yield* Fiber.join(flushFiber)
-        }),
-      ),
-    ),
-  )
-
-  itWithSdk.live("does not reload plugins when config updates leave plugin operations unchanged", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          const activations = { count: 0 }
-          const sdk = yield* SdkPlugins.Service
-          yield* sdk.register(
-            EffectPlugin.define({
-              id: "unchanged-config-plugin",
-              effect: () => Effect.sync(() => ++activations.count).pipe(Effect.asVoid),
-            }),
-          )
-
-          const locations = yield* LocationServiceMap.Service
-          const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
-          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(context))
-          expect(activations.count).toBe(1)
-
-          yield* Bus.Service.use((bus) => bus.publish(Config.Event.Updated, {})).pipe(Effect.provide(context))
-          yield* Effect.sleep("200 millis")
-
-          expect(activations.count).toBe(1)
-        }),
-      ),
-    ),
-  )
-
-  itWithSdk.live("keeps flush open while later hot reload runs", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          const locations = yield* LocationServiceMap.Service
-          const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
-          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(context))
-
-          const started = yield* Deferred.make<void>()
-          const release = yield* Deferred.make<void>()
-          const completed = yield* Deferred.make<void>()
-          const sdk = yield* SdkPlugins.Service
-          yield* sdk.register(
-            EffectPlugin.define({
-              id: "post-ready-plugin",
-              effect: () =>
-                Deferred.succeed(started, undefined).pipe(
-                  Effect.andThen(Deferred.await(release)),
-                  Effect.andThen(Deferred.succeed(completed, undefined)),
-                ),
-            }),
-          )
-          yield* Deferred.await(started)
-
-          const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
-            Effect.provide(context),
-            Effect.forkChild({ startImmediately: true }),
-          )
-          expect(flushFiber.pollUnsafe()).toBeUndefined()
-          yield* Deferred.succeed(release, undefined)
-          yield* Fiber.join(flushFiber)
-          yield* Deferred.await(completed)
-        }),
-      ),
-    ),
-  )
-
-  itWithSdk.live("does not cancel activation when a flush waiter is interrupted", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          const started = yield* Deferred.make<void>()
-          const release = yield* Deferred.make<void>()
-          const completed = yield* Deferred.make<void>()
-          const sdk = yield* SdkPlugins.Service
-          yield* sdk.register(
-            EffectPlugin.define({
-              id: "interrupted-waiter-plugin",
-              effect: () =>
-                Deferred.succeed(started, undefined).pipe(
-                  Effect.andThen(Deferred.await(release)),
-                  Effect.andThen(Deferred.succeed(completed, undefined)),
-                ),
-            }),
-          )
-
-          const locations = yield* LocationServiceMap.Service
-          const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
-          yield* Deferred.await(started)
-          const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
-            Effect.provide(context),
-            Effect.forkChild({ startImmediately: true }),
-          )
-          yield* Fiber.interrupt(flushFiber)
-
-          yield* Deferred.succeed(release, undefined)
-          yield* Deferred.await(completed)
-          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
-            Effect.provide(context),
-            Effect.timeout("500 millis"),
-          )
-        }),
-      ),
-    ),
-  )
-
-  it.live("applies ordered plugin config operations during boot", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            fs.writeFile(path.join(dir.path, "opencode.json"), JSON.stringify({ plugins: ["-*", "opencode.agent"] })),
-          )
-          const plugins = yield* Effect.gen(function* () {
-            const plugins = yield* Plugin.Service
-            const supervisor = yield* PluginSupervisor.Service
-            yield* supervisor.flush
-            return yield* plugins.list()
-          }).pipe(
-            Effect.scoped,
-            Effect.provide(
-              LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) })),
-            ),
-          )
-
-          expect(plugins.map((plugin) => plugin.id)).toEqual([Plugin.ID.make("opencode.agent")])
-        }),
-      ),
-    ),
-  )
-
-  it.live("reloads the plugin generation after config updates", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          const file = path.join(dir.path, "opencode.json")
-          yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ plugins: ["-*", "opencode.agent"] })))
-          yield* Effect.gen(function* () {
-            const registry = yield* Plugin.Service
-            const supervisor = yield* PluginSupervisor.Service
-            yield* supervisor.flush
-            expect((yield* registry.list()).map((plugin) => String(plugin.id))).toEqual(["opencode.agent"])
-
-            yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ plugins: ["-*", "opencode.command"] })))
-            for (let attempt = 0; attempt < 100; attempt++) {
-              if ((yield* registry.list()).some((plugin) => plugin.id === "opencode.command")) break
-              yield* Effect.sleep("20 millis")
-            }
-
-            expect((yield* registry.list()).map((plugin) => String(plugin.id))).toEqual(["opencode.command"])
-
-            yield* Effect.promise(() =>
-              fs.writeFile(
-                file,
-                JSON.stringify({
-                  plugins: ["-*", path.join(import.meta.dir, "plugin/fixtures/failing-plugin.ts")],
-                }),
-              ),
-            )
-            for (let attempt = 0; attempt < 100; attempt++) {
-              if ((yield* registry.list()).some((plugin) => plugin.status === "failed")) break
-              yield* Effect.sleep("20 millis")
-            }
-            expect(yield* registry.list()).toEqual([
-              {
-                id: Plugin.ID.make("failing-plugin"),
-                source: { type: "local", path: path.join(import.meta.dir, "plugin/fixtures/failing-plugin.ts") },
-                status: "failed",
-                error: expect.stringContaining("plugin failed"),
-                tui: false,
-              },
-            ])
-
-            yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ plugins: ["-*", "opencode.agent"] })))
-            for (let attempt = 0; attempt < 100; attempt++) {
-              if ((yield* registry.list()).some((plugin) => plugin.id === "opencode.agent")) break
-              yield* Effect.sleep("20 millis")
-            }
-            expect((yield* registry.list()).map((plugin) => String(plugin.id))).toEqual(["opencode.agent"])
-          }).pipe(
-            Effect.scoped,
-            Effect.provide(
-              LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) })),
-            ),
-          )
         }),
       ),
     ),
@@ -710,8 +462,8 @@ describe("LocationServiceMap", () => {
               yield* Reference.Service
               const catalog = yield* Catalog.Service
               yield* catalog.transform((editor) => editor.provider.update(providerID, () => {}))
-              const supervisor = yield* PluginSupervisor.Service
-              yield* supervisor.flush
+              const plugins = yield* Plugin.Service
+              yield* plugins.awaitActivation
               const registry = yield* Tool.Service
               return {
                 providers: yield* catalog.provider.all(),
@@ -763,6 +515,31 @@ describe("LocationServiceMap", () => {
             "websearch",
             "write",
           ])
+        }),
+      ),
+    ),
+  )
+
+  it.live("allows the built-in Plan agent to be disabled", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(dir.path, "opencode.json"),
+              JSON.stringify({ agents: { plan: { disabled: true } } }),
+            ),
+          )
+          yield* Effect.gen(function* () {
+            const plugins = yield* Plugin.Service
+            yield* plugins.awaitActivation
+            const agents = yield* Agent.Service
+            expect(yield* agents.get(Agent.ID.make("plan"))).toBeUndefined()
+          }).pipe(
+            Effect.provide(
+              LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) })),
+            ),
+          )
         }),
       ),
     ),
@@ -916,98 +693,6 @@ describe("LocationServiceMap", () => {
             }),
           )
           expect(String(resolved.model.id)).toBe("base")
-        }),
-      ),
-    ),
-  )
-
-  it.live("installs public plugins into a location", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          const plugins = yield* Plugin.Service
-          const reviewer = EffectPlugin.define({
-            id: "reviewer",
-            effect: (ctx) =>
-              ctx.agent
-                .transform((agent) => {
-                  agent.update("reviewer", (item) => {
-                    item.description = "Reviews code"
-                    item.mode = "subagent"
-                  })
-                })
-                .pipe(Effect.asVoid),
-          })
-          yield* plugins.activate([{ ...reviewer, version: "1" }])
-
-          const agents = yield* Agent.Service
-          expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({
-            description: "Reviews code",
-            mode: "subagent",
-          })
-        }).pipe(
-          Effect.scoped,
-          Effect.provide(LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))),
-        ),
-      ),
-    ),
-  )
-
-  itWithSdk.live("lets public plugins mutate configured and runtime MCP servers", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          const url = "https://example.com/mcp"
-          yield* Effect.promise(() =>
-            fs.writeFile(
-              path.join(dir.path, "opencode.json"),
-              JSON.stringify({ mcp: { servers: { example: { type: "remote", url, disabled: true } } } }),
-            ),
-          )
-          const observed: Record<string, boolean | undefined> = {}
-          const sdk = yield* SdkPlugins.Service
-          yield* sdk.register(
-            EffectPlugin.define({
-              id: "mcp-codemode-policy",
-              effect: (ctx) =>
-                ctx.mcp
-                  .transform((mcp) => {
-                    for (const [name, server] of mcp.list()) {
-                      if (server.type !== "remote" || new URL(server.url).hostname !== "example.com") continue
-                      mcp.update(name, (current) => {
-                        current.codemode = false
-                        observed[name] = current.codemode
-                      })
-                    }
-                  })
-                  .pipe(Effect.asVoid),
-            }),
-          )
-
-          yield* Effect.gen(function* () {
-            const supervisor = yield* PluginSupervisor.Service
-            const mcp = yield* Mcp.Service
-            yield* supervisor.flush
-            expect(observed.example).toBe(false)
-            yield* mcp.add("dynamic", {
-              type: "remote",
-              url: "https://example.com/dynamic",
-              disabled: true,
-            })
-            expect(observed.dynamic).toBe(false)
-            expect((yield* mcp.servers()).map((server) => String(server.name))).toEqual(["dynamic", "example"])
-          }).pipe(
-            Effect.scoped,
-            Effect.provide(
-              LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) })),
-            ),
-          )
         }),
       ),
     ),

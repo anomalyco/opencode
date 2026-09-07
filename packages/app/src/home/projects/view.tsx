@@ -1,5 +1,6 @@
 import { createMemo, For, type JSX, onCleanup, Show, splitProps } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Popover } from "@kobalte/core/popover"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
 import { AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
@@ -28,6 +29,7 @@ const projectContextMenuID = (server: ServerConnection.Any, directory: string) =
   `project:${ServerConnection.key(server)}:${directory}`
 
 export type HomeProjectsViewProps = {
+  dropdown?: boolean
   language: ReturnType<typeof useLanguage>
   servers: ServerConnection.Any[]
   projects: LocalProject[]
@@ -55,6 +57,8 @@ export type HomeProjectsViewProps = {
   onSelectProject: (server: ServerConnection.Any, directory: string) => void
   onAddProjects: (server: ServerConnection.Any, directories: string[]) => void
   onOpenProjectNewSession: (server: ServerConnection.Any, directory: string) => void
+  canImportSession: boolean
+  onImportSession: (server: ServerConnection.Any, project: LocalProject) => void
   onEditProject: (server: ServerConnection.Any, project: LocalProject) => void
   onRevealProject: (server: ServerConnection.Any, project: LocalProject) => void
   onClearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
@@ -64,6 +68,81 @@ export type HomeProjectsViewProps = {
 }
 
 export function HomeProjectsView(props: HomeProjectsViewProps) {
+  const [state, setState] = createStore({ open: false })
+  const selected = createMemo(() => props.projects.find((project) => project.worktree === props.selection.directory))
+  const server = createMemo(() =>
+    props.servers.find((server) => ServerConnection.key(server) === props.selection.server),
+  )
+  return (
+    <Show when={props.dropdown} fallback={<HomeProjectsPanel {...props} />}>
+      <Popover
+        open={state.open}
+        onOpenChange={(open) => setState("open", open)}
+        placement="bottom-start"
+        sameWidth
+        gutter={6}
+      >
+        <Popover.Trigger
+          data-component="home-projects-dropdown"
+          aria-label={props.language.t("home.projects")}
+          class="flex h-10 w-full min-w-0 items-center gap-2 rounded-[6px] bg-v2-background-bg-base px-1.5 text-start text-v2-text-text-base outline-none hover:bg-v2-background-bg-layer-01"
+        >
+          <Show when={selected()} fallback={<Icon name="folder" size="small" />}>
+            {(project) => <HomeProjectAvatar project={project()} />}
+          </Show>
+          <span class="flex min-w-0 flex-1 flex-col leading-[var(--line-height-compact)]">
+            <bdi class="truncate">
+              <Show when={selected()} fallback={props.language.t("home.projects.all")}>
+                {(project) => displayName(project())}
+              </Show>
+            </bdi>
+            <Show when={props.servers.length > 1 && server()}>
+              {(server) => (
+                <bdi class="truncate text-v2-text-text-muted opacity-70">
+                  {server().displayName ?? new URL(server().http.url).host}
+                </bdi>
+              )}
+            </Show>
+          </span>
+          <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content
+            aria-label={props.language.t("home.projects")}
+            dir={props.language.direction()}
+            class="z-50 max-h-[min(70dvh,var(--kb-popper-content-available-height))] overflow-hidden rounded-[10px] bg-v2-background-bg-base p-1.5 shadow-[var(--v2-elevation-floating)] outline-none data-[expanded]:animate-in data-[expanded]:fade-in data-[expanded]:slide-in-from-top-2 duration-150 ease-out motion-reduce:animate-none"
+          >
+            <HomeProjectsPanel
+              {...props}
+              onSelectProject={(server, directory) => {
+                props.onSelectProject(server, directory)
+                setState("open", false)
+              }}
+              onFocusServer={(server) => {
+                props.onFocusServer(server)
+                setState("open", false)
+              }}
+              onChooseProject={(server) => {
+                setState("open", false)
+                props.onChooseProject(server)
+              }}
+              onAddProjects={(server, directories) => {
+                setState("open", false)
+                props.onAddProjects(server, directories)
+              }}
+              onOpenProjectNewSession={(server, directory) => {
+                setState("open", false)
+                props.onOpenProjectNewSession(server, directory)
+              }}
+            />
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover>
+    </Show>
+  )
+}
+
+function HomeProjectsPanel(props: HomeProjectsViewProps) {
   const [contextMenu, setContextMenu] = createStore({ open: undefined as string | undefined })
   const contextMenuProps = {
     contextMenuOpen: (id: string) => contextMenu.open === id,
@@ -71,48 +150,77 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
   }
   return (
     <aside
-      class={`
+      class={
+        props.dropdown
+          ? "flex max-h-[min(60dvh,calc(var(--kb-popper-content-available-height)-12px))] min-h-0 min-w-0 flex-col overflow-hidden"
+          : `
         mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden
         lg:sticky lg:top-14 lg:mt-14 lg:h-[calc(100cqh-56px)] lg:self-start lg:pt-[52px]
-      `}
+      `
+      }
       aria-label={props.language.t("home.projects")}
       onWheel={(event) => {
         if (event.target === event.currentTarget) return
         props.onWheel(event)
       }}
     >
-      <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-1.5 pr-3">
-        <div class="text-v2-text-text-muted [font-weight:530]">{props.language.t("home.projects")}</div>
-        <Show when={props.servers.length === 1 && !(props.projects.length === 0 && props.recentlyClosed.length > 0)}>
-          <Tooltip placement="bottom" value={props.language.t("home.project.add")}>
-            <IconButton
-              data-action="home-add-project"
-              variant="ghost-muted"
-              size="large"
-              class="titlebar-icon [&_[data-slot=icon-svg]]:text-v2-icon-icon-muted"
-              icon={<Icon name="folder-add-left" />}
-              disabled={props.serverHealth(props.servers[0])?.healthy === false}
-              onClick={() => props.onChooseProject(props.servers[0])}
-              aria-label={props.language.t("home.project.add")}
-            />
-          </Tooltip>
-        </Show>
-      </div>
+      <Show when={!props.dropdown}>
+        <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-1.5 pr-3">
+          <div class="text-v2-text-text-muted [font-weight:530]">{props.language.t("home.projects")}</div>
+          <Show when={props.servers.length === 1 && !(props.projects.length === 0 && props.recentlyClosed.length > 0)}>
+            <Tooltip placement="bottom" value={props.language.t("home.project.add")}>
+              <IconButton
+                data-action="home-add-project"
+                variant="ghost-muted"
+                size="large"
+                class="titlebar-icon [&_[data-slot=icon-svg]]:text-v2-icon-icon-muted"
+                icon={<Icon name="folder-add-left" />}
+                disabled={props.serverHealth(props.servers[0])?.healthy === false}
+                onClick={() => props.onChooseProject(props.servers[0])}
+                aria-label={props.language.t("home.project.add")}
+              />
+            </Tooltip>
+          </Show>
+        </div>
+      </Show>
       <ScrollView data-slot="home-projects-scroll" class="min-h-0 min-w-0 shrink">
+        <Show when={props.dropdown && props.servers.length === 1}>
+          <HomeProjectNavButton
+            type="button"
+            class="mb-1"
+            data-selected={!props.selection.directory ? "" : undefined}
+            onClick={() => props.onFocusServer(props.servers[0])}
+          >
+            <Icon name="folder" size="small" />
+            <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("home.projects.all")}</span>
+          </HomeProjectNavButton>
+        </Show>
         <Show
           when={props.servers.length > 1}
           fallback={
-            <div class="pr-3">
+            <div class={props.dropdown ? "" : "pr-3"}>
               <Show
                 when={props.projects.length > 0}
                 fallback={<HomeProjectEmpty {...props} server={props.servers[0]} items={props.recentlyClosed} />}
               >
                 <HomeProjectList {...props} {...contextMenuProps} server={props.servers[0]} items={props.projects} />
+                <Show when={props.dropdown}>
+                  <HomeProjectNavButton
+                    type="button"
+                    data-action="home-add-project-row"
+                    class="mt-1 disabled:opacity-60"
+                    disabled={props.serverHealth(props.servers[0])?.healthy === false}
+                    onClick={() => props.onChooseProject(props.servers[0])}
+                  >
+                    <Icon name="folder-add-left" size="small" />
+                    <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("home.project.add")}</span>
+                  </HomeProjectNavButton>
+                </Show>
               </Show>
             </div>
           }
         >
-          <div class="flex min-w-0 flex-col gap-4 pr-3">
+          <div class={`flex min-w-0 flex-col ${props.dropdown ? "gap-1" : "gap-4 pr-3"}`}>
             <For each={props.servers}>
               {(item) => {
                 const projects = () => props.projectsForServer(item)
@@ -157,7 +265,9 @@ export function HomeUtilityNav(props: {
   language: ReturnType<typeof useLanguage>
 }) {
   return (
-    <div class={`${props.class ?? ""} min-w-0 flex-col gap-1 pr-3`}>
+    <div
+      class={`${props.class ?? ""} min-w-0 flex-row justify-between gap-1 lg:flex-col lg:justify-start lg:pr-3 [&>button]:w-auto lg:[&>button]:w-full`}
+    >
       <HomeProjectNavButton
         type="button"
         class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
@@ -511,6 +621,7 @@ function HomeProjectRow(
           // does not focus that server and load its session index. Touch is
           // excluded so flick-scrolling the list cannot select rows.
           pointerDownSelected = undefined
+          if (props.dropdown) return
           if (event.button !== 0 || event.pointerType === "touch") return
           if (!props.serverSelected) return
           pointerDownSelected = props.selected
@@ -561,6 +672,11 @@ function HomeProjectRow(
               <Menu.Item onSelect={() => props.onOpenProjectNewSession(props.server, props.project.worktree)}>
                 {props.language.t("command.session.new")}
               </Menu.Item>
+              <Show when={props.canImportSession}>
+                <Menu.Item onSelect={() => props.onImportSession(props.server, props.project)}>
+                  {props.language.t("command.session.import")}
+                </Menu.Item>
+              </Show>
               <Menu.Item onSelect={() => props.onEditProject(props.server, props.project)}>
                 {props.language.t("dialog.project.edit.title")}
               </Menu.Item>

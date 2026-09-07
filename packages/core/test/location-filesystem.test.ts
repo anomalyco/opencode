@@ -14,15 +14,16 @@ import { it } from "./lib/effect"
 
 const provide = (directory: string, workspaceID?: Workspace.ID) =>
   Effect.provide(
-    LayerNode.compile(FileSystem.node, [
-      [
-        Location.node,
-        Layer.succeed(
-          Location.Service,
-          Location.Service.of(location({ directory: AbsolutePath.make(directory), workspaceID })),
+    LayerNode.compile(FileSystem.node, {
+      replacements: [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(location({ directory: AbsolutePath.make(directory), workspaceID })),
+          ),
         ),
       ],
-    ]),
+    }),
   )
 
 const provideMemory = (directory: string, memory: Environment.MemoryDriver) => {
@@ -33,16 +34,17 @@ const provideMemory = (directory: string, memory: Environment.MemoryDriver) => {
     ),
   )
   return Effect.provide(
-    LayerNode.compile(FileSystem.node, [
-      [Location.node, activeLocation],
-      [
-        Environment.node,
-        Layer.succeed(
-          Environment.Service,
-          Environment.Service.of({ files: Environment.makeFiles(memory), spawner: memory.spawner }),
+    LayerNode.compile(FileSystem.node, {
+      replacements: [
+        Location.node.replace(activeLocation),
+        Environment.node.replace(
+          Layer.succeed(
+            Environment.Service,
+            Environment.Service.of({ files: Environment.makeFiles(memory), spawner: memory.spawner }),
+          ),
         ),
       ],
-    ]),
+    }),
   )
 }
 
@@ -152,6 +154,56 @@ describe("FileSystem", () => {
     }).pipe(provideMemory("/workspace/project", memory))
   })
 
+  it.live("lists parents and siblings with paths relative to the current location", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const current = path.join(directory, "current")
+        yield* Effect.promise(() => fs.mkdir(current))
+        yield* Effect.promise(() => fs.mkdir(path.join(directory, "sibling")))
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "sibling", "file.txt"), "outside"))
+        yield* Effect.gen(function* () {
+          const filesystem = yield* FileSystem.Service
+          const parent = yield* filesystem.list({ path: RelativePath.make("..") })
+          expect(parent).toHaveLength(2)
+          expect(parent.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual(
+            expect.arrayContaining([
+              { path: "." + path.sep, type: "directory" },
+              { path: path.join("..", "sibling") + path.sep, type: "directory" },
+            ]),
+          )
+          const sibling = yield* filesystem.list({ path: RelativePath.make("../sibling") })
+          expect(sibling.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+            { path: RelativePath.make(path.join("..", "sibling", "file.txt")), type: "file" },
+          ])
+          const absolute = yield* filesystem.list({ path: path.join(directory, "sibling") })
+          expect(absolute).toEqual(sibling)
+        }).pipe(provide(current))
+      }),
+    ),
+  )
+
+  it.live("lists workspace siblings through the environment", () => {
+    const memory = Environment.makeMemoryDriver()
+    return Effect.gen(function* () {
+      if (process.platform === "win32") return
+      const files = Environment.makeFiles(memory)
+      yield* files.mkdir("/workspace/current")
+      yield* files.mkdir("/workspace/sibling")
+      yield* files.write("/workspace/sibling/file.txt", new TextEncoder().encode("workspace"))
+
+      const filesystem = yield* FileSystem.Service
+      const parent = yield* filesystem.list({ path: ".." })
+      expect(parent).toHaveLength(2)
+      expect(parent.map((entry) => entry.path)).toEqual(expect.arrayContaining(["./", "../sibling/"]))
+      const sibling = yield* filesystem.list({ path: "../sibling" })
+      expect(sibling.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+        { path: "../sibling/file.txt", type: "file" },
+      ])
+      const absolute = yield* filesystem.list({ path: "/workspace/sibling" })
+      expect(absolute).toEqual(sibling)
+    }).pipe(provideMemory("/workspace/current", memory))
+  })
+
   it.live("canonicalizes local symlinked directories", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
@@ -174,10 +226,37 @@ describe("FileSystem", () => {
   it.live("rejects lexical escapes", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
-        const filesystem = yield* FileSystem.Service
-        const result = yield* filesystem.read({ path: RelativePath.make("../outside.txt") }).pipe(Effect.exit)
-        expect(Exit.isFailure(result)).toBe(true)
-      }).pipe(provide(directory)),
+        const current = path.join(directory, "current")
+        yield* Effect.promise(() => fs.mkdir(current))
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "outside.txt"), "outside"))
+        yield* Effect.gen(function* () {
+          const filesystem = yield* FileSystem.Service
+          const result = yield* filesystem.read({ path: RelativePath.make("../outside.txt") }).pipe(Effect.exit)
+          expect(Exit.isFailure(result)).toBe(true)
+        }).pipe(provide(current))
+      }),
+    ),
+  )
+
+  it.live("allows listing through an external symlink without allowing file reads", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const current = path.join(directory, "current")
+        const outside = path.join(directory, "outside")
+        yield* Effect.promise(() => fs.mkdir(current))
+        yield* Effect.promise(() => fs.mkdir(outside))
+        yield* Effect.promise(() => fs.writeFile(path.join(outside, "file.txt"), "outside"))
+        yield* Effect.promise(() => fs.symlink(outside, path.join(current, "link"), "junction"))
+        yield* Effect.gen(function* () {
+          const filesystem = yield* FileSystem.Service
+          const entries = yield* filesystem.list({ path: RelativePath.make("link") })
+          expect(entries.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+            { path: RelativePath.make(path.join("link", "file.txt")), type: "file" },
+          ])
+          const result = yield* filesystem.read({ path: RelativePath.make("link/file.txt") }).pipe(Effect.exit)
+          expect(Exit.isFailure(result)).toBe(true)
+        }).pipe(provide(current))
+      }),
     ),
   )
 })

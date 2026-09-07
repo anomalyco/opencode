@@ -18,7 +18,9 @@ export const loadIntegrations = Effect.fn("cli.auth.integrations")(function* (cl
   // The model endpoint is the existing public readiness boundary for the initial plugin generation.
   yield* request((signal) => client.model.default({ location }, { signal }))
   return yield* request((signal) => client.integration.list({ location }, { signal })).pipe(
-    Effect.map((response) => response.data),
+    Effect.map((response) =>
+      response.data.toSorted((a, b) => Number(b.id === "opencode-go") - Number(a.id === "opencode-go")),
+    ),
   )
 })
 

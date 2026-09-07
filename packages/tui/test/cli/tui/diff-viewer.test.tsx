@@ -297,7 +297,7 @@ test("opening the source chooser from initial Uncommitted does not resolve a bra
     viewer.app.mockInput.pressKey("d")
     await viewer.app.waitForFrame((frame) => frame.includes("Diff source"))
     expect(viewer.app.captureCharFrame()).toContain("Uncommitted · vs HEAD")
-    expect(viewer.app.captureCharFrame()).toMatch(/Base\s+Choose\.\.\./)
+    expect(viewer.app.captureCharFrame()).toMatch(/Base\s+Choose…/)
     expect(viewer.baseRequests).toHaveLength(0)
     expect(viewer.diffRequests).toHaveLength(1)
   } finally {

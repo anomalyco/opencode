@@ -4,7 +4,7 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { isDeepStrictEqual } from "node:util"
 import { type ParseError, parse } from "jsonc-parser"
-import { Context, Effect, Layer, Option, PubSub, Ref, Schema, Semaphore, Stream } from "effect"
+import { Context, Effect, FiberMap, Layer, Option, PubSub, Ref, Schema, Semaphore, Stream } from "effect"
 import {
   AgentsDirectory,
   ClaudeDirectory,
@@ -23,6 +23,8 @@ import { Location } from "./location.js"
 import { AbsolutePath } from "./schema.js"
 import { ConfigVariable } from "./config/variable.js"
 import { ConfigNormalize } from "./config/normalize.js"
+import { ConfigDiscovery } from "./config/discovery.js"
+import { ConfigWatch } from "./config/watch.js"
 import { WellKnown } from "./wellknown.js"
 
 export function latest<K extends keyof Info>(entries: readonly Entry[], key: K): Info[K] | undefined {
@@ -83,15 +85,12 @@ export const layer = (options?: Options) =>
     Service,
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
-      const global = yield* Global.Service
       const location = yield* Location.Service
       const watcher = yield* Watcher.Service
       const bus = yield* Bus.Service
       const credentials = yield* Credential.Service
       const wellknown = yield* WellKnown.Service
-      const names = ["opencode.json", "opencode.jsonc"]
       const reloadLock = Semaphore.makeUnsafe(1)
-      const fileTargets = new Set<AbsolutePath>()
       const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
       const decodeInfo = Schema.decodeUnknownOption(Info, decodeOptions)
       const parseInfo = Effect.fn("Config.parseInfo")(function* (text: string, source: string) {
@@ -177,74 +176,23 @@ export const layer = (options?: Options) =>
 
       const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath) {
         return [
-          ...(yield* Effect.forEach(names, (file) => loadFile(path.join(directory, file))).pipe(
+          ...(yield* Effect.forEach(ConfigDiscovery.names, (file) => loadFile(path.join(directory, file))).pipe(
             Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
           )),
           new Directory({ type: "directory", path: directory }),
         ]
       })
 
-      const discover = Effect.fn("Config.discover")(function* () {
-        const globalDirectory = AbsolutePath.make(global.config)
-        const globalAgentsDirectory = AbsolutePath.make(path.join(global.home, ".agents"))
-        const globalClaudeDirectory = AbsolutePath.make(path.join(global.home, ".claude"))
-        const locationIsGlobal = path.resolve(location.directory) === path.resolve(global.config)
-        const discovered =
-          locationIsGlobal || options?.project === false
-            ? []
-            : yield* fs
-                .up({
-                  targets: [".opencode", ".claude", ".agents", ...names.toReversed()],
-                  start: location.directory,
-                })
-                .pipe(Effect.orDie)
-
-        const globalEnabled = options?.global !== false
-        // A walked path that resolves into a global root is global config
-        // however the walk reached it (home above the project, or a location
-        // beneath the global config dir), so global: false excludes it
-        // uniformly — classified once here, not per consumer below.
-        const globalRoots = [globalDirectory, globalClaudeDirectory, globalAgentsDirectory].map((item) =>
-          path.resolve(item),
-        )
-        const visible = globalEnabled
-          ? discovered
-          : discovered.filter((item) => {
-              const resolved = path.resolve(item)
-              return !globalRoots.some((root) => resolved === root || resolved.startsWith(root + path.sep))
-            })
-        // We load certain files from a few other folders in the ecosystem
-        const claude = [
-          ...new Set([
-            ...(globalEnabled && (yield* fs.isDir(globalClaudeDirectory)) ? [globalClaudeDirectory] : []),
-            ...visible.filter((item) => path.basename(item) === ".claude").toReversed(),
-          ]),
-        ].map((directory) => new ClaudeDirectory({ type: "claude", path: AbsolutePath.make(directory) }))
-        const agents = [
-          ...new Set([
-            ...(globalEnabled && (yield* fs.isDir(globalAgentsDirectory)) ? [globalAgentsDirectory] : []),
-            ...visible.filter((item) => path.basename(item) === ".agents").toReversed(),
-          ]),
-        ].map((directory) => new AgentsDirectory({ type: "agents", path: AbsolutePath.make(directory) }))
-
-        const projectDirectories = visible
-          .filter((item) => path.basename(item) === ".opencode")
-          .toReversed()
-          .map((directory) => AbsolutePath.make(directory))
-        const directPaths = visible
-          .filter((item) => ![".agents", ".claude", ".opencode"].includes(path.basename(item)))
-          .toReversed()
-        fileTargets.clear()
-        directPaths.forEach((filepath) => fileTargets.add(AbsolutePath.make(filepath)))
-        const direct = yield* Effect.forEach(directPaths, (filepath) => loadFile(filepath)).pipe(
+      const load = Effect.fn("Config.load")(function* (sources: ConfigDiscovery.Sources) {
+        const claude = yield* Effect.filter(sources.claude, (path) => fs.isDir(path))
+        const agents = yield* Effect.filter(sources.agents, (path) => fs.isDir(path))
+        const direct = yield* Effect.forEach(sources.direct, (filepath) => loadFile(filepath)).pipe(
           Effect.orDie,
           Effect.map((entries) => entries.filter((entry): entry is Document => entry !== undefined)),
         )
 
-        const file = options?.file
-        if (file) fileTargets.add(AbsolutePath.make(path.resolve(file)))
-        const explicit = file
-          ? yield* loadFile(path.resolve(file)).pipe(
+        const explicit = sources.explicit
+          ? yield* loadFile(sources.explicit).pipe(
               Effect.map((config) => (config ? [config] : [])),
               Effect.orDie,
             )
@@ -265,15 +213,18 @@ export const layer = (options?: Options) =>
 
         // Global entries sit below explicit and direct files; project
         // directories rank above them.
-        const globalSupplementary = globalEnabled ? yield* loadDirectory(globalDirectory).pipe(Effect.orDie) : []
-        const projectSupplementary = yield* Effect.forEach(projectDirectories, loadDirectory).pipe(
+        const globalSupplementary = sources.global ? yield* loadDirectory(sources.global).pipe(Effect.orDie) : []
+        const projectSupplementary = yield* Effect.forEach(
+          sources.project.filter((root) => root.present),
+          (root) => loadDirectory(root.path),
+        ).pipe(
           Effect.orDie,
           Effect.map((entries) => entries.flat()),
         )
         return [
           ...(yield* loadWellknown().pipe(Effect.orDie)),
-          ...claude,
-          ...agents,
+          ...claude.map((path) => new ClaudeDirectory({ type: "claude", path })),
+          ...agents.map((path) => new AgentsDirectory({ type: "agents", path })),
           ...globalSupplementary,
           ...explicit,
           ...direct,
@@ -282,44 +233,35 @@ export const layer = (options?: Options) =>
         ]
       })
 
-      const initial = yield* discover()
-      let configs = initial
+      const initial = yield* ConfigDiscovery.discover(options)
+      let configs = yield* load(initial)
       const updates = yield* PubSub.unbounded<Watcher.Update>()
-      // Vendored trees inside config roots (a plugin's node_modules, a nested
-      // .git) produce event blizzards that can never change discovery output.
-      const ignore = ["node_modules", ".git", "**/{node_modules,.git}/**"]
-      // Watch-once: roots leave discovery only by deletion, so a stale watch is
-      // inert, bounded, and dies with this layer — and keeping a deleted root's
-      // watch alive is exactly what makes its recreation observable.
-      const watched = new Set<string>()
-      const reconcile = Effect.fn("Config.reconcileWatches")(function* (entries: readonly Entry[]) {
-        const directories = entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))
-        const files = [
-          ...entries.flatMap((entry) => (entry.type === "document" && entry.path ? [entry.path] : [])),
-          ...fileTargets,
-        ]
-        const targets = [
-          ...directories.map((path) => ({ path, type: "directory" as const, ignore })),
-          ...files
-            .filter((file) => !directories.some((directory) => FSUtil.contains(directory, file)))
-            .map((path) => ({ path, type: "file" as const })),
-        ]
-        for (const target of targets) {
-          const key = JSON.stringify(target)
-          if (watched.has(key)) continue
-          watched.add(key)
-          const stream = yield* watcher.subscribe(target)
-          yield* stream.pipe(
-            Stream.runForEach((update) => PubSub.publish(updates, update)),
-            Effect.forkScoped({ startImmediately: true }),
-          )
+      const reloads = yield* PubSub.sliding<void>(1)
+      // Readiness rescans recover writes made before a watch attached.
+      const requestReload = PubSub.publish(reloads, undefined).pipe(Effect.asVoid)
+      const watched = yield* FiberMap.make<string>()
+      const reconcile = Effect.fn("Config.reconcileWatches")(function* (sources: ConfigDiscovery.Sources) {
+        const plan = ConfigWatch.plan(sources)
+        for (const key of Array.from(watched, ([key]) => key)) {
+          if (!plan.has(key)) yield* FiberMap.remove(watched, key)
+        }
+        for (const [key, target] of plan) {
+          yield* watcher
+            .subscribe(target, requestReload)
+            .pipe(
+              Effect.flatMap(
+                Stream.runForEach((update) => PubSub.publish(updates, update).pipe(Effect.andThen(requestReload))),
+              ),
+              FiberMap.run(watched, key, { onlyIfMissing: true, startImmediately: true }),
+            )
         }
       })
 
       const reload = Effect.fn("Config.reload")(
         function* () {
-          const next = yield* discover()
-          yield* reconcile(next)
+          const sources = yield* ConfigDiscovery.discover(options)
+          const next = yield* load(sources)
+          yield* reconcile(sources)
           if (isDeepStrictEqual(configs, next)) return
           configs = next
           yield* bus.publish(Event.Updated, {})
@@ -327,12 +269,12 @@ export const layer = (options?: Options) =>
         (effect) => reloadLock.withPermit(effect),
       )
 
-      yield* Stream.fromPubSub(updates).pipe(
+      // Subscribe eagerly so synchronous watch readiness isn't dropped.
+      const pendingReloads = yield* PubSub.subscribe(reloads)
+      yield* Stream.fromSubscription(pendingReloads).pipe(
         Stream.debounce("100 millis"),
-        Stream.runForEach((update) =>
-          reload().pipe(
-            Effect.catchCause((cause) => Effect.logError("failed to reload config", { path: update.path, cause })),
-          ),
+        Stream.runForEach(() =>
+          reload().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload config", { cause }))),
         ),
         Effect.forkScoped({ startImmediately: true }),
       )
@@ -373,7 +315,7 @@ export const layer = (options?: Options) =>
         Effect.forever,
         Effect.forkScoped({ startImmediately: true }),
       )
-      yield* reconcile(initial)
+      yield* reloadLock.withPermit(reconcile(initial))
 
       return Service.of({
         entries: Effect.fnUntraced(function* () {

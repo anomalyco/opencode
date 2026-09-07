@@ -33,11 +33,11 @@ export interface VcsDefinition {
 }
 
 export interface VcsDomain extends VcsApi {
-  readonly transform: Transform<VcsDraft>
+  readonly transform: Transform<VcsEditor>
   readonly reload: () => Promise<void>
 }
 
-export interface VcsDraft {
+export interface VcsEditor {
   add(definition: VcsDefinition): void
   readonly default: {
     get(): string | undefined

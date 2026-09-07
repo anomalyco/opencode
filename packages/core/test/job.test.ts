@@ -64,6 +64,71 @@ describe("Job", () => {
     }),
   )
 
+  it.live("reuses running work when started again with the same ID", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const output = yield* Deferred.make<string>()
+      const job = yield* jobs.start({ id: "job_reused", type: "test", run: Deferred.await(output) })
+
+      expect(
+        yield* jobs.start({ id: job.id, type: "duplicate", run: Effect.die("Duplicate work must not run") }),
+      ).toEqual(job)
+
+      yield* Deferred.succeed(output, "original output")
+      expect((yield* jobs.wait({ id: job.id })).info).toMatchObject({
+        type: "test",
+        status: "completed",
+        output: "original output",
+      })
+    }),
+  )
+
+  it.live("ignores an obsolete callback after a cancellation waiter starts a same-ID replacement", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const callback = yield* Deferred.make<() => void>()
+      const output = yield* Deferred.make<string>()
+      const finalized = yield* Deferred.make<void>()
+      const job = yield* jobs.start({
+        id: "job_replaced",
+        type: "test",
+        run: Effect.callback<string>((resume) => {
+          Deferred.doneUnsafe(
+            callback,
+            Effect.succeed(() => resume(Effect.succeed("obsolete output"))),
+          )
+        }),
+      })
+      const complete = yield* Deferred.await(callback)
+      // Cancellation wakes waiters before closing the old scope, allowing the old callback to race replacement.
+      const replacement = yield* jobs.wait({ id: job.id }).pipe(
+        Effect.tap((result) => Effect.sync(() => expect(result.info?.status).toBe("cancelled"))),
+        Effect.andThen(
+          jobs.start({
+            id: job.id,
+            type: "replacement",
+            run: Deferred.await(output).pipe(Effect.ensuring(Deferred.succeed(finalized, undefined))),
+          }),
+        ),
+        Effect.andThen(Effect.sync(complete)),
+        Effect.forkChild({ startImmediately: true }),
+      )
+
+      yield* jobs.cancel(job.id)
+      yield* Fiber.join(replacement)
+      expect(yield* jobs.get(job.id)).toMatchObject({ type: "replacement", status: "running" })
+      expect(yield* Deferred.isDone(finalized)).toBe(false)
+
+      yield* Deferred.succeed(output, "replacement output")
+      expect((yield* jobs.wait({ id: job.id })).info).toMatchObject({
+        type: "replacement",
+        status: "completed",
+        output: "replacement output",
+      })
+      expect(yield* Deferred.isDone(finalized)).toBe(true)
+    }),
+  )
+
   it.live("returns finished from a blocking wait when completion wins", () =>
     Effect.gen(function* () {
       const jobs = yield* Job.Service

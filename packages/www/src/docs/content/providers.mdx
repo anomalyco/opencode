@@ -38,6 +38,19 @@ The `providers` object is keyed by provider ID. Each provider accepts these fiel
 | `body`     | JSON fields merged into request bodies.                         |
 | `models`   | Models to add or override, keyed by catalog model ID.           |
 
+## OpenCode Go
+
+[OpenCode Go](/console/go) is an optional subscription that provides access to coding models tested by the OpenCode team.
+Subscribe in the [console](https://console.opencode.ai), copy your API key, then run `/connect` in the TUI and select
+**OpenCode Go**:
+
+```text
+/connect
+```
+
+Paste your API key, then run `/models` to select a Go model. See the [Go guide](/console/go) for setup, usage limits,
+endpoints, and privacy details.
+
 ## Azure OpenAI and Microsoft Foundry
 
 Azure supports either an API key or your existing Microsoft Entra ID session from the Azure CLI.
@@ -68,20 +81,13 @@ Azure supports either an API key or your existing Microsoft Entra ID session fro
      --output table
    ```
 
-3. In OpenCode, run `/connect`, select **Azure**, and choose **Microsoft Entra ID (Azure CLI)**. OpenCode lists the Azure
-   resources visible to your active CLI session, including their resource groups. Select one, or choose **Type your own
-   answer** to enter a resource name that is not listed. If resource listing is unavailable, OpenCode asks for the name
-   directly. If `AZURE_RESOURCE_NAME` is already set, OpenCode uses it without prompting.
+3. In OpenCode, run `/connect`, select **Azure**, and choose **Microsoft Entra ID (Azure CLI)**. Enter the Azure resource
+   name when prompted. If `AZURE_RESOURCE_NAME` is already set, OpenCode uses it without prompting.
 
 4. Select a deployed model with `/models`.
 
-OpenCode discovers successful model deployments from the active Azure subscription and refreshes access tokens through your
-Azure CLI session. Set `AZURE_RESOURCE_GROUP` when you already know the resource group and want to skip subscription-wide
-resource discovery.
-
-Listing deployments requires Azure management permissions, which are separate from inference permissions. If your identity
-cannot list deployments, the Azure model catalog remains available. Select a model whose name matches the deployment, or
-configure the deployment name explicitly:
+OpenCode does not query Azure management APIs or discover deployments. Select a model whose catalog name matches your
+deployment, or configure the deployment name explicitly:
 
 ```jsonc title="opencode.jsonc"
 {

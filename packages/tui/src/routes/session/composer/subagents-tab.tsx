@@ -215,7 +215,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                         ? theme.background.action.primary.selected
                         : theme.background.action.primary.default
                   }
-                  onMouseOver={() => setStore("selected", index())}
+                  onMouseMove={() => setStore("selected", index())}
                   onMouseUp={() => {
                     setStore("selected", index())
                     navigate({ type: "session", sessionID: entry.sessionID })

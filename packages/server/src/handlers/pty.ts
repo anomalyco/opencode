@@ -1,7 +1,6 @@
 import { Pty } from "@opencode-ai/core/pty"
 import { PtyProtocol } from "@opencode-ai/core/pty/protocol"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor-service"
 import { Location } from "@opencode-ai/core/location"
 import { Effect, Queue } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -17,6 +16,7 @@ import {
 } from "@opencode-ai/protocol/groups/pty"
 import { response } from "../location"
 import { PtyEnvironment } from "../pty-environment"
+import { runPtySocket } from "./pty-socket"
 
 const ticketScope = Effect.gen(function* () {
   const location = yield* Location.Service
@@ -40,8 +40,6 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
       .handle(
         "pty.create",
         Effect.fn(function* (ctx) {
-          const plugins = yield* PluginSupervisor.Service
-          yield* plugins.flush
           const pty = yield* Pty.Service
           const location = yield* Location.Service
           const cwd = ctx.payload.cwd || location.directory
@@ -209,15 +207,15 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
             }
           })
 
-          yield* Effect.race(
+          yield* runPtySocket(
             drain,
             socket.runRaw((message) => {
               const decoded = PtyProtocol.decodeInput(message)
               if (decoded !== undefined) attachment.write(decoded)
             }),
+            attachment.detach,
           ).pipe(
             Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
-            Effect.ensuring(Effect.sync(() => attachment.detach())),
             Effect.orDie,
           )
           return HttpServerResponse.empty()

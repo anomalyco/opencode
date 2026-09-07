@@ -89,7 +89,7 @@ async function openReview(page: Page) {
   )
   await changes.click()
   expect((await (await diffResponse).json()).data).toHaveLength(1)
-  await expect(page.getByRole("tab", { selected: true })).toHaveAccessibleName(/Files Changed/)
+  await expect(changes).toHaveAttribute("aria-selected", "true")
 
   const review = page.locator('[data-component="session-review"]')
   await expectAppVisible(review)

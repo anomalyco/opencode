@@ -9,7 +9,7 @@ export interface DocsNavGroup {
 }
 
 export interface DocsSection {
-  key: "docs" | "cli" | "build" | "api"
+  key: "docs" | "cli" | "build" | "api" | "console"
   title: string
   landingSlug: string
   groups: DocsNavGroup[]
@@ -94,23 +94,28 @@ export const docsSections: DocsSection[] = [
         title: "Plugins",
         items: [
           { title: "Overview", slug: "build/plugins" },
-          { title: "Effect", slug: "build/plugins/effect" },
+          { title: "RPC", slug: "build/plugins/rpc" },
           { title: "CLI", slug: "build/plugins/cli" },
         ],
       },
       {
         title: "Client",
-        items: [
-          { title: "JavaScript", slug: "build/client" },
-          { title: "Effect", slug: "build/client/effect" },
-        ],
+        items: [{ title: "JavaScript", slug: "build/client" }],
       },
       {
         title: "SDK",
         items: [
           { title: "Overview", slug: "build/sdk" },
-          { title: "Effect", slug: "build/sdk/effect" },
           { title: "Cloudflare", slug: "build/sdk/cloudflare" },
+        ],
+      },
+      {
+        title: "Effect",
+        items: [
+          { title: "Plugins", slug: "build/plugins/effect" },
+          { title: "RPC", slug: "build/plugins/effect/rpc" },
+          { title: "Client", slug: "build/client/effect" },
+          { title: "SDK", slug: "build/sdk/effect" },
         ],
       },
     ],
@@ -123,6 +128,20 @@ export const docsSections: DocsSection[] = [
       {
         title: "API",
         items: [{ title: "Overview", slug: "api" }],
+      },
+    ],
+  },
+  {
+    key: "console",
+    title: "Console",
+    landingSlug: "console",
+    groups: [
+      {
+        items: [
+          { title: "Intro", slug: "console" },
+          { title: "Models", slug: "console/models" },
+          { title: "Go", slug: "console/go" },
+        ],
       },
     ],
   },

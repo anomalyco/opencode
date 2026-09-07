@@ -1,56 +1,128 @@
 export * as State from "./state.js"
 
-import { Clock, Context, Deferred, Effect, Scope, Semaphore } from "effect"
+import { Cause, Context, Effect, Exit, Fiber, Scope } from "effect"
 
 /**
- * A replayable transform applied to a draft during reload.
+ * A synchronous, replayable edit to the current domain state.
  *
- * Domain drafts expose readable and writable state while preserving concise
+ * Domain editors expose readable and writable state while preserving concise
  * plugin/config code. Transforms synchronously rebuild derived state.
  */
-type TransformCallback<DraftApi> = (draft: DraftApi) => void
-export type MakeDraft<State, DraftApi> = (state: State) => DraftApi
+type TransformCallback<Editor> = (editor: Editor) => void
+export type MakeEditor<State, Editor> = (state: State) => Editor
 
 export interface Registration {
   readonly dispose: Effect.Effect<void>
 }
 
 /**
- * Registers and applies a scoped transform. Closing the owning Scope removes
- * the transform and reloads the materialized state.
+ * Registers a scoped transform. Reads rebuild by applying every registered transform in order.
+ * Closing the owning Scope removes the transform and invalidates the current value.
  */
-export type Transform<DraftApi> = (
-  transform: TransformCallback<DraftApi>,
+export type Transform<Editor> = (
+  transform: TransformCallback<Editor>,
 ) => Effect.Effect<Registration, never, Scope.Scope>
 
+/** Invalidates the current value after captured inputs change and notifies like a registration would. */
 export type Reload = () => Effect.Effect<void>
 
-export interface Transformable<DraftApi> {
-  readonly transform: Transform<DraftApi>
+export interface Transformable<Editor> {
+  readonly transform: Transform<Editor>
   readonly reload: Reload
+}
+
+export interface Failure {
+  readonly state: string
+  readonly cause: unknown
+}
+
+type GroupedRegistration = {
+  readonly remove: () => boolean
+  readonly notify: Effect.Effect<void>
+}
+
+type RegistrationGroup = {
+  failed: boolean
+  readonly registrations: Set<GroupedRegistration>
+  readonly report: (failure: Failure, refresh: Effect.Effect<void>) => void
+}
+
+const CurrentGroup = Context.Reference<RegistrationGroup | undefined>("@opencode/State/CurrentGroup", {
+  defaultValue: () => undefined,
+})
+
+/**
+ * Groups registrations without coupling State to plugin identity or asynchronous cleanup.
+ * A failed group is detached synchronously; its supervisor must run refresh and close its scope.
+ */
+export function group(report: RegistrationGroup["report"]) {
+  const group: RegistrationGroup = { failed: false, registrations: new Set(), report }
+  return <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.provideService(effect, CurrentGroup, group)
+}
+
+function disable(group: RegistrationGroup, failure: Failure) {
+  if (group.failed) return
+  group.failed = true
+  const notifications = new Set<Effect.Effect<void>>()
+  for (const registration of group.registrations) {
+    registration.remove()
+    notifications.add(registration.notify)
+  }
+  group.report(
+    failure,
+    Effect.forEach(notifications, (notify) => notify, { discard: true }),
+  )
 }
 
 type Batch = {
   active: boolean
-  readonly flush: boolean
-  readonly reloads: Set<Reload>
+  readonly shutdown: boolean
+  readonly notifications: Set<Effect.Effect<void>>
 }
 
 const CurrentBatch = Context.Reference<Batch | undefined>("@opencode/State/CurrentBatch", {
   defaultValue: () => undefined,
 })
-const reloadDebounce = 500
+/** Coalesces notifications until the effect completes. Reads inside stay fresh; nothing is rolled back. */
+export function batch<A, E, R>(effect: Effect.Effect<A, E, R>) {
+  return run(effect, false)
+}
 
-/** flush: false is terminal teardown: states whose transforms are removed stop rebuilding, including pending reloads. */
-export function batch<A, E, R>(effect: Effect.Effect<A, E, R>, options: { readonly flush?: boolean } = {}) {
+/** Runs the effect as shutdown: States changed inside it close permanently and never notify again. */
+export function shutdown<A, E, R>(effect: Effect.Effect<A, E, R>) {
+  return run(effect, true)
+}
+
+function run<A, E, R>(effect: Effect.Effect<A, E, R>, shutdown: boolean) {
+  return Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      const current = yield* CurrentBatch
+      if (current?.active && !shutdown) return yield* restore(effect)
+      const batch: Batch = { active: true, shutdown, notifications: new Set() }
+      const exit = yield* restore(effect.pipe(Effect.provideService(CurrentBatch, batch))).pipe(Effect.exit)
+      batch.active = false
+      // A shutdown batch never collects notifications: changed() closes the State instead.
+      const notifications = yield* Effect.forEach(batch.notifications, (notify) => restore(notify).pipe(Effect.exit))
+      // Aggregate ordinary failures across domains, while allowing cancellation to stop observer work.
+      yield* Exit.asVoidAll([exit, ...notifications])
+      return yield* exit
+    }),
+  )
+}
+
+/**
+ * A `notify` body that runs resource reconciliation in the owning layer's FiberSet and awaits it, so work
+ * queued behind the layer's locks is interrupted with the layer. That interruption is not a failure.
+ */
+export function reconcile(
+  root: Scope.Scope,
+  fork: (effect: Effect.Effect<void>) => Fiber.Fiber<void>,
+  work: () => Effect.Effect<void>,
+): Effect.Effect<void> {
   return Effect.gen(function* () {
-    const current = yield* CurrentBatch
-    if (current?.active && options.flush !== false) return yield* effect
-    const batch: Batch = { active: true, flush: options.flush !== false, reloads: new Set() }
-    const exit = yield* effect.pipe(Effect.provideService(CurrentBatch, batch), Effect.exit)
-    batch.active = false
-    if (batch.flush) yield* Effect.forEach(batch.reloads, (reload) => reload(), { discard: true })
-    return yield* exit
+    const exit = yield* Fiber.await(fork(work()))
+    if (Exit.isFailure(exit) && root.state._tag === "Closed" && Cause.hasInterruptsOnly(exit.cause)) return
+    yield* exit
   })
 }
 
@@ -59,130 +131,116 @@ export const inherit = Effect.fnUntraced(function* () {
   return <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.provideService(effect, CurrentBatch, batch)
 })
 
-export interface Options<State, DraftApi> {
+export interface Options<State, Editor> {
   readonly name?: string
-  /** Creates the base value for initial state and every scoped-transform reload. */
+  /** Creates the empty base value for every rebuild. */
   readonly initial: () => State
-  /** Wraps mutable state in a domain-specific draft API. */
-  readonly draft: MakeDraft<State, DraftApi>
+  /** Wraps mutable state in a domain-specific editor API. */
+  readonly editor: MakeEditor<State, Editor>
   /**
-   * Runs after the rebuilt state becomes visible. Update events published here
-   * act as read barriers: subscribers refetching on the event observe the
-   * committed state.
+   * Observes the freshly rebuilt value outside the read path. Every registration, disposal, or
+   * reload notifies once it is applied; a batch coalesces them into one notification at its end.
+   * Resource reconciliation owns its execution scope and coordination.
    */
-  readonly finalize?: (draft: DraftApi) => Effect.Effect<void>
+  readonly notify?: (state: State) => Effect.Effect<void>
 }
 
-export interface Interface<State, DraftApi> extends Transformable<DraftApi> {
+export interface Interface<State, Editor> extends Transformable<Editor> {
+  /**
+   * Rebuilds synchronously when transforms changed since the last read. Each rebuild produces a new
+   * value and never touches earlier ones, so callers may retain what they read.
+   */
   readonly get: () => State
 }
 
-export function create<State, DraftApi>(options: Options<State, DraftApi>): Interface<State, DraftApi> {
+export function create<State, Editor>(options: Options<State, Editor>): Interface<State, Editor> {
   let state = options.initial()
-  let transforms: { run: TransformCallback<DraftApi> }[] = []
-  let generation = 0
-  let requestedAt = 0
-  let running = false
+  const transforms = new Set<{ run: TransformCallback<Editor>; group: RegistrationGroup | undefined }>()
+  let dirty = false
   let closed = false
-  let waiters: { generation: number; done: Deferred.Deferred<void> }[] = []
-  const semaphore = Semaphore.makeUnsafe(1)
+  let version = 0
 
-  const commit = Effect.fn("State.commit")(function* (next: State) {
-    state = next
-    if (options.finalize) yield* options.finalize(options.draft(next))
-  })
+  const invalidate = () => {
+    dirty = true
+    version++
+  }
 
-  const materialize = Effect.fnUntraced(function* () {
-    if (closed) return
-    const next = options.initial()
-    const api = options.draft(next)
-    for (const transform of transforms) {
-      yield* Effect.sync(() => {
-        transform.run(api)
-      })
+  const get = () => {
+    if (closed || !dirty) return state
+    while (true) {
+      const started = version
+      const next = options.initial()
+      const editor = options.editor(next)
+      for (const transform of transforms) {
+        try {
+          transform.run(editor)
+        } catch (cause) {
+          if (!transform.group) throw cause
+          disable(transform.group, { state: options.name ?? "anonymous", cause })
+        }
+        // A nested read can disable a group that already contributed to this candidate.
+        if (version !== started) break
+      }
+      if (version !== started) continue
+      // Ungrouped failures still propagate; grouped failures restart from a fresh candidate.
+      state = next
+      dirty = false
+      return state
     }
-    yield* commit(next)
-  })
+  }
 
-  const materializeReload = () => semaphore.withPermit(materialize())
+  // One stable value per State, so a batch's notification Set holds it at most once.
+  const notify: Effect.Effect<void> = Effect.gen(function* () {
+    if (closed) return
+    const value = get()
+    if (options.notify) yield* options.notify(value)
+  }).pipe(Effect.withSpan("State.notify"))
 
-  const rebuild = (): Effect.Effect<void> =>
+  const changed = Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
-      const clock = yield* Clock.Clock
-      const remaining = requestedAt + reloadDebounce - clock.currentTimeMillisUnsafe()
-      if (remaining > 0) yield* Effect.sleep(remaining)
-      if (clock.currentTimeMillisUnsafe() < requestedAt + reloadDebounce) return yield* rebuild()
-
-      const target = generation
-      const exit = yield* materializeReload().pipe(Effect.exit)
-      const completed = waiters.filter((waiter) => waiter.generation <= target)
-      waiters = waiters.filter((waiter) => waiter.generation > target)
-      yield* Effect.forEach(completed, (waiter) => Deferred.done(waiter.done, exit), {
-        concurrency: "unbounded",
-        discard: true,
-      })
-      if (generation > target) return yield* rebuild()
-      running = false
-    })
-
-  const reload = Effect.fnUntraced(function* () {
-    if (closed) return
-    const done = Deferred.makeUnsafe<void>()
-    const clock = yield* Clock.Clock
-    generation++
-    requestedAt = clock.currentTimeMillisUnsafe()
-    waiters.push({ generation, done })
-    if (!running) {
-      running = true
-      yield* rebuild().pipe(Effect.forkDetach)
-    }
-    yield* Deferred.await(done)
-  })
+      if (closed) return
+      invalidate()
+      const batch = yield* CurrentBatch
+      if (batch?.active) {
+        if (batch.shutdown) {
+          closed = true
+          return
+        }
+        batch.notifications.add(notify)
+        return
+      }
+      yield* restore(notify)
+    }),
+  )
 
   return {
-    get: () => state,
+    get,
     transform: Effect.fn("State.transform")(function* (update) {
       yield* Effect.annotateCurrentSpan("state", options.name ?? "anonymous")
       const scope = yield* Scope.Scope
+      const group = yield* CurrentGroup
+      if (group?.failed) return { dispose: Effect.void }
       return yield* Effect.uninterruptible(
         Effect.gen(function* () {
-          const transform = { run: update }
-          let active = true
-          const dispose = Effect.uninterruptible(
-            semaphore.withPermit(
-              Effect.suspend(() => {
-                if (!active) return Effect.void
-                active = false
-                transforms = transforms.filter((item) => item !== transform)
-                return Effect.gen(function* () {
-                  const batch = yield* CurrentBatch
-                  if (batch?.active) {
-                    // Detached debounced reloads must also stay quiet after teardown.
-                    if (!batch.flush) {
-                      closed = true
-                      return
-                    }
-                    batch.reloads.add(materializeReload)
-                    return
-                  }
-                  yield* materialize()
-                })
-              }),
-            ),
-          )
-          yield* semaphore.withPermit(
-            Effect.sync(() => {
-              transforms = [...transforms, transform]
-            }),
-          )
+          const transform = { run: update, group }
+          const registration: GroupedRegistration = {
+            remove: () => {
+              if (!transforms.delete(transform)) return false
+              group?.registrations.delete(registration)
+              invalidate()
+              return true
+            },
+            notify: changed,
+          }
+          const dispose = Effect.uninterruptible(Effect.suspend(() => (registration.remove() ? changed : Effect.void)))
+          transforms.add(transform)
+          group?.registrations.add(registration)
           yield* Scope.addFinalizer(scope, dispose)
-          const batch = yield* CurrentBatch
-          if (batch?.active) batch.reloads.add(materializeReload)
-          else yield* materializeReload()
+          yield* changed
           return { dispose }
         }),
       )
     }),
-    reload,
+    reload: () => changed,
   }
 }

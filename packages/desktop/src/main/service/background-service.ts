@@ -1,14 +1,14 @@
 import { app } from "electron"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
-import type { ServerReadyData } from "../../shared/ipc-contract"
 import { BackgroundServiceState } from "./background-service-state"
 import { cleanStages, DesktopCli } from "./desktop-cli"
+import { SidecarCredentials } from "./sidecar-credentials"
 
 export * as BackgroundService from "./background-service"
 
 export interface Interface {
-  readonly connection: Effect.Effect<ServerReadyData>
-  readonly reconnect: Effect.Effect<ServerReadyData>
+  readonly connection: Effect.Effect<SidecarCredentials.Data>
+  readonly reconnect: Effect.Effect<SidecarCredentials.Data>
 }
 
 export class Service extends Context.Service<Service, Interface>()("opencode/desktop/BackgroundService") {}
@@ -52,16 +52,13 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const url = new URL(service.url)
   if (url.hostname === "0.0.0.0") url.hostname = "127.0.0.1"
   yield* Effect.logInfo("v2 CLI background service ready", {
-    username: service.auth.username,
     version,
     ...endpoint(url.origin),
   })
   if (mode === "initial" && isolated && cli.binary) yield* cleanStages(cli.binary).pipe(Effect.orDie)
-  return {
-    url: url.origin,
-    username: service.auth.username,
-    password: service.auth.password,
-  } satisfies ServerReadyData
+  const ready = { url: url.origin, password: service.auth.password } satisfies SidecarCredentials.Data
+  SidecarCredentials.set(ready)
+  return ready
 })
 
 function endpoint(url: string | undefined) {

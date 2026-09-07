@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Locator } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible } from "../utils/waits"
 
@@ -65,9 +65,62 @@ for (const lines of [6000, 25000]) {
     await expect.poll(async () => (await input.innerText()) === text).toBe(true)
     expect(await events.evaluate((events) => events.count)).toBe(1)
     await expect(input).toBeFocused()
+    await expectCaretVisible(input)
+    const scroll = page.locator('[data-component="composer-scroll"]')
+    await expect(scroll.locator(".scroll-view__viewport")).toHaveCSS("scrollbar-width", "none")
+    await expect(scroll.locator(".scroll-view__thumb")).toBeVisible()
     await page.keyboard.type("!")
     await expect.poll(async () => (await input.innerText()) === text + "!").toBe(true)
+    await expectCaretVisible(input)
+    const thumb = await scroll.locator(".scroll-view__thumb").boundingBox()
+    const bounds = await scroll.boundingBox()
+    if (!thumb || !bounds) throw new Error("Missing composer scrollbar bounds")
+    await page.mouse.move(thumb.x + thumb.width / 2, thumb.y + thumb.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(thumb.x + thumb.width / 2, bounds.y + 8 + thumb.height / 2)
+    await page.mouse.up()
+    await expect(scroll.locator(".scroll-view__viewport")).toHaveJSProperty("scrollTop", 0)
+    await expect(input).toBeFocused()
+    await page.keyboard.press("ControlOrMeta+Home")
+    await page.keyboard.press("ControlOrMeta+End")
+    await expectCaretVisible(input)
   })
+}
+
+async function expectCaretVisible(input: Locator) {
+  await expect
+    .poll(() =>
+      input.evaluate((element) => {
+        const selection = window.getSelection()
+        if (!selection?.isCollapsed || !selection.rangeCount || !element.contains(selection.anchorNode)) return false
+        const caret = selection.getRangeAt(0).getBoundingClientRect()
+        const viewport = (element.closest("[data-scrollable]") ?? element).getBoundingClientRect()
+        return caret.height > 0 && caret.top >= viewport.top - 1 && caret.bottom <= viewport.bottom + 1
+      }),
+    )
+    .toBe(true)
+}
+
+for (const width of [390, 1280]) {
+  for (const direction of ["ltr", "rtl"]) {
+    test(`reveals a multiline paste in the middle at ${width}px in ${direction}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 })
+      await page.evaluate((direction) => (document.documentElement.dir = direction), direction)
+      const input = page.getByRole("textbox", { name: "Prompt", exact: true })
+      const suffix = "\nExisting trailing content".repeat(100)
+      await input.fill("Before " + suffix)
+      await input.press("ControlOrMeta+Home")
+      await input.press("ArrowRight")
+      const text = "Pasted line /tmp/example.ts 123 \u0645\u0631\u062d\u0628\u0627\n".repeat(100) + "End of paste"
+      await page.evaluate((text) => navigator.clipboard.writeText(text), text)
+      await page.keyboard.press("ControlOrMeta+V")
+      await expect.poll(() => input.innerText()).toBe("B" + text + "efore " + suffix)
+      await expectCaretVisible(input)
+      await page.keyboard.type("!")
+      await expect.poll(() => input.innerText()).toBe("B" + text + "!efore " + suffix)
+      await expectCaretVisible(input)
+    })
+  }
 }
 
 for (const text of [

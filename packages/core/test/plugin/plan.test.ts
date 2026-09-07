@@ -166,7 +166,7 @@ describe("plan plugin reminders", () => {
       const { persisted } = yield* run([agentSelected(plan, build), agentSelected(build, plan)])
       yield* settle(persisted, 2)
       expect(persisted[0]).toContain("You are in Plan mode")
-      expect(persisted[0]).toContain("optionally create or update plan documents")
+      expect(persisted[0]).toContain("Do not create or update plan files unless the user explicitly asks you to")
       expect(persisted[0]).toContain(planDirectory)
       expect(persisted[0]).toContain("Do not modify any other files")
       expect(persisted[1]).toContain("NO LONGER in Plan mode")

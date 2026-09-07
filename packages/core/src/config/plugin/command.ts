@@ -1,17 +1,19 @@
 export * as ConfigCommandPlugin from "./command.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Agent } from "@opencode-ai/schema/agent"
 import { Info, type Entry } from "@opencode-ai/schema/config"
 import { ConfigCommand } from "@opencode-ai/schema/config/command"
 import { Model } from "@opencode-ai/schema/model"
 import { Provider } from "@opencode-ai/schema/provider"
 import { AppProcess } from "@opencode-ai/util/process"
 import path from "path"
-import { Effect, Option, Schema, Stream } from "effect"
+import { Effect, Option, PubSub, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
+import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
 import { Location } from "../../location.js"
+import { Session } from "../../session.js"
+import { SubagentJob } from "../../session/subagent-job.js"
 import { ShellSelect } from "../../shell/select.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { ConfigMarkdown } from "../markdown.js"
@@ -32,6 +34,9 @@ export const Plugin = define({
     const location = yield* Location.Service
     const processes = yield* AppProcess.Service
     const shell = yield* ShellSelect.Service
+    const sessions = yield* Session.Service
+    const agents = yield* Agent.Service
+    const subagents = yield* SubagentJob.make
     const load = Effect.fn("ConfigCommandPlugin.load")(function* () {
       return yield* Effect.forEach(yield* config.entries(), loadEntry).pipe(Effect.map((documents) => documents.flat()))
     })
@@ -40,38 +45,41 @@ export const Plugin = define({
       Effect.tap((documents) => Effect.sync(() => (loaded.documents = documents))),
       Effect.andThen(ctx.command.reload()),
     )
-    // One merged trigger stream serializes reloads and shares one debounce
-    // window; subscribing before the initial scan means updates racing the
-    // scan still trigger a rebuild.
-    const sourceChanges = config
-      .changes()
-      .pipe(
-        Stream.filterEffect((update) =>
-          Effect.map(config.entries(), (entries) => isCommandSource(entries, update.path)),
-        ),
-      )
-    const configUpdates = ctx.event.subscribe().pipe(Stream.filter((event) => event.type === "config.updated"))
-    yield* Stream.merge(sourceChanges, configUpdates).pipe(
+    // One trigger feed serializes reloads and shares one debounce window;
+    // subscribing before the initial scan means updates racing the scan still
+    // trigger a rebuild. Each source is subscribed eagerly on its own fiber
+    // (Stream.merge and Stream.debounce both open upstream a fiber hop later)
+    // so no update slips through while the debounce starts its pull.
+    const changes = yield* PubSub.sliding<void>(1)
+    const notify = () => PubSub.publish(changes, undefined)
+    yield* config.changes().pipe(
+      Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isCommandSource(entries, update.path))),
+      Stream.runForEach(notify),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    yield* ctx.event.subscribe().pipe(
+      Stream.filter((event) => event.type === "config.updated"),
+      Stream.runForEach(notify),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    const updates = yield* PubSub.subscribe(changes)
+    yield* Stream.fromSubscription(updates).pipe(
       Stream.debounce("100 millis"),
       Stream.runForEach(() => reload),
       Effect.forkScoped({ startImmediately: true }),
     )
     loaded.documents = yield* load()
-    yield* ctx.command.transform((draft) => {
+    yield* ctx.command.transform((editor) => {
       for (const document of loaded.documents) {
         for (const [name, command] of Object.entries(document.commands ?? {})) {
-          draft.add({
+          const subagent = command.subagent ?? command.subtask
+          editor.add({
             name,
             description: command.description,
             execute: (input) =>
               Effect.gen(function* () {
                 const agent = command.agent === undefined ? undefined : Agent.ID.make(command.agent)
-                const commandAgent = yield* Effect.gen(function* () {
-                  if (agent === undefined) return
-                  const session = yield* ctx.session.get({ sessionID: input.sessionID })
-                  if (session.agent !== agent) yield* ctx.session.switchAgent({ sessionID: input.sessionID, agent })
-                  return (yield* ctx.agent.get({ agentID: agent })).data
-                })
+                const commandAgent = agent === undefined ? undefined : (yield* ctx.agent.get({ agentID: agent })).data
                 const model =
                   command.model === undefined
                     ? commandAgent?.model
@@ -82,15 +90,46 @@ export const Plugin = define({
                           ? {}
                           : { variant: Model.VariantID.make(command.model.variant) }),
                       }
+                const text = yield* evaluateTemplate(command.template, input.prompt.text, {
+                  location,
+                  processes,
+                  shell,
+                })
+                if (subagent ?? commandAgent?.mode === "subagent") {
+                  const parent = yield* sessions.get(input.sessionID)
+                  const selected = yield* agents.select(agent ?? parent.agent)
+                  const child = yield* sessions.create({
+                    parentID: parent.id,
+                    title: command.description ?? name,
+                    agent: selected.id,
+                    model: model ?? selected.info?.model ?? parent.model,
+                  })
+                  yield* sessions.prompt({
+                    ...input.prompt,
+                    sessionID: child.id,
+                    text: ["You are a subagent spawned by another session.", text].join("\n"),
+                    resume: false,
+                  })
+                  const recovery = {
+                    kind: "subagent" as const,
+                    parentSessionID: parent.id,
+                    childSessionID: child.id,
+                    agent: selected.id,
+                    description: command.description ?? name,
+                  }
+                  yield* subagents.start(recovery)
+                  yield* subagents.background(recovery)
+                  return
+                }
+                if (agent !== undefined) {
+                  const session = yield* ctx.session.get({ sessionID: input.sessionID })
+                  if (session.agent !== agent) yield* ctx.session.switchAgent({ sessionID: input.sessionID, agent })
+                }
                 if (model !== undefined) yield* ctx.session.switchModel({ sessionID: input.sessionID, model })
                 yield* ctx.session.prompt({
                   ...input.prompt,
                   sessionID: input.sessionID,
-                  text: yield* evaluateTemplate(command.template, input.prompt.text, {
-                    location,
-                    processes,
-                    shell,
-                  }),
+                  text,
                   delivery: input.delivery,
                 })
               }).pipe(Effect.asVoid),
@@ -189,8 +228,8 @@ function evaluateTemplate(
           )
           .pipe(
             Effect.map((result) => (result.output ?? Buffer.concat([result.stdout, result.stderr])).toString("utf8")),
-            Effect.mapError((error) =>
-              new Error(`Shell interpolation failed for ${JSON.stringify(source)}: ${error.message}`),
+            Effect.mapError(
+              (error) => new Error(`Shell interpolation failed for ${JSON.stringify(source)}: ${error.message}`),
             ),
           )
       },

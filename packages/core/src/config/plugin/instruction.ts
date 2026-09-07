@@ -103,22 +103,26 @@ export const Plugin = define({
         (effect, ..._args: [file?: string]) => lock.withPermit(effect),
       )
 
-      yield* Stream.fromPubSub(changes).pipe(
+      // Editor saves arrive as bursts of watcher events; settle before rescanning once. Subscribe
+      // before debouncing so no update slips through while the debounce starts its pull.
+      const updates = yield* PubSub.subscribe(changes)
+      yield* Stream.fromSubscription(updates).pipe(
+        Stream.debounce("100 millis"),
         Stream.runForEach((file) => refresh(file).pipe(Effect.andThen(discovery.reload()))),
         Effect.forkScoped({ startImmediately: true }),
       )
       yield* refresh()
-      yield* discovery.transform((draft) => {
+      yield* discovery.transform((editor) => {
         if (loaded.current.type === "unavailable") {
-          draft.unavailable()
+          editor.unavailable()
           return
         }
-        for (const file of loaded.current.files) draft.add(file)
+        for (const file of loaded.current.files) editor.add(file)
       })
     }).pipe(
       Effect.catchCause((cause) =>
         Effect.logWarning("failed to activate instruction source", { cause }).pipe(
-          Effect.andThen(discovery.transform((draft) => draft.unavailable())),
+          Effect.andThen(discovery.transform((editor) => editor.unavailable())),
           Effect.asVoid,
         ),
       ),

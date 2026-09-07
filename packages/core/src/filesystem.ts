@@ -26,7 +26,7 @@ export const Content = Schema.Struct({
 export type Content = typeof Content.Type
 
 export const ListInput = Schema.Struct({
-  path: RelativePath.pipe(Schema.optional),
+  path: Schema.String.pipe(Schema.optional),
 })
 export type ListInput = typeof ListInput.Type
 
@@ -38,6 +38,7 @@ export const DEFAULT_SEARCH_TIMEOUT_MS = 30_000
 export class GlobInput extends Schema.Class<GlobInput>("FileSystem.GlobInput")({
   pattern: Schema.String,
   path: Schema.optionalKey(RelativePath),
+  hidden: Schema.optionalKey(Schema.Boolean),
   limit: Schema.optionalKey(PositiveInt),
 }) {}
 
@@ -45,6 +46,8 @@ export class GrepInput extends Schema.Class<GrepInput>("FileSystem.GrepInput")({
   pattern: Schema.String,
   path: Schema.optionalKey(RelativePath),
   include: Schema.optionalKey(Schema.String),
+  literal: Schema.optionalKey(Schema.Boolean),
+  caseSensitive: Schema.optionalKey(Schema.Boolean),
   limit: Schema.optionalKey(PositiveInt),
 }) {}
 
@@ -92,15 +95,16 @@ const baseLayer = Layer.effect(
         }
       }),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
-        const target = yield* resolve(input.path)
-        return yield* environment.files.list(target.real).pipe(
+        // Navigation can leave the cwd without activating another Location.
+        const directory = path.resolve(location.directory, input.path ?? ".")
+        return yield* environment.files.list(directory).pipe(
           Effect.orDie,
           Effect.map((items) =>
             items
               .flatMap((item) => {
                 if (item.type !== "file" && item.type !== "directory") return []
-                const absolute = path.join(target.absolute, item.name)
-                const relative = path.relative(target.directory, absolute)
+                const absolute = path.join(directory, item.name)
+                const relative = path.relative(location.directory, absolute) || "."
                 return [
                   Entry.make({
                     path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),

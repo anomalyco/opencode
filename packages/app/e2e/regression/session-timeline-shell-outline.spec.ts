@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
+import { timelinePresets } from "@opencode-ai/session-ui/timeline/detail"
 import {
   assistantMessage,
   setupTimeline,
@@ -74,21 +75,29 @@ test("keeps the patch card inside a fractionally short virtual row", async ({ pa
     additions: 1,
     deletions: 1,
   }
-  const timeline = await setupTimeline(page, {
+  await setupTimeline(page, {
     messages: [
       userMessage(),
       assistantMessage([
-        toolPart(patchID, "patch", "completed", { patchText: "Update src/outline.ts" }, { metadata: { files: [file] } }),
+        toolPart(
+          patchID,
+          "patch",
+          "completed",
+          { patchText: "Update src/outline.ts" },
+          { metadata: { files: [file] } },
+        ),
       ]),
     ],
-    settings: { editToolPartsExpanded: true },
+    settings: {
+      timelineDetail: { ...timelinePresets[2].value, edit: { placement: "separate", details: "collapsed" } },
+    },
     reducedMotion: true,
   })
   const part = page.locator(`[data-timeline-part-id="${patchID}"]`)
   const card = part.locator('[data-component="accordion"][data-scope="apply-patch"]')
   const row = page.locator("[data-timeline-key]", { has: part })
   await expect(card).toBeVisible()
-  await timeline.settle()
+  await expect(card.getByRole("button")).toHaveAttribute("aria-expanded", "false")
 
   const geometry = await row.evaluate((element) => {
     const card = element.querySelector<HTMLElement>('[data-component="accordion"][data-scope="apply-patch"]')
@@ -106,8 +115,6 @@ test("keeps the patch card inside a fractionally short virtual row", async ({ pa
       cardHeight: cardRect.height,
     }
   })
-  await timeline.settle()
-
   expect(geometry.overflow).toBeCloseTo(0.49, 1)
   expect(geometry.paintOverflow).toBeLessThanOrEqual(0)
   const edges = await captureCardEdges(page, card)

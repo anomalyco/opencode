@@ -25,8 +25,8 @@ export const Plugin = define({
       Effect.forkScoped({ startImmediately: true }),
     )
     loaded.prompts = yield* mcp.prompts()
-    yield* ctx.command.transform((draft) => {
-      draft.add({
+    yield* ctx.command.transform((editor) => {
+      editor.add({
         name: "init",
         description: "guided AGENTS.md setup",
         execute: (input) =>
@@ -39,7 +39,7 @@ export const Plugin = define({
             })
             .pipe(Effect.asVoid),
       })
-      draft.add({
+      editor.add({
         name: "review",
         description: "review changes [commit|branch|pr], defaults to uncommitted",
         execute: (input) =>
@@ -53,7 +53,7 @@ export const Plugin = define({
             .pipe(Effect.asVoid),
       })
       for (const prompt of loaded.prompts) {
-        draft.add({
+        editor.add({
           name: mcpCommandName(prompt.server, prompt.name),
           description: prompt.description,
           execute: (input) =>

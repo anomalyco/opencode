@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { timelinePresets } from "@opencode-ai/session-ui/timeline/detail"
 import {
   assistantID,
   assistantMessage,
@@ -23,20 +24,23 @@ for (const expanded of [false, true]) {
   test(`preserves shell user intent from a ${expanded ? "expanded" : "collapsed"} default`, async ({ page }) => {
     const id = `prt_shell_default_${expanded}`
     const timeline = await setupTimeline(page, {
-      messages: [userMessage(), assistantMessage([shell(id, "completed", lines(3))])],
-      settings: { shellToolPartsExpanded: expanded },
+      messages: [userMessage(), assistantMessage([shell(id, "running", lines(3))], { completed: false })],
+      settings: {
+        timelineDetail: {
+          ...timelinePresets[2].value,
+          shell: { placement: "separate", details: expanded ? "expanded" : "collapsed" },
+        },
+      },
     })
-    const trigger = expanded
-      ? page.locator(`[data-timeline-part-id="${id}"] [data-slot="collapsible-trigger"]`)
-      : page.getByRole("button", { name: "Used 1 Shell", exact: true })
+    const trigger = page.locator(`[data-timeline-part-id="${id}"] [data-slot="collapsible-trigger"]`)
     await expect(trigger).toHaveAttribute("aria-expanded", String(expanded))
     await trigger.click()
     await expect(trigger).toHaveAttribute("aria-expanded", String(!expanded))
 
-    await timeline.send(partUpdated(shell(id, "completed", lines(6))), 180)
-    await timeline.send(partUpdated(textPart(`prt_sibling_${expanded}`, "Sibling content")), 180)
-    await timeline.send(status("busy"), 100)
-    await timeline.send(status("idle"), 250)
+    await timeline.send(partUpdated(shell(id, "completed", lines(6))))
+    await timeline.send(partUpdated(textPart(`prt_sibling_${expanded}`, "Sibling content")))
+    await timeline.send(status("idle"))
+    await expect(page.getByText("Sibling content", { exact: true })).toBeVisible()
     await expect(trigger).toHaveAttribute("aria-expanded", String(!expanded))
   })
 }
@@ -46,6 +50,9 @@ test("transitions a streaming shell from writing through command execution", asy
   const command = "printf ready"
   const timeline = await setupTimeline(page, {
     messages: [userMessage(), assistantMessage([], { completed: false })],
+    settings: {
+      timelineDetail: { ...timelinePresets[2].value, shell: { placement: "separate", details: "collapsed" } },
+    },
   })
   await timeline.send(toolInputStarted({ sessionID, assistantMessageID: assistantID, id, name: "shell" }))
 
@@ -55,7 +62,7 @@ test("transitions a streaming shell from writing through command execution", asy
   const subtitle = tool.locator('[data-slot="basic-tool-tool-subtitle"]')
   await expect(titleShimmer).toHaveAttribute("aria-label", "Shell")
   await expect(titleShimmer).toHaveAttribute("data-active", "true")
-  await expect(subtitle).toHaveText("Writing command...")
+  await expect(subtitle).toHaveText("Writing command…")
   await expect(subtitle.locator('[data-component="text-shimmer"]')).toHaveCount(0)
   await expect(tool.locator('[data-component="shell-submessage"]')).toHaveCount(0)
   await expect(tool.locator('[data-slot="collapsible-trigger"]')).toHaveCSS("height", "28px")
@@ -75,7 +82,7 @@ test("transitions a streaming shell from writing through command execution", asy
   await timeline.send(toolInputEnded({ sessionID, assistantMessageID: assistantID, id, text: input }))
   await expect(titleShimmer).toHaveAttribute("data-active", "true")
   await expect(subtitle).toHaveText(command)
-  await expect(tool).not.toContainText("Writing command...")
+  await expect(tool).not.toContainText("Writing command…")
 
   await timeline.send(
     toolCalled({
@@ -95,12 +102,14 @@ test("shimmers and expands a running shell command", async ({ page }) => {
   const command = "sleep 10 && echo done"
   await setupTimeline(page, {
     messages: [userMessage(), assistantMessage([shell(id, "running", "still running", command)], { completed: false })],
-    settings: { shellToolPartsExpanded: false },
+    settings: {
+      timelineDetail: { ...timelinePresets[2].value, shell: { placement: "separate", details: "collapsed" } },
+    },
   })
 
   const tool = page.locator(`[data-timeline-part-id="${id}"]`)
   await expect(tool.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true")
-  await expect(tool).not.toContainText("Writing command...")
+  await expect(tool).not.toContainText("Writing command…")
   await expect(tool.locator('[data-component="shell-submessage"]')).toHaveText(command)
   await expect(tool.locator('[data-component="shell-submessage"] [data-component="text-shimmer"]')).toHaveCount(0)
   await expect(tool.locator('[data-slot="collapsible-trigger"]')).toHaveCSS("height", "28px")
@@ -110,7 +119,7 @@ test("shimmers and expands a running shell command", async ({ page }) => {
 })
 
 for (const open of [false, true]) {
-  test(`keeps ${open ? "expanded" : "collapsed"} reasoning intent from Thinking through standalone shell into Used`, async ({
+  test(`keeps ${open ? "expanded" : "collapsed"} Separate reasoning intent through shell completion`, async ({
     page,
   }) => {
     const reasoningID = `prt_reasoning_hidden_${open}`
@@ -118,7 +127,13 @@ for (const open of [false, true]) {
     const assistant = assistantMessage([reasoningPart(reasoningID, "## Inspecting stability")], { completed: false })
     const timeline = await setupTimeline(page, {
       messages: [userMessage(), assistant],
-      settings: { showReasoningSummaries: false },
+      settings: {
+        timelineDetail: {
+          ...timelinePresets[2].value,
+          thinking: { placement: "separate", details: "collapsed" },
+          shell: { placement: "separate", details: "collapsed" },
+        },
+      },
       cpuRate: 4,
     })
     const reasoning = page.locator(`[data-timeline-part-id="${renderedPartID(reasoningID)}"]`)
@@ -141,27 +156,10 @@ for (const open of [false, true]) {
     await timeline.send(partUpdated(shell(shellID, "completed", "done")))
     await timeline.send(messageUpdated(completedAssistantInfo(assistant)))
     await timeline.send(status("idle"))
-    const used = group.getByRole("button", { name: "Used 1 Shell", exact: true })
-    await expect(used).toHaveAttribute("aria-expanded", "false")
-    await used.click()
-    await expect(used).toHaveAttribute("aria-expanded", "true")
-    await expect(group.locator(`[data-timeline-part-id="${shellID}"]`)).toBeVisible()
-    await expect(group.getByRole("button", { name: "Thought", exact: true })).toHaveAttribute(
-      "aria-expanded",
-      String(open),
-    )
-    await expect(used.locator('[data-slot="basic-tool-tool-title"]')).toHaveText("1 Shell")
+    await expect(group).toHaveCount(0)
+    await expect(thought).toHaveAttribute("aria-expanded", String(open))
     await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
-    await expect(used).toHaveAttribute("aria-expanded", "true")
     if (!open) await thought.click()
-    await expect(reasoning.getByRole("heading", { name: "Inspecting stability", exact: true })).toBeVisible()
-    await used.click()
-    await expect(used).toHaveAttribute("aria-expanded", "false")
-    await used.click()
-    await expect(reasoning.getByRole("button", { name: "Thought", exact: true })).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    )
     await expect(reasoning.getByRole("heading", { name: "Inspecting stability", exact: true })).toBeVisible()
   })
 }
@@ -172,6 +170,9 @@ for (const transition of ["reasoning-end", "idle", "retry"] as const) {
     const text = "## Inspecting stability\n\nThe timeline is ready for the next step."
     const timeline = await setupTimeline(page, {
       messages: [userMessage(), assistantMessage([reasoningPart(id, text)], { completed: false })],
+      settings: {
+        timelineDetail: { ...timelinePresets[2].value, thinking: { placement: "separate", details: "collapsed" } },
+      },
     })
     const part = page.locator(`[data-timeline-part-id="${renderedPartID(id)}"]`)
     const trigger = part.locator('[data-slot="collapsible-trigger"]')

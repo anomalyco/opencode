@@ -12,10 +12,10 @@ export const Plugin = define({
     const config = yield* Config.Service
     const compaction = yield* SessionCompaction.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, compaction.reload())
-    yield* compaction.transform((draft) => {
+    yield* compaction.transform((editor) => {
       for (const entry of loaded.entries) {
         if (entry.type !== "document" || !entry.info.compaction) continue
-        draft.configure({
+        editor.configure({
           ...(entry.info.compaction.auto === undefined ? {} : { auto: entry.info.compaction.auto }),
           ...(entry.info.compaction.buffer === undefined ? {} : { buffer: entry.info.compaction.buffer }),
           ...(entry.info.compaction.keep?.tokens === undefined ? {} : { tokens: entry.info.compaction.keep.tokens }),

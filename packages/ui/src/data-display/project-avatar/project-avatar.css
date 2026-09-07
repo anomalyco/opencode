@@ -105,8 +105,8 @@
 }
 
 [data-component="project-avatar-v2"][data-unread] [data-slot="project-avatar-surface"] {
-  -webkit-mask-image: radial-gradient(circle 4.5px at calc(100% - 1px) 1px, transparent 4.5px, black 4.5px);
-  mask-image: radial-gradient(circle 4.5px at calc(100% - 1px) 1px, transparent 4.5px, black 4.5px);
+  -webkit-mask-image: radial-gradient(circle 4.5px at 100% 0, transparent 4px, black 5px);
+  mask-image: radial-gradient(circle 4.5px at 100% 0, transparent 4px, black 5px);
 }
 
 [data-slot="project-avatar-unread-dot"] {
@@ -114,8 +114,8 @@
   z-index: 3;
   width: 6px;
   height: 6px;
-  right: -2px;
-  top: -2px;
+  right: -3px;
+  top: -3px;
   border-radius: 9999px;
   background: var(--v2-background-bg-accent);
   pointer-events: none;

@@ -1,14 +1,16 @@
 import { createStore, reconcile } from "solid-js/store"
+import { Schema } from "effect"
+import { SessionError } from "@opencode-ai/schema/session-error"
 import { type Accessor, batch, createEffect, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { ServerSDK } from "@/runtime/server/client"
 import type { Data } from "@opencode-ai/client/solid"
-import type { OpenCodeEvent } from "@opencode-ai/client/promise"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { decode64 } from "@/runtime/persistence/base64"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { Persistence } from "@/runtime/persistence/schema"
 import { playSoundByIdOnce } from "@/shell/notifications/sound"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
@@ -17,24 +19,19 @@ import { requireServerKey, sessionHref } from "@/shell/routes/session"
 import type { ServerScope } from "@/runtime/server/scope"
 import { useServer } from "@/runtime/server/current"
 
-type NotificationBase = {
-  directory?: string
-  session?: string
-  metadata?: unknown
-  time: number
-  viewed: boolean
+const NotificationBase = {
+  directory: Schema.optional(Schema.String),
+  session: Schema.optional(Schema.String),
+  metadata: Schema.optional(Schema.Unknown),
+  time: Schema.Finite,
+  viewed: Schema.Boolean,
 }
-
-type TurnCompleteNotification = NotificationBase & {
-  type: "turn-complete"
-}
-
-type ErrorNotification = NotificationBase & {
-  type: "error"
-  error: Extract<OpenCodeEvent, { type: "session.execution.failed" }>["data"]["error"]
-}
-
-export type Notification = TurnCompleteNotification | ErrorNotification
+export const Notification = Schema.Union([
+  Persistence.struct({ ...NotificationBase, type: Schema.Literal("turn-complete") }),
+  Persistence.struct({ ...NotificationBase, type: Schema.Literal("error"), error: SessionError.Error }),
+])
+export type Notification = typeof Notification.Type
+export const NotificationStore = Persistence.struct({ list: Persistence.array(Notification) })
 
 type NotificationIndex = {
   session: {
@@ -53,11 +50,7 @@ type NotificationIndex = {
 
 type NotificationTabs = Pick<ReturnType<typeof useTabs>, "addSessionTab" | "rememberSessionRoute" | "select">
 
-export function openNotificationSession(
-  tabs: NotificationTabs,
-  server: ServerConnection.Key,
-  sessionID: string,
-) {
+export function openNotificationSession(tabs: NotificationTabs, server: ServerConnection.Key, sessionID: string) {
   const tab = tabs.addSessionTab({ server, sessionId: sessionID })
   if (tab.type !== "session") return
   tabs.rememberSessionRoute(tab, sessionID)
@@ -130,9 +123,8 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
 
   const [store, setStore, _, ready] = persisted(
     Persist.serverGlobal(input.sdk.scope, "notification"),
-    createStore({
-      list: [] as Notification[],
-    }),
+    NotificationStore,
+    { list: [] },
   )
   const [index, setIndex] = createStore<NotificationIndex>(buildNotificationIndex(store.list))
 
@@ -230,10 +222,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
       if (!session) return
       if (session.parentID) return
 
-      if (
-        sessionIDHasOpenTab(tabs.store, input.key, sessionID) &&
-        settings.sounds.agentEnabled()
-      ) {
+      if (sessionIDHasOpenTab(tabs.store, input.key, sessionID) && settings.sounds.agentEnabled()) {
         void playSoundByIdOnce(settings.sounds.agent(), `${input.key}\0${eventID}`)
       }
 
@@ -253,20 +242,12 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
     })
   }
 
-  const handleSessionError = (
-    sessionID: string,
-    error: ErrorNotification["error"],
-    eventID: string,
-    time: number,
-  ) => {
+  const handleSessionError = (sessionID: string, error: SessionError.Error, eventID: string, time: number) => {
     void lookup(sessionID).then((session) => {
       if (meta.disposed) return
       if (session?.parentID) return
 
-      if (
-        sessionIDHasOpenTab(tabs.store, input.key, sessionID) &&
-        settings.sounds.errorsEnabled()
-      ) {
+      if (sessionIDHasOpenTab(tabs.store, input.key, sessionID) && settings.sounds.errorsEnabled()) {
         void playSoundByIdOnce(settings.sounds.errors(), `${input.key}\0${eventID}`)
       }
 

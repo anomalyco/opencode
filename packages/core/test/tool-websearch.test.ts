@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Context, Effect, Layer } from "effect"
-import { HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import type { HttpClientError } from "effect/unstable/http"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Permission } from "@opencode-ai/core/permission"
@@ -55,9 +55,9 @@ const setup = Effect.gen(function* () {
   const fixture = new Fixture()
   const websearch = yield* TestWebSearch.Service
   const kv = yield* KV.Service
-  yield* websearch.transform((draft) =>
+  yield* websearch.transform((editor) =>
     providers.forEach((provider) =>
-      draft.add({
+      editor.add({
         ...provider,
         execute: () =>
           Effect.gen(function* () {
@@ -70,8 +70,7 @@ const setup = Effect.gen(function* () {
   )
   const context = yield* Layer.build(
     AppNodeBuilder.build(LayerNode.group([Tool.node, webSearchToolNode]), [
-      [
-        Permission.node,
+      Permission.node.replace(
         permissionLayer({
           assert: (input) =>
             Effect.sync(() => {
@@ -79,10 +78,9 @@ const setup = Effect.gen(function* () {
               fixture.assertions.push(input)
             }),
         }),
-      ],
-      [WebSearch.node, Layer.succeed(WebSearch.Service, websearch)],
-      [
-        Form.node,
+      ),
+      WebSearch.node.replace(Layer.succeed(WebSearch.Service, websearch)),
+      Form.node.replace(
         Layer.mock(Form.Service, {
           ask: (input) =>
             Effect.gen(function* () {
@@ -91,8 +89,8 @@ const setup = Effect.gen(function* () {
               return fixture.formResponses.shift() ?? fixture.formResponse
             }),
         }),
-      ],
-      [Image.node, imagePassthrough],
+      ),
+      Image.node.replace(imagePassthrough),
     ]),
   )
   return Object.assign(fixture, { websearch, kv, registry: Context.get(context, Tool.Service) })
@@ -133,10 +131,11 @@ describe("WebSearchTool registration", () => {
       expect(fixture.websearch.queries).toEqual([
         {
           query: "effect typescript",
-          providerID: WebSearch.ID.make("exa"),
+          providerID: undefined,
         },
       ])
       expect(fixture.events).toEqual(["permission", "query"])
+      expect(fixture.websearch.sessionIDs).toEqual([sessionID])
     }),
   )
 
@@ -217,7 +216,7 @@ describe("WebSearchTool registration", () => {
       })
       expect(first.status).toBe("completed")
       expect(["exa", "parallel"]).toContain(first.metadata?.provider)
-      expect(first.metadata?.provider).toBe(fixture.websearch.queries[1]?.providerID)
+      expect(fixture.websearch.sessionIDs).toEqual([sessionID, sessionID])
       expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe("random")
       expect(fixture.websearch.queries).toHaveLength(2)
       expect(fixture.formRequests).toEqual([
@@ -255,9 +254,28 @@ describe("WebSearchTool registration", () => {
       })
       expect(second.status).toBe("completed")
       expect(["exa", "parallel"]).toContain(second.metadata?.provider)
-      expect(second.metadata?.provider).toBe(fixture.websearch.queries[2]?.providerID)
+      expect(second.metadata?.provider).toBe(first.metadata?.provider)
       expect(fixture.formRequests).toHaveLength(1)
       expect(fixture.websearch.queries).toHaveLength(3)
+    }),
+  )
+
+  it.effect("honors automatic consent when the configured provider is unavailable", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      yield* fixture.websearch.transform((editor) => editor.default.set(WebSearch.ID.make("missing")))
+      fixture.formResponse = { status: "answered", answer: { choice: "allow" } }
+      const result = yield* executeTool(fixture.registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-missing", name: "websearch", input: { query: "effect" } },
+      })
+      expect(result.status).toBe("completed")
+      expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe("random")
+      expect(result.metadata?.provider).toBe(
+        (yield* fixture.websearch.query({ query: "next" }, { sessionID })).providerID,
+      )
+      expect(fixture.formRequests).toHaveLength(1)
     }),
   )
 
@@ -349,6 +367,67 @@ describe("WebSearchTool registration", () => {
     }),
   )
 
+  it.effect("keeps provider progress, output, and metadata accurate across automatic failover", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      yield* fixture.websearch.select("random")
+      const first = (yield* fixture.websearch.query({ query: "seed" }, { sessionID })).providerID
+      yield* fixture.websearch.transform((editor) =>
+        editor.add({
+          id: first,
+          name: first,
+          execute: () => Effect.fail(TestWebSearch.httpError()),
+        }),
+      )
+      const progress: Tool.Metadata[] = []
+      const tools = yield* fixture.registry.snapshot()
+      const result = yield* tools.execute({
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-failover", name: "websearch", input: { query: "effect" } },
+        progress: (metadata) =>
+          Effect.sync(() => {
+            progress.push(metadata)
+          }),
+      })
+      const replacement = WebSearch.ID.make(first === "exa" ? "parallel" : "exa")
+      expect(progress).toEqual([{ provider: first }, { provider: replacement }])
+      expect(result).toMatchObject({
+        output: { provider: replacement, results: fixture.results },
+        metadata: { provider: replacement },
+      })
+      expect(fixture.formRequests).toEqual([])
+      expect((yield* fixture.websearch.query({ query: "next" }, { sessionID })).providerID).toBe(replacement)
+    }),
+  )
+
+  it.effect("does not reopen consent when all automatic providers are cooling down", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      yield* fixture.websearch.select("random")
+      fixture.error = TestWebSearch.httpError()
+      const tools = yield* fixture.registry.snapshot()
+      yield* Effect.forEach(["first", "cooling"], (query) =>
+        Effect.gen(function* () {
+          const error = yield* tools
+            .execute({
+              sessionID,
+              ...toolIdentity,
+              call: { type: "tool-call", id: `call-${query}`, name: "websearch", input: { query } },
+            })
+            .pipe(Effect.flip)
+          expect(toSessionError(error)).toEqual({
+            type: "tool.execution",
+            message: "Web search rate limited (HTTP 429)",
+          })
+          expect(error.metadata).toMatchObject({ provider: expect.stringMatching(/^(exa|parallel)$/) })
+        }),
+      )
+      expect(fixture.events.filter((event) => event === "query")).toHaveLength(2)
+      expect(fixture.formRequests).toEqual([])
+    }),
+  )
+
   it.effect("reports safe HTTP failures with the attempted provider", () =>
     Effect.gen(function* () {
       const fixture = yield* setup
@@ -364,14 +443,7 @@ describe("WebSearchTool registration", () => {
         ],
         ({ status, message }, index) =>
           Effect.gen(function* () {
-            const request = HttpClientRequest.post("https://mcp.exa.ai/mcp?exaApiKey=secret")
-            fixture.error = new HttpClientError.HttpClientError({
-              reason: new HttpClientError.StatusCodeError({
-                request,
-                response: HttpClientResponse.fromWeb(request, new Response(null, { status })),
-                description: "non 2xx status code",
-              }),
-            })
+            fixture.error = TestWebSearch.httpError(status, undefined, "https://mcp.exa.ai/mcp?exaApiKey=secret")
             const progress: Tool.Metadata[] = []
             const error = yield* tools
               .execute({

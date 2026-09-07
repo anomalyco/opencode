@@ -25,7 +25,7 @@ export interface Definition {
   readonly execute: (input: Invocation) => Effect.Effect<void, unknown>
 }
 
-export type Draft = {
+export type Editor = {
   add: (definition: Definition) => void
 }
 
@@ -39,7 +39,7 @@ export class ExecutionError extends Schema.TaggedError<ExecutionError>()("Comman
   message: Schema.String,
 }) {}
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly get: (name: string) => Effect.Effect<Info | undefined>
   readonly list: () => Effect.Effect<Info[]>
   readonly execute: (input: {
@@ -54,13 +54,13 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    const state = State.create<Map<string, Definition>, Draft>({
+    const state = State.create<Map<string, Definition>, Editor>({
       name: "command",
       initial: () => new Map(),
-      draft: (draft) => ({
-        add: (definition) => draft.set(definition.name, definition),
+      editor: (editor) => ({
+        add: (definition) => editor.set(definition.name, definition),
       }),
-      finalize: () => bus.publish(Command.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: () => bus.publish(Command.Event.Updated, {}).pipe(Effect.asVoid),
     })
     const info = (definition: Definition) =>
       Info.make({

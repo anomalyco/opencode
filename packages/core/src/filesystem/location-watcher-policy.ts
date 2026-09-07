@@ -8,12 +8,12 @@ type Data = {
   ignore: string[]
 }
 
-export type Draft = {
+export type Editor = {
   add: (ignore: readonly string[]) => void
   list: () => readonly string[]
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly current: () => readonly string[]
   readonly observe: (
     listener: (ignore: readonly string[]) => Effect.Effect<void>,
@@ -25,20 +25,19 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Lo
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    let current: readonly string[] = []
     const listeners = new Set<(ignore: readonly string[]) => Effect.Effect<void>>()
-    const state = State.create<Data, Draft>({
+    const state = State.create<Data, Editor>({
       name: "location-watcher-policy",
       initial: () => ({ ignore: [] }),
-      draft: (draft) => ({
-        add: (ignore) => draft.ignore.push(...ignore),
-        list: () => draft.ignore,
+      editor: (editor) => ({
+        add: (ignore) => editor.ignore.push(...ignore),
+        list: () => editor.ignore,
       }),
-      finalize: (draft) =>
-        Effect.sync(() => {
-          current = [...draft.list()]
-        }).pipe(Effect.andThen(Effect.forEach(listeners, (listener) => listener(current), { discard: true }))),
+      // Read per listener: a reentrant transform inside an earlier listener must reach later ones.
+      notify: () => Effect.forEach(listeners, (listener) => listener(current()), { discard: true }),
     })
+    // Annotated to break the inference cycle through notify: notify reads current, current reads state.
+    const current = (): readonly string[] => state.get().ignore
     const observe = Effect.fn("LocationWatcherPolicy.observe")(function* (
       listener: (ignore: readonly string[]) => Effect.Effect<void>,
     ) {
@@ -56,7 +55,7 @@ const layer = Layer.effect(
     return Service.of({
       transform: state.transform,
       reload: state.reload,
-      current: () => current,
+      current,
       observe,
     })
   }),

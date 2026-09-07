@@ -192,7 +192,7 @@ test("ctrl+c clears a dialog text selection before closing the dialog", async ()
     const column = frame[row]!.indexOf("Alpha") + 1
     await select.app.mockMouse.click(column, row)
     await select.app.mockMouse.click(column, row)
-    expect(select.app.renderer.getSelection()?.getSelectedText()).toBe("Alpha")
+    await select.app.waitFor(() => select.app.renderer.getSelection()?.getSelectedText() === "Alpha")
 
     select.app.mockInput.pressKey("c", { ctrl: true })
     await select.app.waitFor(() => !select.app.renderer.getSelection())

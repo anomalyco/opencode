@@ -1,12 +1,6 @@
 import { Effect } from "effect"
-import {
-  type AstNode,
-  AsyncIteratorSymbol,
-  InterpreterRuntimeError,
-  IteratorSymbol,
-  IteratorSymbols,
-} from "../interpreter/model.js"
-import { containsOpaqueReference } from "../interpreter/references.js"
+import { type AstNode, AsyncIteratorSymbol, InterpreterRuntimeError, IteratorSymbol } from "../interpreter/model.js"
+import { containsOpaqueReference, rejectCircularInsertion } from "../interpreter/references.js"
 import { isBlockedMember } from "../tool-runtime.js"
 import { isCodeModeValue, CodeModePromise } from "../values.js"
 import { boundedData, coerceToString } from "./value.js"
@@ -37,10 +31,6 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
     }
     return input as Record<string, unknown>
   }
-  const guardedSet = (out: Record<string, unknown>, key: string, item: unknown): void => {
-    if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
-    out[key] = item
-  }
   switch (name) {
     case "keys":
       return Object.keys(requireObject())
@@ -64,14 +54,29 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
         throw new InterpreterRuntimeError("Object.assign expects a data object target.", node)
       }
       const out = target as Record<string, unknown>
+      const seen = new Set<object>()
+      const guardedSet = (key: PropertyKey, item: unknown): void => {
+        if (typeof key === "string" && isBlockedMember(key))
+          throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
+        rejectCircularInsertion(out, item, "Object.assign result", node, seen)
+        if (!Reflect.set(out, key, item))
+          throw new InterpreterRuntimeError(`Object.assign could not assign property '${String(key)}'.`, node).as(
+            "TypeError",
+          )
+      }
       for (const source of args.slice(1)) {
         if (source === null || source === undefined || isCodeModeValue(source)) continue
         if (typeof source !== "object" || Array.isArray(source)) {
           throw new InterpreterRuntimeError("Object.assign expects data objects.", node)
         }
-        for (const [key, item] of Object.entries(source)) guardedSet(out, key, item)
-        for (const symbol of IteratorSymbols) {
-          if (Object.hasOwn(source, symbol)) Reflect.set(out, symbol, Reflect.get(source, symbol))
+        for (const key of Reflect.ownKeys(source)) {
+          if (typeof key === "string") {
+            if (Object.prototype.propertyIsEnumerable.call(source, key)) guardedSet(key, Reflect.get(source, key))
+            continue
+          }
+          if (key !== AsyncIteratorSymbol && key !== IteratorSymbol) continue
+          if (!Object.prototype.propertyIsEnumerable.call(source, key)) continue
+          guardedSet(key, Reflect.get(source, key))
         }
       }
       return out

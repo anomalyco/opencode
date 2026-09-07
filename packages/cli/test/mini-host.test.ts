@@ -9,6 +9,7 @@ import {
   type InteractiveStdin,
   usingInteractiveStdin,
 } from "../src/mini-host"
+import { OPENCODE_VERSION } from "../src/version"
 import { tmpdir } from "./fixture/tmpdir"
 
 const model = { providerID: "openai", modelID: "gpt-5" }
@@ -145,6 +146,7 @@ describe("Mini CLI host", () => {
     const input = host({ stdin: stream(true), cleanup() {} }, directory.path)
 
     expect(input.paths).toEqual({ home: directory.path })
+    expect(input.version).toBe(OPENCODE_VERSION)
     expect(input.platform).toBe(process.platform)
     expect(typeof input.files.readText).toBe("function")
     const file = path.join(directory.path, "attachment.txt")

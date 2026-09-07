@@ -107,6 +107,17 @@ export function map(input: MapInput): Mapping | undefined {
         },
         ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
       }
+    case "@ai-sdk/mistral":
+      return {
+        package: "@opencode-ai/ai/providers/mistral",
+        settings: {
+          ...baseSettings,
+          ...mapAPIKey(input.settings),
+          ...mapMistralOptions(input.settings),
+        },
+        ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
+        ...(isRecord(input.settings.extraBody) ? { body: input.settings.extraBody } : {}),
+      }
     case "@ai-sdk/openai":
       return {
         package: "@opencode-ai/ai/providers/openai",
@@ -184,7 +195,9 @@ function mapBedrockSettings(
       ? { baseURL: settings.endpoint }
       : {}),
     ...(apiKey === undefined ? {} : { apiKey }),
+    ...(settings.auth === "bearer" || settings.auth === "sigv4" ? { auth: settings.auth } : {}),
     ...(credentials === undefined ? {} : { credentials }),
+    ...(typeof settings.profile === "string" ? { profile: settings.profile } : {}),
     ...(typeof settings.region === "string" ? { region: settings.region } : {}),
     ...(typeof settings.topP === "number" ? { topP: settings.topP } : {}),
   }
@@ -278,6 +291,20 @@ function mapOpenAIOptions(settings: Readonly<Record<string, unknown>>) {
     ...(typeof settings.promptCacheKey === "string" ? { promptCacheKey: settings.promptCacheKey } : {}),
     ...(typeof settings.textVerbosity === "string" ? { textVerbosity: settings.textVerbosity } : {}),
     ...(typeof settings.serviceTier === "string" ? { serviceTier: settings.serviceTier } : {}),
+  }
+  if (Object.keys(options).length === 0) return {}
+  return { providerOptions: options }
+}
+
+function mapMistralOptions(settings: Readonly<Record<string, unknown>>) {
+  const options = {
+    ...(typeof settings.safePrompt === "boolean" ? { safePrompt: settings.safePrompt } : {}),
+    ...(typeof settings.documentImageLimit === "number" ? { documentImageLimit: settings.documentImageLimit } : {}),
+    ...(typeof settings.documentPageLimit === "number" ? { documentPageLimit: settings.documentPageLimit } : {}),
+    ...(typeof settings.parallelToolCalls === "boolean" ? { parallelToolCalls: settings.parallelToolCalls } : {}),
+    ...(typeof settings.promptCacheKey === "string" ? { promptCacheKey: settings.promptCacheKey } : {}),
+    ...(typeof settings.reasoningEffort === "string" ? { reasoningEffort: settings.reasoningEffort } : {}),
+    ...(settings.promptMode === "reasoning" ? { promptMode: settings.promptMode } : {}),
   }
   if (Object.keys(options).length === 0) return {}
   return { providerOptions: options }

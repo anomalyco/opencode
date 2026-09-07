@@ -75,16 +75,16 @@ export function serverOptions(options: Options): ServerOptions {
 /** The workerd replacement graph, applied after the standard server replacements. */
 export function replacements(options: Options): LayerNode.Replacements {
   return [
-    [Database.node, Database.configuredClient(sqliteLayer({ storage: options.storage }))],
-    [CrossSpawnSpawner.node, EnvironmentUnavailable.layer],
-    [Snapshot.node, Snapshot.noopLayer],
-    [Vcs.node, vcsLayer],
-    [FileSystem.node, fileSystemLayer],
-    [FileSystemSearch.node, fileSystemSearchLayer],
-    [Pty.node, ptyLayer],
+    Database.node.replace(Database.configuredClient(sqliteLayer({ storage: options.storage }))),
+    CrossSpawnSpawner.node.replace(EnvironmentUnavailable.layer),
+    Snapshot.node.replace(Snapshot.noopLayer),
+    Vcs.node.replace(vcsLayer),
+    FileSystem.node.replace(fileSystemLayer),
+    FileSystemSearch.node.replace(fileSystemSearchLayer),
+    Pty.node.replace(ptyLayer),
     // Precompiled (internal and SDK) plugins only: no plugin-directory scan, npm
     // install, or import of plugin code from disk.
-    [ConfigPluginSource.node, ConfigPluginSource.empty],
+    ConfigPluginSource.node.replace(ConfigPluginSource.empty),
   ]
 }
 

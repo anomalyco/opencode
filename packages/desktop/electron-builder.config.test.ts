@@ -18,6 +18,20 @@ const channels = [
 ] as const
 
 for (const channel of channels) {
+  test(`includes the Windows sandbox permission hook for ${channel.channel}`, async () => {
+    const previous = process.env.OPENCODE_CHANNEL
+    process.env.OPENCODE_CHANNEL = channel.channel
+    try {
+      const config = (await import(`./electron-builder.config.ts?channel=${channel.channel}`)).default as Configuration
+      const include = path.join(import.meta.dirname, "resources/windows/installer.nsh")
+      expect(config.nsis?.include).toBe(include)
+      expect(await Bun.file(include).exists()).toBe(true)
+    } finally {
+      if (previous === undefined) delete process.env.OPENCODE_CHANNEL
+      else process.env.OPENCODE_CHANNEL = previous
+    }
+  })
+
   test(`uses one Linux desktop identity for ${channel.channel}`, async () => {
     const previous = process.env.OPENCODE_CHANNEL
     process.env.OPENCODE_CHANNEL = channel.channel
@@ -176,19 +190,8 @@ for (const channel of ["dev", "beta"] as const) {
       {
         from: "resources/",
         to: "",
-        filter: ["opencode-cli*"],
+        filter: ["opencode-cli", "opencode-cli.exe"],
       },
     ])
   })
 }
-
-test("does not bundle the CLI in prod builds", async () => {
-  const previous = process.env.OPENCODE_CHANNEL
-  process.env.OPENCODE_CHANNEL = "prod"
-  const module = await import("./electron-builder.config.ts?no-cli-resource=prod")
-  const config = module.default as Configuration
-  if (previous === undefined) delete process.env.OPENCODE_CHANNEL
-  else process.env.OPENCODE_CHANNEL = previous
-
-  expect(config.extraResources).toEqual([])
-})

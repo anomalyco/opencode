@@ -1,5 +1,6 @@
 import {
   type AstNode,
+  AsyncIteratorSymbol,
   CodeModeFunction,
   CodeModeGenerator,
   CoercionFunction,
@@ -9,6 +10,7 @@ import {
   GeneratorMethodReference,
   InterpreterRuntimeError,
   IntrinsicReference,
+  IteratorSymbol,
   JsonMethodReference,
   PromiseCapabilityFunction,
   PromiseInstanceMethodReference,
@@ -42,13 +44,12 @@ export const isRuntimeReference = (value: unknown): boolean =>
   value instanceof SymbolNamespace ||
   isCodeModeValue(value)
 
-function* childValues(value: object): Generator<unknown> {
-  if (Array.isArray(value)) {
-    const length = value.length
-    for (let index = 0; index < length; index++) yield value[index]
-    return
+function* childValues(value: object): Generator {
+  for (const key of Reflect.ownKeys(value)) {
+    if (!Object.prototype.propertyIsEnumerable.call(value, key)) continue
+    if (typeof key === "symbol" && key !== AsyncIteratorSymbol && key !== IteratorSymbol) continue
+    yield Reflect.get(value, key)
   }
-  yield* Object.values(value)
 }
 
 export const containsRuntimeReference = (value: unknown): boolean => {
@@ -90,9 +91,14 @@ export const containsOpaqueReference = (value: unknown): boolean => {
 }
 
 // Reject cycles before mutation so later boundary walks remain safe.
-export const rejectCircularInsertion = (container: object, value: unknown, label: string, node: AstNode): void => {
+export const rejectCircularInsertion = (
+  container: object,
+  value: unknown,
+  label: string,
+  node: AstNode,
+  seen = new Set<object>(),
+): void => {
   const pending: Array<Iterator<unknown>> = [[value].values()]
-  const seen = new Set<object>()
   while (pending.length > 0) {
     const next = pending.at(-1)!.next()
     if (next.done) {
@@ -104,7 +110,7 @@ export const rejectCircularInsertion = (container: object, value: unknown, label
       throw new InterpreterRuntimeError(`${label} contains a circular value.`, node, "InvalidDataValue")
     if (current === null || typeof current !== "object" || isRuntimeReference(current) || seen.has(current)) continue
     seen.add(current)
-    pending.push(Array.isArray(current) ? current[Symbol.iterator]() : childValues(current))
+    pending.push(childValues(current))
   }
 }
 

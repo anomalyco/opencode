@@ -31,7 +31,7 @@ Registrations are owned by the plugin scope. Closing the scope removes them auto
 
 ## Transform Hooks
 
-Transform hooks contribute to stateful domains. Their draft callbacks are
+Transform hooks contribute to stateful domains. Their editor callbacks are
 synchronous, so load effectful data before registering a transform or reloading
 its domain:
 
@@ -45,7 +45,7 @@ yield *
   })
 ```
 
-OpenCode rebuilds the domain when a transform is registered or disposed. A rebuild starts from fresh domain state and runs every active transform in registration order.
+Registry reads rebuild synchronously when registrations changed, applying every transform in registration order to a fresh value; unchanged registries return the previous value. Values read earlier are never mutated. Notifications and resource reconciliation run separately from that materialization.
 
 Available transform hooks are namespaced by domain:
 

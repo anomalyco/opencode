@@ -1,6 +1,7 @@
 export * as SessionRunnerLLM from "./llm.js"
 
 import { Message } from "@opencode-ai/ai"
+import { and, desc, eq, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
@@ -9,11 +10,13 @@ import { SessionCompaction } from "../compaction.js"
 import { SessionContext } from "../context.js"
 import { SessionEvent } from "../event.js"
 import { SessionInbox } from "../inbox.js"
+import { SessionHistory } from "../history.js"
 import { SessionModelRequest } from "../model-request.js"
 import { SessionModelTransport } from "../model-transport.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
+import { SessionMessageTable } from "../sql.js"
 import { SessionTitle } from "../title.js"
 import { DrainResult, Service, type Interface } from "./index.js"
 import { Snapshot } from "../../snapshot.js"
@@ -23,7 +26,7 @@ import { StepFailedError } from "../error.js"
 import { SessionRunnerRetry } from "./retry.js"
 import { SessionStep } from "./step.js"
 import { ToolOutput } from "../../tool-output.js"
-import { PluginSupervisor } from "../../plugin/supervisor.js"
+import { Plugin } from "../../plugin.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
 const CONTINUE_AFTER_INCOMPLETE_STREAM =
@@ -38,7 +41,7 @@ const layer = Layer.effect(
     const modelTransport = yield* SessionModelTransport.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
-    const plugins = yield* PluginSupervisor.Service
+    const plugins = yield* Plugin.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
     // Title generation starts once input is visible and must not delay model execution.
@@ -57,7 +60,8 @@ const layer = Layer.effect(
         const control = pending.type === "compaction" || pending.type === "move"
         if (promotable === "steer" && pending.delivery === "queue" && !control) return DrainResult.Complete()
       }
-      yield* plugins.flush
+      yield* plugins.awaitActivation
+      yield* settleStaleCompactions(sessionID)
       yield* settleStaleToolCalls(sessionID)
 
       const advanceToStep = Effect.fn("SessionRunner.advanceToStep")(() =>
@@ -96,7 +100,7 @@ const layer = Layer.effect(
                 step = 1
               }
               if (pending?.type === "move")
-                return DrainResult.Moved({ continuation: !entering && continuing ? { step } : undefined })
+                return DrainResult.Moved({ continuation: continuing ? { step } : undefined })
               if (pending?.type === "compaction") {
                 const session = yield* store.get(sessionID)
                 if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
@@ -104,7 +108,22 @@ const layer = Layer.effect(
                   Effect.gen(function* () {
                     return yield* compaction.compactManual({
                       session,
-                      resolveModel: context.resolveModel,
+                      resolveContext: (session) =>
+                        Effect.gen(function* () {
+                          const selected = yield* context.select(session.id)
+                          const model = yield* context.resolveModel(selected.session)
+                          // Preview updates without admitting them after the already-delivered compaction marker.
+                          const history = yield* SessionHistory.preview(db, session.id, selected.instructions)
+                          return {
+                            session: selected.session,
+                            agent: selected.agent,
+                            tools: selected.tools,
+                            model,
+                            initial: history.initial,
+                            messages: history.messages,
+                            instructionUpdate: history.instructionUpdate,
+                          }
+                        }),
                       prepare: context.prepare,
                       messages: yield* store.context(sessionID),
                       inputID: pending.id,
@@ -128,7 +147,7 @@ const layer = Layer.effect(
               }
               if (!force && !continuing && (!pending || (pending.delivery === "queue" && promotable === "steer")))
                 return DrainResult.Complete()
-              return yield* restore(
+              const ready = yield* restore(
                 Effect.gen(function* () {
                   const selected = yield* prepareContext(sessionID)
                   const promoted = yield* SessionInbox.promote(
@@ -137,6 +156,8 @@ const layer = Layer.effect(
                     sessionID,
                     entering && !continuing ? promotable : "steer",
                   )
+                  // A control admitted during context preparation owns this boundary.
+                  if (promoted === undefined) return undefined
                   if (promoted > 0 && !selected.session.parentID && SessionTitle.isUntitled(selected.session))
                     yield* FiberMap.run(titles, sessionID, title.generate(sessionID), {
                       onlyIfMissing: true,
@@ -145,6 +166,7 @@ const layer = Layer.effect(
                   return { _tag: "Ready" as const, context: yield* context.load(selected) }
                 }),
               )
+              if (ready) return ready
             }
           }),
         ),
@@ -180,12 +202,10 @@ const layer = Layer.effect(
         const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
         initial = undefined
         const compactionInput = {
-          session: loaded.session,
-          messages: loaded.messages,
-          resolved: loaded.model,
+          context: loaded,
           prepare: context.prepare,
         }
-        if (compaction.required(compactionInput)) {
+        if (compaction.required({ messages: loaded.messages, resolved: loaded.model, context: loaded })) {
           const compacted = yield* compaction.compact(compactionInput)
           if (compacted.status !== "completed") return yield* new StepFailedError({ error: compacted.error })
           assistantMessageID = SessionMessage.ID.create()
@@ -200,6 +220,7 @@ const layer = Layer.effect(
           messages: loaded.messages,
         })
         const prepared = yield* context.prepare({
+          kind: "primary",
           scope: { session: loaded.session, agentID: loaded.agent.id, model: loaded.model, tools: loaded.tools },
           transcript: {
             system: transcript.system,
@@ -262,6 +283,36 @@ const layer = Layer.effect(
       }
     })
 
+    const settleStaleCompactions = Effect.fn("SessionRunner.settleStaleCompactions")(function* (
+      sessionID: SessionSchema.ID,
+    ) {
+      // A process death skips compaction finalizers. Include orphans behind a
+      // completed checkpoint, and settle newest first to match event projection.
+      const rows = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(
+          and(
+            eq(SessionMessageTable.session_id, sessionID),
+            eq(SessionMessageTable.type, "compaction"),
+            sql`json_extract(${SessionMessageTable.data}, '$.status') = 'running'`,
+          ),
+        )
+        .orderBy(desc(SessionMessageTable.seq))
+        .all()
+        .pipe(Effect.orDie)
+      for (const row of rows) {
+        const message = yield* SessionHistory.decodeMessageRow(row)
+        if (message.type !== "compaction") continue
+        yield* bus.publish(SessionEvent.Compaction.Failed, {
+          sessionID,
+          reason: message.reason,
+          inputID: message.id,
+          error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
+        })
+      }
+    })
+
     const settleStaleToolCalls = Effect.fn("SessionRunner.settleStaleToolCalls")(function* (
       sessionID: SessionSchema.ID,
     ) {
@@ -301,7 +352,7 @@ export const node = makeLocationNode({
     SessionModelTransport.node,
     SessionStore.node,
     SessionCompaction.node,
-    PluginSupervisor.node,
+    Plugin.node,
     SessionTitle.node,
     Snapshot.node,
     ToolOutput.node,

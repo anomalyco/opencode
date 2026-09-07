@@ -117,12 +117,13 @@ export function createNewSessionComposerAdapter(props: {
             { dir: base64Encode(sessionDirectory), id: created.id },
             { server: server.key, scope: serverSDK.scope },
           ),
+          { preserveDraft: !!pending },
         )
       })
 
       return {
         cleanupReady,
-        complete: pending?.complete,
+        complete: pending ? () => pending.complete(submission.target()) : undefined,
         session: {
           id: created.id,
           directory: sessionDirectory,
@@ -194,6 +195,7 @@ async function resolveSessionDirectory(input: {
 
   return createWorktree({
     api: input.serverSDK.api,
+    data: input.data,
     directory: input.projectDirectory,
     project: input.data.location.info({ directory: input.projectDirectory })?.project,
     branch: input.branch,

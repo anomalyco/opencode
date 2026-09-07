@@ -6,7 +6,6 @@ import {
   AttentionSoundName,
   Info,
   LeaderTimeoutDefault,
-  PluginSpec,
   resolve,
   TuiConfigProvider,
   type Info as TuiConfigInfo,
@@ -14,12 +13,8 @@ import {
 } from "../src/config/v1"
 
 const decodeInfo = Schema.decodeUnknownSync(Info)
-const decodePlugin = Schema.decodeUnknownSync(PluginSpec)
 
-test("defines package-owned plugin specs and attention sound names", () => {
-  expect(decodePlugin("example-plugin")).toBe("example-plugin")
-  expect(decodePlugin(["example-plugin", { enabled: true }])).toEqual(["example-plugin", { enabled: true }])
-  expect(() => decodePlugin(["example-plugin"])).toThrow()
+test("defines attention sound names", () => {
   expect(AttentionSoundName.literals).toEqual(["default", "question", "permission", "error", "done", "subagent_done"])
 })
 
@@ -32,7 +27,6 @@ test("validates config constraints", () => {
       scroll_speed: 0.001,
       diff_style: "stacked",
       cursor: { blinking: false },
-      plugin: ["example-plugin"],
     }),
   ).toMatchObject({
     leader_timeout: 250,

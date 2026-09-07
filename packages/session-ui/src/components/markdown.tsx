@@ -396,6 +396,7 @@ export function Markdown(
   const markdown = useMarkdown()
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const owner = createUniqueId()
+  const lifetime = new AbortController()
   const activeCodeKeys = new Set<string>()
   const completedCode = new Map<string, Extract<RenderedBlock, { mode: "code" }>>()
   let streamed = false
@@ -481,25 +482,31 @@ export function Markdown(
           }
 
           const ready = block.mode === "full" ? getReadyMarkdown(block, key) : undefined
-          return { key: blockKey, mode: block.mode, ...(ready ?? (await renderCachedMarkdown(block, key))) }
+          return {
+            key: blockKey,
+            mode: block.mode,
+            ...(ready ?? (await renderCachedMarkdown(block, key, lifetime.signal))),
+          }
         }),
       )
         .then((blocks) => ({ text: src.text, blocks, ready: true }) satisfies RenderResult)
         .catch(
           () =>
-            ({
-              text: src.text,
-              ready: true,
-              blocks: [
-                {
-                  key: base ?? "fallback",
-                  mode: "full" as const,
-                  raw: src.text,
-                  hash: checksum(src.text) ?? "",
-                  html: fallback(src.text),
-                },
-              ],
-            }) satisfies RenderResult,
+            (lifetime.signal.aborted
+              ? { text: src.text, blocks: [], ready: false }
+              : {
+                  text: src.text,
+                  ready: true,
+                  blocks: [
+                    {
+                      key: base ?? "fallback",
+                      mode: "full" as const,
+                      raw: src.text,
+                      hash: checksum(src.text) ?? "",
+                      html: fallback(src.text),
+                    },
+                  ],
+                }) satisfies RenderResult,
         )
     },
     { initialValue: initial },
@@ -562,6 +569,7 @@ export function Markdown(
   })
 
   onCleanup(() => {
+    lifetime.abort()
     images?.dispose()
     if (copyCleanup) copyCleanup()
     const container = root()

@@ -11,6 +11,26 @@ export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>
   { httpApiStatus: 400 },
 ) {}
 
+export class RpcError extends Schema.TaggedError<RpcError>()(
+  "RpcError",
+  {
+    type: Schema.String,
+    message: Schema.String,
+    data: Schema.optional(Schema.Unknown),
+  },
+  { httpApiStatus: 400 },
+) {}
+
+export class RpcInternalError extends Schema.TaggedError<RpcInternalError>()(
+  "RpcInternalError",
+  {
+    type: Schema.Literals(["rpc.internal", "rpc.invalid_output"]),
+    message: Schema.String,
+    data: Schema.optional(Schema.Unknown),
+  },
+  { httpApiStatus: 500 },
+) {}
+
 export class UnauthorizedError extends Schema.TaggedError<UnauthorizedError>()(
   "UnauthorizedError",
   { message: Schema.String },

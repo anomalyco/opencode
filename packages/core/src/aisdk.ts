@@ -119,7 +119,7 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
 function prepareOptions(model: Info, pkg: string) {
   const projected = mapBodyToProviderOptions(model, pkg)
   const options: Record<string, any> = {
-    name: model.providerID,
+    name: model.canonical ?? model.providerID,
     ...(model.settings ?? {}),
     headers: model.headers,
     body: projected.body,
@@ -249,6 +249,7 @@ export const locationLayer = Layer.effect(
       language: Effect.fn("AISDK.language")(function* (model) {
         const key = cacheKey({
           providerID: model.providerID,
+          canonical: model.canonical,
           id: model.id,
           modelID: model.modelID,
           package: model.package,
@@ -269,6 +270,7 @@ export const locationLayer = Layer.effect(
         const options = prepareOptions(model, packageName)
         const sdkKey = cacheKey({
           providerID: model.providerID,
+          canonical: model.canonical,
           package: packageName,
           settings: model.settings,
           headers: model.headers,
@@ -301,10 +303,12 @@ export const locationLayer = Layer.effect(
 function modelFromLanguage(info: Info, language: LanguageModelV3) {
   const packageName = Provider.packageName(info.package!)
   const projected = mapBodyToProviderOptions(info, packageName)
-  const optionKey = providerOptionKey(packageName, info.providerID)
+  const providerID = info.canonical ?? info.providerID
+  const optionKey = providerOptionKey(packageName, providerID)
   const route: AnyRoute = {
+    compact: undefined,
     id: `ai-sdk:${packageName}`,
-    provider: ProviderID.make(info.providerID),
+    provider: ProviderID.make(providerID),
     providerMetadataKey: optionKey,
     protocol: "ai-sdk",
     endpoint: Endpoint.path("/", { baseURL: "https://ai-sdk.local" }),
@@ -327,17 +331,22 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
     },
     body: {
       schema: Schema.Unknown,
-      from: (request) => Effect.succeed(callOptions(request, packageName, info.modelID ?? info.id, optionKey)),
+      from: (request) =>
+        Effect.try({
+          try: () => callOptions(request, packageName, info.modelID ?? info.id, optionKey),
+          catch: (cause) =>
+            cause instanceof AIError ? cause : ProviderShared.invalidRequest("Invalid AI SDK request", cause),
+        }),
     },
     with: () => route,
     model: (input) =>
-      LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : info.providerID, route }),
+      LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : providerID, route }),
     prepareTransport: (body) => Effect.succeed(body),
     streamPrepared: (prepared) => streamLanguage(language, prepared as LanguageModelV3CallOptions),
   }
   return LanguageModel.make({
     id: info.modelID ?? info.id,
-    provider: info.providerID,
+    provider: providerID,
     route,
     compatibility: info.compatibility,
   })
@@ -407,8 +416,9 @@ function callOptions(
   modelID: ID,
   optionKey: string,
 ): LanguageModelV3CallOptions {
+  const flattened = ProviderShared.flattenToolRequest(request)
   return {
-    prompt: prompt(request),
+    prompt: prompt(flattened.request),
     maxOutputTokens: request.generation?.maxTokens,
     temperature: request.generation?.temperature,
     stopSequences: request.generation?.stop === undefined ? undefined : [...request.generation.stop],
@@ -417,7 +427,7 @@ function callOptions(
     presencePenalty: request.generation?.presencePenalty,
     frequencyPenalty: request.generation?.frequencyPenalty,
     seed: request.generation?.seed,
-    tools: request.tools.map(tool),
+    tools: flattened.tools.map(tool),
     toolChoice: toolChoice(request.toolChoice),
     headers: request.http?.headers,
     providerOptions: requestProviderOptions(request.providerOptions, packageName, modelID, optionKey),
@@ -512,6 +522,12 @@ function userPart(part: ContentPart): UserContent {
 
 function assistantPart(part: ContentPart): AssistantContent {
   switch (part.type) {
+    case "compaction":
+      throw ProviderShared.unsupportedOperation({
+        operation: "compaction-replay",
+        provider: part.provider,
+        message: "AI SDK routes cannot replay native provider compaction state",
+      })
     case "text":
       return [{ type: "text", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "media":

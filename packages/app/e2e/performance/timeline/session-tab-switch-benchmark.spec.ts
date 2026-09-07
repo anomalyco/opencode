@@ -49,7 +49,7 @@ scenarios.forEach((scenario) => {
 
     expect(result.firstCorrectObservedMs).not.toBeNull()
     expect(result.stableObservedMs).not.toBeNull()
-    expect(requests).toHaveLength(requestsBefore)
+    expect(requests).toHaveLength(requestsBefore + (scenario.cache === "cold" ? 1 : 0))
     await expectReadyTimeline(page, fixture.targetID)
     report(
       {
@@ -65,7 +65,7 @@ scenarios.forEach((scenario) => {
         browserVersion: page.context().browser()!.version(),
         serviceWorkers: "blocked",
         reviewFiles: scenario.review === "closed" ? 0 : reviewDiffs.length,
-        data: "prefetched",
+        data: scenario.cache === "cold" ? "on-demand" : "cached",
         transport: process.env.OPENCODE_PERFORMANCE_HTTP_FIXTURE === "1" ? "http" : "playwright-route",
         inputEvent: "mousedown",
         requireReadyAnswer: true,
@@ -97,16 +97,11 @@ async function prepareSessionTabs(page: Page) {
     })
   await installTimelineSettings(page)
   await installStressSessionTabs(page)
-  // Restored tabs prefetch their data even when their transcript has never rendered.
-  const prefetch = page.waitForResponse((response) =>
-    new URL(response.url()).pathname.endsWith(`/session/${fixture.targetID}/message`),
-  )
   await page.goto(stressSessionHref(fixture.sourceID))
-  expect(await (await prefetch).finished()).toBeNull()
   await expectSessionTitle(page, fixture.expected.sourceTitle)
   await expectReadyTimeline(page, fixture.sourceID)
   await expect(page.locator(`[data-timeline-part-id="${expected[fixture.targetID].answerID}"]`)).toHaveCount(0)
-  expect(requests.toSorted()).toEqual([fixture.sourceID, fixture.targetID].toSorted())
+  expect(requests).toEqual([fixture.sourceID])
   return requests
 }
 

@@ -36,11 +36,11 @@ export interface RestoreInput {
   readonly files: ReadonlyMap<RelativePath, ID>
 }
 
-export type Draft = {
+export type Editor = {
   configure: (enabled: boolean) => void
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   /**
    * Capture the current Location-scoped filesystem state as a content-addressed
    * tree. Returns `undefined` when snapshots are disabled, unsupported, or the
@@ -77,12 +77,12 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const location = yield* Location.Service
     const lifetime = yield* Scope.Scope
-    const state = State.create<{ enabled: boolean }, Draft>({
+    const state = State.create<{ enabled: boolean }, Editor>({
       name: "snapshot",
       initial: () => ({ enabled: true }),
-      draft: (draft) => ({
+      editor: (editor) => ({
         configure: (enabled) => {
-          draft.enabled = enabled
+          editor.enabled = enabled
         },
       }),
     })

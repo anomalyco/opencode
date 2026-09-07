@@ -42,7 +42,7 @@ test("selects a base branch for a new workspace", async ({ page }) => {
   await page.goto(`/new-session?draftId=${draftID}`)
   await expectAppVisible(page.locator('[data-component="composer-editor"]'))
   await page.getByRole("button", { name: "Local", exact: true }).click()
-  await page.getByRole("menuitem", { name: "New workspace", exact: true }).click()
+  await page.getByRole("menuitem", { name: "New worktree", exact: true }).click()
   await page.getByRole("button", { name: "from main", exact: true }).click()
   await page.getByRole("menuitemradio", { name: "feature/api", exact: true }).click()
 

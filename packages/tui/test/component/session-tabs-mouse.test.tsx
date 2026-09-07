@@ -4,6 +4,7 @@ import { MouseButton } from "@opentui/core"
 import { expect, test } from "bun:test"
 import { createSignal } from "solid-js"
 import { ConfigProvider } from "../../src/config"
+import { ClientProvider } from "../../src/context/client"
 import { EMPTY_SESSION_TAB_STATUS, SessionTabs, type SessionTabsController } from "../../src/component/session-tabs"
 import { Keymap } from "../../src/context/keymap"
 import { ThemeProvider } from "../../src/context/theme"
@@ -11,6 +12,7 @@ import { DialogProvider } from "../../src/ui/dialog"
 import { ToastProvider } from "../../src/ui/toast"
 import { emptyThemeSource } from "../fixture/fixture"
 import { TestTuiContexts } from "../fixture/tui-environment"
+import { createApi, createFetch } from "../fixture/tui-client"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
 test("releasing a transcript selection over tab controls does not activate them", async () => {
@@ -68,6 +70,7 @@ test("releasing a transcript selection over tab controls does not activate them"
 test("the horizontal tab context menu keeps preview tabs open without selecting them", async () => {
   const [active, setActive] = createSignal("first")
   const promoted: string[] = []
+  const calls = createFetch()
   const controller = {
     tabs: () => [
       { sessionID: "first", title: "First" },
@@ -86,13 +89,15 @@ test("the horizontal tab context menu keeps preview tabs open without selecting 
       <TestTuiContexts>
         <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
           <Keymap.Provider>
-            <ThemeProvider mode="dark" source={emptyThemeSource}>
-              <ToastProvider>
-                <DialogProvider>
-                  <SessionTabs controller={controller} animations={false} />
-                </DialogProvider>
-              </ToastProvider>
-            </ThemeProvider>
+            <ClientProvider api={createApi(calls.fetch)}>
+              <ThemeProvider mode="dark" source={emptyThemeSource}>
+                <ToastProvider>
+                  <DialogProvider>
+                    <SessionTabs controller={controller} animations={false} />
+                  </DialogProvider>
+                </ToastProvider>
+              </ThemeProvider>
+            </ClientProvider>
           </Keymap.Provider>
         </ConfigProvider>
       </TestTuiContexts>
@@ -113,8 +118,15 @@ test("the horizontal tab context menu keeps preview tabs open without selecting 
     expect(app.captureCharFrame()).toContain("Close")
     expect(app.captureCharFrame()).not.toContain("Keep open")
 
-    app.mockInput.pressKey("c", { ctrl: true })
-    await app.waitForFrame((frame) => !frame.includes("Rename"))
+    const rename = app
+      .captureCharFrame()
+      .split("\n")
+      .findIndex((line) => line.includes("Rename"))
+    await app.mockMouse.click(app.captureCharFrame().split("\n")[rename]!.indexOf("Rename"), rename)
+    await app.waitForFrame((frame) => frame.includes("Rename session"))
+
+    app.mockInput.pressKey("ESCAPE")
+    await app.waitForFrame((frame) => !frame.includes("Rename session"))
 
     const second = app
       .captureCharFrame()

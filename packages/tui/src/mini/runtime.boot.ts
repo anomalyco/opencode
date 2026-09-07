@@ -91,6 +91,7 @@ export function resolveMiniSettings(config?: { mini?: Partial<MiniSettings> }): 
     turn_summary: config?.mini?.turn_summary ?? "show",
     footer: config?.mini?.footer ?? "show",
     splash: config?.mini?.splash ?? "show",
+    work_spinner: config?.mini?.work_spinner ?? "block-soft-slide",
     mono: config?.mini?.mono ?? false,
   }
 }

@@ -49,6 +49,10 @@
     "@opencode-ai/function#test": {
       "outputs": []
     },
+    "@opencode-ai/desktop#test": {
+      "outputs": [],
+      "cache": false
+    },
     "@opencode-ai/httpapi-codegen#test": {
       "outputs": []
     },

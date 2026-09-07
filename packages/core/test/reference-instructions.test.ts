@@ -8,7 +8,7 @@ import { it } from "./lib/effect"
 import { readInitial, readUpdate } from "./lib/instructions"
 
 const instructionsLayer = (referenceLayer: Layer.Layer<Reference.Service>) =>
-  AppNodeBuilder.build(ReferenceInstructions.node, [[Reference.node, referenceLayer]])
+  AppNodeBuilder.build(ReferenceInstructions.node, [Reference.node.replace(referenceLayer)])
 
 describe("ReferenceInstructions", () => {
   it.effect("lists available references in the instructions", () =>

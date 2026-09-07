@@ -57,7 +57,9 @@ const route = Route.make({
   }),
   endpoint: Endpoint.path(({ request }) => `/${request.model.id}:streamRawPredict`),
   auth: Auth.none,
-  framing: AnthropicMessages.framing,
+  transport: AnthropicMessages.transport<
+    Omit<AnthropicMessages.AnthropicMessagesBody, "model"> & { readonly anthropic_version: typeof VERSION }
+  >(),
   headers: () => ({ "anthropic-version": HEADER_VERSION }),
 })
 

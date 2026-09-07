@@ -10,7 +10,6 @@ export { Info, Ref, response }
 
 export interface Interface extends Info {
   readonly vcs?: Project.Vcs
-  readonly vcsBackend?: string
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Location") {}
@@ -28,7 +27,6 @@ const layer = (ref: Ref, options?: { readonly discovery?: boolean }) =>
         workspaceID: ref.workspaceID,
         project: { id: resolved.id, directory: resolved.directory, canonical: resolved.canonical },
         vcs: resolved.vcs,
-        vcsBackend: resolved.vcsBackend,
       })
     }),
   )

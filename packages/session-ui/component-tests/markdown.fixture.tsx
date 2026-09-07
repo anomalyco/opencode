@@ -13,6 +13,8 @@ export {
   touchCachedMarkdown,
 } from "../src/components/markdown-cache"
 export { renderMermaidSvg } from "../src/components/markdown-mermaid"
+export { MarkdownWorkerDisposedError } from "../src/components/markdown-worker"
+export { preloadMarkdown }
 
 export async function mountMarkdown(options: {
   text: string

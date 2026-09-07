@@ -133,6 +133,50 @@ describe("run session shared", () => {
     expect(out[0]?.parts[0]).not.toBe(parts[0])
   })
 
+  test("keeps image-only history and preserves inline attachment metadata and skills", () => {
+    const message = userMessage("msg_image", "", {
+      files: [
+        {
+          data: "cG5n",
+          mime: "image/png",
+          source: { type: "inline" },
+          name: "image.png",
+          description: "Diagram",
+        },
+        {
+          data: "c2VydmVy",
+          mime: "image/png",
+          source: { type: "uri", uri: "file:///remote/image.png" },
+        },
+      ],
+      skills: [{ id: "effect", name: "Effect", mention: { text: "@effect", start: 0, end: 7 } }],
+    })
+
+    expect(sessionHistory(createSession([message]))).toEqual([
+      {
+        text: "",
+        parts: [
+          {
+            type: "file",
+            url: "data:image/png;base64,cG5n",
+            mime: "image/png",
+            filename: "image.png",
+            description: "Diagram",
+            source: undefined,
+          },
+          {
+            type: "file",
+            url: "file:///remote/image.png",
+            mime: "image/png",
+            filename: undefined,
+            source: undefined,
+          },
+          { type: "skill", id: "effect", source: { value: "@effect", start: 0, end: 7 } },
+        ],
+      },
+    ])
+  })
+
   test("returns the latest matching variant for the active model", () => {
     const session: RunSession = {
       first: false,

@@ -2,7 +2,7 @@ import path from "node:path"
 import { $ } from "bun"
 import { expect } from "bun:test"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schedule } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { startServer } from "./fixture/server"
@@ -29,9 +29,16 @@ it.live(
       const server = yield* startServer(path.join(tmp.path, "config"))
       const url = new URL("/api/vcs/base", server.base)
       url.searchParams.set("location[directory]", tmp.path)
-      const base = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
-      expect(base.status).toBe(200)
-      expect(yield* Effect.promise(() => base.json())).toMatchObject({
+      const base = yield* Effect.tryPromise({
+        try: async () => {
+          const response = await fetch(url, { headers: server.headers })
+          const body: unknown = await response.json()
+          if (!isRecord(body) || !isRecord(body.data)) throw new Error("VCS provider not ready")
+          return body
+        },
+        catch: (cause) => cause,
+      }).pipe(Effect.retry(Schedule.spaced("10 millis")), Effect.timeout("2 seconds"))
+      expect(base).toMatchObject({
         data: { name: "main", ref: "refs/heads/main", source: "reflog" },
       })
       yield* Effect.promise(() => $`git branch -m ambiguous`.cwd(tmp.path).quiet())
@@ -74,11 +81,15 @@ it.live("maps a failing base provider to HTTP 503 instead of null metadata", () 
   Effect.gen(function* () {
     const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-vcs-failure-")))
     const handler = yield* ServerFetch.make(
-      { database: { path: ":memory:" }, config: { directory: tmp.path }, fs: { filewatcher: false } },
+      {
+        database: { path: ":memory:" },
+        config: { directory: tmp.path },
+        fs: { filewatcher: false },
+        models: { fetch: false },
+      },
       {
         overrides: [
-          [
-            SdkPlugins.node,
+          SdkPlugins.node.replace(
             Layer.succeed(
               SdkPlugins.Service,
               SdkPlugins.Service.of({
@@ -86,11 +97,11 @@ it.live("maps a failing base provider to HTTP 503 instead of null metadata", () 
                 all: () => [
                   {
                     id: "failing-vcs",
-                    version: "test",
+                    revision: "test",
                     effect: (ctx) =>
                       ctx.vcs
-                        .transform((draft) => {
-                          draft.add({
+                        .transform((editor) => {
+                          editor.add({
                             id: "failing",
                             name: "Failing VCS",
                             info: () => Effect.succeed({ branch: {} }),
@@ -99,20 +110,24 @@ it.live("maps a failing base provider to HTTP 503 instead of null metadata", () 
                             diff: () => Effect.succeed([]),
                             base: () => Effect.fail(new Error("provider failure")),
                           })
-                          draft.default.set("failing")
+                          editor.default.set("failing")
                         })
                         .pipe(Effect.asVoid),
                   },
                 ],
               }),
             ),
-          ],
+          ),
         ],
       },
     )
     const url = new URL("http://opencode.local/api/vcs/base")
     url.searchParams.set("location[directory]", tmp.path)
-    const response = yield* Effect.promise(() => handler(new Request(url)))
+    const response = yield* Effect.promise(() => handler(new Request(url))).pipe(
+      Effect.filterOrFail((response) => response.status === 503),
+      Effect.retry(Schedule.spaced("10 millis")),
+      Effect.timeout("2 seconds"),
+    )
     expect(response.status).toBe(503)
     expect(yield* Effect.promise(() => response.json())).toMatchObject({
       _tag: "ServiceUnavailableError",
@@ -121,3 +136,7 @@ it.live("maps a failing base provider to HTTP 503 instead of null metadata", () 
     })
   }),
 )
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}

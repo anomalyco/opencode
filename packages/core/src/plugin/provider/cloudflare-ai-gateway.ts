@@ -39,8 +39,8 @@ export const CloudflareAIGatewayPlugin = define({
       if (gatewayId) return Form.Fields.make([accountIdForm])
       return Form.Fields.make([accountIdForm, gatewayIdForm])
     })
-    yield* ctx.integration.transform((draft) => {
-      draft.method.update({
+    yield* ctx.integration.transform((editor) => {
+      editor.method.update({
         integrationID: providerID,
         method: {
           type: "key",

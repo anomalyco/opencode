@@ -26,7 +26,9 @@ describe("ConfigToolOutputPlugin.Plugin", () => {
           const plugins = yield* Plugin.Service
           yield* ConfigToolOutputPlugin.Plugin.effect(yield* PluginHost.make(plugins))
 
-          expect((yield* output.truncate({ content: "one\ntwo" })).metadata?.truncated).toBe(true)
+          expect((yield* output.truncate({ content: [{ type: "text", text: "one\ntwo" }] })).metadata?.truncated).toBe(
+            true,
+          )
 
           yield* config.setEntries([
             new Document({
@@ -38,13 +40,15 @@ describe("ConfigToolOutputPlugin.Plugin", () => {
           ])
           yield* bus.publish(Event.Updated, {})
           for (let attempt = 0; attempt < 200; attempt++) {
-            const result = yield* output.truncate({ content: "one\ntwo" })
+            const result = yield* output.truncate({ content: [{ type: "text", text: "one\ntwo" }] })
             if (result.metadata?.truncated === false) return
             yield* Effect.sleep("10 millis")
           }
           yield* Effect.die(new Error("Timed out waiting for tool output config reload"))
         }).pipe(
-          Effect.provide(AppNodeBuilder.build(ToolOutput.node, [[Global.node, Global.layerWith({ data: tmp.path })]])),
+          Effect.provide(
+            AppNodeBuilder.build(ToolOutput.node, [Global.node.replace(Global.layerWith({ data: tmp.path }))]),
+          ),
         ),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ).pipe(

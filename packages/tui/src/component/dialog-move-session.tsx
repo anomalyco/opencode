@@ -27,6 +27,7 @@ type ProjectDirectory = WorktreeListOutput[number]
 
 type DialogMoveSessionProps = {
   projectID: string
+  location?: { directory: string; workspaceID?: string }
   current?: MoveSessionSelection
   onSelect: (selection: MoveSessionSelection) => void
   onCurrentChange?: (selection: MoveSessionSelection) => void
@@ -45,7 +46,11 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   const toast = useToast()
   const paths = useTuiPaths()
   const shortcuts = Keymap.useShortcuts()
-  const location = createMemo(() => sessionData.location.info())
+  const location = createMemo(() => sessionData.location.info(props.location))
+  const worktreeLocation = () => ({
+    directory: props.location?.directory ?? location()?.directory ?? paths.cwd,
+    workspace: props.location?.workspaceID ?? location()?.workspaceID,
+  })
   const [working, setWorking] = createSignal(Boolean(props.initialRemoving))
   const [toDelete, setToDelete] = createSignal<string>()
   const [removing, setRemoving] = createSignal(props.initialRemoving)
@@ -76,11 +81,10 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   })
 
   const [directories, { refetch }] = createResource(
-    () => (props.fixture || props.initialRemoving ? undefined : props.projectID),
-    async (projectID, info): Promise<ReadonlyArray<ProjectDirectory> | undefined> => {
+    () => (props.fixture || props.initialRemoving ? undefined : worktreeLocation()),
+    async (location, info): Promise<ReadonlyArray<ProjectDirectory> | undefined> => {
       try {
-        await client.api.worktree.refresh({ projectID })
-        const directories = await client.api.worktree.list({ projectID })
+        const directories = await client.api.worktree.list({ location })
         setLoadError(undefined)
         return directories
       } catch (error) {
@@ -223,10 +227,13 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     setToDelete(undefined)
     setRemoving(selected.directory)
     setWorking(true)
+    const request = {
+      directory: selected.directory,
+      location: worktreeLocation(),
+    }
     const error = await client.api.worktree
       .remove({
-        projectID: props.projectID,
-        directory: selected.directory,
+        ...request,
         force: false,
       })
       .then(
@@ -251,8 +258,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         reopen(selected.directory)
         const forcedError = await client.api.worktree
           .remove({
-            projectID: props.projectID,
-            directory: selected.directory,
+            ...request,
             force: true,
           })
           .then(

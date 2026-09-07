@@ -63,6 +63,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
     () => import("@opencode-ai/ai/providers/google-vertex/messages"),
   ],
   ["@opencode-ai/ai/providers/groq", () => import("@opencode-ai/ai/providers/groq")],
+  ["@opencode-ai/ai/providers/mistral", () => import("@opencode-ai/ai/providers/mistral")],
   ["@opencode-ai/ai/providers/openai", () => import("@opencode-ai/ai/providers/openai")],
   ["@opencode-ai/ai/providers/openai/chat", () => import("@opencode-ai/ai/providers/openai/chat")],
   ["@opencode-ai/ai/providers/openai/responses", () => import("@opencode-ai/ai/providers/openai/responses")],
@@ -94,8 +95,7 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (specifie
   const root = specifier.startsWith("@") ? parts.slice(0, 2).join("/") : (parts[0] ?? specifier)
   const installed = yield* npm.add(root).pipe(Effect.mapError((cause) => new LoadError({ package: specifier, cause })))
   const entrypoint = yield* Effect.try({
-    try: () =>
-      specifier === root && installed.entrypoint ? installed.entrypoint : resolveModule(specifier, installed.directory),
+    try: () => resolveModule(specifier, installed.directory),
     catch: (cause) => new LoadError({ package: specifier, cause }),
   })
   return yield* importPackage(specifier, entrypoint)

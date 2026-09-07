@@ -96,6 +96,9 @@ export interface SessionReviewProps {
   empty?: JSX.Element
   split?: boolean
   diffStyle?: SessionReviewDiffStyle
+  changeSummary?: boolean
+  overflow?: "wrap" | "scroll"
+  disableLineNumbers?: boolean
   onDiffStyleChange?: (diffStyle: SessionReviewDiffStyle) => void
   onDiffRendered?: VoidFunction
   onLineComment?: (comment: SessionReviewLineComment) => void
@@ -339,6 +342,9 @@ export const SessionReview = (props: SessionReviewProps) => {
         <div data-slot="session-review-title">
           {props.title === undefined ? i18n.t("ui.sessionReview.title") : props.title}
         </div>
+        <Show when={hasDiffs()}>
+          <DiffChanges appearance="standard" changes={props.diffs} />
+        </Show>
         <div data-slot="session-review-actions">
           <Show when={hasDiffs() && props.onDiffStyleChange}>
             <SegmentedControl
@@ -364,7 +370,7 @@ export const SessionReview = (props: SessionReviewProps) => {
             <Button
               size="small"
               icon="chevron-grabber-vertical"
-              class="w-[106px] justify-start"
+              class="shrink-0 whitespace-nowrap justify-start"
               onClick={handleExpandOrCollapseAll}
             >
               <Switch>
@@ -506,6 +512,37 @@ export const SessionReview = (props: SessionReviewProps) => {
                       commentsUi.onLineSelectionEnd(range)
                     }
 
+                    const changes = (summary = false) => (
+                      <>
+                        <Switch>
+                          <Match when={isAdded()}>
+                            <div data-slot="session-review-change-group" data-type="added">
+                              <span data-slot="session-review-change" data-type="added">
+                                {i18n.t("ui.sessionReview.change.added")}
+                              </span>
+                              <DiffChanges appearance="standard" changes={diff()} />
+                            </div>
+                          </Match>
+                          <Match when={isDeleted()}>
+                            <span data-slot="session-review-change" data-type="removed">
+                              {i18n.t("ui.sessionReview.change.removed")}
+                            </span>
+                            <Show when={summary}>
+                              <DiffChanges appearance="standard" changes={diff()} />
+                            </Show>
+                          </Match>
+                          <Match when={!!mediaKind()}>
+                            <span data-slot="session-review-change" data-type="modified">
+                              {i18n.t("ui.sessionReview.change.modified")}
+                            </span>
+                          </Match>
+                          <Match when={true}>
+                            <DiffChanges appearance="standard" changes={diff()} />
+                          </Match>
+                        </Switch>
+                      </>
+                    )
+
                     return (
                       <Accordion.Item
                         value={diffCanRender() ? file : null!}
@@ -524,7 +561,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     <span data-slot="session-review-directory">{`\u202A${getDirectory(file)}\u202C`}</span>
                                   </Show>
                                   <span data-slot="session-review-filename">{getFilename(file)}</span>
-                                  <Show when={props.onViewFile && diffCanRender()}>
+                                  <Show when={props.onViewFile && diffCanRender() && !props.changeSummary}>
                                     <Tooltip appearance="standard" value={openFileLabel()} placement="top" gutter={4}>
                                       <button
                                         data-slot="session-review-view-button"
@@ -542,29 +579,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 </div>
                               </div>
                               <div data-slot="session-review-trigger-actions">
-                                <Switch>
-                                  <Match when={isAdded()}>
-                                    <div data-slot="session-review-change-group" data-type="added">
-                                      <span data-slot="session-review-change" data-type="added">
-                                        {i18n.t("ui.sessionReview.change.added")}
-                                      </span>
-                                      <DiffChanges appearance="standard" changes={diff()} />
-                                    </div>
-                                  </Match>
-                                  <Match when={isDeleted()}>
-                                    <span data-slot="session-review-change" data-type="removed">
-                                      {i18n.t("ui.sessionReview.change.removed")}
-                                    </span>
-                                  </Match>
-                                  <Match when={!!mediaKind()}>
-                                    <span data-slot="session-review-change" data-type="modified">
-                                      {i18n.t("ui.sessionReview.change.modified")}
-                                    </span>
-                                  </Match>
-                                  <Match when={true}>
-                                    <DiffChanges appearance="standard" changes={diff()} />
-                                  </Match>
-                                </Switch>
+                                <Show when={!props.changeSummary || !diffCanRender()}>{changes()}</Show>
                                 <Show when={diffCanRender()}>
                                   <span data-slot="session-review-diff-chevron">
                                     <Icon name="chevron-down" size="small" />
@@ -574,6 +589,22 @@ export const SessionReview = (props: SessionReviewProps) => {
                             </div>
                           </Accordion.Trigger>
                         </StickyAccordionHeader>
+                        <Show when={props.changeSummary && expanded()}>
+                          <div data-slot="session-review-change-summary">
+                            {changes(true)}
+                            <Show when={props.onViewFile}>
+                              <Button
+                                data-slot="session-review-summary-open-file"
+                                size="small"
+                                variant="ghost"
+                                icon="open-file"
+                                onClick={() => props.onViewFile?.(file)}
+                              >
+                                {openFileLabel()}
+                              </Button>
+                            </Show>
+                          </div>
+                        </Show>
                         <Accordion.Content data-slot="session-review-accordion-content">
                           <div
                             data-slot="session-review-diff-wrapper"
@@ -621,6 +652,8 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     fileDiff={diff().fileDiff}
                                     preloadedDiff={diff().preloaded}
                                     diffStyle={diffStyle()}
+                                    overflow={props.overflow ?? "wrap"}
+                                    disableLineNumbers={props.disableLineNumbers}
                                     onRendered={() => {
                                       props.onDiffRendered?.()
                                     }}

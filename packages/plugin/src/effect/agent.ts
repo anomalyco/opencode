@@ -3,7 +3,7 @@ import type { Agent } from "@opencode-ai/schema/agent"
 import type { Effect, Types } from "effect"
 import type { Transform } from "./registration.js"
 
-export interface AgentDraft {
+export interface AgentEditor {
   list(): readonly Types.DeepMutable<Agent.Info>[]
   get(id: string): Types.DeepMutable<Agent.Info> | undefined
   default(id: string | undefined): void
@@ -12,6 +12,6 @@ export interface AgentDraft {
 }
 
 export interface AgentDomain extends AgentApi<unknown> {
-  readonly transform: Transform<AgentDraft>
+  readonly transform: Transform<AgentEditor>
   readonly reload: () => Effect.Effect<void>
 }

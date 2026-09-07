@@ -23,7 +23,13 @@ async function publish(dir: string, name: string, version: string) {
   }
 }
 
-async function publishDistribution(input: { root: string; name: string; binary: string; packagePrefix: string }) {
+async function publishDistribution(input: {
+  root: string
+  name: string
+  binary: string
+  packagePrefix: string
+  artifact: string
+}) {
   const binaries: Record<string, string> = {}
   for (const filepath of new Bun.Glob("*/package.json").scanSync({ cwd: input.root })) {
     const item = await Bun.file(`${input.root}/${filepath}`).json()
@@ -72,6 +78,13 @@ async function publishDistribution(input: { root: string; name: string; binary: 
     ),
   )
   await publish(`${input.root}/${input.name}`, input.name, version)
+  await UpdateArtifact.publish({
+    channel: Script.channel,
+    name: input.artifact,
+    distribution: "npm",
+    version,
+    metadata: { package: input.name },
+  })
 }
 
 await publishDistribution({
@@ -79,6 +92,7 @@ await publishDistribution({
   name: pkg.name,
   binary: "opencode2",
   packagePrefix: "@opencode-ai/cli-",
+  artifact: "cli",
 })
 if (existsSync("./dist/node")) {
   await publishDistribution({
@@ -86,12 +100,6 @@ if (existsSync("./dist/node")) {
     name: "opencode-node",
     binary: "opencode2-node",
     packagePrefix: "@opencode-ai/cli-node-",
+    artifact: "cli-node",
   })
 }
-await UpdateArtifact.publish({
-  channel: Script.channel,
-  name: "cli",
-  distribution: "npm",
-  version: Script.version,
-  metadata: {},
-})

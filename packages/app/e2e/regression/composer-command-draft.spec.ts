@@ -8,7 +8,8 @@ const projectID = "proj_composer_editing"
 const sessionID = "ses_composer_editing"
 const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
-test("preserves the draft when a populated command menu triggers a built-in", async ({ page }) => {
+test("keeps a narrow session composer contained when invoking a built-in", async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 600 })
   await mockOpenCodeServer(page, {
     directory,
     project: {
@@ -40,6 +41,8 @@ test("preserves the draft when a populated command menu triggers a built-in", as
     .poll(() => input.evaluate((element) => getComputedStyle(element, "::before").content))
     .toBe(`"${String.fromCodePoint(0x200b)}"`)
   await expectAppVisible(composer)
+  await expect(page.locator('[data-slot="session-chat-panel"]')).toHaveCSS("min-width", "0px")
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 
   await input.fill("keep me")
   await composer.getByRole("button", { name: "Add images and files" }).click()

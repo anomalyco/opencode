@@ -11,6 +11,9 @@ truth. Follow links from that page when the question needs more detail. Fetch
 <https://opencode.ai/v2/docs/> first when you need to discover the relevant
 documentation page.
 
+A machine-readable documentation index is available at
+<https://opencode.ai/v2/llms.txt>.
+
 ## Version policy
 
 Always answer for OpenCode V2 unless the user explicitly asks about V1,
@@ -152,6 +155,8 @@ before answering. Refer to this guide when the user wants to build a plugin. It
 covers hooks, transforms, tools, plugin context capabilities, and package
 entrypoints. Plugins can also extend the TUI; for those, fetch the
 [CLI plugin guide](https://opencode.ai/v2/docs/build/plugins/cli).
+For custom methods and events shared with other plugins or clients, fetch the
+[RPC guide](https://opencode.ai/v2/docs/build/plugins/rpc).
 
 ## [Service](https://opencode.ai/v2/docs/troubleshooting#check-the-background-service)
 
@@ -219,6 +224,16 @@ iterables for streaming endpoints. The `@opencode-ai/client/effect` entrypoint
 exposes typed Effects, Streams, and decoded OpenCode schema values. Its
 `Service` API can discover, start, stop, and authenticate with the local
 background service from a Node application.
+
+## [SDK](https://opencode.ai/v2/docs/build/sdk)
+
+For questions about embedding OpenCode directly in an application, fetch the
+full [SDK guide](https://opencode.ai/v2/docs/build/sdk) before answering. The SDK
+hosts OpenCode in the application without opening an HTTP listener.
+
+Use the [Effect SDK guide](https://opencode.ai/v2/docs/build/sdk/effect) for
+Effect applications. For Cloudflare Durable Objects, use the
+[Cloudflare SDK guide](https://opencode.ai/v2/docs/build/sdk/cloudflare).
 
 ## [Troubleshooting](https://opencode.ai/v2/docs/troubleshooting)
 

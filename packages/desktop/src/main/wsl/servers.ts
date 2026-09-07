@@ -10,8 +10,6 @@ import type {
 } from "@opencode-ai/app/wsl/types"
 import { Effect } from "effect"
 import { nativeT } from "../native/translations"
-import { WSL_SERVERS_KEY } from "../storage/keys"
-import { getStore } from "../storage/store"
 import {
   installWslRuntimeElevated,
   listInstalledWslDistros,
@@ -28,7 +26,6 @@ type RunningSidecar = {
   stop: () => Promise<void>
   onExit: (cb: (code: number | null, signal: NodeJS.Signals | null) => void) => void
   url: string
-  username: string | null
   password: string
 }
 
@@ -39,8 +36,8 @@ type WslServersControllerOptions = {
   spawnSidecar: SpawnSidecar
   installCli: (distro: string, cli: WslCliBuild) => Promise<void>
   installDistro: (distro: string) => Promise<void>
-  readServers?: () => WslServerConfig[]
-  writeServers?: (servers: WslServerConfig[]) => void
+  readServers: () => WslServerConfig[]
+  writeServers: (servers: WslServerConfig[]) => void
   probeDistro?: typeof probeWslDistro
   resolveCli?: typeof resolveWslCli
   readCliVersion?: typeof readWslCliVersion
@@ -61,8 +58,6 @@ export const createWslServersController = Effect.fn("WslServers.make")(function*
   const sidecars = new Map<string, RunningSidecar>()
   const starts = new Map<string, symbol>()
   let closed = false
-  const readServers = options.readServers ?? readPersistedServers
-  const writeServers = options.writeServers ?? writePersistedServers
   const probeDistro = options.probeDistro ?? probeWslDistro
 
   const emit = () => {
@@ -80,7 +75,7 @@ export const createWslServersController = Effect.fn("WslServers.make")(function*
   }
 
   const refreshFromStore = () => {
-    const persisted = readServers()
+    const persisted = options.readServers()
     const items: WslServerItem[] = persisted.map((config) => {
       const existing = state.servers.find((item) => item.config.id === config.id)
       return {
@@ -174,7 +169,6 @@ export const createWslServersController = Effect.fn("WslServers.make")(function*
       setRuntime(id, {
         kind: "ready",
         url: sidecar.url,
-        username: sidecar.username,
         password: sidecar.password,
       })
       sidecar.onExit((code, signal) => {
@@ -293,7 +287,7 @@ export const createWslServersController = Effect.fn("WslServers.make")(function*
         id,
         distro,
       }
-      writeServers([...readServers(), config])
+      options.writeServers([...options.readServers(), config])
       setState({
         servers: [...state.servers, { config, runtime: { kind: "starting" } }],
       })
@@ -304,8 +298,8 @@ export const createWslServersController = Effect.fn("WslServers.make")(function*
     async removeServer(id: string) {
       const distro = state.servers.find((item) => item.config.id === id)?.config.distro
       await stopServer(id)
-      const remaining = readServers().filter((item) => item.id !== id)
-      writeServers(remaining)
+      const remaining = options.readServers().filter((item) => item.id !== id)
+      options.writeServers(remaining)
       setState({
         servers: state.servers.filter((item) => item.config.id !== id),
         ...(distro ? removeDistroState(state, distro) : {}),
@@ -334,35 +328,6 @@ function initialState(): WslServersState {
     servers: [],
     job: null,
   }
-}
-
-function readPersistedServers(): WslServerConfig[] {
-  const store = getStore()
-  const existing = store.get(WSL_SERVERS_KEY)
-  if (existing && typeof existing === "object") {
-    const record = existing as { servers?: unknown }
-    const list = Array.isArray(record.servers) ? record.servers : []
-    return list.flatMap(normalizePersistedServer)
-  }
-  return []
-}
-
-function writePersistedServers(servers: WslServerConfig[]) {
-  getStore().set(WSL_SERVERS_KEY, { servers })
-}
-
-function normalizePersistedServer(value: unknown): WslServerConfig[] {
-  if (!value || typeof value !== "object") return []
-  const record = value as Record<string, unknown>
-  const distro = typeof record.distro === "string" && record.distro.length > 0 ? record.distro : null
-  if (!distro) return []
-  const id = typeof record.id === "string" && record.id.length > 0 ? record.id : wslServerIdForDistro(distro)
-  return [
-    {
-      id,
-      distro,
-    },
-  ]
 }
 
 function cliCheck(

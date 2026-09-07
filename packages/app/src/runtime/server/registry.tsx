@@ -1,18 +1,12 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { type Accessor, batch, createMemo } from "solid-js"
-import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
+import { batch, createMemo } from "solid-js"
+import { type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { pathKey } from "@/workspaces/path-key"
 import { ServerScope } from "@/runtime/server/scope"
+import { ServerHttp, ServerHttpBase, ServerKey, serverState } from "./persistence"
 
-type StoredProject = { worktree: string; expanded: boolean }
-type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
-type ServerProjectState = {
-  projects: Record<string, StoredProject[]>
-  lastProject: Record<string, string>
-  recentlyClosed: Record<string, string[]>
-}
-const HEALTH_POLL_INTERVAL_MS = 10_000
+type ServerState = ReturnType<typeof serverState>["current"]["Type"]
 // The store retains more history than is displayed. Consumers filter recently closed entries
 // against the live project list (dropping deleted projects) and then cap the visible count via
 // RECENTLY_CLOSED_DISPLAY_LIMIT. Retaining extra history ensures entries that are temporarily
@@ -38,50 +32,12 @@ function isLocalHost(url: string) {
   if (host === "localhost" || host === "127.0.0.1") return "local"
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-export function migrateCanonicalLocalServerState(value: unknown, canonicalLocalServer?: ServerConnection.Key) {
-  if (!canonicalLocalServer || canonicalLocalServer === "local") return value
-  if (!isRecord(value)) return value
-  const projects = isRecord(value.projects) ? value.projects : undefined
-  const lastProject = isRecord(value.lastProject) ? value.lastProject : undefined
-  const previousProjects = projects?.[canonicalLocalServer]
-  const previousLastProject = lastProject?.[canonicalLocalServer]
-  if (!Array.isArray(previousProjects) && typeof previousLastProject !== "string") return value
-
-  const next = { ...value }
-  if (projects && Array.isArray(previousProjects)) {
-    const local = Array.isArray(projects.local) ? projects.local : []
-    const worktrees = new Set(
-      local.flatMap((project) => (isRecord(project) && typeof project.worktree === "string" ? [project.worktree] : [])),
-    )
-    const migrated = previousProjects.filter((project) => {
-      if (!isRecord(project) || typeof project.worktree !== "string") return true
-      if (worktrees.has(project.worktree)) return false
-      worktrees.add(project.worktree)
-      return true
-    })
-    const nextProjects: Record<string, unknown> = { ...projects, local: [...local, ...migrated] }
-    delete nextProjects[canonicalLocalServer]
-    next.projects = nextProjects
-  }
-  if (lastProject && typeof previousLastProject === "string") {
-    const nextLastProject = { ...lastProject }
-    if (typeof nextLastProject.local !== "string") nextLastProject.local = previousLastProject
-    delete nextLastProject[canonicalLocalServer]
-    next.lastProject = nextLastProject
-  }
-  return next
-}
-
-export function createServerProjects<T extends ServerProjectState>(input: {
+export function createServerProjects(input: {
   scope: () => ServerScope
-  store: Store<T>
-  setStore: SetStoreFunction<T>
+  store: Store<ServerState>
+  setStore: SetStoreFunction<ServerState>
 }) {
-  const setStore = input.setStore as unknown as SetStoreFunction<ServerProjectState>
+  const setStore = input.setStore
   const current = () => input.store.projects[input.scope()] ?? []
   const currentClosed = () => input.store.recentlyClosed?.[input.scope()] ?? []
   const remove = (directory: string) => {
@@ -147,22 +103,13 @@ export function createServerProjects<T extends ServerProjectState>(input: {
 
 export function resolveServerList(input: {
   props?: Array<ServerConnection.Any>
-  stored: StoredServer[]
+  stored: ServerConnection.Http[]
 }): Array<ServerConnection.Any> {
   const deduped = new Map<ServerConnection.Key, ServerConnection.Any>(
     input.props?.map((v) => [ServerConnection.key(v), v]) ?? [],
   )
 
-  for (const value of input.stored) {
-    const conn: ServerConnection.Http =
-      typeof value === "string"
-        ? {
-            type: "http" as const,
-            http: { url: value },
-          }
-        : "http" in value
-          ? value
-          : { type: "http", http: value }
+  for (const conn of input.stored) {
     const key = ServerConnection.key(conn)
 
     const existing = deduped.get(key)
@@ -181,29 +128,19 @@ export function resolveServerList(input: {
 export function canRemoveServer(input: {
   key: ServerConnection.Key
   provided?: Array<ServerConnection.Any>
-  stored: StoredServer[]
+  stored: ServerConnection.Http[]
 }) {
   if (input.provided?.some((server) => ServerConnection.key(server) === input.key)) return false
-  return input.stored.some((server) =>
-    typeof server === "string" ? server === input.key : ("type" in server ? server.http.url : server.url) === input.key,
-  )
+  return input.stored.some((server) => server.http.url === input.key)
 }
 
 export namespace ServerConnection {
   type Base = { displayName?: string; label?: string }
 
-  export type HttpBase = {
-    url: string
-    username?: string
-    password?: string
-  }
+  export type HttpBase = typeof ServerHttpBase.Type
 
   // Regular web connections
-  export type Http = {
-    type: "http"
-    http: HttpBase
-    authToken?: boolean
-  } & Base
+  export type Http = typeof ServerHttp.Type
 
   export type Sidecar = {
     type: "sidecar"
@@ -245,8 +182,8 @@ export namespace ServerConnection {
     }
   }
 
-  export type Key = string & { _brand: "Key" }
-  export const Key = { make: (v: string) => v as Key }
+  export const Key = ServerKey
+  export type Key = typeof Key.Type
 
   export const builtin = (conn: Any) => conn.type === "sidecar" && conn.variant === "base"
   export const local = (conn?: Any) =>
@@ -266,18 +203,10 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
         ...Persist.global("server"),
         sync: true,
         previousKey: "server.v3",
-        migrate: (value) => migrateCanonicalLocalServerState(value, props.canonicalLocalServer),
       },
-      createStore({
-        list: [] as StoredServer[],
-        hidden: {} as Record<string, boolean>,
-        projects: {} as Record<string, StoredProject[]>,
-        lastProject: {} as Record<string, string>,
-        recentlyClosed: {} as Record<string, string[]>,
-      }),
+      serverState(() => props.canonicalLocalServer),
+      { list: [], hidden: {}, projects: {}, lastProject: {}, recentlyClosed: {} },
     )
-
-    const url = (x: StoredServer) => (typeof x === "string" ? x : "type" in x ? x.http.url : x.url)
 
     const allServers = createMemo((): Array<ServerConnection.Any> => {
       return resolveServerList({ stored: store.list, props: props.servers })
@@ -289,7 +218,7 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
       if (!url_) return
       const conn: ServerConnection.Http = { ...input, authToken: undefined, http: { ...input.http, url: url_ } }
       return batch(() => {
-        const existing = store.list.findIndex((x) => url(x) === url_)
+        const existing = store.list.findIndex((x) => x.http.url === url_)
         if (existing !== -1) {
           setStore("list", existing, conn)
         } else {
@@ -300,7 +229,7 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
     }
 
     function remove(key: ServerConnection.Key) {
-      const list = store.list.filter((x) => url(x) !== key)
+      const list = store.list.filter((x) => x.http.url !== key)
       batch(() => {
         setStore("list", list)
       })

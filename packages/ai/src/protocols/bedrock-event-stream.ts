@@ -1,7 +1,7 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { Effect, Encoding, Stream } from "effect"
-import { AIError, AIErrorReason } from "../schema/index.js"
+import { AIError, AIErrorReason, InvalidProviderOutputError } from "../schema/index.js"
 import { Framing } from "../route/framing.js"
 import { ProviderShared } from "./shared.js"
 
@@ -22,6 +22,10 @@ interface FrameBufferState {
 
 const initialFrameBuffer: FrameBufferState = { buffer: new Uint8Array(0), offset: 0 }
 
+type FrameInput = { readonly _tag: "Chunk"; readonly bytes: Uint8Array } | { readonly _tag: "End" }
+
+const endOfStream: FrameInput = { _tag: "End" }
+
 const appendChunk = (state: FrameBufferState, chunk: Uint8Array): FrameBufferState => {
   const remaining = state.buffer.length - state.offset
   // Compact: drop the consumed prefix and append the new chunk in one alloc.
@@ -33,9 +37,23 @@ const appendChunk = (state: FrameBufferState, chunk: Uint8Array): FrameBufferSta
   return { buffer: next, offset: 0 }
 }
 
-const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8Array) =>
+const consumeFrames = (route: string) => (state: FrameBufferState, input: FrameInput) =>
   Effect.gen(function* () {
-    let cursor = appendChunk(state, chunk)
+    if (input._tag === "End") {
+      const remaining = state.buffer.subarray(state.offset)
+      if (remaining.length > 0)
+        return yield* new AIError({
+          reason: new InvalidProviderOutputError({
+            route,
+            classification: "incomplete-stream",
+            message: `Incomplete Bedrock Converse event-stream frame: ${remaining.length} buffered bytes remain at end of stream`,
+            body: Encoding.encodeBase64(remaining),
+          }),
+        })
+      return [state, []] as const
+    }
+
+    let cursor = appendChunk(state, input.bytes)
     const out: object[] = []
     while (cursor.buffer.length - cursor.offset >= 4) {
       const view = cursor.buffer.subarray(cursor.offset)
@@ -113,7 +131,12 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
 export const framing = (route: string): Framing.Definition<object> => ({
   id: "aws-event-stream",
   body: (frame) => ("rawBody" in frame && typeof frame.rawBody === "string" ? frame.rawBody : undefined),
-  frame: (bytes) => bytes.pipe(Stream.mapAccumEffect(() => initialFrameBuffer, consumeFrames(route))),
+  frame: (bytes) =>
+    bytes.pipe(
+      Stream.map((bytes): FrameInput => ({ _tag: "Chunk", bytes })),
+      Stream.concat(Stream.succeed(endOfStream)),
+      Stream.mapAccumEffect(() => initialFrameBuffer, consumeFrames(route)),
+    ),
 })
 
 export * as BedrockEventStream from "./bedrock-event-stream.js"

@@ -10,14 +10,9 @@ import { createScopedCache } from "@/runtime/server/scoped-cache"
 import { uuid } from "@/runtime/persistence/uuid"
 import type { SelectedLineRange } from "@/workspaces/files/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
+import { CommentStore, type LineComment } from "./schema"
 
-export type LineComment = {
-  id: string
-  file: string
-  selection: SelectedLineRange
-  comment: string
-  time: number
-}
+export type { LineComment } from "./schema"
 
 type CommentFocus = { file: string; id: string }
 
@@ -35,10 +30,6 @@ function decodeSessionKey(key: string) {
     dir: key.slice(0, split),
     id: key.slice(split + 1),
   }
-}
-
-type CommentStore = {
-  comments: Record<string, LineComment[]>
 }
 
 function aggregate(comments: Record<string, LineComment[]>) {
@@ -179,12 +170,9 @@ export function createCommentSessionForTest(comments: Record<string, LineComment
 }
 
 function createCommentSession(scope: ServerScope, dir: string, id: string | undefined) {
-  const [store, setStore, _, ready] = persisted(
-    Persist.serverScoped(scope, dir, id, "comments"),
-    createStore<CommentStore>({
-      comments: {},
-    }),
-  )
+  const [store, setStore, _, ready] = persisted(Persist.serverScoped(scope, dir, id, "comments"), CommentStore, {
+    comments: {},
+  })
   const session = createCommentSessionState(store, setStore)
 
   return {

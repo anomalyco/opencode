@@ -294,7 +294,7 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
         <div data-slot="line-comment-v2-footer">
           <div data-slot="line-comment-v2-footer-meta">{local.selection}</div>
           <div data-slot="line-comment-v2-footer-actions">
-            <Button type="button" size="normal" variant="neutral" onClick={() => local.onCancel()}>
+            <Button type="button" size="normal" variant="ghost" onClick={() => local.onCancel()}>
               {local.cancelLabel ?? i18n.t("ui.lineComment.cancel")}
             </Button>
             <Button type="button" size="normal" variant="contrast" disabled={!canSubmit()} onClick={submit}>

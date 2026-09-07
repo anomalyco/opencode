@@ -118,3 +118,40 @@ test("defensively syncs advertised Copilot models", async () => {
     await server.stop(true)
   }
 })
+
+test("prices cache reads from either token price spelling", async () => {
+  // API version 2026-08-01 renamed cache_price to cache_read_price; older payloads still use cache_price.
+  const item = (id: string, prices: Record<string, number>) => ({
+    model_picker_enabled: true,
+    id,
+    name: id,
+    version: `${id}-2026-08-01`,
+    supported_endpoints: ["/chat/completions"],
+    billing: { token_prices: { batch_size: 1_000_000, default: { input_price: 250, output_price: 1500, ...prices } } },
+    capabilities: {
+      family: "gpt",
+      limits: { max_output_tokens: 1000, max_prompt_tokens: 8000 },
+      supports: { tool_calls: true },
+    },
+  })
+  const server = Bun.serve({
+    port: 0,
+    fetch: () =>
+      Response.json({
+        data: [
+          item("renamed", { cache_read_price: 25, cache_write_price: 0 }),
+          item("legacy", { cache_price: 25 }),
+          item("unpriced", {}),
+        ],
+      }),
+  })
+
+  try {
+    const models = await CopilotModels.get(server.url.origin, {}, [])
+    expect(models.get(Model.ID.make("renamed"))?.cost[0]).toMatchObject({ input: 2.5, output: 15, cache: { read: 0.25 } })
+    expect(models.get(Model.ID.make("legacy"))?.cost[0]).toMatchObject({ input: 2.5, output: 15, cache: { read: 0.25 } })
+    expect(models.get(Model.ID.make("unpriced"))?.cost[0]).toMatchObject({ cache: { read: 0 } })
+  } finally {
+    await server.stop(true)
+  }
+})

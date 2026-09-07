@@ -127,16 +127,18 @@ Choose the primary agent used when a session does not select one explicitly.
 See the [agents guide](/agents) for built-in and custom
 agents.
 
-### Autoupdate
+### Updates
 
-Control automatic updates from the global config. Set this to `false` to
-disable updates, or `"notify"` to report available updates without installing
-them. Set this to `true` to automatically install compatible non-major updates.
+Control update checks from the global config. Set `update` to `"disable"` to
+skip them, `"notify"` to show available updates before installing them, or
+`"auto"` to install updates automatically. When omitted, `update` defaults to `"notify"`.
+
+Automatic installation does not restart a running server. Restart it manually to activate the installed update.
 Project-level values are ignored.
 
 ```jsonc
 {
-  "autoupdate": false,
+  "update": "notify",
 }
 ```
 
@@ -296,6 +298,26 @@ Set the maximum number of lines and bytes retained from a tool result.
 }
 ```
 
+### Web search
+
+Use `"random"` to randomly choose a search provider for each session and keep using it until it
+returns HTTP 429. OpenCode then retries the query with another available provider.
+
+```jsonc
+{
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+- Rate-limited providers cool down for `Retry-After`, or 60 seconds if it is missing or invalid.
+- When every provider is cooling down, the search fails without waiting.
+- Each session remembers its preferred provider; cooldowns are shared within a Location.
+- State is kept in memory. Moving a session or restarting its Location services resets its preference.
+- API and plugin queries without session context share a Location-level preference.
+- Set `provider` to a provider ID to disable automatic switching, or set `websearch` to `false` to disable search.
+
 ### MCP
 
 Configure local and remote Model Context Protocol servers. Global timeouts can
@@ -417,9 +439,28 @@ context.
 
 See the [references guide](/references) for shorthand, visibility, and path resolution.
 
+### Worktrees
+
+Set the parent directory for new local worktrees. OpenCode appends the requested or generated worktree name.
+
+```jsonc
+{
+  "worktree": {
+    "directory": "../worktrees",
+  },
+}
+```
+
+Relative paths resolve against the config file that declares them; `~/` resolves against the user's home directory.
+Without this setting, creation uses the server's data directory under `worktree/<first-six-project-ID-characters>`.
+Configuration applies to the caller's location, not every clone sharing a project ID. Changing it does not move existing worktrees.
+
+Git is the built-in default. A [plugin](/build/plugins#worktrees) that registers a strategy automatically becomes the
+default for its location. Strategy-specific options belong to that plugin, not the `worktree` config object.
+
 ### Plugins
 
-Load plugins from packages or local files. Use the object form when a plugin
+Load plugins from packages or local plugin directories. Use the object form when a plugin
 accepts options.
 
 ```jsonc
@@ -427,7 +468,7 @@ accepts options.
   "plugins": [
     "opencode-example-plugin",
     {
-      "package": "./plugins/local.ts",
+      "package": "./plugins/local",
       "options": {
         "enabled": true,
       },

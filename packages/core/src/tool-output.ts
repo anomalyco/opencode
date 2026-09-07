@@ -1,7 +1,7 @@
 export * as ToolOutput from "./tool-output.js"
 
 import path from "path"
-import type { Tool } from "@opencode-ai/schema/tool"
+import type { Tool } from "./tool.js"
 import { Context, Duration, Effect, Layer, Schedule } from "effect"
 import { makeGlobalNode, makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -15,18 +15,18 @@ export const MAX_BYTES = 50 * 1024 // 50 KiB
 export const RETENTION = Duration.days(7)
 export const DIRECTORY = "tool-output"
 
-type Result = Tool.Result
+type Result = Tool.NormalizedResult
 
 type Limits = {
   maxLines: number
   maxBytes: number
 }
 
-export type Draft = {
+export type Editor = {
   configure: (limits: Partial<Limits>) => void
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly truncate: (result: Result) => Effect.Effect<Result>
   readonly cleanup: () => Effect.Effect<void>
 }
@@ -51,21 +51,20 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
     const directory = path.join(global.data, DIRECTORY)
-    const state = State.create<Limits, Draft>({
+    const state = State.create<Limits, Editor>({
       name: "tool-output",
       initial: () => ({ maxLines: MAX_LINES, maxBytes: MAX_BYTES }),
-      draft: (draft) => ({
+      editor: (editor) => ({
         configure: (limits) => {
-          if (limits.maxLines !== undefined) draft.maxLines = limits.maxLines
-          if (limits.maxBytes !== undefined) draft.maxBytes = limits.maxBytes
+          if (limits.maxLines !== undefined) editor.maxLines = limits.maxLines
+          if (limits.maxBytes !== undefined) editor.maxBytes = limits.maxBytes
         },
       }),
     })
 
     const truncate = Effect.fnUntraced(function* (result: Result) {
       if (result.metadata?.truncated !== undefined) return result
-      const content =
-        typeof result.content === "string" ? [{ type: "text" as const, text: result.content }] : (result.content ?? [])
+      const content = result.content
       const text = content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n")
       const limits = state.get()
       const lines = text.split("\n")

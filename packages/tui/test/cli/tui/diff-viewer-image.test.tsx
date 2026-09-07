@@ -42,7 +42,7 @@ test.each([
     options,
   )
   try {
-    await app.waitForFrame((frame) => frame.includes("Loading image..."))
+    await app.waitForFrame((frame) => frame.includes("Loading image…"))
     pending.resolve(diffImageFixture)
     await app.waitForFrame((frame) => frame.includes("96 x 48"))
     expect(requested).toEqual(["assets/landscape.png"])
@@ -100,7 +100,7 @@ test("pending image reads are aborted when the source changes or the preview clo
     </Show>
   ))
   try {
-    await app.waitForFrame((frame) => frame.includes("Loading image..."))
+    await app.waitForFrame((frame) => frame.includes("Loading image…"))
     expect(signals[0].aborted).toBe(false)
     setFile("b.png")
     await app.flush()

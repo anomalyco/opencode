@@ -8,11 +8,11 @@ import { CodeModeCatalog } from "./catalog.js"
 // prettier-ignore
 const prompt = (hasMoreTools: boolean) => `The Code Mode tool catalog below is ${hasMoreTools ? "partial" : "complete"}.
 
-${hasMoreTools ? "The Code Mode catalog and `search` results are" : "This catalog is"} the complete set of tools available within Code Mode. Tools presented elsewhere are not available in this runtime.${hasMoreTools ? `
+${hasMoreTools ? "The Code Mode catalog and `search` results are" : "This catalog is"} the complete set of tools callable inside \`execute\`. It does not affect tools exposed directly outside Code Mode.${hasMoreTools ? `
 
 ## Search
 
-Use \`search\` to discover exact paths and signatures for additional tools:
+Call \`search(...)\` to discover exact paths and signatures for additional tools:
 
 - ${searchSignature}` : ""}
 
@@ -23,14 +23,7 @@ export function render(catalog: CodeModeCatalog.Summary) {
     return "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool."
 
   const tools = catalog.namespaces.flatMap((namespace) => {
-    const count = namespace.count === 1 ? "1 tool" : `${namespace.count} tools`
-    const label =
-      namespace.entries.length === namespace.count
-        ? count
-        : namespace.entries.length === 0
-          ? `${count}, none shown`
-          : `${count}, ${namespace.entries.length} shown`
-    return [`- ${namespace.name} (${label})`, ...namespace.entries.map((entry) => entry.line)]
+    return [CodeModeCatalog.namespaceLine(namespace), ...namespace.entries.map((entry) => entry.line)]
   })
 
   return `${prompt(catalog.shown < catalog.total)}
@@ -46,6 +39,15 @@ ${render(current)}`
   const previousComplete = previous.shown === previous.total
   const currentComplete = current.shown === current.total
   if (previousComplete !== currentComplete) return replacement
+
+  const descriptions = Instructions.diffByKey(
+    previous.namespaces.filter((namespace) => namespace.description !== undefined),
+    current.namespaces.filter((namespace) => namespace.description !== undefined),
+    (namespace) => namespace.name,
+    (before, after) => before.description !== after.description,
+  )
+  if (descriptions.added.length > 0 || descriptions.removed.length > 0 || descriptions.changed.length > 0)
+    return replacement
 
   const diff = Instructions.diffByKey(
     previous.namespaces.flatMap((namespace) => namespace.entries),
@@ -126,8 +128,8 @@ ${render(current)}`
 const key = Instructions.Key.make("core/codemode")
 const codec = Schema.toCodecJson(CodeModeCatalog.Summary)
 
-export const make = (entries?: ReadonlyArray<CodeModeCatalog.Entry>): Instructions.List => {
-  const catalog = entries === undefined ? Instructions.removed : CodeModeCatalog.summarize(entries)
+export const make = (inventory?: CodeModeCatalog.Inventory): Instructions.List => {
+  const catalog = inventory === undefined ? Instructions.removed : CodeModeCatalog.summarize(inventory)
   return Instructions.make({
     key,
     codec,

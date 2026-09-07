@@ -86,14 +86,13 @@ const discover = (directory: string, global: string) =>
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
-        [
-          Location.node,
+        Location.node.replace(
           Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
-        ],
-        [Global.node, Global.layerWith({ config: global, home: path.join(global, "home") })],
-        [Credential.node, emptyCredentialNode],
-        [WellKnown.node, emptyWellknownNode],
-        [Watcher.node, Watcher.testLayer],
+        ),
+        Global.node.replace(Global.layerWith({ config: global, home: path.join(global, "home") })),
+        Credential.node.replace(emptyCredentialNode),
+        WellKnown.node.replace(emptyWellknownNode),
+        Watcher.node.replace(Watcher.testLayer),
       ]),
     ),
   )

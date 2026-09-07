@@ -26,6 +26,7 @@ import { IncompatibleServerPanel } from "./incompatible-server-panel"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionResolution } from "./session-resolution"
 import { SessionScreen } from "./screen"
+import { PreparingComposer } from "./preparing-composer"
 
 export function TargetSessionRouteContent() {
   const params = useParams<{ serverKey: string; id: string }>()
@@ -63,8 +64,9 @@ function PreparingSession(props: { sessionID: string; pending: PendingSession })
           provider: { all: providers.all(), default: providers.default(), connected: [] },
         }}
       >
-        <div data-component="session-preparing" class="min-h-0 flex-1 overflow-y-auto">
-          <div class="mx-auto w-full min-w-0 max-w-[1000px] px-4 pt-5 pb-5 md:px-5">
+        <div data-component="session-preparing" data-workspace-session class="min-h-0 flex-1 overflow-y-auto">
+          <SessionIdentityHeader sessionID={props.sessionID} />
+          <div class="mx-auto w-full min-w-0 max-w-[1000px] px-4 pb-5 md:px-5">
             <SessionUserMessage
               sessionID={props.sessionID}
               message={props.pending.message}
@@ -84,6 +86,7 @@ function PreparingSession(props: { sessionID: string; pending: PendingSession })
             </div>
           </div>
         </div>
+        <PreparingComposer pending={props.pending} />
       </DataProvider>
     </SessionStatePanel>
   )
@@ -116,7 +119,7 @@ function ResolvedTargetSessionRoute() {
   const current = createSessionResolution(
     () => params.id,
     () => data.session,
-    { children: true },
+    { children: true, connected: () => server.ctx.sdk.connection.status() === "connected" },
   )
   const directory = createMemo(() => current()?.location.directory)
 
@@ -133,7 +136,7 @@ function ResolvedTargetSessionRoute() {
     >
       <Show when={directory()} fallback={<PendingSessionState sessionID={params.id} />}>
         {(value) => (
-          <LocationProvider directory={value}>
+          <LocationProvider directory={value} workspaceID={() => current()?.location.workspaceID}>
             <SessionUIProvider directory={value()} server={server.key}>
               <TargetSessionPage />
             </SessionUIProvider>
@@ -154,7 +157,7 @@ function PendingSessionState(props: { sessionID: string }) {
 
 function SessionStatePanel(props: ParentProps) {
   return (
-    <div class="flex min-h-0 flex-1 px-2 pb-2 pt-[var(--shell-top-inset,8px)]">
+    <div class="flex min-h-0 flex-1 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
       <SessionPanelFrame raised>{props.children}</SessionPanelFrame>
     </div>
   )

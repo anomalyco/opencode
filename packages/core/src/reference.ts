@@ -1,7 +1,7 @@
 export * as Reference from "./reference.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Context, Effect, Layer, Scope, Types } from "effect"
+import { Context, Effect, Layer, Scope } from "effect"
 import { Reference } from "@opencode-ai/schema/reference"
 import { Global } from "@opencode-ai/util/global"
 import { Bus } from "./bus.js"
@@ -25,16 +25,17 @@ export const Info = Reference.Info
 export type Info = Reference.Info
 
 type Data = {
-  sources: Map<string, Types.DeepMutable<Source>>
+  sources: Map<string, Source>
 }
 
-type Draft = {
+type Editor = {
   add(name: string, source: Source): void
   remove(name: string): void
   list(): readonly [string, Source][]
+  get(name: string): Source | undefined
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<Info[]>
 }
 
@@ -47,71 +48,74 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const cache = yield* RepositoryCache.Service
     const scope = yield* Scope.Scope
-    const materialized = new Map<string, Info>()
-    const state = State.create<Data, Draft>({
+    const list = (): Info[] =>
+      Array.from(state.get().sources).flatMap(([name, source]) => {
+        const info = {
+          name,
+          source,
+          ...(source.description === undefined ? {} : { description: source.description }),
+          ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
+        }
+        if (source.type === "local") return [Info.make({ ...info, path: source.path })]
+        const repository = Repository.parse(source.repository)
+        if (!repository || !Repository.isRemote(repository)) return []
+        if (source.branch) {
+          try {
+            Repository.validateBranch(source.branch)
+          } catch {
+            return []
+          }
+        }
+        return [
+          Info.make({
+            ...info,
+            path: AbsolutePath.make(Repository.cachePath(global.repos, repository, source.branch)),
+          }),
+        ]
+      })
+    const refresh = Effect.fn("Reference.refresh")(function* () {
+      yield* Effect.forEach(
+        list(),
+        (reference) =>
+          Effect.gen(function* () {
+            if (reference.source.type !== "git") return
+            yield* cache.ensure({
+              reference: Repository.parseRemote(reference.source.repository),
+              branch: reference.source.branch,
+              refresh: "daily",
+            })
+          }).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning("failed to materialize reference", { name: reference.name, cause }),
+            ),
+          ),
+        { concurrency: 4, discard: true },
+      )
+    })
+    const state = State.create<Data, Editor>({
       name: "reference",
       initial: () => ({ sources: new Map() }),
-      draft: (draft) => ({
-        add: (name, source) => draft.sources.set(name, source as Types.DeepMutable<Source>),
-        remove: (name) => draft.sources.delete(name),
-        list: () => Array.from(draft.sources.entries()) as [string, Source][],
+      editor: (editor) => ({
+        add: (name, source) => editor.sources.set(name, source),
+        remove: (name) => editor.sources.delete(name),
+        list: () => Array.from(editor.sources),
+        get: (name) => editor.sources.get(name),
       }),
-      finalize: (draft) =>
+      notify: () =>
         Effect.gen(function* () {
-          materialized.clear()
-          for (const [name, source] of draft.list()) {
-            if (source.type === "local") {
-              materialized.set(
-                name,
-                Info.make({
-                  name,
-                  path: source.path,
-                  ...(source.description === undefined ? {} : { description: source.description }),
-                  ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
-                  source,
-                }),
-              )
-              continue
-            }
-            const repository = Repository.parse(source.repository)
-            if (!repository || !Repository.isRemote(repository)) continue
-            if (source.branch) {
-              try {
-                Repository.validateBranch(source.branch)
-              } catch {
-                continue
-              }
-            }
-            materialized.set(
-              name,
-              Info.make({
-                name,
-                path: AbsolutePath.make(Repository.cachePath(global.repos, repository, source.branch)),
-                ...(source.description === undefined ? {} : { description: source.description }),
-                ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
-                source,
-              }),
-            )
-            yield* cache.ensure({ reference: repository, branch: source.branch, refresh: true }).pipe(
-              Effect.catchCause((cause) =>
-                Effect.logWarning("failed to materialize reference", {
-                  name,
-                  repository: source.repository,
-                  cause,
-                }),
-              ),
-              Effect.forkIn(scope),
-            )
-          }
+          yield* refresh().pipe(Effect.forkIn(scope))
           yield* bus.publish(Reference.Event.Updated, {})
         }),
     })
+
+    // Check independently of session activity; the shared cache throttles Git work daily.
+    yield* Effect.sleep("1 hour").pipe(Effect.andThen(refresh()), Effect.forever, Effect.forkScoped)
 
     return Service.of({
       transform: state.transform,
       reload: state.reload,
       list: Effect.fn("Reference.list")(function* () {
-        return Array.from(materialized.values())
+        return list()
       }),
     })
   }),

@@ -8,6 +8,12 @@ export async function expectAppVisible(locator: Locator) {
 }
 
 export async function expectSessionTitle(page: Page, title: string) {
+  if ((page.viewportSize()?.width ?? 1280) < 768) {
+    const trigger = page.locator('[data-slot="mobile-tabs-trigger"]')
+    await expectAppVisible(trigger)
+    await expect(trigger.locator('span[dir="auto"]')).toHaveText(title, { timeout: APP_READY_TIMEOUT })
+    return
+  }
   await expectAppVisible(page.getByRole("heading", { name: title }))
 }
 

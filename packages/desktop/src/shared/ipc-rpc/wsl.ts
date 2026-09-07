@@ -7,7 +7,6 @@ const WslServerRuntime = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("ready"),
     url: Schema.String,
-    username: Schema.NullOr(Schema.String),
     password: Schema.NullOr(Schema.String),
   }),
   Schema.Struct({ kind: Schema.Literal("failed"), message: Schema.String }),

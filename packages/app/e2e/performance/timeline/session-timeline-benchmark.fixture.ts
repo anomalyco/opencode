@@ -39,13 +39,7 @@ const editPart: ToolSeed = {
     content: [{ type: "text", text: "Edited src/regression.ts" }],
     metadata: {
       files: [
-        currentFile(
-          "src/regression.ts",
-          "export const value = 'before'\n",
-          "export const value = 'after'\n",
-          1,
-          1,
-        ),
+        currentFile("src/regression.ts", "export const value = 'before'\n", "export const value = 'after'\n", 1, 1),
       ],
     },
   },
@@ -70,6 +64,8 @@ export async function setupTimelineBenchmark(
     eventBatch: number
     vcsDiff?: unknown[]
     turnDiffs?: unknown[]
+    busy?: boolean
+    historyShape?: "mixed" | "tool-heavy"
   },
 ) {
   const events: EventPayload[] = []
@@ -77,19 +73,47 @@ export async function setupTimelineBenchmark(
   const currentUserMessage = options.turnDiffs
     ? { ...userMessage, metadata: { diffs: options.turnDiffs as JsonValue } }
     : userMessage
+  const messages = [
+    ...Array.from({ length: options.historyTurns }, (_, index) => performanceTurn(index))
+      .flat()
+      .map((message) => {
+        if (options.historyShape !== "tool-heavy" || message.type !== "assistant") return message
+        return {
+          ...message,
+          content: [
+            ...Array.from({ length: 6 }, (_, index) =>
+              toolContent({
+                id: `${message.id}:read:${index}`,
+                type: "tool",
+                name: "read",
+                state: {
+                  status: "completed",
+                  input: { path: `src/session/module-${index}.ts` },
+                  content: [{ type: "text", text: historicalSource(index, false) }],
+                  metadata: {},
+                },
+                time: {
+                  created: message.time.created,
+                  ran: message.time.created,
+                  completed: message.time.created + 100,
+                },
+              }),
+            ),
+            ...message.content,
+          ],
+        }
+      }),
+    currentUserMessage,
+    assistantMessage,
+  ]
   await mockOpenCodeServer(page, {
     directory,
     project: project(),
     provider: provider(),
     sessions: [session()],
     vcsDiff: options.vcsDiff,
-    pageMessages: () => ({
-      items: [
-        ...Array.from({ length: options.historyTurns }, (_, index) => performanceTurn(index)).flat(),
-        currentUserMessage,
-        assistantMessage,
-      ],
-    }),
+    sessionStatus: options.busy ? { [sessionID]: { type: "busy" } } : undefined,
+    pageMessages: () => ({ items: messages }),
     events: () => events.splice(0, eventBatch),
     eventRetry: 16,
   })
@@ -113,6 +137,11 @@ export async function setupTimelineBenchmark(
   await expectSessionTitle(page, title)
   await expectAppVisible(scroller)
   return {
+    workload: {
+      messages: messages.length,
+      parts: messages.reduce((sum, message) => sum + (message.type === "assistant" ? message.content.length : 0), 0),
+      historyBytes: Buffer.byteLength(JSON.stringify(messages)),
+    },
     scroller,
     text,
     transport: {

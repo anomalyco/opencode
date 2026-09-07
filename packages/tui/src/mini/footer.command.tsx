@@ -1,10 +1,20 @@
 /** @jsxImportSource @opentui/solid */
 import { TextAttributes, type InputRenderable, type KeyEvent } from "@opentui/core"
-import { useKeyboard, type JSX } from "@opentui/solid"
+import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import { Keymap } from "../context/keymap"
-import { RunFooterMenu, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
+import { Config } from "../config"
+import { OneCellSpinner } from "../component/one-cell-spinner"
+import { SEED_MONO, WORK_SPINNERS } from "../ui/one-cell-motion"
+import {
+  FOOTER_COMPACT_WIDTH,
+  RunFooterMenu,
+  createFooterMenuState,
+  footerMenuText,
+  type RunFooterMenuItem,
+} from "./footer.menu"
+import { stringWidth } from "../util/string-width"
 import { monoShortcut } from "./mono"
 import type { RunFooterTheme } from "./theme"
 import type {
@@ -78,7 +88,12 @@ const PANEL_FRAME_ROWS = 6
 export const RUN_COMMAND_PANEL_ROWS = PANEL_LIST_ROWS + PANEL_FRAME_ROWS
 const SUBAGENT_LIST_ROWS = 12
 export const RUN_SUBAGENT_PANEL_ROWS = SUBAGENT_LIST_ROWS + PANEL_FRAME_ROWS
-const PANEL_PAGE = PANEL_LIST_ROWS - 1
+export function footerPanelLayout(height: number, limit = PANEL_LIST_ROWS) {
+  const available = Math.max(3, height - 1)
+  const compact = available < limit + PANEL_FRAME_ROWS
+  const frame = compact ? 2 : PANEL_FRAME_ROWS
+  return { compact, frame, limit: Math.max(1, Math.min(limit, available - frame)) }
+}
 const HALF_BLOCK_BORDER = {
   topLeft: "",
   bottomLeft: "",
@@ -138,10 +153,17 @@ function createSearchablePanelController<T extends PanelEntry>(input: {
   onKey?: (event: KeyEvent, item: T | undefined) => boolean
   onRows?: (rows: number) => void
 }) {
+  const renderer = useRenderer()
+  const term = useTerminalDimensions()
+  const layout = createMemo(() => {
+    term()
+    // The panel mounts before the footer expands, so its initial render height is stale.
+    return footerPanelLayout(renderer.terminalHeight, input.limit)
+  })
   let field: InputRenderable | undefined
   const [query, setQuery] = createSignal("")
   const items = createMemo<T[]>(() => match(query(), input.entries()))
-  const menu = createFooterMenuState({ count: () => items().length, limit: input.limit })
+  const menu = createFooterMenuState({ count: () => items().length, limit: () => layout().limit })
   const selected = () => items()[menu.selected()]
 
   createEffect(() => {
@@ -161,7 +183,7 @@ function createSearchablePanelController<T extends PanelEntry>(input: {
   })
 
   createEffect(() => {
-    input.onRows?.(menu.rows() + PANEL_FRAME_ROWS)
+    input.onRows?.(menu.rows() + layout().frame)
   })
 
   useKeyboard((event) => {
@@ -201,13 +223,13 @@ function createSearchablePanelController<T extends PanelEntry>(input: {
 
     if (name === "pageup") {
       event.preventDefault()
-      menu.reveal(menu.selected() - PANEL_PAGE)
+      menu.reveal(menu.selected() - Math.max(1, menu.limit() - 1))
       return
     }
 
     if (name === "pagedown") {
       event.preventDefault()
-      menu.reveal(menu.selected() + PANEL_PAGE)
+      menu.reveal(menu.selected() + Math.max(1, menu.limit() - 1))
       return
     }
 
@@ -244,6 +266,7 @@ function createSearchablePanelController<T extends PanelEntry>(input: {
     setQuery,
     items,
     menu,
+    layout,
     inputRef(input: InputRenderable) {
       field = input
     },
@@ -263,50 +286,66 @@ function PanelShell(props: {
   children: JSX.Element
   hint?: string
   mono?: boolean
+  background?: boolean
+  layout: ReturnType<typeof footerPanelLayout>
 }) {
-  const background = () => props.theme().shade
+  const term = useTerminalDimensions()
+  const pad = () => (term().width < FOOTER_COMPACT_WIDTH ? 1 : panelPad(props.mono))
+  const header = createMemo(() => {
+    const width = Math.max(0, term().width - pad() * 2 - 4)
+    const title = footerMenuText(props.title, width, props.mono)
+    const count = countLabel(props.count, props.total, props.query)
+    const showCount = props.countVisible !== false && stringWidth(props.title) + stringWidth(count) + 1 <= width
+    const hint =
+      props.hint &&
+      stringWidth(props.title) + (showCount ? stringWidth(count) + 1 : 0) + stringWidth(props.hint) + 3 <= width
+    return { title, count: showCount ? count : undefined, hint: hint ? props.hint : undefined }
+  })
+  const background = () => (props.background === false ? "transparent" : props.theme().shade)
   const content = (
     <>
-      <box height={1} flexShrink={0} backgroundColor={background()} />
+      <box height={props.layout.compact ? 0 : 1} flexShrink={0} backgroundColor={background()} />
       <box
         width="100%"
         height={1}
-        paddingLeft={panelPad(props.mono)}
-        paddingRight={panelPad(props.mono)}
+        paddingLeft={pad()}
+        paddingRight={pad()}
         flexDirection="row"
-        gap={1}
+        gap={0}
         flexShrink={0}
         backgroundColor={background()}
       >
         <text fg={props.theme().text} attributes={TextAttributes.BOLD} wrapMode="none" flexShrink={0}>
-          {props.title}
+          {header().title}
         </text>
-        {props.countVisible !== false ? (
+        {header().count ? (
           <text fg={props.theme().muted} wrapMode="none" flexShrink={0}>
-            {countLabel(props.count, props.total, props.query)}
+            {" " + header().count}
           </text>
         ) : null}
-        <box flexGrow={1} flexShrink={1} backgroundColor="transparent" />
-        <text fg={props.theme().muted} wrapMode="none" truncate flexShrink={0}>
-          {props.hint ? `${props.hint} ${props.mono ? "-" : "·"} ` : ""}esc
+        <box minWidth={1} flexGrow={1} flexShrink={1} backgroundColor="transparent" />
+        <text fg={props.theme().muted} wrapMode="none" flexShrink={0}>
+          {header().hint ? `${header().hint} ${props.mono ? "-" : "·"} ` : ""}esc
         </text>
       </box>
-      <box height={1} flexShrink={0} backgroundColor={background()} />
+      <box height={props.layout.compact ? 0 : 1} flexShrink={0} backgroundColor={background()} />
       <box
         width="100%"
         height={1}
-        paddingLeft={panelPad(props.mono)}
-        paddingRight={panelPad(props.mono)}
+        paddingLeft={pad()}
+        paddingRight={pad()}
         flexShrink={0}
         backgroundColor={background()}
       >
         <input
           width="100%"
-          focusedBackgroundColor={background()}
-          focusedTextColor={props.theme().text}
+          focusedBackgroundColor={props.background === false ? "transparent" : props.theme().formfieldFocusedBg}
+          focusedTextColor={
+            props.background === false ? props.theme().formfieldText : props.theme().formfieldFocusedText
+          }
           placeholder={props.placeholder}
           placeholderColor={props.theme().muted}
-          cursorColor={props.theme().highlight}
+          cursorColor={props.background === false ? props.theme().formfieldText : props.theme().formfieldFocusedText}
           onInput={props.onQuery}
           ref={(input) => {
             props.inputRef(input)
@@ -319,7 +358,7 @@ function PanelShell(props: {
           }}
         />
       </box>
-      <box height={1} flexShrink={0} backgroundColor={background()} />
+      <box height={props.layout.compact ? 0 : 1} flexShrink={0} backgroundColor={background()} />
       <box width="100%" flexDirection="column" flexShrink={0} backgroundColor={background()}>
         {props.children}
       </box>
@@ -330,8 +369,14 @@ function PanelShell(props: {
       <box width="100%" flexDirection="column" border={false} backgroundColor="transparent" flexShrink={0}>
         {content}
       </box>
-      <box width="100%" height={1} border={false} backgroundColor="transparent" flexShrink={0}>
-        {props.mono ? null : (
+      <box
+        width="100%"
+        height={props.layout.compact ? 0 : 1}
+        border={false}
+        backgroundColor="transparent"
+        flexShrink={0}
+      >
+        {props.layout.compact || props.mono || props.background === false ? null : (
           <box
             width="100%"
             height={1}
@@ -448,7 +493,7 @@ export function RunCommandMenuBody(props: {
             {
               action: "queued" as const,
               category: "Agent",
-              display: "View queued prompts",
+              display: "View pending prompts",
               footer: `${props.queued().length} pending`,
               keywords: props
                 .queued()
@@ -562,6 +607,7 @@ export function RunCommandMenuBody(props: {
   return (
     <PanelShell
       title="Commands"
+      layout={controller.layout()}
       countVisible={false}
       query={controller.query()}
       count={controller.items().length}
@@ -577,8 +623,9 @@ export function RunCommandMenuBody(props: {
         items={controller.items}
         selected={controller.menu.selected}
         offset={controller.menu.offset}
-        rows={() => PANEL_LIST_ROWS}
-        limit={PANEL_LIST_ROWS}
+        rows={controller.menu.limit}
+        limit={controller.menu.limit()}
+        compact={controller.layout().compact}
         empty="No results found"
         border={false}
         paddingLeft={panelPad(props.mono)}
@@ -609,6 +656,7 @@ export function RunAgentSelectBody(props: {
         display: agent.id,
         description: agent.description,
         footer: props.current() === agent.id ? "current" : undefined,
+        footerTone: "selection" as const,
         keywords: `${agent.id} ${agent.name} ${agent.description ?? ""}`,
         id: agent.id,
         current: props.current() === agent.id,
@@ -625,6 +673,7 @@ export function RunAgentSelectBody(props: {
   return (
     <PanelShell
       title="Select agent"
+      layout={controller.layout()}
       query={controller.query()}
       count={controller.items().length}
       total={entries().length}
@@ -639,8 +688,9 @@ export function RunAgentSelectBody(props: {
         items={controller.items}
         selected={controller.menu.selected}
         offset={controller.menu.offset}
-        rows={() => PANEL_LIST_ROWS}
-        limit={PANEL_LIST_ROWS}
+        rows={controller.menu.limit}
+        limit={controller.menu.limit()}
+        compact={controller.layout().compact}
         empty="No agents found"
         border={false}
         paddingLeft={panelPad(props.mono)}
@@ -659,6 +709,7 @@ export function RunSettingsBody(props: {
   onClose: () => void
   onChange: (change: MiniSettingChange) => void | Promise<void>
   mono?: boolean
+  animations?: boolean
 }) {
   const [saving, setSaving] = createSignal<keyof MiniSettings>()
   const entries = createMemo<SettingEntry[]>(() => [
@@ -666,6 +717,7 @@ export function RunSettingsBody(props: {
       category: "Transcript",
       display: "Thinking",
       footer: saving() === "thinking" ? "saving" : props.settings().thinking,
+      footerTone: saving() === "thinking" ? "running" : "selection",
       keywords: `thinking reasoning ${props.settings().thinking}`,
       key: "thinking",
     },
@@ -673,6 +725,7 @@ export function RunSettingsBody(props: {
       category: "Transcript",
       display: "Shell",
       footer: saving() === "shell_output" ? "saving" : props.settings().shell_output,
+      footerTone: saving() === "shell_output" ? "running" : "selection",
       keywords: `shell tool command output ${props.settings().shell_output}`,
       key: "shell_output",
     },
@@ -680,6 +733,7 @@ export function RunSettingsBody(props: {
       category: "Transcript",
       display: "Turn summary",
       footer: saving() === "turn_summary" ? "saving" : props.settings().turn_summary,
+      footerTone: saving() === "turn_summary" ? "running" : "selection",
       keywords: `turn summary agent model duration ${props.settings().turn_summary}`,
       key: "turn_summary",
     },
@@ -687,6 +741,7 @@ export function RunSettingsBody(props: {
       category: "Terminal",
       display: "Footer details",
       footer: saving() === "footer" ? "saving" : props.settings().footer,
+      footerTone: saving() === "footer" ? "running" : "selection",
       keywords: `footer status activity model context usage ${props.settings().footer}`,
       key: "footer",
     },
@@ -694,6 +749,7 @@ export function RunSettingsBody(props: {
       category: "Terminal",
       display: "Splash",
       footer: saving() === "splash" ? "saving" : props.settings().splash,
+      footerTone: saving() === "splash" ? "running" : "selection",
       keywords: `splash entry exit banner ${props.settings().splash}`,
       key: "splash",
     },
@@ -701,16 +757,46 @@ export function RunSettingsBody(props: {
       category: "Terminal",
       display: "Monochrome UI",
       footer: saving() === "mono" ? "saving" : props.settings().mono ? "on" : "off",
+      footerTone: saving() === "mono" ? "running" : "selection",
       keywords: `mono monochrome ascii legacy compat terminal ${props.settings().mono ? "on" : "off"}`,
       key: "mono",
     },
+    {
+      category: "Terminal",
+      display: "Work spinner",
+      icon: (color) => (
+        <OneCellSpinner
+          animation={props.mono ? SEED_MONO : WORK_SPINNERS[props.settings().work_spinner]}
+          color={color}
+          animations={props.animations}
+          glow={!props.mono}
+          still={props.mono ? "*" : undefined}
+        />
+      ),
+      footer:
+        saving() === "work_spinner"
+          ? "saving"
+          : props.settings().work_spinner.replace("block-", "").replaceAll("-", " "),
+      footerTone: saving() === "work_spinner" ? "running" : "selection",
+      keywords: `work spinner animation ${props.settings().work_spinner}`,
+      key: "work_spinner",
+    },
   ])
-  const change = (item: SettingEntry) => {
+  const change = (item: SettingEntry, direction = 1) => {
     if (saving()) return
+    const spinners = Config.MiniWorkSpinner.literals
     const next: MiniSettingChange =
-      item.key === "mono"
-        ? { key: "mono", value: !props.settings().mono }
-        : { key: item.key, value: props.settings()[item.key] === "show" ? "hide" : "show" }
+      item.key === "work_spinner"
+        ? {
+            key: "work_spinner",
+            value:
+              spinners[
+                (spinners.indexOf(props.settings().work_spinner) + direction + spinners.length) % spinners.length
+              ]!,
+          }
+        : item.key === "mono"
+          ? { key: "mono", value: !props.settings().mono }
+          : { key: item.key, value: props.settings()[item.key] === "show" ? "hide" : "show" }
     setSaving(item.key)
     void Promise.resolve(props.onChange(next))
       .catch(() => {})
@@ -725,7 +811,7 @@ export function RunSettingsBody(props: {
       const name = event.name.toLowerCase()
       if (name !== "left" && name !== "right") return false
       event.preventDefault()
-      if (item) change(item)
+      if (item) change(item, name === "left" ? -1 : 1)
       return true
     },
   })
@@ -733,6 +819,7 @@ export function RunSettingsBody(props: {
   return (
     <PanelShell
       title="Settings"
+      layout={controller.layout()}
       countVisible={false}
       query={controller.query()}
       count={controller.items().length}
@@ -749,8 +836,9 @@ export function RunSettingsBody(props: {
         items={controller.items}
         selected={controller.menu.selected}
         offset={controller.menu.offset}
-        rows={() => PANEL_LIST_ROWS}
-        limit={PANEL_LIST_ROWS}
+        rows={controller.menu.limit}
+        limit={controller.menu.limit()}
+        compact={controller.layout().compact}
         empty="No settings found"
         border={false}
         paddingLeft={panelPad(props.mono)}
@@ -785,6 +873,12 @@ export function RunSubagentSelectBody(props: {
           display: title,
           description: title === item.label ? undefined : item.label,
           footer: subagentStatusLabel(item.status),
+          footerTone:
+            item.status === "running" || item.status === "error"
+              ? item.status
+              : item.status === "completed"
+                ? ("success" as const)
+                : undefined,
           keywords: `${item.label} ${item.description} ${item.title ?? ""} ${item.status}`,
           sessionID: item.sessionID,
           current: props.current() === item.sessionID,
@@ -810,6 +904,7 @@ export function RunSubagentSelectBody(props: {
   return (
     <PanelShell
       title="Select subagent"
+      layout={controller.layout()}
       query={controller.query()}
       count={controller.items().length}
       total={entries().length}
@@ -826,7 +921,8 @@ export function RunSubagentSelectBody(props: {
         selected={controller.menu.selected}
         offset={controller.menu.offset}
         rows={controller.menu.rows}
-        limit={SUBAGENT_LIST_ROWS}
+        limit={controller.menu.limit()}
+        compact={controller.layout().compact}
         empty="No subagents found"
         border={false}
         paddingLeft={panelPad(props.mono)}
@@ -843,7 +939,7 @@ export function RunQueuedPromptSelectBody(props: {
   theme: Accessor<RunFooterTheme>
   prompts: Accessor<FooterQueuedPrompt[]>
   onClose: () => void
-  onSteer: (prompt: FooterQueuedPrompt) => void
+  onSelect: (prompt: FooterQueuedPrompt) => void
   onDelete: (prompt: FooterQueuedPrompt) => void
   onRows?: (rows: number) => void
   mono?: boolean
@@ -852,7 +948,7 @@ export function RunQueuedPromptSelectBody(props: {
     props.prompts().map((prompt) => ({
       category: "",
       display: prompt.prompt.text.replaceAll("\n", " "),
-      footer: "queued",
+      footer: prompt.delivery === "queue" ? "queued" : "steering",
       keywords: prompt.prompt.text,
       prompt,
     })),
@@ -861,7 +957,7 @@ export function RunQueuedPromptSelectBody(props: {
     entries,
     limit: SUBAGENT_LIST_ROWS,
     onClose: props.onClose,
-    onSelect: (item) => props.onSteer(item.prompt),
+    onSelect: (item) => props.onSelect(item.prompt),
     onRows: props.onRows,
   })
   const shortcuts = Keymap.useShortcuts()
@@ -871,7 +967,7 @@ export function RunQueuedPromptSelectBody(props: {
     commands: [
       {
         id: "queued_prompt.delete",
-        title: "Delete queued prompt",
+        title: "Delete pending prompt",
         group: "Prompt",
         run() {
           const item = controller.items()[controller.menu.selected()]
@@ -884,7 +980,8 @@ export function RunQueuedPromptSelectBody(props: {
 
   return (
     <PanelShell
-      title="Queued prompts"
+      title="Pending prompts"
+      layout={controller.layout()}
       query={controller.query()}
       count={controller.items().length}
       total={entries().length}
@@ -892,7 +989,12 @@ export function RunQueuedPromptSelectBody(props: {
       theme={props.theme}
       inputRef={controller.inputRef}
       onQuery={controller.setQuery}
-      hint={["enter steer", deleteShortcut() ? `${deleteShortcut()} delete` : undefined].filter(Boolean).join(" · ")}
+      hint={[
+        controller.items()[controller.menu.selected()]?.prompt.delivery === "steer" ? "enter queue" : "enter steer",
+        deleteShortcut() ? `${deleteShortcut()} delete` : undefined,
+      ]
+        .filter(Boolean)
+        .join(" · ")}
       mono={props.mono}
     >
       <RunFooterMenu
@@ -901,8 +1003,9 @@ export function RunQueuedPromptSelectBody(props: {
         selected={controller.menu.selected}
         offset={controller.menu.offset}
         rows={controller.menu.rows}
-        limit={SUBAGENT_LIST_ROWS}
-        empty="No queued prompts"
+        limit={controller.menu.limit()}
+        compact={controller.layout().compact}
+        empty="No pending prompts"
         border={false}
         paddingLeft={panelPad(props.mono)}
         paddingRight={panelPad(props.mono)}
@@ -943,6 +1046,7 @@ export function RunSkillSelectBody(props: {
   return (
     <PanelShell
       title="Skills"
+      layout={controller.layout()}
       query={controller.query()}
       count={controller.items().length}
       total={entries().length}
@@ -957,8 +1061,9 @@ export function RunSkillSelectBody(props: {
         items={controller.items}
         selected={controller.menu.selected}
         offset={controller.menu.offset}
-        rows={() => PANEL_LIST_ROWS}
-        limit={PANEL_LIST_ROWS}
+        rows={controller.menu.limit}
+        limit={controller.menu.limit()}
+        compact={controller.layout().compact}
         empty={props.commands() ? "No skills found" : "Skills loading"}
         border={false}
         paddingLeft={panelPad(props.mono)}
@@ -983,7 +1088,8 @@ export function RunVariantSelectBody(props: {
     {
       category: "",
       display: "Default",
-      description: props.current() === undefined ? "current" : undefined,
+      footer: props.current() === undefined ? "current" : undefined,
+      footerTone: "selection",
       keywords: "default",
       variant: undefined,
       current: props.current() === undefined,
@@ -991,7 +1097,8 @@ export function RunVariantSelectBody(props: {
     ...props.variants().map((variant) => ({
       category: "",
       display: variant,
-      description: props.current() === variant ? "current" : undefined,
+      footer: props.current() === variant ? "current" : undefined,
+      footerTone: "selection" as const,
       keywords: variant,
       variant,
       current: props.current() === variant,
@@ -1008,6 +1115,7 @@ export function RunVariantSelectBody(props: {
   return (
     <PanelShell
       title="Select variant"
+      layout={controller.layout()}
       query={controller.query()}
       count={controller.items().length}
       total={entries().length}
@@ -1022,8 +1130,9 @@ export function RunVariantSelectBody(props: {
         items={controller.items}
         selected={controller.menu.selected}
         offset={controller.menu.offset}
-        rows={() => PANEL_LIST_ROWS}
-        limit={PANEL_LIST_ROWS}
+        rows={controller.menu.limit}
+        limit={controller.menu.limit()}
+        compact={controller.layout().compact}
         empty="No results found"
         border={false}
         paddingLeft={panelPad(props.mono)}
@@ -1066,6 +1175,7 @@ export function RunModelSelectBody(props: {
               category: provider.name,
               display: title,
               footer,
+              footerTone: current ? ("selection" as const) : undefined,
               keywords: `${provider.id} ${provider.name} ${modelID} ${title} ${footer ?? ""}`,
               current,
             }
@@ -1096,6 +1206,7 @@ export function RunModelSelectBody(props: {
   return (
     <PanelShell
       title="Select model"
+      layout={controller.layout()}
       query={controller.query()}
       count={controller.items().length}
       total={entries().length}
@@ -1104,24 +1215,26 @@ export function RunModelSelectBody(props: {
       inputRef={controller.inputRef}
       onQuery={controller.setQuery}
       mono={props.mono}
+      background={false}
     >
       <RunFooterMenu
         theme={props.theme}
         items={() =>
-          controller.query().trim()
-            ? controller.items().map((item) => ({ ...item, footer: item.providerName }))
+          controller.query().trim() ||
+          (controller.layout().compact && new Set(controller.items().map((item) => item.providerID)).size > 1)
+            ? controller.items().map((item) => ({ ...item, footer: item.providerName, footerTone: undefined }))
             : controller.items()
         }
         selected={controller.menu.selected}
         offset={controller.menu.offset}
-        rows={() => PANEL_LIST_ROWS}
-        limit={PANEL_LIST_ROWS}
+        rows={controller.menu.limit}
+        limit={controller.menu.limit()}
+        compact={controller.layout().compact}
         empty={props.providers() ? "No results found" : "Models loading"}
         border={false}
         paddingLeft={panelPad(props.mono)}
         paddingRight={panelPad(props.mono)}
         grouped={!controller.query().trim()}
-        background
         headerColor={props.theme().muted}
         mono={props.mono}
       />

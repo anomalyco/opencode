@@ -12,6 +12,10 @@ import { createPermissionAutoApprover } from "@/session/requests/auto-approve"
 import { createServerNotificationState } from "@/shell/notifications/notification"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { createDesktopData } from "./data"
+import { ModelState } from "./persistence"
+import { useLanguage } from "@/runtime/i18n/language"
+import { showToast } from "@/shell/notifications/toast"
+import { formatServerError } from "./errors"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -98,18 +102,11 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
 })
 
 function createGlobalModels() {
-  const [store, setStore, _, ready] = persisted(
-    Persist.global("model"),
-    createStore<{
-      user: Array<{ providerID: string; modelID: string; visibility: "show" | "hide"; favorite?: boolean }>
-      recent: Array<{ providerID: string; modelID: string }>
-      variant?: Record<string, string | undefined>
-    }>({
-      user: [],
-      recent: [],
-      variant: {},
-    }),
-  )
+  const [store, setStore, _, ready] = persisted(Persist.global("model"), ModelState, {
+    user: [],
+    recent: [],
+    variant: {},
+  })
   const [recent] = createResource(
     async () => {
       const value = store.recent
@@ -133,6 +130,7 @@ function createServerController(
   scope: ServerScope,
   projects: ReturnType<typeof createServerProjects>,
 ) {
+  const language = useLanguage()
   const connKey = ServerConnection.key(conn)
   const sdk = createServerSdkContext(conn, scope)
   const source = createData({
@@ -143,6 +141,13 @@ function createServerController(
     },
     connection: sdk.connection,
     directory: "",
+    onError(error) {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: formatServerError(error, language.t),
+      })
+    },
   })
   const data = createDesktopData({
     data: source,

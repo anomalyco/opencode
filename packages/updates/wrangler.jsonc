@@ -5,6 +5,13 @@
   "compatibility_date": "2026-07-21",
   "workers_dev": false,
   "preview_urls": false,
+  "pipelines": [
+    {
+      "binding": "EVENTS",
+      // Shared lake stream from anomalyco/platform/production.
+      "stream": "251a89241c3a461c9007f6b6f345ed8b",
+    },
+  ],
   "routes": [
     {
       "pattern": "update.opencode.ai",

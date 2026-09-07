@@ -1,11 +1,8 @@
-import { Duration, Effect, Layer, LayerMap } from "effect"
-import { existsSync } from "fs"
-import path from "path"
+import { Duration, Effect, Exit, Layer, LayerMap, MutableHashMap, Option } from "effect"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Instance } from "./instance.js"
 import { Location } from "./location.js"
 import { LocationServiceMap } from "./location-service-map.js"
-import { AbsolutePath } from "./schema.js"
 
 export { LocationServiceMap } from "./location-service-map.js"
 
@@ -15,31 +12,63 @@ export type LocationError = Instance.Error
 export function buildLocationServiceMap(
   replacements: LayerNode.Replacements = [],
 ): Layer.Layer<LocationServiceMap.Service> {
-  // Structural Equal distinguishes optional-key shape and Windows separator style.
-  // The RcMap caches the raw key before the build callback, so normalize both here.
-  const canonical = (ref: Location.Ref) =>
-    Location.Ref.make({
-      directory: AbsolutePath.make(process.platform === "win32" ? path.normalize(ref.directory) : ref.directory),
-      workspaceID: ref.workspaceID,
-    })
   return Layer.effect(
     LocationServiceMap.Service,
-    Effect.map(
-      LayerMap.make((ref: Location.Ref) => Instance.layer(ref, { replacements }), {
-        // Workspace-placed directories exist only inside the workspace, so a
-        // local stat consults the wrong filesystem. Workspace liveness is
-        // owned by placement; do not probe the sandbox here, which would
-        // provision lazily-idle workspaces.
-        idleTimeToLive: (ref) =>
-          ref.workspaceID !== undefined || existsSync(ref.directory) ? Duration.infinity : Duration.zero,
-      }),
-      (inner) => ({
+    Effect.gen(function* () {
+      const owner = yield* Effect.scope
+      const booting = MutableHashMap.empty<Location.Ref, object>()
+      const inner: LayerMap.LayerMap<Location.Ref, LocationServices> = yield* LayerMap.make(
+        (ref: Location.Ref) => {
+          const build = {}
+          MutableHashMap.set(booting, ref, build)
+          return Layer.fromBuild((memoMap, scope) =>
+            Effect.suspend(() =>
+              Layer.buildWithMemoMap(Instance.layer(ref, { replacements: bindings }), memoMap, scope),
+            ).pipe(
+              Effect.onExit((exit) => {
+                const finish = Effect.suspend(() => {
+                  // An explicitly invalidated build must not evict its replacement.
+                  if (Option.getOrUndefined(MutableHashMap.get(booting, ref)) !== build) return Effect.void
+                  MutableHashMap.remove(booting, ref)
+                  // Evict once per failed build, before its result reaches borrowers.
+                  return Exit.isFailure(exit) ? inner.invalidate(ref) : Effect.void
+                })
+                // With no borrowers, invalidation closes the entry's scope and
+                // joins this lookup fiber. Let the owner finish that cleanup.
+                return Exit.isFailure(exit)
+                  ? finish.pipe(Effect.forkIn(owner, { startImmediately: true }), Effect.asVoid)
+                  : finish
+              }),
+            ),
+          )
+        },
+        // Retain healthy graphs. Boot failures, not local filesystem probes,
+        // decide whether a location (including workspace placement) can retry.
+        { idleTimeToLive: Duration.infinity },
+      )
+      const map = {
         ...inner,
-        get: (ref: Location.Ref) => inner.get(canonical(ref)),
-        contextEffect: (ref: Location.Ref) => inner.contextEffect(canonical(ref)),
-        contextEffectOption: (ref: Location.Ref) => inner.contextEffectOption(canonical(ref)),
-        invalidate: (ref: Location.Ref) => inner.invalidate(canonical(ref)),
-      }),
-    ),
+        get: (ref: Location.Ref) => inner.get(LocationServiceMap.canonical(ref)),
+        contextEffect: (ref: Location.Ref) => inner.contextEffect(LocationServiceMap.canonical(ref)),
+        contextEffectOption: (ref: Location.Ref) => inner.contextEffectOption(LocationServiceMap.canonical(ref)),
+        invalidate: (ref: Location.Ref) =>
+          Effect.suspend(() => {
+            const key = LocationServiceMap.canonical(ref)
+            MutableHashMap.remove(booting, key)
+            return inner.invalidate(key)
+          }),
+      }
+      // Cached instances borrow their owner instead of retaining its Layer scope.
+      const bindings: LayerNode.Replacements = [
+        Instance.node.replace(
+          Layer.succeed(Instance.Service, {
+            provide: (session) => Effect.provide(map.get(session.location)),
+          }),
+        ),
+        ...replacements,
+        LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, map)),
+      ]
+      return map
+    }),
   )
 }

@@ -442,11 +442,8 @@ class StringSerializeHandler extends BaseSerializeHandler {
 
       this._currentRow += `\u001b[${sgrSeq.join(";")}m`
 
-      const line = this._buffer.getLine(row)
-      const cellFromLine = line?.getCell(col)
-      if (cellFromLine) {
-        this._cursorStyle = cellFromLine
-      }
+      // Ghostty cells are snapshots; rereading this cell copies the whole row again.
+      this._cursorStyle = cell
     }
 
     if (isEmptyCell) {

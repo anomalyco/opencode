@@ -7,7 +7,7 @@ The Promise plugin API at `@opencode-ai/plugin` is the async/await equivalent of
 
 The Promise API uses Promises instead of Effects for setup, runtime hook
 callbacks, hook registration, `reload`, and `Registration.dispose`. Transform
-draft callbacks remain synchronous.
+editor callbacks remain synchronous.
 
 ## Defining A Plugin
 
@@ -48,7 +48,7 @@ await registration.dispose()
 
 ## Transform Hooks
 
-Transform hooks contribute to stateful domains. The draft editor is synchronous,
+Transform hooks contribute to stateful domains. The editor is synchronous,
 so load asynchronous data before registering a transform or reloading its domain:
 
 ```ts

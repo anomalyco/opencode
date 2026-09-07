@@ -27,8 +27,8 @@ const locationLayer = Layer.succeed(
 )
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Command.node, Mcp.node, Bus.node]), [
-    [Mcp.node, emptyMcpLayer],
-    [Location.node, locationLayer],
+    Mcp.node.replace(emptyMcpLayer),
+    Location.node.replace(locationLayer),
   ]),
 )
 

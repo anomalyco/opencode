@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeAll, afterEach } from "bun:test"
+import { describe, test, expect, beforeAll, afterEach, spyOn } from "bun:test"
 import { Terminal, Ghostty } from "ghostty-web"
 import { SerializeAddon } from "./serialize"
 
@@ -37,6 +37,32 @@ function writeAndWait(term: Terminal, data: string): Promise<void> {
 }
 
 describe("SerializeAddon", () => {
+  test("reuses cells across style changes without rereading their rows", async () => {
+    const { term, addon } = createTerminal(20, 5)
+    await writeAndWait(term, "\x1b[31mred\x1b[32mgreen\x1b[0m\r\n\x1b[1;44mbold\x1b[0m")
+    const reads = spyOn(term.buffer.normal, "getLine")
+    const serialized = addon.serialize({ range: { start: 0, end: 1 } })
+    expect(reads.mock.calls.map((args) => args[0])).toEqual([0, 1, 1])
+    reads.mockRestore()
+
+    const restored = createTerminal(20, 5)
+    await writeAndWait(restored.term, serialized)
+    for (let row = 0; row < 2; row++) {
+      const original = term.buffer.normal.getLine(row)!
+      const replayed = restored.term.buffer.normal.getLine(row)!
+      expect(replayed.translateToString()).toBe(original.translateToString())
+      for (let col = 0; col < 20; col++) {
+        const before = original.getCell(col)!
+        const after = replayed.getCell(col)!
+        expect([after.getFgColor(), after.getBgColor(), after.isBold()]).toEqual([
+          before.getFgColor(),
+          before.getBgColor(),
+          before.isBold(),
+        ])
+      }
+    }
+  })
+
   test("preserves color scheme reporting mode", async () => {
     const { term, addon } = createTerminal()
     await writeAndWait(term, "\x1b[?2031h")

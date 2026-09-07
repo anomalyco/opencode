@@ -13,7 +13,7 @@ import type { ProviderPackage } from "../provider-package.js"
 
 export const id = ProviderID.make("xai")
 
-export type XAIProviderOptionsInput = OpenAIOptionsInput
+export type XAIProviderOptionsInput = OpenAIOptionsInput & { readonly contextManagement?: never }
 
 export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
@@ -32,6 +32,7 @@ export type { XAIImageOptions } from "../protocols/xai-images.js"
 const RESPONSES_WEBSOCKET_ROTATE_AFTER_MS = 24 * 60 * 1000
 
 const responsesRoute = Route.make({
+  compact: { endpoint: XAIResponses.compact },
   id: "openai-responses",
   provider: id,
   providerMetadataKey: "xai",
@@ -102,7 +103,11 @@ export const configure = (input: LanguageModelOptions = {}) => {
 }
 
 export const provider = configure()
-export const model: ProviderPackage.Definition<Settings, XAIProviderOptionsInput>["model"] = (modelID, settings) =>
+export const model: ProviderPackage.Definition<
+  Settings,
+  XAIProviderOptionsInput,
+  typeof responsesRoute.compact
+>["model"] = (modelID, settings) =>
   configure({
     apiKey: settings.apiKey,
     baseURL: settings.baseURL,

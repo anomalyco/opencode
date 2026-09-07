@@ -1,11 +1,32 @@
-import { Show, type JSX } from "solid-js"
+import { Show } from "solid-js"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { useCommand } from "@/shell/commands/command"
+import { reviewTooltipKeybind } from "@/shell/commands/tooltip-keybind"
+import { useLanguage } from "@/runtime/i18n/language"
+import { useSessionLayout } from "@/session/session-layout"
+
+export function SessionReviewToggle() {
+  const command = useCommand()
+  const language = useLanguage()
+  const { view } = useSessionLayout()
+
+  return (
+    <SessionHeaderActions
+      state={{
+        reviewLabel: language.t("command.review.toggle"),
+        reviewKeybind: reviewTooltipKeybind(command),
+        reviewVisible: true,
+        reviewOpened: view().reviewPanel.opened(),
+        onReviewToggle: () => view().reviewPanel.toggle(),
+      }}
+    />
+  )
+}
 
 export type SessionHeaderActionsState = {
-  status?: { label: string; content: () => JSX.Element }
   reviewLabel: string
   reviewKeybind: string[]
   reviewVisible: boolean
@@ -16,13 +37,6 @@ export type SessionHeaderActionsState = {
 export function SessionHeaderActions(props: { state: SessionHeaderActionsState }) {
   return (
     <div class="flex items-center gap-2">
-      <Show when={props.state.status}>
-        {(status) => (
-          <Tooltip appearance="standard" placement="bottom" value={status().label}>
-            {status().content()}
-          </Tooltip>
-        )}
-      </Show>
       <Show when={props.state.reviewVisible}>
         <Tooltip
           class="shrink-0"
@@ -40,7 +54,7 @@ export function SessionHeaderActions(props: { state: SessionHeaderActionsState }
             type="button"
             variant="ghost-muted"
             size="large"
-            class="!w-9 shrink-0"
+            class="shrink-0"
             state={props.state.reviewOpened ? "pressed" : undefined}
             onClick={props.state.onReviewToggle}
             aria-label={props.state.reviewLabel}

@@ -44,7 +44,7 @@ const fixture = Effect.gen(function* () {
           return yield* discovery.pull(base)
         }).pipe(
           Effect.provide(
-            AppNodeBuilder.build(SkillDiscovery.node, [[Global.node, Global.layerWith({ cache: tmp.path })]]),
+            AppNodeBuilder.build(SkillDiscovery.node, [Global.node.replace(Global.layerWith({ cache: tmp.path }))]),
           ),
         )
         return { directories, requests: state.requests.slice() }

@@ -384,7 +384,11 @@ const layer = () =>
                   command.timeoutFiber = runFork(
                     Effect.sleep(Duration.millis(duration)).pipe(
                       Effect.flatMap(() =>
-                        finish("timeout", undefined, handle.kill().pipe(Effect.catch(() => Effect.void))),
+                        finish(
+                          "timeout",
+                          undefined,
+                          handle.kill({ forceKillAfter: Duration.seconds(3) }).pipe(Effect.catch(() => Effect.void)),
+                        ),
                       ),
                     ),
                   )

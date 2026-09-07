@@ -38,10 +38,10 @@ export function compatibility(input: unknown): Compatibility | undefined {
 }
 
 export function parse(input: string): { providerID: Provider.ID; modelID: ID } {
-  const [providerID, ...modelID] = input.split("/")
+  const index = input.indexOf("/")
   return {
-    providerID: Provider.ID.make(providerID),
-    modelID: ID.make(modelID.join("/")),
+    providerID: Provider.ID.make(index === -1 ? input : input.slice(0, index)),
+    modelID: ID.make(index === -1 ? "" : input.slice(index + 1)),
   }
 }
 

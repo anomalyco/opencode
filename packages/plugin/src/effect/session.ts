@@ -30,10 +30,17 @@ export interface SessionContext {
   providerOptions: Record<string, unknown>
 }
 
+/**
+ * Why a Session request is being made. Auxiliary requests share the Session's
+ * hook identity but need to be told apart from the agent loop.
+ */
+export type SessionRequestKind = "primary" | "compaction" | "title" | "generate"
+
 export interface SessionModelRequest {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
+  readonly kind: SessionRequestKind
   baseURL?: string
   headers: Record<string, string>
 }
@@ -42,6 +49,7 @@ export interface SessionHttpRequest {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
+  readonly kind: SessionRequestKind
   request: Request
 }
 
@@ -49,6 +57,7 @@ export interface SessionHttpResponse {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
+  readonly kind: SessionRequestKind
   readonly request: Request
   response: Response
 }

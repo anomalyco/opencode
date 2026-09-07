@@ -7,5 +7,7 @@ export { type FatalRendererErrorLog, type Platform, PlatformProvider } from "./r
 export { ServerConnection, useServers } from "./runtime/server/registry"
 export { useTabs } from "./shell/tabs/tabs"
 export { createDraftStore } from "./runtime/persistence/drafts"
+export { createNamespaceStorage, type NamespaceStorage } from "./runtime/persistence/namespace"
+export { flushPersisted } from "./runtime/persistence/persist"
 export { useWslServers } from "./servers/wsl/context"
 export { type UpdaterPlatform, type UpdaterState } from "./shell/updates/types"

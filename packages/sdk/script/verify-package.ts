@@ -105,9 +105,30 @@ import { OpenCodeWorkerd } from "@opencode-ai/sdk/workerd"
 
 export class OpenCodeDO {
   constructor(state) {
+    this.configurations = 0
     this.opencode = state.blockConcurrencyWhile(() => OpenCodeWorkerd.create({
       storage: state.storage,
       app: { version: "packed-workerd" },
+      models: { fetch: false },
+      instances: {
+        key: session => String(session.metadata.thread),
+        configure: key => {
+          this.configurations++
+          return {
+            plugins: [{
+              id: "packed-instance",
+              async setup(ctx) {
+                if (ctx.app.version !== "packed-workerd" || ctx.location.directory !== "/workspace") {
+                  throw new Error("Selected instance did not inherit the host configuration")
+                }
+                await ctx.session.hook("prompt", event => {
+                  event.prompt.text += ":" + key
+                })
+              },
+            }],
+          }
+        },
+      },
     }))
   }
 
@@ -116,6 +137,18 @@ export class OpenCodeDO {
       throw new Error("Packed workerd SHA-256 mismatch")
     }
     const opencode = await this.opencode
+    const sessions = await Promise.all([1, 2].map(() => opencode.sessions.create({
+      location: { directory: "/workspace" },
+      metadata: { thread: "packed-thread" },
+    })))
+    const admitted = await Promise.all(sessions.map(session => opencode.sessions.prompt({
+      sessionID: session.id,
+      text: "Packed prompt",
+      resume: false,
+    })))
+    if (this.configurations !== 1 || admitted.some(item => item.payload.text !== "Packed prompt:packed-thread")) {
+      throw new Error("Packed instance configuration did not share or prepare prompts correctly")
+    }
     return Response.json(await opencode.health.get())
   }
 }
@@ -183,9 +216,6 @@ for (const module of modules) {
 
   const transpiler = new Bun.Transpiler({ loader: "js" })
   const bundled = await Bun.file(join(consumer, "dist/worker.js")).text()
-  if (/createRequire\s*\(\s*import\.meta\.url\s*\)/.test(bundled)) {
-    throw new Error("Packed workerd bundle contains Bun's eager Node require initializer")
-  }
   const bunGlobals = Array.from(new Set(bundled.match(/\bBun\.[A-Za-z_$][\w$]*/g) ?? []))
   if (bunGlobals.length > 0) throw new Error(`Packed workerd bundle references Bun globals: ${bunGlobals.join(", ")}`)
   const leaked = [
@@ -197,6 +227,8 @@ for (const module of modules) {
   ].filter((specifier) => specifier === "bun" || specifier.startsWith("bun:"))
   if (leaked.length > 0) throw new Error(`Packed workerd bundle statically imports Bun builtins: ${leaked.join(", ")}`)
 
+  // Boot in workerd to catch eager Node initializers; lazy createRequire calls
+  // in native-only code are valid and must not fail a bundle-wide text check.
   await $`node boot.mjs`.cwd(consumer)
   console.log("packed SDK consumer OK")
 } finally {
