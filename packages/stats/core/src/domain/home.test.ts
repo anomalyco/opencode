@@ -7,7 +7,7 @@ process.env.SST_RESOURCE_StatsDatabase = JSON.stringify({ url: "mysql://localhos
 const { buildRetentionEntries } = await import("./home")
 
 describe("retention aggregates", () => {
-  test("pools the latest seven cohorts and ranks models above the sample floor", () => {
+  test("pools the latest seven weekly cohorts and ranks models above the sample floor", () => {
     const rows = [
       ...cohorts("model-a", "provider-a", 8, 20, 10),
       ...cohorts("model-b", "provider-b", 8, 20, 12),
@@ -16,20 +16,20 @@ describe("retention aggregates", () => {
     const entries = buildRetentionEntries(rows)
 
     expect(entries.find((item) => item.model === "model-a")).toMatchObject({
-      eligibleUserDays: 140,
-      retainedUserDays: 70,
+      eligibleUserWeeks: 140,
+      retainedUserWeeks: 70,
       rate: 50,
       rank: 2,
     })
     expect(entries.find((item) => item.model === "model-b")).toMatchObject({
-      eligibleUserDays: 140,
-      retainedUserDays: 84,
+      eligibleUserWeeks: 140,
+      retainedUserWeeks: 84,
       rate: 60,
       rank: 1,
     })
     expect(entries.find((item) => item.model === "small-model")).toMatchObject({
-      eligibleUserDays: 70,
-      retainedUserDays: 63,
+      eligibleUserWeeks: 70,
+      retainedUserWeeks: 63,
       rate: 90,
       rank: null,
     })

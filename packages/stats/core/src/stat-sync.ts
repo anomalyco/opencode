@@ -20,7 +20,9 @@ const DATALAKE_INGESTION_LAG_MS = 5 * 60_000
 const STATS_DATA_START_MS = new Date("2026-05-28T00:00:00.000Z").getTime()
 const WEEK_MS = 7 * 86_400_000
 const DISPLAY_WINDOW_MS = 56 * 86_400_000
-const RETENTION_INCREMENTAL_LOOKBACK_MS = 9 * 86_400_000
+// A retention result needs one complete activity week plus its complete return
+// week. Keep another partial week of slack around the ISO-week boundary.
+const RETENTION_INCREMENTAL_LOOKBACK_MS = 16 * 86_400_000
 // Anchor incremental passes to the ISO week containing this lookback, so the pass
 // after a week boundary still recomputes the previous week's final aggregates even
 // if the boundary pass itself failed.
@@ -80,7 +82,7 @@ export const syncStats: (options?: {
         retentionStats.replace(retentionRows, {
           cohortDates: retentionQueries.flatMap((item) => item.cohortDates),
           dataset: Resource.StatsSyncConfig.dataset,
-          tier: "all",
+          tier: "Go",
         }),
       ],
       {
