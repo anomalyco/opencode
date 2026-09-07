@@ -99,6 +99,73 @@ describe("namespace storage", () => {
     expect(await storage.getItem("model")).toBeNull()
   })
 
+  test("a batch is handed to the driver synchronously, not behind an earlier reply", async () => {
+    const memory = memoryDriver()
+    const first = Promise.withResolvers<void>()
+    memory.driver.update = async (name, insert, remove) => {
+      memory.calls.push({ kind: "update", name, insert, remove })
+      if (memory.calls.filter((call) => call.kind === "update").length === 1) await first.promise
+    }
+    const storage = createNamespaceStorage(memory.driver, "w", { delay: 10_000 })
+    void storage.setItem("tabs", "[1]")
+    void storage.flush()
+    void storage.setItem("tabs", "[2]")
+    void storage.flush()
+    // Both batches reached the driver while the first reply is still outstanding.
+    expect(memory.calls.filter((call) => call.kind === "update").map((call) => call.insert)).toEqual([
+      { tabs: "[1]" },
+      { tabs: "[2]" },
+    ])
+    first.resolve()
+  })
+
+  test("a pending load or an external change cannot overwrite a value that is in flight", async () => {
+    const loaded = Promise.withResolvers<Record<string, string>>()
+    const accepted = Promise.withResolvers<void>()
+    const driver: NamespaceDriver = {
+      items: () => loaded.promise,
+      update: () => accepted.promise,
+      clear: async () => undefined,
+    }
+    const storage = createNamespaceStorage(driver, "g", { delay: 10_000 })
+    const read = storage.getItem("model")
+    void storage.setItem("model", "local")
+    void storage.flush()
+    storage.accept({ model: "other-window-older" }, [])
+    loaded.resolve({ model: "snapshot-older" })
+    expect(await read).toBe("local")
+    accepted.resolve()
+    await storage.flush()
+    expect(await storage.getItem("model")).toBe("local")
+    storage.accept({ model: "other-window-newer" }, [])
+    expect(await storage.getItem("model")).toBe("other-window-newer")
+  })
+
+  test("a failed batch does not requeue a value a later batch already replaced", async () => {
+    const memory = memoryDriver()
+    const replies: PromiseWithResolvers<void>[] = []
+    memory.driver.update = async (name, insert, remove) => {
+      memory.calls.push({ kind: "update", name, insert, remove })
+      const reply = Promise.withResolvers<void>()
+      replies.push(reply)
+      await reply.promise
+      for (const [key, value] of Object.entries(insert)) memory.data.set(name, new Map([[key, value]]))
+    }
+    const storage = createNamespaceStorage(memory.driver, "w", { delay: 10_000 })
+    void storage.setItem("tabs", "old")
+    void storage.flush()
+    void storage.setItem("tabs", "new")
+    void storage.flush()
+    replies[0]!.reject(new Error("disk full"))
+    replies[1]!.resolve()
+    await storage.flush()
+    await storage.flush()
+    const updates = memory.calls.filter((call) => call.kind === "update")
+    expect(updates.map((call) => call.insert)).toEqual([{ tabs: "old" }, { tabs: "new" }])
+    expect(memory.data.get("w")?.get("tabs")).toBe("new")
+    expect(await storage.getItem("tabs")).toBe("new")
+  })
+
   test("clear drops the cache and queued changes and clears the driver", async () => {
     const memory = memoryDriver({ w: { tabs: "[]" } })
     const storage = createNamespaceStorage(memory.driver, "w", { delay: 10_000 })

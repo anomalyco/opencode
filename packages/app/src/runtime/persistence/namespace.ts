@@ -10,7 +10,7 @@ export type NamespaceDriver = {
 export type NamespaceStorage = AsyncStorage & {
   /** Write every queued change now. Resolves when the driver has accepted it. */
   flush(): Promise<void>
-  /** Apply changes another window made, without touching keys this window has queued. */
+  /** Apply changes another window made, without touching keys this window has changed locally. */
   accept(insert: Record<string, string>, remove: string[]): void
 }
 
@@ -19,6 +19,11 @@ export const namespaceFlushDelay = 100
 // In-memory truth for a namespace. Reads load the namespace once and are Map lookups from then
 // on; writes update the cache immediately and are batched into one driver call per flush window,
 // so a burst of setter calls costs one round trip. Mirrors VS Code's Storage class.
+//
+// Every local write gets a sequence number that stays recorded until the host has accepted that
+// exact write. While it is recorded, neither the initial load, another window's change, nor a
+// retry of an older batch may replace the key. Batches are posted as soon as they are cut, never
+// behind an earlier reply, so a flush on pagehide is on the wire before the page goes away.
 export function createNamespaceStorage(
   driver: NamespaceDriver,
   name: string,
@@ -26,44 +31,49 @@ export function createNamespaceStorage(
 ): NamespaceStorage {
   const delay = options.delay ?? namespaceFlushDelay
   const cache = new Map<string, string>()
-  const inserts = new Map<string, string>()
-  const removes = new Set<string>()
+  const local = new Map<string, { seq: number; value: string | null }>()
+  const dirty = new Set<string>()
+  const inflight = new Set<Promise<void>>()
+  let seq = 0
   let loading: Promise<void> | undefined
-  let inflight: Promise<void> = Promise.resolve()
   let timer: ReturnType<typeof setTimeout> | undefined
 
   const load = () =>
     (loading ??= driver.items(name).then((items) => {
-      // Writes queued while loading are newer than what the driver returned.
       for (const [key, value] of Object.entries(items)) {
-        if (!inserts.has(key) && !removes.has(key)) cache.set(key, value)
+        if (!local.has(key)) cache.set(key, value)
       }
     }))
 
-  const schedule = () => {
+  const write = (key: string, value: string | null) => {
+    if (value === null) cache.delete(key)
+    else cache.set(key, value)
+    local.set(key, { seq: ++seq, value })
+    dirty.add(key)
     timer ??= setTimeout(() => void flush(), delay)
   }
 
   const flush = () => {
     clearTimeout(timer)
     timer = undefined
-    if (inserts.size === 0 && removes.size === 0) return inflight
-    const insert = Object.fromEntries(inserts)
-    const remove = [...removes]
-    inserts.clear()
-    removes.clear()
-    // Flushes run in order so a later batch never lands before an earlier one.
-    inflight = inflight.then(() =>
-      driver.update(name, insert, remove).catch((error: unknown) => {
-        // Keep what has not been superseded queued for the next flush.
-        for (const [key, value] of Object.entries(insert)) {
-          if (!inserts.has(key) && !removes.has(key)) inserts.set(key, value)
-        }
-        for (const key of remove) if (!inserts.has(key) && !removes.has(key)) removes.add(key)
-        console.error(`[persistence] flush failed for ${name}`, error)
-      }),
-    )
-    return inflight
+    if (dirty.size > 0) {
+      const batch = [...dirty].map((key) => ({ key, ...local.get(key)! }))
+      dirty.clear()
+      const insert = Object.fromEntries(batch.filter((entry) => entry.value !== null).map((e) => [e.key, e.value!]))
+      const remove = batch.filter((entry) => entry.value === null).map((entry) => entry.key)
+      const current = (entry: { key: string; seq: number }) => local.get(entry.key)?.seq === entry.seq
+      const request = driver
+        .update(name, insert, remove)
+        .then(() => batch.filter(current).forEach((entry) => local.delete(entry.key)))
+        .catch((error: unknown) => {
+          // Only a value nothing newer has replaced is worth retrying.
+          batch.filter(current).forEach((entry) => dirty.add(entry.key))
+          console.error(`[persistence] flush failed for ${name}`, error)
+        })
+        .finally(() => inflight.delete(request))
+      inflight.add(request)
+    }
+    return Promise.all(inflight).then(() => undefined)
   }
 
   const storage: NamespaceStorage = {
@@ -71,24 +81,14 @@ export function createNamespaceStorage(
       await load()
       return cache.get(key) ?? null
     },
-    setItem: async (key, value) => {
-      cache.set(key, value)
-      removes.delete(key)
-      inserts.set(key, value)
-      schedule()
-    },
-    removeItem: async (key) => {
-      cache.delete(key)
-      inserts.delete(key)
-      removes.add(key)
-      schedule()
-    },
+    setItem: async (key, value) => write(key, value),
+    removeItem: async (key) => write(key, null),
     clear: async () => {
       clearTimeout(timer)
       timer = undefined
       cache.clear()
-      inserts.clear()
-      removes.clear()
+      local.clear()
+      dirty.clear()
       loading = Promise.resolve()
       await driver.clear(name)
     },
@@ -105,10 +105,8 @@ export function createNamespaceStorage(
     },
     flush,
     accept(insert, remove) {
-      for (const [key, value] of Object.entries(insert)) {
-        if (!inserts.has(key) && !removes.has(key)) cache.set(key, value)
-      }
-      for (const key of remove) if (!inserts.has(key) && !removes.has(key)) cache.delete(key)
+      for (const [key, value] of Object.entries(insert)) if (!local.has(key)) cache.set(key, value)
+      for (const key of remove) if (!local.has(key)) cache.delete(key)
     },
   }
   return storage

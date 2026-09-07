@@ -55,10 +55,12 @@ On desktop, `platform.storage(name)` returns a `NamespaceStorage` (`namespace.ts
 in-memory truth for one storage namespace, modelled on VS Code's `Storage` class. The
 namespace is loaded from the host once, reads are Map lookups from then on, and writes
 update the cache immediately while being batched into one host round trip per flush
-window (`namespaceFlushDelay`). `flush()` writes now; the desktop platform flushes every
-namespace before the IPC runtime is disposed and whenever the window is hidden. Changes
-made by another window arrive through `accept(insert, remove)` and never override a key
-this window has queued.
+window (`namespaceFlushDelay`). `flush()` hands the batch to the driver synchronously, so a
+flush on page hide is on the wire before the page goes away; the desktop platform flushes
+every namespace before the IPC runtime is disposed and whenever the window is hidden. Each
+local write carries a sequence number that is kept until the host accepts that exact write;
+until then neither the initial load, a change from another window (`accept`), nor the retry
+of an older failed batch can replace the key.
 
 ## Migrations
 
