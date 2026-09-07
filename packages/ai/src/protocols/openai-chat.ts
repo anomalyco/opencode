@@ -257,7 +257,7 @@ interface PendingToolDelta {
 }
 
 export interface ParserState {
-  readonly providerMetadataKey: string
+  readonly routeID: string
   readonly tools: ToolStream.State<number>
   readonly pendingTools: Partial<Record<number, PendingToolDelta>>
   readonly toolCallEvents: ReadonlyArray<LLMEvent>
@@ -329,18 +329,17 @@ const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart
 const openAICompatibleReasoningContent = (native: unknown) =>
   isRecord(native) && typeof native.reasoning_content === "string" ? native.reasoning_content : undefined
 
-const reasoningField = (part: ReasoningPart, providerMetadataKey: string) => {
-  const field = part.providerMetadata?.[providerMetadataKey]?.reasoningField
+const reasoningField = (part: ReasoningPart, routeID: string) => {
+  const field = part.providerMetadata?.[routeID]?.reasoningField
   return typeof field === "string" ? field : undefined
 }
 
-const reasoningDetails = (parts: ReadonlyArray<ReasoningPart>, native: unknown, providerMetadataKey: string) => {
+const reasoningDetails = (parts: ReadonlyArray<ReasoningPart>, native: unknown, routeID: string) => {
   const observed = parts.flatMap((part) => {
-    const details = part.providerMetadata?.[providerMetadataKey]?.reasoningDetails
+    const details = part.providerMetadata?.[routeID]?.reasoningDetails
     return Array.isArray(details) ? details : []
   })
-  if (parts.some((part) => Array.isArray(part.providerMetadata?.[providerMetadataKey]?.reasoningDetails)))
-    return observed
+  if (parts.some((part) => Array.isArray(part.providerMetadata?.[routeID]?.reasoningDetails))) return observed
   if (isRecord(native) && Array.isArray(native.reasoning_details)) return native.reasoning_details
 }
 
@@ -372,7 +371,7 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
   message: OpenAIChatRequestMessage,
   configuredField: string | undefined,
   requireReasoning: boolean,
-  options: LoweringOptions & { readonly providerMetadataKey: string },
+  options: LoweringOptions & { readonly routeID: string },
 ) {
   const content: TextPart[] = []
   const reasoning: ReasoningPart[] = []
@@ -394,13 +393,13 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
     }
   }
   const text = reasoning.map((part) => part.text).join("")
-  const details = reasoningDetails(reasoning, message.native?.openaiCompatible, options.providerMetadataKey)
+  const details = reasoningDetails(reasoning, message.native?.openaiCompatible, options.routeID)
   const observedField = reasoning
-    .map((part) => reasoningField(part, options.providerMetadataKey))
+    .map((part) => reasoningField(part, options.routeID))
     .find((value) => value !== undefined)
   const nativeReasoning = openAICompatibleReasoningContent(message.native?.openaiCompatible)
   const fullyStructured = reasoning.every((part) =>
-    Array.isArray(part.providerMetadata?.[options.providerMetadataKey]?.reasoningDetails),
+    Array.isArray(part.providerMetadata?.[options.routeID]?.reasoningDetails),
   )
   const field = (() => {
     if (configuredField !== undefined && (requireReasoning || reasoning.length > 0 || nativeReasoning !== undefined))
@@ -469,7 +468,7 @@ const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (
   message: OpenAIChatRequestMessage,
   reasoningField: string | undefined,
   requireReasoning: boolean,
-  options: LoweringOptions & { readonly providerMetadataKey: string },
+  options: LoweringOptions & { readonly routeID: string },
 ) {
   if (message.role === "user") return [yield* lowerUserMessage(message, options)]
   if (message.role === "assistant")
@@ -505,7 +504,7 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
   const mistral = ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((family) => modelID.includes(family))
   const lowering = {
     ...options,
-    providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
+    routeID: request.model.route.id,
     toolCallID: (id: string) => {
       if (mistral)
         return id
@@ -833,7 +832,7 @@ const mapFinishReason = Effect.fn("OpenAIChat.mapFinishReason")(function* (event
 // Providers differ on cache-hit location: OpenAI uses
 // `prompt_tokens_details.cached_tokens`, DeepSeek uses
 // `prompt_cache_hit_tokens`, and Zai uses top-level `cached_tokens`.
-const mapUsage = (usage: OpenAIChatEvent["usage"], providerMetadataKey: string): Usage | undefined => {
+const mapUsage = (usage: OpenAIChatEvent["usage"], routeID: string): Usage | undefined => {
   if (!usage) return undefined
   const input = usage.prompt_tokens ?? undefined
   const output = usage.completion_tokens ?? undefined
@@ -852,7 +851,7 @@ const mapUsage = (usage: OpenAIChatEvent["usage"], providerMetadataKey: string):
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(input, output, usage.total_tokens ?? undefined),
-    providerMetadata: { [providerMetadataKey]: usage },
+    providerMetadata: { [routeID]: usage },
   })
 }
 
@@ -927,11 +926,11 @@ const conflictingDetailValue = (previous: unknown, current: unknown) =>
   previous !== undefined && previous !== null && current !== undefined && current !== null && previous !== current
 
 const reasoningMetadata = (
-  providerMetadataKey: string,
+  routeID: string,
   field: ParserState["reasoningField"],
   details?: ReadonlyArray<unknown>,
 ) => ({
-  [providerMetadataKey]: {
+  [routeID]: {
     ...(field ? { reasoningField: field } : {}),
     ...(details ? { reasoningDetails: details } : {}),
   },
@@ -955,8 +954,8 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     // `choice.usage` instead of the top-level `usage` field.
     const choiceUsage = (choice as unknown as { usage?: OpenAIChatEvent["usage"] })?.usage
     const usage =
-      mapUsage(event.usage, state.providerMetadataKey) ??
-      (choiceUsage ? mapUsage(choiceUsage, state.providerMetadataKey) : undefined) ??
+      mapUsage(event.usage, state.routeID) ??
+      (choiceUsage ? mapUsage(choiceUsage, state.routeID) : undefined) ??
       state.usage
     const rawFinishReason = choice?.finish_reason
     const finishReason = rawFinishReason
@@ -995,7 +994,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     const detailDelta = Array.isArray(delta?.reasoning_details) ? delta.reasoning_details : undefined
     if (detailDelta !== undefined) appendReasoningDetails(state.reasoningDetails, detailDelta)
     const reasoningDetailsObserved = state.reasoningDetailsObserved || detailDelta !== undefined
-    const deltaMetadata = reasoningMetadata(state.providerMetadataKey, reasoningField)
+    const deltaMetadata = reasoningMetadata(state.routeID, reasoningField)
     const text = detailDelta?.length ? (detailText(detailDelta) ?? reasoning?.text) : reasoning?.text
     if (text !== undefined) lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", text, deltaMetadata)
     else if (
@@ -1084,7 +1083,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
     return [
       {
-        providerMetadataKey: state.providerMetadataKey,
+        routeID: state.routeID,
         tools: finished?.tools ?? tools,
         pendingTools,
         toolCallEvents: finished?.events ?? state.toolCallEvents,
@@ -1128,7 +1127,7 @@ const finishEvents = Effect.fn("OpenAIChat.finishEvents")(function* (state: Pars
   // Snapshot details at publish time so the emitted event never observes later
   // mutation of the accumulated `reasoningDetails` array.
   const metadata = reasoningMetadata(
-    state.providerMetadataKey,
+    state.routeID,
     state.reasoningField,
     state.reasoningDetailsObserved ? [...state.reasoningDetails] : undefined,
   )
@@ -1138,7 +1137,7 @@ const finishEvents = Effect.fn("OpenAIChat.finishEvents")(function* (state: Pars
           state.lifecycle,
           events,
           "reasoning-0",
-          reasoningMetadata(state.providerMetadataKey, state.reasoningField),
+          reasoningMetadata(state.routeID, state.reasoningField),
         )
       : state.lifecycle
   const ended = Lifecycle.reasoningEnd(started, events, "reasoning-0", metadata)
@@ -1166,7 +1165,7 @@ export const protocol = Protocol.make({
   stream: {
     event: OpenAIChatStreamEvent,
     initial: (request) => ({
-      providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
+      routeID: request.model.route.id,
       tools: ToolStream.empty<number>(),
       pendingTools: {},
       toolCallEvents: [],
@@ -1190,7 +1189,6 @@ export const httpTransport = HttpTransport.sseJson.with<OpenAIChatBody>().with({
 export const route = Route.make({
   id: ADAPTER,
   provider: "openai",
-  providerMetadataKey: "openai",
   protocol,
   endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
   auth: Auth.none,

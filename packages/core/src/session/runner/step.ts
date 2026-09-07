@@ -75,7 +75,7 @@ export const make = Effect.gen(function* () {
       assistantMessageID: input.assistantMessageID,
       agent: input.agent,
       model: input.model.ref,
-      providerMetadataKey: input.model.model.route.providerMetadataKey ?? input.model.model.provider,
+      routeID: input.model.model.route.id,
       snapshot: startSnapshot,
     })
     const toolRuns: Array<{

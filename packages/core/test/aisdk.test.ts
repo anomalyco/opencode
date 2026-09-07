@@ -145,7 +145,7 @@ it.effect("uses canonical names and metadata without merging connection cache pa
 
     const resolved = yield* aisdk.model(input)
     expect(resolved).toMatchObject({ id: "api-model", provider: "openai" })
-    expect(resolved.route).toMatchObject({ provider: "openai", providerMetadataKey: "openai" })
+    expect(resolved.route).toMatchObject({ provider: "openai", id: "ai-sdk:@ai-sdk/openai-compatible" })
     expect(resolved.route.model({ id: "another-model" })).toMatchObject({ provider: "openai" })
     const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
     expect(prepared.body.providerOptions).toEqual({ openai: { reasoningEffort: "high" } })
@@ -385,22 +385,26 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
     })
 
     const resolved = yield* aisdk.model(model("@ai-sdk/anthropic"))
-    expect(resolved.route.providerMetadataKey).toBe("anthropic")
+    expect(resolved.route.id).toBe("ai-sdk:@ai-sdk/anthropic")
     const prepared = yield* compileRequest(
       LLM.request({
         model: resolved,
         messages: [
           Message.assistant([
-            { type: "text", text: "Answer", providerMetadata: { anthropic: { cacheControl: { type: "ephemeral" } } } },
+            {
+              type: "text",
+              text: "Answer",
+              providerMetadata: { [resolved.route.id]: { cacheControl: { type: "ephemeral" } } },
+            },
             { type: "text", text: " without metadata" },
-            { type: "reasoning", text: "Think", providerMetadata: { anthropic: { signature: "signed" } } },
+            { type: "reasoning", text: "Think", providerMetadata: { [resolved.route.id]: { signature: "signed" } } },
             {
               type: "tool-call",
               id: "hosted",
               name: "web_search",
               input: { query: "Effect" },
               providerExecuted: true,
-              providerMetadata: { anthropic: { blockType: "server_tool_use" } },
+              providerMetadata: { [resolved.route.id]: { blockType: "server_tool_use" } },
             },
           ]),
         ],
@@ -435,6 +439,41 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
             providerOptions: { anthropic: { blockType: "server_tool_use" } },
           },
         ],
+      },
+    ])
+  }),
+)
+
+it.effect("round-trips SDK metadata through the route namespace", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            { type: "reasoning-start", id: "thinking" },
+            { type: "reasoning-delta", id: "thinking", delta: "Think" },
+            { type: "reasoning-end", id: "thinking", providerMetadata: { anthropic: { signature: "signed" } } },
+            { type: "finish", finishReason: { unified: "stop", raw: "end_turn" }, usage },
+          ]),
+      }
+    })
+    const resolved = yield* aisdk.model(model("@ai-sdk/anthropic"))
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Think" })).pipe(
+      Effect.provide(client),
+    )
+    expect(response.message.content).toEqual([
+      {
+        type: "reasoning",
+        text: "Think",
+        providerMetadata: { "ai-sdk:@ai-sdk/anthropic": { signature: "signed" } },
+      },
+    ])
+    const replay = yield* compileRequest(LLM.request({ model: resolved, messages: [response.message] }))
+    expect(replay.body.prompt).toEqual([
+      {
+        role: "assistant",
+        content: [{ type: "reasoning", text: "Think", providerOptions: { anthropic: { signature: "signed" } } }],
       },
     ])
   }),

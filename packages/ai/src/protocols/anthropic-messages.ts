@@ -455,7 +455,7 @@ type AnthropicEvent = Schema.Schema.Type<typeof AnthropicEvent>
 interface ParserState {
   readonly provider: LLMRequest["model"]["provider"]
   readonly compactions: Readonly<Record<number, string | null>>
-  readonly providerMetadataKey: string
+  readonly routeID: string
   readonly tools: ToolStream.State<number>
   readonly reasoningSignatures: Readonly<Record<number, string>>
   readonly usage?: Usage
@@ -563,14 +563,14 @@ const serverToolResultType = (name: string): AnthropicServerToolResultType | und
 
 const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult")(function* (
   part: ToolResultPart,
-  providerMetadataKey: string,
+  routeID: string,
 ) {
   const wireType = serverToolResultType(part.name)
   if (!wireType)
     return yield* invalid(`Anthropic Messages does not know how to round-trip server tool result for ${part.name}`)
   // Prefer the provider-owned replay payload; fall back to the result value for
   // histories constructed directly from provider events.
-  const payload = part.providerMetadata?.[providerMetadataKey]?.["result"] ?? part.result.value
+  const payload = part.providerMetadata?.[routeID]?.["result"] ?? part.result.value
   return {
     type: wireType,
     tool_use_id: scrubToolCallID(part.id),
@@ -857,7 +857,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
   breakpoints: Cache.Breakpoints,
 ) {
   const messages: AnthropicMessage[] = []
-  const providerMetadataKey = request.model.route.providerMetadataKey ?? String(request.model.provider)
+  const routeID = request.model.route.id
 
   for (const [index, message] of request.messages.entries()) {
     if (message.role === "system") {
@@ -911,8 +911,8 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
         if (part.type === "reasoning") {
           // A signature marks visible thinking; only signature-less parts carrying
           // redactedData round-trip as opaque redacted_thinking blocks.
-          const signature = part.encrypted ?? signatureFromMetadata(part.providerMetadata, providerMetadataKey)
-          const redactedData = redactedDataFromMetadata(part.providerMetadata, providerMetadataKey)
+          const signature = part.encrypted ?? signatureFromMetadata(part.providerMetadata, routeID)
+          const redactedData = redactedDataFromMetadata(part.providerMetadata, routeID)
           if (signature === undefined && redactedData !== undefined) {
             content.push({ type: "redacted_thinking", data: redactedData })
             continue
@@ -941,7 +941,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted) {
-          content.push(yield* lowerServerToolResult(part, providerMetadataKey))
+          content.push(yield* lowerServerToolResult(part, routeID))
           continue
         }
         return yield* invalid(
@@ -1148,7 +1148,7 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
 // inclusive `inputTokens` the rest of the contract expects. Extended
 // thinking tokens are included in `output_tokens`; newer responses also
 // expose that subset through `output_tokens_details.thinking_tokens`.
-const mapUsage = (usage: AnthropicUsage | undefined, providerMetadataKey: string): Usage | undefined => {
+const mapUsage = (usage: AnthropicUsage | undefined, routeID: string): Usage | undefined => {
   if (!usage) return undefined
   const iterations = usage.iterations?.length ? usage.iterations : [usage]
   const last = usage.iterations?.at(-1)
@@ -1175,7 +1175,7 @@ const mapUsage = (usage: AnthropicUsage | undefined, providerMetadataKey: string
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: ProviderShared.sumTokens(...iterations.map((item) => item.output_tokens_details?.thinking_tokens)),
     totalTokens: ProviderShared.totalTokens(inputTokens, outputTokens, undefined),
-    providerMetadata: { [providerMetadataKey]: usage },
+    providerMetadata: { [routeID]: usage },
   })
 }
 
@@ -1184,7 +1184,7 @@ const mapUsage = (usage: AnthropicUsage | undefined, providerMetadataKey: string
 // field prefers `right` when defined, falls back to `left`. `inputTokens` is
 // recomputed from the merged breakdown so the inclusive total stays
 // consistent with `nonCached + cacheRead + cacheWrite`.
-const mergeUsage = (left: Usage | undefined, right: Usage | undefined, providerMetadataKey: string) => {
+const mergeUsage = (left: Usage | undefined, right: Usage | undefined, routeID: string) => {
   if (!left) return right
   if (!right) return left
   const nonCachedInputTokens = right.nonCachedInputTokens ?? left.nonCachedInputTokens
@@ -1203,9 +1203,7 @@ const mergeUsage = (left: Usage | undefined, right: Usage | undefined, providerM
     reasoningTokens,
     totalTokens: ProviderShared.totalTokens(inputTokens, outputTokens, undefined),
     providerMetadata: {
-      [providerMetadataKey]:
-        mergeJsonRecords(left.providerMetadata?.[providerMetadataKey], right.providerMetadata?.[providerMetadataKey]) ??
-        {},
+      [routeID]: mergeJsonRecords(left.providerMetadata?.[routeID], right.providerMetadata?.[routeID]) ?? {},
     },
   })
 }
@@ -1223,7 +1221,7 @@ const SERVER_TOOL_RESULT_NAMES: Record<AnthropicServerToolResultType, string> = 
 
 const isServerToolResultType = (type: string): type is AnthropicServerToolResultType => type in SERVER_TOOL_RESULT_NAMES
 
-const serverToolResultEvent = (block: AnthropicStreamBlock, providerMetadataKey: string): LLMEvent | undefined => {
+const serverToolResultEvent = (block: AnthropicStreamBlock, routeID: string): LLMEvent | undefined => {
   if (!block.type || !isServerToolResultType(block.type)) return undefined
   const errorPayload =
     typeof block.content === "object" && block.content !== null && "type" in block.content
@@ -1237,7 +1235,7 @@ const serverToolResultEvent = (block: AnthropicStreamBlock, providerMetadataKey:
     providerExecuted: true,
     // The complete payload is irreducible provider replay state: subsequent
     // stateless requests must round-trip the typed result block verbatim.
-    providerMetadata: providerMetadata(providerMetadataKey, { blockType: block.type, result: block.content }),
+    providerMetadata: providerMetadata(routeID, { blockType: block.type, result: block.content }),
   })
 }
 
@@ -1246,8 +1244,8 @@ type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 const NO_EVENTS: StepResult["1"] = []
 
 const onMessageStart = (state: ParserState, event: AnthropicEvent): StepResult => {
-  const usage = mapUsage(event.message?.usage, state.providerMetadataKey)
-  return [usage ? { ...state, usage: mergeUsage(state.usage, usage, state.providerMetadataKey) } : state, NO_EVENTS]
+  const usage = mapUsage(event.message?.usage, state.routeID)
+  return [usage ? { ...state, usage: mergeUsage(state.usage, usage, state.routeID) } : state, NO_EVENTS]
 }
 
 const onContentBlockStart = (
@@ -1299,9 +1297,7 @@ const onContentBlockStart = (
     const events: LLMEvent[] = []
     const id = `reasoning-${event.index ?? 0}`
     const metadata =
-      block.signature === undefined
-        ? undefined
-        : providerMetadata(state.providerMetadataKey, { signature: block.signature })
+      block.signature === undefined ? undefined : providerMetadata(state.routeID, { signature: block.signature })
     const lifecycle = Lifecycle.reasoningStart(state.lifecycle, events, id, metadata)
     return [
       {
@@ -1330,14 +1326,14 @@ const onContentBlockStart = (
           state.lifecycle,
           events,
           `reasoning-${event.index ?? 0}`,
-          providerMetadata(state.providerMetadataKey, { redactedData: block.data }),
+          providerMetadata(state.routeID, { redactedData: block.data }),
         ),
       },
       events,
     ]
   }
 
-  const result = serverToolResultEvent(block, state.providerMetadataKey)
+  const result = serverToolResultEvent(block, state.routeID)
   if (!result) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
   return [{ ...state, lifecycle: Lifecycle.stepStart(state.lifecycle, events) }, [...events, result]]
@@ -1438,7 +1434,7 @@ const onContentBlockStop = Effect.fn("AnthropicMessages.onContentBlockStop")(fun
         Lifecycle.textEnd(state.lifecycle, events, `text-${event.index}`),
         events,
         `reasoning-${event.index}`,
-        signature === undefined ? undefined : providerMetadata(state.providerMetadataKey, { signature }),
+        signature === undefined ? undefined : providerMetadata(state.routeID, { signature }),
       )
   events.push(...resultEvents)
   const reasoningSignatures = { ...state.reasoningSignatures }
@@ -1450,7 +1446,7 @@ const onMessageDelta = (
   state: ParserState,
   event: AnthropicEvent & { readonly delta?: AnthropicStreamDelta },
 ): StepResult => {
-  const usage = mergeUsage(state.usage, mapUsage(event.usage, state.providerMetadataKey), state.providerMetadataKey)
+  const usage = mergeUsage(state.usage, mapUsage(event.usage, state.routeID), state.routeID)
   const pendingFinish = (() => {
     const stopReason = event.delta?.stop_reason
     if (stopReason === null || stopReason === undefined) return state.pendingFinish
@@ -1459,7 +1455,7 @@ const onMessageDelta = (
     const finishMetadata =
       stopSequence === null || stopSequence === undefined
         ? state.pendingFinish?.providerMetadata
-        : providerMetadata(state.providerMetadataKey, { stopSequence })
+        : providerMetadata(state.routeID, { stopSequence })
     return {
       reason: {
         normalized: mapFinishReason(stopReason),
@@ -1487,12 +1483,7 @@ const onMessageStop = Effect.fn("AnthropicMessages.onMessageStop")(function* (st
   events.push(...result.events)
   const closed = Object.entries(state.reasoningSignatures).reduce(
     (current, [index, signature]) =>
-      Lifecycle.reasoningEnd(
-        current,
-        events,
-        `reasoning-${index}`,
-        providerMetadata(state.providerMetadataKey, { signature }),
-      ),
+      Lifecycle.reasoningEnd(current, events, `reasoning-${index}`, providerMetadata(state.routeID, { signature })),
     lifecycle,
   )
   const finished = Lifecycle.finish(closed, events, {
@@ -1627,7 +1618,7 @@ export const protocol = Protocol.make({
     initial: (request) => ({
       provider: request.model.provider,
       compactions: {},
-      providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
+      routeID: request.model.route.id,
       tools: ToolStream.empty<number>(),
       reasoningSignatures: {},
       lifecycle: Lifecycle.initial(),
@@ -1670,7 +1661,6 @@ export const transport = <Body extends Pick<AnthropicMessagesBody, "messages" | 
 export const route = Route.make({
   id: ADAPTER,
   provider: "anthropic",
-  providerMetadataKey: "anthropic",
   protocol,
   endpoint: Endpoint.path((input) => (input.request.model.provider === "anthropic" ? `${PATH}?beta=true` : PATH), {
     baseURL: DEFAULT_BASE_URL,

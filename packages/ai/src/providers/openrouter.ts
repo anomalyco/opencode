@@ -162,7 +162,6 @@ const bodyOptions = (input: unknown) => {
 export const route = Route.make({
   id: ADAPTER,
   provider: id,
-  providerMetadataKey: "openrouter",
   protocol,
   endpoint: Endpoint.path("/chat/completions", { baseURL }),
   framing: OpenAIChat.framing,

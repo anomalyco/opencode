@@ -97,27 +97,37 @@ describe("Open Responses basic-item lifecycles", () => {
         {
           type: "reasoning-start",
           id: "rs_1:0",
-          providerMetadata: { "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: null } },
+          providerMetadata: { "openai-compatible-responses": { itemId: "rs_1", reasoningEncryptedContent: null } },
         },
         { type: "reasoning-delta", id: "rs_1:0", text: "First" },
-        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { "openai-compatible": { itemId: "rs_1" } } },
+        {
+          type: "reasoning-end",
+          id: "rs_1:0",
+          providerMetadata: { "openai-compatible-responses": { itemId: "rs_1" } },
+        },
         {
           type: "reasoning-start",
           id: "rs_1:1",
-          providerMetadata: { "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: null } },
+          providerMetadata: { "openai-compatible-responses": { itemId: "rs_1", reasoningEncryptedContent: null } },
         },
         { type: "reasoning-delta", id: "rs_1:1", text: "Second" },
-        { type: "reasoning-end", id: "rs_1:1", providerMetadata: { "openai-compatible": { itemId: "rs_1" } } },
+        {
+          type: "reasoning-end",
+          id: "rs_1:1",
+          providerMetadata: { "openai-compatible-responses": { itemId: "rs_1" } },
+        },
         {
           type: "reasoning-start",
           id: "rs_1:2",
-          providerMetadata: { "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: null } },
+          providerMetadata: { "openai-compatible-responses": { itemId: "rs_1", reasoningEncryptedContent: null } },
         },
         { type: "reasoning-delta", id: "rs_1:2", text: "Third" },
         {
           type: "reasoning-end",
           id: "rs_1:2",
-          providerMetadata: { "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+          providerMetadata: {
+            "openai-compatible-responses": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
+          },
         },
       ])
     }),
@@ -141,13 +151,17 @@ describe("Open Responses basic-item lifecycles", () => {
         {
           type: "reasoning-start",
           id: "rs_1",
-          providerMetadata: { "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+          providerMetadata: {
+            "openai-compatible-responses": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
+          },
         },
         {
           type: "reasoning-end",
           id: "rs_1",
           text: "Not streamed",
-          providerMetadata: { "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+          providerMetadata: {
+            "openai-compatible-responses": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
+          },
         },
       ])
     }),
@@ -176,32 +190,36 @@ describe("Open Responses basic-item lifecycles", () => {
         {
           type: "text-start",
           id: "msg_1",
-          providerMetadata: { "openai-compatible": { itemId: "msg_1", phase: "commentary" } },
+          providerMetadata: { "openai-compatible-responses": { itemId: "msg_1", phase: "commentary" } },
         },
         { type: "text-delta", id: "msg_1", text: "Checking" },
         {
           type: "text-end",
           id: "msg_1",
-          providerMetadata: { "openai-compatible": { itemId: "msg_1", phase: "commentary" } },
+          providerMetadata: { "openai-compatible-responses": { itemId: "msg_1", phase: "commentary" } },
         },
         {
           type: "text-start",
           id: "msg_2",
-          providerMetadata: { "openai-compatible": { itemId: "msg_2", phase: null } },
+          providerMetadata: { "openai-compatible-responses": { itemId: "msg_2", phase: null } },
         },
         { type: "text-delta", id: "msg_2", text: "Cannot help." },
         {
           type: "text-end",
           id: "msg_2",
-          providerMetadata: { "openai-compatible": { itemId: "msg_2", phase: "final_answer" } },
+          providerMetadata: { "openai-compatible-responses": { itemId: "msg_2", phase: "final_answer" } },
         },
         {
           type: "text-start",
           id: "msg_3",
-          providerMetadata: { "openai-compatible": { itemId: "msg_3", phase: null } },
+          providerMetadata: { "openai-compatible-responses": { itemId: "msg_3", phase: null } },
         },
         { type: "text-delta", id: "msg_3", text: "Done-only refusal." },
-        { type: "text-end", id: "msg_3", providerMetadata: { "openai-compatible": { itemId: "msg_3", phase: null } } },
+        {
+          type: "text-end",
+          id: "msg_3",
+          providerMetadata: { "openai-compatible-responses": { itemId: "msg_3", phase: null } },
+        },
       ])
     }),
   )
@@ -232,24 +250,24 @@ describe("Open Responses basic-item lifecycles", () => {
         {
           type: "text-start",
           id: "msg_text",
-          providerMetadata: { "openai-compatible": { itemId: "msg_text" } },
+          providerMetadata: { "openai-compatible-responses": { itemId: "msg_text" } },
         },
         {
           type: "text-end",
           id: "msg_text",
           text: "Done-only text.",
-          providerMetadata: { "openai-compatible": { itemId: "msg_text" } },
+          providerMetadata: { "openai-compatible-responses": { itemId: "msg_text" } },
         },
         {
           type: "text-start",
           id: "msg_refusal",
-          providerMetadata: { "openai-compatible": { itemId: "msg_refusal" } },
+          providerMetadata: { "openai-compatible-responses": { itemId: "msg_refusal" } },
         },
         {
           type: "text-end",
           id: "msg_refusal",
           text: "Done-only refusal.",
-          providerMetadata: { "openai-compatible": { itemId: "msg_refusal" } },
+          providerMetadata: { "openai-compatible-responses": { itemId: "msg_refusal" } },
         },
       ])
     }),
@@ -305,7 +323,7 @@ describe("Open Responses basic-item lifecycles", () => {
           response: { id: "resp_1", output: [{ type: "reasoning", id: "msg_879a68b589198b4c" }, terminal] },
         },
       )
-      const providerMetadata = { "openai-compatible": { itemId: "fc_828bee50dee1d029" } }
+      const providerMetadata = { "openai-compatible-responses": { itemId: "fc_828bee50dee1d029" } }
       expect(events.filter((event) => event.type.startsWith("tool-"))).toEqual([
         { type: "tool-input-start", id: "call_bc1eb4b42e70ee53", name: "get_weather", providerMetadata },
         {
@@ -338,7 +356,7 @@ describe("Open Responses basic-item lifecycles", () => {
       )
       const call = events.find(LLMEvent.is.toolCall)
       expect(call).toMatchObject({ id: "call_1", name: "lookup", input: { query: "weather" } })
-      expect(call?.providerMetadata?.["openai-compatible"]).toMatchObject({
+      expect(call?.providerMetadata?.["openai-compatible-responses"]).toMatchObject({
         itemId: expect.stringMatching(/^fc_[0-9a-f]{32}$/),
       })
     }),
@@ -354,7 +372,7 @@ describe("Open Responses basic-item lifecycles", () => {
         arguments: '{"query":"weather"}',
       }
       const events = yield* collect({ type: "response.output_item.done", item }, completed)
-      const providerMetadata = { "openai-compatible": { itemId: "fc_1" } }
+      const providerMetadata = { "openai-compatible-responses": { itemId: "fc_1" } }
       expect(events.filter((event) => event.type.startsWith("tool-"))).toEqual([
         { type: "tool-input-start", id: "call_1", name: "lookup", namespace: undefined, providerMetadata },
         { type: "tool-input-end", id: "call_1", name: "lookup", namespace: undefined, providerMetadata },
@@ -371,7 +389,7 @@ describe("Open Responses basic-item lifecycles", () => {
         {
           type: "finish",
           reason: { normalized: "tool-calls", raw: undefined },
-          providerMetadata: { "openai-compatible": { responseId: "resp_1", serviceTier: undefined } },
+          providerMetadata: { "openai-compatible-responses": { responseId: "resp_1", serviceTier: undefined } },
         },
       ])
     }),
@@ -405,7 +423,7 @@ describe("Open Responses basic-item lifecycles", () => {
           type: "tool-input-end",
           id: "call_1",
           name: "lookup",
-          providerMetadata: { "openai-compatible": { itemId: "fc_1" } },
+          providerMetadata: { "openai-compatible-responses": { itemId: "fc_1" } },
         },
         {
           type: "tool-call",
@@ -413,7 +431,7 @@ describe("Open Responses basic-item lifecycles", () => {
           name: "lookup",
           input: { query: "final" },
           providerExecuted: undefined,
-          providerMetadata: { "openai-compatible": { itemId: "fc_1" } },
+          providerMetadata: { "openai-compatible-responses": { itemId: "fc_1" } },
         },
         { type: "reasoning-end", id: "rs_1:0" },
       ])
@@ -438,7 +456,7 @@ describe("Open Responses basic-item lifecycles", () => {
         {
           type: "reasoning-end",
           id: ":0",
-          providerMetadata: { "openai-compatible": { itemId: "", reasoningEncryptedContent: "state" } },
+          providerMetadata: { "openai-compatible-responses": { itemId: "", reasoningEncryptedContent: "state" } },
         },
       ])
     }),
@@ -474,7 +492,7 @@ describe("Open Responses basic-item lifecycles", () => {
         completed,
       )
       // Generic terminal closure does not repeat the message's phase metadata.
-      const providerMetadata = { "openai-compatible": { itemId: "fc_1" } }
+      const providerMetadata = { "openai-compatible-responses": { itemId: "fc_1" } }
       expect(events.slice(4, -2)).toEqual([
         { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata },
         { type: "tool-call", id: "call_1", name: "lookup", input: {}, providerMetadata },
@@ -518,7 +536,7 @@ describe("Open Responses basic-item lifecycles", () => {
         {
           type: "finish",
           reason: { normalized: "length", raw: "max_output_tokens" },
-          providerMetadata: { "openai-compatible": { responseId: "resp_1", serviceTier: undefined } },
+          providerMetadata: { "openai-compatible-responses": { responseId: "resp_1", serviceTier: undefined } },
         },
       ])
     }),

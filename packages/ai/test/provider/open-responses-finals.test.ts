@@ -37,7 +37,7 @@ describe("Open Responses completed item text", () => {
             type: "text-end",
             id: "msg_1",
             text,
-            providerMetadata: { "openai-compatible": { itemId: "msg_1", phase: "final_answer" } },
+            providerMetadata: { "openai-compatible-responses": { itemId: "msg_1", phase: "final_answer" } },
           },
         ])
       }),
@@ -138,7 +138,7 @@ describe("Open Responses completed item reasoning", () => {
         expect(response.reasoning).toBe(fixture.text)
         expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
         expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-          "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: "encrypted" },
+          "openai-compatible-responses": { itemId: "rs_1", reasoningEncryptedContent: "encrypted" },
         })
       }),
     )

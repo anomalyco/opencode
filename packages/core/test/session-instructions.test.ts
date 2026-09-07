@@ -317,7 +317,7 @@ describe("SessionInstructions", () => {
       metadata: { instruction: { paths: ["/repo/sub/AGENTS.md"] } },
       time: { created },
     })
-    const messages = toLLMMessages([synthetic], model)
+    const messages = toLLMMessages([synthetic], model, "test-route")
     expect(messages).toHaveLength(1)
     expect(messages[0]!.role).toBe("user")
     expect(messages[0]!.content).toEqual([{ type: "text", text: "Instructions from: /repo/sub/AGENTS.md\ncontent" }])

@@ -93,7 +93,7 @@ export const make = <Body>(body: RouteBody<Body>): TriggerCompactOperation =>
           result = new CompactionCheckpointResponse({
             checkpoint,
             responseID,
-            usage: OpenResponses.mapUsage(event.response?.usage, OpenResponses.metadataKey(request.model)),
+            usage: OpenResponses.mapUsage(event.response?.usage, request.model.route.id),
           })
           return [next, [LLMEvent.finish({ reason: { normalized: "stop" } })]] as const
         }),
@@ -102,7 +102,6 @@ export const make = <Body>(body: RouteBody<Body>): TriggerCompactOperation =>
     const route = Route.make({
       id: source.id,
       provider: source.provider,
-      providerMetadataKey: source.providerMetadataKey,
       protocol,
       endpoint: source.endpoint,
       auth: source.auth,

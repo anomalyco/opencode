@@ -423,7 +423,7 @@ export interface ParserState {
   readonly completedCompactions: ReadonlySet<string>
   readonly id: string
   readonly name: string
-  readonly providerMetadataKey: string
+  readonly routeID: string
   readonly tools: ToolStream.State<string>
   readonly hasFunctionCall: boolean
   readonly lifecycle: Lifecycle.State
@@ -476,15 +476,15 @@ export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LL
 
 // Server-issued item ids need a nonempty prefix and suffix, but the prefix is
 // provider-defined and does not necessarily identify the item's semantic type.
-const itemID = (providerMetadata: ProviderMetadata | undefined, providerMetadataKey: string) => {
-  const metadata = providerMetadata?.[providerMetadataKey]
+const itemID = (providerMetadata: ProviderMetadata | undefined, routeID: string) => {
+  const metadata = providerMetadata?.[routeID]
   if (!ProviderShared.isRecord(metadata) || typeof metadata.itemId !== "string") return undefined
   const separator = metadata.itemId.indexOf("_")
   return separator > 0 && separator < metadata.itemId.length - 1 ? metadata.itemId : undefined
 }
 
-const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenResponsesInputItem => {
-  const id = itemID(part.providerMetadata, providerMetadataKey)
+const lowerToolCall = (part: ToolCallPart, routeID: string): OpenResponsesInputItem => {
+  const id = itemID(part.providerMetadata, routeID)
   return {
     type: "function_call",
     ...(id === undefined ? {} : { id }),
@@ -495,10 +495,10 @@ const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenRes
   }
 }
 
-const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenResponsesReasoningInput | undefined => {
-  const metadata = part.providerMetadata?.[providerMetadataKey]
+const lowerReasoning = (part: ReasoningPart, routeID: string): OpenResponsesReasoningInput | undefined => {
+  const metadata = part.providerMetadata?.[routeID]
   if (!ProviderShared.isRecord(metadata)) return undefined
-  const id = itemID(part.providerMetadata, providerMetadataKey)
+  const id = itemID(part.providerMetadata, routeID)
   const encryptedContent =
     typeof metadata.reasoningEncryptedContent === "string" || metadata.reasoningEncryptedContent === null
       ? metadata.reasoningEncryptedContent
@@ -521,7 +521,7 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
   const providerMedia = adapter.lowerMedia?.({ part, media, request })
   if (providerMedia) return providerMedia
   const detail = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesInputImage.fields.detail))(
-    part.providerMetadata?.[metadataKey(request.model)]?.detail,
+    part.providerMetadata?.[request.model.route.id]?.detail,
   )
   const url =
     typeof part.data === "string" && (part.data.startsWith("https://") || part.data.startsWith("http://"))
@@ -608,12 +608,12 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
   adapter: ProviderAdapter,
 ) {
   const input: LoweredInputItem[] = []
-  const providerMetadataKey = metadataKey(request.model)
+  const routeID = request.model.route.id
 
   for (const message of request.messages) {
     const metadata = yield* ProviderShared.validateWith(
       Schema.decodeUnknownEffect(Schema.UndefinedOr(MessageMetadata)),
-    )(message.providerMetadata?.[providerMetadataKey])
+    )(message.providerMetadata?.[routeID])
     if (message.role === "system") {
       input.push({
         role: "developer",
@@ -638,8 +638,8 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
         const groups = content.reduce<
           Array<{ id: string | undefined; phase: MessagePhase | null | undefined; parts: TextPart[] }>
         >((groups, part) => {
-          const partMetadata = part.providerMetadata?.[providerMetadataKey]
-          const id = itemID(part.providerMetadata, providerMetadataKey) ?? metadata?.itemId
+          const partMetadata = part.providerMetadata?.[routeID]
+          const id = itemID(part.providerMetadata, routeID) ?? metadata?.itemId
           const partPhase = messagePhase(partMetadata?.phase)
           const phase = partPhase === undefined ? metadata?.phase : partPhase
           const group = groups.at(-1)
@@ -675,7 +675,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
         }
         if (part.type === "reasoning") {
           flushText()
-          const reasoning = lowerReasoning(part, providerMetadataKey)
+          const reasoning = lowerReasoning(part, routeID)
           if (!reasoning) continue
           const existing = reasoning.id === undefined ? undefined : reasoningItems[reasoning.id]
           if (existing) {
@@ -691,12 +691,12 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
         if (part.type === "tool-call") {
           flushText()
           if (part.providerExecuted === true) continue
-          input.push(lowerToolCall(part, providerMetadataKey))
+          input.push(lowerToolCall(part, routeID))
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted === true) {
           flushText()
-          const id = itemID(part.providerMetadata, providerMetadataKey)
+          const id = itemID(part.providerMetadata, routeID)
           const hosted =
             part.result.type !== "json"
               ? undefined
@@ -844,7 +844,7 @@ export const fromRequest = Effect.fn("OpenResponses.fromRequest")(function* (req
 // cached-read and cache-write subsets, and `output_tokens` (inclusive total)
 // with a `reasoning_tokens` subset. Pass the totals through and derive the
 // non-cached breakdown.
-export const mapUsage = (usage: OpenResponsesUsage | null | undefined, providerMetadataKey: string) => {
+export const mapUsage = (usage: OpenResponsesUsage | null | undefined, routeID: string) => {
   if (!usage) return undefined
   const cached = usage.input_tokens_details?.cached_tokens
   const cacheWrite = usage.input_tokens_details?.cache_write_tokens
@@ -858,7 +858,7 @@ export const mapUsage = (usage: OpenResponsesUsage | null | undefined, providerM
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(usage.input_tokens, usage.output_tokens, usage.total_tokens),
-    providerMetadata: { [providerMetadataKey]: usage },
+    providerMetadata: { [routeID]: usage },
   })
 }
 
@@ -874,10 +874,8 @@ const mapFinishReason = (event: Event, hasFunctionCall: boolean): FinishReason =
   return hasFunctionCall ? "tool-calls" : "unknown"
 }
 
-export const metadataKey = (model: LLMRequest["model"]) => model.route.providerMetadataKey ?? "openresponses"
-
 export const providerMetadata = (state: ParserState, metadata: Record<string, unknown>): ProviderMetadata => ({
-  [state.providerMetadataKey]: metadata,
+  [state.routeID]: metadata,
 })
 
 export type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
@@ -1349,7 +1347,7 @@ const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (
       normalized: mapFinishReason(event, current.hasFunctionCall),
       raw: event.response?.incomplete_details?.reason,
     },
-    usage: mapUsage(event.response?.usage, current.providerMetadataKey),
+    usage: mapUsage(event.response?.usage, current.routeID),
     providerMetadata:
       event.response?.id || event.response?.service_tier
         ? providerMetadata(current, {
@@ -1486,7 +1484,7 @@ export const initial = (request: LLMRequest, adapter: ProviderAdapter = BASE_ADA
   completedCompactions: new Set<string>(),
   id: adapter.id,
   name: adapter.name,
-  providerMetadataKey: metadataKey(request.model),
+  routeID: request.model.route.id,
   hasFunctionCall: false,
   tools: ToolStream.empty<string>(),
   lifecycle: Lifecycle.initial(),

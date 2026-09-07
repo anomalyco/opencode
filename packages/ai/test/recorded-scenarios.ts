@@ -253,10 +253,10 @@ const assistantMessageFromResponse = (response: LLMResponse, step: AssistantStep
   if (step.reasoning === "openai-encrypted") {
     const reasoning = response.events.find(
       (event): event is Extract<LLMEvent, { readonly type: "reasoning-end" }> =>
-        LLMEvent.is.reasoningEnd(event) && typeof event.providerMetadata?.openai?.itemId === "string",
+        LLMEvent.is.reasoningEnd(event) && typeof event.providerMetadata?.["openai-responses"]?.itemId === "string",
     )
     if (!reasoning) throw new Error("OpenAI Responses did not return reasoning metadata")
-    expect(reasoning.providerMetadata?.openai?.reasoningEncryptedContent).toEqual(expect.any(String))
+    expect(reasoning.providerMetadata?.["openai-responses"]?.reasoningEncryptedContent).toEqual(expect.any(String))
     content.push({ type: "reasoning", text: response.reasoning, providerMetadata: reasoning.providerMetadata })
   }
 

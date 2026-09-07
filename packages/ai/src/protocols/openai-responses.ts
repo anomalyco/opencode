@@ -313,7 +313,6 @@ export const route = Route.make({
   compact: { endpoint: ResponsesCompaction.make(adapter), trigger: ResponsesCheckpoint.make(checkpointBody) },
   id: ADAPTER,
   provider: "openai",
-  providerMetadataKey: "openai",
   protocol,
   endpoint,
   auth,

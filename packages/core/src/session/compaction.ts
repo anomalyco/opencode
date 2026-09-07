@@ -155,7 +155,7 @@ export const estimateTokens = (input: RequiredInput) => {
   const last = input.messages[index]
   // Keep the anchor's local tool results: they are not covered by its provider usage.
   const added = SessionModelRequest.unsupportedParts(
-    toLLMMessages(input.messages.slice(Math.max(0, index)), input.resolved.ref),
+    toLLMMessages(input.messages.slice(Math.max(0, index)), input.resolved.ref, input.resolved.model.route.id),
     input.resolved.capabilities,
   )
     .filter((message) => message.role !== "assistant" || message.id !== last?.id)
@@ -609,8 +609,7 @@ export const layer = Layer.effect(
               })
             }
             if (LLMEvent.is.stepFinish(event)) {
-              providerState =
-                event.providerMetadata?.[context.model.model.route.providerMetadataKey ?? context.model.model.provider]
+              providerState = event.providerMetadata?.[context.model.model.route.id]
               const step = SessionUsage.record(event.usage, context.model.cost)
               usage = usage ? SessionUsage.add(usage, step) : step
             }

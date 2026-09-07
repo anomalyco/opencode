@@ -287,9 +287,10 @@ const lowerAssistant = Effect.fn("MistralChat.lowerAssistant")(function* (
   message: LLMRequest["messages"][number],
   normalizeID: (id: string) => string,
   prefix: boolean,
+  routeID: string,
 ) {
   const structured = message.content.some(
-    (part) => part.type === "reasoning" && isMistralThinkingContent(part.providerMetadata?.mistral?.thinking),
+    (part) => part.type === "reasoning" && isMistralThinkingContent(part.providerMetadata?.[routeID]?.thinking),
   )
   const content: Array<Schema.Schema.Type<typeof MistralTextContent> | MistralThinkingContent> = []
   const text: string[] = []
@@ -301,7 +302,7 @@ const lowerAssistant = Effect.fn("MistralChat.lowerAssistant")(function* (
       continue
     }
     if (part.type === "reasoning") {
-      const native = part.providerMetadata?.mistral?.thinking
+      const native = part.providerMetadata?.[routeID]?.thinking
       if (structured && isMistralThinkingContent(native)) content.push(native)
       else if (structured) content.push({ type: "text", text: part.text })
       else text.push(part.text)
@@ -378,13 +379,22 @@ const lowerMessages = Effect.fn("MistralChat.lowerMessages")(function* (request:
     if (message.role === "assistant") {
       const hasToolCalls = message.content.some((part) => part.type === "tool-call")
       const hasNativeThinking = message.content.some(
-        (part) => part.type === "reasoning" && isMistralThinkingContent(part.providerMetadata?.mistral?.thinking),
+        (part) =>
+          part.type === "reasoning" &&
+          isMistralThinkingContent(part.providerMetadata?.[request.model.route.id]?.thinking),
       )
       const text = message.content
         .flatMap((part) => (part.type === "text" || part.type === "reasoning" ? [part.text] : []))
         .join("")
       if (!hasToolCalls && !hasNativeThinking && text.trim() === "") continue
-      messages.push(yield* lowerAssistant(message, normalizeID, !hasToolCalls && message === request.messages.at(-1)))
+      messages.push(
+        yield* lowerAssistant(
+          message,
+          normalizeID,
+          !hasToolCalls && message === request.messages.at(-1),
+          request.model.route.id,
+        ),
+      )
       continue
     }
     messages.push(...(yield* lowerToolResults(message, normalizeID)))
@@ -455,6 +465,7 @@ interface ActiveContent {
 }
 
 export interface ParserState {
+  readonly routeID: string
   readonly tools: ToolStream.State<ToolKey>
   readonly pendingTools: Partial<Record<ToolKey, PendingTool>>
   readonly toolIDs: ReadonlyMap<string, string>
@@ -469,7 +480,7 @@ export interface ParserState {
   readonly finishReason?: FinishReasonDetails
 }
 
-const mapUsage = (usage: MistralEvent["usage"]): Usage | undefined => {
+const mapUsage = (usage: MistralEvent["usage"], routeID: string): Usage | undefined => {
   if (!usage) return undefined
   const input = usage.prompt_tokens ?? undefined
   const reported =
@@ -485,7 +496,7 @@ const mapUsage = (usage: MistralEvent["usage"]): Usage | undefined => {
     nonCachedInputTokens: ProviderShared.subtractTokens(input, cached),
     cacheReadInputTokens: cached,
     totalTokens: ProviderShared.totalTokens(input, output, usage.total_tokens ?? undefined),
-    providerMetadata: { mistral: usage },
+    providerMetadata: { [routeID]: usage },
   })
 }
 
@@ -517,7 +528,7 @@ const thinkingUnits = (value: unknown): ReadonlyArray<MistralThinkingUnit> => {
 const thinkingText = (thinking: ReadonlyArray<MistralThinkingUnit>) =>
   thinking.flatMap((unit) => (typeof unit.text === "string" ? [unit.text] : [])).join("")
 
-const thinkingMetadata = (thinking: MistralThinkingContent) => ({ mistral: { thinking } })
+const thinkingMetadata = (thinking: MistralThinkingContent, routeID: string) => ({ [routeID]: { thinking } })
 
 const closeActive = (state: ParserState, events: LLMEvent[]) => {
   if (!state.active) return state
@@ -528,7 +539,7 @@ const closeActive = (state: ParserState, events: LLMEvent[]) => {
           state.lifecycle,
           events,
           state.active.id,
-          thinkingMetadata(state.active.thinking ?? { type: "thinking", thinking: [] }),
+          thinkingMetadata(state.active.thinking ?? { type: "thinking", thinking: [] }, state.routeID),
           thinkingText(state.active.thinking?.thinking ?? []),
         )
   return { ...state, lifecycle, active: undefined }
@@ -561,8 +572,14 @@ const appendThinking = (state: ParserState, events: LLMEvent[], part: MistralOut
     ...current,
     lifecycle:
       text.length > 0
-        ? Lifecycle.reasoningDelta(current.lifecycle, events, active.id, text, thinkingMetadata(thinking))
-        : Lifecycle.reasoningStart(current.lifecycle, events, active.id, thinkingMetadata(thinking)),
+        ? Lifecycle.reasoningDelta(
+            current.lifecycle,
+            events,
+            active.id,
+            text,
+            thinkingMetadata(thinking, state.routeID),
+          )
+        : Lifecycle.reasoningStart(current.lifecycle, events, active.id, thinkingMetadata(thinking, state.routeID)),
     active: { ...active, thinking },
     nextContent: current.active ? current.nextContent : current.nextContent + 1,
   }
@@ -683,7 +700,7 @@ const step = Effect.fn("MistralChat.step")(function* (state: ParserState, event:
     })
   }
   const events: LLMEvent[] = []
-  const usage = mapUsage(event.usage) ?? state.usage
+  const usage = mapUsage(event.usage, state.routeID) ?? state.usage
   if (state.finishReason) {
     if (hasLateContent(event))
       return yield* ProviderShared.eventError(
@@ -761,7 +778,8 @@ export const protocol = Protocol.make({
   body: { schema: MistralBody, from: fromRequest },
   stream: {
     event: MistralStreamEvent,
-    initial: (): ParserState => ({
+    initial: (request): ParserState => ({
+      routeID: request.model.route.id,
       tools: ToolStream.empty<ToolKey>(),
       pendingTools: {},
       toolIDs: new Map(),
@@ -783,7 +801,6 @@ export const httpTransport = HttpTransport.sseJson.with<MistralBody>().with({ fr
 export const route = Route.make({
   id: ADAPTER,
   provider: "mistral",
-  providerMetadataKey: "mistral",
   protocol,
   endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
   auth: Auth.none,

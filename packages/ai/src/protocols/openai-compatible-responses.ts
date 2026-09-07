@@ -13,7 +13,6 @@ export type OpenAICompatibleResponsesLanguageModelInput = RouteRoutedLanguageMod
  */
 export const route = Route.make({
   id: ADAPTER,
-  providerMetadataKey: "openresponses",
   protocol: OpenResponses.protocol,
   endpoint: Endpoint.path(OpenResponses.PATH),
   transport: OpenResponses.httpTransport,

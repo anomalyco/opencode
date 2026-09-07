@@ -493,7 +493,7 @@ describe("Gemini route", () => {
                 id: "call_image",
                 name: "read",
                 input: { path: "pixel.png" },
-                providerMetadata: { google: { thoughtSignature: "sig_1" } },
+                providerMetadata: { gemini: { thoughtSignature: "sig_1" } },
               }),
             ]),
             Message.tool({
@@ -872,7 +872,7 @@ describe("Gemini route", () => {
         reasoningTokens: 1,
         totalTokens: 7,
         providerMetadata: {
-          google: {
+          gemini: {
             promptTokenCount: 5,
             candidatesTokenCount: 2,
             totalTokenCount: 7,
@@ -973,22 +973,22 @@ describe("Gemini route", () => {
         {
           type: "reasoning",
           text: "A",
-          providerMetadata: { google: { thoughtSignature: "reasoning_sig_a" } },
+          providerMetadata: { gemini: { thoughtSignature: "reasoning_sig_a" } },
         },
         {
           type: "text",
           text: "X",
-          providerMetadata: { google: { thoughtSignature: "text_sig_x" } },
+          providerMetadata: { gemini: { thoughtSignature: "text_sig_x" } },
         },
         {
           type: "reasoning",
           text: "B",
-          providerMetadata: { google: { thoughtSignature: "reasoning_sig_b" } },
+          providerMetadata: { gemini: { thoughtSignature: "reasoning_sig_b" } },
         },
         {
           type: "text",
           text: "Y",
-          providerMetadata: { google: { thoughtSignature: "text_sig_y" } },
+          providerMetadata: { gemini: { thoughtSignature: "text_sig_y" } },
         },
       ])
     }),
@@ -1079,11 +1079,11 @@ describe("Gemini route", () => {
       expect(reasoningEnd).toEqual({
         type: "reasoning-end",
         id: "reasoning-0",
-        providerMetadata: { google: { thoughtSignature: "thought_sig" } },
+        providerMetadata: { gemini: { thoughtSignature: "thought_sig" } },
       })
       expect(toolCall).toMatchObject({
         id: "provider_call",
-        providerMetadata: { google: { thoughtSignature: "tool_sig" } },
+        providerMetadata: { gemini: { thoughtSignature: "tool_sig" } },
       })
       expect(response.events.findIndex((event) => event.type === "reasoning-end")).toBeLessThan(
         response.events.findIndex((event) => event.type === "tool-call"),
@@ -1153,7 +1153,7 @@ describe("Gemini route", () => {
       expect(delta).toMatchObject({
         id: "text-0",
         text: "All done.",
-        providerMetadata: { google: { thoughtSignature: "text_sig" } },
+        providerMetadata: { gemini: { thoughtSignature: "text_sig" } },
       })
 
       const prepared = yield* compileRequest(
@@ -1190,7 +1190,7 @@ describe("Gemini route", () => {
       expect(delta).toMatchObject({ id: "text-0", text: "Working.", providerMetadata: undefined })
       expect(end).toMatchObject({
         id: "text-0",
-        providerMetadata: { google: { thoughtSignature: "tail_sig" } },
+        providerMetadata: { gemini: { thoughtSignature: "tail_sig" } },
       })
     }),
   )
@@ -1244,7 +1244,7 @@ describe("Gemini route", () => {
                 id: "tool_0",
                 name: "lookup",
                 input: { query: "weather" },
-                providerMetadata: { google: { thoughtSignature: "parallel_signature" } },
+                providerMetadata: { gemini: { thoughtSignature: "parallel_signature" } },
               }),
               ToolCallPart.make({ id: "tool_1", name: "lookup", input: { query: "news" } }),
               ToolCallPart.make({ id: "tool_2", name: "lookup", input: { query: "sports" } }),
@@ -1333,7 +1333,7 @@ describe("Gemini route", () => {
         cacheReadInputTokens: undefined,
         reasoningTokens: undefined,
         totalTokens: 6,
-        providerMetadata: { google: { promptTokenCount: 5, candidatesTokenCount: 1 } },
+        providerMetadata: { gemini: { promptTokenCount: 5, candidatesTokenCount: 1 } },
       })
 
       expect(response.toolCalls[0].id).toMatch(/^tool_[0-9a-zA-Z]+$/)
@@ -1629,7 +1629,7 @@ describe("Gemini route", () => {
         type: "finish",
         reason: { normalized: "content-filter", raw: "FUTURE_SAFETY_REASON" },
         providerMetadata: {
-          google: {
+          gemini: {
             promptFeedback: {
               blockReason: "FUTURE_SAFETY_REASON",
               blockReasonMessage: "Prompt blocked",

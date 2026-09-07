@@ -34,45 +34,48 @@ import { dynamicResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
 describe("native OpenAI-compatible providers", () => {
-  test("assigns provider-owned metadata namespaces across native routes", () => {
+  test("assigns API-specific route identities across native providers", () => {
     const vertex = { project: "project", accessToken: "token" }
     const providers = [
-      [OpenAI.configure({ apiKey: "test" }).chat("model"), "openai"],
-      [OpenAI.configure({ apiKey: "test" }).responses("model"), "openai"],
-      [Azure.configure({ resourceName: "resource", apiKey: "test" }).chat("model"), "azure"],
-      [Azure.configure({ resourceName: "resource", apiKey: "test" }).responses("model"), "azure"],
-      [AmazonBedrock.configure({ apiKey: "test" }).model("model"), "bedrock"],
-      [AmazonBedrockMantle.configure({ apiKey: "test" }).chat("model"), "mantle"],
-      [AmazonBedrockMantle.configure({ apiKey: "test" }).responses("model"), "mantle"],
-      [Google.configure({ apiKey: "test" }).model("model"), "google"],
-      [GoogleVertex.configure(vertex).model("model"), "vertex"],
-      [GoogleVertexChat.configure(vertex).model("model"), "vertex"],
-      [GoogleVertexResponses.configure(vertex).model("model"), "vertex"],
-      [GoogleVertexMessages.configure(vertex).model("model"), "anthropic"],
-      [Anthropic.configure({ apiKey: "test" }).model("model"), "anthropic"],
+      [OpenAI.configure({ apiKey: "test" }).chat("model"), "openai-chat"],
+      [OpenAI.configure({ apiKey: "test" }).responses("model"), "openai-responses"],
+      [Azure.configure({ resourceName: "resource", apiKey: "test" }).chat("model"), "azure-openai-chat"],
+      [Azure.configure({ resourceName: "resource", apiKey: "test" }).responses("model"), "azure-openai-responses"],
+      [AmazonBedrock.configure({ apiKey: "test" }).model("model"), "bedrock-converse"],
+      [AmazonBedrockMantle.configure({ apiKey: "test" }).chat("model"), "bedrock-mantle-chat"],
+      [AmazonBedrockMantle.configure({ apiKey: "test" }).responses("model"), "bedrock-mantle-responses"],
+      [Google.configure({ apiKey: "test" }).model("model"), "gemini"],
+      [GoogleVertex.configure(vertex).model("model"), "google-vertex-gemini"],
+      [GoogleVertexChat.configure(vertex).model("model"), "google-vertex-chat"],
+      [GoogleVertexResponses.configure(vertex).model("model"), "google-vertex-responses"],
+      [GoogleVertexMessages.configure(vertex).model("model"), "google-vertex-messages"],
+      [Anthropic.configure({ apiKey: "test" }).model("model"), "anthropic-messages"],
       [
         AnthropicCompatible.configure({ baseURL: "https://example.test/v1", provider: "minimax" }).model("model"),
-        "minimax",
+        "anthropic-messages",
       ],
-      [OpenAICompatible.configure({ baseURL: "https://example.test/v1", provider: "custom" }).model("model"), "custom"],
+      [
+        OpenAICompatible.configure({ baseURL: "https://example.test/v1", provider: "custom" }).model("model"),
+        "openai-compatible-chat",
+      ],
       [
         OpenAICompatibleResponses.configure({ baseURL: "https://example.test/v1", provider: "custom" }).model("model"),
-        "custom",
+        "openai-compatible-responses",
       ],
-      [Cerebras.configure({ apiKey: "test" }).model("model"), "cerebras"],
-      [Baseten.configure({ apiKey: "test" }).model("model"), "baseten"],
-      [DeepSeek.configure({ apiKey: "test" }).model("model"), "deepseek"],
-      [Fireworks.configure({ apiKey: "test" }).model("model"), "fireworks"],
-      [DeepInfra.configure({ apiKey: "test" }).model("model"), "deepinfra"],
-      [TogetherAI.configure({ apiKey: "test" }).model("model"), "togetherai"],
+      [Cerebras.configure({ apiKey: "test" }).model("model"), "cerebras-chat"],
+      [Baseten.configure({ apiKey: "test" }).model("model"), "baseten-chat"],
+      [DeepSeek.configure({ apiKey: "test" }).model("model"), "deepseek-chat"],
+      [Fireworks.configure({ apiKey: "test" }).model("model"), "fireworks-chat"],
+      [DeepInfra.configure({ apiKey: "test" }).model("model"), "deepinfra-chat"],
+      [TogetherAI.configure({ apiKey: "test" }).model("model"), "togetherai-chat"],
       [CloudflareAIGateway.configure({ accountId: "account" }).model("model"), "cloudflare-ai-gateway"],
       [CloudflareWorkersAI.configure({ accountId: "account" }).model("model"), "cloudflare-workers-ai"],
       [OpenRouter.configure({ apiKey: "test" }).model("model"), "openrouter"],
-      [XAI.configure({ apiKey: "test" }).chat("model"), "xai"],
-      [XAI.configure({ apiKey: "test" }).responses("model"), "xai"],
+      [XAI.configure({ apiKey: "test" }).chat("model"), "xai-chat"],
+      [XAI.configure({ apiKey: "test" }).responses("model"), "xai-responses"],
     ] as const
 
-    for (const [model, key] of providers) expect(model.route.providerMetadataKey).toBe(key)
+    for (const [model, id] of providers) expect(model.route.id).toBe(id)
   })
 
   test("preserves native Together AI and Cerebras provider and route identities", () => {

@@ -102,7 +102,7 @@ describe("Anthropic Messages route", () => {
             Message.assistant([{ type: "reasoning", text: "" }]),
             Message.assistant([
               { type: "text", text: "" },
-              { type: "reasoning", text: "", providerMetadata: { anthropic: { signature: "sig_1" } } },
+              { type: "reasoning", text: "", providerMetadata: { "anthropic-messages": { signature: "sig_1" } } },
             ]),
           ],
           cache: "none",
@@ -753,7 +753,11 @@ describe("Anthropic Messages route", () => {
           model,
           messages: [
             Message.assistant([
-              { type: "reasoning", text: "thinking", providerMetadata: { anthropic: { signature: "sig_1" } } },
+              {
+                type: "reasoning",
+                text: "thinking",
+                providerMetadata: { "anthropic-messages": { signature: "sig_1" } },
+              },
             ]),
           ],
         }),
@@ -831,8 +835,12 @@ describe("Anthropic Messages route", () => {
           model,
           messages: [
             Message.assistant([
-              { type: "reasoning", text: "", providerMetadata: { anthropic: { redactedData: "opaque_1" } } },
-              { type: "reasoning", text: "visible", providerMetadata: { anthropic: { signature: "sig_1" } } },
+              { type: "reasoning", text: "", providerMetadata: { "anthropic-messages": { redactedData: "opaque_1" } } },
+              {
+                type: "reasoning",
+                text: "visible",
+                providerMetadata: { "anthropic-messages": { signature: "sig_1" } },
+              },
             ]),
           ],
         }),
@@ -912,20 +920,28 @@ describe("Anthropic Messages route", () => {
       )
 
       expect(response.message.content).toMatchObject([
-        { type: "reasoning", text: "Thinking.", providerMetadata: { "custom-anthropic": { signature: "custom_sig" } } },
-        { type: "reasoning", text: "", providerMetadata: { "custom-anthropic": { redactedData: "custom_redacted" } } },
+        {
+          type: "reasoning",
+          text: "Thinking.",
+          providerMetadata: { "custom-anthropic-messages": { signature: "custom_sig" } },
+        },
+        {
+          type: "reasoning",
+          text: "",
+          providerMetadata: { "custom-anthropic-messages": { redactedData: "custom_redacted" } },
+        },
         { type: "tool-call", id: "custom_tool", providerExecuted: true },
         {
           type: "tool-result",
           providerExecuted: true,
-          providerMetadata: { "custom-anthropic": { blockType: "web_search_tool_result", result } },
+          providerMetadata: { "custom-anthropic-messages": { blockType: "web_search_tool_result", result } },
         },
       ])
       expect(response.usage?.providerMetadata).toEqual({
-        "custom-anthropic": { input_tokens: 5, custom_start: true, output_tokens: 2, custom_terminal: true },
+        "custom-anthropic-messages": { input_tokens: 5, custom_start: true, output_tokens: 2, custom_terminal: true },
       })
       expect(response.events.at(-1)).toMatchObject({
-        providerMetadata: { "custom-anthropic": { stopSequence: "custom_stop" } },
+        providerMetadata: { "custom-anthropic-messages": { stopSequence: "custom_stop" } },
       })
 
       const prepared = yield* compileRequest(
@@ -974,13 +990,13 @@ describe("Anthropic Messages route", () => {
       const reasoningEnds = response.events.filter((event) => event.type === "reasoning-end")
       expect(reasoningEnds).toHaveLength(1)
       expect(reasoningEnds[0]).toMatchObject({
-        providerMetadata: { "custom-anthropic": { signature: "sig_1" } },
+        providerMetadata: { "custom-anthropic-messages": { signature: "sig_1" } },
       })
       expect(response.message.content).toEqual([
         {
           type: "reasoning",
           text: "Reasoning.",
-          providerMetadata: { "custom-anthropic": { signature: "sig_1" } },
+          providerMetadata: { "custom-anthropic-messages": { signature: "sig_1" } },
         },
       ])
 
@@ -1024,18 +1040,18 @@ describe("Anthropic Messages route", () => {
         totalTokens: 8,
       })
       expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
-        providerMetadata: { anthropic: { signature: "sig_1" } },
+        providerMetadata: { "anthropic-messages": { signature: "sig_1" } },
       })
       expect(response.events.filter((event) => event.type === "reasoning-end")).toHaveLength(1)
       expect(response.events.find((event) => event.type === "reasoning-delta" && event.text === "")).toBeUndefined()
       expect(response.message.content).toEqual([
         { type: "text", text: "Hello!" },
-        { type: "reasoning", text: "thinking", providerMetadata: { anthropic: { signature: "sig_1" } } },
+        { type: "reasoning", text: "thinking", providerMetadata: { "anthropic-messages": { signature: "sig_1" } } },
       ])
       expect(response.events.at(-1)).toMatchObject({
         type: "finish",
         reason: { normalized: "stop", raw: "end_turn" },
-        providerMetadata: { anthropic: { stopSequence: "\n\nHuman:" } },
+        providerMetadata: { "anthropic-messages": { stopSequence: "\n\nHuman:" } },
       })
     }),
   )
@@ -1064,13 +1080,13 @@ describe("Anthropic Messages route", () => {
       expect(response.events.find((event) => event.type === "step-finish")).toMatchObject({
         reason: { normalized: "stop", raw: "end_turn" },
         usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-        providerMetadata: { anthropic: { stopSequence: "X" } },
+        providerMetadata: { "anthropic-messages": { stopSequence: "X" } },
       })
       expect(response.events.at(-1)).toMatchObject({
         type: "finish",
         reason: { normalized: "stop", raw: "end_turn" },
         usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-        providerMetadata: { anthropic: { stopSequence: "X" } },
+        providerMetadata: { "anthropic-messages": { stopSequence: "X" } },
       })
     }),
   )
@@ -1296,7 +1312,7 @@ describe("Anthropic Messages route", () => {
         reasoningTokens: 3,
         totalTokens: 15,
         providerMetadata: {
-          anthropic: {
+          "anthropic-messages": {
             input_tokens: null,
             cache_read_input_tokens: 2,
             service_tier: "standard",
@@ -1337,7 +1353,7 @@ describe("Anthropic Messages route", () => {
       )
 
       expect(response.message.content).toEqual([
-        { type: "reasoning", text: "", providerMetadata: { anthropic: { signature: "sig_1" } } },
+        { type: "reasoning", text: "", providerMetadata: { "anthropic-messages": { signature: "sig_1" } } },
       ])
 
       const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message], cache: "none" }))
@@ -1368,10 +1384,10 @@ describe("Anthropic Messages route", () => {
       )
 
       expect(response.message.content).toEqual([
-        { type: "reasoning", text: "", providerMetadata: { anthropic: { signature: "sig_1" } } },
+        { type: "reasoning", text: "", providerMetadata: { "anthropic-messages": { signature: "sig_1" } } },
       ])
       expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
-        providerMetadata: { anthropic: { signature: "sig_1" } },
+        providerMetadata: { "anthropic-messages": { signature: "sig_1" } },
       })
     }),
   )
@@ -1435,10 +1451,10 @@ describe("Anthropic Messages route", () => {
       const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
 
       expect(response.events.find((event) => event.type === "reasoning-start")).toMatchObject({
-        providerMetadata: { anthropic: { redactedData: "opaque_1" } },
+        providerMetadata: { "anthropic-messages": { redactedData: "opaque_1" } },
       })
       expect(response.message.content).toEqual([
-        { type: "reasoning", text: "", providerMetadata: { anthropic: { redactedData: "opaque_1" } } },
+        { type: "reasoning", text: "", providerMetadata: { "anthropic-messages": { redactedData: "opaque_1" } } },
         { type: "text", text: "Hello" },
       ])
     }),
@@ -1582,7 +1598,7 @@ describe("Anthropic Messages route", () => {
         cacheReadInputTokens: undefined,
         cacheWriteInputTokens: undefined,
         totalTokens: 6,
-        providerMetadata: { anthropic: { input_tokens: 5, output_tokens: 1 } },
+        providerMetadata: { "anthropic-messages": { input_tokens: 5, output_tokens: 1 } },
       })
 
       expect(response.toolCalls).toEqual([
@@ -1891,7 +1907,7 @@ describe("Anthropic Messages route", () => {
         // The complete payload rides in provider metadata as irreducible replay
         // state for later stateless requests.
         providerMetadata: {
-          anthropic: {
+          "anthropic-messages": {
             blockType: "web_search_tool_result",
             result: [{ type: "web_search_result", url: "https://example.com", title: "Example" }],
           },

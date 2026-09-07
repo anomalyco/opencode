@@ -69,8 +69,8 @@ describe("public exports", () => {
     expect(XAI.model).toBeFunction()
     expect(XAI.provider.responses).toBe(XAI.responses)
     expect(XAI.provider.chat).toBe(XAI.chat)
-    expect(XAI.configure({ apiKey: "fixture" }).responses("grok-4.3").route.id).toBe("openai-responses")
-    expect(XAI.configure({ apiKey: "fixture" }).chat("grok-4.3").route.id).toBe("openai-compatible-chat")
+    expect(XAI.configure({ apiKey: "fixture" }).responses("grok-4.3").route.id).toBe("xai-responses")
+    expect(XAI.configure({ apiKey: "fixture" }).chat("grok-4.3").route.id).toBe("xai-chat")
   })
 
   test("protocol barrels expose supported low-level routes", () => {

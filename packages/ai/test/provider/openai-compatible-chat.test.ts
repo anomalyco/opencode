@@ -405,7 +405,7 @@ describe("OpenAI-compatible Chat route", () => {
         outputTokens: undefined,
         totalTokens: undefined,
         providerMetadata: {
-          deepseek: {
+          "openai-compatible-chat": {
             prompt_tokens: null,
             completion_tokens: null,
             total_tokens: null,

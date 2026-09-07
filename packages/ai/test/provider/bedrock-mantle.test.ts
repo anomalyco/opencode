@@ -41,8 +41,8 @@ describe("Amazon Bedrock Mantle provider", () => {
         protocol: "openai-responses",
         body: { model: "openai.gpt-oss-120b", store: false },
       })
-      expect(provider.model("openai.gpt-oss-120b").route.providerMetadataKey).toBe("mantle")
-      expect(provider.chat("openai.gpt-oss-120b").route.providerMetadataKey).toBe("mantle")
+      expect(provider.model("openai.gpt-oss-120b").route.id).toBe("bedrock-mantle-responses")
+      expect(provider.chat("openai.gpt-oss-120b").route.id).toBe("bedrock-mantle-chat")
     }),
   )
 
@@ -160,7 +160,7 @@ describe("Amazon Bedrock Mantle provider", () => {
       )
 
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        mantle: { itemId: "msg_95d4d0af4350432a", reasoningEncryptedContent: "mantle-state" },
+        "bedrock-mantle-responses": { itemId: "msg_95d4d0af4350432a", reasoningEncryptedContent: "mantle-state" },
       })
       expect(prepared.body.input).toEqual([
         {

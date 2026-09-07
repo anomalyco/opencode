@@ -24,7 +24,6 @@ export interface Settings extends ProviderPackage.Settings {
 export const route = Route.make({
   id: "baseten-chat",
   provider: id,
-  providerMetadataKey: "baseten",
   protocol: OpenAIChat.protocol,
   endpoint: Endpoint.path("/chat/completions", { baseURL }),
   framing: OpenAIChat.framing,

@@ -36,7 +36,6 @@ export interface Settings extends ProviderPackage.Settings {
 const responsesRoute = Route.make({
   id: "bedrock-mantle-responses",
   provider: id,
-  providerMetadataKey: "mantle",
   protocol: OpenAIResponses.protocol,
   endpoint: OpenAIResponses.route.endpoint,
   auth: OpenAIResponses.route.auth,
@@ -47,7 +46,6 @@ const responsesRoute = Route.make({
 const chatRoute = OpenAIChat.route.with({
   id: "bedrock-mantle-chat",
   provider: id,
-  providerMetadataKey: "mantle",
 })
 
 export const routes = [responsesRoute, chatRoute]

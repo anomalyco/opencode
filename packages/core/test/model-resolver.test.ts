@@ -253,7 +253,6 @@ describe("ModelResolver", () => {
       expect(resolved).toMatchObject({ id: "api-test-model", provider: "test-provider" })
       expect(resolved.route).toMatchObject({
         id: "openai-responses",
-        providerMetadataKey: "openai",
         endpoint: { baseURL: "https://openai.example/v1" },
         defaults: {
           headers: { "x-test": "header" },
@@ -469,7 +468,6 @@ describe("ModelResolver", () => {
       expect(headers.authorization).toBe("Bearer settings-secret")
       expect(resolved.route.id).toBe("openai-compatible-chat")
       expect(String(resolved.provider)).toBe("deepseek")
-      expect(resolved.route.providerMetadataKey).toBe("deepseek")
       expect(resolved.compatibility?.reasoningField).toBe("vendor_reasoning")
       expect(resolved.compatibility?.requireReasoning).toBe(true)
       expect(resolved.compatibility?.maxTokensField).toBe("max_completion_tokens")
@@ -640,7 +638,6 @@ describe("ModelResolver", () => {
 
       expect(resolved.route).toMatchObject({
         id: "anthropic-messages",
-        providerMetadataKey: "anthropic",
         endpoint: { baseURL: "https://anthropic.example/v1" },
       })
     }),
@@ -1262,7 +1259,7 @@ describe("ModelResolver", () => {
         reasoningEffort: "high",
       })
       expect(String(mistral.provider)).toBe("test-provider")
-      expect(xai.route.id).toBe("openai-responses")
+      expect(xai.route.id).toBe("xai-responses")
       expect(xai.route.defaults.providerOptions).toEqual({
         reasoningEffort: "high",
         store: false,

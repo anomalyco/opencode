@@ -126,7 +126,7 @@ for (const model of [
             name: item.type,
             result: { type: "json", value: item },
             providerExecuted: true,
-            providerMetadata: { [model.route.providerMetadataKey ?? model.provider]: { itemId: item.id } },
+            providerMetadata: { [model.route.id]: { itemId: item.id } },
           }),
         ],
       })
@@ -196,11 +196,10 @@ const retainedItems = [
 
 for (const model of [
   OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"),
-  ...[undefined, "custom"].map((providerMetadataKey) =>
+  ...["default-metadata", "custom"].map((id) =>
     Route.make({
-      id: providerMetadataKey ?? "default-metadata",
+      id,
       provider: "openai",
-      providerMetadataKey,
       protocol: OpenAIResponses.protocol,
       compact: OpenAIResponses.route.compact,
       endpoint: OpenAIResponses.route.endpoint,

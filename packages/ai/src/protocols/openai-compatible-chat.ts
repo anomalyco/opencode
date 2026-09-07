@@ -15,7 +15,6 @@ export type OpenAICompatibleChatLanguageModelInput = RouteRoutedLanguageModelInp
  */
 export const route = Route.make({
   id: ADAPTER,
-  providerMetadataKey: "openai",
   protocol: OpenAIChat.protocol,
   endpoint: Endpoint.path("/chat/completions"),
   framing: OpenAIChat.framing,

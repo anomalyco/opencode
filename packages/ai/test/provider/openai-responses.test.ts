@@ -1938,7 +1938,7 @@ describe("OpenAI Responses route", () => {
         reasoningTokens: 0,
         totalTokens: 7,
         providerMetadata: {
-          openai: {
+          "openai-responses": {
             input_tokens: 5,
             output_tokens: 2,
             total_tokens: 7,
@@ -1951,7 +1951,7 @@ describe("OpenAI Responses route", () => {
       expect(response.text).toBe("Hello!")
       expect(response.events).toEqual([
         { type: "step-start", index: 0 },
-        { type: "text-start", id: "msg_1", providerMetadata: { openai: { itemId: "msg_1" } } },
+        { type: "text-start", id: "msg_1", providerMetadata: { "openai-responses": { itemId: "msg_1" } } },
         { type: "text-delta", id: "msg_1", text: "Hello" },
         { type: "text-delta", id: "msg_1", text: "!" },
         { type: "text-end", id: "msg_1" },
@@ -1959,13 +1959,13 @@ describe("OpenAI Responses route", () => {
           type: "step-finish",
           index: 0,
           reason: { normalized: "stop", raw: undefined },
-          providerMetadata: { openai: { responseId: "resp_1", serviceTier: "default" } },
+          providerMetadata: { "openai-responses": { responseId: "resp_1", serviceTier: "default" } },
           usage,
         },
         {
           type: "finish",
           reason: { normalized: "stop", raw: undefined },
-          providerMetadata: { openai: { responseId: "resp_1", serviceTier: "default" } },
+          providerMetadata: { "openai-responses": { responseId: "resp_1", serviceTier: "default" } },
           usage,
         },
       ])
@@ -2040,7 +2040,7 @@ describe("OpenAI Responses route", () => {
         {
           type: "text",
           text: "I can't help with that.",
-          providerMetadata: { openai: { itemId: "msg_refusal", phase: "final_answer" } },
+          providerMetadata: { "openai-responses": { itemId: "msg_refusal", phase: "final_answer" } },
         },
       ])
 
@@ -2112,17 +2112,17 @@ describe("OpenAI Responses route", () => {
         {
           type: "text",
           text: "Checking.",
-          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
+          providerMetadata: { "openai-responses": { itemId: "msg_commentary", phase: "commentary" } },
         },
         {
           type: "text",
           text: "Finished.",
-          providerMetadata: { openai: { itemId: "msg_final", phase: "final_answer" } },
+          providerMetadata: { "openai-responses": { itemId: "msg_final", phase: "final_answer" } },
         },
         {
           type: "text",
           text: "Unclassified.",
-          providerMetadata: { openai: { itemId: "msg_null", phase: null } },
+          providerMetadata: { "openai-responses": { itemId: "msg_null", phase: null } },
         },
       ])
 
@@ -2170,7 +2170,7 @@ describe("OpenAI Responses route", () => {
 
       expect(response.text).toBe("Indexed")
       expect(response.message.content).toEqual([
-        { type: "text", text: "Indexed", providerMetadata: { openai: { itemId: "msg_1" } } },
+        { type: "text", text: "Indexed", providerMetadata: { "openai-responses": { itemId: "msg_1" } } },
       ])
     }),
   )
@@ -2331,7 +2331,7 @@ describe("OpenAI Responses route", () => {
         {
           type: "reasoning",
           text: "Thinking",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "state" } },
+          providerMetadata: { "openai-responses": { itemId: "rs_1", reasoningEncryptedContent: "state" } },
         },
       ])
     }),
@@ -2379,7 +2379,7 @@ describe("OpenAI Responses route", () => {
         {
           type: "reasoning",
           text: "Raw",
-          providerMetadata: { openai: { itemId: "", reasoningEncryptedContent: "state" } },
+          providerMetadata: { "openai-responses": { itemId: "", reasoningEncryptedContent: "state" } },
         },
       ])
     }),
@@ -2588,12 +2588,12 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(response.events.filter((event) => event.type.startsWith("text-"))).toEqual([
-        { type: "text-start", id: "msg_1", providerMetadata: { openai: { itemId: "msg_1" } } },
+        { type: "text-start", id: "msg_1", providerMetadata: { "openai-responses": { itemId: "msg_1" } } },
         { type: "text-delta", id: "msg_1", text: "First", providerMetadata: undefined },
-        { type: "text-end", id: "msg_1", providerMetadata: { openai: { itemId: "msg_1" } } },
-        { type: "text-start", id: "msg_2", providerMetadata: { openai: { itemId: "msg_2" } } },
+        { type: "text-end", id: "msg_1", providerMetadata: { "openai-responses": { itemId: "msg_1" } } },
+        { type: "text-start", id: "msg_2", providerMetadata: { "openai-responses": { itemId: "msg_2" } } },
         { type: "text-delta", id: "msg_2", text: "Second", providerMetadata: undefined },
-        { type: "text-end", id: "msg_2", providerMetadata: { openai: { itemId: "msg_2" } } },
+        { type: "text-end", id: "msg_2", providerMetadata: { "openai-responses": { itemId: "msg_2" } } },
       ])
     }),
   )
@@ -2629,9 +2629,9 @@ describe("OpenAI Responses route", () => {
         {
           type: "reasoning",
           text: "thinking",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+          providerMetadata: { "openai-responses": { itemId: "rs_1", reasoningEncryptedContent: null } },
         },
-        { type: "text", text: "Hello", providerMetadata: { openai: { itemId: "msg_1" } } },
+        { type: "text", text: "Hello", providerMetadata: { "openai-responses": { itemId: "msg_1" } } },
       ])
     }),
   )
@@ -2663,7 +2663,7 @@ describe("OpenAI Responses route", () => {
         expect.objectContaining({
           type: "reasoning-end",
           id: "rs_1:0",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+          providerMetadata: { "openai-responses": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         }),
       )
     }),
@@ -2715,7 +2715,7 @@ describe("OpenAI Responses route", () => {
       expect(response.message.content).toContainEqual({
         type: "reasoning",
         text: "Checked the diff.",
-        providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        providerMetadata: { "openai-responses": { itemId: "rs_1", reasoningEncryptedContent: null } },
       })
     }),
   )
@@ -2829,20 +2829,20 @@ describe("OpenAI Responses route", () => {
         {
           type: "reasoning-start",
           id: "rs_1:0",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+          providerMetadata: { "openai-responses": { itemId: "rs_1", reasoningEncryptedContent: null } },
         },
         { type: "reasoning-delta", id: "rs_1:0", text: "First" },
-        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { openai: { itemId: "rs_1" } } },
+        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { "openai-responses": { itemId: "rs_1" } } },
         {
           type: "reasoning-start",
           id: "rs_1:1",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+          providerMetadata: { "openai-responses": { itemId: "rs_1", reasoningEncryptedContent: null } },
         },
         { type: "reasoning-delta", id: "rs_1:1", text: "Second" },
         {
           type: "reasoning-end",
           id: "rs_1:1",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+          providerMetadata: { "openai-responses": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         },
         { type: "step-finish", index: 0, reason: { normalized: "stop", raw: undefined } },
         { type: "finish", reason: { normalized: "stop", raw: undefined } },
@@ -2887,31 +2887,31 @@ describe("OpenAI Responses route", () => {
         {
           type: "reasoning-start",
           id: "rs_1:0",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+          providerMetadata: { "openai-responses": { itemId: "rs_1", reasoningEncryptedContent: null } },
         },
         { type: "reasoning-delta", id: "rs_1:0", text: "First", providerMetadata: undefined },
-        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { openai: { itemId: "rs_1" } } },
+        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { "openai-responses": { itemId: "rs_1" } } },
         {
           type: "reasoning-start",
           id: "rs_1:1",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+          providerMetadata: { "openai-responses": { itemId: "rs_1", reasoningEncryptedContent: null } },
         },
         { type: "reasoning-delta", id: "rs_1:1", text: "Second", providerMetadata: undefined },
         {
           type: "reasoning-end",
           id: "rs_1:1",
-          providerMetadata: { openai: { itemId: "rs_1" } },
+          providerMetadata: { "openai-responses": { itemId: "rs_1" } },
         },
         {
           type: "reasoning-start",
           id: "rs_1:2",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+          providerMetadata: { "openai-responses": { itemId: "rs_1", reasoningEncryptedContent: null } },
         },
         { type: "reasoning-delta", id: "rs_1:2", text: "Third", providerMetadata: undefined },
         {
           type: "reasoning-end",
           id: "rs_1:2",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+          providerMetadata: { "openai-responses": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         },
       ])
     }),
@@ -3093,14 +3093,14 @@ describe("OpenAI Responses route", () => {
         {
           type: "reasoning-start",
           id: "rs_1:0",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+          providerMetadata: { "openai-responses": { itemId: "rs_1", reasoningEncryptedContent: null } },
         },
         { type: "reasoning-delta", id: "rs_1:0", text: "Checked the diff.", providerMetadata: undefined },
         {
           type: "reasoning-end",
           id: "rs_1:0",
           text: "Checked the diff.",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+          providerMetadata: { "openai-responses": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         },
       ])
 
@@ -3178,11 +3178,11 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(response.events.filter((event) => event.type === "reasoning-end")).toEqual([
-        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { openai: { itemId: "rs_1" } } },
+        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { "openai-responses": { itemId: "rs_1" } } },
         {
           type: "reasoning-end",
           id: "rs_1:1",
-          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+          providerMetadata: { "openai-responses": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         },
       ])
     }),
@@ -3201,7 +3201,7 @@ describe("OpenAI Responses route", () => {
                 type: "reasoning",
                 text: "Checked the previous diff.",
                 providerMetadata: {
-                  openai: {
+                  "openai-responses": {
                     itemId: "rs_1",
                     reasoningEncryptedContent: "encrypted-state",
                   },
@@ -3262,7 +3262,7 @@ describe("OpenAI Responses route", () => {
                 type: "reasoning",
                 text: "Checked order.",
                 providerMetadata: {
-                  openai: {
+                  "openai-responses": {
                     itemId: "rs_1",
                     reasoningEncryptedContent: "encrypted-state",
                   },
@@ -3298,7 +3298,9 @@ describe("OpenAI Responses route", () => {
               {
                 type: "reasoning",
                 text: "Checked the previous diff.",
-                providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+                providerMetadata: {
+                  "openai-responses": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
+                },
               },
             ]),
           ],
@@ -3330,7 +3332,7 @@ describe("OpenAI Responses route", () => {
                 name: "web_search",
                 input: { query: "effect 4" },
                 providerExecuted: true,
-                providerMetadata: { openai: { itemId: "ws_1" } },
+                providerMetadata: { "openai-responses": { itemId: "ws_1" } },
               }),
               {
                 type: "tool-result",
@@ -3338,7 +3340,7 @@ describe("OpenAI Responses route", () => {
                 name: "web_search",
                 result: { type: "json", value: item },
                 providerExecuted: true,
-                providerMetadata: { openai: { itemId: "ws_1" } },
+                providerMetadata: { "openai-responses": { itemId: "ws_1" } },
               },
             ]),
             Message.user("Continue."),
@@ -3368,7 +3370,7 @@ describe("OpenAI Responses route", () => {
                 name: "web_search",
                 input: { query: "effect 4" },
                 providerExecuted: true,
-                providerMetadata: { openai: { itemId: "ws_1" } },
+                providerMetadata: { "openai-responses": { itemId: "ws_1" } },
               }),
               {
                 type: "tool-result",
@@ -3376,7 +3378,7 @@ describe("OpenAI Responses route", () => {
                 name: "web_search",
                 result: { type: "json", value: item },
                 providerExecuted: true,
-                providerMetadata: { openai: { itemId: "ws_1" } },
+                providerMetadata: { "openai-responses": { itemId: "ws_1" } },
               },
             ]),
             Message.user("Continue."),
@@ -3410,7 +3412,7 @@ describe("OpenAI Responses route", () => {
               name: item.type,
               result: { type: "json", value: item },
               providerExecuted: true,
-              providerMetadata: { openai: { itemId: item.id } },
+              providerMetadata: { "openai-responses": { itemId: item.id } },
             }),
           ),
         }),
@@ -3437,7 +3439,7 @@ describe("OpenAI Responses route", () => {
                 name: "web_search",
                 input: { query: "effect 4" },
                 providerExecuted: true,
-                providerMetadata: { openai: { itemId: "ws_1" } },
+                providerMetadata: { "openai-responses": { itemId: "ws_1" } },
               }),
               {
                 type: "tool-result",
@@ -3445,7 +3447,7 @@ describe("OpenAI Responses route", () => {
                 name: "web_search",
                 result: { type: "json", value: item },
                 providerExecuted: true,
-                providerMetadata: { openai: { itemId: "ws_1" } },
+                providerMetadata: { "openai-responses": { itemId: "ws_1" } },
               },
             ]),
             Message.user("Continue."),
@@ -3477,7 +3479,7 @@ describe("OpenAI Responses route", () => {
                 name: "web_search",
                 result: { type: "json", value: { type: "web_search_call", id: "ws_other", status: "completed" } },
                 providerExecuted: true,
-                providerMetadata: { openai: { itemId: "ws_1" } },
+                providerMetadata: { "openai-responses": { itemId: "ws_1" } },
               },
             ]),
           ],
@@ -3503,39 +3505,41 @@ describe("OpenAI Responses route", () => {
               {
                 type: "text",
                 text: "Hello",
-                providerMetadata: { openai: { itemId: "history_1" } },
+                providerMetadata: { "openai-responses": { itemId: "history_1" } },
               },
               {
                 type: "text",
                 text: "World",
-                providerMetadata: { openai: { itemId: `message_${"a".repeat(64)}` } },
+                providerMetadata: { "openai-responses": { itemId: `message_${"a".repeat(64)}` } },
               },
               {
                 type: "reasoning",
                 text: "Checked the diff.",
-                providerMetadata: { openai: { itemId: "thinking_1", reasoningEncryptedContent: "encrypted-state" } },
+                providerMetadata: {
+                  "openai-responses": { itemId: "thinking_1", reasoningEncryptedContent: "encrypted-state" },
+                },
               },
               {
                 type: "reasoning",
                 text: "Missing suffix.",
-                providerMetadata: { openai: { itemId: "rs_", reasoningEncryptedContent: "another-state" } },
+                providerMetadata: { "openai-responses": { itemId: "rs_", reasoningEncryptedContent: "another-state" } },
               },
               {
                 type: "reasoning",
                 text: "No prefix separator.",
-                providerMetadata: { openai: { itemId: "550e8400-e29b-41d4-a716-446655440000" } },
+                providerMetadata: { "openai-responses": { itemId: "550e8400-e29b-41d4-a716-446655440000" } },
               },
               ToolCallPart.make({
                 id: "call_1",
                 name: "lookup",
                 input: { query: "weather" },
-                providerMetadata: { openai: { itemId: "toolu_01A" } },
+                providerMetadata: { "openai-responses": { itemId: "toolu_01A" } },
               }),
               ToolCallPart.make({
                 id: "call_2",
                 name: "lookup",
                 input: { query: "news" },
-                providerMetadata: { openai: { itemId: "fc_" } },
+                providerMetadata: { "openai-responses": { itemId: "fc_" } },
               }),
             ]),
           ],
@@ -3597,7 +3601,7 @@ describe("OpenAI Responses route", () => {
             name: "web_search",
             input: { query: "effect 4" },
             providerExecuted: true,
-            providerMetadata: { openai: { itemId } },
+            providerMetadata: { "openai-responses": { itemId } },
           }),
           {
             type: "tool-result" as const,
@@ -3605,7 +3609,7 @@ describe("OpenAI Responses route", () => {
             name: "web_search",
             result: { type: "json" as const, value: item },
             providerExecuted: true as const,
-            providerMetadata: { openai: { itemId } },
+            providerMetadata: { "openai-responses": { itemId } },
           },
         ]
       }
@@ -3641,7 +3645,7 @@ describe("OpenAI Responses route", () => {
                 name: "image_generation",
                 input: {},
                 providerExecuted: true,
-                providerMetadata: { openai: { itemId: "ig_1" } },
+                providerMetadata: { "openai-responses": { itemId: "ig_1" } },
               }),
               ToolResultPart.make({
                 id: "ig_1",
@@ -3651,7 +3655,7 @@ describe("OpenAI Responses route", () => {
                   value: [{ type: "file", uri: "data:image/png;base64,AQID", mime: "image/png" }],
                 },
                 providerExecuted: true,
-                providerMetadata: { openai: { itemId: "ig_1" } },
+                providerMetadata: { "openai-responses": { itemId: "ig_1" } },
               }),
             ]),
             Message.user("Make it blue."),
@@ -3682,7 +3686,7 @@ describe("OpenAI Responses route", () => {
                 name: "image_generation",
                 input: {},
                 providerExecuted: true,
-                providerMetadata: { openai: { itemId: "ig_1" } },
+                providerMetadata: { "openai-responses": { itemId: "ig_1" } },
               }),
               ToolResultPart.make({
                 id: "ig_1",
@@ -3692,7 +3696,7 @@ describe("OpenAI Responses route", () => {
                   value: [{ type: "file", uri: "data:image/png;base64,AQID", mime: "image/png" }],
                 },
                 providerExecuted: true,
-                providerMetadata: { openai: { itemId: "ig_1" } },
+                providerMetadata: { "openai-responses": { itemId: "ig_1" } },
               }),
             ]),
           ],
@@ -3717,12 +3721,14 @@ describe("OpenAI Responses route", () => {
               {
                 type: "reasoning",
                 text: "First",
-                providerMetadata: { openai: { itemId: "rs_1" } },
+                providerMetadata: { "openai-responses": { itemId: "rs_1" } },
               },
               {
                 type: "reasoning",
                 text: "Second",
-                providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+                providerMetadata: {
+                  "openai-responses": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
+                },
               },
             ]),
           ],
@@ -3757,7 +3763,7 @@ describe("OpenAI Responses route", () => {
                 type: "reasoning",
                 text: "Checked the previous diff.",
                 providerMetadata: {
-                  openai: {
+                  "openai-responses": {
                     itemId: "rs_1",
                     reasoningEncryptedContent: null,
                   },
@@ -3821,7 +3827,7 @@ describe("OpenAI Responses route", () => {
         cacheReadInputTokens: undefined,
         reasoningTokens: undefined,
         totalTokens: 6,
-        providerMetadata: { openai: { input_tokens: 5, output_tokens: 1 } },
+        providerMetadata: { "openai-responses": { input_tokens: 5, output_tokens: 1 } },
       })
 
       expect(response.events).toEqual([
@@ -3830,7 +3836,7 @@ describe("OpenAI Responses route", () => {
           type: "tool-input-start",
           id: "call_1",
           name: "lookup",
-          providerMetadata: { openai: { itemId: "fc_item_1" } },
+          providerMetadata: { "openai-responses": { itemId: "fc_item_1" } },
         },
         {
           type: "tool-input-delta",
@@ -3850,7 +3856,7 @@ describe("OpenAI Responses route", () => {
           type: "tool-input-end",
           id: "call_1",
           name: "lookup",
-          providerMetadata: { openai: { itemId: "fc_item_1" } },
+          providerMetadata: { "openai-responses": { itemId: "fc_item_1" } },
         },
         {
           type: "tool-call",
@@ -3858,7 +3864,7 @@ describe("OpenAI Responses route", () => {
           name: "lookup",
           input: { query: "weather" },
           providerExecuted: undefined,
-          providerMetadata: { openai: { itemId: "fc_item_1" } },
+          providerMetadata: { "openai-responses": { itemId: "fc_item_1" } },
         },
         {
           type: "step-finish",
@@ -3927,7 +3933,7 @@ describe("OpenAI Responses route", () => {
           name: "lookup",
           input: { query: "weather" },
           providerExecuted: undefined,
-          providerMetadata: { openai: { itemId: "fc_item_1" } },
+          providerMetadata: { "openai-responses": { itemId: "fc_item_1" } },
         },
       ])
     }),
@@ -4104,7 +4110,7 @@ describe("OpenAI Responses route", () => {
       expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({
         id: "call_1",
         input: { query: "weather" },
-        providerMetadata: { openai: { itemId: "fc_item_1" } },
+        providerMetadata: { "openai-responses": { itemId: "fc_item_1" } },
       })
       expect(response.events.filter(LLMEvent.is.toolInputEnd)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.toolCall)).toHaveLength(1)
@@ -4228,7 +4234,7 @@ describe("OpenAI Responses route", () => {
             type: "tool-input-end",
             id: "call_1",
             name: "lookup",
-            providerMetadata: { openai: { itemId: "fc_item_1" } },
+            providerMetadata: { "openai-responses": { itemId: "fc_item_1" } },
           },
           {
             type: "tool-call",
@@ -4236,7 +4242,7 @@ describe("OpenAI Responses route", () => {
             name: "lookup",
             input: {},
             providerExecuted: undefined,
-            providerMetadata: { openai: { itemId: "fc_item_1" } },
+            providerMetadata: { "openai-responses": { itemId: "fc_item_1" } },
           },
         ],
       )
@@ -4330,7 +4336,7 @@ describe("OpenAI Responses route", () => {
 
       expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({
         id: "call_1",
-        providerMetadata: { openai: { itemId: "fc_item_1" } },
+        providerMetadata: { "openai-responses": { itemId: "fc_item_1" } },
       })
     }),
   )
@@ -4360,7 +4366,7 @@ describe("OpenAI Responses route", () => {
           name: "web_search",
           input: { type: "search", query: "effect 4" },
           providerExecuted: true,
-          providerMetadata: { openai: { itemId: "ws_1" } },
+          providerMetadata: { "openai-responses": { itemId: "ws_1" } },
         },
         {
           type: "tool-result",
@@ -4368,7 +4374,7 @@ describe("OpenAI Responses route", () => {
           name: "web_search",
           result: { type: "json", value: item },
           providerExecuted: true,
-          providerMetadata: { openai: { itemId: "ws_1" } },
+          providerMetadata: { "openai-responses": { itemId: "ws_1" } },
         },
       ])
     }),
@@ -4401,7 +4407,7 @@ describe("OpenAI Responses route", () => {
           name: "computer_use",
           input: { type: "click", x: 100, y: 200 },
           providerExecuted: true,
-          providerMetadata: { openai: { itemId: "computer_1" } },
+          providerMetadata: { "openai-responses": { itemId: "computer_1" } },
         },
         {
           type: "tool-result",
@@ -4409,7 +4415,7 @@ describe("OpenAI Responses route", () => {
           name: "computer_use",
           result: { type: "json", value: item },
           providerExecuted: true,
-          providerMetadata: { openai: { itemId: "computer_1" } },
+          providerMetadata: { "openai-responses": { itemId: "computer_1" } },
         },
       ])
     }),
@@ -4437,7 +4443,7 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({
-        providerMetadata: { openai: { itemId: "ig_1" } },
+        providerMetadata: { "openai-responses": { itemId: "ig_1" } },
       })
       expect(response.events.find(LLMEvent.is.toolResult)).toMatchObject({
         id: "ig_1",
@@ -4447,7 +4453,7 @@ describe("OpenAI Responses route", () => {
           type: "content",
           value: [{ type: "file", uri: "data:image/png;base64,AQID", mime: "image/png" }],
         },
-        providerMetadata: { openai: { itemId: "ig_1" } },
+        providerMetadata: { "openai-responses": { itemId: "ig_1" } },
       })
 
       const prepared = yield* Effect.forEach([false, true], (store) =>
@@ -4481,7 +4487,7 @@ describe("OpenAI Responses route", () => {
 
       expect(response.events.find(LLMEvent.is.toolResult)).toMatchObject({
         result: { type: "error", value: item.error },
-        providerMetadata: { openai: { itemId: "ws_failed" } },
+        providerMetadata: { "openai-responses": { itemId: "ws_failed" } },
       })
 
       const prepared = yield* compileRequest(
@@ -4541,7 +4547,7 @@ describe("OpenAI Responses route", () => {
         name: "code_interpreter",
         input: { code: "print(1+1)", container_id: "cnt_xyz" },
         providerExecuted: true,
-        providerMetadata: { openai: { itemId: "ci_1" } },
+        providerMetadata: { "openai-responses": { itemId: "ci_1" } },
       })
       const toolResult = response.events.find((event) => event.type === "tool-result")
       expect(toolResult).toEqual({
@@ -4550,7 +4556,7 @@ describe("OpenAI Responses route", () => {
         name: "code_interpreter",
         result: { type: "json", value: item },
         providerExecuted: true,
-        providerMetadata: { openai: { itemId: "ci_1" } },
+        providerMetadata: { "openai-responses": { itemId: "ci_1" } },
       })
     }),
   )

@@ -232,7 +232,7 @@ type GeminiEvent = Schema.Schema.Type<typeof GeminiEvent>
 
 interface ParserState {
   readonly route: string
-  readonly providerMetadataKey: string
+  readonly routeID: string
   readonly finishReason?: string
   readonly hasToolCalls: boolean
   readonly promptFeedback?: GeminiPromptFeedback
@@ -309,7 +309,7 @@ const lowerToolCall = (part: ToolCallPart, omitIds: boolean, metadataKey: string
 
 const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMRequest) {
   const contents: GeminiContent[] = []
-  const metadataKey = request.model.route.providerMetadataKey ?? String(request.model.provider)
+  const metadataKey = request.model.route.id
   const omitCallIds = omitsFunctionCallIds(request.model.id)
   const legacyToolMedia = routesLegacyToolMedia(request.model.id)
   let pendingMedia: GeminiInlineDataPart[] | undefined
@@ -583,7 +583,7 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
       state.reasoningId,
       state.reasoningSignature === undefined
         ? undefined
-        : providerMetadata(state.providerMetadataKey, { thoughtSignature: state.reasoningSignature }),
+        : providerMetadata(state.routeID, { thoughtSignature: state.reasoningSignature }),
     )
   if (state.textId !== undefined)
     lifecycle = Lifecycle.textEnd(
@@ -592,7 +592,7 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
       state.textId,
       state.textSignature === undefined
         ? undefined
-        : providerMetadata(state.providerMetadataKey, { thoughtSignature: state.textSignature }),
+        : providerMetadata(state.routeID, { thoughtSignature: state.textSignature }),
     )
   Lifecycle.finish(lifecycle, events, {
     reason: {
@@ -604,7 +604,7 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
     providerMetadata:
       state.promptFeedback === undefined
         ? undefined
-        : providerMetadata(state.providerMetadataKey, { promptFeedback: state.promptFeedback }),
+        : providerMetadata(state.routeID, { promptFeedback: state.promptFeedback }),
   })
   return events
 }
@@ -634,9 +634,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
   const nextState = {
     ...state,
     promptFeedback: event.promptFeedback ?? state.promptFeedback,
-    usage: event.usageMetadata
-      ? (mapUsage(event.usageMetadata, state.providerMetadataKey) ?? state.usage)
-      : state.usage,
+    usage: event.usageMetadata ? (mapUsage(event.usageMetadata, state.routeID) ?? state.usage) : state.usage,
   }
   const candidate = event.candidates?.[0]
   if (candidate?.finishReason && mapFinishReason(candidate.finishReason, state.hasToolCalls) === "error")
@@ -692,9 +690,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
             lifecycle,
             events,
             textId,
-            textSignature
-              ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature })
-              : undefined,
+            textSignature ? providerMetadata(state.routeID, { thoughtSignature: textSignature }) : undefined,
           )
           textId = undefined
           textSignature = undefined
@@ -708,7 +704,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
           events,
           reasoningId,
           part.text,
-          signature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: signature }) : undefined,
+          signature ? providerMetadata(state.routeID, { thoughtSignature: signature }) : undefined,
         )
         continue
       }
@@ -717,9 +713,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
           lifecycle,
           events,
           reasoningId,
-          reasoningSignature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
-            : undefined,
+          reasoningSignature ? providerMetadata(state.routeID, { thoughtSignature: reasoningSignature }) : undefined,
         )
         reasoningId = undefined
         reasoningSignature = undefined
@@ -733,7 +727,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
         events,
         textId,
         part.text,
-        textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
+        textSignature ? providerMetadata(state.routeID, { thoughtSignature: textSignature }) : undefined,
       )
       textSignature = undefined
       continue
@@ -754,9 +748,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
           lifecycle,
           events,
           reasoningId,
-          reasoningSignature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
-            : undefined,
+          reasoningSignature ? providerMetadata(state.routeID, { thoughtSignature: reasoningSignature }) : undefined,
         )
         reasoningId = undefined
         reasoningSignature = undefined
@@ -766,7 +758,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
           lifecycle,
           events,
           textId,
-          textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
+          textSignature ? providerMetadata(state.routeID, { thoughtSignature: textSignature }) : undefined,
         )
         textId = undefined
         textSignature = undefined
@@ -778,7 +770,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
           name: part.functionCall.name,
           input,
           providerMetadata: part.thoughtSignature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: part.thoughtSignature })
+            ? providerMetadata(state.routeID, { thoughtSignature: part.thoughtSignature })
             : undefined,
         }),
       )
@@ -821,7 +813,7 @@ export const protocol = Protocol.make({
     event: Protocol.jsonEvent(GeminiEvent),
     initial: (request) => ({
       route: `${request.model.provider}/${request.model.route.id}`,
-      providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
+      routeID: request.model.route.id,
       hasToolCalls: false,
       lifecycle: Lifecycle.initial(),
       nextReasoningId: 0,
@@ -835,7 +827,6 @@ export const protocol = Protocol.make({
 export const route = Route.make({
   id: ADAPTER,
   provider: "google",
-  providerMetadataKey: "google",
   protocol,
   // Gemini's path embeds the model id and pins SSE framing at the URL level.
   endpoint: Endpoint.path(({ request }) => `/models/${request.model.id}:streamGenerateContent?alt=sse`, {

@@ -154,7 +154,7 @@ describe("OpenAI Chat route", () => {
               {
                 type: "reasoning",
                 text: "thinking",
-                providerMetadata: { openai: { reasoningField: "reasoning" } },
+                providerMetadata: { "openai-chat": { reasoningField: "reasoning" } },
               },
               { type: "text", text: "Hello" },
             ]),
@@ -180,7 +180,7 @@ describe("OpenAI Chat route", () => {
               {
                 type: "reasoning",
                 text: "thinking",
-                providerMetadata: { openai: { reasoningField: "reasoning_text" } },
+                providerMetadata: { "openai-chat": { reasoningField: "reasoning_text" } },
               },
               { type: "text", text: "Hello" },
             ]),
@@ -775,7 +775,7 @@ describe("OpenAI Chat route", () => {
         reasoningTokens: 0,
         totalTokens: 7,
         providerMetadata: {
-          openai: {
+          "openai-chat": {
             prompt_tokens: 5,
             completion_tokens: 2,
             total_tokens: 7,
@@ -868,7 +868,7 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(response.message.content).toEqual([
-        { type: "reasoning", text: "", providerMetadata: { openai: { reasoningDetails: [] } } },
+        { type: "reasoning", text: "", providerMetadata: { "openai-chat": { reasoningDetails: [] } } },
         {
           type: "text",
           text: "I can't help with that.",
@@ -917,7 +917,7 @@ describe("OpenAI Chat route", () => {
         expect(response.reasoning).toBe("thinking")
         expect(response.text).toBe("Hello")
         expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-          openai: { reasoningField: field },
+          "openai-chat": { reasoningField: field },
         })
 
         const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
@@ -926,10 +926,10 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("uses the configured provider metadata namespace for reasoning and usage", () =>
+  it.effect("uses the route ID for reasoning and usage metadata", () =>
     Effect.gen(function* () {
       const selected = LanguageModel.update(model, {
-        route: { ...model.route, providerMetadataKey: "vendor" },
+        route: model.route.with({ id: "vendor" }),
       })
       const details = [{ type: "reasoning.text", text: "thinking", signature: "signed" }]
       const response = yield* LLMClient.generate(LLMRequest.update(request, { model: selected })).pipe(
@@ -959,12 +959,9 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("falls back to the selected provider for the metadata namespace", () =>
+  it.effect("preserves the route metadata namespace when the selected provider changes", () =>
     Effect.gen(function* () {
-      const compatible = model.route.with({ provider: "deepseek" }).model({ id: "deepseek-chat" })
-      const selected = LanguageModel.update(compatible, {
-        route: { ...compatible.route, providerMetadataKey: undefined },
-      })
+      const selected = model.route.with({ provider: "deepseek" }).model({ id: "deepseek-chat" })
       const response = yield* LLMClient.generate(LLMRequest.update(request, { model: selected })).pipe(
         Effect.provide(
           fixedResponse(
@@ -979,10 +976,10 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        deepseek: { reasoningField: "reasoning_content" },
+        "openai-chat": { reasoningField: "reasoning_content" },
       })
       expect(response.usage?.providerMetadata).toEqual({
-        deepseek: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+        "openai-chat": { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
       })
 
       const replay = yield* compileRequest(LLM.request({ model: selected, messages: [response.message] }))
@@ -1007,7 +1004,7 @@ describe("OpenAI Chat route", () => {
 
       expect(response.reasoning).toBe("thinking")
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "vendor_reasoning" },
+        "openai-chat": { reasoningField: "vendor_reasoning" },
       })
 
       const replay = yield* compileRequest(LLM.request({ model: custom, messages: [response.message] }))
@@ -1050,7 +1047,7 @@ describe("OpenAI Chat route", () => {
 
       expect(response.reasoning).toBe("thinking")
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: details },
+        "openai-chat": { reasoningField: "reasoning", reasoningDetails: details },
       })
 
       const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
@@ -1093,7 +1090,7 @@ describe("OpenAI Chat route", () => {
 
       expect(response.reasoning).toBe("thinking")
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningDetails: details },
+        "openai-chat": { reasoningDetails: details },
       })
 
       const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
@@ -1118,7 +1115,7 @@ describe("OpenAI Chat route", () => {
 
       expect(response.reasoning).toBe("thinking")
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: details },
+        "openai-chat": { reasoningField: "reasoning", reasoningDetails: details },
       })
 
       const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
@@ -1145,7 +1142,7 @@ describe("OpenAI Chat route", () => {
 
       expect(response.reasoning).toBe("thinking")
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: details },
+        "openai-chat": { reasoningField: "reasoning", reasoningDetails: details },
       })
     }),
   )
@@ -1171,7 +1168,7 @@ describe("OpenAI Chat route", () => {
       expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
       expect(response.message.content.filter((part) => part.type === "reasoning")).toHaveLength(1)
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: details },
+        "openai-chat": { reasoningField: "reasoning", reasoningDetails: details },
       })
     }),
   )
@@ -1197,7 +1194,7 @@ describe("OpenAI Chat route", () => {
       expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
       expect(response.message.content.filter((part) => part.type === "reasoning")).toHaveLength(1)
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: details },
+        "openai-chat": { reasoningField: "reasoning", reasoningDetails: details },
       })
     }),
   )
@@ -1218,7 +1215,7 @@ describe("OpenAI Chat route", () => {
 
       expect(response.reasoning).toBe("")
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningDetails: [] },
+        "openai-chat": { reasoningDetails: [] },
       })
 
       const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
@@ -1268,12 +1265,14 @@ describe("OpenAI Chat route", () => {
       expect(response.reasoning).toBe("thinking")
       expect(response.message.content.filter((part) => part.type === "reasoning")).toHaveLength(1)
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: merged },
+        "openai-chat": { reasoningField: "reasoning", reasoningDetails: merged },
       })
       expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.reasoningDelta)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
-      expect(publishedEndMetadata).toEqual([{ openai: { reasoningField: "reasoning", reasoningDetails: merged } }])
+      expect(publishedEndMetadata).toEqual([
+        { "openai-chat": { reasoningField: "reasoning", reasoningDetails: merged } },
+      ])
       expect(response.events.findIndex(LLMEvent.is.reasoningStart)).toBeLessThan(
         response.events.findIndex(LLMEvent.is.textStart),
       )
@@ -1304,7 +1303,7 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(response.message.content).toEqual([
-        { type: "reasoning", text: "", providerMetadata: { openai: { reasoningDetails: details } } },
+        { type: "reasoning", text: "", providerMetadata: { "openai-chat": { reasoningDetails: details } } },
       ])
       expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
@@ -1330,7 +1329,7 @@ describe("OpenAI Chat route", () => {
 
       expect(response.reasoning).toBe("summary")
       expect(response.message.content).toEqual([
-        { type: "reasoning", text: "summary", providerMetadata: { openai: { reasoningDetails: details } } },
+        { type: "reasoning", text: "summary", providerMetadata: { "openai-chat": { reasoningDetails: details } } },
       ])
     }),
   )
@@ -1347,12 +1346,12 @@ describe("OpenAI Chat route", () => {
               {
                 type: "reasoning",
                 text: "first",
-                providerMetadata: { openai: { reasoningDetails: [first] } },
+                providerMetadata: { "openai-chat": { reasoningDetails: [first] } },
               },
               {
                 type: "reasoning",
                 text: "second",
-                providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: [second] } },
+                providerMetadata: { "openai-chat": { reasoningField: "reasoning", reasoningDetails: [second] } },
               },
             ]),
           ],
@@ -1376,7 +1375,7 @@ describe("OpenAI Chat route", () => {
               {
                 type: "reasoning",
                 text: "A",
-                providerMetadata: { openai: { reasoningDetails: [detail] } },
+                providerMetadata: { "openai-chat": { reasoningDetails: [detail] } },
               },
               { type: "reasoning", text: "B" },
             ]),

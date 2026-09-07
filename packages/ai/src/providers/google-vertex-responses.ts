@@ -28,7 +28,6 @@ export interface Settings extends ProviderPackage.Settings {
 const route = Route.make({
   id: "google-vertex-responses",
   provider: id,
-  providerMetadataKey: "vertex",
   protocol: OpenResponses.protocol,
   endpoint: Endpoint.path(OpenResponses.PATH),
   transport: OpenResponses.httpTransport,

@@ -28,7 +28,6 @@ export interface Settings extends ProviderPackage.Settings {
 const route = Route.make({
   id: "google-vertex-chat",
   provider: id,
-  providerMetadataKey: "vertex",
   protocol: OpenAIChat.protocol,
   endpoint: Endpoint.path("/chat/completions"),
   framing: OpenAIChat.framing,

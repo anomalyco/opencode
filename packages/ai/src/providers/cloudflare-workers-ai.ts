@@ -35,7 +35,6 @@ export const baseURL = (input: WorkersAIURL) => {
 export const route = Route.make({
   id: "cloudflare-workers-ai",
   provider: id,
-  providerMetadataKey: "cloudflare-workers-ai",
   protocol: OpenAIChat.protocol,
   endpoint: Endpoint.path("/chat/completions"),
   framing: OpenAIChat.framing,

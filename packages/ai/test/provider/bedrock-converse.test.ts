@@ -837,7 +837,7 @@ describe("Bedrock Converse route", () => {
                   {
                     type: "reasoning",
                     text: "Partial thought",
-                    providerMetadata: signature === undefined ? undefined : { bedrock: { signature } },
+                    providerMetadata: signature === undefined ? undefined : { "bedrock-converse": { signature } },
                     cache: new CacheHint({ type: "ephemeral" }),
                   },
                 ]),
@@ -865,7 +865,7 @@ describe("Bedrock Converse route", () => {
             Message.user("Think"),
             Message.assistant([
               { type: "reasoning", text: "", cache },
-              { type: "reasoning", text: "  ", providerMetadata: { bedrock: { signature: "" } }, cache },
+              { type: "reasoning", text: "  ", providerMetadata: { "bedrock-converse": { signature: "" } }, cache },
             ]),
             Message.user([{ type: "text", text: "Continue", cache }]),
           ],
@@ -893,11 +893,16 @@ describe("Bedrock Converse route", () => {
               {
                 type: "reasoning",
                 text: "Signed thought",
-                providerMetadata: { bedrock: { signature: "sig_1" } },
+                providerMetadata: { "bedrock-converse": { signature: "sig_1" } },
                 cache,
               },
               { type: "reasoning", text: "", encrypted: "sig_2", cache },
-              { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData: "cmVkYWN0ZWQ=" } }, cache },
+              {
+                type: "reasoning",
+                text: "",
+                providerMetadata: { "bedrock-converse": { redactedData: "cmVkYWN0ZWQ=" } },
+                cache,
+              },
               { type: "text", text: "Checking" },
               ToolCallPart.make({ id: "call_1", name: "lookup", input: {} }),
             ]),
@@ -937,7 +942,7 @@ describe("Bedrock Converse route", () => {
       expect(reasoning).toEqual({
         type: "reasoning-end",
         id: "reasoning-0",
-        providerMetadata: { bedrock: { signature: "sig_1" } },
+        providerMetadata: { "bedrock-converse": { signature: "sig_1" } },
       })
 
       const prepared = yield* compileRequest(
@@ -960,7 +965,7 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("round-trips reassigned provider reasoning and usage metadata in its own namespace", () =>
+  it.effect("preserves route-keyed reasoning and usage metadata when the provider is reassigned", () =>
     Effect.gen(function* () {
       const compatible = model.route.with({ provider: "custom-bedrock" }).model({ id: model.id })
       const redactedData = "cmVkYWN0ZWQtdGhpbmtpbmc="
@@ -988,12 +993,12 @@ describe("Bedrock Converse route", () => {
         {
           type: "reasoning",
           text: "Let me think.",
-          providerMetadata: { "custom-bedrock": { signature: "custom_sig" } },
+          providerMetadata: { "bedrock-converse": { signature: "custom_sig" } },
         },
-        { type: "reasoning", text: "", providerMetadata: { "custom-bedrock": { redactedData } } },
+        { type: "reasoning", text: "", providerMetadata: { "bedrock-converse": { redactedData } } },
       ])
       expect(response.usage?.providerMetadata).toEqual({
-        "custom-bedrock": { inputTokens: 5, outputTokens: 2, totalTokens: 7 },
+        "bedrock-converse": { inputTokens: 5, outputTokens: 2, totalTokens: 7 },
       })
 
       const prepared = yield* compileRequest(
@@ -1030,13 +1035,13 @@ describe("Bedrock Converse route", () => {
         type: "reasoning-delta",
         id: "reasoning-0",
         text: "",
-        providerMetadata: { bedrock: { signature: "sig_1" } },
+        providerMetadata: { "bedrock-converse": { signature: "sig_1" } },
       })
       expect(response.message.content).toEqual([
         {
           type: "reasoning",
           text: "Let me think.",
-          providerMetadata: { bedrock: { signature: "sig_1" } },
+          providerMetadata: { "bedrock-converse": { signature: "sig_1" } },
         },
       ])
 
@@ -1061,7 +1066,7 @@ describe("Bedrock Converse route", () => {
       const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
 
       expect(response.message.content).toEqual([
-        { type: "reasoning", text: "", providerMetadata: { bedrock: { signature: "sig_1" } } },
+        { type: "reasoning", text: "", providerMetadata: { "bedrock-converse": { signature: "sig_1" } } },
       ])
     }),
   )
@@ -1081,10 +1086,10 @@ describe("Bedrock Converse route", () => {
         type: "reasoning-delta",
         id: "reasoning-0",
         text: "",
-        providerMetadata: { bedrock: { redactedData } },
+        providerMetadata: { "bedrock-converse": { redactedData } },
       })
       expect(response.message.content).toEqual([
-        { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData } } },
+        { type: "reasoning", text: "", providerMetadata: { "bedrock-converse": { redactedData } } },
       ])
     }),
   )
@@ -1124,12 +1129,12 @@ describe("Bedrock Converse route", () => {
         type: "reasoning-delta",
         id: "reasoning-0",
         text: "",
-        providerMetadata: { bedrock: { redactedData } },
+        providerMetadata: { "bedrock-converse": { redactedData } },
       })
       expect(response.events.find((event) => event.type === "reasoning-end")).toEqual({
         type: "reasoning-end",
         id: "reasoning-0",
-        providerMetadata: { bedrock: { redactedData } },
+        providerMetadata: { "bedrock-converse": { redactedData } },
       })
       const prepared = yield* compileRequest(
         LLM.request({
@@ -1181,8 +1186,8 @@ describe("Bedrock Converse route", () => {
       )
 
       expect(response.message.content).toEqual([
-        { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData: "AQI=" } } },
-        { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData: "AwQ=" } } },
+        { type: "reasoning", text: "", providerMetadata: { "bedrock-converse": { redactedData: "AQI=" } } },
+        { type: "reasoning", text: "", providerMetadata: { "bedrock-converse": { redactedData: "AwQ=" } } },
       ])
     }),
   )
@@ -1203,7 +1208,7 @@ describe("Bedrock Converse route", () => {
       )
 
       expect(response.message.content).toEqual([
-        { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData: "AQID" } } },
+        { type: "reasoning", text: "", providerMetadata: { "bedrock-converse": { redactedData: "AQID" } } },
       ])
     }),
   )

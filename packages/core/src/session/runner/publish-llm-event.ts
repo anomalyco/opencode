@@ -18,7 +18,7 @@ type Input = {
   readonly sessionID: SessionSchema.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
-  readonly providerMetadataKey: string
+  readonly routeID: string
   readonly snapshot?: Snapshot.ID
   readonly assistantMessageID: SessionMessage.ID
 }
@@ -115,7 +115,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       assistantMessageID: yield* startAssistant(),
     })
   })
-  const providerState = (metadata: ProviderMetadata | undefined) => metadata?.[input.providerMetadataKey]
+  const providerState = (metadata: ProviderMetadata | undefined) => metadata?.[input.routeID]
   const fragments = (
     name: string,
     ended: (id: string, value: string, ordinal: number, state?: Record<string, unknown>) => Effect.Effect<void>,

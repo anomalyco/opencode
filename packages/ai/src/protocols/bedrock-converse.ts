@@ -260,14 +260,14 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
 
 const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })
 
-const reasoningSignature = (part: ReasoningPart, providerMetadataKey: string) => {
-  const metadata = part.providerMetadata?.[providerMetadataKey]
+const reasoningSignature = (part: ReasoningPart, routeID: string) => {
+  const metadata = part.providerMetadata?.[routeID]
   if (part.encrypted !== undefined) return part.encrypted
   if (ProviderShared.isRecord(metadata) && typeof metadata.signature === "string") return metadata.signature
 }
 
-const reasoningRedactedData = (part: ReasoningPart, providerMetadataKey: string) => {
-  const metadata = part.providerMetadata?.[providerMetadataKey]
+const reasoningRedactedData = (part: ReasoningPart, routeID: string) => {
+  const metadata = part.providerMetadata?.[routeID]
   if (ProviderShared.isRecord(metadata) && typeof metadata.redactedData === "string") return metadata.redactedData
 }
 
@@ -324,7 +324,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
   breakpoints: BedrockCache.Breakpoints,
 ) {
   const messages: BedrockMessage[] = []
-  const providerMetadataKey = request.model.route.providerMetadataKey ?? String(request.model.provider)
+  const routeID = request.model.route.id
 
   for (const message of request.messages) {
     if (message.role === "system") {
@@ -372,8 +372,8 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
           continue
         }
         if (part.type === "reasoning") {
-          const signature = reasoningSignature(part, providerMetadataKey)
-          const redactedData = reasoningRedactedData(part, providerMetadataKey)
+          const signature = reasoningSignature(part, routeID)
+          const redactedData = reasoningRedactedData(part, routeID)
           if (signature === undefined && redactedData !== undefined) {
             content.push({ reasoningContent: { redactedContent: redactedData } })
             continue
@@ -485,7 +485,7 @@ const mapFinishReason = (reason: string): FinishReason => {
 
 // AWS reports inputTokens separately from cache reads and writes.
 // Bedrock does not break reasoning out of outputTokens for current models.
-const mapUsage = (usage: BedrockUsageSchema | undefined, providerMetadataKey: string): Usage | undefined => {
+const mapUsage = (usage: BedrockUsageSchema | undefined, routeID: string): Usage | undefined => {
   if (!usage) return undefined
   const inputTokens = ProviderShared.sumTokens(
     usage.inputTokens,
@@ -499,12 +499,12 @@ const mapUsage = (usage: BedrockUsageSchema | undefined, providerMetadataKey: st
     cacheReadInputTokens: usage.cacheReadInputTokens,
     cacheWriteInputTokens: usage.cacheWriteInputTokens,
     totalTokens: ProviderShared.totalTokens(inputTokens, usage.outputTokens, usage.totalTokens),
-    providerMetadata: { [providerMetadataKey]: usage },
+    providerMetadata: { [routeID]: usage },
   })
 }
 
 interface ParserState {
-  readonly providerMetadataKey: string
+  readonly routeID: string
   readonly tools: ToolStream.State<number>
   // Bedrock splits the finish into `messageStop` (carries `stopReason`) and
   // `metadata` (carries usage). Hold both in state so `onHalt` can emit exactly
@@ -587,8 +587,8 @@ const step = (state: ParserState, event: BedrockEvent) =>
       })()
       const redactedData = redactedChunks === undefined ? reasoning.data : encodeRedactedContent(redactedChunks)
       const metadata = (() => {
-        if (reasoning.signature) return providerMetadata(state.providerMetadataKey, { signature: reasoning.signature })
-        if (redactedData !== undefined) return providerMetadata(state.providerMetadataKey, { redactedData })
+        if (reasoning.signature) return providerMetadata(state.routeID, { signature: reasoning.signature })
+        if (redactedData !== undefined) return providerMetadata(state.routeID, { redactedData })
       })()
       const lifecycle = (() => {
         if (reasoning.text === undefined && metadata === undefined) return state.lifecycle
@@ -640,10 +640,10 @@ const step = (state: ParserState, event: BedrockEvent) =>
         if (resultEvents.length) return Lifecycle.stepStart(state.lifecycle, events)
         const metadata = (() => {
           const signature = state.reasoningSignatures[index]
-          if (signature) return providerMetadata(state.providerMetadataKey, { signature })
+          if (signature) return providerMetadata(state.routeID, { signature })
           const redactedContent = state.reasoningRedactedContent[index]
           if (redactedContent)
-            return providerMetadata(state.providerMetadataKey, {
+            return providerMetadata(state.routeID, {
               redactedData: encodeRedactedContent(redactedContent),
             })
         })()
@@ -697,7 +697,7 @@ const step = (state: ParserState, event: BedrockEvent) =>
     }
 
     if (event.metadata) {
-      const usage = mapUsage(event.metadata.usage, state.providerMetadataKey) ?? state.usage
+      const usage = mapUsage(event.metadata.usage, state.routeID) ?? state.usage
       return [
         {
           ...state,
@@ -757,7 +757,7 @@ export const protocol = Protocol.make({
   stream: {
     event: BedrockEvent,
     initial: (request) => ({
-      providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
+      routeID: request.model.route.id,
       tools: ToolStream.empty<number>(),
       finishReason: undefined,
       usage: undefined,
@@ -774,7 +774,6 @@ export const protocol = Protocol.make({
 export const route = Route.make({
   id: ADAPTER,
   provider: "bedrock",
-  providerMetadataKey: "bedrock",
   protocol,
   // Bedrock's URL embeds the region in the route endpoint host and the
   // validated modelId in the path. We read the validated body so the URL

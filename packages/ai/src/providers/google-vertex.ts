@@ -68,7 +68,6 @@ const protocol = {
 const route = Route.make({
   id: "google-vertex-gemini",
   provider: id,
-  providerMetadataKey: "vertex",
   protocol,
   endpoint: Endpoint.path(({ request }) => {
     const model = String(request.model.id)

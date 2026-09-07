@@ -69,7 +69,7 @@ for (const item of cases) {
           expect(response.reasoning.length).toBeGreaterThan(0)
           expect(response.events.some(LLMEvent.is.reasoningDelta)).toBe(true)
           const metadata = response.message.content.find((part) => part.type === "reasoning")?.providerMetadata?.[
-            item.model.route.providerMetadataKey ?? String(item.model.provider)
+            item.model.route.id
           ]
           expect(metadata?.reasoningField).toBe(item.structured ? "reasoning" : "reasoning_content")
           expect(Array.isArray(metadata?.reasoningDetails)).toBe(item.structured)
@@ -128,11 +128,7 @@ for (const item of cases) {
           ).toMatch(/^Paris is sunny\.?$/)
           const details = events
             .filter(LLMEvent.is.reasoningEnd)
-            .map(
-              (event) =>
-                event.providerMetadata?.[item.model.route.providerMetadataKey ?? String(item.model.provider)]
-                  ?.reasoningDetails,
-            )
+            .map((event) => event.providerMetadata?.[item.model.route.id]?.reasoningDetails)
             .find(Array.isArray)
           expect(Array.isArray(details)).toBe(item.structured)
           if (!item.structured || !Array.isArray(details)) return

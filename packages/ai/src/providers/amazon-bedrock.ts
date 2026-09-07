@@ -45,7 +45,6 @@ const configuredRoute = (input: Config) => {
   return BedrockConverse.route.with({
     ...rest,
     provider: id,
-    providerMetadataKey: "bedrock",
     endpoint: { baseURL: baseURL ?? bedrockBaseURL(resolvedRegion) },
     auth: BedrockAuth.resolveAuth({ apiKey, credentials, profile }, resolvedRegion, { mode: auth }),
   })

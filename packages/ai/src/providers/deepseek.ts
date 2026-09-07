@@ -24,7 +24,6 @@ export interface Settings extends ProviderPackage.Settings {
 export const route = Route.make({
   id: "deepseek-chat",
   provider: id,
-  providerMetadataKey: "deepseek",
   protocol: OpenAIChat.protocol,
   endpoint: Endpoint.path("/chat/completions", { baseURL }),
   framing: OpenAIChat.framing,

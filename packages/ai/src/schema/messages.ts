@@ -15,6 +15,7 @@ import { ProviderID } from "./ids.js"
 export const MessageRole = Schema.Literals(["system", "user", "assistant", "tool"])
 export type MessageRole = Schema.Schema.Type<typeof MessageRole>
 
+/** Provider-specific data; LLM routes emit and replay it under their route ID. */
 export const ProviderMetadata = Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown)).annotate({
   identifier: "LLM.ProviderMetadata",
 })

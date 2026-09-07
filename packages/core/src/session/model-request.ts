@@ -93,9 +93,7 @@ export const baseTranscript = (input: {
   readonly initial: string
   readonly messages: ReadonlyArray<SessionMessage.Info>
 }) => {
-  const providerMetadataKey = input.model.model.route.providerMetadataKey ?? input.model.model.provider
   return {
-    providerMetadataKey,
     system: [
       input.agent.system
         ? input.agent.system
@@ -104,7 +102,7 @@ export const baseTranscript = (input: {
     ]
       .filter((part) => part.length > 0)
       .map(SystemPart.make),
-    messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey),
+    messages: toLLMMessages(input.messages, input.model.ref, input.model.model.route.id),
   }
 }
 

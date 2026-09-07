@@ -42,10 +42,9 @@ export interface Route<
   Compact extends CompactionOperations | undefined = CompactionOperations | undefined,
 > {
   readonly compact: Compact
+  /** Route identity and namespace for metadata emitted and replayed by this route. */
   readonly id: string
   readonly provider?: ProviderID
-  /** ProviderMetadata namespace emitted and consumed by this route. */
-  readonly providerMetadataKey?: string
   readonly protocol: ProtocolID
   readonly endpoint: Endpoint.Definition<Body>
   readonly auth: Auth.Definition
@@ -113,7 +112,6 @@ export interface RoutePatch<Body, Prepared> extends RouteDefaultsInput {
   readonly compact?: CompactionOperations
   readonly id?: string
   readonly provider?: string | ProviderID
-  readonly providerMetadataKey?: string
   readonly auth?: Auth.Definition
   readonly transport?: Transport<Body, Prepared, unknown>
   readonly endpoint?: EndpointPatch<Body>
@@ -276,12 +274,10 @@ const resolveRequestOptions = (request: LLMRequest) => {
 
 export interface MakeInput<Body, Frame, Event, State> {
   readonly compact?: CompactionOperations
-  /** Route id used in diagnostics and prepared request metadata. */
+  /** Route identity, also used as the namespace for emitted and replayed ProviderMetadata. */
   readonly id: string
   /** Provider identity for route-owned model construction. */
   readonly provider?: string | ProviderID
-  /** ProviderMetadata namespace emitted and consumed by this route. */
-  readonly providerMetadataKey?: string
   /** Semantic API contract — owns body construction, body schema, and parsing. */
   readonly protocol: Protocol<Body, Frame, Event, State>
   /** Where the request is sent. */
@@ -298,12 +294,10 @@ export interface MakeInput<Body, Frame, Event, State> {
 
 export interface MakeTransportInput<Body, Prepared, Frame, Event, State> {
   readonly compact?: CompactionOperations
-  /** Route id used in diagnostics and prepared request metadata. */
+  /** Route identity, also used as the namespace for emitted and replayed ProviderMetadata. */
   readonly id: string
   /** Provider identity for route-owned model construction. */
   readonly provider?: string | ProviderID
-  /** ProviderMetadata namespace emitted and consumed by this route. */
-  readonly providerMetadataKey?: string
   /** Semantic API contract — owns body construction, body schema, and parsing. */
   readonly protocol: Protocol<Body, Frame, Event, State>
   /** Where the request is sent. */
@@ -376,7 +370,6 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       compact: routeInput.compact,
       id: routeInput.id,
       provider: routeInput.provider === undefined ? undefined : ProviderID.make(routeInput.provider),
-      providerMetadataKey: routeInput.providerMetadataKey,
       protocol: protocol.id,
       endpoint: routeInput.endpoint,
       auth: routeInput.auth ?? Auth.none,
@@ -385,17 +378,12 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       defaults: routeInput.defaults ?? {},
       body: protocol.body,
       with: (patch: RoutePatch<Body, Prepared>) => {
-        const { compact, id, provider, providerMetadataKey, auth, transport, endpoint, ...defaults } = patch
+        const { compact, id, provider, auth, transport, endpoint, ...defaults } = patch
         return build({
           ...routeInput,
           compact: "compact" in patch ? compact : routeInput.compact,
           id: id ?? routeInput.id,
           provider: provider ?? routeInput.provider,
-          providerMetadataKey:
-            providerMetadataKey ??
-            (provider !== undefined && String(provider) !== String(routeInput.provider)
-              ? String(provider)
-              : routeInput.providerMetadataKey),
           auth: auth ?? routeInput.auth,
           endpoint: endpoint ? Endpoint.merge(routeInput.endpoint, endpoint) : routeInput.endpoint,
           transport: (transport as Transport<Body, Prepared, Frame> | undefined) ?? routeInput.transport,
@@ -536,7 +524,6 @@ export function make<Body, Prepared, Frame, Event, State>(
     compact: input.compact,
     id: input.id,
     provider: input.provider,
-    providerMetadataKey: input.providerMetadataKey,
     protocol,
     endpoint: input.endpoint,
     auth: input.auth,

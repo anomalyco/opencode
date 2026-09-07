@@ -534,6 +534,35 @@ Additional provider entrypoints include:
 - `@opencode-ai/ai/providers/cloudflare-ai-gateway`
 - `@opencode-ai/ai/providers/cloudflare-workers-ai`
 
+### Route-keyed metadata
+
+LLM messages, events, and usage retain provider-specific information under `providerMetadata[model.route.id]`. The provider ID identifies the provider; the route ID identifies its API and owns the metadata needed to replay that API's responses.
+
+```ts
+const model = GoogleVertexMessages.configure({ project, accessToken }).model("claude-sonnet-4-5")
+const response = yield * LLM.generate(LLM.request({ model, prompt: "Think through this problem." }))
+const reasoning = response.message.content.find((part) => part.type === "reasoning")
+const signature = reasoning?.providerMetadata?.[model.route.id]?.signature
+// model.route.id === "google-vertex-messages"
+```
+
+The former `providerMetadataKey` route option has been removed. Existing application-owned LLM metadata must use route keys instead of provider names, for example:
+
+| API                                                                | Metadata key                                                                                                 |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| OpenAI Chat / Responses                                            | `openai-chat` / `openai-responses`                                                                           |
+| Azure Chat / Responses                                             | `azure-openai-chat` / `azure-openai-responses`                                                               |
+| Anthropic Messages                                                 | `anthropic-messages`                                                                                         |
+| Google Gemini                                                      | `gemini`                                                                                                     |
+| Vertex Gemini / Chat / Responses / Messages                        | `google-vertex-gemini` / `google-vertex-chat` / `google-vertex-responses` / `google-vertex-messages`         |
+| Bedrock Converse / Mantle Chat / Mantle Responses                  | `bedrock-converse` / `bedrock-mantle-chat` / `bedrock-mantle-responses`                                      |
+| Groq / Mistral                                                     | `groq-chat` / `mistral-chat`                                                                                 |
+| xAI Chat / Responses                                               | `xai-chat` / `xai-responses`                                                                                 |
+| Baseten / Cerebras / DeepInfra / DeepSeek / Fireworks / TogetherAI | `baseten-chat` / `cerebras-chat` / `deepinfra-chat` / `deepseek-chat` / `fireworks-chat` / `togetherai-chat` |
+| Generic Chat / Responses                                           | `openai-compatible-chat` / `openai-compatible-responses`                                                     |
+
+OpenRouter and Cloudflare already use matching provider and route IDs. Generic Messages uses `anthropic-messages`. Custom routes use their own `id`.
+
 ## Provider options & HTTP overlays
 
 Request options in order of stability:

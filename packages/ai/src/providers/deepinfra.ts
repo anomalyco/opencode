@@ -24,7 +24,6 @@ export interface Settings extends ProviderPackage.Settings {
 export const route = Route.make({
   id: "deepinfra-chat",
   provider: id,
-  providerMetadataKey: "deepinfra",
   protocol: OpenAIChat.protocol,
   endpoint: Endpoint.path("/chat/completions", { baseURL }),
   framing: OpenAIChat.framing,

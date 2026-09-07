@@ -314,7 +314,7 @@ describe("GithubCopilotPlugin", () => {
         loadAISDK: (model) => aisdk.model(model),
       })
       expect(resolved.route.id).toBe("ai-sdk:@ai-sdk/github-copilot")
-      expect(resolved.route.providerMetadataKey).toBe("copilot")
+      expect(resolved.route.id).toBe("ai-sdk:@ai-sdk/github-copilot")
     }),
   )
 

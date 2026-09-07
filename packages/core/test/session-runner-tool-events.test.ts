@@ -29,7 +29,7 @@ const sessionID = Session.ID.make("ses_tool_event_test")
 const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
 
 const capture = (
-  providerMetadataKey = "anthropic",
+  routeID = "anthropic-messages",
   options?: { readonly interruptProgress?: boolean; readonly beforeTextDelta?: Effect.Effect<void> },
 ) => {
   const published: Array<{ readonly type: string; readonly data: unknown }> = []
@@ -59,7 +59,7 @@ const capture = (
         id: Model.ID.make("model"),
         providerID: Provider.ID.opencode,
       },
-      providerMetadataKey,
+      routeID,
       assistantMessageID: SessionMessage.ID.create(),
     }),
   }
@@ -114,7 +114,7 @@ test("provider-executed success derives content and retains provider result stat
       LLMEvent.toolResult({
         ...hostedResult,
         providerExecuted: true,
-        providerMetadata: { anthropic: { result: { type: "content", value: [] } } },
+        providerMetadata: { "anthropic-messages": { result: { type: "content", value: [] } } },
       }),
     ),
   )
@@ -162,7 +162,7 @@ testEffect(
         assistantMessageID,
         agent: Agent.defaultID,
         model: { id: Model.ID.make("test-model"), providerID: Provider.ID.opencode },
-        providerMetadataKey: "openai",
+        routeID: "openai-responses",
       },
     )
     yield* publisher.publish(LLMEvent.toolCall({ ...call, providerExecuted: true }))
@@ -213,7 +213,7 @@ testEffect(
 )
 
 test("interrupted progress metadata remains in the terminal failure snapshot", async () => {
-  const { published, publisher } = capture("anthropic", { interruptProgress: true })
+  const { published, publisher } = capture("anthropic-messages", { interruptProgress: true })
   await Effect.runPromise(publisher.publish(call))
   const exit = await Effect.runPromiseExit(publisher.progress(call.id, { phase: "visible" }))
   expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
@@ -225,7 +225,7 @@ test("interrupted progress metadata remains in the terminal failure snapshot", a
 })
 
 test("interrupted subagent failures expose their existing child session to the model", async () => {
-  const { published, publisher } = capture("anthropic", { interruptProgress: true })
+  const { published, publisher } = capture("anthropic-messages", { interruptProgress: true })
   const subagent = LLMEvent.toolCall({
     id: "call-subagent",
     name: "subagent",
@@ -267,7 +267,7 @@ test("local failure metadata completes the progress snapshot", async () => {
 })
 
 test("failure snapshot retains canonical progress above the default byte limit", async () => {
-  const { published, publisher } = capture("anthropic", { interruptProgress: true })
+  const { published, publisher } = capture("anthropic-messages", { interruptProgress: true })
   await Effect.runPromise(publisher.publish(call))
   const detail = "x".repeat(60 * 1024)
   await Effect.runPromiseExit(publisher.progress(call.id, { detail }))
@@ -292,7 +292,7 @@ test("provider metadata is flattened using the route key", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(
     publisher.publish(
-      LLMEvent.reasoningStart({ id: "reasoning", providerMetadata: { anthropic: { signature: "signed" } } }),
+      LLMEvent.reasoningStart({ id: "reasoning", providerMetadata: { "anthropic-messages": { signature: "signed" } } }),
     ),
   )
 
@@ -305,7 +305,10 @@ test("reasoning state from start, empty delta, and end is merged", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(
     publisher.publish(
-      LLMEvent.reasoningStart({ id: "reasoning", providerMetadata: { anthropic: { blockType: "thinking" } } }),
+      LLMEvent.reasoningStart({
+        id: "reasoning",
+        providerMetadata: { "anthropic-messages": { blockType: "thinking" } },
+      }),
     ),
   )
   await Effect.runPromise(
@@ -313,13 +316,16 @@ test("reasoning state from start, empty delta, and end is merged", async () => {
       LLMEvent.reasoningDelta({
         id: "reasoning",
         text: "",
-        providerMetadata: { anthropic: { signature: "signed" }, gateway: { traceID: "trace" } },
+        providerMetadata: { "anthropic-messages": { signature: "signed" }, gateway: { traceID: "trace" } },
       }),
     ),
   )
   await Effect.runPromise(
     publisher.publish(
-      LLMEvent.reasoningEnd({ id: "reasoning", providerMetadata: { anthropic: { stopReason: "tool_use" } } }),
+      LLMEvent.reasoningEnd({
+        id: "reasoning",
+        providerMetadata: { "anthropic-messages": { stopReason: "tool_use" } },
+      }),
     ),
   )
 
@@ -389,7 +395,7 @@ it.effect("retains new chunks and orders text-end behind an in-flight timer publ
   Effect.gen(function* () {
     const entered = yield* Deferred.make<void>()
     const release = yield* Deferred.make<void>()
-    const { published, publisher } = capture("anthropic", {
+    const { published, publisher } = capture("anthropic-messages", {
       beforeTextDelta: Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))),
     })
     yield* publisher.publish(LLMEvent.textStart({ id: "text" }))
@@ -481,7 +487,7 @@ test("tool input deltas are accumulated without being published", async () => {
 })
 
 test("provider-executed tool metadata is flattened using the route key", async () => {
-  const { published, publisher } = capture("openai")
+  const { published, publisher } = capture("openai-responses")
   await Effect.runPromise(
     publisher.publish(
       LLMEvent.toolCall({
@@ -489,7 +495,7 @@ test("provider-executed tool metadata is flattened using the route key", async (
         name: "web_search",
         input: { query: "Effect" },
         providerExecuted: true,
-        providerMetadata: { openai: { itemId: "call" } },
+        providerMetadata: { "openai-responses": { itemId: "call" } },
       }),
     ),
   )
@@ -500,7 +506,7 @@ test("provider-executed tool metadata is flattened using the route key", async (
         name: "web_search",
         result: { type: "json", value: { found: true } },
         providerExecuted: true,
-        providerMetadata: { openai: { itemId: "result" } },
+        providerMetadata: { "openai-responses": { itemId: "result" } },
       }),
     ),
   )
@@ -556,7 +562,7 @@ test("content-filter finish retains failure evidence until step closeout", async
         index: 0,
         reason: { normalized: "content-filter", raw: "refusal" },
         providerMetadata: {
-          anthropic: {
+          "anthropic-messages": {
             stopDetails: { type: "refusal", category: "safety", explanation: "Blocked" },
           },
         },

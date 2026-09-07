@@ -71,7 +71,6 @@ export const protocol = Protocol.make({
 export const route = Route.make({
   id: "groq-chat",
   provider: id,
-  providerMetadataKey: "openai",
   protocol,
   endpoint: Endpoint.path("/chat/completions", { baseURL }),
   framing: OpenAIChat.framing,

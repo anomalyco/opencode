@@ -65,7 +65,7 @@ describe("xAI Responses route", () => {
       expect(response.message.content.find((part) => part.type === "reasoning")).toMatchObject({
         type: "reasoning",
         text: "Considering.",
-        providerMetadata: { xai: { itemId: "reasoning_1", reasoningEncryptedContent: "opaque" } },
+        providerMetadata: { "xai-responses": { itemId: "reasoning_1", reasoningEncryptedContent: "opaque" } },
       })
     }),
   )
@@ -101,7 +101,7 @@ describe("xAI Responses route", () => {
 
       expect(response.reasoning).toBe("Considering.")
       expect(response.message.content.find((part) => part.type === "reasoning")).toMatchObject({
-        providerMetadata: { xai: { itemId: "reasoning_1", reasoningEncryptedContent: "opaque" } },
+        providerMetadata: { "xai-responses": { itemId: "reasoning_1", reasoningEncryptedContent: "opaque" } },
       })
     }),
   )
@@ -120,7 +120,7 @@ describe("xAI Responses route", () => {
                 name: "x_search",
                 result: { type: "json", value: item },
                 providerExecuted: true,
-                providerMetadata: { xai: { itemId: "x_search_1" } },
+                providerMetadata: { "xai-responses": { itemId: "x_search_1" } },
               },
             ]),
           ],
@@ -148,7 +148,7 @@ describe("xAI Responses route", () => {
               name: item.type,
               result: { type: "json", value: item },
               providerExecuted: true,
-              providerMetadata: { xai: { itemId: item.id } },
+              providerMetadata: { "xai-responses": { itemId: item.id } },
             }),
           ),
         }),
@@ -181,11 +181,11 @@ describe("xAI Responses route", () => {
         name: "x_search",
         input: { query: "news" },
         providerExecuted: true,
-        providerMetadata: { xai: { itemId: "x_search_1" } },
+        providerMetadata: { "xai-responses": { itemId: "x_search_1" } },
       })
       expect(response.events.find(LLMEvent.is.toolResult)).toMatchObject({
         result: { type: "json", value: item },
-        providerMetadata: { xai: { itemId: "x_search_1" } },
+        providerMetadata: { "xai-responses": { itemId: "x_search_1" } },
       })
     }),
   )

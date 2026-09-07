@@ -309,7 +309,6 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
     compact: undefined,
     id: `ai-sdk:${packageName}`,
     provider: ProviderID.make(providerID),
-    providerMetadataKey: optionKey,
     protocol: "ai-sdk",
     endpoint: Endpoint.path("/", { baseURL: "https://ai-sdk.local" }),
     auth: Auth.none,
@@ -342,7 +341,16 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
     model: (input) =>
       LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : providerID, route }),
     prepareTransport: (body) => Effect.succeed(body),
-    streamPrepared: (prepared) => streamLanguage(language, prepared as LanguageModelV3CallOptions),
+    streamPrepared: (prepared) =>
+      streamLanguage(language, prepared as LanguageModelV3CallOptions).pipe(
+        Stream.map((event) => {
+          if (!("providerMetadata" in event)) return event
+          // Preserve the same inner state that Session persists, while keeping SDK
+          // option namespaces private to this bridge.
+          const state = event.providerMetadata?.[optionKey]
+          return { ...event, providerMetadata: state === undefined ? undefined : { [route.id]: state } }
+        }),
+      ),
   }
   return LanguageModel.make({
     id: info.modelID ?? info.id,
@@ -418,7 +426,7 @@ function callOptions(
 ): LanguageModelV3CallOptions {
   const flattened = ProviderShared.flattenToolRequest(request)
   return {
-    prompt: prompt(flattened.request),
+    prompt: prompt(flattened.request, optionKey),
     maxOutputTokens: request.generation?.maxTokens,
     temperature: request.generation?.temperature,
     stopSequences: request.generation?.stop === undefined ? undefined : [...request.generation.stop],
@@ -434,15 +442,21 @@ function callOptions(
   }
 }
 
-function prompt(request: LLMRequest): LanguageModelV3Prompt {
+type MetadataOptions = (input: ProviderMetadata | undefined) => SharedV3ProviderOptions | undefined
+
+function prompt(request: LLMRequest, optionKey: string): LanguageModelV3Prompt {
+  const metadata: MetadataOptions = (input) => {
+    const state = input?.[request.model.route.id]
+    return state === undefined ? undefined : { [optionKey]: jsonObject(state) }
+  }
   const system = request.system
     .map((part) => part.text)
     .filter(Boolean)
     .join("\n\n")
   const pending: UserContent = []
   const messages = request.messages.flatMap((input, index) => {
-    if (input.role !== "tool") return message(input)
-    const lowered = toolMessage(input)
+    if (input.role !== "tool") return message(input, metadata)
+    const lowered = toolMessage(input, metadata)
     pending.push(...lowered.media)
     if (request.messages[index + 1]?.role === "tool" || pending.length === 0) return lowered.messages
     const media = [...pending]
@@ -459,7 +473,7 @@ function prompt(request: LLMRequest): LanguageModelV3Prompt {
   return [{ role: "system", content: system }, ...messages]
 }
 
-function message(input: LLMRequest["messages"][number]): LanguageModelV3Message[] {
+function message(input: LLMRequest["messages"][number], metadata: MetadataOptions): LanguageModelV3Message[] {
   switch (input.role) {
     case "system":
       // The initial privileged prompt lives in `request.system` and is prepended above. A system message here is a
@@ -479,29 +493,32 @@ function message(input: LLMRequest["messages"][number]): LanguageModelV3Message[
     case "user":
       return [{ role: "user", content: input.content.flatMap(userPart) }]
     case "assistant":
-      return [{ role: "assistant", content: input.content.flatMap(assistantPart) }]
+      return [{ role: "assistant", content: input.content.flatMap((part) => assistantPart(part, metadata)) }]
     case "tool":
-      return toolMessage(input).messages
+      return toolMessage(input, metadata).messages
   }
 }
 
-function toolMessage(input: LLMRequest["messages"][number]) {
+function toolMessage(input: LLMRequest["messages"][number], metadata: MetadataOptions) {
   const media: UserContent = []
   const content = input.content.flatMap((part) => {
-    if (part.type !== "tool-result" || part.result.type !== "content") return toolResultPart(part)
+    if (part.type !== "tool-result" || part.result.type !== "content") return toolResultPart(part, metadata)
     const value = part.result.value.filter((item) => {
       if (item.type !== "file") return true
       if (!item.mime.startsWith("image/") && item.mime !== "application/pdf") return true
       media.push({ type: "file", mediaType: item.mime, data: fileData(item.uri), filename: item.name })
       return false
     })
-    return toolResultPart({
-      ...part,
-      result:
-        value.length === 0
-          ? { type: "text", value: "Media attached in the following user message." }
-          : { ...part.result, value },
-    })
+    return toolResultPart(
+      {
+        ...part,
+        result:
+          value.length === 0
+            ? { type: "text", value: "Media attached in the following user message." }
+            : { ...part.result, value },
+      },
+      metadata,
+    )
   })
   return {
     messages: content.length ? ([{ role: "tool", content }] satisfies LanguageModelV3Message[]) : [],
@@ -520,7 +537,7 @@ function userPart(part: ContentPart): UserContent {
   return []
 }
 
-function assistantPart(part: ContentPart): AssistantContent {
+function assistantPart(part: ContentPart, metadata: MetadataOptions): AssistantContent {
   switch (part.type) {
     case "compaction":
       throw ProviderShared.unsupportedOperation({
@@ -529,11 +546,11 @@ function assistantPart(part: ContentPart): AssistantContent {
         message: "AI SDK routes cannot replay native provider compaction state",
       })
     case "text":
-      return [{ type: "text", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
+      return [{ type: "text", text: part.text, providerOptions: metadata(part.providerMetadata) }]
     case "media":
       return [{ type: "file", mediaType: part.mediaType, data: fileData(part.data), filename: part.filename }]
     case "reasoning":
-      return [{ type: "reasoning", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
+      return [{ type: "reasoning", text: part.text, providerOptions: metadata(part.providerMetadata) }]
     case "tool-call":
       return [
         {
@@ -542,11 +559,11 @@ function assistantPart(part: ContentPart): AssistantContent {
           toolName: part.name,
           input: part.input,
           providerExecuted: part.providerExecuted,
-          providerOptions: metadataProviderOptions(part.providerMetadata),
+          providerOptions: metadata(part.providerMetadata),
         },
       ]
     case "tool-result":
-      return toolResultPart(part)
+      return toolResultPart(part, metadata)
   }
 }
 
@@ -559,7 +576,7 @@ function fileData(data: Extract<ContentPart, { type: "media" }>["data"]) {
   return url.protocol === "http:" || url.protocol === "https:" ? url : data
 }
 
-function toolResultPart(part: ContentPart): ToolResultContent[] {
+function toolResultPart(part: ContentPart, metadata: MetadataOptions): ToolResultContent[] {
   if (part.type !== "tool-result") return []
   return [
     {
@@ -567,7 +584,7 @@ function toolResultPart(part: ContentPart): ToolResultContent[] {
       toolCallId: part.id,
       toolName: part.name,
       output: toolOutput(part.result),
-      providerOptions: metadataProviderOptions(part.providerMetadata),
+      providerOptions: metadata(part.providerMetadata),
     },
   ]
 }
@@ -622,11 +639,6 @@ function requestProviderOptions(
   if (packageName === "@ai-sdk/gateway") return gatewayProviderOptions(modelID, options)
   if (packageName === "@ai-sdk/azure") return { openai: options, azure: options }
   return { [optionKey]: options }
-}
-
-function metadataProviderOptions(input: ProviderMetadata | undefined): SharedV3ProviderOptions | undefined {
-  if (!input) return undefined
-  return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, jsonObject(value)]))
 }
 
 function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallOptions) {

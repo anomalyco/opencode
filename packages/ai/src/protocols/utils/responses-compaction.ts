@@ -125,7 +125,7 @@ export const make = (adapter: OpenResponses.ProviderAdapter): CompactOperation =
       return yield* invalid("Compaction response did not contain a checkpoint")
     return new CompactionResponse({
       replacement: result.output.map((item) => toMessage(item, request.model)),
-      usage: OpenResponses.mapUsage(result.usage, OpenResponses.metadataKey(request.model)),
+      usage: OpenResponses.mapUsage(result.usage, request.model.route.id),
     })
   })
 
@@ -135,7 +135,7 @@ function toMessage(item: (typeof Response.Type.output)[number], model: LLMReques
       CompactionPart.make({ provider: model.provider, id: item.id ?? undefined, encrypted: item.encrypted_content }),
     )
 
-  const key = OpenResponses.metadataKey(model)
+  const key = model.route.id
   if (item.type === "reasoning") {
     const summary = item.summary.length ? item.summary : [{ text: "" }]
     return Message.assistant(

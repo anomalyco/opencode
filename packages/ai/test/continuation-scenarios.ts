@@ -66,14 +66,14 @@ export function continuationRequest(input: {
     firstAssistant.push({
       type: "reasoning",
       text: "I inspected the previous turn.",
-      providerMetadata: { anthropic: { signature: "sig_continuation_1" } },
+      providerMetadata: { [input.model.route.id]: { signature: "sig_continuation_1" } },
     })
   if (features.has("encrypted-reasoning"))
     firstAssistant.push({
       type: "reasoning",
       text: "I inspected the previous turn.",
       providerMetadata: {
-        openai: {
+        [input.model.route.id]: {
           itemId: "rs_continuation_1",
           reasoningEncryptedContent: "encrypted-continuation-state",
         },

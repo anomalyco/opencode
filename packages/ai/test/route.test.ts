@@ -47,14 +47,29 @@ describe("Route.with", () => {
     })
   })
 
-  test("assigns metadata ownership to a replacement provider and preserves explicit overrides", () => {
-    const route = OpenAIChat.route.with({ provider: "azure" })
-    const overridden = route.with({ providerMetadataKey: "custom-azure" }).with({ headers: { "x-test": "value" } })
-
-    expect(route.providerMetadataKey).toBe("azure")
-    expect(overridden.providerMetadataKey).toBe("custom-azure")
-    expect(overridden.defaults).not.toHaveProperty("providerMetadataKey")
-  })
+  it.effect("namespaces emitted metadata by route ID independently of provider identity", () =>
+    Effect.gen(function* () {
+      const base = OpenAIChat.route.with({ provider: "azure", auth: Auth.none })
+      for (const route of [base, base.with({ id: "custom-azure-chat" })]) {
+        const response = yield* LLMClient.generate(
+          LLM.request({ model: route.model({ id: "test" }), prompt: "Hello" }),
+        ).pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents({
+                choices: [{ delta: { content: "Hello" }, finish_reason: "stop" }],
+                usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
+              }),
+            ),
+          ),
+        )
+        expect(response.usage?.providerMetadata).toEqual({
+          [route.id]: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
+        })
+        expect(route).not.toHaveProperty("providerMetadataKey")
+      }
+    }),
+  )
 })
 
 describe("Route diagnostics", () => {

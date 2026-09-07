@@ -11,6 +11,49 @@ import { deltaChunk, finishChunk } from "../lib/openai-chunks.js"
 import { sseEvents } from "../lib/sse.js"
 
 describe("Google Vertex providers", () => {
+  it.effect("round-trips Claude signatures under the Vertex Messages route ID", () =>
+    Effect.gen(function* () {
+      const model = GoogleVertexMessages.configure({ project: "project", accessToken: "token" }).model(
+        "claude-sonnet-4-5",
+      )
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Think." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "Thinking." } },
+              {
+                type: "content_block_delta",
+                index: 0,
+                delta: { type: "signature_delta", signature: "vertex-signature" },
+              },
+              { type: "content_block_stop", index: 0 },
+              { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 2 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+      expect(response.message.content).toEqual([
+        {
+          type: "reasoning",
+          text: "Thinking.",
+          providerMetadata: { "google-vertex-messages": { signature: "vertex-signature" } },
+        },
+      ])
+      expect(response.usage?.providerMetadata).toEqual({
+        "google-vertex-messages": { input_tokens: 5, output_tokens: 2 },
+      })
+      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      expect(replay.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [{ type: "thinking", thinking: "Thinking.", signature: "vertex-signature" }],
+        },
+      ])
+    }),
+  )
+
   it.effect("sends Gemini requests to the global Vertex endpoint", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
@@ -89,7 +132,7 @@ describe("Google Vertex providers", () => {
                 id: "call_1",
                 name: "lookup",
                 input: { query: "weather" },
-                providerMetadata: { vertex: { functionCallId: "provider_call_1" } },
+                providerMetadata: { "google-vertex-gemini": { functionCallId: "provider_call_1" } },
               }),
             ]),
             Message.tool({
@@ -97,7 +140,7 @@ describe("Google Vertex providers", () => {
               name: "lookup",
               result: "sunny",
               resultType: "text",
-              providerMetadata: { vertex: { functionCallId: "provider_call_1" } },
+              providerMetadata: { "google-vertex-gemini": { functionCallId: "provider_call_1" } },
             }),
           ],
         }),
@@ -158,17 +201,17 @@ describe("Google Vertex providers", () => {
       const text = response.events.find((event) => event.type === "text-delta")
       const toolCall = response.toolCalls[0]
 
-      expect(reasoning?.providerMetadata).toEqual({ vertex: { thoughtSignature: "reasoning_sig" } })
-      expect(text?.providerMetadata).toEqual({ vertex: { thoughtSignature: "text_sig" } })
+      expect(reasoning?.providerMetadata).toEqual({ "google-vertex-gemini": { thoughtSignature: "reasoning_sig" } })
+      expect(text?.providerMetadata).toEqual({ "google-vertex-gemini": { thoughtSignature: "text_sig" } })
       expect(toolCall).toMatchObject({
         id: "provider_call_1",
-        providerMetadata: { vertex: { thoughtSignature: "tool_sig" } },
+        providerMetadata: { "google-vertex-gemini": { thoughtSignature: "tool_sig" } },
       })
       expect(response.usage?.providerMetadata).toEqual({
-        vertex: { promptTokenCount: 5, candidatesTokenCount: 2, thoughtsTokenCount: 1 },
+        "google-vertex-gemini": { promptTokenCount: 5, candidatesTokenCount: 2, thoughtsTokenCount: 1 },
       })
       expect(response.events.at(-1)?.providerMetadata).toEqual({
-        vertex: { promptFeedback: { blockReasonMessage: "Reviewed" } },
+        "google-vertex-gemini": { promptFeedback: { blockReasonMessage: "Reviewed" } },
       })
 
       const prepared = yield* compileRequest(

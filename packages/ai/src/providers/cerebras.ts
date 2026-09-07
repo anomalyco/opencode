@@ -24,7 +24,6 @@ export interface Settings extends ProviderPackage.Settings {
 export const route = Route.make({
   id: "cerebras-chat",
   provider: id,
-  providerMetadataKey: "cerebras",
   protocol: OpenAIChat.protocol,
   endpoint: Endpoint.path("/chat/completions", { baseURL }),
   framing: OpenAIChat.framing,

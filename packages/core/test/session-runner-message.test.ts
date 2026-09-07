@@ -38,7 +38,7 @@ describe("toLLMMessages", () => {
       time: { created },
     })
 
-    expect(toLLMMessages([shell], model)).toEqual([])
+    expect(toLLMMessages([shell], model, "test-route")).toEqual([])
     const completed = SessionMessage.Shell.make({
       ...shell,
       status: "exited",
@@ -46,8 +46,8 @@ describe("toLLMMessages", () => {
       output: { output: "/project", cursor: 8, size: 8, truncated: false },
       time: { created, completed: created },
     })
-    expect(toLLMMessages([completed], model)).toEqual([])
-    expect(toLLMMessages([completed, notification], model)).toEqual([
+    expect(toLLMMessages([completed], model, "test-route")).toEqual([])
+    expect(toLLMMessages([completed, notification], model, "test-route")).toEqual([
       Message.make({ id: notification.id, role: "user", content: notification.text }),
     ])
   })
@@ -77,6 +77,7 @@ describe("toLLMMessages", () => {
         ]),
       ],
       model,
+      "test-route",
     )
 
     expect(messages.map((message) => message.id)).toEqual([id("text"), id("reasoning")])
@@ -153,6 +154,7 @@ describe("toLLMMessages", () => {
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages.map((message) => message.role)).toEqual(["user", "system", "user", "user", "user", "user"])
@@ -220,6 +222,7 @@ Recent work
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages).toHaveLength(1)
@@ -259,6 +262,7 @@ Recent work
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages).toEqual([
@@ -293,6 +297,7 @@ Recent work
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages[0]).toMatchObject({
@@ -320,6 +325,7 @@ Recent work
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages[0]?.content).toMatchObject([
@@ -350,6 +356,7 @@ Recent work
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages).toHaveLength(1)
@@ -393,6 +400,7 @@ Recent work
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages).toHaveLength(1)
@@ -423,6 +431,7 @@ Recent work
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages).toHaveLength(1)
@@ -452,6 +461,7 @@ Recent work
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages[0]?.content).toEqual([
@@ -482,6 +492,7 @@ Recent work
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages[0]?.content).toEqual([
@@ -517,6 +528,7 @@ Recent work
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages[0]?.content).toEqual([
@@ -555,6 +567,7 @@ Recent work
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages[0]?.content).toEqual([
@@ -599,6 +612,7 @@ Recent work
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages[0]?.content).toEqual([
@@ -655,6 +669,7 @@ Recent work
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages[0]?.content.filter((part) => part.type === "media")).toHaveLength(4)
@@ -744,12 +759,13 @@ Recent work
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages.map((message) => message.role)).toEqual(["assistant", "tool"])
     expect(messages[0]?.content).toEqual([
       { type: "text", text: "Checking" },
-      { type: "reasoning", text: "Think", providerMetadata: { provider: { signature: "sig_1" } } },
+      { type: "reasoning", text: "Think", providerMetadata: { "test-route": { signature: "sig_1" } } },
       { type: "tool-call", id: "pending", name: "read", input: { path: "README.md" } },
       { type: "tool-call", id: "running", name: "read", input: { path: "README.md" } },
       {
@@ -764,14 +780,14 @@ Recent work
         name: "web_search",
         input: { query: "Effect" },
         providerExecuted: true,
-        providerMetadata: { provider: { continuation: "hosted-call" } },
+        providerMetadata: { "test-route": { continuation: "hosted-call" } },
       },
       {
         type: "tool-result",
         id: "hosted",
         name: "web_search",
         providerExecuted: true,
-        providerMetadata: { provider: { continuation: "hosted-result" } },
+        providerMetadata: { "test-route": { continuation: "hosted-result" } },
         result: { type: "text", value: "Found it" },
       },
       {
@@ -780,14 +796,14 @@ Recent work
         name: "write",
         input: { path: "README.md" },
         providerExecuted: true,
-        providerMetadata: { provider: { continuation: "failed" } },
+        providerMetadata: { "test-route": { continuation: "failed" } },
       },
       {
         type: "tool-result",
         id: "hosted-failed",
         name: "write",
         providerExecuted: true,
-        providerMetadata: { provider: { continuation: "failed" } },
+        providerMetadata: { "test-route": { continuation: "failed" } },
         result: {
           type: "error",
           value: { error: { type: "unknown", message: "Denied" }, content: [] },
@@ -829,13 +845,14 @@ Recent work
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages[0]?.content).toEqual([
       {
         type: "reasoning",
         text: "Think",
-        providerMetadata: { provider: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        providerMetadata: { "test-route": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
       },
     ])
   })
@@ -860,11 +877,11 @@ Recent work
         }),
       ],
       opencode,
-      "anthropic",
+      "anthropic-messages",
     )
 
     expect(messages[0]?.content).toEqual([
-      { type: "reasoning", text: "Think", providerMetadata: { anthropic: { signature: "signed" } } },
+      { type: "reasoning", text: "Think", providerMetadata: { "anthropic-messages": { signature: "signed" } } },
     ])
   })
 
@@ -917,6 +934,7 @@ Recent work
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages[0]?.content).toEqual([
@@ -927,7 +945,7 @@ Recent work
         name: "web_search",
         input: { query: "Effect" },
         providerExecuted: true,
-        providerMetadata: { provider: { itemId: "call_completed" } },
+        providerMetadata: { "test-route": { itemId: "call_completed" } },
       },
       {
         type: "tool-result",
@@ -937,7 +955,7 @@ Recent work
         providerExecuted: true,
         cache: undefined,
         metadata: undefined,
-        providerMetadata: { provider: { itemId: "result_completed" } },
+        providerMetadata: { "test-route": { itemId: "result_completed" } },
       },
       {
         type: "tool-call",
@@ -945,7 +963,7 @@ Recent work
         name: "web_search",
         input: { query: "Effect" },
         providerExecuted: true,
-        providerMetadata: { provider: { itemId: "call_failed" } },
+        providerMetadata: { "test-route": { itemId: "call_failed" } },
       },
       {
         type: "tool-result",
@@ -961,7 +979,7 @@ Recent work
         providerExecuted: true,
         cache: undefined,
         metadata: undefined,
-        providerMetadata: { provider: { itemId: "result_failed" } },
+        providerMetadata: { "test-route": { itemId: "result_failed" } },
       },
     ])
   })
@@ -1013,6 +1031,7 @@ Recent work
         }),
       ],
       model,
+      "test-route",
     )
 
     expect(messages[0]?.content).toEqual([
@@ -1035,7 +1054,7 @@ Recent work
         metadata: undefined,
         // Hosted result payloads are provider-format state and must survive a
         // model switch within the same provider for replay to stay valid.
-        providerMetadata: { provider: { itemId: "hosted-old-model" } },
+        providerMetadata: { "test-route": { itemId: "hosted-old-model" } },
       },
       {
         type: "tool-call",
@@ -1079,13 +1098,14 @@ Recent work
         }),
       ],
       Model.Ref.make({ id: Model.ID.make("fast"), providerID: Provider.ID.make("provider") }),
+      "test-route",
     )
 
     expect(messages[0]?.content).toEqual([
       {
         type: "reasoning",
         text: "Visible thought",
-        providerMetadata: { provider: { reasoningEncryptedContent: "encrypted" } },
+        providerMetadata: { "test-route": { reasoningEncryptedContent: "encrypted" } },
       },
     ])
   })
@@ -1110,6 +1130,7 @@ Recent work
         }),
       ],
       Model.Ref.make({ id: Model.ID.make("new"), providerID: Provider.ID.make("provider") }),
+      "test-route",
     )
 
     expect(messages[0]?.content).toEqual([
@@ -1140,13 +1161,14 @@ Recent work
         }),
       ],
       Model.Ref.make({ id: Model.ID.make("same"), providerID: Provider.ID.make("provider") }),
+      "test-route",
     )
 
     expect(messages[0]?.content).toEqual([
       {
         type: "text",
         text: "Checking.",
-        providerMetadata: { provider: { phase: "commentary" } },
+        providerMetadata: { "test-route": { phase: "commentary" } },
       },
     ])
   })

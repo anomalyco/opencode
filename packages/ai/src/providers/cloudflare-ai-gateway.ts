@@ -53,7 +53,6 @@ const auth = (input: LanguageModelOptions) => {
 export const route = Route.make({
   id: "cloudflare-ai-gateway",
   provider: id,
-  providerMetadataKey: "cloudflare-ai-gateway",
   protocol: OpenAIChat.protocol,
   endpoint: Endpoint.path("/chat/completions"),
   framing: OpenAIChat.framing,

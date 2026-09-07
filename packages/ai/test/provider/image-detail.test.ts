@@ -18,8 +18,7 @@ for (const model of [
           type: "media",
           mediaType: "image/png",
           data: "https://example.com/image.png",
-          providerMetadata:
-            detail === undefined ? undefined : { [model.route.providerMetadataKey ?? model.provider]: { detail } },
+          providerMetadata: detail === undefined ? undefined : { [model.route.id]: { detail } },
         })),
       )
       const codec = Schema.fromJsonString(Message)
@@ -50,7 +49,7 @@ it.effect("rejects malformed image detail instead of silently discarding it", ()
             type: "media",
             mediaType: "image/png",
             data: "https://example.com/image.png",
-            providerMetadata: { openai: { detail: 42 } },
+            providerMetadata: { "openai-responses": { detail: 42 } },
           }),
         ],
       }),

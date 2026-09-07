@@ -26,7 +26,6 @@ describe("Mistral Chat", () => {
     expect(Mistral.route).toMatchObject({
       id: "mistral-chat",
       provider: "mistral",
-      providerMetadataKey: "mistral",
       protocol: "mistral-chat",
     })
     expect(Mistral.route.endpoint).toMatchObject({
@@ -316,7 +315,7 @@ describe("Mistral Chat", () => {
           type: "reasoning",
           text: "Consider",
           providerMetadata: {
-            mistral: {
+            "mistral-chat": {
               thinking: {
                 type: "thinking",
                 thinking: [{ type: "text", text: "Consider" }],
@@ -360,7 +359,7 @@ describe("Mistral Chat", () => {
           type: "reasoning",
           text: "",
           providerMetadata: {
-            mistral: { thinking: { type: "thinking", thinking: [], marker: "opaque" } },
+            "mistral-chat": { thinking: { type: "thinking", thinking: [], marker: "opaque" } },
           },
         },
       ])
