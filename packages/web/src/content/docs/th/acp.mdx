@@ -25,12 +25,15 @@ ACP เป็นมาตรฐานเปิดสำหรับการส�
 
 ### Zed
 
-สำหรับ [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
+ติดตั้ง OpenCode จาก [รีจิสทรี ACP ของ Zed](https://zed.dev/docs/ai/external-agents#registry) โดยเรียกใช้ `zed: acp registry` ใน Command Palette
+
+หากต้องการใช้ไฟล์ปฏิบัติการ OpenCode แบบกำหนดเอง ให้เพิ่มลงในการตั้งค่า [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
 
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
     "OpenCode": {
+      "type": "custom",
       "command": "opencode",
       "args": ["acp"]
     }

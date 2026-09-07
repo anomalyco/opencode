@@ -25,12 +25,15 @@ ACP 是一個開放協議，用於標準化程式碼編輯器與 AI 編碼代理
 
 ### Zed
 
-新增到你的 [Zed](https://zed.dev) 設定檔（`~/.config/zed/settings.json`）中：
+在命令面板中執行 `zed: acp registry`，從 [Zed ACP 登錄檔](https://zed.dev/docs/ai/external-agents#registry)安裝 OpenCode。
+
+如果要改用自訂 OpenCode 執行檔，請將它新增到 [Zed](https://zed.dev) 設定檔（`~/.config/zed/settings.json`）中：
 
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
     "OpenCode": {
+      "type": "custom",
       "command": "opencode",
       "args": ["acp"]
     }

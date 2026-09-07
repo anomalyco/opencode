@@ -139,6 +139,7 @@ export function normalizeProviderList(
   return {
     all,
     connected: providers.map((provider) => provider.id),
+    defaultModel: defaultModel ? { providerID: defaultModel.providerID, modelID: defaultModel.id } : null,
     default: Object.fromEntries(
       providers.flatMap((provider) => {
         const model =

@@ -1,0 +1,14 @@
+{
+  "lsp": {
+    "typescript": {
+      "command": ["typescript-language-server", "--stdio"]
+    },
+    "compatible": {
+      "command": ["custom-lsp"],
+      "extensions": [".custom"]
+    },
+    "disabled": {
+      "disabled": true
+    }
+  }
+}

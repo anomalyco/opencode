@@ -7,6 +7,7 @@ import { RETIRED_STAT_MODELS, RETIRED_STAT_PROVIDERS } from "./model-normalizati
 import {
   chunks,
   collapseRows,
+  DATA_SITE_TIERS,
   inserted,
   isMissingUniqueUsersColumn,
   omitUniqueUsers,
@@ -211,7 +212,7 @@ function modelDailyScope() {
     eq(modelStat.grain, "day"),
     eq(modelStat.client, "all"),
     eq(modelStat.source, "all"),
-    inArray(modelStat.tier, ["Go", "go"]),
+    inArray(modelStat.tier, DATA_SITE_TIERS),
   )
 }
 
