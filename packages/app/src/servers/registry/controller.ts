@@ -58,6 +58,7 @@ export function useServerActionsController() {
   const remove = async (key: ServerConnection.Key) => {
     try {
       if (key.startsWith("wsl:")) await platform.wslServers?.removeServer(key)
+      if (key.startsWith("ssh:")) await platform.sshServers?.forget(key.slice(4))
       tabs.removeServer(key)
       server.remove(key)
       if ((await platform.getDefaultServer?.()) === key) await defaults.set(null)

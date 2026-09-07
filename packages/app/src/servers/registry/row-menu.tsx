@@ -5,6 +5,7 @@ import { type Component, Show } from "solid-js"
 import type { ServerActionsController } from "@/servers/registry/controller"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
+import { SshMenu } from "../ssh/menu"
 
 export const ServerRowMenu: Component<{
   server: ServerConnection.Any
@@ -15,6 +16,7 @@ export const ServerRowMenu: Component<{
 }> = (props) => {
   const language = useLanguage()
   const key = ServerConnection.key(props.server)
+  if (props.server.type === "ssh" && props.server.id) return <SshMenu id={props.server.id} domain={props.domain} />
   return (
     <ServerRowMenuView
       server={props.server}

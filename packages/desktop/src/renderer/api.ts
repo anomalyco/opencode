@@ -25,6 +25,24 @@ const updaterHandler = (state: UpdaterState) => {
 export const api: ElectronAPI = {
   awaitInitialization: () => invoke("AppAwaitInitialization"),
   reconnectService: () => invoke("AppReconnectService"),
+  sshServers: {
+    getState: () => invoke("SshGetState"),
+    subscribe: (callback) => {
+      const off = listen("SshChanged", (event) => callback(event.state))
+      void invoke("SshSubscribe")
+      return () => {
+        off()
+        void invoke("SshUnsubscribe")
+      }
+    },
+    hosts: () => invoke("SshHosts"),
+    start: (input) => invoke("SshStart", input),
+    resolve: (id) => invoke("SshResolve", { id }),
+    respond: (id, prompt, value) => invoke("SshRespond", { id, prompt, value }),
+    disconnect: (id) => invoke("SshDisconnect", { id }),
+    forget: (id) => invoke("SshForget", { id }),
+    openConfig: () => invoke("SshOpenConfig"),
+  },
   wslServers: {
     getState: () => invoke("WslGetState").then(mutable),
     subscribe: (cb) => {

@@ -2,6 +2,9 @@ import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/unstable/rpc"
 import { UpdaterStateSchema } from "./updater"
 import { WslServersEventSchema } from "./wsl"
+import { SshState } from "@opencode-ai/app/ssh"
+
+export class SshChanged extends Schema.TaggedClass<SshChanged>()("SshChanged", { state: SshState }) {}
 
 export class DeepLinksOpened extends Schema.TaggedClass<DeepLinksOpened>()("DeepLinksOpened", {
   urls: Schema.Array(Schema.String),
@@ -44,6 +47,7 @@ export const DesktopEvent = Schema.Union([
   MenuCommandTriggered,
   UpdaterStateChanged,
   WslServersChanged,
+  SshChanged,
   WindowFullscreenChanged,
   WindowPinchZoomChanged,
   WindowZoomChanged,

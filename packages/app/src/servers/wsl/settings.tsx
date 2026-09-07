@@ -16,6 +16,7 @@ import { showToast } from "@/shell/notifications/toast"
 import { DialogAddWslServer } from "./dialog"
 import { useWslServers } from "./context"
 import { wslOpencodeAction, wslRuntimeRetryable } from "./model"
+import { DialogSsh } from "../ssh/dialog"
 
 export function isWslServer(server: ServerConnection.Any) {
   return server.type === "sidecar" && server.variant === "wsl"
@@ -30,7 +31,7 @@ export function AddServerMenu(props: { onAddServer: () => void }) {
   }
   return (
     <Show
-      when={platform.wslServers}
+      when={platform.wslServers || platform.sshServers}
       fallback={
         <Button variant="ghost-muted" icon="plus" onClick={props.onAddServer}>
           {language.t("dialog.server.add.button")}
@@ -44,7 +45,12 @@ export function AddServerMenu(props: { onAddServer: () => void }) {
         <Menu.Portal>
           <Menu.Content>
             <Menu.Item onSelect={props.onAddServer}>{language.t("dialog.server.add.button")}</Menu.Item>
-            <Menu.Item onSelect={openAddWsl}>{language.t("wsl.server.add")}</Menu.Item>
+            <Show when={platform.sshServers}>
+              <Menu.Item onSelect={() => void dialog.push(() => <DialogSsh />)}>{language.t("ssh.add")}</Menu.Item>
+            </Show>
+            <Show when={platform.wslServers}>
+              <Menu.Item onSelect={openAddWsl}>{language.t("wsl.server.add")}</Menu.Item>
+            </Show>
           </Menu.Content>
         </Menu.Portal>
       </Menu>

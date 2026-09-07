@@ -10,6 +10,7 @@
     "./i18n/desktop-native": "./src/runtime/i18n/desktop-native.ts",
     "./updater": "./src/shell/updates/types.ts",
     "./wsl/types": "./src/servers/wsl/types.ts",
+    "./ssh": "./src/servers/ssh/types.ts",
     "./vite": "./vite.js",
     "./index.css": "./src/index.css"
   },

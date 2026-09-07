@@ -24,6 +24,7 @@ export function normalizeServerUrl(input: string) {
 export function serverName(conn?: ServerConnection.Any, ignoreDisplayName = false) {
   if (!conn) return ""
   if (conn.displayName && !ignoreDisplayName) return conn.displayName
+  if (conn.type === "ssh") return conn.host
   return conn.http.url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
@@ -159,9 +160,12 @@ export namespace ServerConnection {
   // Remote server desktop can SSH into
   export type Ssh = {
     type: "ssh"
+    connecting?: boolean
+    id?: string
     host: string
     // SSH client exposes an HTTP server for the app to use as a proxy
     http: HttpBase
+    reconnect?: (signal: AbortSignal) => Promise<HttpBase>
   } & Base
 
   export type Any =
@@ -178,7 +182,7 @@ export namespace ServerConnection {
         return Key.make("sidecar")
       }
       case "ssh":
-        return Key.make(`ssh:${conn.host}`)
+        return Key.make(`ssh:${conn.id ?? conn.host}`)
     }
   }
 

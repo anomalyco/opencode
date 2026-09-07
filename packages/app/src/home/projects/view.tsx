@@ -365,7 +365,10 @@ function HomeServerRow(props: {
             />
           </span>
           <div class="flex size-4 shrink-0 items-center justify-center -mr-0.5">
-            <ServerHealthIndicator health={props.health} />
+            <ServerHealthIndicator
+              health={props.health}
+              connecting={props.server.type === "ssh" && props.server.connecting}
+            />
           </div>
           <span class="flex min-w-0 items-center gap-1">
             <span class={HOME_PROJECT_NAV_LABEL}>

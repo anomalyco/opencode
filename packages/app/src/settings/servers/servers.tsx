@@ -13,6 +13,8 @@ import { ServerConnection, serverName } from "@/runtime/server/registry"
 import { useServerCollectionController } from "@/servers/registry/controller"
 import { DialogServer } from "@/servers/connect/dialog"
 import { SettingsList } from "@/settings/list"
+import { SshServerSettings } from "@/servers/ssh/settings"
+import { useSshServers } from "@/servers/ssh/context"
 import { AddServerMenu, isWslServer, useFilteredWslServers, WslServerSettings } from "@/servers/wsl/settings"
 import "@/settings/settings.css"
 
@@ -22,13 +24,14 @@ export const SettingsServers: Component = () => {
   const controller = useServerCollectionController()
   const [store, setStore] = createStore({ filter: "" })
   const wslServers = useFilteredWslServers(() => store.filter)
+  const ssh = useSshServers()
 
   const showSearch = createMemo(
     () => controller.collection.items().filter((item) => !isWslServer(item)).length + wslServers().length > 1,
   )
 
   const filtered = createMemo(() => {
-    const items = controller.collection.items().filter((item) => !isWslServer(item))
+    const items = controller.collection.items().filter((item) => !isWslServer(item) && item.type !== "ssh")
     const query = store.filter.trim()
     if (!query) return items
     return fuzzysort
@@ -89,7 +92,7 @@ export const SettingsServers: Component = () => {
 
       <div class="settings-tab-body settings-servers">
         <Show
-          when={filtered().length > 0 || wslServers().length > 0}
+          when={filtered().length > 0 || wslServers().length > 0 || ssh.data?.servers.some((item) => item.saved)}
           fallback={
             <div class="settings-servers-status">
               <span>{store.filter ? language.t("palette.empty") : language.t("dialog.server.empty")}</span>
@@ -100,6 +103,7 @@ export const SettingsServers: Component = () => {
           }
         >
           <SettingsList>
+            <SshServerSettings filter={store.filter} domain={controller} />
             <WslServerSettings domain={controller} servers={wslServers} />
             <For each={filtered()}>
               {(item) => {
