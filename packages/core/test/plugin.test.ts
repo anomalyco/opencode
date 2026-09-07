@@ -134,6 +134,49 @@ it.effect("unloading a plugin removes its commands and runs cleanup", () =>
   }),
 )
 
+it.effect("registers declarative commands from Effect and Promise plugins", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const commands = yield* Command.Service
+    const promise = fromPromise({
+      id: "promise-command",
+      async setup(ctx) {
+        await ctx.command.transform((editor) =>
+          editor.add({
+            name: "promise-review",
+            description: "Promise review",
+            template: "Review $ARGUMENTS",
+            subagent: true,
+          }),
+        )
+      },
+    })
+    yield* plugins.activate([
+      {
+        id: "effect-command",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.command
+            .transform((editor) =>
+              editor.add({
+                name: "effect-review",
+                description: "Effect review",
+                template: "Review $ARGUMENTS",
+                agent: "build",
+              }),
+            )
+            .pipe(Effect.asVoid),
+      },
+      { ...promise, revision: "1" },
+    ])
+
+    expect(yield* commands.list()).toEqual([
+      Command.Info.make({ name: "effect-review", description: "Effect review" }),
+      Command.Info.make({ name: "promise-review", description: "Promise review" }),
+    ])
+  }),
+)
+
 it.effect("reports a failed plugin without blocking a healthy plugin", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service

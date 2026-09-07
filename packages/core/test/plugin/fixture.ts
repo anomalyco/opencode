@@ -2,6 +2,7 @@ import { Agent } from "@opencode-ai/core/agent"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Command } from "@opencode-ai/core/command"
+import { CommandTemplate } from "@opencode-ai/core/command/template"
 import { Config } from "@opencode-ai/core/config"
 import { Credential } from "@opencode-ai/core/credential"
 import { LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
@@ -79,6 +80,7 @@ export const PluginTestLayer = AppNodeBuilder.build(
     AISDK.node,
     Catalog.node,
     Command.node,
+    CommandTemplate.node,
     Integration.node,
     KV.node,
     Mcp.node,

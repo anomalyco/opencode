@@ -1,4 +1,5 @@
 import type { CommandApi } from "@opencode-ai/client/effect/api"
+import type { ConfigCommand } from "@opencode-ai/schema/config/command"
 import type { PromptInput } from "@opencode-ai/schema/prompt-input"
 import type { Session } from "@opencode-ai/schema/session"
 import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
@@ -11,11 +12,22 @@ export interface CommandInvocation {
   readonly delivery: SessionInbox.Delivery
 }
 
-export interface CommandDefinition {
+export interface CommandCallbackDefinition {
   readonly name: string
   readonly description?: string
   readonly execute: (input: CommandInvocation) => Effect.Effect<void, unknown>
 }
+
+export interface CommandTemplateDefinition {
+  readonly name: string
+  readonly description?: string
+  readonly template: string
+  readonly agent?: string
+  readonly model?: ConfigCommand.Info["model"]
+  readonly subagent?: boolean
+}
+
+export type CommandDefinition = CommandCallbackDefinition | CommandTemplateDefinition
 
 export interface CommandEditor {
   add(definition: CommandDefinition): void
