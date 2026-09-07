@@ -235,6 +235,19 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
     if (!project) return []
     const current = location.ref?.directory ?? location.current?.directory
     const directories = [project.canonical, ...(worktrees() ?? []).map((worktree) => worktree.directory)]
+    const width = Math.max(
+      0,
+      dialogSelectContentWidth(Math.min(dialogWidth("large"), dimensions().width - 2)) -
+        Math.max(
+          ...directories.map((directory) =>
+            stringWidth(
+              directory === project.canonical
+                ? (projectName(project) ?? path.basename(directory))
+                : path.basename(directory),
+            ),
+          ),
+        ),
+    )
     return [
       ...directories
         .filter((directory, index) => directories.indexOf(directory) === index)
@@ -250,12 +263,10 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
             directory === project.canonical
               ? (projectName(project) ?? path.basename(directory))
               : path.basename(directory)
+          const footer = truncateFilePath(abbreviateHome(directory, paths.home), width)
           return {
             title,
-            footer: truncateFilePath(
-              abbreviateHome(directory, paths.home),
-              dialogSelectContentWidth(Math.min(dialogWidth("large"), dimensions().width - 2)) - stringWidth(title),
-            ),
+            footer: footer + " ".repeat(Math.max(0, width - stringWidth(footer))),
             value: { type: "project", directory } as OpenTarget,
             category: "Worktrees",
             gutter: directory === current ? () => <text fg={theme.text.formfield.selected}>●</text> : undefined,
@@ -339,17 +350,19 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         </Show>
       }
       footer={
-        <box>
-          <Show when={recent.loading || projects.loading}>
-            <Spinner color={theme.text.subdued}>Refreshing sessions and projects…</Spinner>
-          </Show>
-          <Show when={recent() === false || projects() === false}>
-            <text fg={theme.text.feedback.error.default}>
-              Could not refresh{" "}
-              {recent() === false ? (projects() === false ? "sessions and projects" : "sessions") : "projects"}.
-            </text>
-          </Show>
-        </box>
+        <Show when={recent.loading || projects.loading || recent() === false || projects() === false}>
+          <box>
+            <Show when={recent.loading || projects.loading}>
+              <Spinner color={theme.text.subdued}>Refreshing sessions and projects…</Spinner>
+            </Show>
+            <Show when={recent() === false || projects() === false}>
+              <text fg={theme.text.feedback.error.default}>
+                Could not refresh{" "}
+                {recent() === false ? (projects() === false ? "sessions and projects" : "sessions") : "projects"}.
+              </text>
+            </Show>
+          </box>
+        </Show>
       }
       bindings={[
         {
