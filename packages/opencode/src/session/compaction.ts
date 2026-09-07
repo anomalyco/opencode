@@ -51,6 +51,23 @@ type CompletedCompaction = {
 const truncate = (value: string) =>
   value.length <= TOOL_OUTPUT_MAX_CHARS ? value : `${value.slice(0, TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`
 
+// Replay must never re-inject the payload that caused the overflow. User
+// document attachments are stored as `file`/`text` parts and are truncated
+// nowhere else in the pipeline (the 2k cap above covers tool outputs only),
+// so replaying them verbatim re-creates the overflow on the very next call
+// and wedges the session permanently.
+export const REPLAY_PART_MAX_CHARS = TOOL_OUTPUT_MAX_CHARS
+
+export function replayPartFor(part: SessionV1.Part): SessionV1.Part | { type: "text"; text: string } {
+  if (part.type === "file") {
+    return { type: "text", text: `[Attached ${part.mime}: ${part.filename ?? "file"}]` }
+  }
+  if (part.type === "text" && part.text.length > REPLAY_PART_MAX_CHARS) {
+    return { type: "text", text: `[Document omitted: ${part.text.length} characters]` }
+  }
+  return part
+}
+
 const serialize = (message: SessionV1.WithParts) => {
   if (message.info.role === "user") {
     const text = message.parts
@@ -481,10 +498,7 @@ const layer = Layer.effect(
           })
           for (const part of replay.parts) {
             if (part.type === "compaction") continue
-            const replayPart =
-              part.type === "file" && MessageV2.isMedia(part.mime)
-                ? { type: "text" as const, text: `[Attached ${part.mime}: ${part.filename ?? "file"}]` }
-                : part
+            const replayPart = replayPartFor(part)
             yield* session.updatePart({
               ...replayPart,
               id: PartID.ascending(),

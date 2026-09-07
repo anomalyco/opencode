@@ -28,7 +28,15 @@ export function isOverflow(input: {
   if (input.cfg.compaction?.auto === false) return false
   if (input.model.limit.context === 0) return false
 
-  const count =
-    input.tokens.total || input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
+  // `total_tokens` semantics are provider-dependent: OpenAI-style providers
+  // include cached tokens in the total, while Anthropic-style providers report
+  // cached tokens separately (excluding cache reads). A session with a
+  // near-100% prompt-cache hit ratio can therefore report a tiny `total`
+  // forever, blinding the trigger while the real context grows unbounded.
+  // Always compare the full context size (input + cache) against the window.
+  const count = Math.max(
+    input.tokens.total ?? 0,
+    input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write,
+  )
   return count >= usable(input)
 }

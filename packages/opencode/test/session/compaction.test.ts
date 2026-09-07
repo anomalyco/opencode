@@ -8,7 +8,7 @@ import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { Config } from "@/config/config"
 import { LLM } from "../../src/session/llm"
-import { SessionCompaction } from "../../src/session/compaction"
+import { SessionCompaction, replayPartFor } from "../../src/session/compaction"
 import { Token } from "@/util/token"
 import { Plugin } from "../../src/plugin"
 import { provideTmpdirInstance, TestInstance } from "../fixture/fixture"
@@ -423,6 +423,21 @@ describe("session.compaction.isOverflow", () => {
         const compact = yield* SessionCompaction.Service
         const model = createModel({ context: 400_000, input: 272_000, output: 128_000 })
         const tokens = { input: 271_000, output: 1_000, reasoning: 0, cache: { read: 2_000, write: 0 } }
+        expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
+      }),
+    ),
+  )
+
+  it.live(
+    "counts cache reads when total_tokens excludes cached tokens (Anthropic-style providers)",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const model = createModel({ context: 300_000, output: 131_072 })
+        // Anthropic-style usage: prompt_tokens excludes cache reads, so the
+        // reported total stays tiny while the real context (cache reads)
+        // grows unbounded. The trigger must count cache reads.
+        const tokens = { input: 15, output: 100, reasoning: 0, cache: { read: 2_900_000, write: 0 }, total: 115 }
         expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
       }),
     ),
@@ -1955,5 +1970,31 @@ describe("SessionNs.getUsage", () => {
     expect(result.tokens.input).toBe(500)
     expect(result.tokens.cache.read).toBe(200)
     expect(result.tokens.cache.write).toBe(300)
+  })
+})
+
+describe("session.compaction.replayPartFor", () => {
+  test("replaces file attachments with reference placeholders regardless of mime", () => {
+    const part = { type: "file", mime: "application/json", filename: "flow.json" } as any
+    const out = replayPartFor(part as any)
+    expect(out.type).toBe("text")
+    expect((out as any).text).toBe("[Attached application/json: flow.json]")
+  })
+
+  test("replaces media file attachments with reference placeholders", () => {
+    const part = { type: "file", mime: "image/png", filename: "shot.png" } as any
+    const out = replayPartFor(part as any)
+    expect((out as any).text).toBe("[Attached image/png: shot.png]")
+  })
+
+  test("omits oversized text parts instead of re-injecting them", () => {
+    const part = { type: "text", text: "x".repeat(5_000) } as any
+    const out = replayPartFor(part as any)
+    expect((out as any).text).toBe("[Document omitted: 5000 characters]")
+  })
+
+  test("keeps small text parts verbatim", () => {
+    const part = { type: "text", text: "hello" } as any
+    expect(replayPartFor(part as any)).toBe(part)
   })
 })
