@@ -176,9 +176,19 @@ describe("draft store text externalization", () => {
     const read = JSON.parse((await fresh.getItem("doc"))!)
     expect(read.prompt[0].content).toBe(paste)
     expect(read.prompt[1].blob.id).toBe(restored.prompt[1].blob.id)
-    // The renamed chunk ids are what the cache now answers with, so the next save needs no repair.
+    // The renamed ids are what later encodes publish, so saves of the still-live references (the
+    // composer keeps the original image id) upload nothing and keep one stable image id.
     const puts = counter
-    await store.setDocument("doc", { prompt: [{ type: "text", content: paste }], cursor: 1 })
+    for (const cursor of [1, 2, 3]) {
+      await store.setDocument("doc", {
+        prompt: [
+          { type: "text", content: paste },
+          { type: "image", blob: image },
+        ],
+        cursor,
+      })
+      expect(JSON.parse(memory.documents.get("doc")!).prompt[1].blob.id).toBe(restored.prompt[1].blob.id)
+    }
     expect(counter).toBe(puts)
   })
 

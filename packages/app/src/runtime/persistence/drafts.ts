@@ -32,6 +32,9 @@ const urls = new Map<string, string>()
 // The object URL already pins the Blob for the page's lifetime; keeping the Blob itself lets a
 // collected image be uploaded again without fetching the URL.
 const held = new Map<string, Blob>()
+// Image ids that were restored under a different id (a store without WebCrypto assigns fresh
+// ones); live references still carry the original.
+const aliases = new Map<string, string>()
 
 function blobUrl(id: string, blob: Blob) {
   const existing = urls.get(id)
@@ -140,11 +143,13 @@ export function createDraftStore(driver: Driver): DraftStore {
         return { ...item, blob: { id } }
       }
       if (typeof blob.id === "string") {
-        const id = blob.id
+        // A live reference keeps the id it was created with; publish the id its bytes now live under.
+        const id = aliases.get(blob.id) ?? blob.id
         const kept = held.get(id)
         const url = typeof blob.url === "string" ? blob.url : urls.get(id)
         if (kept) sources.set(id, { blob: async () => kept })
         else if (url) sources.set(id, { blob: () => fetch(url).then((response) => response.blob()) })
+        return { ...item, blob: { id } }
       }
       return { ...item, blob: { id: blob.id } }
     }
@@ -189,6 +194,11 @@ export function createDraftStore(driver: Driver): DraftStore {
         }
         held.set(next, blob)
         blobUrl(next, blob)
+        if (next === id) return
+        // Later encodes of the still-live reference resolve straight to the new id. Re-point any
+        // earlier alias chain so lookups stay one step.
+        for (const [from, to] of aliases) if (to === id) aliases.set(from, next)
+        aliases.set(id, next)
       }),
     )
     return renamed
@@ -303,12 +313,30 @@ export function createBrowserDraftStore(): DraftStore {
   return createDraftStore({
     get: async (key) => ((await get("documents", key)) as string | undefined) ?? null,
     set: async (key, value, strict) => {
-      // Another tab may have collected a blob this document still references.
+      // One readwrite transaction over both stores: IndexedDB serialises overlapping readwrite
+      // transactions in creation order, so a later save or removal cannot commit between the
+      // reference check and this write. The put is issued from the last lookup's callback so the
+      // transaction is never left without a pending request.
       const ids = [...referenced(value)]
-      const present = await Promise.all(ids.map((id) => get("blobs", id)))
-      const missing = ids.filter((_, index) => present[index] === undefined)
-      if (!strict || missing.length === 0) await write("documents", key, value)
-      return missing
+      const transaction = (await db).transaction(["blobs", "documents"], "readwrite")
+      const missing: string[] = []
+      const publish = () => {
+        if (!strict || missing.length === 0) transaction.objectStore("documents").put(value, key)
+      }
+      let remaining = ids.length
+      if (remaining === 0) publish()
+      for (const id of ids) {
+        const lookup = transaction.objectStore("blobs").getKey(id)
+        lookup.addEventListener("success", () => {
+          if (lookup.result === undefined) missing.push(id)
+          if (--remaining === 0) publish()
+        })
+      }
+      return new Promise<string[]>((resolve, reject) => {
+        transaction.addEventListener("complete", () => resolve(missing))
+        transaction.addEventListener("error", () => reject(transaction.error))
+        transaction.addEventListener("abort", () => reject(transaction.error))
+      })
     },
     remove: (key) => write("documents", key),
     putBlob: async (blob) => {
