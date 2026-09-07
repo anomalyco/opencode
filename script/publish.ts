@@ -110,3 +110,8 @@ if (Script.release) {
     metadata: await UpdateArtifact.desktopMetadata(Script.version, repo),
   })
 }
+
+if (Script.channel === "beta" && Script.release) {
+  console.log("\n=== AUR ===\n")
+  await $`bun ./packages/cli/script/publish-aur.ts`
+}
