@@ -23,14 +23,15 @@ import { emptyThemeSource, tmpdir } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
-test("scopes sessions to the active session location", async () => {
+test("scopes sessions to the active location and follows its project identity while open", async () => {
   const active = "/tmp/opencode/project-b"
   const events = createEventStream()
+  const identity = { project: "proj_b" }
   const requestedProjects: string[] = []
   const calls = createFetch((url) => {
     if (url.pathname === "/api/location") {
       const directory = url.searchParams.get("location[directory]") ?? process.cwd()
-      const project = directory === active ? "proj_b" : "proj_a"
+      const project = directory === active ? identity.project : "proj_a"
       return json({ directory, project: { id: project, directory, canonical: directory } })
     }
     if (url.pathname !== "/api/session") return undefined
@@ -42,13 +43,18 @@ test("scopes sessions to the active session location", async () => {
     return json({
       data: [
         {
-          id: project === "proj_b" ? "ses_b" : "ses_a",
+          id: project === "proj_a" ? "ses_a" : "ses_b",
           projectID: project,
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 1, updated: 2 },
-          title: project === "proj_b" ? "Project B session" : "Project A session",
-          location: { directory: project === "proj_b" ? active : process.cwd() },
+          title:
+            project === "proj_b_identified"
+              ? "Identified project session"
+              : project === "proj_b"
+                ? "Project B session"
+                : "Project A session",
+          location: { directory: project === "proj_a" ? process.cwd() : active },
         },
       ],
       cursor: {},
@@ -122,6 +128,18 @@ test("scopes sessions to the active session location", async () => {
     const frame = await app.waitForFrame((value) => value.includes("Project B session"))
     expect(frame).not.toContain("Project A session")
     expect(requestedProjects.at(-1)).toBe("proj_b")
+
+    identity.project = "proj_b_identified"
+    events.emit({
+      id: "evt_project_identified",
+      created: 4,
+      type: "worktree.resolved",
+      durable: { aggregateID: identity.project, seq: 0, version: 1 },
+      data: { projectID: identity.project, directory: active, previous: "proj_b" },
+    })
+    const updated = await app.waitForFrame((value) => value.includes("Identified project session"))
+    expect(updated).not.toContain("Project A session")
+    expect(requestedProjects.at(-1)).toBe(identity.project)
   } finally {
     app.renderer.destroy()
     await storage.flush()

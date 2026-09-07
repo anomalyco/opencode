@@ -56,6 +56,7 @@ export function DialogSessionList() {
       query: search().trim(),
       allProjects: allProjects(),
       location: pickerLocation(),
+      projectID: data.location.info(pickerLocation())?.project.id,
     }),
     async ({ query, allProjects, location }) => {
       try {

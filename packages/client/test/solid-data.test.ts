@@ -312,6 +312,75 @@ test("adopts cached directory-project sessions when their repository is resolved
   }
 })
 
+test("refreshes cached location identities when their repository is resolved", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const requests: string[] = []
+  const identity = { id: "directory-root" }
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      if (url.pathname !== "/api/location") throw new Error(`Unexpected request: ${request.url}`)
+      const directory = url.searchParams.get("location[directory]") ?? "/repo"
+      const workspaceID = url.searchParams.get("location[workspace]") ?? undefined
+      requests.push(`${workspaceID ?? ""}:${directory}`)
+      return Response.json({
+        directory,
+        workspaceID,
+        project: {
+          id: directory === "/repo-other" ? "other" : workspaceID ? "directory-root" : identity.id,
+          directory: directory === "/repo-other" ? directory : "/repo",
+          canonical: directory === "/repo-other" ? directory : "/repo",
+        },
+      })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/repo",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+
+  try {
+    for (const location of [
+      { directory: "/repo" },
+      { directory: "/repo/app" },
+      { directory: "/repo-other" },
+      { directory: "/repo", workspaceID: "remote" },
+    ]) {
+      await setup.data.location.syncInfo(location)
+    }
+    requests.length = 0
+    identity.id = "global"
+    const resolved: OpenCodeEvent = {
+      id: "evt_unborn_repository",
+      created: 1,
+      type: "worktree.resolved",
+      durable: { aggregateID: "global", seq: 0, version: 1 },
+      data: { projectID: "global", directory: "/repo", previous: "global", adopted: ["directory-root"] },
+    }
+    listeners.forEach((listener) => listener({ name: resolved.type, details: resolved }))
+
+    await wait(() => setup.data.location.info()?.project.id === "global")
+    expect(setup.data.location.info({ directory: "/repo/app" })?.project.id).toBe("global")
+    expect(setup.data.location.info({ directory: "/repo-other" })?.project.id).toBe("other")
+    expect(setup.data.location.info({ directory: "/repo", workspaceID: "remote" })?.project.id).toBe("directory-root")
+    expect(requests.sort()).toEqual([":/repo", ":/repo/app"])
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("refreshes global credential events across every loaded location and workspace", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const requests: URL[] = []

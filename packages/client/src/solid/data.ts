@@ -738,6 +738,19 @@ export function createData(config: CreateDataInput) {
           setStore("session", "info", sessionID, "projectID", adopted.projectID)
           setStore("session", "info", sessionID, "subpath", adopted.subpath)
         }
+        for (const [key, location] of Object.entries(store.location)) {
+          const info = location.info
+          if (
+            !info ||
+            !Worktree.adopt(
+              { projectID: info.project.id, directory: info.project.directory, workspaceID: info.workspaceID },
+              event.data,
+            )
+          )
+            continue
+          sync.invalidate(`location:${key}`)
+          refresh(() => result.location.syncInfo(info))
+        }
         return
       }
       case "session.inbox.delivered": {

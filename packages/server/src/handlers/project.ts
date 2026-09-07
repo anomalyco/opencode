@@ -21,13 +21,5 @@ export const ProjectHandler = HttpApiBuilder.group(Api, "server.project", (handl
         ),
       ),
     )
-    .handle("project.current", () =>
-      Location.Service.use((location) =>
-        Effect.succeed({
-          id: location.project.id,
-          directory: location.project.directory,
-          canonical: location.project.canonical,
-        }),
-      ),
-    ),
+    .handle("project.current", () => Location.current.pipe(Effect.map((location) => location.project))),
 )
