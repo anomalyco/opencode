@@ -301,6 +301,7 @@ export const make = Effect.fn("Session.make")(function* () {
               text: input.text,
               description: input.description,
               metadata: input.metadata,
+              resume: input.resume === false ? false : undefined,
             }),
             delivery: SessionInbox.Delivery.make(input.delivery ?? "steer"),
           } satisfies SessionInbox.Item
