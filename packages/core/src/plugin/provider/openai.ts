@@ -233,16 +233,19 @@ export const OpenAIPlugin = define({
     const loading = Semaphore.makeUnsafe(1)
     let chatgpt: Credential.OAuth | undefined
 
-    const load = Effect.fn("OpenAIPlugin.load")(function* () {
+    const active = Effect.fn("OpenAIPlugin.active")(function* () {
       const connection = yield* ctx.integration.connection.active("openai")
       const credential = connection
         ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
         : undefined
-      chatgpt =
-        credential?.type === "oauth" &&
+      return credential?.type === "oauth" &&
         (credential.methodID === browserMethodID || credential.methodID === headlessMethodID)
-          ? credential
-          : undefined
+        ? credential
+        : undefined
+    })
+
+    const load = Effect.fn("OpenAIPlugin.load")(function* () {
+      chatgpt = yield* active()
     })
 
     yield* ctx.integration.transform((editor) => {
@@ -294,12 +297,17 @@ export const OpenAIPlugin = define({
     yield* ctx.session.hook(
       "model.request",
       (evt) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           if (!chatgpt) return
           if (evt.baseURL && URL.canParse(evt.baseURL) && new URL(evt.baseURL).origin === "https://api.openai.com")
             evt.baseURL = codexBaseURL
           evt.headers.originator = "opencode"
           evt.headers["session-id"] = evt.sessionID
+          // The catalog header is rebuilt asynchronously after an account
+          // switch. Read the account from the credential this request
+          // authenticates with so the header never lags behind the token.
+          const account = (yield* active())?.metadata?.accountID
+          if (typeof account === "string") evt.headers["chatgpt-account-id"] = account
         }),
       { providerID: Provider.ID.openai },
     )

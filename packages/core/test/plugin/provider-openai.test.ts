@@ -177,8 +177,49 @@ describe("OpenAIPlugin", () => {
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-6-astra"))).enabled).toBe(true)
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.10"))).enabled).toBe(true)
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5"))).enabled).toBe(false)
-      expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"))).enabled).toBe(false)
+      expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"))).enabled).toBe(
+        false,
+      )
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-4.99"))).enabled).toBe(false)
+    }),
+  )
+
+  it.effect("sends the account header of the credential active at request time", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const credentials = yield* Credential.Service
+      yield* catalog.transform((catalog) => {
+        catalog.provider.update(Provider.ID.openai, (draft) => {
+          draft.package = Provider.aisdk("@ai-sdk/openai")
+        })
+        catalog.model.update(Provider.ID.openai, Model.ID.make("gpt-5.5"), () => {})
+      })
+      const chatgpt = (accountID: string) =>
+        Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-browser"),
+          access: `${accountID}-token`,
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+          metadata: { accountID },
+        })
+      const first = yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: chatgpt("acct_1"),
+      })
+      yield* credentials.create({ integrationID: Integration.ID.make("openai"), value: chatgpt("acct_2") })
+      yield* addPlugin()
+
+      expect((yield* request(Provider.ID.openai, "https://api.openai.com/v1")).headers).toMatchObject({
+        "chatgpt-account-id": "acct_2",
+      })
+
+      // Switching accounts must be visible to the very next request, before the
+      // asynchronous catalog refresh has run.
+      yield* credentials.activate(first.id)
+      expect((yield* request(Provider.ID.openai, "https://api.openai.com/v1")).headers).toMatchObject({
+        "chatgpt-account-id": "acct_1",
+      })
     }),
   )
 
