@@ -29,7 +29,6 @@ import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
 import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { ProviderError } from "@/provider/error"
-import { iife } from "@/util/iife"
 import { errorMessage } from "@/util/error"
 import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
@@ -167,7 +166,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     if (typeof output === "object") {
       const outputObject = output as {
         text: string
-        attachments?: Array<{ mime: string; url: string }>
+        attachments?: Array<{ mime: string; url: string; filename?: string }>
       }
       const attachments = (outputObject.attachments ?? []).filter((attachment) => {
         return attachment.url.startsWith("data:") && attachment.url.includes(",")
@@ -177,14 +176,19 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         type: "content",
         value: [
           ...(outputObject.text ? [{ type: "text", text: outputObject.text }] : []),
-          ...attachments.map((attachment) => ({
-            type: "media",
-            mediaType: attachment.mime,
-            data: iife(() => {
-              const commaIndex = attachment.url.indexOf(",")
-              return commaIndex === -1 ? attachment.url : attachment.url.slice(commaIndex + 1)
-            }),
-          })),
+          ...attachments.map((attachment) => {
+            const data = attachment.url.slice(attachment.url.indexOf(",") + 1)
+            if (attachment.mime.startsWith("image/")) {
+              return { type: "image-data", data, mediaType: attachment.mime }
+            }
+            return {
+              type: "file-data",
+              data,
+              mediaType: attachment.mime,
+              // Responses requires a file extension, including for old tool results without a filename.
+              filename: attachment.filename ?? (attachment.mime === "application/pdf" ? "attachment.pdf" : undefined),
+            }
+          }),
         ],
       }
     }

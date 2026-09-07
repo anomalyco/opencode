@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { APICallError } from "ai"
+import { APICallError, generateText } from "ai"
+import { createBedrockMantle } from "@ai-sdk/amazon-bedrock/mantle"
+import { createOpenAI } from "@ai-sdk/openai"
 import { MessageV2 } from "../../src/session/message-v2"
 import { ProviderTransform } from "@/provider/transform"
 import type { Provider } from "@/provider/provider"
@@ -110,6 +112,118 @@ function basePart(messageID: string, id: string) {
     messageID: MessageID.make(messageID.startsWith("msg") ? messageID : `msg_${messageID}`),
   }
 }
+
+describe.each([
+  {
+    npm: "@ai-sdk/amazon-bedrock/mantle",
+    sdk: (fetch: typeof globalThis.fetch) =>
+      createBedrockMantle({ region: "us-east-1", apiKey: "test-key", fetch }).responses("openai.gpt-5.5"),
+  },
+  {
+    npm: "@ai-sdk/openai",
+    sdk: (fetch: typeof globalThis.fetch) => createOpenAI({ apiKey: "test-key", fetch }).responses("gpt-5.5"),
+  },
+])("$npm tool attachment serialization", ({ npm, sdk }) => {
+  test.each([
+    { name: "plain text", mime: undefined, filename: undefined, replay: false },
+    { name: "image", mime: "image/png", filename: "image.png", replay: false },
+    { name: "named PDF", mime: "application/pdf", filename: "report.pdf", replay: false },
+    { name: "unnamed PDF", mime: "application/pdf", filename: undefined, replay: false },
+    { name: "PDF replayed before glob", mime: "application/pdf", filename: "report.pdf", replay: true },
+  ])("preserves $name", async ({ mime, filename, replay }) => {
+    const selected = { ...model, api: { ...model.api, npm } }
+    const data = Buffer.from(mime === "image/png" ? "image fixture" : "%PDF-1.4\n").toString("base64")
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo("msg_assistant", "msg_user"),
+        parts: [
+          {
+            ...basePart("msg_assistant", "prt_read"),
+            type: "tool",
+            tool: "read",
+            callID: "call_read",
+            state: {
+              status: "completed",
+              input: { filePath: "/fixture/file" },
+              output: "File read successfully",
+              title: "Read",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: mime
+                ? [
+                    {
+                      ...basePart("msg_assistant", "prt_file"),
+                      type: "file",
+                      mime,
+                      filename,
+                      url: `data:${mime};base64,${data}`,
+                    },
+                  ]
+                : [],
+            },
+          },
+        ],
+      },
+    ]
+    if (replay)
+      input.push({
+        info: assistantInfo("msg_glob", "msg_user"),
+        parts: [
+          {
+            ...basePart("msg_glob", "prt_glob"),
+            type: "tool",
+            tool: "glob",
+            callID: "call_glob",
+            state: {
+              status: "completed",
+              input: { pattern: "*.ts" },
+              output: "/fixture/main.ts",
+              title: "Find Files",
+              metadata: {},
+              time: { start: 2, end: 3 },
+            },
+          },
+        ],
+      })
+    const requests: string[] = []
+    const capture = Object.assign(
+      async (...args: Parameters<typeof fetch>) => {
+        requests.push(String(args[1]?.body))
+        throw new Error("request captured")
+      },
+      { preconnect: () => undefined },
+    )
+    await expect(
+      generateText({
+        model: sdk(capture),
+        messages: await MessageV2.toModelMessages(input, selected),
+        maxRetries: 0,
+      }),
+    ).rejects.toThrow("request captured")
+    expect(requests).toHaveLength(1)
+    expect(JSON.parse(requests[0])).toMatchObject({
+      input: expect.arrayContaining([
+        {
+          type: "function_call_output",
+          call_id: "call_read",
+          output: mime
+            ? [
+                { type: "input_text", text: "File read successfully" },
+                mime === "image/png"
+                  ? { type: "input_image", image_url: `data:${mime};base64,${data}` }
+                  : {
+                      type: "input_file",
+                      filename: filename ?? "attachment.pdf",
+                      file_data: `data:${mime};base64,${data}`,
+                    },
+              ]
+            : "File read successfully",
+        },
+        ...(replay ? [{ type: "function_call_output", call_id: "call_glob", output: "/fixture/main.ts" }] : []),
+      ]),
+    })
+  })
+})
 
 describe("session.message-v2.toModelMessage", () => {
   test("filters out messages with no parts", async () => {
@@ -401,7 +515,7 @@ describe("session.message-v2.toModelMessage", () => {
               type: "content",
               value: [
                 { type: "text", text: "ok" },
-                { type: "media", mediaType: "image/png", data: "Zm9v" },
+                { type: "image-data", mediaType: "image/png", data: "Zm9v" },
               ],
             },
             providerOptions: { openai: { tool: "meta" } },
@@ -488,7 +602,7 @@ describe("session.message-v2.toModelMessage", () => {
         type: "content",
         value: [
           { type: "text", text: "Image read successfully" },
-          { type: "media", mediaType: "image/jpeg", data: jpeg },
+          { type: "image-data", mediaType: "image/jpeg", data: jpeg },
         ],
       },
     })
