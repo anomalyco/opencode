@@ -78,6 +78,9 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
     ...model.request.body,
   }
   if (model.api.type === "aisdk" && model.api.url) options.baseURL = model.api.url
+  if (model.request.headers && Object.keys(model.request.headers).length > 0) {
+    options.headers = { ...options.headers, ...model.request.headers }
+  }
 
   const customFetch = options.fetch
   const chunkTimeout = options.chunkTimeout
