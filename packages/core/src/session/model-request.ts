@@ -342,7 +342,16 @@ export const layer = Layer.effect(
           tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),
           toolChoice: input.toolChoice,
           generation: Object.keys(context.generation).length === 0 ? undefined : context.generation,
-          providerOptions: Object.keys(context.providerOptions).length === 0 ? undefined : context.providerOptions,
+          providerOptions:
+            model.route.id === "openai-responses" && /^gpt-6-astra(?:-|$)/.test(model.id)
+              ? {
+                  asyncTools: Array.from(hooked.keys()).filter((name) => name !== "question"),
+                  ...model.route.defaults?.providerOptions,
+                  ...context.providerOptions,
+                }
+              : Object.keys(context.providerOptions).length === 0
+                ? undefined
+                : context.providerOptions,
         }),
       )
       const hasHttpHooks =
@@ -351,7 +360,7 @@ export const layer = Layer.effect(
       const webSocket =
         resolved.capabilities.responsesWebsockets === true
           ? yield* Config.boolean(responsesWebSocketFlag(resolved.ref.providerID)).pipe(
-              Config.withDefault(false),
+              Config.withDefault(model.route.id === "openai-responses" && /^gpt-6-astra(?:-|$)/.test(model.id)),
               Effect.orDie,
             )
           : false

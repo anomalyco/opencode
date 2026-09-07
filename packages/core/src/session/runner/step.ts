@@ -22,6 +22,9 @@ import { StepFailedError } from "../error.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
 import { SessionModelRequest } from "../model-request.js"
+import { SessionModelTransport } from "../model-transport.js"
+import { SessionInbox } from "../inbox.js"
+import { Database } from "../../database/database.js"
 import { SessionSchema } from "../schema.js"
 import { toSessionError } from "../to-session-error.js"
 import { SessionUsage } from "../usage.js"
@@ -55,6 +58,7 @@ interface Input {
   readonly recoverContinuation: boolean
   /** The runner owns compaction policy; the attempt invokes it only before durable output. */
   readonly recoverOverflow: Effect.Effect<boolean>
+  readonly onSteer?: () => void
 }
 
 const TOOLS_INTERRUPTED = { type: "aborted", message: "Tool execution interrupted" } as const
@@ -67,6 +71,8 @@ export const make = Effect.gen(function* () {
   const llm = yield* LLMClient.Service
   const snapshots = yield* Snapshot.Service
   const toolOutput = yield* ToolOutput.Service
+  const transport = yield* SessionModelTransport.Service
+  const db = (yield* Database.Service).db
 
   const attempt = Effect.fn("SessionStep.attempt")(function* (input: Input) {
     const startSnapshot = yield* snapshots.capture()
@@ -78,6 +84,44 @@ export const make = Effect.gen(function* () {
       providerMetadataKey: input.model.model.route.providerMetadataKey ?? input.model.model.provider,
       snapshot: startSnapshot,
     })
+    let steered = false
+    const steer = input.prepared.options.webSocket
+      ? SessionInbox.serialized(
+          input.sessionID,
+          Effect.gen(function* () {
+            const pending = yield* SessionInbox.nextPromotable(db, input.sessionID, "steer")
+            // Attachments and controls require normal context preparation at a step boundary.
+            if (
+              pending?.type !== "user" ||
+              pending.payload.files?.length ||
+              pending.payload.agents?.length ||
+              pending.payload.skills?.length
+            )
+              return
+            yield* transport.steer(
+              input.sessionID,
+              pending.payload.text,
+              publisher.startAssistant().pipe(
+                Effect.andThen(
+                  bus.publish(SessionEvent.InboxDelivered, { sessionID: input.sessionID, inboxID: pending.id }),
+                ),
+                Effect.tap(() =>
+                  Effect.sync(() => {
+                    steered = true
+                    input.onSteer?.()
+                  }),
+                ),
+                Effect.asVoid,
+              ),
+            )
+          }),
+        )
+      : Effect.void
+    const steering = yield* bus.subscribe([SessionEvent.InboxEnqueued, SessionEvent.InboxDeliveryChanged]).pipe(
+      Stream.filter((event) => event.data.sessionID === input.sessionID),
+      Stream.runForEach(() => steer),
+      Effect.forkScoped({ startImmediately: true }),
+    )
     const toolRuns: Array<{
       readonly call: ToolCall
       readonly fiber: Fiber.Fiber<void, Permission.DeclinedError | QuestionTool.CancelledError>
@@ -112,6 +156,7 @@ export const make = Effect.gen(function* () {
             return
           }
           yield* publisher.publish(event)
+          if (event.type === "step-start") yield* steer
           if (event.type !== "tool-call" || event.providerExecuted) return
           toolRuns.push({
             call: event,
@@ -134,10 +179,12 @@ export const make = Effect.gen(function* () {
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
         const stream = yield* restore(providerStream).pipe(Effect.exit)
+        yield* Fiber.interrupt(steering)
         const streamFailure = Option.getOrUndefined(Exit.findErrorOption(stream))
         const streamInterrupted = Exit.hasInterrupts(stream)
         if (!overflowFailure && publisher.hasStarted()) yield* publisher.streamed()
-        if (streamInterrupted) yield* interruptTools
+        if (streamInterrupted || (streamFailure instanceof AIError && streamFailure.reason._tag === "ContentPolicy"))
+          yield* interruptTools
         const joined = yield* restore(Fiber.awaitAll(toolRuns.map((run) => run.fiber))).pipe(Effect.exit)
         if (Exit.isFailure(joined)) yield* interruptTools
         const tools = classifyToolExits(joined, toolRuns)
@@ -170,7 +217,7 @@ export const make = Effect.gen(function* () {
         )
           return Outcome.RecoverFull()
         const retry =
-          llmFailure && llmError && !isContextOverflowFailure(llmFailure)
+          llmFailure && llmError && llmFailure.reason._tag !== "ContentPolicy" && !isContextOverflowFailure(llmFailure)
             ? yield* restore(
                 input.retry(
                   llmFailure,
@@ -256,7 +303,10 @@ export const make = Effect.gen(function* () {
         if (tools.interrupted && Exit.isFailure(joined)) return yield* Effect.failCause(joined.cause)
         if (record.failure) return yield* new StepFailedError({ error: record.failure })
         return Outcome.Completed({
-          needsContinuation: input.prepared.request.toolChoice?.type !== "none" && record.needsContinuation,
+          needsContinuation:
+            steered ||
+            transport.hasPendingInput(input.sessionID) ||
+            (input.prepared.request.toolChoice?.type !== "none" && record.needsContinuation),
         })
       }),
     )

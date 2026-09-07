@@ -30,17 +30,30 @@ export interface WebSocketChannelExchange {
 export interface WebSocketChannelDriver {
   readonly create: (checkpoint: ChannelCheckpoint | undefined) => Effect.Effect<ChannelCreate, AIError>
   readonly observe: (create: ChannelCreate, frame: string) => Effect.Effect<ChannelObservation, AIError>
+  /** Undefined when this response cannot accept a user update. */
+  readonly steer?: (text: string) => Effect.Effect<string | undefined, AIError>
 }
 
 export interface ChannelCreate {
   readonly message: string
-  readonly mode: "full" | "incremental"
+  readonly mode: "full" | "incremental" | "automatic"
 }
 
 export type ChannelObservation =
+  | { readonly type: "ignore" }
   | { readonly type: "frame"; readonly frame: string }
-  | { readonly type: "completed"; readonly frame: string; readonly checkpoint?: ChannelCheckpoint }
-  | { readonly type: "incomplete"; readonly frame: string }
+  | {
+      readonly type: "completed"
+      readonly frame: string
+      readonly checkpoint?: ChannelCheckpoint
+      readonly continuation?: string
+    }
+  | {
+      readonly type: "incomplete"
+      readonly frame: string
+      readonly checkpoint?: ChannelCheckpoint
+      readonly continuation?: string
+    }
   | { readonly type: "provider-failure"; readonly error: AIError }
   | { readonly type: "rejected"; readonly error: AIError; readonly recovery: "retry-full" }
   | { readonly type: "rejected"; readonly error: AIError; readonly recovery: "rotate-and-retry-full" }
@@ -48,4 +61,6 @@ export type ChannelObservation =
 export interface ChannelCheckpoint {
   readonly protocol: string
   readonly value: unknown
+  /** Input deferred while a server-created response was already running. */
+  readonly pendingInput?: boolean
 }

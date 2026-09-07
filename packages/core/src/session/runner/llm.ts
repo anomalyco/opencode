@@ -175,7 +175,9 @@ const layer = Layer.effect(
       while (true) {
         const next = yield* advanceToStep()
         if (next._tag !== "Ready") return next
-        continuing = yield* runStep(next.context, step)
+        continuing = yield* runStep(next.context, step, () => {
+          step = 0
+        })
         step++
         force = false
         entering = false
@@ -190,7 +192,11 @@ const layer = Layer.effect(
     })
 
     /** Owns logical Step policy; each attempt owns its streaming, tools, and durable settlement. */
-    const runStep = Effect.fn("SessionRunner.runStep")(function* (first: SessionContext.Loaded, step: number) {
+    const runStep = Effect.fn("SessionRunner.runStep")(function* (
+      first: SessionContext.Loaded,
+      step: number,
+      onSteer: () => void,
+    ) {
       const sessionID = first.session.id
       let assistantMessageID = SessionMessage.ID.create()
       const retry = yield* SessionRunnerRetry.make(bus, sessionID)
@@ -248,6 +254,7 @@ const layer = Layer.effect(
               retry: proposed,
             }),
           recoverContinuation,
+          onSteer,
           recoverOverflow: Effect.suspend(() =>
             recoverOverflow && compaction.enabled()
               ? compaction.compact(compactionInput).pipe(Effect.map((result) => result.status === "completed"))

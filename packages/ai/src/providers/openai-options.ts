@@ -6,6 +6,8 @@ import type { ContextManagement } from "../protocols/openai-responses.js"
 export type { OpenAIResponseIncludable, OpenAIServiceTier } from "../protocols/utils/openai-options.js"
 
 export type OpenAIOptionsInput = Omit<Options, "serviceTier"> & {
+  /** Local functions the model may leave running while it continues its response. */
+  readonly asyncTools?: ReadonlyArray<string>
   /** Advanced in-band compaction. The caller owns checkpoint persistence and recovery. */
   readonly contextManagement?: ContextManagement
   readonly serviceTier?: OpenAIServiceTier
@@ -58,7 +60,17 @@ export const openAIDefaultOptions = (
   modelID: string,
   options: { readonly textVerbosity?: boolean } = {},
 ): ProviderOptions | undefined =>
-  mergeProviderOptions(openAIProviderOptions({ store: false }), gpt5DefaultOptions(modelID, options))
+  mergeProviderOptions(
+    openAIProviderOptions({ store: false }),
+    modelID === "gpt-6-astra" || modelID.startsWith("gpt-6-astra-")
+      ? openAIProviderOptions({
+          reasoningEffort: "low",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"],
+          textVerbosity: options.textVerbosity ? "low" : undefined,
+        })
+      : gpt5DefaultOptions(modelID, options),
+  )
 
 export const withOpenAIOptions = <Options extends { readonly providerOptions?: OpenAIProviderOptionsInput }>(
   modelID: string,

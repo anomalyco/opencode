@@ -727,6 +727,8 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   request: LLMRequest,
   options: LoweringOptions = {},
 ) {
+  if (/^gpt-6-astra(?:-|$)/.test(request.model.id) && request.tools.length > 0)
+    return yield* ProviderShared.invalidRequest("GPT-6 Astra tool calling requires the Responses API")
   // `fromRequest` returns the provider body only. Endpoint, auth, framing,
   // validation, and HTTP execution are composed by `Route.make`.
   const reasoningField = request.model.compatibility?.reasoningField

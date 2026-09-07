@@ -27,6 +27,7 @@ export interface Decision {
 }
 
 export function isRetryable(error: AIError) {
+  if (error.reason._tag === "ContentPolicy") return false
   const override = error.reason.http?.headers["x-should-retry"]
   if (override === "true") return true
   if (override === "false") return false
@@ -45,7 +46,6 @@ export function isRetryable(error: AIError) {
       return true
     case "Authentication":
     case "QuotaExceeded":
-    case "ContentPolicy":
     case "InvalidRequest":
     case "UnsupportedOperation":
     case "NoRoute":

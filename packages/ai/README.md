@@ -29,6 +29,30 @@ await Effect.runPromise(program.pipe(Effect.provide(llmLayer)))
 
 Run `LLMClient.stream(request)` instead of `generate` when you want incremental `LLMEvent`s. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses, Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
+## GPT-6 Astra sessions
+
+Select `openai/gpt-6-astra` with either the existing OpenAI API-key integration or ChatGPT login. Astra uses Responses, defaults to `low` reasoning, and retains encrypted reasoning for continuation. Tool calling through Chat Completions and unsupported sampling/logprob options fail locally.
+
+OpenCode sessions enable Responses WebSockets for Astra by default. Set `OPENCODE_EXPERIMENTAL_OPENAI_RESPONSES_WEBSOCKET=false` to use HTTP; failed WebSocket upgrades also retain the existing HTTP fallback.
+
+Local functions run with `async: true`, except the synchronous question tool. They start when complete call items arrive, so the model can continue generating while tools run. The existing permission checks, cancellation, result truncation, and durable tool events still apply. Results settle at the step boundary and retain their original `call_id`; this does not introduce detached jobs that survive the session runner.
+
+Low-level callers opt in by naming functions in `providerOptions.asyncTools`, including functions inside namespaces:
+
+```ts
+LLM.request({ model: OpenAI.responses("gpt-6-astra"), prompt, tools, providerOptions: { asyncTools: ["lookup"] } })
+```
+
+Plain-text prompts sent with `delivery: "steer"` are persisted before `response.steer` is sent on the active connection. An automatic continuation is consumed as the next physical attempt without another `response.create`. When the server needs a tool result, the next explicit request supplies it without repeating accepted steering. Async results completed during an automatic continuation are delivered in the following request.
+
+One update is in flight per response. Additional updates, attachments, skills, moves, and compaction use the existing step-boundary inbox path. A rejected steer remains in canonical history; disconnect recovery rebuilds from that history rather than assuming connection-local steering survived. Changes to the request settings during handoff also require a full-context recovery.
+
+Monitoring blocks are classified by `misalignment_policy_violation`, stop pending local work, and are not automatically retried. Fixture and local-server tests cover the transport and runner. Live ChatGPT OAuth checks also covered ordinary replies, async shell execution, accepted steering with automatic continuation, and delivery of deferred tool results after steering. Availability still depends on the account and plan.
+
+Steering acceptance does not guarantee immediate interruption: the server may finish the current response before starting its automatic successor. The Astra system prompt tells the model to end its response when it needs a pending async result, allowing the runner to deliver that result instead of waiting inside generation.
+
+API references: [async tool calling](https://developers.openai.com/api/docs/guides/async-tool-calling), [mid-turn steering](https://developers.openai.com/api/docs/guides/steering), [monitoring stops](https://developers.openai.com/api/docs/guides/safety-checks/misalignment-monitoring).
+
 ## Image generation
 
 Use `Image.generate` with an image model for direct asset generation:

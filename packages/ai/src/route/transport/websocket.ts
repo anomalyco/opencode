@@ -346,12 +346,14 @@ export const messageText = (message: string | Uint8Array, decoder: TextDecoder) 
   typeof message === "string" ? message : decoder.decode(message)
 
 const observationFrame = (observation: ChannelObservation) => {
+  if (observation.type === "ignore") return Effect.die("Ignored channel event reached the parser")
   if (observation.type === "frame" || observation.type === "completed" || observation.type === "incomplete")
     return Effect.succeed(observation.frame)
   return Effect.fail(observation.error)
 }
 
-const observationTerminal = (observation: ChannelObservation) => observation.type !== "frame"
+const observationTerminal = (observation: ChannelObservation) =>
+  observation.type !== "frame" && observation.type !== "ignore"
 
 export const makeDirect = (connector: WebSocketConnector): WebSocketChannelExecutor => ({
   execute: (exchange) =>
@@ -422,6 +424,7 @@ export const makeDirect = (connector: WebSocketConnector): WebSocketChannelExecu
             ),
           ),
           Stream.takeUntil(observationTerminal),
+          Stream.filter((observation) => observation.type !== "ignore"),
           Stream.mapEffect(observationFrame),
           Stream.mapError(
             (error) =>

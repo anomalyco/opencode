@@ -37,6 +37,8 @@ const transport = SessionModelTransport.Service.of({
   bind: () => ({ execute: () => Effect.die("unused WebSocket execution") }),
   close: () => Effect.void,
   closeAll: Effect.void,
+  steer: () => Effect.succeed(false),
+  hasPendingInput: () => false,
 })
 
 describe("SessionModelRequest HTTP hooks", () => {

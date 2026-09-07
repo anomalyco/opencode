@@ -186,6 +186,7 @@ export const InputItem = Schema.Union([
   OpenResponsesReasoningItem,
   Schema.Struct({
     type: Schema.tag("function_call"),
+    async: Schema.optional(Schema.Boolean),
     id: Schema.optionalKey(Schema.String),
     call_id: Schema.String,
     name: Schema.String,
@@ -487,6 +488,7 @@ const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenRes
   const id = itemID(part.providerMetadata, providerMetadataKey)
   return {
     type: "function_call",
+    ...(part.providerMetadata?.[providerMetadataKey]?.async === true ? { async: true } : {}),
     ...(id === undefined ? {} : { id }),
     call_id: part.id,
     name: part.name,
@@ -871,6 +873,7 @@ const mapFinishReason = (event: Event, hasFunctionCall: boolean): FinishReason =
   }
   if (reason === "max_output_tokens") return "length"
   if (reason === "content_filter") return "content-filter"
+  if (reason === "steered") return hasFunctionCall ? "tool-calls" : "stop"
   return hasFunctionCall ? "tool-calls" : "unknown"
 }
 
@@ -1092,7 +1095,7 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
   }
   if (item.type !== "function_call" || !item.call_id) return [state, NO_EVENTS]
   if (state.tools[item.id] !== undefined) return [state, NO_EVENTS]
-  const metadata = providerMetadata(state, { itemId: item.id })
+  const metadata = providerMetadata(state, { itemId: item.id, ...(item.async === true ? { async: true } : {}) })
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
   return [
@@ -1230,10 +1233,14 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
 
   if (item.type === "function_call") {
     if (!item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
-    const metadata = providerMetadata(state, { itemId: item.id })
+    const metadata = providerMetadata(state, {
+      ...state.tools[item.id]?.providerMetadata?.[state.providerMetadataKey],
+      itemId: item.id,
+      ...(item.async === undefined ? {} : { async: item.async }),
+    })
     const registered = state.tools[item.id] !== undefined
     const tools = registered
-      ? state.tools
+      ? ToolStream.start(state.tools, item.id, { ...state.tools[item.id]!, providerMetadata: metadata })
       : ToolStream.start(state.tools, item.id, {
           id: item.call_id,
           name: item.name,

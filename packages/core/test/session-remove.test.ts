@@ -32,6 +32,8 @@ const transport = Layer.effect(
       bind: () => ({ execute: () => Effect.die("Unexpected WebSocket execution") }),
       close: (sessionID) => Effect.sync(() => closed.push(sessionID)),
       closeAll: Effect.void,
+      steer: () => Effect.succeed(false),
+      hasPendingInput: () => false,
     })
   }),
 )

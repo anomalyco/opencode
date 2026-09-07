@@ -239,5 +239,15 @@ describe("toSessionError", () => {
         llm(new InvalidRequestError({ message: "retry", http: http({ "x-should-retry": "true" }) })),
       ),
     ).toBeTrue()
+    expect(
+      SessionRunnerRetry.isRetryable(
+        llm(
+          new ContentPolicyError({
+            message: "Review required",
+            http: http({ "x-should-retry": "true" }),
+          }),
+        ),
+      ),
+    ).toBeFalse()
   })
 })
