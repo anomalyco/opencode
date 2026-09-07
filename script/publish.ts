@@ -111,7 +111,7 @@ if (Script.release) {
   })
 }
 
-if (Script.channel === "beta" && Script.release) {
+if ((Script.channel === "beta" || Script.channel === "latest") && Script.release) {
   console.log("\n=== AUR ===\n")
   await $`bun ./packages/cli/script/publish-aur.ts`
 }
