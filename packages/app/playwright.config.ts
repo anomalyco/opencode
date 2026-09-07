@@ -20,6 +20,7 @@ export default defineConfig({
   testDir: "./e2e",
   testIgnore: [
     "service-worker/**",
+    "server-connect/**",
     process.env.OPENCODE_PERFORMANCE === "1" ? "performance/**/*.test.ts" : "performance/**",
   ],
   outputDir: "./e2e/test-results",

@@ -366,6 +366,20 @@ export const dict = {
   "dialog.server.add.namePlaceholder": "Localhost",
   "dialog.server.add.password": "Password",
   "dialog.server.add.passwordPlaceholder": "password",
+
+  "server.connect.title": "Connect to a server",
+  "server.connect.description": "Enter your server address and password to get started.",
+  "server.connect.button": "Connect",
+  "server.connect.address.invalid": "Enter a valid HTTP or HTTPS server address.",
+  "server.connect.failed": "Could not connect. Check the server address and password, then try again.",
+  "server.connect.pair.description": "Run this command on your computer to get your connection details.",
+  "server.connect.scan": "Scan QR code",
+  "server.connect.scan.description": "Point your camera at the QR code shown by opencode pair.",
+  "server.connect.scan.invalid": "This is not an OpenCode pairing code. Scan the code shown by opencode pair.",
+  "server.connect.camera": "Pairing camera",
+  "server.connect.camera.starting": "Opening camera…",
+  "server.connect.camera.error":
+    "Could not open the camera. Allow camera access or enter your connection details manually.",
   "dialog.server.edit.title": "Edit server",
   "dialog.server.default.title": "Default server",
   "dialog.server.default.description":
