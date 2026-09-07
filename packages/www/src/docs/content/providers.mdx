@@ -108,6 +108,19 @@ Your identity needs the **Cognitive Services OpenAI User** role for Azure OpenAI
 role for other Foundry models. If a request fails because the token belongs to another tenant, sign in again with
 `az login --tenant TENANT_ID`.
 
+## Multiple accounts
+
+A provider can hold several stored accounts, for example two ChatGPT subscriptions connected through the OpenAI
+provider. Run `/connect`, select the provider, and choose **Add account** to connect another one. The account manager
+lists every stored account under **Connected accounts**; select one to make it active for the whole server, or use the
+rename and delete actions on it.
+
+Under **Settings**, turn on **Switch accounts when rate limited** to move to the next connected account automatically.
+When the active account is rate limited, OpenCode retries it a couple of times first, unless the provider reports that
+its usage quota is exhausted or asks for a long wait. It then activates the next account and continues the same step.
+Once every connected account is exhausted the request fails with the provider's rate limit error. The setting is off by
+default and is stored per provider.
+
 ## Endpoint
 
 Override `settings.baseURL` to send an existing provider through a proxy or compatible endpoint. Its existing package,
