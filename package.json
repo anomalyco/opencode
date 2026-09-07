@@ -59,7 +59,7 @@
       "opentui-spinner": "0.0.7",
       "@solid-primitives/storage": "4.3.3",
       "@tailwindcss/vite": "4.1.11",
-      "diff": "8.0.2",
+      "diff": "8.0.3",
       "dompurify": "3.3.1",
       "drizzle-kit": "1.0.0-rc.2",
       "drizzle-orm": "1.0.0-rc.2",
@@ -142,7 +142,9 @@
     "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",
     "@types/bun": "catalog:",
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "tar": "7.5.21",
+    "seroval": "1.5.3"
   },
   "patchedDependencies": {
     "@dnd-kit/dom@0.5.0": "patches/@dnd-kit%2Fdom@0.5.0.patch",
