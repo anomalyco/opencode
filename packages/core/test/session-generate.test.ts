@@ -113,7 +113,7 @@ const tools = Layer.mock(Tool.Service, {
             type: "tool",
             name: "captured.lookup",
             description: "Captured Code Mode catalog",
-            signature: "tools.captured.lookup(input: {}): Promise<string>",
+            signature: "tools.captured.lookup(): Promise<string>",
           },
         ],
       },
@@ -327,7 +327,7 @@ it.effect(
       )
       expect(instructionUpdates).toHaveLength(1)
       expect(instructionUpdates?.[0]).toContain("Changed context")
-      expect(instructionUpdates?.[0]).toContain("tools.captured.lookup(input: {}): Promise<string>")
+      expect(instructionUpdates?.[0]).toContain("tools.captured.lookup(): Promise<string>")
       expect(userTexts(requests[0])).toEqual(["Existing durable context", "Summarize privately"])
       expect(
         requests[0]?.messages.flatMap((message) =>
