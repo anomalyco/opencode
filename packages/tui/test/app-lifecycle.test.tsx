@@ -10,6 +10,48 @@ import { tmpdir } from "./fixture/fixture"
 import { createAppFixture } from "./fixture/app"
 import type { PluginInfo } from "@opencode-ai/client"
 
+test("applies frame rates to the handed-off renderer and reloads edits and removal", async () => {
+  await using state = await tmpdir()
+  const file = Bun.file(path.join(state.path, "cli.json"))
+  await file.write(JSON.stringify({ targetFps: 24, maxFps: 90, animations: false }))
+  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false, targetFps: 15, maxFps: 30 })
+  setup.renderer.start()
+  const ready = Promise.withResolvers<void>()
+  const calls = createFetch(undefined, createEventStream())
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+  const { run } = await import("../src/app")
+  const task = Effect.runPromise(
+    run({
+      app: { name: "test", version: "test", channel: "test" },
+      server: { endpoint: { url: server.url.toString() } },
+      config: { path: file.name, get: () => file.json(), update: () => file.json() },
+      packages: { prepare: async () => ({ directory: "" }) },
+      terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
+      args: {},
+    }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+  )
+  try {
+    await ready.promise
+    await setup.waitForFrame(() => setup.renderer.targetFps === 24 && setup.renderer.maxFps === 90)
+    expect(setup.renderer.targetFps).toBe(24)
+    expect(setup.renderer.maxFps).toBe(90)
+
+    await file.write(JSON.stringify({ targetFps: 120, maxFps: 45, animations: false }))
+    await setup.waitFor(() => setup.renderer.targetFps === 120 && setup.renderer.maxFps === 45)
+    expect(setup.renderer.targetFps).toBe(120)
+    expect(setup.renderer.maxFps).toBe(45)
+
+    await file.write(JSON.stringify({ animations: false }))
+    await setup.waitFor(() => setup.renderer.targetFps === 60 && setup.renderer.maxFps === 60)
+    expect(setup.renderer.targetFps).toBe(60)
+    expect(setup.renderer.maxFps).toBe(60)
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await task
+    await server.stop()
+  }
+})
+
 test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deletions at width %s", async (width) => {
   await using state = await tmpdir()
   const requested = Promise.withResolvers<void>()

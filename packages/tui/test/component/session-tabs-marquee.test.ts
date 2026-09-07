@@ -1,13 +1,26 @@
 import { afterEach, describe, expect, jest, test } from "bun:test"
-import { createRoot } from "solid-js"
+import { ManualClock } from "@opentui/core/testing"
+import { testRender } from "@opentui/solid"
 import { createMarquee, createTabMarquee } from "../../src/component/session-tabs"
 
 afterEach(() => jest.useRealTimers())
 
+async function setup<T>(create: () => T) {
+  let marquee!: T
+  const app = await testRender(
+    () => {
+      marquee = create()
+      return null
+    },
+    { clock: new ManualClock() },
+  )
+  return { marquee, dispose: () => app.renderer.destroy() }
+}
+
 describe("session tab marquee", () => {
-  test("starts for the hovered width and resets when the next tab fits", () => {
+  test("starts for the hovered width and resets when the next tab fits", async () => {
+    const scope = await setup(() => createMarquee(() => false))
     jest.useFakeTimers()
-    const scope = createRoot((dispose) => ({ marquee: createMarquee(() => false), dispose }))
 
     scope.marquee.enter("first", "opencode", 6)
     expect(scope.marquee.active()).toBe("first")
@@ -23,9 +36,9 @@ describe("session tab marquee", () => {
     scope.dispose()
   })
 
-  test("stops after one cycle", () => {
+  test("stops after one cycle", async () => {
+    const scope = await setup(() => createMarquee(() => false))
     jest.useFakeTimers()
-    const scope = createRoot((dispose) => ({ marquee: createMarquee(() => false), dispose }))
 
     scope.marquee.enter("first", "opencode", 6)
     jest.advanceTimersByTime(1_400)
@@ -36,9 +49,9 @@ describe("session tab marquee", () => {
     scope.dispose()
   })
 
-  test("resets immediately after leaving", () => {
+  test("resets immediately after leaving", async () => {
+    const scope = await setup(() => createMarquee(() => false))
     jest.useFakeTimers()
-    const scope = createRoot((dispose) => ({ marquee: createMarquee(() => false), dispose }))
 
     scope.marquee.enter("first", "opencode", 6)
     jest.advanceTimersByTime(700)
@@ -50,9 +63,9 @@ describe("session tab marquee", () => {
     scope.dispose()
   })
 
-  test("resets when the pointer leaves the tab rail", () => {
+  test("resets when the pointer leaves the tab rail", async () => {
+    const scope = await setup(() => createTabMarquee(() => false))
     jest.useFakeTimers()
-    const scope = createRoot((dispose) => ({ marquee: createTabMarquee(() => false), dispose }))
 
     scope.marquee.enter("first", "opencode", 6)
     jest.advanceTimersByTime(700)

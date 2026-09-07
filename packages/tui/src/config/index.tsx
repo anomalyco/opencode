@@ -230,6 +230,12 @@ export const Info = Schema.Struct({
     description: "Experimental features that may change or be removed at any time",
   }),
   animations: Schema.optional(Schema.Boolean).annotate({ description: "Enable interface animations" }),
+  targetFps: Schema.optional(Schema.Finite.check(Schema.isGreaterThan(0))).annotate({
+    description: "Target animation frame rate (default: 60 in the TUI, 30 in Mini)",
+  }),
+  maxFps: Schema.optional(Schema.Finite.check(Schema.isGreaterThan(0))).annotate({
+    description: "Maximum frame rate for requested redraws (default: 60)",
+  }),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable terminal mouse capture" }),
   cursor: Schema.optional(Cursor),
 })

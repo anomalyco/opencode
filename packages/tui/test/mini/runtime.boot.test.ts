@@ -31,12 +31,16 @@ describe("run runtime boot", () => {
         theme: { mode: "light" },
         leader: { timeout: 450 },
         cursor: { style: "underline", blinking: false },
+        targetFps: 24,
+        maxFps: 120,
       }),
     )
 
     expect(result.theme).toEqual({ mode: "light" })
     expect(result.leader.timeout).toBe(450)
     expect(result.cursor).toEqual({ style: "underline", blinking: false })
+    expect(result.targetFps).toBe(24)
+    expect(result.maxFps).toBe(120)
     expect(resolveMiniSettings(result)).toEqual({
       thinking: "hide",
       shell_output: "hide",
