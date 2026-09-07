@@ -85,9 +85,9 @@ const request = LLM.request({
 })
 ```
 
-`meta.chat("muse-spark-1.3")` selects Chat Completions. Both use `https://api.meta.ai/v1`.
-The package entrypoints `@opencode-ai/ai/providers/meta/responses` and
-`@opencode-ai/ai/providers/meta/chat` expose `model(modelID, settings)`.
+`meta.chat("muse-spark-1.3")` selects Chat Completions; `meta.messages("muse-spark-1.3")` selects
+the Anthropic-compatible Messages API. All use `https://api.meta.ai/v1`. The package entrypoints
+`@opencode-ai/ai/providers/meta/responses`, `meta/chat`, and `meta/messages` expose `model(modelID, settings)`.
 
 [Muse Spark](https://dev.meta.ai/docs/models) supports `minimal`, `low`, `medium`, `high`, and
 `xhigh` reasoning effort; standard-tier 1.3 also supports `max`. Omitting effort uses the model's
@@ -99,7 +99,45 @@ reasoning through tool loops. Optional `reasoningSummary: "auto"` requests a rea
 For server-managed history, override `store: true, include: []` and send the response ID through
 `http: { body: { previous_response_id: responseID } }` with only the new input.
 Chat Completions redacts private reasoning and cannot carry it between calls.
-Both APIs support only `toolChoice: "auto"` (the default); forced, named, and `"none"` choices are rejected.
+Responses and Chat support only `toolChoice: "auto"` (the default). Messages also accepts `"none"`;
+its documented forced `"any"` choice currently returns HTTP 400. Messages defaults to adaptive thinking
+with `display: "omitted"`, preserving encrypted `redacted_thinking` in `response.message`. Use
+`providerOptions: { effort: "low" }` for depth or `thinking: { type: "enabled", budgetTokens: 1024 }`
+for budget compatibility (with `generation.maxTokens > 1024`).
+
+Add `tools: [Meta.webSearch()]` to a Spark Responses or Messages request for hosted web search.
+Responses exposes hosted results and URL citations in text-part `providerMetadata.meta.annotations`.
+To include search result lists, set `include: ["reasoning.encrypted_content", "web_search_call.results"]`.
+Messages exposes hosted search calls; the recorded Messages API stream does not supply structured
+citations or separate result blocks. Retain `response.message` for either API's continuation.
+
+Use `Image.generate` for one-off generation or editing:
+
+```ts
+import { Image, ImageInput } from "@opencode-ai/ai"
+
+const generation = Image.generate({
+  model: meta.image("muse-image-1.0"),
+  prompt: "A flat black square on a white background.",
+  options: { n: 1, reasoningStrength: "low" },
+})
+
+const edit = Image.generate({
+  model: meta.image("muse-image-1.0"),
+  prompt: "Make the square purple.",
+  images: [ImageInput.bytes(imageBytes, "image/webp")],
+  options: { outputFormat: "png", reasoningStrength: "low" },
+})
+```
+
+The default image format is WEBP; `outputFormat` also accepts PNG/JPEG and `responseFormat: "url"`
+returns a signed URL. `size` is an aspect-ratio hint. For conversational images, select
+`meta.responses("muse-image-1.0")` with `tools: [Meta.imageGeneration({ reasoningStrength: "low" })]`.
+Generated images are provider-executed tool results with file content. Retain `response.message` to
+replay the signed image handle on the next request. Muse Image accepts only the `image_generation` tool.
+
+Responses currently uses HTTP/SSE. An authenticated WebSocket upgrade to `/v1/responses` returned
+HTTP 405 (`Allow: POST`); a Responses WebSocket contract could not be verified in Meta's published docs.
 
 ## Image generation
 

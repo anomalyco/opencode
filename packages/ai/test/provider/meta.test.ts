@@ -5,6 +5,7 @@ import { Auth, LLM } from "../../src/index.js"
 import { Meta } from "../../src/providers/index.js"
 import { OpenAIChat } from "../../src/protocols/openai-chat.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
+import { MetaResponses } from "../../src/protocols/meta-responses.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 
@@ -13,7 +14,8 @@ it.effect("Meta composes baseline protocols with provider-owned endpoints and de
     const meta = Meta.configure({ apiKey: "fixture" })
     const responses = meta.model("muse-spark-1.3")
     const chat = meta.chat("muse-spark-1.3")
-    expect(responses.route.body).toBe(OpenResponses.protocol.body)
+    expect(responses.route.body).toBe(MetaResponses.protocol.body)
+    expect(MetaResponses.protocol.stream.event).toBe(OpenResponses.protocol.stream.event)
     expect(chat.route.body).toBe(OpenAIChat.protocol.body)
     expect(meta.model).toBe(meta.responses)
     for (const model of [responses, chat]) {
@@ -24,7 +26,7 @@ it.effect("Meta composes baseline protocols with provider-owned endpoints and de
     expect(responses.route.endpoint.path).toBe("/responses")
     expect(chat.route.endpoint.path).toBe("/chat/completions")
     const compiled = yield* compileRequest(LLM.request({ model: responses, prompt: "Hello" }))
-    expect(compiled.protocol).toBe("open-responses")
+    expect(compiled.protocol).toBe("meta-responses")
     expect(compiled.body).toMatchObject({ store: false, include: ["reasoning.encrypted_content"] })
     expect(compiled.body.reasoning).toBeUndefined()
   }),
