@@ -21,7 +21,7 @@ import { LocaleLinks } from "../component/locale-links"
 import { useI18n } from "../context/i18n"
 import { useLanguage } from "../context/language"
 import { localizedUrl } from "../lib/language"
-import { findModelCatalogEntry, loadModelCatalog, type ModelCatalog } from "./model-catalog"
+import { findModelCatalogEntry, isKnownCatalogLab, loadModelCatalog, type ModelCatalog } from "./model-catalog"
 import { SectionHeading } from "./section-heading"
 import { setStatsPageCacheHeaders } from "./stats-cache"
 import { ComparisonCardsSection, uniqueComparisonPairs, type ComparisonModelRef } from "./compare-cards"
@@ -72,6 +72,7 @@ type StatsHomePageData = {
   sessionCost: SessionCostEntry[]
   retention: RetentionEntry[]
   country: CountryEntry[]
+  catalogLabs: string[]
 }
 
 const countryNumericIds = new Map(
@@ -92,6 +93,7 @@ const getData = query(async () => {
     sessionCost: stats.sessionCost.Go,
     retention: stats.retention,
     country: stats.country,
+    catalogLabs: catalog.labs.map((lab) => lab.id),
   } satisfies StatsHomePageData
 }, "getStatsHomeData")
 
@@ -147,7 +149,11 @@ export default function StatsHome() {
             {(stats) => (
               <>
                 <Hero updatedAt={stats().updatedAt} />
-                <TopModelsSection data={stats().usage} leaderboard={stats().leaderboard} />
+                <TopModelsSection
+                  data={stats().usage}
+                  leaderboard={stats().leaderboard}
+                  catalogLabs={stats().catalogLabs}
+                />
                 <UniqueUsersSection data={stats().users} />
                 <RetentionSection data={stats().retention} />
                 <SessionCostSection data={stats().sessionCost} />
@@ -156,7 +162,7 @@ export default function StatsHome() {
                 <MarketShareSection data={stats().market} />
                 <GeoBreakdownSection data={stats().country} />
                 <ComparisonCardsSection
-                  pairs={homeComparisonPairs(stats().leaderboard)}
+                  pairs={homeComparisonPairs(stats().leaderboard, stats().catalogLabs)}
                   title="Model Comparisons"
                   description="Popular model pairs from the leaderboard."
                   variant="featured"
@@ -368,7 +374,11 @@ function formatUpdatedAtLabel(value: { date: string; time: string }) {
   return `${value.date}, ${value.time}`
 }
 
-function TopModelsSection(props: { data: UsagePoint[]; leaderboard: LeaderboardEntry[] }) {
+function TopModelsSection(props: {
+  data: UsagePoint[]
+  leaderboard: LeaderboardEntry[]
+  catalogLabs: readonly string[]
+}) {
   const i18n = useI18n()
   const [activeModel, setActiveModel] = createSignal<string>()
 
@@ -393,7 +403,12 @@ function TopModelsSection(props: { data: UsagePoint[]; leaderboard: LeaderboardE
           <EmptyState title={i18n.t("home.noLeaderboardTitle")} description={i18n.t("home.noLeaderboardDescription")} />
         }
       >
-        <Leaderboard data={props.leaderboard} activeModel={activeModel()} onActiveModelChange={setActiveModel} />
+        <Leaderboard
+          data={props.leaderboard}
+          activeModel={activeModel()}
+          onActiveModelChange={setActiveModel}
+          catalogLabs={props.catalogLabs}
+        />
       </Show>
     </section>
   )
@@ -806,6 +821,7 @@ function Leaderboard(props: {
   data: LeaderboardEntry[]
   activeModel: string | undefined
   onActiveModelChange: (model: string | undefined) => void
+  catalogLabs: readonly string[]
 }) {
   const featured = createMemo(() => props.data.slice(0, 3))
   const compact = createMemo(() => props.data.slice(3))
@@ -820,6 +836,7 @@ function Leaderboard(props: {
               size="featured"
               active={props.activeModel === entry.model}
               onActiveModelChange={props.onActiveModelChange}
+              catalogLabs={props.catalogLabs}
             />
           )}
         </For>
@@ -833,6 +850,7 @@ function Leaderboard(props: {
               size="compact"
               active={props.activeModel === entry.model}
               onActiveModelChange={props.onActiveModelChange}
+              catalogLabs={props.catalogLabs}
             />
           )}
         </For>
@@ -845,6 +863,7 @@ function Leaderboard(props: {
               size="featured"
               active={props.activeModel === entry.model}
               onActiveModelChange={props.onActiveModelChange}
+              catalogLabs={props.catalogLabs}
             />
           )}
         </For>
@@ -858,9 +877,11 @@ function LeaderboardCard(props: {
   size: "featured" | "compact"
   active: boolean
   onActiveModelChange: (model: string | undefined) => void
+  catalogLabs: readonly string[]
 }) {
   const i18n = useI18n()
   const language = useLanguage()
+  const hasProvider = () => isKnownCatalogLab(props.entry.provider, props.catalogLabs)
   return (
     <a
       data-component="leader-card"
@@ -879,16 +900,22 @@ function LeaderboardCard(props: {
       onClick={() => props.onActiveModelChange(props.entry.model)}
     >
       <span data-slot="rank">{String(props.entry.rank).padStart(2, "0")}</span>
-      <ProviderIcon data-slot="leader-watermark" aria-hidden="true" id={getProviderIconId(props.entry.author)} />
+      <Show when={hasProvider()}>
+        <ProviderIcon data-slot="leader-watermark" aria-hidden="true" id={getProviderIconId(props.entry.author)} />
+      </Show>
       <div data-slot="leader-body">
-        <ProviderIcon data-slot="leader-avatar" aria-hidden="true" id={getProviderIconId(props.entry.author)} />
+        <Show when={hasProvider()}>
+          <ProviderIcon data-slot="leader-avatar" aria-hidden="true" id={getProviderIconId(props.entry.author)} />
+        </Show>
         <div data-slot="leader-copy">
           <div>
             <strong>{props.entry.model}</strong>
             <span>{formatBillions(props.entry.tokens)}</span>
           </div>
           <div>
-            <span>{props.entry.author}</span>
+            <Show when={hasProvider()} fallback={<span />}>
+              <span>{props.entry.author}</span>
+            </Show>
             <span
               data-slot="delta"
               data-new={props.entry.change === null ? "true" : undefined}
@@ -1669,22 +1696,24 @@ function formatSessionCost(value: number) {
   return `$${value.toFixed(4)}`
 }
 
-function homeComparisonPairs(leaderboard: LeaderboardEntry[]) {
+function homeComparisonPairs(leaderboard: LeaderboardEntry[], catalogLabs: readonly string[]) {
   return uniqueComparisonPairs(
     comparisonPairIndexes.flatMap(([firstIndex, secondIndex, detail]) => {
       const first = leaderboard[firstIndex]
       const second = leaderboard[secondIndex]
-      return first && second ? [{ first: leaderboardRef(first), second: leaderboardRef(second), detail }] : []
+      return first && second
+        ? [{ first: leaderboardRef(first, catalogLabs), second: leaderboardRef(second, catalogLabs), detail }]
+        : []
     }),
   )
 }
 
-function leaderboardRef(entry: LeaderboardEntry): ComparisonModelRef {
+function leaderboardRef(entry: LeaderboardEntry, catalogLabs: readonly string[]): ComparisonModelRef {
   return {
     name: entry.model,
     lab: entry.provider,
     slug: modelSlug(entry.model),
-    labName: entry.author,
+    labName: isKnownCatalogLab(entry.provider, catalogLabs) ? entry.author : undefined,
     metric: `#${entry.rank} / ${formatBillions(entry.tokens)}`,
   }
 }
