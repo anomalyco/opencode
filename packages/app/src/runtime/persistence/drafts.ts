@@ -11,7 +11,18 @@ type Driver = {
   getBlob(id: string): Promise<Blob | null>
 }
 
-export type DraftStore = AsyncStorage & { putBlob(blob: Blob): Promise<BlobReference> }
+export type DraftStore = AsyncStorage & {
+  putBlob(blob: Blob): Promise<BlobReference>
+  /** Persist an already-encoded document without re-parsing its serialized form. */
+  setDocument(key: string, document: unknown): Promise<void>
+}
+
+// Strings at least this long leave the document as fixed-size content-addressed chunks. Typing
+// after a large paste changes only the final chunk, so a save uploads one chunk, not the paste.
+export const draftTextThreshold = 16 * 1024
+export const draftTextChunk = 64 * 1024
+const textCacheLimit = 64
+
 const urls = new Map<string, string>()
 
 function blobUrl(id: string, blob: Blob) {
@@ -56,7 +67,43 @@ export function createDraftStore(driver: Driver): DraftStore {
     const id = await driver.putBlob(blob)
     return { id, url: blobUrl(id, blob) }
   }
+  // Keyed by chunk content so unchanged chunks are never hashed or sent again while the draft is
+  // edited. Bounded because each entry pins up to draftTextChunk characters.
+  const chunkIds = new Map<string, Promise<string>>()
+  const chunks = new Map<string, string>()
+  const remember = <V>(cache: Map<string, V>, key: string, value: V) => {
+    cache.set(key, value)
+    if (cache.size > textCacheLimit) cache.delete(cache.keys().next().value!)
+    return value
+  }
+  const externalize = (text: string) =>
+    Promise.all(
+      Array.from({ length: Math.ceil(text.length / draftTextChunk) }, (_, index) => {
+        const chunk = text.slice(index * draftTextChunk, (index + 1) * draftTextChunk)
+        return (
+          chunkIds.get(chunk) ??
+          remember(
+            chunkIds,
+            chunk,
+            driver.putBlob(new Blob([chunk])).then((id) => {
+              remember(chunks, id, chunk)
+              return id
+            }),
+          )
+        )
+      }),
+    )
+  const loadChunk = async (id: string) => {
+    const cached = chunks.get(id)
+    if (cached !== undefined) return cached
+    const blob = await driver.getBlob(id)
+    // A missing chunk loses that text but keeps the rest of the document decodable.
+    return remember(chunks, id, blob ? await blob.text() : "")
+  }
   const encode = async (value: unknown): Promise<unknown> => {
+    if (typeof value === "string" && value.length >= draftTextThreshold) {
+      return { blob: { kind: "text", ids: await externalize(value) } }
+    }
     if (Array.isArray(value)) return Promise.all(value.map(encode))
     if (!value || typeof value !== "object") return value
     const item = value as Record<string, unknown>
@@ -67,6 +114,7 @@ export function createDraftStore(driver: Driver): DraftStore {
     }
     if ("blob" in item && item.blob && typeof item.blob === "object") {
       const blob = item.blob as Record<string, unknown>
+      if (blob.kind === "text") return item
       if (typeof blob.id === "string" && blob.id.startsWith("data:")) {
         const data = await fetch(blob.id).then((response) => response.blob())
         return { ...item, blob: { id: await driver.putBlob(data) } }
@@ -83,6 +131,9 @@ export function createDraftStore(driver: Driver): DraftStore {
     const item = value as Record<string, unknown>
     if (item.blob && typeof item.blob === "object") {
       const ref = item.blob as Record<string, unknown>
+      if (ref.kind === "text" && Array.isArray(ref.ids)) {
+        return (await Promise.all(ref.ids.map((id) => loadChunk(String(id))))).join("")
+      }
       if (typeof ref.id === "string") {
         const url = await loadBlobUrl(ref.id)
         if (url) return { ...item, blob: { id: ref.id, url } }
@@ -91,6 +142,12 @@ export function createDraftStore(driver: Driver): DraftStore {
     return Object.fromEntries(
       await Promise.all(Object.entries(item).map(async ([key, entry]) => [key, await decode(entry)])),
     )
+  }
+  const setDocument = async (key: string, document: unknown) => {
+    const version = (versions.get(key) ?? 0) + 1
+    versions.set(key, version)
+    const encoded = JSON.stringify(await encode(document))
+    if (versions.get(key) === version) await driver.set(key, encoded)
   }
   return {
     getItem: async (key) => {
@@ -101,12 +158,8 @@ export function createDraftStore(driver: Driver): DraftStore {
       if (Option.isNone(parsed)) return value
       return JSON.stringify(await decode(parsed.value))
     },
-    setItem: async (key, value) => {
-      const version = (versions.get(key) ?? 0) + 1
-      versions.set(key, version)
-      const encoded = JSON.stringify(await encode(JSON.parse(value)))
-      if (versions.get(key) === version) await driver.set(key, encoded)
-    },
+    setItem: (key, value) => setDocument(key, JSON.parse(value)),
+    setDocument,
     removeItem: async (key) => {
       versions.set(key, (versions.get(key) ?? 0) + 1)
       await driver.remove(key)
@@ -130,6 +183,7 @@ export function createBrowserDraftStore(): DraftStore {
         const used = new Set<string>()
         JSON.parse(`[${documents.result.join(",")}]`, (_key, item) => {
           if (item?.blob && typeof item.blob.id === "string") used.add(item.blob.id)
+          if (item?.blob && Array.isArray(item.blob.ids)) item.blob.ids.forEach((id: unknown) => used.add(String(id)))
           return item
         })
         const store = transaction.objectStore("blobs")

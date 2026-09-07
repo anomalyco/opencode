@@ -29,4 +29,26 @@ describe("draft store", () => {
     expect(second.getBlob(used)).toEqual(new Uint8Array([1, 2, 3]))
     expect(second.getBlob(unused)).toBeNull()
   })
+
+  test("keeps text chunks alive and collects retired ones after a flush once the interval passed", () => {
+    const database = openDatabase(":memory:")
+    let clock = 0
+    const drafts = createDraftStore(database.db, { delay: 1_000, now: () => clock })
+    const a = drafts.putBlob(new TextEncoder().encode("chunk a"))
+    const b = drafts.putBlob(new TextEncoder().encode("chunk b"))
+    drafts.set("doc", JSON.stringify({ prompt: [{ type: "text", content: { blob: { kind: "text", ids: [a, b] } } }] }))
+    drafts.flush()
+    const c = drafts.putBlob(new TextEncoder().encode("chunk c"))
+    drafts.set("doc", JSON.stringify({ prompt: [{ type: "text", content: { blob: { kind: "text", ids: [a, c] } } }] }))
+    drafts.flush()
+    // Too soon: the retired chunk survives this flush.
+    expect(drafts.getBlob(b)).not.toBeNull()
+    clock = 120_000
+    drafts.putBlob(new TextEncoder().encode("chunk d"))
+    drafts.set("other", "{}")
+    drafts.flush()
+    expect(drafts.getBlob(a)).not.toBeNull()
+    expect(drafts.getBlob(c)).not.toBeNull()
+    expect(drafts.getBlob(b)).toBeNull()
+  })
 })

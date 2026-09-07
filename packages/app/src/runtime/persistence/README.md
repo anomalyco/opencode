@@ -108,3 +108,16 @@ Storage-key relocation (`previousKey`, workspace aliases, draft storage moves)
 remains separate from schema migration. Draft blob externalization and hydration
 also remain in the storage adapter: composer codecs receive hydrated references,
 not raw ID-only blob documents.
+
+## Large draft content
+
+Draft documents never carry large text inline. Any string of `draftTextThreshold`
+characters or more is split into `draftTextChunk`-sized content-addressed blobs and
+stored as `{ blob: { kind: "text", ids: [...] } }`; reads join the chunks again. A
+content-keyed cache means unchanged chunks are not hashed or sent on later saves, so
+typing after a large paste uploads one chunk per save rather than the paste.
+`persisted()` hands the draft store the encoded document (`setDocument`) rather than
+a serialized string, so the store does not re-parse the full document to externalize
+it. Both blob collectors (desktop SQL, browser IndexedDB) keep chunk ids alive. This
+follows VS Code's rule that editor content lives in per-resource backups, not in the
+state database.
