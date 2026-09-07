@@ -52,12 +52,17 @@ export function createNamespaceStorage(
     applied.set(key, revision)
   }
 
+  // The snapshot is the whole truth at its revision: a key it lacks was deleted by then, even if
+  // an older event inserted it into the cache while the load was in flight.
   const load = () =>
     (loading ??= driver.items(name).then((loaded) => {
       floor = loaded.revision
+      const stale = (key: string) => !local.has(key) && (applied.get(key) ?? -1) <= loaded.revision
+      for (const key of [...cache.keys()]) {
+        if (!(key in loaded.items) && stale(key)) place(key, null, loaded.revision)
+      }
       for (const [key, value] of Object.entries(loaded.items)) {
-        if (local.has(key) || (applied.get(key) ?? -1) > loaded.revision) continue
-        place(key, value, loaded.revision)
+        if (stale(key)) place(key, value, loaded.revision)
       }
     }))
 

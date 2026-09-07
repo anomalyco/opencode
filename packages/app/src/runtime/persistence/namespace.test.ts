@@ -201,6 +201,27 @@ describe("namespace storage", () => {
     expect(await storage.getItem("model")).toBe("theirs")
   })
 
+  test("the initial load removes a key an older event inserted while the load was in flight", async () => {
+    const loaded = Promise.withResolvers<{ items: Record<string, string>; revision: number }>()
+    const driver: NamespaceDriver = { items: () => loaded.promise, update: async () => 0, clear: async () => undefined }
+    const storage = createNamespaceStorage(driver, "g", { delay: 10_000 })
+    const read = storage.getItem("model")
+    // Host history: insert at 41, delete at 42; the snapshot was taken at 42.
+    storage.accept({ model: "inserted" }, [], 41)
+    loaded.resolve({ items: {}, revision: 42 })
+    expect(await read).toBeNull()
+    // The delete event is older than the floor and must stay a no-op either way.
+    storage.accept({}, ["model"], 42)
+    expect(await storage.getItem("model")).toBeNull()
+    // A key inserted by an event newer than the snapshot survives the load.
+    const second = Promise.withResolvers<{ items: Record<string, string>; revision: number }>()
+    const other = createNamespaceStorage({ ...driver, items: () => second.promise }, "g", { delay: 10_000 })
+    const pending = other.getItem("model")
+    other.accept({ model: "after-snapshot" }, [], 43)
+    second.resolve({ items: {}, revision: 42 })
+    expect(await pending).toBe("after-snapshot")
+  })
+
   test("an event older than the initial load is ignored", async () => {
     const h = host({ g: { model: "loaded" } })
     void h.driver.update("g", { model: "loaded" }, [])
