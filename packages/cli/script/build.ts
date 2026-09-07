@@ -111,7 +111,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
   const parcelWatcherPlugin: BunPlugin = {
     name: "parcel-watcher-binding",
     setup(build) {
-      build.onLoad({ filter: /filesystem\/watcher-binding\.ts$/ }, () => ({
+      build.onLoad({ filter: /filesystem[/\\]watcher-binding\.ts$/ }, () => ({
         contents: `export default () => require(${JSON.stringify(parcelWatcherPackage)})`,
         loader: "js",
       }))
