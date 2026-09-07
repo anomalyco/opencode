@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createUniqueId } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
+import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
@@ -127,22 +128,9 @@ export function TimelineDetailControl(props: { value: TimelineDetail; onChange: 
                             })
                           }}
                           icon={
-                            <svg
-                              width="16"
-                              height="16"
-                              viewBox="0 0 20 20"
-                              fill="none"
-                              stroke="currentColor"
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              aria-hidden="true"
-                            >
-                              <path d="M2.5 10s3.33-5.42 7.5-5.42S17.5 10 17.5 10s-3.33 5.42-7.5 5.42S2.5 10 2.5 10Z" />
-                              <circle cx="10" cy="10" r="2.5" />
-                              <Show when={props.value[category].placement === "hidden"}>
-                                <path data-slot="timeline-detail-eye-slash" d="M3 3 17 17" />
-                              </Show>
-                            </svg>
+                            <Icon
+                              name={props.value[category].placement === "hidden" ? "outline-eye-slash" : "outline-eye"}
+                            />
                           }
                         />
                       </Tooltip>

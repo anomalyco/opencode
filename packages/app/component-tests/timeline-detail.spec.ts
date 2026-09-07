@@ -51,7 +51,7 @@ story("replaces hidden switches with solid lines and restores options", async ({
     '"shell":{"placement":"hidden","details":"expanded"}',
   )
   await expect(label).not.toHaveCSS("color", color)
-  await expect(shell.locator('[data-slot="timeline-detail-eye-slash"]')).toHaveCount(1)
+  await expect(visibility.locator("use")).toHaveAttribute("href", "#opencode-v2-icon-outline-eye-slash")
   await component.getByRole("button", { name: "Advanced", exact: true }).hover()
   await expect(visibility).not.toHaveCSS("color", iconColor)
   await expect(shell.locator('[data-slot="timeline-detail-unavailable"]').first()).toHaveCSS(
@@ -67,7 +67,7 @@ story("replaces hidden switches with solid lines and restores options", async ({
 
   await expect(visibility).toHaveAttribute("aria-pressed", "true")
   await expect(label).toHaveCSS("color", color)
-  await expect(shell.locator('[data-slot="timeline-detail-eye-slash"]')).toHaveCount(0)
+  await expect(visibility.locator("use")).toHaveAttribute("href", "#opencode-v2-icon-outline-eye")
   await expect(shell.locator('[data-slot="timeline-detail-unavailable"]')).toHaveCount(0)
   await expect(shell.getByRole("switch", { name: "Shell grouped", exact: true })).toBeEnabled()
   await expect(shell.getByRole("switch", { name: "Shell collapsed", exact: true })).toBeEnabled()
