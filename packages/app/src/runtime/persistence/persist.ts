@@ -1,0 +1,83 @@
+import type { AsyncStorage, PersistenceSyncAPI, SyncStorage } from "@solid-primitives/storage"
+import { getOwner, onCleanup, untrack } from "solid-js"
+import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
+
+export const persistSaveDelay = 100
+
+const pending = new Set<() => void>()
+
+/** Serialize and write every store with unsaved changes now. */
+export function flushPersisted() {
+  for (const save of [...pending]) save()
+}
+
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushPersisted()
+  })
+  // Runs before the desktop IPC runtime disposes on pagehide; see ipc-client.ts.
+  window.addEventListener("pagehide", flushPersisted)
+}
+
+// A store whose serialized form is written to storage on a schedule instead of on every setter
+// call. The setter only marks the store dirty; serialization happens once per save window, once
+// per owner cleanup, and when the page hides. Mirrors VS Code's Memento.
+export function persistStore<T extends object>(input: {
+  store: Store<T>
+  setStore: SetStoreFunction<T>
+  name: string
+  storage: SyncStorage | AsyncStorage
+  serialize: (value: T) => string
+  deserialize: (raw: string) => T
+  sync?: PersistenceSyncAPI
+  delay?: number
+}) {
+  const delay = input.delay ?? persistSaveDelay
+  let dirty = false
+  let touched = false
+  let last: string | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  const save = () => {
+    clearTimeout(timer)
+    timer = undefined
+    pending.delete(save)
+    if (!dirty) return
+    dirty = false
+    const next = untrack(() => input.serialize(input.store))
+    if (next === last) return
+    last = next
+    input.sync?.[1](input.name, next)
+    void input.storage.setItem(input.name, next)
+  }
+
+  // Solid's setter overloads are too deep to spread generically; the wrapper only forwards.
+  const apply = input.setStore as unknown as (...values: unknown[]) => void
+  const setStore = ((...values: unknown[]) => {
+    apply(...values)
+    dirty = true
+    touched = true
+    pending.add(save)
+    timer ??= setTimeout(save, delay)
+  }) as unknown as SetStoreFunction<T>
+
+  const hydrate = (raw: string) => {
+    last = raw
+    input.setStore(reconcile(input.deserialize(raw)))
+  }
+  const init = input.storage.getItem(input.name)
+  // A value the user already changed is newer than whatever storage held.
+  if (init instanceof Promise) void init.then((raw) => raw && !touched && hydrate(raw))
+  else if (init) hydrate(init)
+
+  input.sync?.[0]((data) => {
+    if (data.key !== input.name || (data.url ?? location.href) !== location.href) return
+    // Unsaved local changes win over another window's write, as in VS Code's storage service.
+    if (dirty || !data.newValue || data.newValue === last) return
+    hydrate(data.newValue)
+  })
+
+  if (getOwner()) onCleanup(save)
+
+  return { setStore, init, flush: save }
+}

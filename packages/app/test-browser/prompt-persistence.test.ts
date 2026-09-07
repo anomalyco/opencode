@@ -6,6 +6,7 @@ import type { Platform } from "@/runtime/platform/platform"
 import { createComposerReady, createComposerState } from "@/composer/state"
 import { ServerScope } from "@/runtime/server/scope"
 import { createDraftStore } from "@/runtime/persistence/drafts"
+import { flushPersisted } from "@/runtime/persistence/persist"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 
 let read: ((value: string | null) => void) | undefined
@@ -109,6 +110,7 @@ describe("prompt persistence", () => {
       },
     ])
     root.session.set([{ type: "text", content: "hello", start: 0, end: 5 }, ...root.session.current()])
+    flushPersisted()
     await Bun.sleep(0)
     expect(documents.get(key)).toContain("hello")
     expect(documents.get(key)).toContain('"blob":{"id":"composer-image"}')

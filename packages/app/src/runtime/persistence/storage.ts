@@ -1,14 +1,15 @@
 import { Platform, usePlatform } from "@/runtime/platform/platform"
-import { makePersisted, messageSync, type AsyncStorage, type SyncStorage } from "@solid-primitives/storage"
+import { messageSync, type AsyncStorage, type SyncStorage } from "@solid-primitives/storage"
 import { checksum } from "@opencode-ai/util/encode"
 import { createResource, onCleanup, type Accessor } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Option, Schema } from "effect"
 import { pathKey } from "@/workspaces/path-key"
 import { ScopedKey, ServerScope } from "@/runtime/server/scope"
+import { persistStore } from "./persist"
 import { Persistence } from "./schema"
 
-type InitType = Promise<string> | string | null
+type InitType = Promise<string | null> | string | null
 type PersistedWithReady<T> = [
   Store<T>,
   SetStoreFunction<T>,
@@ -593,13 +594,18 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
       : undefined
   if (channel) onCleanup(() => channel.close())
 
-  const [state, setState, init] = makePersisted<S["Type"], typeof store>(store, {
+  const persist = persistStore({
+    store: store[0],
+    setStore: store[1],
     name: config.key,
     storage,
     serialize,
     deserialize: Schema.decodeUnknownSync(json),
     sync: channel ? messageSync(channel) : undefined,
   })
+  const state = store[0]
+  const setState = persist.setStore
+  const init = persist.init
 
   const isAsync = init instanceof Promise
   const [ready] = createResource(
