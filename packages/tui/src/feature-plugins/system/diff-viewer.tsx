@@ -2,7 +2,7 @@
 import type { FileDiffInfo, LocationRef } from "@opencode-ai/client"
 import type { Vcs } from "@opencode-ai/schema/vcs"
 import { Plugin } from "@opencode-ai/plugin/tui"
-import type { KeymapCommand, Route } from "@opencode-ai/plugin/tui/context"
+import type { KeymapCommand, PanelInput, Route } from "@opencode-ai/plugin/tui/context"
 import {
   MouseButton,
   TextAttributes,
@@ -15,6 +15,7 @@ import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { DiffViewerFileTree } from "./diff-viewer-file-tree"
 import { DiffFileMenu } from "./diff-viewer-file-menu"
+import { DiffViewerFooter } from "./diff-viewer-footer"
 import { DiffViewerImage, isDiffImageFile } from "./diff-viewer-image"
 import { DialogSelect } from "../../ui/dialog-select"
 import { EmptyBorder } from "../../ui/border"
@@ -23,7 +24,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { createDebouncedSignal } from "../../util/signal"
 import { useConfig } from "../../config"
 import { locationKey } from "../../context/data"
-import { useThemes } from "../../context/theme"
+import { useTheme, useThemes } from "../../context/theme"
 import { PatchDiff, type PatchDiffRef } from "../../component/patch-diff"
 import {
   allExpandedFileTreeDirectories,
@@ -76,27 +77,22 @@ function diffSourceLabel(mode: DiffMode) {
   return "Uncommitted"
 }
 
-function DiffViewer(props: { context: Plugin.Context }) {
-  const dimensions = useTerminalDimensions()
+function DiffViewer(props: {
+  context: Plugin.Context
+  sessionID?: string
+  initialMode?: DiffMode
+  panel?: PanelInput
+  onClose: () => void
+}) {
   const config = useConfig()
   const [memory, updateMemory] = props.context.storage.memory<{
     source?: DiffMode
     bases: Record<string, string>
   }>("review", { initial: { bases: {} } })
-  const params = () => {
-    const route = props.context.ui.router.current()
-    return (route.type === "plugin" ? route.data : undefined) as
-      | {
-          mode?: DiffMode
-          sessionID?: string
-          returnRoute?: Route
-        }
-      | undefined
-  }
-  const [mode, setMode] = createSignal(params()?.mode ?? memory.source ?? config.data.diffs?.source ?? "branch")
+  const [mode, setMode] = createSignal(props.initialMode ?? memory.source ?? config.data.diffs?.source ?? "branch")
   const location = createMemo(
     () => {
-      const sessionID = params()?.sessionID
+      const sessionID = props.sessionID
       return sessionID
         ? (props.context.data.session.get(sessionID)?.location ?? props.context.data.location.default())
         : props.context.data.location.default()
@@ -158,51 +154,66 @@ function DiffViewer(props: { context: Plugin.Context }) {
     if (!base) return "Base not reported"
     return `vs ${base.name}`
   }
+  return (
+    <DiffViewerContent
+      context={props.context}
+      files={result()?.files ?? []}
+      loading={diff.loading}
+      error={diff.error}
+      mode={mode()}
+      sourceDetail={sourceDetail()}
+      sourceBase={sourceBase()}
+      unavailable={mode() === "committed" && !!result() && !result()?.base}
+      preferences={config.data.diffs}
+      panel={props.panel}
+      loadImage={(file, signal) => props.context.client.file.read({ path: file, location: location() }, { signal })}
+      onPreferencesChange={(value) => {
+        void config
+          .update((draft) => {
+            draft.diffs = { ...draft.diffs, ...value }
+          })
+          .catch(() => {})
+      }}
+      onClose={props.onClose}
+      onSwitchSource={(mode) => {
+        updateMemory((draft) => {
+          draft.source = mode
+        })
+        setMode(mode)
+      }}
+      onChooseBase={() => {
+        const target = { ...location() }
+        const key = baseKey()
+        if (!memory.bases[key]) void loadBase(target, key).catch(() => {})
+        props.context.ui.dialog.show(() => (
+          <DiffBaseDialog
+            context={props.context}
+            location={target}
+            current={memory.bases[key] ?? reportedBases().get(key)?.ref}
+            onSelect={(ref) =>
+              updateMemory((draft) => {
+                draft.bases[key] = ref
+              })
+            }
+          />
+        ))
+      }}
+    />
+  )
+}
 
+function DiffRoute(props: {
+  context: Plugin.Context
+  data?: { mode?: DiffMode; sessionID?: string; returnRoute?: Route }
+}) {
+  const dimensions = useTerminalDimensions()
   return (
     <box position="absolute" zIndex={2500} left={0} top={0} width={dimensions().width} height={dimensions().height}>
-      <DiffViewerContent
+      <DiffViewer
         context={props.context}
-        files={result()?.files ?? []}
-        loading={diff.loading}
-        error={diff.error}
-        mode={mode()}
-        sourceDetail={sourceDetail()}
-        sourceBase={sourceBase()}
-        unavailable={mode() === "committed" && !!result() && !result()?.base}
-        preferences={config.data.diffs}
-        loadImage={(file, signal) => props.context.client.file.read({ path: file, location: location() }, { signal })}
-        onPreferencesChange={(value) => {
-          void config
-            .update((draft) => {
-              draft.diffs = { ...draft.diffs, ...value }
-            })
-            .catch(() => {})
-        }}
-        onClose={() => props.context.ui.router.navigate(params()?.returnRoute ?? { type: "home" })}
-        onSwitchSource={(mode) => {
-          updateMemory((draft) => {
-            draft.source = mode
-          })
-          setMode(mode)
-        }}
-        onChooseBase={() => {
-          const target = { ...location() }
-          const key = baseKey()
-          if (!memory.bases[key]) void loadBase(target, key).catch(() => {})
-          props.context.ui.dialog.show(() => (
-            <DiffBaseDialog
-              context={props.context}
-              location={target}
-              current={memory.bases[key] ?? reportedBases().get(key)?.ref}
-              onSelect={(ref) =>
-                updateMemory((draft) => {
-                  draft.bases[key] = ref
-                })
-              }
-            />
-          ))
-        }}
+        sessionID={props.data?.sessionID}
+        initialMode={props.data?.mode}
+        onClose={() => props.context.ui.router.navigate(props.data?.returnRoute ?? { type: "home" })}
       />
     </box>
   )
@@ -267,6 +278,7 @@ export function DiffViewerContent(props: {
   navigation?: "tree" | "list"
   loadImage?: (file: string, signal: AbortSignal) => Promise<Uint8Array>
   preferences?: DiffPreferences
+  panel?: PanelInput
   onPreferencesChange?: (value: DiffPreferences) => void
   onClose: () => void
   onSwitchSource: (mode: DiffMode) => void
@@ -276,19 +288,21 @@ export function DiffViewerContent(props: {
   const dimensions = useTerminalDimensions()
   const config = useConfig()
   const dialog = props.context.ui.dialog
-  const theme = useThemes().current
+  const theme = useTheme()
   const currentSyntax = useThemes().currentSyntax
   const files = () => props.files
+  const docked = () => props.panel?.presentation === "panel"
+  const width = () => props.panel?.width ?? dimensions().width
   const mode = () => props.mode
   const [fileTreeEnabled, setFileTreeEnabled] = createSignal(props.preferences?.tree ?? true)
   const showFileTree = createMemo(
-    () => dimensions().width >= 90 && showDiffViewerFileTree(fileTreeEnabled(), files().length),
+    () => !docked() && width() >= 90 && showDiffViewerFileTree(fileTreeEnabled(), files().length),
   )
   const [singlePatch, setSinglePatch] = createSignal(props.preferences?.single ?? false)
   const fileTreeWidth = createMemo(() =>
-    Math.max(FILE_TREE_MIN_WIDTH, Math.min(FILE_TREE_MAX_WIDTH, Math.floor(dimensions().width / 4))),
+    Math.max(FILE_TREE_MIN_WIDTH, Math.min(FILE_TREE_MAX_WIDTH, Math.floor(width() / 4))),
   )
-  const patchPaneWidth = createMemo(() => dimensions().width - (showFileTree() ? fileTreeWidth() : 0) - 4)
+  const patchPaneWidth = createMemo(() => width() - (showFileTree() ? fileTreeWidth() : 0) - (docked() ? 2 : 4))
   const splitAvailable = createMemo(() => patchPaneWidth() >= MIN_SPLIT_WIDTH)
   const [viewOverride, setViewOverride] = createSignal<DiffView | undefined>(storedView(props.preferences?.view))
   const view = createMemo(() =>
@@ -307,8 +321,6 @@ export function DiffViewerContent(props: {
   const patchDiffByFileIndex = new Map<number, PatchDiffRef>()
   const [selectedHunk, setSelectedHunk] = createSignal<SelectedHunk | undefined>()
   const [pendingPatchScrollFileIndex, setPendingPatchScrollFileIndex] = createSignal<number | undefined>()
-
-  onCleanup(() => dialog.clear())
 
   createEffect(() => {
     setExpandedFileNodes(allExpandedFileTreeDirectories(fileTree()))
@@ -517,6 +529,7 @@ export function DiffViewerContent(props: {
     if (event.button !== MouseButton.RIGHT) return
     event.preventDefault()
     event.stopPropagation()
+    props.panel?.focus()
     setFileMenu({ fileIndex, x: event.x, y: event.y })
   }
 
@@ -636,7 +649,9 @@ export function DiffViewerContent(props: {
       id: "diff.toggle_file_tree",
       title: "Toggle diff viewer file tree",
       group: "VCS",
+      enabled: () => !docked(),
       run() {
+        if (docked()) return
         const next = !fileTreeEnabled()
         setFileTreeEnabled(next)
         props.onPreferencesChange?.({ tree: next })
@@ -683,6 +698,13 @@ export function DiffViewerContent(props: {
         setViewOverride(next)
         props.onPreferencesChange?.({ view: next })
       },
+    },
+    {
+      id: "diff.toggle_fullscreen",
+      title: "Toggle diff viewer full screen",
+      group: "VCS",
+      enabled: () => props.panel !== undefined,
+      run: () => props.panel?.toggleFullscreen(),
     },
     {
       id: "diff.help",
@@ -749,7 +771,14 @@ export function DiffViewerContent(props: {
   }
 
   const openHelpDialog = () => {
-    dialog.show(() => <DiffViewerHelpDialog context={props.context} single={singlePatch()} />)
+    dialog.show(() => (
+      <DiffViewerHelpDialog
+        context={props.context}
+        single={singlePatch()}
+        fullscreen={props.panel !== undefined}
+        tree={!docked()}
+      />
+    ))
     dialog.set({ size: "medium", centered: true })
   }
 
@@ -875,7 +904,13 @@ export function DiffViewerContent(props: {
                 />
               </Show>
 
-              <box flexGrow={1} minWidth={0} minHeight={0} paddingLeft={2} paddingRight={2}>
+              <box
+                flexGrow={1}
+                minWidth={0}
+                minHeight={0}
+                paddingLeft={docked() ? 1 : 2}
+                paddingRight={docked() ? 1 : 2}
+              >
                 <box
                   id="diff-patch-top-edge"
                   ref={(edge: BoxRenderable) => {
@@ -954,7 +989,7 @@ export function DiffViewerContent(props: {
                               zIndex={1}
                               backgroundColor={background()}
                               paddingLeft={1}
-                              paddingRight={1}
+                              paddingRight={docked() ? 0 : 1}
                               paddingBottom={1}
                             >
                               <box flexGrow={1} minWidth={0}>
@@ -1057,7 +1092,10 @@ export function DiffViewerContent(props: {
           </Match>
         </Switch>
       </box>
-      <Show when={!showFileTree()}>
+      <Show when={docked() ? props.panel : undefined}>
+        {(panel) => <DiffViewerFooter context={props.context} panel={panel()} onHelp={openHelpDialog} />}
+      </Show>
+      <Show when={!showFileTree() && !docked()}>
         <box position="absolute" top={0} right={0} width={1} height={1}>
           <HelpShortcut compact />
         </box>
@@ -1077,7 +1115,7 @@ export function DiffViewerContent(props: {
   )
 }
 
-function DiffViewerHelpDialog(props: { context: Plugin.Context; single: boolean }) {
+function DiffViewerHelpDialog(props: { context: Plugin.Context; single: boolean; fullscreen: boolean; tree: boolean }) {
   const dimensions = useTerminalDimensions()
   const theme = props.context.theme.contextual.elevated
   const shortcut =
@@ -1115,8 +1153,11 @@ function DiffViewerHelpDialog(props: { context: Plugin.Context; single: boolean 
       rows: [
         { shortcut: shortcut("diff.toggle_view"), label: "Split / unified" },
         { shortcut: shortcut("diff.single_patch"), label: "All files / single file" },
-        { shortcut: shortcut("diff.toggle_file_tree"), label: "Show / hide file tree" },
+        ...(props.tree ? [{ shortcut: shortcut("diff.toggle_file_tree"), label: "Show / hide file tree" }] : []),
         { shortcut: shortcut("diff.switch_source"), label: "Switch diff source" },
+        ...(props.fullscreen
+          ? [{ shortcut: shortcut("diff.toggle_fullscreen"), label: "Full screen / split view" }]
+          : []),
         { shortcut: () => props.context.keymap.shortcuts("diff.close").join(" / "), label: "Close diff viewer" },
       ],
     },
@@ -1185,6 +1226,13 @@ function Commands(props: { context: Plugin.Context }) {
         palette: true,
         run() {
           const route = props.context.ui.router.current()
+          props.context.ui.dialog.clear()
+          const current = props.context.ui.panel.current()
+          if (route.type === "session" && current?.sessionID === route.sessionID && current.name === ROUTE) {
+            props.context.ui.panel.close()
+            return
+          }
+          if (props.context.ui.panel.open(ROUTE)) return
           const returnRoute: Route =
             route.type === "home"
               ? { type: "home" }
@@ -1204,7 +1252,6 @@ function Commands(props: { context: Plugin.Context }) {
               returnRoute,
             },
           })
-          props.context.ui.dialog.clear()
         },
       },
     ],
@@ -1215,9 +1262,17 @@ function Commands(props: { context: Plugin.Context }) {
 export default Plugin.define({
   id: "opencode.diffs",
   setup(context) {
+    context.ui.slot({
+      append: "session.panel",
+      render: (panel) => (
+        <Show when={panel.name === ROUTE}>
+          <DiffViewer context={context} sessionID={panel.sessionID} panel={panel} onClose={panel.close} />
+        </Show>
+      ),
+    })
     context.ui.router.register({
       name: ROUTE,
-      render: () => <DiffViewer context={context} />,
+      render: ({ data }) => <DiffRoute context={context} data={data} />,
     })
     context.ui.slot({ append: "app", render: () => <Commands context={context} /> })
   },
