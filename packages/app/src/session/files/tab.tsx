@@ -15,6 +15,10 @@ export function SortableTab(props: {
   temporary?: boolean
   onTabClose: (tab: string) => void
   onTabDoubleClick?: (tab: string) => void
+  /** Replaces the file visual for non-file tabs such as the browser. */
+  children?: JSX.Element
+  id?: string
+  ariaControls?: string
 }): JSX.Element {
   const file = useFile()
   const language = useLanguage()
@@ -39,6 +43,8 @@ export function SortableTab(props: {
       <div class="relative">
         <Tabs.Trigger
           value={props.tab}
+          id={props.id}
+          aria-controls={props.ariaControls}
           onMiddleClick={() => props.onTabClose(props.tab)}
           onDblClick={() => props.onTabDoubleClick?.(props.tab)}
           closeButton={
@@ -63,7 +69,9 @@ export function SortableTab(props: {
           }
           hideCloseButton
         >
-          <Show when={content()}>{(value) => value()}</Show>
+          <Show when={props.children} fallback={<Show when={content()}>{(value) => value()}</Show>}>
+            {props.children}
+          </Show>
         </Tabs.Trigger>
       </div>
     </div>

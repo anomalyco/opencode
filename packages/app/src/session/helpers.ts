@@ -50,7 +50,8 @@ export const createSessionTabs = (input: TabsInput) => {
         .tabs()
         .all()
         .flatMap((tab) => {
-          if (tab === "context" || tab === "review" || isSessionBrowserTab(tab)) return []
+          if (tab === "context" || tab === "review") return []
+          if (isSessionBrowserTab(tab)) return browser() ? [tab] : []
           if (tab === SESSION_OPEN_FILE_TAB && !fileBrowser()) return []
           const value = input.pathFromTab(tab) ? input.normalizeTab(tab) : tab
           if (seen.has(value)) return []
@@ -61,9 +62,11 @@ export const createSessionTabs = (input: TabsInput) => {
     emptyTabs,
     { equals: same },
   )
-  const openedTabs = createMemo(() => panelTabs().filter((tab) => tab !== SESSION_OPEN_FILE_TAB), emptyTabs, {
-    equals: same,
-  })
+  const openedTabs = createMemo(
+    () => panelTabs().filter((tab) => tab !== SESSION_OPEN_FILE_TAB && !isSessionBrowserTab(tab)),
+    emptyTabs,
+    { equals: same },
+  )
   const activeTab = createMemo(() => {
     const active = input.tabs().active()
     if (active === "context") return active

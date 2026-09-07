@@ -173,7 +173,7 @@ export function SessionSidePanel(props: {
     review: reviewTab,
     hasReview: () => props.canReview,
     fileBrowser: () => true,
-    browser: props.browser.opened,
+    browser: props.browser.attached,
   })
   const contextOpen = tabState.contextOpen
   const openFileOpen = tabState.openFileOpen
@@ -354,8 +354,7 @@ export function SessionSidePanel(props: {
                           </Show>
                           <For each={panelTabs()}>
                             {(tab) => (
-                              <Show
-                                when={tab === SESSION_OPEN_FILE_TAB}
+                              <Switch
                                 fallback={
                                   <SortableTab
                                     tab={tab}
@@ -366,78 +365,72 @@ export function SessionSidePanel(props: {
                                   />
                                 }
                               >
-                                <Tabs.Trigger
-                                  value={SESSION_OPEN_FILE_TAB}
-                                  class="group"
-                                  onMiddleClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}
-                                  closeButton={
-                                    <Tooltip
-                                      value={
-                                        <>
-                                          {language.t("common.closeTab")}
-                                          <Show when={closeTabKeybind().length > 0}>
-                                            <Keybind keys={closeTabKeybind()} variant="neutral" />
-                                          </Show>
-                                        </>
-                                      }
-                                      placement="bottom"
-                                      gutter={10}
-                                    >
-                                      <IconButton
-                                        size="small"
-                                        variant="ghost-muted"
-                                        class="hover-reveal relative z-10 group-hover:opacity-100"
-                                        classList={{ "opacity-100": activeTab() === SESSION_OPEN_FILE_TAB }}
-                                        onPointerDown={(event) => {
-                                          event.preventDefault()
-                                          event.stopPropagation()
-                                        }}
-                                        onClick={(event) => {
-                                          event.preventDefault()
-                                          event.stopPropagation()
-                                          tabs().close(SESSION_OPEN_FILE_TAB)
-                                        }}
-                                        icon={<Icon name="xmark-small" />}
-                                        aria-label={language.t("common.closeTab")}
-                                      />
-                                    </Tooltip>
-                                  }
-                                  hideCloseButton
-                                >
-                                  <div class="flex items-center gap-1.5">
-                                    <Icon name="file-tree" size="small" />
-                                    <span>{language.t("command.file.open")}</span>
-                                  </div>
-                                </Tabs.Trigger>
-                              </Show>
-                            )}
-                          </For>
-                          <For each={props.browser.tabs()}>
-                            {(tab) => (
-                              <Tabs.Trigger
-                                value={sessionBrowserTab(tab.id)}
-                                id={`${browserTabID}-${tab.id}`}
-                                aria-controls={
-                                  activeTab() === sessionBrowserTab(tab.id) ? browserTabPanelID : undefined
-                                }
-                                onMiddleClick={() => props.browser.close(tab.id)}
-                                closeButton={
-                                  <Tooltip value={language.t("common.closeTab")} placement="bottom" gutter={10}>
-                                    <Tabs.CloseButton
-                                      onClick={() => props.browser.close(tab.id)}
-                                      aria-label={language.t("common.closeTab")}
-                                    />
-                                  </Tooltip>
-                                }
-                                hideCloseButton
-                              >
-                                <div class="flex items-center gap-1.5">
-                                  <Icon name="window-cursor" size="small" />
-                                  <span class="max-w-40 truncate">
-                                    {tab.title || language.t("session.tab.browser")}
-                                  </span>
-                                </div>
-                              </Tabs.Trigger>
+                                <Match when={isSessionBrowserTab(tab)}>
+                                  <Show when={props.browser.tabs().find((item) => sessionBrowserTab(item.id) === tab)}>
+                                    {(item) => (
+                                      <SortableTab
+                                        tab={tab}
+                                        index={tabs().all().indexOf(tab)}
+                                        onTabClose={() => props.browser.close(item().id)}
+                                        id={`${browserTabID}-${item().id}`}
+                                        ariaControls={activeTab() === tab ? browserTabPanelID : undefined}
+                                      >
+                                        <div class="flex items-center gap-1.5">
+                                          <Icon name="window-cursor" size="small" />
+                                          <span class="max-w-40 truncate">
+                                            {item().title || language.t("session.tab.browser")}
+                                          </span>
+                                        </div>
+                                      </SortableTab>
+                                    )}
+                                  </Show>
+                                </Match>
+                                <Match when={tab === SESSION_OPEN_FILE_TAB}>
+                                  <Tabs.Trigger
+                                    value={SESSION_OPEN_FILE_TAB}
+                                    class="group"
+                                    onMiddleClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}
+                                    closeButton={
+                                      <Tooltip
+                                        value={
+                                          <>
+                                            {language.t("common.closeTab")}
+                                            <Show when={closeTabKeybind().length > 0}>
+                                              <Keybind keys={closeTabKeybind()} variant="neutral" />
+                                            </Show>
+                                          </>
+                                        }
+                                        placement="bottom"
+                                        gutter={10}
+                                      >
+                                        <IconButton
+                                          size="small"
+                                          variant="ghost-muted"
+                                          class="hover-reveal relative z-10 group-hover:opacity-100"
+                                          classList={{ "opacity-100": activeTab() === SESSION_OPEN_FILE_TAB }}
+                                          onPointerDown={(event) => {
+                                            event.preventDefault()
+                                            event.stopPropagation()
+                                          }}
+                                          onClick={(event) => {
+                                            event.preventDefault()
+                                            event.stopPropagation()
+                                            tabs().close(SESSION_OPEN_FILE_TAB)
+                                          }}
+                                          icon={<Icon name="xmark-small" />}
+                                          aria-label={language.t("common.closeTab")}
+                                        />
+                                      </Tooltip>
+                                    }
+                                    hideCloseButton
+                                  >
+                                    <div class="flex items-center gap-1.5">
+                                      <Icon name="file-tree" size="small" />
+                                      <span>{language.t("command.file.open")}</span>
+                                    </div>
+                                  </Tabs.Trigger>
+                                </Match>
+                              </Switch>
                             )}
                           </For>
                           <div class="h-full shrink-0 sticky end-0 z-10 flex items-center justify-center bg-v2-background-bg-base">

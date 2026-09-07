@@ -1,40 +1,36 @@
-import { batch, createEffect, createMemo, on, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, on } from "solid-js"
 import type { Browser } from "@opencode-ai/plugin-browser/rpc"
-import { createStore, reconcile } from "solid-js/store"
+import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
-import type { BrowserPaneCommand, BrowserPaneRegistration, BrowserPaneState } from "@/runtime/platform/browser-pane"
-import { usePlatform } from "@/runtime/platform/platform"
+import type { BrowserPaneCommand } from "@/runtime/platform/browser-pane"
 import { useServer } from "@/runtime/server/current"
-import { useSettings } from "@/settings/model"
 import type { SessionModel } from "../model"
 import { isSessionBrowserTab, sessionBrowserTab } from "../helpers"
+import { useBrowserAttachments } from "./attachments"
 
 export function createSessionBrowser(session: SessionModel) {
-  const platform = usePlatform()
-  const settings = useSettings()
+  const attachments = useBrowserAttachments()
   const language = useLanguage()
   const server = useServer()
-  const [state, setState] = createStore({
-    registration: undefined as BrowserPaneRegistration | undefined,
-    browser: null as BrowserPaneState,
-    error: undefined as string | undefined,
-    // The connected server has no browser plugin.
-    unsupported: false,
-  })
-  const eligible = createMemo(
+  const [local, setLocal] = createStore({ error: undefined as string | undefined })
+  const attachment = () => {
+    const sessionID = session.identity.sessionID()
+    return sessionID ? attachments.state(server, sessionID) : undefined
+  }
+  const available = createMemo(
     () =>
-      !!platform.browserPane &&
-      settings.ready() &&
-      settings.general.experimentalBrowser() &&
+      attachments.enabled() &&
+      attachments.supported(server) &&
       !!session.identity.sessionID() &&
       !server.health?.incompatible &&
-      !state.unsupported,
+      session.isDesktop(),
   )
-  const available = createMemo(() => eligible() && session.isDesktop())
+  const attached = () => attachment()?.registration !== undefined
   const browserTabs = createMemo(
-    () => state.browser?.tabs.filter((tab) => session.layout.tabs().all().includes(sessionBrowserTab(tab.id))) ?? [],
+    () =>
+      attachment()?.browser?.tabs.filter((tab) => session.layout.tabs().all().includes(sessionBrowserTab(tab.id))) ??
+      [],
   )
-  const opened = () => state.registration !== undefined && browserTabs().length > 0
   const focus = (tabID: Browser.TabID) => {
     session.layout.view().reviewPanel.open()
     const tabs = session.layout.tabs()
@@ -43,18 +39,24 @@ export function createSessionBrowser(session: SessionModel) {
     tabs.setActive(key)
   }
   const command = (command: BrowserPaneCommand) => {
-    setState("error", undefined)
+    const sessionID = session.identity.sessionID()
+    if (!sessionID) return
+    setLocal("error", undefined)
     const owner = session.ownership.capture()
-    void state.registration?.command(command).catch(() => {
-      if (owner.current()) setState("error", language.t("common.requestFailed"))
+    void attachments.command(server, sessionID, command).catch(() => {
+      if (owner.current()) setLocal("error", language.t("common.requestFailed"))
     })
   }
+  createEffect(() => {
+    const sessionID = session.identity.sessionID()
+    if (sessionID && attachments.enabled()) attachments.attach(server, sessionID)
+  })
   createEffect(
     on(
       () => session.layout.tabs().active(),
       (active) => {
-        const tab = state.browser?.tabs.find((tab) => sessionBrowserTab(tab.id) === active)
-        if (tab && tab.id !== state.browser?.focusedTabID) command({ type: "tabs.focus", tabID: tab.id })
+        const tab = attachment()?.browser?.tabs.find((tab) => sessionBrowserTab(tab.id) === active)
+        if (tab && tab.id !== attachment()?.browser?.focusedTabID) command({ type: "tabs.focus", tabID: tab.id })
       },
     ),
   )
@@ -65,86 +67,53 @@ export function createSessionBrowser(session: SessionModel) {
         previous
           ?.filter((key) => isSessionBrowserTab(key) && !current.includes(key))
           .forEach((key) => {
-            const tab = state.browser?.tabs.find((tab) => sessionBrowserTab(tab.id) === key)
+            const tab = attachment()?.browser?.tabs.find((tab) => sessionBrowserTab(tab.id) === key)
             if (tab) command({ type: "tabs.close", tabID: tab.id })
           })
       },
     ),
   )
-
-  createEffect(() => {
-    const sessionID = session.identity.sessionID()
-    const pane = platform.browserPane
-    setState({ registration: undefined, browser: null, error: undefined })
-    if (!eligible() || !sessionID || !pane) return
-    const owner = session.ownership.capture()
-    const target = { sessionID, endpoint: server.conn.http }
-    let registration: BrowserPaneRegistration | undefined
-    let retry: ReturnType<typeof setTimeout> | undefined
-    let attempts = 0
-    const register = () => {
-      if (registration) return
-      registration = pane.register(target, (event) =>
-        owner.run(() => {
-          if (event.type === "focus") return focus(event.tabID)
-          if (event.error === "browser.pane.unsupported") return setState("unsupported", true)
-          if (event.error === "browser.pane.replaced") {
-            registration?.close()
-            registration = undefined
-            setState({ registration: undefined, browser: null, error: language.t("session.browser.replaced") })
-            return
-          }
-          // The desktop dropped the attachment (server restart, attach race).
-          // Re-register so the agent's browser tool comes back without a reload.
-          if (event.error === "browser.pane.registration.closed") {
-            registration?.close()
-            registration = undefined
-            setState({ registration: undefined, browser: null, error: undefined })
-            retry = setTimeout(register, Math.min(30_000, 1_000 * 2 ** attempts++))
-            return
-          }
-          if (event.state) attempts = 0
-          batch(() => {
-            const known = new Set(state.browser?.tabs.map((tab) => sessionBrowserTab(tab.id)) ?? [])
-            setState("browser", reconcile(event.state))
-            setState("error", event.error ? language.t("common.requestFailed") : undefined)
-            const tabs = session.layout.tabs()
-            const ids = event.state?.tabs.map((tab) => sessionBrowserTab(tab.id)) ?? []
-            tabs
-              .all()
-              .filter((key) => isSessionBrowserTab(key) && !ids.includes(key))
-              .forEach(tabs.close)
-            const current = tabs.all()
-            const added = ids.filter((key) => !known.has(key) && !current.includes(key))
-            if (added.length) tabs.setAll([...current, ...added])
-          })
-        }),
-      )
-      setState({ registration, browser: null, error: undefined })
-    }
-    // A new session appears in the UI before its server-side creation finishes.
-    const unsubscribe = session.shared.data.on("session.created", (event) => {
-      if (event.data.sessionID === sessionID) register()
-    })
-    if (!session.shared.data.session.creating(sessionID)) register()
-    onCleanup(() => {
-      unsubscribe()
-      clearTimeout(retry)
-      registration?.close()
-    })
-  })
+  // Mirror the desktop's tab inventory into this session's layout tabs. Only tabs new since the last
+  // inventory are added, so a layout tab the user just closed is not reopened before the desktop confirms.
+  createEffect(
+    on(
+      () => attachment()?.browser?.tabs.map((tab) => sessionBrowserTab(tab.id)),
+      (ids, previous) => {
+        if (!ids) return
+        const known = new Set(previous ?? [])
+        batch(() => {
+          const tabs = session.layout.tabs()
+          tabs
+            .all()
+            .filter((key) => isSessionBrowserTab(key) && !ids.includes(key))
+            .forEach(tabs.close)
+          const current = tabs.all()
+          const added = ids.filter((key) => !known.has(key) && !current.includes(key))
+          if (added.length) tabs.setAll([...current, ...added])
+        })
+      },
+    ),
+  )
+  createEffect(
+    on(
+      () => attachment()?.focus,
+      (request) => request && focus(request.tabID),
+      { defer: true },
+    ),
+  )
 
   return {
     available,
-    opened,
-    state: () => state.browser,
+    attached,
+    opened: () => attached() && browserTabs().length > 0,
+    state: () => attachment()?.browser ?? null,
     tabs: browserTabs,
     active: () =>
       browserTabs().find((tab) => sessionBrowserTab(tab.id) === session.layout.tabs().active()) ??
-      browserTabs().find((tab) => tab.id === state.browser?.focusedTabID) ??
+      browserTabs().find((tab) => tab.id === attachment()?.browser?.focusedTabID) ??
       browserTabs()[0],
-    error: () => state.error,
-    registration: () => state.registration,
+    error: () => local.error ?? attachment()?.error,
+    registration: () => attachment()?.registration,
     close: (tabID: Browser.TabID) => session.layout.tabs().close(sessionBrowserTab(tabID)),
     open: () => command({ type: "tabs.open" }),
     command,

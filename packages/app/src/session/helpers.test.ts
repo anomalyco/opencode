@@ -246,7 +246,8 @@ describe("createSessionTabs", () => {
         browser: () => true,
       })
 
-      expect(result.panelTabs()).toEqual([])
+      expect(result.panelTabs()).toEqual([SESSION_BROWSER_TAB])
+      expect(result.openedTabs()).toEqual([])
       expect(result.activeTab()).toBe(SESSION_BROWSER_TAB)
       expect(result.activeFileTab()).toBeUndefined()
       expect(result.closableTab()).toBe(SESSION_BROWSER_TAB)
@@ -254,20 +255,28 @@ describe("createSessionTabs", () => {
     })
   })
 
-  test("keeps multiple browser tabs distinct from file tabs", () => {
+  test("keeps browser tabs in layout order beside file tabs, and drops them when the browser is detached", () => {
+    const first = sessionBrowserTab("first")
+    const second = sessionBrowserTab("second")
+    const input = {
+      tabs: () => ({ active: () => second, all: () => [first, "file://src/a.ts", second] }),
+      pathFromTab: (tab: string) => (tab.startsWith("file://") ? tab.slice(7) : undefined),
+      normalizeTab: (tab: string) => tab,
+    }
     createRoot((dispose) => {
-      const first = sessionBrowserTab("first")
-      const second = sessionBrowserTab("second")
-      const result = createSessionTabs({
-        tabs: () => ({ active: () => second, all: () => [first, "file://src/a.ts", second] }),
-        pathFromTab: (tab) => (tab.startsWith("file://") ? tab.slice(7) : undefined),
-        normalizeTab: (tab) => tab,
-        browser: () => true,
-      })
-      expect(result.panelTabs()).toEqual(["file://src/a.ts"])
+      const result = createSessionTabs({ ...input, browser: () => true })
+      expect(result.panelTabs()).toEqual([first, "file://src/a.ts", second])
+      expect(result.openedTabs()).toEqual(["file://src/a.ts"])
       expect(result.activeTab()).toBe(second)
       expect(result.activeFileTab()).toBeUndefined()
       expect(result.closableTab()).toBe(second)
+      dispose()
+    })
+    createRoot((dispose) => {
+      const result = createSessionTabs({ ...input, browser: () => false })
+      expect(result.panelTabs()).toEqual(["file://src/a.ts"])
+      expect(result.activeTab()).toBe("file://src/a.ts")
+      expect(result.closableTab()).toBe("file://src/a.ts")
       dispose()
     })
   })

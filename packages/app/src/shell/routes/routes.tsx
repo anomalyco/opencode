@@ -4,6 +4,7 @@ import { Home } from "@/home/route"
 import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
+import { BrowserAttachmentsProvider } from "@/session/browser/attachments"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import { LayoutProvider } from "@/shell/state/layout"
 import { SettingsSurfaceProvider } from "@/settings/surface"
@@ -73,7 +74,9 @@ function AppLayout(props: ParentProps) {
   return (
     <LayoutProvider>
       <SettingsSurfaceProvider>
-        <Shell>{props.children}</Shell>
+        <BrowserAttachmentsProvider>
+          <Shell>{props.children}</Shell>
+        </BrowserAttachmentsProvider>
       </SettingsSurfaceProvider>
     </LayoutProvider>
   )
