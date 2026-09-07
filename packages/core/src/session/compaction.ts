@@ -688,27 +688,26 @@ export const layer = Layer.effect(
       // Run the completed checkpoint before considering another automatic compaction.
       const last = input.messages.at(-1)
       if (last?.type === "compaction" && last.status === "completed") return false
-      const native = input.messages.findLastIndex(
-        (message) => message.type === "compaction" && message.status === "completed" && message.providerContext,
-      )
       // Native usage describes the compaction operation, not the replacement's size. Wait for
       // a primary response to anchor the new window, including after restart or new admission.
-      if (native >= 0 && !input.messages.some((message, index) => index > native && hasInputUsage(message)))
+      if (
+        input.messages.findLastIndex(hasInputUsage) < input.messages.findLastIndex(SessionProviderContext.isCheckpoint)
+      )
         return false
       const limit = input.resolved.limit
       const context = limit.context
-      const policy = input.resolved.compaction
-      // Preserve local behavior. Provider policies can use a known input limit or an
-      // explicit threshold when the catalog has no context limit; no universal default.
-      if (context <= 0 && policy?.mode !== "provider") return false
+      if (context <= 0) return false
       const output = Math.min(limit.output, OUTPUT_TOKEN_MAX)
       const promptCeiling = Math.min(
         limit.input === undefined ? Number.POSITIVE_INFINITY : limit.input - config.buffer,
-        context <= 0 ? Number.POSITIVE_INFINITY : context - Math.max(output, config.buffer),
+        context - Math.max(output, config.buffer),
       )
+      const policy = input.resolved.compaction
       const threshold =
-        policy?.mode === "provider" ? Math.min(policy.threshold ?? Infinity, promptCeiling) : promptCeiling
-      return Number.isFinite(threshold) && estimateTokens(input) >= threshold
+        policy?.mode === "provider" && policy.threshold !== undefined
+          ? Math.min(policy.threshold, promptCeiling)
+          : promptCeiling
+      return estimateTokens(input) >= threshold
     }
     const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: ManualInput) {
       if (findTailStart(input.messages, state.get().tokens) === undefined)

@@ -100,9 +100,6 @@ provider policy. An individual model's policy replaces the entire provider polic
 - `threshold` is an optional positive integer in provider mode. Omit it to use the
   selected model's usable input ceiling above. A configured threshold is clamped
   to that ceiling. In this example, `gpt-5.4-mini` uses its own ceiling, not 120,000.
-- With unknown context limits, a known input limit still supplies a ceiling. With
-  neither limit, automatic provider compaction requires an explicit threshold;
-  there is no universal token default. Manual compaction remains available.
 - Scheduling uses the normal safe session step boundaries, not in-band provider
   context management. `compaction.auto: false` disables all new automatic work.
 - After installing a native checkpoint, automatic checks wait for a fresh model
@@ -123,6 +120,8 @@ provider policy. An individual model's policy replaces the entire provider polic
   `compaction.tokens` budget, including users retained across earlier native
   compactions. Synthetic guidance is not retained as user input. Endpoint results
   are stored as the provider returned them. Neither path fabricates a text summary.
+  Keep `threshold` comfortably above `tokens` plus the system prompt and tools, or
+  every step will compact again as soon as the next response reports usage.
 - Successful native checkpoints advance the instruction epoch and are replayed
   only with a matching provider, model, protocol, and endpoint. Switching to an
   incompatible route reuses an earlier compatible checkpoint or retained transcript.
@@ -172,8 +171,8 @@ read. See [Instructions](/instructions) for source ordering and update behavior.
 
 ## Current limitations
 
-- Compaction requires a resolvable model. Default local automatic scheduling needs
-  a positive catalog context limit; manual and overflow recovery do not.
+- Compaction requires a resolvable model. Automatic scheduling needs a positive
+  catalog context limit; manual and overflow recovery do not.
   There is no separate compaction-model setting or fallback model.
 - Summary generation can fail if the summary prompt itself cannot fit beside
   its output allowance, the model returns no summary, or the provider fails.

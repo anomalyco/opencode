@@ -210,9 +210,7 @@ it.effect("auto compaction estimates current content against the buffered prompt
     expect(compaction.required(native(99_999, inputLimited, 100_000))).toBe(false)
     expect(compaction.required(native(100_000, inputLimited, 100_000))).toBe(true)
     expect(compaction.required(native(252_000, inputLimited, 500_000))).toBe(true)
-    expect(compaction.required(native(1_000_000, { context: 0, input: undefined, output: 0 }))).toBe(false)
-    expect(compaction.required(native(100_000, { context: 0, input: undefined, output: 0 }, 100_000))).toBe(true)
-    expect(compaction.required(native(80_000, { context: 0, input: 100_000, output: 0 }))).toBe(true)
+    expect(compaction.required(native(1_000_000, { context: 0, input: undefined, output: 0 }, 100_000))).toBe(false)
 
     const contextLimited = { context: 100_000, output: 10_000 }
     expect(compaction.required(input(79_999, contextLimited))).toBe(false)

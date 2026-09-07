@@ -203,7 +203,6 @@ const layer = Layer.effect(
       let initial: SessionContext.Loaded | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
-      let compacted = false
       while (true) {
         // Reuse boundary preparation once; retries refresh context without delivering more input.
         const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
@@ -212,10 +211,9 @@ const layer = Layer.effect(
           context: loaded,
           prepare: context.prepare,
         }
-        if (!compacted && compaction.required({ messages: loaded.messages, resolved: loaded.model, context: loaded })) {
+        if (compaction.required({ messages: loaded.messages, resolved: loaded.model, context: loaded })) {
           const result = yield* compaction.compact(compactionInput)
           if (result.status !== "completed") return yield* new StepFailedError({ error: result.error })
-          compacted = true
           if (result.recoveredOverflow) recoverOverflow = false
           assistantMessageID = SessionMessage.ID.create()
           continue
@@ -284,7 +282,6 @@ const layer = Layer.effect(
           }),
           Compacted: Effect.fnUntraced(function* () {
             recoverOverflow = false
-            compacted = true
             assistantMessageID = SessionMessage.ID.create()
           }),
           RecoverFull: Effect.fnUntraced(function* () {
