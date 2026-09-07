@@ -1965,6 +1965,23 @@ export const HLS: Info = {
   },
 }
 
+export const PureScriptLS: Info = {
+  id: "purescript-language-server",
+  extensions: [".purs"],
+  root: NearestRoot(["spago.dhall", "spago.yaml", "psc-package.json", "bower.json"]),
+  async spawn(root) {
+    const bin = which("purescript-language-server")
+    if (!bin) {
+      return
+    }
+    return {
+      process: spawn(bin, ["--stdio"], {
+        cwd: root,
+      }),
+    }
+  },
+}
+
 export const JuliaLS: Info = {
   id: "julials",
   extensions: [".jl"],
