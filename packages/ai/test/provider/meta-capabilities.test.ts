@@ -81,7 +81,7 @@ it.effect("Meta Images preserves request overlays, bearer auth, JSON edit inputs
         toolEnablement: { enable_web_search: false },
         output_format: "png",
       },
-      http: { body: { output_format: "jpeg" }, query: { trace: "1" } },
+      http: { body: { output_format: "jpeg", future_option: true }, query: { trace: "1" } },
     })
     expect(response.image?.mediaType).toBe("image/jpeg")
     expect(response.image?.data).toBe("https://images.example/result.jpg")
@@ -103,14 +103,32 @@ it.effect("Meta Images preserves request overlays, bearer auth, JSON edit inputs
                 response_format: "url",
                 reasoning_strength: "low",
                 tool_enablement: { enable_web_search: false },
+                future_option: true,
               })
-              return input.respond(
-                JSON.stringify({ output_format: "jpeg", data: [{ url: "https://images.example/result.jpg" }] }),
-                { headers: { "content-type": "application/json" } },
-              )
+              return input.respond(JSON.stringify({ data: [{ url: "https://images.example/result.jpg" }] }), {
+                headers: { "content-type": "application/json" },
+              })
             }),
           ),
         ),
+      ),
+    ),
+  ),
+)
+
+it.effect("Meta Images validates the final output format before sending the request", () =>
+  Effect.gen(function* () {
+    const error = yield* Image.generate({
+      model: Meta.configure({ apiKey: "fixture" }).image("muse-image-1.0"),
+      prompt: "Draw",
+      options: { outputFormat: "png" },
+      http: { body: { output_format: 42 } },
+    }).pipe(Effect.flip)
+    expect(error.reason._tag).toBe("InvalidRequest")
+  }).pipe(
+    Effect.provide(
+      ImageClient.layer.pipe(
+        Layer.provide(dynamicResponse(() => Effect.die("Invalid image requests must not reach HTTP"))),
       ),
     ),
   ),

@@ -3,7 +3,7 @@ import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { GeneratedImage, ImageModel, ImageResponse, type ImageRequestFor, type ImageRoute } from "../image.js"
 import { Auth } from "../route/auth.js"
 import { Usage, mergeHttpOptions, mergeJsonRecords, type HttpOptions } from "../schema/index.js"
-import { ProviderShared, optionalNull } from "./shared.js"
+import { JsonObject, ProviderShared, optionalNull } from "./shared.js"
 import { ImageInputs } from "./utils/image-input.js"
 
 type OpenString<Known extends string> = Known | (string & {})
@@ -21,6 +21,21 @@ export type ImageOptions = {
   }
   readonly [key: string]: unknown
 }
+
+const Body = Schema.StructWithRest(
+  Schema.Struct({
+    model: Schema.String,
+    prompt: Schema.String,
+    images: Schema.optional(Schema.Array(JsonObject)),
+    n: Schema.optional(Schema.Number),
+    size: Schema.optional(Schema.String),
+    output_format: Schema.optional(Schema.String),
+    response_format: Schema.optional(Schema.String),
+    reasoning_strength: Schema.optional(Schema.String),
+    tool_enablement: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
+  }),
+  [JsonObject],
+)
 
 const Response = Schema.Struct({
   data: Schema.Array(Schema.Struct({ b64_json: optionalNull(Schema.String), url: optionalNull(Schema.String) })),
@@ -51,7 +66,7 @@ export const model = (input: {
         return ImageInputs.invalid("Meta Images accepts image bytes and URLs")
       })
       const { outputFormat, responseFormat, reasoningStrength, toolEnablement, ...native } = request.options ?? {}
-      const body = ProviderShared.encodeJson(
+      const payload = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Body))(
         mergeJsonRecords(
           {
             model: request.model.id,
@@ -66,6 +81,7 @@ export const model = (input: {
           http?.body,
         ),
       )
+      const body = ProviderShared.encodeJson(payload)
       const url = new URL(`${input.baseURL.replace(/\/$/, "")}/images/${images.length === 0 ? "generations" : "edits"}`)
       Object.entries(http?.query ?? {}).forEach(([key, value]) => url.searchParams.set(key, value))
       const headers = yield* Auth.toEffect(input.auth)({
@@ -85,13 +101,7 @@ export const model = (input: {
       const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Response))(output.body).pipe(
         Effect.mapError((cause) => output.invalid("Meta Images returned an invalid response", cause)),
       )
-      const format =
-        decoded.output_format ??
-        (typeof http?.body?.output_format === "string"
-          ? http.body.output_format
-          : typeof native.output_format === "string"
-            ? native.output_format
-            : (outputFormat ?? "webp"))
+      const format = decoded.output_format ?? payload.output_format ?? "webp"
       const generated = yield* Effect.forEach(decoded.data, (item, index) => {
         if (item.b64_json)
           return Effect.fromResult(Encoding.decodeBase64(item.b64_json)).pipe(
