@@ -1,5 +1,6 @@
 import { Effect, Encoding, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
+import { HttpTransport } from "../route/transport/index.js"
 import { LLMEvent, LLMRequest, Message, ToolResultPart } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
@@ -231,5 +232,7 @@ export const protocol = Protocol.make({
     terminal: OpenResponses.terminal,
   },
 })
+
+export const httpTransport = HttpTransport.sseJson.with<Schema.Schema.Type<typeof Body>>()
 
 export * as MetaResponses from "./meta-responses.js"

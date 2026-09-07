@@ -136,8 +136,8 @@ returns a signed URL. `size` is an aspect-ratio hint. For conversational images,
 Generated images are provider-executed tool results with file content. Retain `response.message` to
 replay the signed image handle on the next request. Muse Image accepts only the `image_generation` tool.
 
-Responses currently uses HTTP/SSE. An authenticated WebSocket upgrade to `/v1/responses` returned
-HTTP 405 (`Allow: POST`); a Responses WebSocket contract could not be verified in Meta's published docs.
+Meta Responses is explicitly HTTP/SSE-only and does not use WebSockets, even when a caller supplies
+`StreamOptions.webSocket`. The public `/v1/responses` endpoint rejects WebSocket upgrades with HTTP 405 (`Allow: POST`).
 
 ## Image generation
 

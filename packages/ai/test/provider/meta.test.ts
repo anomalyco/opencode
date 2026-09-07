@@ -1,13 +1,15 @@
 import { expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/unstable/http"
-import { Auth, LLM } from "../../src/index.js"
+import { Auth, LLM, LLMClient } from "../../src/index.js"
 import { Meta } from "../../src/providers/index.js"
 import { OpenAIChat } from "../../src/protocols/openai-chat.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { MetaResponses } from "../../src/protocols/meta-responses.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
+import { dynamicResponse } from "../lib/http.js"
+import { sseEvents } from "../lib/sse.js"
 
 it.effect("Meta composes baseline protocols with provider-owned endpoints and defaults", () =>
   Effect.gen(function* () {
@@ -29,6 +31,51 @@ it.effect("Meta composes baseline protocols with provider-owned endpoints and de
     expect(compiled.protocol).toBe("meta-responses")
     expect(compiled.body).toMatchObject({ store: false, include: ["reasoning.encrypted_content"] })
     expect(compiled.body.reasoning).toBeUndefined()
+  }),
+)
+
+it.effect("Meta Responses stays on HTTP when a WebSocket executor is supplied", () =>
+  Effect.gen(function* () {
+    for (const baseURL of ["https://api.meta.ai/v1", "https://gateway.example/v1"]) {
+      const response = yield* LLMClient.generate(
+        LLM.request({
+          model: Meta.configure({ apiKey: "fixture", baseURL }).responses("muse-spark-1.3"),
+          prompt: "Hello",
+        }),
+        { webSocket: { execute: () => Effect.die("Meta must not execute WebSocket requests") } },
+      ).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.sync(() => {
+              expect(input.request.method).toBe("POST")
+              expect(input.request.url).toBe(`${baseURL}/responses`)
+              expect(input.request.headers.authorization).toBe("Bearer fixture")
+              expect(input.request.headers["openai-beta"]).toBeUndefined()
+              expect(JSON.parse(input.text)).toMatchObject({ model: "muse-spark-1.3", stream: true })
+              return input.respond(
+                sseEvents(
+                  { type: "response.created", response: { id: "resp_http" } },
+                  {
+                    type: "response.output_item.done",
+                    output_index: 0,
+                    item: {
+                      id: "msg_http",
+                      type: "message",
+                      role: "assistant",
+                      content: [{ type: "output_text", text: "Hello" }],
+                    },
+                  },
+                  { type: "response.completed", response: { id: "resp_http" } },
+                ),
+                { headers: { "content-type": "text/event-stream" } },
+              )
+            }),
+          ),
+        ),
+      )
+      expect(response.text).toBe("Hello")
+      expect(response.finishReason.normalized).toBe("stop")
+    }
   }),
 )
 

@@ -7,7 +7,6 @@ import { MetaImages } from "../protocols/meta-images.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { Framing } from "../route/framing.js"
 import { HttpOptions, ProviderID, ToolDefinition, type ModelID } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
@@ -92,7 +91,8 @@ const responsesRoute = Route.make({
   providerMetadataKey: "meta",
   protocol: MetaResponses.protocol,
   endpoint: Endpoint.path("/responses", { baseURL }),
-  framing: Framing.sse,
+  // Meta Responses does not support WebSocket upgrades; always use HTTP/SSE.
+  transport: MetaResponses.httpTransport,
   defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
