@@ -22,7 +22,7 @@ export type Info<
   ) => Promise<Tool.Result<Output>>
 }
 
-interface ToolDraft {
+export interface ToolEditor {
   list(): readonly (Info & { readonly id: string })[]
   get(id: string): (Info & { readonly id: string }) | undefined
   namespace(namespace: Tool.Namespace): void
@@ -63,7 +63,7 @@ interface ToolHooks {
 }
 
 export interface ToolDomain {
-  readonly transform: Transform<ToolDraft>
+  readonly transform: Transform<ToolEditor>
   readonly reload: () => Promise<void>
   readonly hook: Hooks<ToolHooks>
 }

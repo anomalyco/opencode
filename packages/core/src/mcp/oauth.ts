@@ -1,12 +1,63 @@
 export * as McpOAuth from "./oauth.js"
 
-import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
+import { auth, parseErrorResponse, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
 import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js"
-import { Deferred, Effect } from "effect"
+import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js"
+import { Cause, Deferred, Effect } from "effect"
 import { Credential } from "@opencode-ai/schema/credential"
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 import { OauthCallbackPage } from "../oauth/page.js"
 import type { Integration } from "../integration.js"
+import { ErrorSummary } from "../util/error-summary.js"
+
+/** Observe OAuth failures before the SDK handles them by invalidating credentials or redirecting. */
+export const loggedFetch = (fields: { readonly server: string; readonly directory?: string }) =>
+  Effect.gen(function* () {
+    const run = Effect.runPromiseWith(yield* Effect.context())
+    const request: FetchLike = (url, init) => {
+      const grant = init?.body instanceof URLSearchParams ? init.body.get("grant_type") : undefined
+      const operation = grant === "refresh_token" ? "refresh" : grant === "authorization_code" ? "exchange" : undefined
+      const started = Date.now()
+      return run(
+        Effect.gen(function* () {
+          if (operation) yield* Effect.logInfo("mcp oauth request started")
+          const response = yield* Effect.tryPromise({ try: () => fetch(url, init), catch: (error) => error })
+          const result = { status: response.status, durationMs: Date.now() - started }
+          if (operation && !response.ok) {
+            // Only retain the SDK's standard error code. Descriptions and raw bodies can echo credentials.
+            const error = yield* Effect.tryPromise(async () => parseErrorResponse(await response.clone().text())).pipe(
+              Effect.map((error) => error.errorCode),
+              Effect.orElseSucceed(() => "unreadable_response"),
+            )
+            yield* Effect.logWarning("mcp oauth request rejected", { ...result, error })
+          }
+          if (operation && response.ok) {
+            yield* Effect.logInfo("mcp oauth request succeeded", result)
+          }
+          if (!operation && (response.status === 401 || response.status === 403)) {
+            yield* Effect.logWarning("mcp http authentication rejected", result)
+          }
+          return response
+        }).pipe(
+          Effect.onError((cause) => {
+            if (init?.signal?.aborted) return Effect.logDebug("mcp http request aborted")
+            return Effect.logWarning("mcp http request failed", {
+              errors: ErrorSummary.from(Cause.squash(cause)),
+              durationMs: Date.now() - started,
+            })
+          }),
+          Effect.annotateLogs({
+            ...fields,
+            requestID: crypto.randomUUID(),
+            origin: new URL(url).origin,
+            method: init?.method ?? "GET",
+            ...(operation ? { operation } : {}),
+          }),
+        ),
+      )
+    }
+    return request
+  })
 
 /** Persists the OAuth artifacts for one MCP server session: DCR client info, PKCE verifier, and tokens. */
 export interface Store {
@@ -145,6 +196,12 @@ export const authorize = (input: {
   readonly methodID: Integration.MethodID
 }) =>
   Effect.gen(function* () {
+    const fields = { server: input.name, methodID: input.methodID, oauthAttemptID: crypto.randomUUID() }
+    const context = yield* Effect.context()
+    const run = Effect.runPromiseWith(context)
+    const runFork = Effect.runForkWith(context)
+    const fetchFn = yield* loggedFetch({ server: input.name }).pipe(Effect.annotateLogs(fields))
+    yield* Effect.logInfo("mcp oauth authorization started", fields)
     const oauth = input.config.oauth || undefined
     const store = memoryStore()
     const code = yield* Deferred.make<string, Error>()
@@ -160,19 +217,20 @@ export const authorize = (input: {
         response.writeHead(404).end("Not found")
         return
       }
-      const fail = (reason: string) => {
+      const fail = (reason: string, failure: string) => {
+        runFork(Effect.logWarning("mcp oauth callback rejected", { ...fields, reason: failure }))
         Effect.runFork(Deferred.fail(code, new Error(reason)))
         response
           .writeHead(400, { "Content-Type": "text/html" })
           .end(OauthCallbackPage.error(reason, { provider: input.name }))
       }
       const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
-      if (error) return fail(error)
+      if (error) return fail(error, "authorization_error")
       // Reject a redirect whose state does not match what we issued: this is the CSRF defense the
       // state parameter exists for, so an attacker can't inject their own authorization code.
-      if (url.searchParams.get("state") !== state) return fail("OAuth state mismatch")
+      if (url.searchParams.get("state") !== state) return fail("OAuth state mismatch", "state_mismatch")
       const value = url.searchParams.get("code")
-      if (!value) return fail("Missing authorization code")
+      if (!value) return fail("Missing authorization code", "missing_code")
       Effect.runFork(Deferred.succeed(code, value))
       response.writeHead(200, { "Content-Type": "text/html" }).end(OauthCallbackPage.success({ provider: input.name }))
     })
@@ -202,6 +260,7 @@ export const authorize = (input: {
       client: oauth?.client_id ? { id: oauth.client_id, secret: oauth.client_secret } : undefined,
       onRedirect: (url) => {
         authorizationUrl = url
+        return run(Effect.logInfo("mcp oauth awaiting authorization", fields))
       },
       store,
     })
@@ -210,11 +269,16 @@ export const authorize = (input: {
       const tokens = yield* Effect.promise(() => store.tokens())
       if (!tokens) return yield* Effect.fail(new Error(`MCP server "${input.name}" did not return OAuth tokens`))
       const client = yield* Effect.promise(() => store.clientInformation())
+      yield* Effect.logInfo("mcp oauth authorization completed", {
+        ...fields,
+        hasRefreshToken: Boolean(tokens.refresh_token),
+        expiresIn: tokens.expires_in,
+      })
       return toCredential({ methodID: input.methodID, serverUrl: input.config.url, tokens, client })
     })
 
     yield* Effect.tryPromise({
-      try: () => auth(oauthProvider, { serverUrl: input.config.url, scope: oauth?.scope }),
+      try: () => auth(oauthProvider, { serverUrl: input.config.url, scope: oauth?.scope, fetchFn }),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     })
 
@@ -229,11 +293,28 @@ export const authorize = (input: {
         Effect.flatMap((value) =>
           Effect.tryPromise({
             try: () =>
-              auth(oauthProvider, { serverUrl: input.config.url, authorizationCode: value, scope: oauth?.scope }),
+              auth(oauthProvider, {
+                serverUrl: input.config.url,
+                authorizationCode: value,
+                scope: oauth?.scope,
+                fetchFn,
+              }),
             catch: (error) => (error instanceof Error ? error : new Error(String(error))),
           }),
         ),
         Effect.flatMap(() => finalize),
+        Effect.onError((cause) =>
+          Effect.logWarning("mcp oauth authorization failed", { errors: ErrorSummary.from(Cause.squash(cause)) }),
+        ),
+        Effect.annotateLogs(fields),
       ),
     }
-  })
+  }).pipe(
+    Effect.onError((cause) =>
+      Effect.logWarning("mcp oauth authorization setup failed", {
+        server: input.name,
+        methodID: input.methodID,
+        errors: ErrorSummary.from(Cause.squash(cause)),
+      }),
+    ),
+  )

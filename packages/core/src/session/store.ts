@@ -172,7 +172,7 @@ const layer = Layer.effect(
           SessionHistory.decodeMessageRow,
         )
       }),
-      context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID)),
+      context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID, "latest")),
       message: Effect.fn("SessionStore.message")(function* (messageID) {
         const row = yield* db
           .select()

@@ -1,6 +1,7 @@
 export * as SessionRunnerLLM from "./llm.js"
 
 import { Message } from "@opencode-ai/ai"
+import { and, desc, eq, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
@@ -10,11 +11,13 @@ import { SessionContext } from "../context.js"
 import { SessionEvent } from "../event.js"
 import { SessionInbox } from "../inbox.js"
 import { SessionHistory } from "../history.js"
+import { SessionProviderContext } from "../provider-context.js"
 import { SessionModelRequest } from "../model-request.js"
 import { SessionModelTransport } from "../model-transport.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
+import { SessionMessageTable } from "../sql.js"
 import { SessionTitle } from "../title.js"
 import { DrainResult, Service, type Interface } from "./index.js"
 import { Snapshot } from "../../snapshot.js"
@@ -59,6 +62,7 @@ const layer = Layer.effect(
         if (promotable === "steer" && pending.delivery === "queue" && !control) return DrainResult.Complete()
       }
       yield* plugins.awaitActivation
+      yield* settleStaleCompactions(sessionID)
       yield* settleStaleToolCalls(sessionID)
 
       const advanceToStep = Effect.fn("SessionRunner.advanceToStep")(() =>
@@ -110,7 +114,12 @@ const layer = Layer.effect(
                           const selected = yield* context.select(session.id)
                           const model = yield* context.resolveModel(selected.session)
                           // Preview updates without admitting them after the already-delivered compaction marker.
-                          const history = yield* SessionHistory.preview(db, session.id, selected.instructions)
+                          const history = yield* SessionHistory.preview(
+                            db,
+                            session.id,
+                            selected.instructions,
+                            SessionProviderContext.provenance(model) ?? "local",
+                          )
                           return {
                             session: selected.session,
                             agent: selected.agent,
@@ -144,7 +153,7 @@ const layer = Layer.effect(
               }
               if (!force && !continuing && (!pending || (pending.delivery === "queue" && promotable === "steer")))
                 return DrainResult.Complete()
-              return yield* restore(
+              const ready = yield* restore(
                 Effect.gen(function* () {
                   const selected = yield* prepareContext(sessionID)
                   const promoted = yield* SessionInbox.promote(
@@ -153,6 +162,8 @@ const layer = Layer.effect(
                     sessionID,
                     entering && !continuing ? promotable : "steer",
                   )
+                  // A control admitted during context preparation owns this boundary.
+                  if (promoted === undefined) return undefined
                   if (promoted > 0 && !selected.session.parentID && SessionTitle.isUntitled(selected.session))
                     yield* FiberMap.run(titles, sessionID, title.generate(sessionID), {
                       onlyIfMissing: true,
@@ -161,6 +172,7 @@ const layer = Layer.effect(
                   return { _tag: "Ready" as const, context: yield* context.load(selected) }
                 }),
               )
+              if (ready) return ready
             }
           }),
         ),
@@ -200,8 +212,9 @@ const layer = Layer.effect(
           prepare: context.prepare,
         }
         if (compaction.required({ messages: loaded.messages, resolved: loaded.model, context: loaded })) {
-          const compacted = yield* compaction.compact(compactionInput)
-          if (compacted.status !== "completed") return yield* new StepFailedError({ error: compacted.error })
+          const result = yield* compaction.compact(compactionInput)
+          if (result.status !== "completed") return yield* new StepFailedError({ error: result.error })
+          if (result.recoveredOverflow) recoverOverflow = false
           assistantMessageID = SessionMessage.ID.create()
           continue
         }
@@ -214,6 +227,7 @@ const layer = Layer.effect(
           messages: loaded.messages,
         })
         const prepared = yield* context.prepare({
+          kind: "primary",
           scope: { session: loaded.session, agentID: loaded.agent.id, model: loaded.model, tools: loaded.tools },
           transcript: {
             system: transcript.system,
@@ -243,7 +257,9 @@ const layer = Layer.effect(
           recoverContinuation,
           recoverOverflow: Effect.suspend(() =>
             recoverOverflow && compaction.enabled()
-              ? compaction.compact(compactionInput).pipe(Effect.map((result) => result.status === "completed"))
+              ? compaction
+                  .compact({ ...compactionInput, overflow: true })
+                  .pipe(Effect.map((result) => result.status === "completed"))
               : Effect.succeed(false),
           ),
         })
@@ -273,6 +289,36 @@ const layer = Layer.effect(
           }),
         })
         if (completed !== undefined) return completed
+      }
+    })
+
+    const settleStaleCompactions = Effect.fn("SessionRunner.settleStaleCompactions")(function* (
+      sessionID: SessionSchema.ID,
+    ) {
+      // A process death skips compaction finalizers. Include orphans behind a
+      // completed checkpoint, and settle newest first to match event projection.
+      const rows = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(
+          and(
+            eq(SessionMessageTable.session_id, sessionID),
+            eq(SessionMessageTable.type, "compaction"),
+            sql`json_extract(${SessionMessageTable.data}, '$.status') = 'running'`,
+          ),
+        )
+        .orderBy(desc(SessionMessageTable.seq))
+        .all()
+        .pipe(Effect.orDie)
+      for (const row of rows) {
+        const message = yield* SessionHistory.decodeMessageRow(row)
+        if (message.type !== "compaction") continue
+        yield* bus.publish(SessionEvent.Compaction.Failed, {
+          sessionID,
+          reason: message.reason,
+          inputID: message.id,
+          error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
+        })
       }
     })
 

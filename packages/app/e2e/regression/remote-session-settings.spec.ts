@@ -30,9 +30,11 @@ test("session settings use the remote server context", async ({ page }) => {
 
   const settings = page.getByTestId("settings-screen")
   await expect(settings).toBeVisible()
+  await expect(page).toHaveURL("/settings")
+  await expect(page.locator('[data-titlebar-tab][data-active="true"]')).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Home", exact: true })).toHaveAttribute("aria-pressed", "false")
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expect(settings.getByRole("tablist")).toHaveCSS("width", "328px")
-  await expect(sessionHeading).toBeAttached()
   await expect(sessionHeading).toBeHidden()
   const autoAccept = settings.locator('[data-action="settings-auto-accept-permissions"]')
   const input = autoAccept.getByRole("switch")
@@ -66,6 +68,15 @@ test("session settings use the remote server context", async ({ page }) => {
   await expect(settings.getByRole("switch", { name: "Server A Model" })).toHaveCount(0)
   await settings.getByRole("button", { name: "Back to app" }).click()
   await expect(settings).toBeHidden()
+  await expect(page).toHaveURL(`/server/${base64Encode(serverB)}/session/${sessionB.id}`)
+  await expect(sessionHeading).toBeVisible()
+  await expect(page.locator('[data-titlebar-tab][data-active="true"]')).toContainText(sessionB.title)
+  await page.keyboard.press("Control+]")
+  await expect(page).toHaveURL("/settings")
+  await expect(settings.getByRole("tab", { name: "Models", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(page.locator('[data-titlebar-tab][data-active="true"]')).toHaveCount(0)
+  await page.keyboard.press("Escape")
+  await expect(page).toHaveURL(`/server/${base64Encode(serverB)}/session/${sessionB.id}`)
   await expect(sessionHeading).toBeVisible()
 })
 
@@ -385,7 +396,12 @@ async function mockServers(
       return json(route, { data: [], cursor: {} })
     if (sessions.some((session) => url.pathname === `/api/session/${session.id}/inbox`))
       return json(route, { data: [] })
-    if (url.pathname === "/api/location") return json(route, { directory })
+    if (url.pathname === "/api/location")
+      return json(route, {
+        directory,
+        project: { id: remote ? sessionB.projectID : "project-server-a", directory, canonical: directory },
+      })
+    if (url.pathname === "/api/worktree") return json(route, [{ directory }])
     if (url.pathname === "/api/vcs")
       return json(route, { location: { directory }, data: { branch: "main", defaultBranch: "main" } })
     if (url.pathname === "/api/pty/shells") return json(route, { location: { directory }, data: [] })

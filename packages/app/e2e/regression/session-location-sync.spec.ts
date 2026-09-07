@@ -67,6 +67,12 @@ test("follows a live session move while the agent catalog is still loading", asy
   const session = { id: sessionID, projectID: fixture.project.id, directory, title: "Moved session" }
   const requested = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "settings.v3",
+      JSON.stringify({ general: { timelineDetail: { notices: { placement: "separate" } } } }),
+    )
+  })
   const transport = await installSseTransport(page, { server: fixture.serverKey })
   await mockOpenCodeServer(page, {
     directory: fixture.directory,
@@ -95,9 +101,7 @@ test("follows a live session move while the agent catalog is still loading", asy
   await transport.waitForConnection()
   const resolved = page.waitForResponse((response) => {
     const url = new URL(response.url())
-    return (
-      url.pathname === "/api/agent" && url.searchParams.get("location[directory]") === destination && response.ok()
-    )
+    return url.pathname === "/api/agent" && url.searchParams.get("location[directory]") === destination && response.ok()
   })
   session.directory = destination
   await transport.send({
@@ -221,7 +225,8 @@ function recoveryRequests(page: Page) {
   const requests: string[] = []
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname
-    if (request.method() === "POST" && /^\/api\/(session\/[^/]+\/move$|worktree(?:\/|$))/.test(path)) requests.push(path)
+    if (request.method() === "POST" && /^\/api\/(session\/[^/]+\/move$|worktree(?:\/|$))/.test(path))
+      requests.push(path)
   })
   return requests
 }

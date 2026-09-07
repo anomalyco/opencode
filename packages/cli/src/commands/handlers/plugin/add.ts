@@ -5,6 +5,7 @@ import { Effect } from "effect"
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser"
 import { Global } from "@opencode-ai/util/global"
 import { Npm } from "@opencode-ai/util/npm"
+import { Host } from "@opencode-ai/plugin/host"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { resolveConfigPath } from "../mcp/add"
@@ -16,9 +17,9 @@ export default Runtime.handler(
     if (!(yield* Effect.promise(() => Npm.isInstallablePackage(input.package))))
       return yield* Effect.fail(new Error("Plugin target must be an npm registry package or Git package specifier"))
     const npm = yield* Npm.Service
-    const installed = yield* npm.add(input.package, { subpaths: ["server", ""] })
-    const tui = yield* npm.resolve(input.package, { subpaths: ["tui"] })
-    const target = configurationTarget(installed.entrypoint, tui.entrypoint)
+    const installed = yield* npm.add(input.package)
+    const entrypoints = Host.resolve(installed)
+    const target = configurationTarget(entrypoints.server, entrypoints.tui)
     if (!target)
       return yield* Effect.fail(new Error(`Plugin package has no server or TUI entrypoint: ${input.package}`))
 

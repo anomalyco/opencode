@@ -17,8 +17,8 @@ import {
 } from "./shared"
 
 const integrationPriority = new Map([
-  ["opencode", 0],
-  ["opencode-go", 1],
+  ["opencode-go", 0],
+  ["opencode", 1],
   ["openai", 2],
   ["github-copilot", 3],
   ["google", 4],

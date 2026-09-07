@@ -46,9 +46,12 @@ const adapter = {
 const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(XAIResponsesBody))
 const fromRequest = Effect.fn("XAIResponses.fromRequest")(function* (request: LLMRequest) {
   if (request.providerOptions?.contextManagement !== undefined)
-    return yield* ProviderShared.invalidRequest(
-      "xAI requires explicit compaction through LLMClient.compact; automatic context management is not supported",
-    )
+    return yield* ProviderShared.unsupportedOperation({
+      operation: "in-band-compaction",
+      provider: request.model.provider,
+      route: request.model.route.id,
+      message: "xAI requires explicit compaction through LLMClient.compact; automatic context management is not supported",
+    })
   return yield* decodeBody(yield* OpenResponses.fromRequestWithAdapter(request, adapter))
 })
 
@@ -69,7 +72,8 @@ const HOSTED_TOOLS = {
 
 // Grok speaks the standard Responses reasoning dialect (`reasoning_summary_text.*`,
 // handled by the baseline); only its hosted tool vocabulary differs.
-const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
+const step = (state: OpenResponses.ParserState, input: OpenResponses.Event) => {
+  const event = OpenResponses.normalize(state, input)
   if (event.type === "response.output_item.done" && event.item && ResponsesHostedTools.isItem(event.item, HOSTED_TOOLS))
     return ResponsesHostedTools.onDone(state, event.item, HOSTED_TOOLS)
   return OpenResponses.step(state, event)

@@ -3,9 +3,9 @@ export * as ServerProcess from "./process"
 import { NodeHttpServer } from "@effect/platform-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
+import { InstallationEvent } from "@opencode-ai/schema/installation-event"
 import { hasPtyConnectTicketURL } from "@opencode-ai/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode-ai/protocol/groups/persistent-pty"
-import { InstallationEvent } from "@opencode-ai/schema/installation-event"
 import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
 import {
   HttpMiddleware,
@@ -116,11 +116,13 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
       )
     yield* Ref.set(application, Option.some(transform ? transform(app) : app))
     yield* status.ready
+    const bus = Context.get(context, Bus.Service)
     return {
       address: bound.http.address,
       shutdown: shutdown.await,
       updateAvailable: (version: string) =>
-        Context.get(context, Bus.Service).publish(InstallationEvent.UpdateAvailable, { version }).pipe(Effect.asVoid),
+        bus.publish(InstallationEvent.UpdateAvailable, { version }).pipe(Effect.asVoid),
+      updated: (version: string) => bus.publish(InstallationEvent.Updated, { version }).pipe(Effect.asVoid),
     }
   }).pipe(
     Effect.catchCause((cause) => {

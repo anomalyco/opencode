@@ -134,6 +134,7 @@ export const dict = {
   "command.language.cycle": "Gjuha e ciklit",
   "command.language.set": "Përdorni gjuhën: {{language}}",
   "command.session.new": "Sesion i ri",
+  "command.session.import": "Importo sesionin",
   "command.file.open": "Hap skedarin",
   "command.tab.close": "Mbyll skedën",
   "command.tab.reopenClosed": "Rihap skedën e mbyllur",

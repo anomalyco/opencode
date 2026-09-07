@@ -135,6 +135,7 @@ export const dict = {
   "command.language.cycle": "Llenguatge de cicle",
   "command.language.set": "Utilitza l'idioma: {{language}}",
   "command.session.new": "Nova sessió",
+  "command.session.import": "Importa la sessió",
   "command.file.open": "Obre el fitxer",
   "command.tab.close": "Tanca la pestanya",
   "command.tab.reopenClosed": "Torneu a obrir la pestanya tancada",

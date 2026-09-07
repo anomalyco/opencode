@@ -92,6 +92,8 @@ for (const direction of ["ltr", "rtl"] as const) {
       .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("settings.v3") ?? "{}").general?.mobileDiffWrap))
       .toBe(false)
     await settings.getByRole("button", { name: "Back to app", exact: true }).click()
+    await expect(page).toHaveURL(stressSessionHref(fixture.targetID))
+    await page.getByRole("tab", { name: "Changes", exact: true }).click()
     await expect(modified.locator("[data-diff]")).toHaveAttribute("data-overflow", "scroll")
     await expect
       .poll(() => modified.locator("[data-code]").evaluate((element) => element.scrollWidth > element.clientWidth))
@@ -114,6 +116,8 @@ for (const direction of ["ltr", "rtl"] as const) {
       .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("settings.v3") ?? "{}").general?.mobileDiffWrap))
       .toBe(true)
     await settings.getByRole("button", { name: "Back to app", exact: true }).click()
+    await expect(page).toHaveURL(stressSessionHref(fixture.targetID))
+    await navigation.getByRole("tab", { name: "Changes", exact: true }).click()
     await expect(modified.locator("[data-diff]")).toHaveAttribute("data-overflow", "wrap")
     const openFile = modified.getByRole("button", { name: "Open file", exact: true })
     await expect(openFile).toBeVisible()

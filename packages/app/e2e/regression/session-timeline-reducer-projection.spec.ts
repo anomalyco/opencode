@@ -18,10 +18,10 @@ test("reducer-hardening: converges when idle arrives before final part and messa
   const textID = "prt_event_order_text"
   const assistant = assistantMessage([textPart(textID, "Partial")], { completed: false })
   const timeline = await setupTimeline(page, { messages: [userMessage(), assistant] })
-  await timeline.send(status("busy"), 100)
-  await timeline.send(status("idle"), 100)
-  await timeline.send(partUpdated(textPart(textID, "Final after early idle")), 120)
-  await timeline.send(messageUpdated(completedAssistantInfo(assistant)), 250)
+  await timeline.send(status("busy"))
+  await timeline.send(status("idle"))
+  await timeline.send(partUpdated(textPart(textID, "Final after early idle")))
+  await timeline.send(messageUpdated(completedAssistantInfo(assistant)))
 
   await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
   await expect(page.locator(`[data-timeline-part-id="${renderedPartID(textID)}"]`)).toContainText(
@@ -161,17 +161,19 @@ test("keeps failed search calls and their error cards inside the collapsed stack
   ]
   await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
 
-  const group = page.locator('[data-timeline-part-ids="prt_error_glob,prt_error_grep"]')
+  const group = page.locator('[data-component="collapsed-tool-group"]')
   const summary = group.getByRole("button", { name: "Used 1 Glob, 1 Grep", exact: true })
-  await expect(summary.locator('[data-slot="basic-tool-tool-title"]')).toHaveText("1 Glob, 1 Grep")
+  await expect(summary).toHaveAttribute("aria-expanded", "false")
   await summary.click()
   await expect(group.locator('[data-kind="tool-error-card"]')).toHaveCount(2)
   const glob = group.locator('[data-timeline-part-id="prt_error_glob"]')
+  await expect(glob.getByRole("button")).toHaveAttribute("aria-expanded", "false")
+  await glob.getByRole("button").click()
   await expect(glob).toContainText("Invalid tool input")
   await expect(glob.locator('[data-component="tool-error-card-icon"]')).toBeVisible()
   await expect(glob.locator('[data-component="tool-error-card-icon"] use')).toHaveAttribute(
     "href",
-    "#opencode-v2-icon-circle-exclamation",
+    "#opencode-v2-icon-outline-hexagonal-warning",
   )
   await expect
     .poll(() =>
@@ -180,6 +182,7 @@ test("keeps failed search calls and their error cards inside the collapsed stack
         .evaluate((element) => getComputedStyle(element, "::before").display),
     )
     .toBe("none")
+  await group.locator('[data-timeline-part-id="prt_error_grep"]').getByRole("button").click()
   await expect(group.locator('[data-timeline-part-id="prt_error_grep"]')).toContainText(
     "Search timed out after 30 seconds",
   )

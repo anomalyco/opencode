@@ -81,7 +81,12 @@ it.live("maps a failing base provider to HTTP 503 instead of null metadata", () 
   Effect.gen(function* () {
     const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-vcs-failure-")))
     const handler = yield* ServerFetch.make(
-      { database: { path: ":memory:" }, config: { directory: tmp.path }, fs: { filewatcher: false } },
+      {
+        database: { path: ":memory:" },
+        config: { directory: tmp.path },
+        fs: { filewatcher: false },
+        models: { fetch: false },
+      },
       {
         overrides: [
           SdkPlugins.node.replace(
@@ -95,8 +100,8 @@ it.live("maps a failing base provider to HTTP 503 instead of null metadata", () 
                     revision: "test",
                     effect: (ctx) =>
                       ctx.vcs
-                        .transform((draft) => {
-                          draft.add({
+                        .transform((editor) => {
+                          editor.add({
                             id: "failing",
                             name: "Failing VCS",
                             info: () => Effect.succeed({ branch: {} }),
@@ -105,7 +110,7 @@ it.live("maps a failing base provider to HTTP 503 instead of null metadata", () 
                             diff: () => Effect.succeed([]),
                             base: () => Effect.fail(new Error("provider failure")),
                           })
-                          draft.default.set("failing")
+                          editor.default.set("failing")
                         })
                         .pipe(Effect.asVoid),
                   },

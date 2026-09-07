@@ -239,7 +239,7 @@ describe("Session-owned handles", () => {
       const calls: string[] = []
       yield* fixture.hooks.register("session", "prompt", (event) =>
         Effect.sync(() => {
-          expect(fixture.activationWaits).toEqual([])
+          expect(fixture.activationWaits).toEqual([source])
           calls.push(event.prompt.text)
           event.prompt.text += " prepared"
         }),
@@ -264,7 +264,7 @@ describe("Session-owned handles", () => {
       )
       expect(calls).toEqual(["Original"])
       expect(fixture.locations).toEqual([source])
-      expect(fixture.activationWaits).toEqual([])
+      expect(fixture.activationWaits).toEqual([source])
       expect(fixture.wakes).toEqual([
         { sessionID, pending: [synthetic.id, first.id], enqueued: 2 },
         { sessionID, pending: [synthetic.id, first.id], enqueued: 2 },
@@ -350,7 +350,7 @@ describe("Session-owned handles", () => {
       expect(fixture.locations).toEqual([source])
       yield* prompt
       expect(fixture.locations).toEqual([source, destination])
-      expect(fixture.activationWaits).toEqual([])
+      expect(fixture.activationWaits).toEqual([source, destination])
       expect((yield* fixture.sessions.forSession(otherID).get()).location).toEqual(source)
     }),
   )
@@ -395,7 +395,7 @@ describe("Session-owned handles", () => {
       expect(
         events.filter((event) => event.type === SessionEvent.Skill.Activated.type).map((event) => event.location),
       ).toEqual([undefined, undefined, source])
-      expect(fixture.activationWaits).toEqual([])
+      expect(fixture.activationWaits).toEqual([source, destination, destination])
       expect(fixture.resumes).toEqual([])
       expect(fixture.wakes).toEqual([])
     }),
@@ -429,7 +429,7 @@ describe("Session-owned handles", () => {
       expect(yield* handle.get()).toEqual(before)
       expect(yield* handle.inbox()).toEqual([])
       expect(yield* fixture.store.context(sessionID)).toEqual([])
-      expect(fixture.activationWaits).toEqual([])
+      expect(fixture.activationWaits).toEqual([source])
       expect(fixture.resumes).toEqual([])
       expect(fixture.wakes).toEqual([])
     }),

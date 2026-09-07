@@ -10,9 +10,9 @@ describe("CodeMode", () => {
   it.effect("owns registrations, execute, and catalog materialization", () =>
     Effect.gen(function* () {
       const tools = yield* Tool.Service
-      yield* tools.transform((draft) => {
-        draft.namespace({ name: "empty", description: "No tools registered yet" })
-        draft.add({
+      yield* tools.transform((editor) => {
+        editor.namespace({ name: "empty", description: "No tools registered yet" })
+        editor.add({
           name: "echo",
           description: "Echo text",
           input: Schema.Struct({ text: Schema.String }),

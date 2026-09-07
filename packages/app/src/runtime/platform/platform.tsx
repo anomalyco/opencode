@@ -6,6 +6,7 @@ import { ServerConnection } from "@/runtime/server/registry"
 import type { WslServersPlatform } from "@/servers/wsl/types"
 import type { UpdaterPlatform } from "@/shell/updates/types"
 import type { DraftStore } from "@/runtime/persistence/drafts"
+import type { BrowserPanePlatform } from "./browser-pane"
 
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
@@ -59,8 +60,11 @@ type PlatformBase = {
   /** Resolve the native source path for a desktop File. */
   getPathForFile?(file: File): string
 
-  /** Open a native save file picker dialog (desktop only) */
-  saveFilePickerDialog?(opts?: SaveFilePickerOptions): Promise<string | null>
+  /** Observe native drag cancellation that does not reach the renderer event loop. */
+  onDragCancel?(callback: () => void): () => void
+
+  /** Open a native save file dialog and write content to the selected path (desktop only) */
+  saveFile?(opts: SaveFilePickerOptions, content: string): Promise<boolean>
 
   /** Storage mechanism, defaults to localStorage */
   storage?: (name?: string) => SyncStorage | AsyncStorage
@@ -115,6 +119,9 @@ type PlatformBase = {
 
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
+
+  /** Native browser pane hosted by the platform (desktop only). */
+  browserPane?: BrowserPanePlatform
 }
 
 export type Platform = PlatformBase &

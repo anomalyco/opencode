@@ -8,17 +8,33 @@ import { Location } from "@opencode-ai/schema/location"
 import type { Session } from "@opencode-ai/schema/session"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import type { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Duration, Effect, Layer, LayerMap, Scope } from "effect"
+import { Context, Duration, Effect, Layer, LayerMap, Scope } from "effect"
 
 export interface Configuration {
   readonly plugins: InstancePlugins.List
 }
 
-export interface Options {
+export interface Options<R = never> {
   /** Select a sharing key within the Session's current Location. Must not initialize plugins. */
   readonly key: (session: Session.Info) => string
-  /** Reconstruct configuration on a cache miss. Resources belong to the instance Scope. */
-  readonly configure: (key: string) => Effect.Effect<Configuration, unknown, Scope.Scope>
+  /**
+   * Reconstruct configuration on a cache miss. Resources belong to the instance Scope; other requirements
+   * are the services the SDK entrypoint was built with.
+   */
+  readonly configure: (key: string) => Effect.Effect<Configuration, unknown, R | Scope.Scope>
+}
+
+/** Closes `configure` over services captured where the SDK entrypoint was built; the host graph has none of its own. */
+export function provide<R>(options: Options<R>, context: Context.Context<R>): Options {
+  return {
+    key: options.key,
+    // The ambient side wins the merge, so the instance Scope owns configured resources rather than the
+    // build Scope that was captured alongside the services.
+    configure: (key) =>
+      options
+        .configure(key)
+        .pipe(Effect.updateContext((ambient: Context.Context<Scope.Scope>) => Context.merge(context, ambient))),
+  }
 }
 
 /** Replaces the host's `Instance.node`; `replacements` resolves lazily so instances inherit the final host graph. */

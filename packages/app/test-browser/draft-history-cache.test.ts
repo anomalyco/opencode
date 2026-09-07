@@ -9,7 +9,10 @@ function fixture(id: string, getBlob: () => Promise<Blob | null>) {
   ])
   const store = createDraftStore({
     get: async (key) => documents.get(key) ?? null,
-    set: async (key, value) => void documents.set(key, value),
+    set: async (key, value) => {
+      documents.set(key, value)
+      return []
+    },
     remove: async (key) => void documents.delete(key),
     putBlob: async () => id,
     getBlob,
@@ -113,7 +116,7 @@ test("keeps different blob IDs independent", async () => {
   const reads: string[] = []
   const store = createDraftStore({
     get: async () => JSON.stringify(["history-cache-first", "history-cache-second"].map((id) => ({ blob: { id } }))),
-    set: async () => {},
+    set: async () => [],
     remove: async () => {},
     putBlob: async () => "unused",
     getBlob: async (id) => {

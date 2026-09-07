@@ -32,6 +32,7 @@ import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Tool } from "@opencode-ai/core/tool"
 import { Vcs } from "@opencode-ai/core/vcs"
 import { WebSearch } from "@opencode-ai/core/websearch"
+import { Worktree } from "@opencode-ai/core/worktree"
 import { Effect, Layer } from "effect"
 import { tempLocationLayer } from "../fixture/location"
 import { emptyMcpLayer } from "../fixture/mcp"
@@ -39,10 +40,10 @@ import { emptyMcpLayer } from "../fixture/mcp"
 const npmLayer = Layer.succeed(
   Npm.Service,
   Npm.Service.of({
-    add: () => Effect.succeed({ directory: "", entrypoint: undefined }),
-    resolve: () => Effect.succeed({ directory: "", entrypoint: undefined }),
+    add: (name) => Effect.succeed({ directory: "", name }),
+    resolve: (name) => Effect.succeed({ directory: "", name }),
     check: () => Effect.succeed(false),
-    update: () => Effect.succeed({ directory: "", entrypoint: undefined }),
+    update: (name) => Effect.succeed({ directory: "", name }),
     which: () => Effect.undefined,
   }),
 )
@@ -94,6 +95,7 @@ export const PluginTestLayer = AppNodeBuilder.build(
     Vcs.node,
     Watcher.node,
     WebSearch.node,
+    Worktree.node,
   ]),
   [
     Location.node.replace(tempLocationLayer),

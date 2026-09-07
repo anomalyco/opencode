@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { timelinePresets } from "@opencode-ai/session-ui/timeline/detail"
 import {
   assistantMessage,
   partUpdated,
@@ -14,7 +15,9 @@ test.describe("session timeline projection", () => {
     const first = "prt_patch_first"
     const second = "prt_patch_second"
     const timeline = await setupTimeline(page, {
-      settings: { editToolPartsExpanded: true },
+      settings: {
+        timelineDetail: { ...timelinePresets[2].value, edit: { placement: "separate", details: "collapsed" } },
+      },
       messages: [
         userMessage(),
         assistantMessage([
@@ -34,6 +37,7 @@ test.describe("session timeline projection", () => {
     const initial = page.locator(`[data-timeline-part-id="${first}"]`)
     const initialFile = initial.locator('[data-scope="apply-patch"] [data-type="update"]')
     await expect(initialFile).toBeVisible()
+    await expect(initialFile.getByRole("button")).toHaveAttribute("aria-expanded", "false")
     await initialFile.getByRole("button").click()
     await expect(initialFile.getByRole("button")).toHaveAttribute("aria-expanded", "true")
     await initial.evaluate((element) => {
@@ -110,8 +114,11 @@ test.describe("session timeline projection", () => {
       parentID: "msg_2000_second_user",
       created: 1700000006000,
     })
-    const timeline = await setupTimeline(page, { messages: [firstUser, aborted, failed, nextUser, nextAssistant] })
-    await timeline.send(status("idle"), 100)
+    const timeline = await setupTimeline(page, {
+      settings: { timelineDetail: timelinePresets[2].value },
+      messages: [firstUser, aborted, failed, nextUser, nextAssistant],
+    })
+    await timeline.send(status("idle"))
     const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
     await scroller.evaluate((element) => (element.scrollTop = 0))
 
@@ -127,6 +134,7 @@ test.describe("session timeline projection", () => {
     const longName = "Company Gateway Extra Long Context Model for Narrow Timeline Layouts"
     await setupTimeline(page, {
       viewport: { width: 420, height: 700 },
+      settings: { timelineDetail: { ...timelinePresets[2].value, notices: { placement: "separate" } } },
       sessionMessages: [
         {
           id: "msg_model_fast_nano",

@@ -1,7 +1,9 @@
+import type { BrowserPaneEvent } from "@opencode-ai/app/desktop"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import type { DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
+import type { BrowserPaneRequest } from "../shared/ipc-rpc/browser"
 import type {
   ClipboardImage,
   DirectoryPickerOptions,
@@ -23,6 +25,11 @@ export type UpdaterAPI = {
 export type ElectronAPI = {
   awaitInitialization(): Promise<ServerReadyData>
   reconnectService(): Promise<ServerReadyData>
+  browserPane: {
+    request(request: BrowserPaneRequest): Promise<void>
+    send(request: BrowserPaneRequest): void
+    onEvent(callback: (value: { readonly bindingID: string; readonly event: BrowserPaneEvent }) => void): () => void
+  }
   wslServers: WslServersAPI
   updater: UpdaterAPI
   consumeInitialDeepLinks(): Promise<string[]>
@@ -32,14 +39,14 @@ export type ElectronAPI = {
   finishFirstLaunchOnboarding(createDefaultProject: boolean): Promise<string | null>
   checkAppExists(appName: string): Promise<boolean>
   resolveAppPath(appName: string): Promise<string | null>
-  storeGet(name: string, key: string): Promise<string | null>
-  storeSet(name: string, key: string, value: string): Promise<void>
-  storeDelete(name: string, key: string): Promise<void>
+  storeItems(name: string): Promise<{ items: Record<string, string>; revision: number }>
+  storeUpdate(name: string, insert: Record<string, string>, remove: string[]): Promise<number>
   storeClear(name: string): Promise<void>
-  storeKeys(name: string): Promise<string[]>
-  storeLength(name: string): Promise<number>
+  onStoreChanged(
+    cb: (name: string, insert: Record<string, string>, remove: string[], revision: number) => void,
+  ): () => void
   draftGet(key: string): Promise<string | null>
-  draftSet(key: string, value: string): Promise<void>
+  draftSet(key: string, value: string, strict: boolean): Promise<string[]>
   draftDelete(key: string): Promise<void>
   draftBlobPut(data: ArrayBuffer): Promise<string>
   draftBlobGet(id: string): Promise<ArrayBuffer | null>
@@ -52,7 +59,7 @@ export type ElectronAPI = {
   readPickedFile(token: string, path: string): Promise<ArrayBuffer>
   releasePickedFiles(token: string): Promise<void>
   getPathForFile(file: File): string
-  saveFilePicker(opts?: SaveFilePickerOptions): Promise<string | null>
+  saveFile(opts: SaveFilePickerOptions, content: string): Promise<boolean>
   openExternal(url: string): void
   openLocalFile(url: string): void
   openPath(path: string, app?: string): Promise<string | undefined>

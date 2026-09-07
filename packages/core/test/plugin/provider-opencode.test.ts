@@ -3,6 +3,7 @@ import { LLM } from "@opencode-ai/ai"
 import { LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
 import { Money } from "@opencode-ai/schema/money"
 import { Effect, Layer, Stream } from "effect"
+import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
@@ -267,12 +268,12 @@ describe("OpencodePlugin", () => {
           const credentials = yield* Credential.Service
           const catalog = yield* Catalog.Service
           const integrations = yield* Integration.Service
-          yield* catalog.transform((draft) => {
-            draft.provider.update(Provider.ID.openai, (provider) => {
+          yield* catalog.transform((editor) => {
+            editor.provider.update(Provider.ID.openai, (provider) => {
               provider.package = Provider.aisdk("@ai-sdk/openai")
               provider.integrationID = Integration.ID.make("openai")
             })
-            draft.model.update(Provider.ID.openai, Model.ID.make("api-model"), (model) => {
+            editor.model.update(Provider.ID.openai, Model.ID.make("api-model"), (model) => {
               model.package = Provider.aisdk("@ai-sdk/openai")
               model.settings = { baseURL: "https://upstream.example/v1" }
               model.variants = [
@@ -284,7 +285,7 @@ describe("OpencodePlugin", () => {
                 },
               ]
             })
-            draft.model.update(Provider.ID.make("remote"), Model.ID.make("stale"), () => {})
+            editor.model.update(Provider.ID.make("remote"), Model.ID.make("stale"), () => {})
           })
           const initial = yield* credentials.create({
             integrationID: Integration.ID.make("opencode"),
@@ -379,40 +380,23 @@ describe("OpencodePlugin", () => {
     ),
   )
 
-  it.live("normalizes legacy Console OpenAI variant bodies without changing native bodies", () =>
+  it.live("preserves native Console OpenAI variant bodies in inference requests", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
         const variants = [
           {
-            id: "legacy",
-            body: { reasoningEffort: "high", reasoningSummary: "auto" },
-            expected: { reasoning: { effort: "high", summary: "auto" } },
-          },
-          {
             id: "effort-only",
-            body: { reasoningEffort: "low" },
-            expected: { reasoning: { effort: "low" } },
+            body: { reasoning: { effort: "low" } },
           },
           {
             id: "summary-only",
-            body: { reasoningSummary: "detailed" },
-            expected: { reasoning: { summary: "detailed" } },
+            body: { reasoning: { summary: "detailed" } },
           },
           {
             id: "native",
             body: { reasoning: { effort: "high", summary: "auto" } },
-            expected: { reasoning: { effort: "high", summary: "auto" } },
           },
-          {
-            id: "mixed",
-            body: {
-              reasoningEffort: "low",
-              reasoningSummary: "auto",
-              reasoning: { effort: "high", summary: "detailed" },
-            },
-            expected: { reasoning: { effort: "high", summary: "detailed" } },
-          },
-          { id: "plain", body: {}, expected: {} },
+          { id: "plain", body: {} },
         ]
         const models = {
           astra: {
@@ -480,7 +464,7 @@ describe("OpencodePlugin", () => {
             Effect.gen(function* () {
               const projected = required(model.variants.find((item) => item.id === variant.id))
               expect(projected.body).toEqual({
-                ...variant.expected,
+                ...variant.body,
                 include: ["reasoning.encrypted_content"],
                 metadata: { custom: "unchanged" },
               })
@@ -494,7 +478,7 @@ describe("OpencodePlugin", () => {
               const request = required(requests.at(-1))
               expect(request.variant).toBe(variant.id)
               expect(request.body).toMatchObject({
-                ...variant.expected,
+                ...variant.body,
                 model: "api-astra",
                 include: ["reasoning.encrypted_content"],
                 metadata: { custom: "unchanged" },
@@ -507,9 +491,8 @@ describe("OpencodePlugin", () => {
           const compatible = required(yield* catalog.model.get(Provider.ID.make("compatible"), Model.ID.make("astra")))
           const override = required(yield* catalog.model.get(Provider.ID.make("remote"), Model.ID.make("override")))
           for (const model of [compatible, override]) {
-            expect(model.variants.find((variant) => variant.id === "legacy")?.body).toEqual({
-              reasoningEffort: "high",
-              reasoningSummary: "auto",
+            expect(model.variants.find((variant) => variant.id === "native")?.body).toEqual({
+              reasoning: { effort: "high", summary: "auto" },
               include: ["reasoning.encrypted_content"],
               metadata: { custom: "unchanged" },
             })
@@ -608,7 +591,16 @@ describe("OpencodePlugin", () => {
             draft.cost = cost(1)
           })
         })
-        yield* addPlugin()
+        // An env credential has no server metadata, so the plugin would ask the
+        // default Console for remote config; answer 404 (no remote config) locally.
+        yield* addPlugin().pipe(
+          Effect.provideService(
+            HttpClient.HttpClient,
+            HttpClient.make((request) =>
+              Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 404 }))),
+            ),
+          ),
+        )
         expect(required(yield* catalog.provider.get(Provider.ID.opencode)).settings?.apiKey).toBeUndefined()
         expect(required(yield* catalog.model.get(Provider.ID.opencode, Model.ID.make("paid"))).enabled).toBe(true)
       }),

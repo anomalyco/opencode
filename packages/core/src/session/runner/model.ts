@@ -35,6 +35,8 @@ export const UnsupportedPackageError = ModelResolver.UnsupportedPackageError
 export type UnsupportedPackageError = ModelResolver.UnsupportedPackageError
 export const UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
 export type UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
+export const UnsupportedCompactionError = ModelResolver.UnsupportedCompactionError
+export type UnsupportedCompactionError = ModelResolver.UnsupportedCompactionError
 
 export type Error = ModelNotSelectedError | ModelUnavailableError | ModelResolver.Error
 export type Resolved = ModelResolver.Resolved
@@ -57,6 +59,7 @@ export const resolved = (
     readonly variant?: Model.VariantID
     readonly cost: Model.Info["cost"]
     readonly limit: Model.Info["limit"]
+    readonly compaction?: Provider.Compaction
   },
 ): Resolved => ({
   model,
@@ -68,6 +71,7 @@ export const resolved = (
   capabilities: options.capabilities,
   cost: options.cost,
   limit: options.limit,
+  compaction: options.compaction,
 })
 
 const layer = Layer.effect(

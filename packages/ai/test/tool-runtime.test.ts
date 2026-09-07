@@ -7,6 +7,7 @@ import {
   LLMEvent,
   LLMRequest,
   LLMResponse,
+  ToolCallPart,
   ToolChoice,
   ToolOutput,
   toDefinitions,
@@ -35,6 +36,27 @@ const baseRequest = LLM.request({
   prompt: "Use the tool.",
 })
 const weatherFailureCause = new Error("weather lookup denied")
+
+test("dispatches namespaced calls by qualified identity", async () => {
+  let context: ToolExecuteContext | undefined
+  const lookup = Tool.make({
+    description: "Look up a customer.",
+    parameters: Schema.Struct({}),
+    success: Schema.String,
+    execute: (_, value) => {
+      context = value
+      return Effect.succeed("customer")
+    },
+  })
+  const call = ToolCallPart.make({ id: "call_1", namespace: "crm", name: "lookup", input: {} })
+  const result = await Effect.runPromise(
+    ToolRuntime.dispatch({ "crm.lookup": lookup, lookup: schema_only_weather }, call),
+  )
+
+  expect(result.result).toEqual({ type: "text", value: "customer" })
+  expect(context).toEqual({ id: "call_1", namespace: "crm", name: "lookup" })
+  expect(result.events).toEqual([expect.objectContaining({ type: "tool-result", namespace: "crm", name: "lookup" })])
+})
 
 const get_weather = Tool.make({
   description: "Get current weather for a city.",

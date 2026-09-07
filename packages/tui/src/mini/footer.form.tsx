@@ -438,7 +438,7 @@ export function RunFormBody(props: {
                           flexDirection="row"
                           gap={1}
                           alignItems="flex-start"
-                          onMouseOver={() => setState((previous) => formSetSelected(previous, index()))}
+                          onMouseMove={() => setState((previous) => formSetSelected(previous, index()))}
                           backgroundColor={active() ? props.theme.formfieldFocusedBg : "transparent"}
                           onMouseUp={() => choose(index())}
                         >

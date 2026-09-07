@@ -154,6 +154,7 @@ export const dict = {
   "command.language.set": "使用语言：{{language}}",
 
   "command.session.new": "新建会话",
+  "command.session.import": "导入会话",
 
   "command.file.open": "打开文件",
 

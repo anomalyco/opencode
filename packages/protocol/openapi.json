@@ -7407,7 +7407,7 @@
             }
           }
         },
-        "description": "Update project display metadata and workspace commands.",
+        "description": "Update the project canonical directory, display metadata, and workspace commands.",
         "summary": "Update project",
         "requestBody": {
           "content": {
@@ -7415,6 +7415,9 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "canonical": {
+                    "type": "string"
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -8890,7 +8893,8 @@
                 {
                   "type": "null"
                 }
-              ]
+              ],
+              "description": "An absolute path or a path relative to the requested location. Defaults to the location directory."
             },
             "required": false
           }
@@ -8941,7 +8945,7 @@
             }
           }
         },
-        "description": "List direct children of one directory relative to the requested location.",
+        "description": "List direct children using an absolute path or a path relative to the requested location, including parents and siblings outside its directory. Entry paths remain relative to the requested location; listing does not switch locations.",
         "summary": "List directory"
       }
     },
@@ -11996,18 +12000,50 @@
         "summary": "List references"
       }
     },
-    "/api/worktree/{projectID}": {
+    "/api/worktree": {
       "get": {
         "tags": ["worktree"],
         "operationId": "v2.worktree.list",
         "parameters": [
           {
-            "name": "projectID",
-            "in": "path",
+            "name": "location",
+            "in": "query",
             "schema": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
-            "required": true
+            "required": false,
+            "style": "deepObject",
+            "explode": true
           }
         ],
         "security": [],
@@ -12023,11 +12059,18 @@
             }
           },
           "400": {
-            "description": "InvalidRequestError",
+            "description": "WorktreeError | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WorktreeErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -12043,7 +12086,7 @@
             }
           }
         },
-        "description": "List known local worktrees for a project.",
+        "description": "Discover worktrees through the requested location's strategies and return its project's inventory.",
         "summary": "List worktrees"
       },
       "post": {
@@ -12051,12 +12094,44 @@
         "operationId": "v2.worktree.create",
         "parameters": [
           {
-            "name": "projectID",
-            "in": "path",
+            "name": "location",
+            "in": "query",
             "schema": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
-            "required": true
+            "required": false,
+            "style": "deepObject",
+            "explode": true
           }
         ],
         "security": [],
@@ -12099,32 +12174,13 @@
             }
           }
         },
-        "description": "Create a worktree for a project and run its configured setup script.",
+        "description": "Create a local worktree using the location's registered strategy and directory defaults, then run the project's setup script.",
         "summary": "Create worktree",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "strategy": {
-                    "type": "string"
-                  },
-                  "from": {
-                    "type": "string"
-                  },
-                  "branch": {
-                    "type": "string"
-                  },
-                  "directory": {
-                    "type": "string"
-                  },
-                  "name": {
-                    "type": "string"
-                  }
-                },
-                "required": ["strategy", "directory"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/Worktree.CreateInput"
               }
             }
           },
@@ -12136,12 +12192,44 @@
         "operationId": "v2.worktree.remove",
         "parameters": [
           {
-            "name": "projectID",
-            "in": "path",
+            "name": "location",
+            "in": "query",
             "schema": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
-            "required": true
+            "required": false,
+            "style": "deepObject",
+            "explode": true
           }
         ],
         "security": [],
@@ -12177,23 +12265,13 @@
             }
           }
         },
-        "description": "Remove a managed worktree from a project.",
+        "description": "Remove a managed worktree from the requested location's project using its recorded strategy.",
         "summary": "Remove worktree",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "directory": {
-                    "type": "string"
-                  },
-                  "force": {
-                    "type": "boolean"
-                  }
-                },
-                "required": ["directory", "force"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/Worktree.RemoveInput"
               }
             }
           },
@@ -12201,18 +12279,50 @@
         }
       }
     },
-    "/api/worktree/{projectID}/refresh": {
+    "/api/worktree/refresh": {
       "post": {
         "tags": ["worktree"],
         "operationId": "v2.worktree.refresh",
         "parameters": [
           {
-            "name": "projectID",
-            "in": "path",
+            "name": "location",
+            "in": "query",
             "schema": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
-            "required": true
+            "required": false,
+            "style": "deepObject",
+            "explode": true
           }
         ],
         "security": [],
@@ -12248,7 +12358,7 @@
             }
           }
         },
-        "description": "Reconcile stored worktrees with the project repositories.",
+        "description": "Discover worktrees from the requested location and reconcile the shared project inventory.",
         "summary": "Refresh worktrees"
       }
     },
@@ -13777,8 +13887,12 @@
               }
             ]
           },
-          "subtask": {
+          "subagent": {
             "type": "boolean"
+          },
+          "subtask": {
+            "type": "boolean",
+            "description": "Deprecated alias for subagent."
           }
         },
         "required": ["template"],
@@ -14141,6 +14255,9 @@
               ]
             }
           },
+          "worktree": {
+            "$ref": "#/components/schemas/Config.Worktree"
+          },
           "warming": {
             "anyOf": [
               {
@@ -14267,6 +14384,9 @@
       "Config.ModelEncoded": {
         "type": "object",
         "properties": {
+          "compaction": {
+            "$ref": "#/components/schemas/Provider.Compaction"
+          },
           "modelID": {
             "type": "string"
           },
@@ -14372,6 +14492,9 @@
       "Config.ProviderEncoded": {
         "type": "object",
         "properties": {
+          "compaction": {
+            "$ref": "#/components/schemas/Provider.Compaction"
+          },
           "canonical": {
             "type": "string"
           },
@@ -14458,6 +14581,16 @@
         },
         "additionalProperties": false
       },
+      "Config.Worktree": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          }
+        },
+        "required": ["directory"],
+        "additionalProperties": false
+      },
       "ConfigWebSearch.InfoEncoded": {
         "type": "object",
         "properties": {
@@ -14465,7 +14598,8 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["random"]
+                "enum": ["random"],
+                "description": "Reuse a randomly selected provider until it is rate limited, then switch to another available provider."
               },
               {
                 "type": "string"
@@ -16304,6 +16438,9 @@
           "package": {
             "type": "string"
           },
+          "compaction": {
+            "$ref": "#/components/schemas/Provider.Compaction"
+          },
           "settings": {
             "type": "object"
           },
@@ -17237,6 +17374,36 @@
         "required": ["id"],
         "additionalProperties": false
       },
+      "Provider.Compaction": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["local"]
+              }
+            },
+            "required": ["mode"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["provider"]
+              },
+              "threshold": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": ["mode"],
+            "additionalProperties": false
+          }
+        ]
+      },
       "Provider.Info": {
         "type": "object",
         "properties": {
@@ -17258,6 +17425,9 @@
           },
           "package": {
             "type": "string"
+          },
+          "compaction": {
+            "$ref": "#/components/schemas/Provider.Compaction"
           },
           "settings": {
             "type": "object"
@@ -18216,11 +18386,20 @@
             "type": "string",
             "enum": ["auto", "manual"]
           },
+          "model": {
+            "$ref": "#/components/schemas/Model.Ref"
+          },
+          "providerState": {
+            "$ref": "#/components/schemas/Session.Message.ProviderState_5"
+          },
           "summary": {
             "type": "string"
           },
           "recent": {
             "type": "string"
+          },
+          "providerContext": {
+            "$ref": "#/components/schemas/Session.ProviderContext"
           }
         },
         "required": ["type", "id", "time", "status", "reason", "summary", "recent"],
@@ -18441,6 +18620,9 @@
         "type": "object"
       },
       "Session.Message.ProviderState_4": {
+        "type": "object"
+      },
+      "Session.Message.ProviderState_5": {
         "type": "object"
       },
       "Session.Message.Shell": {
@@ -18765,6 +18947,46 @@
       },
       "Session.Metadata": {
         "type": "object"
+      },
+      "Session.ProviderContext": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "enum": [1]
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/Session.ProviderContext.Provenance"
+          },
+          "messages": {}
+        },
+        "required": ["version", "provenance", "messages"],
+        "additionalProperties": false
+      },
+      "Session.ProviderContext.Provenance": {
+        "type": "object",
+        "properties": {
+          "providerID": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "modelID": {
+            "type": "string"
+          },
+          "route": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string"
+          }
+        },
+        "required": ["providerID", "provider", "modelID", "route", "protocol", "endpoint"],
+        "additionalProperties": false
       },
       "Session.Revert": {
         "type": "object",
@@ -19562,6 +19784,27 @@
         "additionalProperties": false,
         "description": "Reports whether this request destroyed an existing workspace."
       },
+      "Worktree.CreateInput": {
+        "type": "object",
+        "properties": {
+          "strategy": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "Worktree.Directory": {
         "type": "object",
         "properties": {
@@ -19590,6 +19833,19 @@
         "items": {
           "$ref": "#/components/schemas/Worktree.Directory"
         }
+      },
+      "Worktree.RemoveInput": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": ["directory", "force"],
+        "additionalProperties": false
       },
       "WorktreeErrorEncoded": {
         "type": "object",
@@ -19724,7 +19980,7 @@
     },
     {
       "name": "worktree",
-      "description": "Project worktree management routes."
+      "description": "Location-scoped worktree management routes."
     },
     {
       "name": "workspace",

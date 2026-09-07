@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
+  SESSION_BROWSER_TAB,
+  sessionBrowserTab,
   SESSION_OPEN_FILE_TAB,
   createOpenReviewFile,
   createOpenSessionFileTab,
@@ -230,6 +232,51 @@ describe("createSessionTabs", () => {
       expect(result.openFileOpen()).toBe(false)
       expect(result.panelTabs()).toEqual(["file://src/a.ts"])
       expect(result.activeTab()).toBe("file://src/a.ts")
+      dispose()
+    })
+  })
+
+  test("exposes one browser tab without treating it as a file tab", () => {
+    createRoot((dispose) => {
+      const tabs = createMemo(() => ({ active: () => SESSION_BROWSER_TAB, all: () => [SESSION_BROWSER_TAB] }))
+      const result = createSessionTabs({
+        tabs,
+        pathFromTab: () => undefined,
+        normalizeTab: (tab) => tab,
+        browser: () => true,
+      })
+
+      expect(result.panelTabs()).toEqual([SESSION_BROWSER_TAB])
+      expect(result.openedTabs()).toEqual([])
+      expect(result.activeTab()).toBe(SESSION_BROWSER_TAB)
+      expect(result.activeFileTab()).toBeUndefined()
+      expect(result.closableTab()).toBe(SESSION_BROWSER_TAB)
+      dispose()
+    })
+  })
+
+  test("keeps browser tabs in layout order beside file tabs, and drops them when the browser is detached", () => {
+    const first = sessionBrowserTab("first")
+    const second = sessionBrowserTab("second")
+    const input = {
+      tabs: () => ({ active: () => second, all: () => [first, "file://src/a.ts", second] }),
+      pathFromTab: (tab: string) => (tab.startsWith("file://") ? tab.slice(7) : undefined),
+      normalizeTab: (tab: string) => tab,
+    }
+    createRoot((dispose) => {
+      const result = createSessionTabs({ ...input, browser: () => true })
+      expect(result.panelTabs()).toEqual([first, "file://src/a.ts", second])
+      expect(result.openedTabs()).toEqual(["file://src/a.ts"])
+      expect(result.activeTab()).toBe(second)
+      expect(result.activeFileTab()).toBeUndefined()
+      expect(result.closableTab()).toBe(second)
+      dispose()
+    })
+    createRoot((dispose) => {
+      const result = createSessionTabs({ ...input, browser: () => false })
+      expect(result.panelTabs()).toEqual(["file://src/a.ts"])
+      expect(result.activeTab()).toBe("file://src/a.ts")
+      expect(result.closableTab()).toBe("file://src/a.ts")
       dispose()
     })
   })

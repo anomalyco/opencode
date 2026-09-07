@@ -215,6 +215,35 @@ describe("applyCachePolicy", () => {
     }),
   )
 
+  it.effect("deduplicates tools before counting cache hints", () =>
+    Effect.gen(function* () {
+      const manual = new CacheHint({ type: "ephemeral" })
+      const duplicate = (description: string) => ({
+        name: "lookup",
+        description,
+        inputSchema: { type: "object" },
+        cache: manual,
+      })
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: anthropicModel,
+          tools: [
+            duplicate("first"),
+            duplicate("second"),
+            duplicate("third"),
+            duplicate("fourth"),
+            { name: "lookup", description: "final", inputSchema: { type: "object" } },
+          ],
+          cache: { tools: true },
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        expect.objectContaining({ name: "lookup", description: "final", cache_control: { type: "ephemeral" } }),
+      ])
+    }),
+  )
+
   it.effect("auto policy preserves manual CacheHints on other parts", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -280,6 +309,30 @@ describe("applyCachePolicy", () => {
       expect(body.messages[0]?.content[0]?.cache_control).toBeUndefined()
     }),
   )
+
+  test("marks the final leaf inside a tool namespace", () => {
+    const request = LLM.request({
+      model: anthropicModel,
+      tools: [
+        {
+          type: "namespace",
+          name: "crm",
+          tools: [
+            { name: "lookup", description: "lookup", inputSchema: {} },
+            { name: "orders", description: "orders", inputSchema: {} },
+          ],
+        },
+      ],
+      cache: { tools: true },
+    })
+    const applied = applyCachePolicy(request)
+    const namespace = applied.tools[0]
+
+    expect(namespace?.type).toBe("namespace")
+    if (namespace?.type !== "namespace") throw new Error("Expected namespace")
+    expect(namespace.tools[0]).not.toHaveProperty("cache")
+    expect(namespace.tools[1]).toHaveProperty("cache", { type: "ephemeral" })
+  })
 
   it.effect("ttlSeconds in the policy flows through to wire markers", () =>
     Effect.gen(function* () {

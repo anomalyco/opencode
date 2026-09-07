@@ -4,6 +4,7 @@ import { Home } from "@/home/route"
 import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
+import { BrowserAttachmentsProvider } from "@/session/browser/attachments"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import { LayoutProvider } from "@/shell/state/layout"
 import { SettingsSurfaceProvider } from "@/settings/surface"
@@ -13,6 +14,7 @@ import { requireServerKey } from "./session"
 export const File = lazy(() => import("@opencode-ai/session-ui/file").then((module) => ({ default: module.File })))
 const loadSessionRoute = () => Promise.all([import("@/session/route"), File.preload()]).then(([module]) => module)
 const DraftRoute = lazy(() => import("@/new-session/route").then((module) => ({ default: module.DraftRoute })))
+const SettingsScreen = lazy(() => import("@/settings/shell").then((module) => ({ default: module.SettingsScreen })))
 const TargetSessionRouteContent = lazy(() =>
   loadSessionRoute().then((module) => ({ default: module.TargetSessionRouteContent })),
 )
@@ -20,6 +22,7 @@ const TargetSessionRouteContent = lazy(() =>
 export function preloadRoute(url: string) {
   const pathname = url.split(/[?#]/, 1)[0]
   if (pathname === "/new-session") return DraftRoute.preload().then(() => undefined)
+  if (pathname === "/settings") return SettingsScreen.preload().then(() => undefined)
   if (/^\/server\/[^/]+\/session\/[^/]+$/.test(pathname))
     return TargetSessionRouteContent.preload().then(() => undefined)
   return Promise.resolve()
@@ -29,6 +32,7 @@ export function AppRoutes() {
   return (
     <Route component={AppLayout}>
       <Route path="/" component={Home} />
+      <Route path="/settings" component={SettingsScreen} />
       <Route
         path="/server/:serverKey/session/:id"
         component={() => (
@@ -70,7 +74,9 @@ function AppLayout(props: ParentProps) {
   return (
     <LayoutProvider>
       <SettingsSurfaceProvider>
-        <Shell>{props.children}</Shell>
+        <BrowserAttachmentsProvider>
+          <Shell>{props.children}</Shell>
+        </BrowserAttachmentsProvider>
       </SettingsSurfaceProvider>
     </LayoutProvider>
   )

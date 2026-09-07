@@ -24,8 +24,8 @@ export const Plugin = define({
   id: "opencode.skill",
   effect: Effect.fn(function* (ctx) {
     const reportContent = yield* reportContentWithDiagnostics(ctx.app)
-    yield* ctx.skill.transform((draft) => {
-      draft.add(
+    yield* ctx.skill.transform((editor) => {
+      editor.add(
         Skill.Info.make({
           id: Skill.ID.make("opencode"),
           name: Skill.Name.make("OpenCode"),
@@ -34,7 +34,7 @@ export const Plugin = define({
           content: OpencodeContent,
         }),
       )
-      draft.add(
+      editor.add(
         Skill.Info.make({
           id: Skill.ID.make("report"),
           name: Skill.Name.make("Report"),

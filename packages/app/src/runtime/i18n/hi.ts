@@ -140,6 +140,7 @@ export const dict = {
   "command.language.cycle": "भाषा बदलें",
   "command.language.set": "भाषा का प्रयोग करें: {{language}}",
   "command.session.new": "नया सेशन",
+  "command.session.import": "सेशन आयात करें",
   "command.file.open": "फ़ाइल खोलें",
   "command.tab.close": "टैब बंद करें",
   "command.tab.reopenClosed": "बंद टैब पुनः खोलें",

@@ -25,6 +25,8 @@ export function toSessionError(cause: unknown): SessionError.Error {
         return providerError("provider.invalid-output", cause.reason)
       case "InvalidRequest":
         return providerError("provider.invalid-request", cause.reason)
+      case "UnsupportedOperation":
+        return providerError("provider.unsupported-operation", cause.reason)
       case "NoRoute":
         return providerError("provider.no-route", cause.reason)
       case "UnknownProvider":
@@ -44,6 +46,8 @@ export function toSessionError(cause: unknown): SessionError.Error {
     return unwrapped.message === "" ? { ...unwrapped, type: "tool.execution", message: cause.message } : unwrapped
   }
   if (cause instanceof StepFailedError) return cause.error
+  if (cause instanceof SessionRunnerModel.UnsupportedCompactionError)
+    return { type: "provider.unsupported-operation", message: cause.message }
   if (cause instanceof AgentNotFoundError) return { type: "unknown", message: cause.message }
   if (cause instanceof UserInterruptedError) return { type: "aborted", message: cause.message }
   if (

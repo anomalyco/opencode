@@ -188,22 +188,22 @@ describe("OllamaPlugin", () => {
           const catalog = yield* Catalog.Service
           const integrations = yield* Integration.Service
           const providerID = Provider.ID.make("ollama")
-          yield* integrations.transform((draft) => {
-            draft.update(Integration.ID.make("ollama"), (integration) => {
+          yield* integrations.transform((editor) => {
+            editor.update(Integration.ID.make("ollama"), (integration) => {
               integration.name = "Ollama"
             })
-            draft.method.update({
+            editor.method.update({
               integrationID: Integration.ID.make("ollama"),
               method: { type: "env", names: ["OLLAMA_API_KEY"] },
             })
           })
-          yield* catalog.transform((draft) => {
-            draft.provider.update(providerID, (provider) => {
+          yield* catalog.transform((editor) => {
+            editor.provider.update(providerID, (provider) => {
               provider.name = "Ollama"
               provider.package = "aisdk:@ai-sdk/openai-compatible"
               provider.integrationID = Integration.ID.make("ollama")
             })
-            draft.model.update(providerID, Model.ID.make("static-model"), () => {})
+            editor.model.update(providerID, Model.ID.make("static-model"), () => {})
           })
 
           yield* addPlugin(server.url.origin, "5 millis")

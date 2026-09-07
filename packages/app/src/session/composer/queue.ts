@@ -4,7 +4,6 @@ import { useMutation } from "@tanstack/solid-query"
 import type { SessionInboxInfo } from "@opencode-ai/client/promise"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { ComposerDelivery } from "@/composer/adapter"
-import type { ComposerModel } from "@/composer/model"
 import type { ComposerStateTarget } from "@/composer/submission-state"
 import type { ImageAttachmentPart, Prompt } from "@/composer/state"
 import { clonePrompt, promptLength } from "@/composer/prompt-parts"
@@ -30,7 +29,7 @@ export function createSessionQueue(input: {
   draft: ComposerStateTarget
   working: Accessor<boolean>
   behavior: Accessor<ComposerDelivery>
-  composer: Accessor<ComposerModel | undefined>
+  restoreFocus: (cursor: number) => void
 }) {
   const data = useData()
   const server = useServerSDK()
@@ -159,9 +158,9 @@ export function createSessionQueue(input: {
       },
     })
     const text = queuedPromptText(item)
-    input.composer()?.dispatch({ type: "mode.normal" })
+    input.draft.mode.set("normal")
     input.draft.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
-    input.composer()?.restoreFocus(text.length)
+    input.restoreFocus(text.length)
     return true
   }
   const cancelEdit = () => {
@@ -170,10 +169,10 @@ export function createSessionQueue(input: {
     setState("editing", undefined)
     // Mode first, then prompt, then retry: mode and prompt writes both clear
     // the retry marker.
-    input.composer()?.dispatch({ type: editing.stash.mode === "shell" ? "mode.shell" : "mode.normal" })
+    input.draft.mode.set(editing.stash.mode)
     input.draft.set(editing.stash.prompt, editing.stash.cursor)
     if (editing.stash.retry) input.draft.retry.set(editing.stash.retry)
-    input.composer()?.restoreFocus(editing.stash.cursor)
+    input.restoreFocus(editing.stash.cursor)
   }
   const confirmEdit = (delivery: ComposerDelivery) => {
     const editing = state.editing

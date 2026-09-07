@@ -2,6 +2,21 @@
   user-select: none;
 }
 
+[data-slot="vertical-tabs-sidebar"] [data-slot="vertical-tabs"] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+[data-slot="vertical-tabs-sidebar"] [data-slot="vertical-tabs-scroll"] {
+  min-height: 0;
+  /* Leave enough space to scroll the final tab clear of the fade above Settings. */
+  padding-block-end: 16px;
+  scroll-padding-block-end: 16px;
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 16px), transparent);
+  mask-image: linear-gradient(to bottom, black calc(100% - 16px), transparent);
+}
+
 [data-slot="mobile-tabs-trigger"][aria-expanded="true"] {
   background:
     linear-gradient(var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),

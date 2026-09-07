@@ -7,7 +7,16 @@ export interface ButtonProps
   extends ComponentProps<typeof Root>,
     Pick<ComponentProps<"button">, "class" | "classList" | "children"> {
   size?: "small" | "normal" | "large"
-  variant?: "neutral" | "danger" | "warning" | "outline" | "contrast" | "ghost" | "ghost-muted" | "loading"
+  variant?:
+    | "neutral"
+    | "danger"
+    | "warning"
+    | "outline"
+    | "contrast"
+    | "ghost"
+    | "ghost-muted"
+    | "ghost-faint"
+    | "loading"
   icon?: IconProps["name"]
 }
 

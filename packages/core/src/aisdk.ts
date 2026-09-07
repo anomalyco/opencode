@@ -416,8 +416,9 @@ function callOptions(
   modelID: ID,
   optionKey: string,
 ): LanguageModelV3CallOptions {
+  const flattened = ProviderShared.flattenToolRequest(request)
   return {
-    prompt: prompt(request),
+    prompt: prompt(flattened.request),
     maxOutputTokens: request.generation?.maxTokens,
     temperature: request.generation?.temperature,
     stopSequences: request.generation?.stop === undefined ? undefined : [...request.generation.stop],
@@ -426,7 +427,7 @@ function callOptions(
     presencePenalty: request.generation?.presencePenalty,
     frequencyPenalty: request.generation?.frequencyPenalty,
     seed: request.generation?.seed,
-    tools: request.tools.map(tool),
+    tools: flattened.tools.map(tool),
     toolChoice: toolChoice(request.toolChoice),
     headers: request.http?.headers,
     providerOptions: requestProviderOptions(request.providerOptions, packageName, modelID, optionKey),
@@ -522,7 +523,11 @@ function userPart(part: ContentPart): UserContent {
 function assistantPart(part: ContentPart): AssistantContent {
   switch (part.type) {
     case "compaction":
-      throw ProviderShared.invalidRequest("AI SDK routes cannot replay native provider compaction state")
+      throw ProviderShared.unsupportedOperation({
+        operation: "compaction-replay",
+        provider: part.provider,
+        message: "AI SDK routes cannot replay native provider compaction state",
+      })
     case "text":
       return [{ type: "text", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "media":

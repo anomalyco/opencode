@@ -12,6 +12,7 @@ import { fileURLToPath } from "url"
 import { Image } from "../image.js"
 import { Instance } from "../instance/service.js"
 import { Mime } from "../mime.js"
+import { Plugin } from "../plugin/service.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { Skill } from "../skill.js"
 import { AttachmentError, SkillNotFoundError } from "./error.js"
@@ -34,6 +35,7 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
   const instances = yield* Instance.Service
 
   return yield* Effect.gen(function* () {
+    yield* Plugin.awaitActivation
     const hooks = yield* PluginHooks.Service
     const event = yield* hooks.trigger("session", "prompt", {
       sessionID: request.session.id,

@@ -48,8 +48,13 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode-ai/ai/providers/azure", () => import("@opencode-ai/ai/providers/azure")],
   ["@opencode-ai/ai/providers/azure/chat", () => import("@opencode-ai/ai/providers/azure/chat")],
   ["@opencode-ai/ai/providers/azure/responses", () => import("@opencode-ai/ai/providers/azure/responses")],
+  ["@opencode-ai/ai/providers/baseten", () => import("@opencode-ai/ai/providers/baseten")],
   ["@opencode-ai/ai/providers/cerebras", () => import("@opencode-ai/ai/providers/cerebras")],
+  ["@opencode-ai/ai/providers/cloudflare-ai-gateway", () => import("@opencode-ai/ai/providers/cloudflare-ai-gateway")],
+  ["@opencode-ai/ai/providers/cloudflare-workers-ai", () => import("@opencode-ai/ai/providers/cloudflare-workers-ai")],
   ["@opencode-ai/ai/providers/deepinfra", () => import("@opencode-ai/ai/providers/deepinfra")],
+  ["@opencode-ai/ai/providers/deepseek", () => import("@opencode-ai/ai/providers/deepseek")],
+  ["@opencode-ai/ai/providers/fireworks", () => import("@opencode-ai/ai/providers/fireworks")],
   ["@opencode-ai/ai/providers/google", () => import("@opencode-ai/ai/providers/google")],
   ["@opencode-ai/ai/providers/google-vertex", () => import("@opencode-ai/ai/providers/google-vertex")],
   ["@opencode-ai/ai/providers/google-vertex/gemini", () => import("@opencode-ai/ai/providers/google-vertex/gemini")],
@@ -95,8 +100,7 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (specifie
   const root = specifier.startsWith("@") ? parts.slice(0, 2).join("/") : (parts[0] ?? specifier)
   const installed = yield* npm.add(root).pipe(Effect.mapError((cause) => new LoadError({ package: specifier, cause })))
   const entrypoint = yield* Effect.try({
-    try: () =>
-      specifier === root && installed.entrypoint ? installed.entrypoint : resolveModule(specifier, installed.directory),
+    try: () => resolveModule(specifier, installed.directory),
     catch: (cause) => new LoadError({ package: specifier, cause }),
   })
   return yield* importPackage(specifier, entrypoint)

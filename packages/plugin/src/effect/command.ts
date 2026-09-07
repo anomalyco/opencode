@@ -17,11 +17,11 @@ export interface CommandDefinition {
   readonly execute: (input: CommandInvocation) => Effect.Effect<void, unknown>
 }
 
-export interface CommandDraft {
+export interface CommandEditor {
   add(definition: CommandDefinition): void
 }
 
 export interface CommandDomain extends Pick<CommandApi<unknown>, "list"> {
-  readonly transform: Transform<CommandDraft>
+  readonly transform: Transform<CommandEditor>
   readonly reload: () => Effect.Effect<void>
 }

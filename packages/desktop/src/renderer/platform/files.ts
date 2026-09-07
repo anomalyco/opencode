@@ -9,7 +9,7 @@ type DesktopFileAPI = Pick<
   | "readPickedFile"
   | "releasePickedFiles"
   | "getPathForFile"
-  | "saveFilePicker"
+  | "saveFile"
   | "openExternal"
   | "openLocalFile"
   | "resolveAppPath"
@@ -52,9 +52,8 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS, acceptedE
     openDirectoryPickerDialog,
     openAttachmentPickerDialog,
     getPathForFile: (file: File) => attachmentPaths.get(file) ?? api.getPathForFile(file),
-    async saveFilePickerDialog(options?: { title?: string; defaultPath?: string }) {
-      return api.saveFilePicker({ title: options?.title, defaultPath: options?.defaultPath })
-    },
+    saveFile: (options: { title?: string; defaultPath?: string }, content: string) =>
+      api.saveFile({ title: options.title, defaultPath: options.defaultPath }, content),
     openExternal: (url: string) => api.openExternal(url),
     openLocalFile: (url: string) => api.openLocalFile(url),
     async openPath(path: string, app?: string) {

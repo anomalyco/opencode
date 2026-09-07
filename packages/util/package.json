@@ -54,8 +54,7 @@
     "mime-types": "3.0.2",
     "minimatch": "10.2.5",
     "npm-package-arg": "13.0.2",
-    "pacote": "21.5.1",
-    "resolve.exports": "catalog:"
+    "pacote": "21.5.1"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",

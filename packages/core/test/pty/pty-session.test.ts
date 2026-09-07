@@ -212,7 +212,7 @@ describe("pty create defaults", () => {
       if (!configuredShell) return
       const pty = yield* Pty.Service
       const shell = yield* ShellSelect.Service
-      yield* shell.transform((draft) => draft.configure(configuredShell))
+      yield* shell.transform((editor) => editor.configure(configuredShell))
       const info = yield* Effect.acquireRelease(pty.create({ title: "configured" }), (created) =>
         pty.remove(created.id).pipe(Effect.ignore),
       )

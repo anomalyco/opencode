@@ -13,7 +13,7 @@ import { displayName, projectForSession } from "@/shell/layout/helpers"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode-ai/session-ui/v2/session-progress-indicator-v2"
 import type { SessionInfo } from "@opencode-ai/client/promise"
-import { sessionLabel } from "@/session/title"
+import { sessionTabTitle } from "./tab-title"
 import { useSettings } from "@/settings/model"
 import { canOpenTabRename, forwardTabRef } from "./tab-gesture"
 import { TabPreviewPopover } from "./tab-popover"
@@ -63,7 +63,7 @@ export function TabNavItem(props: {
   })
   const title = createMemo(() => {
     const session = props.session
-    return session ? sessionLabel(session) : props.fallbackTitle
+    return sessionTabTitle(session ? session.title : props.fallbackTitle, language.t("session.tab.session"))
   })
 
   const projectName = createMemo(() => {
@@ -395,11 +395,8 @@ export function DraftTabItem(props: {
       data-active={props.active}
       data-dragging={props.dragging}
       data-state={props.active || props.pressed ? "pressed" : undefined}
-      class="group relative flex h-7 min-w-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] px-1.5 whitespace-nowrap"
-      classList={{
-        invisible: props.hidden,
-        "w-full [container-type:inline-size]": props.orientation === "vertical",
-      }}
+      class="group relative flex h-7 w-full min-w-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] px-1.5 [container-type:inline-size] whitespace-nowrap"
+      classList={{ invisible: props.hidden }}
       onMouseDown={(event) => {
         if (event.button !== MIDDLE_MOUSE_BUTTON) return
         event.preventDefault()
@@ -432,16 +429,27 @@ export function DraftTabItem(props: {
           if (props.suppressNavigation) return
           props.onNavigate()
         }}
-        class="flex h-full min-w-0 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base [-webkit-user-drag:none]"
-        classList={{ "flex-1": props.orientation === "vertical", "flex-none pe-10": props.orientation !== "vertical" }}
+        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base [-webkit-user-drag:none]"
       >
         <span class="flex size-4 shrink-0 items-center justify-center">
-          <Icon name="edit" />
+          <svg
+            class="text-v2-icon-icon-muted group-data-[active='true']:text-v2-icon-icon-base"
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <path
+              d="M9.00002 13.5H14M2.60419 10.9167V13.3958H5.08335L13.3959 5.08333L10.9167 2.60416L2.60419 10.9167Z"
+              stroke="currentColor"
+            />
+          </svg>
         </span>
         <span
           data-titlebar-tab-title
-          class="min-w-0 overflow-hidden text-clip whitespace-nowrap outline-none leading-4"
-          classList={{ "flex-1": props.orientation === "vertical", "flex-none": props.orientation !== "vertical" }}
+          class="min-w-0 flex-1 overflow-hidden text-clip whitespace-nowrap outline-none leading-4"
         >
           {props.title}
         </span>

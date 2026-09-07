@@ -171,7 +171,7 @@ function SessionTabEntry(props: {
         preparing={!!pending()}
         fallbackTitle={
           pending()
-            ? language.t("command.session.new")
+            ? language.t("session.tab.session")
             : (persisted()?.title ?? (missingSession() ? language.t("session.tab.unknown") : undefined))
         }
         onRename={rename}
@@ -211,7 +211,7 @@ function DraftTabSlot(props: {
       data-orientation={props.orientation}
       class="relative flex"
       classList={{
-        "w-max min-w-7 max-w-56 shrink-0": props.orientation === "horizontal",
+        "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
         "w-full shrink-0": props.orientation === "vertical",
       }}
     >
@@ -377,7 +377,7 @@ export function TitlebarTabStrip(props: {
                     index={visibleIndex()}
                     active={props.currentTab === tab}
                     orientation={vertical() ? "vertical" : "horizontal"}
-                    title={language.t("command.session.new")}
+                    title={language.t("session.tab.session")}
                     onNavigate={(element) => {
                       ref = element
                       props.onNavigate(tab, element)

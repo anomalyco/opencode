@@ -3,6 +3,7 @@ import type { Model } from "@opencode-ai/schema/model"
 import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"
 import { SessionMessage } from "../message.js"
+import { SessionProviderContext } from "../provider-context.js"
 import type { FileAttachment } from "@opencode-ai/schema/prompt"
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
@@ -274,6 +275,9 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
       return assistant(message, model, providerMetadataKey)
     case "compaction":
       if (message.status !== "completed") return []
+      // History selection only keeps native windows the target model can replay.
+      if (SessionProviderContext.isCheckpoint(message))
+        return [...SessionProviderContext.decode(message.providerContext)]
       return [
         Message.make({
           id: message.id,

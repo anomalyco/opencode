@@ -62,7 +62,7 @@ export const inspect = Effect.fn("cli.plugin.inspect")(function* (selected?: str
     tuiTargets,
     (target) =>
       Effect.gen(function* () {
-        const installed = yield* npm.resolve(target, { subpaths: ["tui"] })
+        const installed = yield* npm.resolve(target)
         const outdated = yield* npm.check(target).pipe(Effect.exit)
         return {
           runtime: "TUI" as const,

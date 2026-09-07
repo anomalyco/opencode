@@ -60,12 +60,16 @@ export default Plugin.define({
       context.data.on("session.execution.interrupted", (event) => ended(event.data.sessionID)),
       context.data.on("session.execution.failed", (event) => {
         const sessionID = event.data.sessionID
+        if (terminal.has(sessionID)) return
         if (errored.has(sessionID)) {
           ended(sessionID)
           return
         }
         errored.add(sessionID)
         notify(context, sessionID, event.data.error.message, "error")
+        const route = context.ui.router.current()
+        if (route.type === "session" && route.sessionID === sessionID)
+          context.ui.toast.show({ title: "Session failed", message: event.data.error.message, variant: "error" })
         ended(sessionID)
       }),
     ]

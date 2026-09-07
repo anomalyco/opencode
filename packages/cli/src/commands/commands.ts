@@ -59,6 +59,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
   commands: [
     Spec.make("upgrade", {
       description: "Upgrade OpenCode to the latest or a specific version",
+      aliases: ["update"],
       params: {
         target: Argument.string("target").pipe(
           Argument.withDescription("Version to upgrade to (with or without a leading v)"),
@@ -359,6 +360,34 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         thinking: Flag.boolean("thinking").pipe(Flag.withDescription("Show thinking blocks"), Flag.withDefault(false)),
         ...PermissionParams,
       },
+    }),
+    Spec.make("session", {
+      description: "Manage sessions",
+      commands: [
+        Spec.make("list", {
+          description: "List top-level sessions in the current project, newest first",
+          params: {
+            ...ServerParams,
+            maxCount: Flag.integer("max-count").pipe(
+              Flag.withAlias("n"),
+              Flag.withSchema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+              Flag.withDescription("Limit to N most recent sessions (default: 100)"),
+              Flag.optional,
+            ),
+            format: Flag.choice("format", ["table", "json"]).pipe(
+              Flag.withDescription("Output format"),
+              Flag.withDefault("table"),
+            ),
+          },
+        }),
+        Spec.make("delete", {
+          description: "Delete a session and its child sessions",
+          params: {
+            ...ServerParams,
+            sessionID: Argument.string("sessionID").pipe(Argument.withDescription("Session ID to delete")),
+          },
+        }),
+      ],
     }),
     Spec.make("service", {
       description: "Manage the background server",

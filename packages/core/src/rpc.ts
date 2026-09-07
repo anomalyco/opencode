@@ -121,7 +121,15 @@ const layer = Layer.effect(
         // The heterogeneous registry erases handlers after their selected schema validates input.
         const execution: Effect.Effect<unknown, unknown> = Reflect.apply(handler, undefined, [parsed, callContext])
         return execution
-      }).pipe(Effect.catch((error) => encodeError(method, error)))
+      }).pipe(
+        Effect.catch((error) => encodeError(method, error)),
+        // Normalize handler bugs here so direct callers can recover just like HTTP callers.
+        Effect.catchDefect((defect) =>
+          Effect.logError("rpc handler failed", { rpc: rpcID, method: name, defect }).pipe(
+            Effect.andThen(Effect.fail(failure("rpc.internal", "RPC call failed"))),
+          ),
+        ),
+      )
       return yield* encode(method.output, result).pipe(
         Effect.mapError((error) => failure("rpc.invalid_output", errorMessage(error, "Invalid RPC output"))),
       )

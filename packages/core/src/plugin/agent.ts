@@ -83,15 +83,15 @@ Rules:
 export const Plugin = define({
   id: "opencode.agent",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.agent.transform((draft) => {
-      draft.update(Agent.defaultID, (item) => {
+    yield* ctx.agent.transform((editor) => {
+      editor.update(Agent.defaultID, (item) => {
         item.name = Agent.Name.make("Build")
         item.description = "The default agent. Executes tools based on configured permissions."
         item.mode = "primary"
         item.permissions.push({ action: "question", resource: "*", effect: "allow" })
       })
 
-      draft.update(Agent.ID.make("general"), (item) => {
+      editor.update(Agent.ID.make("general"), (item) => {
         item.name = Agent.Name.make("General")
         item.description =
           "General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel."
@@ -102,7 +102,7 @@ export const Plugin = define({
         )
       })
 
-      draft.update(Agent.ID.make("explore"), (item) => {
+      editor.update(Agent.ID.make("explore"), (item) => {
         const externalDirectories = item.permissions.filter(
           (rule) => rule.action === "external_directory" && rule.effect === "allow",
         )
@@ -130,13 +130,13 @@ export const Plugin = define({
         )
       })
 
-      draft.update(Agent.ID.make("compaction"), (item) => {
+      editor.update(Agent.ID.make("compaction"), (item) => {
         item.name = Agent.Name.make("Compaction")
         item.mode = "primary"
         item.hidden = true
       })
 
-      draft.update(Agent.ID.make("title"), (item) => {
+      editor.update(Agent.ID.make("title"), (item) => {
         item.name = Agent.Name.make("Title")
         item.mode = "primary"
         item.hidden = true
@@ -144,7 +144,7 @@ export const Plugin = define({
         item.permissions.push({ action: "*", resource: "*", effect: "deny" })
       })
 
-      draft.update(Agent.ID.make("summary"), (item) => {
+      editor.update(Agent.ID.make("summary"), (item) => {
         item.name = Agent.Name.make("Summary")
         item.mode = "primary"
         item.hidden = true

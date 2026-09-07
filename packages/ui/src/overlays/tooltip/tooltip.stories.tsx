@@ -8,7 +8,7 @@ Floating tooltip built on Kobalte's tooltip primitive.
 - \`value\`: Content rendered inside the floating tooltip.
 - \`children\`: The trigger element that activates the tooltip on hover/focus.
 - \`placement\`: Kobalte placement string (e.g. "top", "bottom", "left", "right").
-- \`appearance\`: \`compact\` (default) or \`standard\`.
+- \`appearance\`: \`compact\` (default), \`standard\`, or \`large\`.
 - \`inactive\`: When true, renders only the trigger without tooltip behavior.
 - \`forceOpen\`: Forces the tooltip to stay open.
 - Inherits Kobalte Tooltip root props.
@@ -48,6 +48,9 @@ export const Appearances = {
       </Tooltip>
       <Tooltip appearance="compact" value="Compact tooltip">
         <span>Compact</span>
+      </Tooltip>
+      <Tooltip appearance="large" value="Large tooltip">
+        <span>Large</span>
       </Tooltip>
     </div>
   ),

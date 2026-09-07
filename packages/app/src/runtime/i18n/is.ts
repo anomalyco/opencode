@@ -137,6 +137,7 @@ export const dict = {
   "command.language.cycle": "Skipta um tungumál",
   "command.language.set": "Notaðu tungumál: {{language}}",
   "command.session.new": "Ný seta",
+  "command.session.import": "Flytja inn setu",
   "command.file.open": "Opna skrá",
   "command.tab.close": "Loka flipa",
   "command.tab.reopenClosed": "Opnaðu aftur lokaðan flipa",

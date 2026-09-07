@@ -255,7 +255,7 @@ export function createChildStoreManager(input: {
           disposers.set(key, dispose)
           activationToggles.set(key, setInstanceQueriesEnabled)
 
-          const onPersistedInit = (init: Promise<string> | string | null, run: () => void) => {
+          const onPersistedInit = (init: Promise<string | null> | string | null, run: () => void) => {
             if (!(init instanceof Promise)) return
             void init.then(() => {
               if (children[key] !== child) return

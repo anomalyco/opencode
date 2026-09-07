@@ -35,8 +35,8 @@ export const Plugin = define({
       worktree: location.project.directory,
     })
 
-    yield* ctx.vcs.transform((draft) => {
-      draft.add({
+    yield* ctx.vcs.transform((editor) => {
+      editor.add({
         id: "hg",
         name: "Mercurial",
         info: () => adapter.info(),

@@ -133,6 +133,7 @@ export const dict = {
   "command.language.cycle": "Mainīt valodu",
   "command.language.set": "Izmantot valodu: {{language}}",
   "command.session.new": "Jauna sesija",
+  "command.session.import": "Importēt sesiju",
   "command.file.open": "Atvērt failu",
   "command.tab.close": "Aizvērt cilni",
   "command.tab.reopenClosed": "Atvērt aizvērtu cilni",

@@ -1,7 +1,7 @@
 export * as PluginSupervisor from "./supervisor.js"
 
 import { Event } from "@opencode-ai/schema/config"
-import { Cause, Effect, Layer, Stream } from "effect"
+import { Cause, Effect, Layer, Queue, Stream } from "effect"
 import path from "path"
 import { ConfigPluginSource } from "../config/plugin/source.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -13,12 +13,15 @@ import { PluginInternal } from "./internal.js"
 import { PluginModule } from "./module.js"
 import { SdkPlugins } from "./sdk.js"
 import { PluginUpdate } from "./update.js"
+import { Watcher } from "../filesystem/watcher.js"
 
 const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
+  modules: Effect.Success<ReturnType<typeof PluginModule.make>>,
   pre: readonly Plugin.Generation[],
   post: readonly Plugin.Generation[],
   operations: readonly ConfigPluginSource.Operation[],
   install: boolean,
+  running: ReadonlyMap<string, Plugin.Generation>,
 ) {
   const matches = (selector: string, target: string) =>
     selector === "*" || (selector.endsWith(".*") ? target.startsWith(selector.slice(0, -1)) : selector === target)
@@ -52,7 +55,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
       continue
     }
 
-    const plugin = yield* PluginModule.load(operation, { install }).pipe(
+    const plugin = yield* modules.load(operation, { install }).pipe(
       Effect.catchCause((cause) => {
         const ref = `err_${crypto.randomUUID().slice(0, 8)}`
         const error = Cause.squash(cause)
@@ -71,6 +74,11 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
         state: { status: "failed", error: plugin.error, ref: plugin.ref },
         features: { server: true },
       })
+      // The new revision never became a generation, so the one already running keeps its place.
+      const retained = packages.get(operation.target) ?? running.get(operation.target)
+      if (!retained) continue
+      packages.set(operation.target, retained)
+      enabled.add(retained.id)
       continue
     }
     failures.delete(operation.target)
@@ -91,6 +99,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     ordered.findIndex((other) => other.id === plugin.id) !== index
   return {
     plugins: ordered.filter((plugin, index) => !duplicate(plugin, index)),
+    packages: new Map([...packages].filter(([, plugin]) => enabled.has(plugin.id))),
     failures: [
       ...failures.values(),
       ...ordered.filter(duplicate).map((plugin) => ({
@@ -110,6 +119,7 @@ export const layer = Layer.effectDiscard(
     const sdk = yield* SdkPlugins.Service
     const instance = yield* InstancePlugins.Service
     const sources = yield* ConfigPluginSource.Service
+    const modules = yield* PluginModule.make()
     const bus = yield* Bus.Service
     const updates = yield* PluginUpdate.Service
     const internal = yield* PluginInternal.list()
@@ -118,6 +128,8 @@ export const layer = Layer.effectDiscard(
     // Built-ins capture services from this layer; unload them before those services close.
     yield* Effect.addFinalizer(registry.close)
     let packages = new Set<string>()
+    // Last generation handed to the registry per target; a failed reload keeps it in place.
+    let running = new Map<string, Plugin.Generation>()
     let outdated = new Set<string>()
     const updating = new Set<string>()
     let generation = 0
@@ -140,7 +152,7 @@ export const layer = Layer.effectDiscard(
       }))
       const operations = yield* sources.operations()
       // Activate everything available locally before waiting on missing package installs.
-      const immediate = yield* resolve(pre, post, operations, false)
+      const immediate = yield* resolve(modules, pre, post, operations, false, running)
       const source = (source: Plugin.Source) =>
         source.type === "package"
           ? {
@@ -155,16 +167,19 @@ export const layer = Layer.effectDiscard(
           resolved.failures.map((failure) => ({ ...failure, source: source(failure.source) })),
         )
       yield* apply(immediate)
-      const resolved = immediate.pending.length ? yield* resolve(pre, post, operations, true) : immediate
+      const resolved = immediate.pending.length
+        ? yield* resolve(modules, pre, post, operations, true, running)
+        : immediate
       if (resolved !== immediate) yield* apply(resolved)
-      const loaded = new Set(
+      running = resolved.packages
+      const targets = new Set(
         [...resolved.plugins, ...resolved.failures].flatMap((plugin) =>
           plugin.source?.type === "package" ? [plugin.source.target] : [],
         ),
       )
-      packages = loaded
+      packages = targets
       yield* Effect.forEach(
-        loaded,
+        targets,
         (target) => updates.check(target).pipe(Effect.map((available) => [target, available] as const)),
         { concurrency: "unbounded" },
       ).pipe(
@@ -178,8 +193,25 @@ export const layer = Layer.effectDiscard(
         Effect.forkScoped({ startImmediately: true }),
       )
     })
-    const reloads = Stream.merge(
-      Stream.merge(sources.changes(), bus.subscribe([Event.Updated, SdkPlugins.Updated])),
+    // Start source consumers before activation, without an extra merge/debounce boundary delaying them.
+    // Each source owns its upstream subscriptions; the queue retains the latest observed request.
+    const triggers = yield* Queue.sliding<number>(1)
+    // Make accepted work visible to awaitActivation before coalescing the burst.
+    const notify = Effect.gen(function* () {
+      observed++
+      if (!release) release = yield* registry.hold()
+      yield* Queue.offer(triggers, observed)
+    })
+    const watch = <A>(stream: Stream.Stream<A>) =>
+      stream.pipe(
+        Stream.runForEach(() => notify),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+    yield* watch(sources.changes())
+    yield* watch(modules.changes())
+    yield* watch(Stream.fromEffectRepeat(Effect.sleep("24 hours")))
+    yield* watch(bus.subscribe([Event.Updated, SdkPlugins.Updated]))
+    yield* watch(
       updates.changes().pipe(
         Stream.filter((update) => packages.has(update.target)),
         Stream.tap((update) =>
@@ -188,22 +220,10 @@ export const layer = Layer.effectDiscard(
             update.updating ? updating.add(update.target) : updating.delete(update.target)
           }),
         ),
-        Stream.map(() => undefined),
-      ),
-    ).pipe(
-      // Make accepted work visible to awaitActivation before coalescing the burst.
-      Stream.mapEffect(() =>
-        Effect.gen(function* () {
-          observed++
-          if (!release) release = yield* registry.hold()
-          return observed
-        }),
       ),
     )
-    yield* Stream.concat(Stream.succeed(0), reloads).pipe(
-      // Keep observing updates while activation runs, retaining only the latest generation request.
-      Stream.buffer({ capacity: 1, strategy: "sliding" }),
-      Stream.debounce("100 millis"),
+    // Run initial activation immediately; debounce only later requests. One consumer serializes both.
+    yield* Stream.concat(Stream.succeed(0), Stream.fromQueue(triggers).pipe(Stream.debounce("100 millis"))).pipe(
       Stream.runForEach((target) =>
         Effect.gen(function* () {
           yield* activate().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause })))
@@ -214,17 +234,6 @@ export const layer = Layer.effectDiscard(
         }),
       ),
       Effect.forkScoped({ startImmediately: true }),
-    )
-    yield* Effect.sleep("24 hours").pipe(
-      Effect.andThen(
-        Effect.acquireUseRelease(
-          registry.hold(),
-          () => activate(),
-          (release) => release,
-        ),
-      ),
-      Effect.forever,
-      Effect.forkScoped,
     )
   }),
 )
@@ -237,6 +246,7 @@ const nodeDeps = [
   PluginUpdate.node,
   Bus.node,
   Npm.node,
+  Watcher.node,
   PluginInternal.requirements,
 ] as const
 

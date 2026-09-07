@@ -210,8 +210,8 @@ it.live("embedded client exposes plugin-backed web search", () =>
       yield* opencode.plugin({
         id: `embedded-websearch-${crypto.randomUUID()}`,
         effect: (ctx) =>
-          ctx.websearch.transform((draft) => {
-            draft.add({
+          ctx.websearch.transform((editor) => {
+            editor.add({
               id: providerID,
               name: "Embedded web search",
               execute: (input) =>

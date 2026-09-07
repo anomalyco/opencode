@@ -13,10 +13,10 @@ import { context, layer, type LogOptions } from "../logging"
 import { OwnedFetch } from "./fetch"
 import { SdkInstances } from "./instances"
 
-export interface CreateOptions extends Omit<ServerOptions, "hostname" | "port" | "password"> {
+export interface CreateOptions<R = never> extends Omit<ServerOptions, "hostname" | "port" | "password"> {
   readonly log?: LogOptions
   readonly workspaceProviders?: Readonly<Record<string, WorkspaceDriver.Interface>>
-  readonly instances?: SdkInstances.Options
+  readonly instances?: SdkInstances.Options<R>
 }
 
 /** Host hooks for embedding opencode on a non-default runtime profile. */
@@ -24,11 +24,12 @@ export interface EmbedOptions {
   readonly overrides?: LayerNode.Replacements
 }
 
-export const create = Effect.fn("EmbeddedHost.create")(function* (
-  options: CreateOptions = {},
+export const create = Effect.fn("EmbeddedHost.create")(function* <R = never>(
+  options: CreateOptions<R> = {},
   embed: EmbedOptions = {},
 ) {
   const { log, workspaceProviders, instances, ...server } = options
+  const selector = instances ? SdkInstances.provide(instances, yield* Effect.context<R>()) : undefined
   const runtime = ManagedRuntime.make(
     createEmbeddedRoutes(
       {
@@ -39,7 +40,7 @@ export const create = Effect.fn("EmbeddedHost.create")(function* (
       workspaceProviders
         ? [...(embed.overrides ?? []), WorkspaceDriver.node.replace(WorkspaceDriver.registryNode(workspaceProviders))]
         : embed.overrides,
-      instances ? (replacements) => SdkInstances.node(instances, replacements) : undefined,
+      selector ? (replacements) => SdkInstances.node(selector, replacements) : undefined,
     ).pipe(Layer.provide(HttpServer.layerServices), Layer.provideMerge(layer(log))),
   )
 

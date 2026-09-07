@@ -37,7 +37,7 @@ type Data = {
   shell?: string
 }
 
-export type Draft = {
+export type Editor = {
   configure: (shell: string) => void
 }
 
@@ -45,7 +45,7 @@ export type ResolveInput = {
   priority: "config" | "compat"
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly resolve: (input: ResolveInput) => Effect.Effect<string>
 }
 
@@ -201,12 +201,12 @@ const layer = (options?: Options) =>
     Service,
     Effect.gen(function* () {
       const global = yield* Global.Service
-      const state = State.create<Data, Draft>({
+      const state = State.create<Data, Editor>({
         name: "shell-select",
         initial: () => ({}),
-        draft: (draft) => ({
+        editor: (editor) => ({
           configure: (shell) => {
-            draft.shell = shell
+            editor.shell = shell
           },
         }),
       })

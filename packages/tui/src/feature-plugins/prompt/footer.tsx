@@ -2,6 +2,7 @@ import { Plugin } from "@opencode-ai/plugin/tui"
 import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { contextUsage, formatContextUsage } from "../../util/session"
 import { useTerminalDimensions } from "@opentui/solid"
+import { stringWidth } from "../../util/string-width"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -47,13 +48,22 @@ export function PromptFooter(props: {
   })
   const live = createMemo(() => Boolean(subagents() || shells()))
   const shortcut = (id: string) => props.context.keymap.shortcuts(id)[0]
+  const layout = createMemo(() => {
+    const command = shortcut("command.palette.show")
+    if (status().length === 0) return { usage: false, shortcuts: dimensions().width >= 44 }
+    return promptFooterLayout({
+      width: Math.max(0, dimensions().width - 8),
+      usage: status(),
+      shortcuts: command ? [`${command} commands`] : [],
+    })
+  })
 
   return (
     <Switch>
       <Match when={props.mode === "normal"}>
         <Switch>
           <Match when={live() || status().length > 0}>
-            <box flexDirection="row" flexShrink={1} minWidth={0}>
+            <box flexDirection="row" flexShrink={props.showDetails && layout().usage ? 0 : 1} minWidth={0}>
               <Show when={live()}>
                 <box
                   flexShrink={0}
@@ -74,21 +84,21 @@ export function PromptFooter(props: {
                   </text>
                 </box>
               </Show>
-              <Show when={props.showDetails && status().length > 0}>
-                <text fg={props.context.theme.text.subdued} wrapMode="none" truncate flexShrink={1}>
+              <Show when={props.showDetails && layout().usage && status().length > 0}>
+                <text fg={props.context.theme.text.subdued} wrapMode="none" flexShrink={0}>
                   <Show when={live()}> · </Show>
                   {status().join(" · ")}
                 </text>
               </Show>
             </box>
           </Match>
-          <Match when={props.showDetails && dimensions().width >= 44}>
+          <Match when={props.showDetails && layout().shortcuts}>
             <text fg={props.context.theme.text.default} flexShrink={0}>
               {shortcut("agent.cycle")} <span style={{ fg: props.context.theme.text.subdued }}>agents</span>
             </text>
           </Match>
         </Switch>
-        <Show when={props.showDetails}>
+        <Show when={props.showDetails && layout().shortcuts}>
           <text fg={props.context.theme.text.default} wrapMode="none" flexShrink={0}>
             {shortcut("command.palette.show")} <span style={{ fg: props.context.theme.text.subdued }}>commands</span>
           </text>
@@ -112,13 +122,20 @@ export default Plugin.define({
     context.ui.slot({
       append: "prompt.footer",
       render: (props) => (
-        <PromptFooter
-          context={context}
-          sessionID={props.sessionID}
-          mode={props.mode}
-          showDetails={props.showDetails}
-        />
+        <PromptFooter context={context} sessionID={props.sessionID} mode={props.mode} showDetails={props.showDetails} />
       ),
     })
   },
 })
+
+function promptFooterLayout(input: { width: number; usage: string[]; shortcuts: string[] }) {
+  const usage = input.usage.join(" · ")
+  const shortcuts = input.shortcuts.join(" · ")
+  const available = Math.max(0, input.width - Math.min(28, Math.floor(input.width / 2)))
+  if (usage && shortcuts && stringWidth(`${usage} · ${shortcuts}`) <= available) {
+    return { usage: true, shortcuts: true }
+  }
+  if (usage && stringWidth(usage) <= available) return { usage: true, shortcuts: false }
+  if (!usage && shortcuts && stringWidth(shortcuts) <= available) return { usage: false, shortcuts: true }
+  return { usage: false, shortcuts: false }
+}

@@ -26,7 +26,7 @@ export default Runtime.handler(
       (item) =>
         (item.runtime === "Server"
           ? Effect.promise(() => result.client.plugin.update({ location: result.location, targets: [item.target] }))
-          : npm.update(item.target, { subpaths: ["tui"] }).pipe(Effect.asVoid)
+          : npm.update(item.target).pipe(Effect.asVoid)
         ).pipe(
           Effect.exit,
           Effect.map((result) => ({ item, result })),

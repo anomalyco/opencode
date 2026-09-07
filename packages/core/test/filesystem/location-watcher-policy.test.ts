@@ -21,9 +21,9 @@ describe("LocationWatcherPolicy", () => {
 
       yield* State.batch(
         Effect.gen(function* () {
-          yield* policy.transform((draft) => draft.add(["node_modules"]))
+          yield* policy.transform((editor) => editor.add(["node_modules"]))
           expect(policy.current()).toEqual(["node_modules"])
-          const overlay = yield* policy.transform((draft) => draft.add([".git"]))
+          const overlay = yield* policy.transform((editor) => editor.add([".git"]))
           expect(policy.current()).toEqual(["node_modules", ".git"])
           expect(observed).toEqual([])
 
@@ -47,7 +47,7 @@ describe("LocationWatcherPolicy", () => {
         Effect.gen(function* () {
           if (reentered) return
           reentered = true
-          yield* policy.transform((draft) => draft.add([".git"])).pipe(Scope.provide(scope))
+          yield* policy.transform((editor) => editor.add([".git"])).pipe(Scope.provide(scope))
           expect(policy.current()).toEqual(["node_modules", ".git"])
         }),
       )
@@ -58,7 +58,7 @@ describe("LocationWatcherPolicy", () => {
         }),
       )
 
-      yield* policy.transform((draft) => draft.add(["node_modules"]))
+      yield* policy.transform((editor) => editor.add(["node_modules"]))
 
       expect(policy.current()).toEqual(["node_modules", ".git"])
       expect(observed).toEqual([

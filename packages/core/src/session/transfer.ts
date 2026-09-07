@@ -4,7 +4,7 @@ import { SessionTransfer } from "@opencode-ai/schema/session-transfer"
 import { Tool } from "@opencode-ai/schema/tool"
 import { Skill } from "@opencode-ai/schema/skill"
 import { eq } from "drizzle-orm"
-import { Context, DateTime, Effect, Layer, Schema } from "effect"
+import { Clock, Context, DateTime, Effect, Layer, Schema } from "effect"
 import { map } from "effect/Array"
 import path from "path"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
@@ -73,6 +73,7 @@ const layer = Layer.effect(
         if (input.data.info.parentID) yield* sessions.get(input.data.info.parentID)
         const project = yield* projects.resolve(input.location.directory)
         yield* upsertProject(db, project).pipe(Effect.orDie)
+        const importedAt = yield* Clock.currentTimeMillis
         const messages = input.data.messages.filter(isSettled).map((message, index) => {
           const encoded = encodeMessage(message)
           const { id: _, type, ...data } = encoded
@@ -121,7 +122,7 @@ const layer = Layer.effect(
                       tokens_cache_read: input.data.info.tokens.cache.read,
                       tokens_cache_write: input.data.info.tokens.cache.write,
                       time_created: DateTime.toEpochMillis(input.data.info.time.created),
-                      time_updated: DateTime.toEpochMillis(input.data.info.time.updated),
+                      time_updated: importedAt,
                       time_idle: input.data.info.time.idle ? DateTime.toEpochMillis(input.data.info.time.idle) : null,
                       time_viewed:
                         input.data.info.time.idle && input.data.info.time.viewed
@@ -296,6 +297,9 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
       metadata: meta,
       summary: redact("compaction-summary", message.id, message.summary),
       recent: redact("compaction-recent", message.id, message.recent),
+      ...(message.status === "completed"
+        ? { providerState: metadata("compaction-provider-state", message.id, message.providerState) }
+        : {}),
     }
   }
   return { ...message, metadata: meta }

@@ -35,7 +35,7 @@ import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
-import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
+import { OptimizePlugin } from "@opencode-ai/core/plugin/optimize"
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
 import { Effect, Layer } from "effect"
@@ -182,8 +182,8 @@ describe("SessionRunnerLLM recorded", () => {
       const agents = yield* Agent.Service
       const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
-      yield* agents.transform((draft) =>
-        draft.update(Agent.ID.make("build"), (agent) => {
+      yield* agents.transform((editor) =>
+        editor.update(Agent.ID.make("build"), (agent) => {
           agent.mode = "primary"
           agent.permissions.push({ action: "execute", resource: "*", effect: "deny" })
         }),
@@ -193,7 +193,7 @@ describe("SessionRunnerLLM recorded", () => {
         catalog: catalogHost(catalog),
         session: { hook: (name, callback) => hooks.register("session", name, callback) },
       })
-      yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), { discard: true })
+      yield* Effect.forEach(OptimizePlugin.Plugins, (plugin) => plugin.effect(pluginHost), { discard: true })
       const { db } = yield* Database.Service
       yield* db
         .insert(ProjectTable)

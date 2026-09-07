@@ -1,6 +1,7 @@
 export * as SessionMessage from "./session-message.js"
 
 import { Schema } from "effect"
+import { SessionProviderContext } from "./session-provider-context.js"
 import { optional } from "./schema.js"
 import { Content } from "./tool.js"
 import { Location } from "./location.js"
@@ -250,8 +251,11 @@ export const CompactionCompleted = Schema.Struct({
   ...CompactionBase,
   status: Schema.tag("completed"),
   reason: Schema.Literals(["auto", "manual"]),
+  model: Model.Ref.pipe(optional),
+  providerState: ProviderState.pipe(optional),
   summary: Schema.String,
   recent: Schema.String,
+  providerContext: SessionProviderContext.Info.pipe(optional),
 }).annotate({ identifier: "Session.Message.Compaction.Completed" })
 
 export interface CompactionFailed extends Schema.Schema.Type<typeof CompactionFailed> {}

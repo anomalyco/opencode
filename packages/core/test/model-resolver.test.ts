@@ -132,6 +132,25 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("keeps explicitly selected compatible packages generic for known provider IDs", () =>
+    Effect.gen(function* () {
+      for (const providerID of ["baseten", "cerebras", "deepinfra", "deepseek", "fireworks-ai", "groq", "togetherai"]) {
+        const selected = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/openai-compatible"), {
+            providerID: Provider.ID.make(providerID),
+            settings: { baseURL: "https://provider.example/v1/openai", apiKey: "fixture" },
+          }),
+        )
+        expect(String(selected.provider)).toBe(providerID)
+        expect(selected.route.id).toBe("openai-compatible-chat")
+        expect(selected.route.endpoint.baseURL).toBe("https://provider.example/v1/openai")
+        const prepared = yield* compileRequest(LLM.request({ model: selected, prompt: "Hello" }))
+        expect(prepared.body.messages).toEqual([{ role: "user", content: "Hello" }])
+        expect(prepared.body).not.toHaveProperty("apiKey")
+      }
+    }),
+  )
+
   it.effect("resolves environment templates before native providers inspect endpoints", () =>
     withEnv({ AZURE_HOST: "resource.openai.azure.com" }, () =>
       Effect.gen(function* () {
@@ -301,6 +320,13 @@ describe("ModelResolver", () => {
         settings: { baseURL: "https://native-mistral.example.com/v1" },
         headers: { "cf-access-token": "access-token" },
       }),
+      ...["baseten", "cloudflare-ai-gateway", "cloudflare-workers-ai", "deepseek", "fireworks"].map((name) =>
+        model(`@opencode-ai/ai/providers/${name}`, {
+          providerID: Provider.ID.make("gateway"),
+          settings: { baseURL: `https://${name}.example.com/v1` },
+          headers: { "cf-access-token": "access-token" },
+        }),
+      ),
     ]
     const provider = Provider.Info.make({
       ...Provider.Info.empty(selected.providerID),

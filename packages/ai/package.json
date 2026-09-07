@@ -28,6 +28,7 @@
     "typescript": "catalog:"
   },
   "dependencies": {
+    "@aws-sdk/credential-providers": "3.1057.0",
     "@smithy/eventstream-codec": "4.2.14",
     "@smithy/util-utf8": "4.2.2",
     "@opencode-ai/schema": "workspace:*",

@@ -52,10 +52,24 @@ export class UnresolvedProviderVariablesError extends Schema.TaggedError<Unresol
   }
 }
 
+export class UnsupportedCompactionError extends Schema.TaggedError<UnsupportedCompactionError>()(
+  "SessionRunnerModel.UnsupportedCompactionError",
+  {
+    providerID: Provider.ID,
+    modelID: ID,
+    route: Schema.String,
+  },
+) {
+  override get message() {
+    return `Provider compaction is not supported by ${this.providerID}/${this.modelID} (${this.route})`
+  }
+}
+
 export type Error =
   | VariantUnavailableError
   | UnsupportedPackageError
   | UnresolvedProviderVariablesError
+  | UnsupportedCompactionError
   | Integration.AuthorizationError
 
 export interface Resolved {
@@ -69,6 +83,8 @@ export interface Resolved {
   readonly cost: Info["cost"]
   /** Catalog token limits used by Core for context management. */
   readonly limit: Info["limit"]
+  /** Model policy overrides the provider policy; omitted means local compaction. */
+  readonly compaction?: Info["compaction"]
 }
 
 export interface Interface {
@@ -115,9 +131,20 @@ export const fromCatalogModel = (
   model: Info,
   credential?: Credential.Value,
   dependencies?: Dependencies,
-): Effect.Effect<LanguageModel, UnsupportedPackageError | UnresolvedProviderVariablesError> =>
+): Effect.Effect<
+  LanguageModel,
+  UnsupportedPackageError | UnresolvedProviderVariablesError | UnsupportedCompactionError
+> =>
   resolveCatalogModel(model, credential, dependencies).pipe(
     Effect.flatMap((resolved) => validateProviderVariables(model, resolved)),
+    Effect.flatMap((resolved) => {
+      // Reject provider compaction policies up front so the misconfiguration surfaces before any step runs.
+      if (model.compaction?.mode !== "provider" || resolved.route.compact?.trigger || resolved.route.compact?.endpoint)
+        return Effect.succeed(resolved)
+      return Effect.fail(
+        new UnsupportedCompactionError({ providerID: model.providerID, modelID: model.id, route: resolved.route.id }),
+      )
+    }),
   )
 
 const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(function* (
@@ -296,6 +323,7 @@ export const layer = Layer.effect(
         capabilities: selected.capabilities,
         cost: selected.cost,
         limit: selected.limit,
+        compaction: selected.compaction,
       }
     })
     return Service.of({
@@ -344,8 +372,13 @@ function usesAPIKeyAuth(packageName: string | undefined) {
     name?.startsWith("@opencode-ai/ai/providers/openai/") === true ||
     name === "@opencode-ai/ai/providers/anthropic" ||
     name === "@opencode-ai/ai/providers/anthropic-compatible" ||
+    name === "@opencode-ai/ai/providers/baseten" ||
     name === "@opencode-ai/ai/providers/cerebras" ||
+    name === "@opencode-ai/ai/providers/cloudflare-ai-gateway" ||
+    name === "@opencode-ai/ai/providers/cloudflare-workers-ai" ||
     name === "@opencode-ai/ai/providers/deepinfra" ||
+    name === "@opencode-ai/ai/providers/deepseek" ||
+    name === "@opencode-ai/ai/providers/fireworks" ||
     name === "@opencode-ai/ai/providers/openai-compatible" ||
     name === "@opencode-ai/ai/providers/google" ||
     name === "@opencode-ai/ai/providers/groq" ||

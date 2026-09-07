@@ -133,6 +133,7 @@ export const dict = {
   "command.language.cycle": "Volgende taal",
   "command.language.set": "Gebruik taal: {{language}}",
   "command.session.new": "Nieuwe sessie",
+  "command.session.import": "Sessie importeren",
   "command.file.open": "Bestand openen",
   "command.tab.close": "Tabblad sluiten",
   "command.tab.reopenClosed": "Gesloten tabblad opnieuw openen",

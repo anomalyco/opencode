@@ -37,19 +37,19 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
   id: "opencode.websearch.firecrawl",
   effect: Effect.fn("WebSearchFirecrawl.Plugin")(function* (ctx) {
     const http = yield* HttpClient.HttpClient
-    yield* ctx.integration.transform((draft) => {
-      draft.update("firecrawl", (integration) => (integration.name = "Firecrawl"))
-      draft.method.update({
+    yield* ctx.integration.transform((editor) => {
+      editor.update("firecrawl", (integration) => (integration.name = "Firecrawl"))
+      editor.method.update({
         integrationID: "firecrawl",
         method: { type: "key" },
       })
-      draft.method.update({
+      editor.method.update({
         integrationID: "firecrawl",
         method: { type: "env", names: ["FIRECRAWL_API_KEY"] },
       })
     })
-    yield* ctx.websearch.transform((draft) => {
-      draft.add({
+    yield* ctx.websearch.transform((editor) => {
+      editor.add({
         id: "firecrawl",
         name: "Firecrawl",
         execute: (input) =>

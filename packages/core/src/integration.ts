@@ -130,7 +130,7 @@ type Data = {
   integrations: Map<ID, Entry>
 }
 
-export type Draft = {
+export type Editor = {
   list: () => readonly Ref[]
   get: (id: ID) => Ref | undefined
   update: (id: ID, update: (integration: Types.DeepMutable<Ref>) => void) => void
@@ -142,7 +142,7 @@ export type Draft = {
   }
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   /** Registers a scoped transform over the integration registry. */
   /** Returns one integration with its methods and current connections. */
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
@@ -266,27 +266,27 @@ const layer = Layer.effect(
     const scope = yield* Scope.Scope
     const attempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, AttemptEntry>())
     const commandAttempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, CommandAttemptEntry>())
-    const state = State.create<Data, Draft>({
+    const state = State.create<Data, Editor>({
       name: "integration",
       initial: () => ({ integrations: new Map<ID, Entry>() }),
-      draft: (draft) => ({
-        list: () => Array.from(draft.integrations.values(), (entry) => entry.ref) as Ref[],
-        get: (id) => draft.integrations.get(id)?.ref as Ref | undefined,
+      editor: (editor) => ({
+        list: () => Array.from(editor.integrations.values(), (entry) => entry.ref) as Ref[],
+        get: (id) => editor.integrations.get(id)?.ref as Ref | undefined,
         update: (id, update) => {
-          const current = draft.integrations.get(id) ?? {
+          const current = editor.integrations.get(id) ?? {
             ref: { id, name: id },
             methods: [],
             implementations: new Map(),
           }
-          if (!draft.integrations.has(id)) draft.integrations.set(id, current)
+          if (!editor.integrations.has(id)) editor.integrations.set(id, current)
           update(current.ref)
           current.ref.id = id
         },
-        remove: (id) => draft.integrations.delete(id),
+        remove: (id) => editor.integrations.delete(id),
         method: {
-          list: (integrationID) => (draft.integrations.get(integrationID)?.methods as Method[] | undefined) ?? [],
+          list: (integrationID) => (editor.integrations.get(integrationID)?.methods as Method[] | undefined) ?? [],
           update: (implementation) => {
-            const current = draft.integrations.get(implementation.integrationID) ?? {
+            const current = editor.integrations.get(implementation.integrationID) ?? {
               ref: {
                 id: implementation.integrationID,
                 name: implementation.integrationID,
@@ -294,8 +294,8 @@ const layer = Layer.effect(
               methods: [],
               implementations: new Map<MethodID, Types.DeepMutable<OAuthImplementation>>(),
             }
-            if (!draft.integrations.has(implementation.integrationID)) {
-              draft.integrations.set(implementation.integrationID, current)
+            if (!editor.integrations.has(implementation.integrationID)) {
+              editor.integrations.set(implementation.integrationID, current)
             }
             const index = current.methods.findIndex((method) => {
               if (method.type !== implementation.method.type) return false
@@ -315,7 +315,7 @@ const layer = Layer.effect(
             }
           },
           remove: (integrationID, method) => {
-            const current = draft.integrations.get(integrationID)
+            const current = editor.integrations.get(integrationID)
             if (!current) return
             const index = current.methods.findIndex((candidate) => {
               if (candidate.type !== method.type) return false

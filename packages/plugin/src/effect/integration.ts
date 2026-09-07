@@ -74,7 +74,7 @@ export type IntegrationMethodRegistration =
       readonly method: IntegrationEnvMethod
     }
 
-export interface IntegrationDraft {
+export interface IntegrationEditor {
   list(): readonly IntegrationRef[]
   get(id: string): IntegrationRef | undefined
   update(id: string, update: (integration: IntegrationRef) => void): void
@@ -87,7 +87,7 @@ export interface IntegrationDraft {
 }
 
 export interface IntegrationDomain extends Omit<IntegrationApi<unknown>, "wellknown"> {
-  readonly transform: Transform<IntegrationDraft>
+  readonly transform: Transform<IntegrationEditor>
   readonly reload: () => Effect.Effect<void>
   readonly connection: {
     readonly active: (integrationID: string) => Effect.Effect<ConnectionInfo | undefined>

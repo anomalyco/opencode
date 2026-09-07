@@ -79,7 +79,7 @@ test.each([80, 120, 180])("session wheel scrolling preserves pane focus at width
         get: async () => ({ animations: false, session: { terminal: true }, tabs: { enabled: false } }),
         update: async () => ({}),
       },
-      packages: { resolve: async () => undefined },
+      packages: { prepare: async () => ({ directory: "" }) },
       args: { sessionID: session.id },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
       log: () => {},

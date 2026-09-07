@@ -9,7 +9,7 @@ export interface DocsNavGroup {
 }
 
 export interface DocsSection {
-  key: "docs" | "cli" | "build" | "api"
+  key: "docs" | "cli" | "build" | "api" | "console"
   title: string
   landingSlug: string
   groups: DocsNavGroup[]
@@ -128,6 +128,20 @@ export const docsSections: DocsSection[] = [
       {
         title: "API",
         items: [{ title: "Overview", slug: "api" }],
+      },
+    ],
+  },
+  {
+    key: "console",
+    title: "Console",
+    landingSlug: "console",
+    groups: [
+      {
+        items: [
+          { title: "Intro", slug: "console" },
+          { title: "Models", slug: "console/models" },
+          { title: "Go", slug: "console/go" },
+        ],
       },
     ],
   },

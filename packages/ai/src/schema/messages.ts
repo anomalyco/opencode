@@ -135,6 +135,7 @@ export const ToolCallPart = Object.assign(
     type: Schema.Literal("tool-call"),
     id: Schema.String,
     name: Schema.String,
+    namespace: Schema.optional(Schema.String),
     input: Schema.Unknown,
     providerExecuted: Schema.optional(Schema.Boolean),
     cache: Schema.optional(CacheHint),
@@ -152,6 +153,7 @@ export const ToolResultPart = Object.assign(
     type: Schema.Literal("tool-result"),
     id: Schema.String,
     name: Schema.String,
+    namespace: Schema.optional(Schema.String),
     result: ToolResultValue,
     providerExecuted: Schema.optional(Schema.Boolean),
     cache: Schema.optional(CacheHint),
@@ -168,6 +170,7 @@ export const ToolResultPart = Object.assign(
       type: "tool-result",
       id: input.id,
       name: input.name,
+      namespace: input.namespace,
       result: ToolResultValue.make(input.result, input.resultType),
       providerExecuted: input.providerExecuted,
       cache: input.cache,
@@ -266,7 +269,7 @@ export namespace Message {
     make({ role: "tool", content: ["type" in result ? result : ToolResultPart.make(result)] })
 }
 
-export class ToolDefinition extends Schema.Class<ToolDefinition>("LLM.ToolDefinition")({
+const toolDefinitionFields = {
   name: Schema.String,
   description: Schema.String,
   inputSchema: JsonSchema,
@@ -274,14 +277,70 @@ export class ToolDefinition extends Schema.Class<ToolDefinition>("LLM.ToolDefini
   cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}) {}
+}
+
+export type ToolDefinitionInput = Schema.Struct.Type<typeof toolDefinitionFields>
+
+export class ToolDefinition extends Schema.Class<ToolDefinition>("LLM.ToolDefinition")({
+  type: Schema.Literal("tool"),
+  ...toolDefinitionFields,
+}) {
+  constructor(input: ToolDefinitionInput) {
+    super({ ...input, type: "tool" })
+  }
+}
 
 export namespace ToolDefinition {
-  export type Input = ToolDefinition | ConstructorParameters<typeof ToolDefinition>[0]
+  export type Input = ToolDefinition | ToolDefinitionInput
 
   /** Normalize tool definition input into the canonical `ToolDefinition` class. */
   export const make = (input: Input) => (input instanceof ToolDefinition ? input : new ToolDefinition(input))
 }
+
+export type ToolNamespace = {
+  readonly type: "namespace"
+  readonly name: string
+  readonly description?: string
+  readonly tools: ReadonlyArray<ToolEntry>
+}
+
+export type ToolNamespaceInput = Omit<ToolNamespace, "type" | "tools"> & {
+  readonly tools: ReadonlyArray<ToolEntryInput>
+}
+export type ToolNamespaceEntryInput = ToolNamespaceInput & { readonly type: "namespace" }
+
+export const ToolNamespace: Schema.Codec<ToolNamespace> & {
+  readonly make: (input: ToolNamespace | ToolNamespaceInput) => ToolNamespace
+} = Object.assign(
+  Schema.Struct({
+    type: Schema.Literal("namespace"),
+    name: Schema.String,
+    description: Schema.optional(Schema.UndefinedOr(Schema.String)),
+    tools: Schema.Array(Schema.suspend((): Schema.Codec<ToolEntry> => ToolEntry)),
+  }).annotate({ identifier: "LLM.ToolNamespace" }),
+  {
+    make: (input: ToolNamespace | ToolNamespaceInput): ToolNamespace => ({
+      ...input,
+      type: "namespace",
+      tools: input.tools.map(ToolEntry.make),
+    }),
+  },
+)
+
+export type ToolEntry = ToolDefinition | ToolNamespace
+export type ToolEntryInput = ToolDefinition.Input | ToolNamespaceEntryInput
+export const ToolEntry: Schema.Codec<ToolEntry> & {
+  readonly make: (input: ToolEntryInput) => ToolEntry
+} = Object.assign(
+  Schema.Union([ToolDefinition, ToolNamespace]).pipe(
+    Schema.toTaggedUnion("type"),
+    Schema.annotate({ identifier: "LLM.ToolEntry" }),
+  ),
+  {
+    make: (input: ToolEntryInput): ToolEntry =>
+      "type" in input && input.type === "namespace" ? ToolNamespace.make(input) : ToolDefinition.make(input),
+  },
+)
 
 export class ToolChoice extends Schema.Class<ToolChoice>("LLM.ToolChoice")({
   type: Schema.Literals(["auto", "none", "required", "tool"]),
@@ -312,7 +371,7 @@ const requestSchema = Schema.Struct({
   model: LanguageModelSchema,
   system: Schema.Array(SystemPart),
   messages: Schema.Array(Message),
-  tools: Schema.Array(ToolDefinition),
+  tools: Schema.Array(ToolEntry),
   toolChoice: Schema.optional(ToolChoice),
   generation: Schema.optional(GenerationOptions),
   providerOptions: Schema.optional(ProviderOptions),

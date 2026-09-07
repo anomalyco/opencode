@@ -172,23 +172,23 @@ describe("VLLMPlugin", () => {
           const catalog = yield* Catalog.Service
           const integrations = yield* Integration.Service
           const providerID = Provider.ID.make("vllm")
-          yield* integrations.transform((draft) => {
-            draft.update(Integration.ID.make("vllm"), (integration) => {
+          yield* integrations.transform((editor) => {
+            editor.update(Integration.ID.make("vllm"), (integration) => {
               integration.name = "vLLM"
             })
-            draft.method.update({
+            editor.method.update({
               integrationID: Integration.ID.make("vllm"),
               method: { type: "env", names: ["VLLM_API_KEY"] },
             })
           })
-          yield* catalog.transform((draft) => {
-            draft.provider.update(providerID, (provider) => {
+          yield* catalog.transform((editor) => {
+            editor.provider.update(providerID, (provider) => {
               provider.name = "vLLM"
               provider.package = "aisdk:@ai-sdk/openai-compatible"
               provider.integrationID = Integration.ID.make("vllm")
               provider.activation = "auto"
             })
-            draft.model.update(providerID, Model.ID.make("static-model"), () => {})
+            editor.model.update(providerID, Model.ID.make("static-model"), () => {})
           })
 
           yield* addPlugin(server.url.origin, "5 millis")

@@ -57,6 +57,8 @@ export type HomeProjectsViewProps = {
   onSelectProject: (server: ServerConnection.Any, directory: string) => void
   onAddProjects: (server: ServerConnection.Any, directories: string[]) => void
   onOpenProjectNewSession: (server: ServerConnection.Any, directory: string) => void
+  canImportSession: boolean
+  onImportSession: (server: ServerConnection.Any, project: LocalProject) => void
   onEditProject: (server: ServerConnection.Any, project: LocalProject) => void
   onRevealProject: (server: ServerConnection.Any, project: LocalProject) => void
   onClearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
@@ -670,6 +672,11 @@ function HomeProjectRow(
               <Menu.Item onSelect={() => props.onOpenProjectNewSession(props.server, props.project.worktree)}>
                 {props.language.t("command.session.new")}
               </Menu.Item>
+              <Show when={props.canImportSession}>
+                <Menu.Item onSelect={() => props.onImportSession(props.server, props.project)}>
+                  {props.language.t("command.session.import")}
+                </Menu.Item>
+              </Show>
               <Menu.Item onSelect={() => props.onEditProject(props.server, props.project)}>
                 {props.language.t("dialog.project.edit.title")}
               </Menu.Item>

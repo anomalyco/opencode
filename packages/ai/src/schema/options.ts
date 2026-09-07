@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { ModelID, ProviderID } from "./ids.js"
-import type { AnyRoute, CompactOperation } from "../route/client.js"
+import type { AnyRoute, CompactionOperations } from "../route/client.js"
 import { isRecord } from "../utils/record.js"
 
 export const JsonSchema = Schema.Record(Schema.String, Schema.Unknown)
@@ -175,7 +175,7 @@ export namespace LanguageModelCompatibility {
 
 export class LanguageModel<
   Options extends ProviderOptions = ProviderOptions,
-  Compact extends CompactOperation | undefined = CompactOperation | undefined,
+  Compact extends CompactionOperations | undefined = CompactionOperations | undefined,
 > {
   declare protected readonly _ProviderOptions: Options
   readonly id: ModelID
@@ -194,7 +194,7 @@ export class LanguageModel<
 
   static make<
     Options extends ProviderOptions = ProviderOptions,
-    Compact extends CompactOperation | undefined = CompactOperation | undefined,
+    Compact extends CompactionOperations | undefined = CompactionOperations | undefined,
   >(input: LanguageModel.Input<Compact>) {
     return new LanguageModel<Options, Compact>({
       id: ModelID.make(input.id),
@@ -206,7 +206,7 @@ export class LanguageModel<
     })
   }
 
-  static input<Options extends ProviderOptions, Compact extends CompactOperation | undefined>(
+  static input<Options extends ProviderOptions, Compact extends CompactionOperations | undefined>(
     model: LanguageModel<Options, Compact>,
   ): LanguageModel.ConstructorInput<Compact> {
     return {
@@ -218,11 +218,11 @@ export class LanguageModel<
     }
   }
 
-  static update<Options extends ProviderOptions, Compact extends CompactOperation | undefined>(
+  static update<Options extends ProviderOptions, Compact extends CompactionOperations | undefined>(
     model: LanguageModel<Options>,
     patch: Partial<LanguageModel.Input<Compact>> & { readonly route: AnyRoute<Compact> },
   ): LanguageModel<Options, Compact>
-  static update<Options extends ProviderOptions, Compact extends CompactOperation | undefined>(
+  static update<Options extends ProviderOptions, Compact extends CompactionOperations | undefined>(
     model: LanguageModel<Options, Compact>,
     patch: Partial<Omit<LanguageModel.Input, "route">> & { readonly route?: undefined },
   ): LanguageModel<Options, Compact>
@@ -241,7 +241,7 @@ export class LanguageModel<
 }
 
 export namespace LanguageModel {
-  export type ConstructorInput<Compact extends CompactOperation | undefined = CompactOperation | undefined> = {
+  export type ConstructorInput<Compact extends CompactionOperations | undefined = CompactionOperations | undefined> = {
     readonly id: ModelID
     readonly provider: ProviderID
     readonly route: AnyRoute<Compact>
@@ -249,7 +249,7 @@ export namespace LanguageModel {
     readonly compatibility?: LanguageModelCompatibility
   }
 
-  export type Input<Compact extends CompactOperation | undefined = CompactOperation | undefined> = Omit<
+  export type Input<Compact extends CompactionOperations | undefined = CompactionOperations | undefined> = Omit<
     ConstructorInput<Compact>,
     "id" | "provider" | "defaults" | "compatibility"
   > & {

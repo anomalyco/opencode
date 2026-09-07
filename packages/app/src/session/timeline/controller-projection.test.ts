@@ -3,6 +3,7 @@ import type { SessionInboxInfo, SessionMessageInfo } from "@opencode-ai/client/p
 import { createRoot } from "solid-js"
 import { applyTimelineMessageHandoff, visibleTimelineMessages } from "./controller-projection"
 import { createTimelineProjection } from "./projection"
+import { timelinePresets } from "@opencode-ai/session-ui/timeline/detail"
 
 const messages = [
   { id: "msg_1", type: "user", text: "first", time: { created: 1 } },
@@ -63,6 +64,7 @@ describe("visibleTimelineMessages", () => {
         reasoningMode: () => "compact",
         shellToolDefaultOpen: () => false,
         editToolDefaultOpen: () => false,
+        timelineDetail: () => timelinePresets[2].value,
         pendingUserMessageIDs: () => new Set([steer.id]),
       })
       expect(projection.activeMessageID()).toBe("msg_1")
