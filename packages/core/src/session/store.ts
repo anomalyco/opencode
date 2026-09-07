@@ -72,10 +72,10 @@ export interface Interface {
   /** Releases the claim and resets resume accounting. Terminal events call this on commit. */
   readonly release: (sessionID: Session.ID) => Effect.Effect<void>
   /**
-   * Clears orphaned child claims except children owned by recoverable
+   * Lists orphaned child claims except children owned by recoverable
    * background subagent jobs.
    */
-  readonly releaseChildClaims: (recoverable: ReadonlyArray<Session.ID>) => Effect.Effect<void>
+  readonly listChildClaims: (recoverable: ReadonlyArray<Session.ID>) => Effect.Effect<ReadonlyArray<Session.ID>>
   /**
    * Durably counts one more resume of an orphaned claim, returning the new
    * total — or undefined when the Session no longer exists.
@@ -218,10 +218,10 @@ const layer = Layer.effect(
           .run()
           .pipe(Effect.orDie)
       }),
-      releaseChildClaims: Effect.fn("SessionStore.releaseChildClaims")((recoverable) =>
+      listChildClaims: Effect.fn("SessionStore.listChildClaims")((recoverable) =>
         db
-          .update(SessionTable)
-          .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
+          .select({ sessionID: SessionTable.id })
+          .from(SessionTable)
           .where(
             and(
               isNotNull(SessionTable.time_suspended),
@@ -229,8 +229,11 @@ const layer = Layer.effect(
               recoverable.length > 0 ? notInArray(SessionTable.id, Array.from(recoverable)) : undefined,
             ),
           )
-          .run()
-          .pipe(Effect.orDie, Effect.asVoid),
+          .all()
+          .pipe(
+            Effect.orDie,
+            Effect.map((rows) => rows.map((row) => row.sessionID)),
+          ),
       ),
       countResume: Effect.fn("SessionStore.countResume")(function* (sessionID) {
         const row = yield* db
