@@ -15,6 +15,7 @@ const platformMap = {
   darwin: "darwin",
   linux: "linux",
   win32: "windows",
+  android: "linux",
 }
 const archMap = {
   x64: "x64",
@@ -80,6 +81,7 @@ function isMusl() {
   if (platform !== "linux") return false
 
   try {
+    if (os.platform() === "android") return true
     if (fs.existsSync("/etc/alpine-release")) return true
   } catch {
     // Ignore filesystem probes that are blocked by the host.
