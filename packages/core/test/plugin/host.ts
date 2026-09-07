@@ -77,6 +77,9 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     integration: overrides.integration ?? {
       list: () => Effect.die("unused integration.list"),
       get: () => Effect.die("unused integration.get"),
+      settings: {
+        update: () => Effect.die("unused integration.settings.update"),
+      },
       connect: {
         key: () => Effect.die("unused integration.connect.key"),
       },
@@ -309,6 +312,9 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
   return {
     list: () => Effect.die("unused integration.list"),
     get: () => Effect.die("unused integration.get"),
+    settings: {
+      update: () => Effect.die("unused integration.settings.update"),
+    },
     connect: {
       key: () => Effect.die("unused integration.connect.key"),
     },

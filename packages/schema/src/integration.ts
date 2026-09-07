@@ -62,12 +62,19 @@ export const Ref = Schema.Struct({
   metadata: optional(Schema.Record(Schema.String, Schema.Any)),
 }).annotate({ identifier: "Integration.Ref" })
 
+export interface Settings extends Schema.Schema.Type<typeof Settings> {}
+export const Settings = Schema.Struct({
+  /** Switch to another connected account when the active one is rate limited or out of quota. */
+  autoSwitch: Schema.Boolean,
+}).annotate({ identifier: "Integration.Settings" })
+
 export const Info = Schema.Struct({
   id: ID,
   name: Schema.String,
   metadata: optional(Schema.Record(Schema.String, Schema.Any)),
   methods: Schema.Array(Method),
   connections: Schema.Array(Connection.Info),
+  settings: Settings,
 }).annotate({ identifier: "Integration.Info" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 

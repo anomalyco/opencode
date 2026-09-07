@@ -230,6 +230,8 @@ export type ConnectionCredentialInfo = { type: "credential"; id: string; label: 
 
 export type ConnectionEnvInfo = { type: "env"; name: string }
 
+export type IntegrationSettings = { autoSwitch: boolean }
+
 export type IntegrationAttemptStatus =
   | {
       status: "pending"
@@ -2261,6 +2263,7 @@ export type IntegrationInfo = {
   metadata?: { [x: string]: any }
   methods: Array<IntegrationMethod>
   connections: Array<ConnectionInfo>
+  settings: IntegrationSettings
 }
 
 export type V2Event =
@@ -4479,6 +4482,16 @@ export type IntegrationWellknownAddInput = {
 }
 
 export type IntegrationWellknownAddOutput = void
+
+export type IntegrationSettingsUpdateInput = {
+  readonly integrationID: { readonly integrationID: string }["integrationID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly autoSwitch?: { readonly autoSwitch?: boolean | undefined }["autoSwitch"]
+}
+
+export type IntegrationSettingsUpdateOutput = void
 
 export type IntegrationConnectKeyInput = {
   readonly integrationID: { readonly integrationID: string }["integrationID"]

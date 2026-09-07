@@ -1239,6 +1239,16 @@ export type IntegrationWellknownAddOperation<E = never> = (
   input: IntegrationWellknownAddInput,
 ) => Effect.Effect<IntegrationWellknownAddOutput, E>
 
+export type IntegrationSettingsUpdateInput = {
+  readonly integrationID: Integration.ID
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly autoSwitch?: boolean | undefined
+}
+export type IntegrationSettingsUpdateOutput = void
+export type IntegrationSettingsUpdateOperation<E = never> = (
+  input: IntegrationSettingsUpdateInput,
+) => Effect.Effect<IntegrationSettingsUpdateOutput, E>
+
 export type IntegrationConnectKeyInput = {
   readonly integrationID: Integration.ID
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -1338,6 +1348,7 @@ export interface IntegrationApi<E = never> {
   readonly list: IntegrationListOperation<E>
   readonly get: IntegrationGetOperation<E>
   readonly wellknown: { readonly add: IntegrationWellknownAddOperation<E> }
+  readonly settings: { readonly update: IntegrationSettingsUpdateOperation<E> }
   readonly connect: { readonly key: IntegrationConnectKeyOperation<E> }
   readonly oauth: {
     readonly connect: IntegrationOauthConnectOperation<E>

@@ -52,6 +52,14 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
         }),
       )
       .handle(
+        "integration.settings.update",
+        Effect.fn(function* (ctx) {
+          const service = yield* Integration.Service
+          yield* service.settings.update(ctx.params.integrationID, ctx.payload)
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
         "integration.connect.key",
         Effect.fn(function* (ctx) {
           const service = yield* Integration.Service

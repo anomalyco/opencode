@@ -649,6 +649,7 @@ describe("ModelsDevPlugin", () => {
             },
           ],
           connections: [],
+          settings: { autoSwitch: false },
         }),
       ])
     }).pipe(Effect.provide(models(path.join(import.meta.dir, "fixtures", "models-dev.json")))),

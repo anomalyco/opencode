@@ -19,6 +19,7 @@ import {
 } from "effect"
 import { Integration } from "@opencode-ai/schema/integration"
 import { Credential } from "./credential.js"
+import { KV } from "./kv.js"
 import { State } from "./state.js"
 import { Bus } from "./bus.js"
 import { IntegrationConnection } from "./integration/connection.js"
@@ -52,6 +53,9 @@ export type Method = Integration.Method
 
 export const Info = Integration.Info
 export type Info = Integration.Info
+
+export const Settings = Integration.Settings
+export type Settings = Integration.Settings
 
 export type OAuthAuthorization = {
   readonly url: string
@@ -176,6 +180,10 @@ export interface Interface extends State.Transformable<Editor> {
     /** Removes a stored credential connection. */
     readonly remove: (credentialID: Credential.ID) => Effect.Effect<void>
   }
+  readonly settings: {
+    /** Updates the stored settings of one integration. */
+    readonly update: (id: ID, updates: Partial<Settings>) => Effect.Effect<void>
+  }
   readonly oauth: {
     /** Starts a stateful OAuth attempt. */
     readonly connect: (input: {
@@ -217,6 +225,9 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/In
 const attemptLifetime = Duration.toMillis(Duration.minutes(10))
 const terminalRetention = Duration.toMillis(Duration.minutes(1))
 const scrubInterval = Duration.seconds(30)
+// Automatic account switching is opt-in so a rate limit never silently moves
+// traffic to another account the user did not intend to spend.
+const DEFAULT_SETTINGS: Settings = { autoSwitch: false }
 
 type AttemptTime = { created: number; expires: number }
 type PendingAttempt = {
@@ -261,6 +272,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const credentials = yield* Credential.Service
+    const kv = yield* KV.Service
     const bus = yield* Bus.Service
     const processes = yield* AppProcess.Service
     const scope = yield* Scope.Scope
@@ -357,13 +369,21 @@ const layer = Layer.effect(
       return [...credentials, ...env]
     }
 
-    const project = (entry: Entry, connections: IntegrationConnection.Info[]): Info =>
+    const settingsKey = (id: ID) => `integration:settings:${id}`
+
+    const loadSettings = Effect.fn("Integration.loadSettings")(function* (id: ID) {
+      const value = yield* kv.get(settingsKey(id))
+      return Schema.is(Settings)(value) ? value : DEFAULT_SETTINGS
+    })
+
+    const project = (entry: Entry, connections: IntegrationConnection.Info[], settings: Settings): Info =>
       Info.make({
         id: entry.ref.id,
         name: entry.ref.name,
         ...(entry.ref.metadata === undefined ? {} : { metadata: entry.ref.metadata }),
         methods: entry.methods,
         connections,
+        settings,
       })
 
     const authorize = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -651,13 +671,15 @@ const layer = Layer.effect(
       get: Effect.fn("Integration.get")(function* (id) {
         const entry = state.get().integrations.get(id)
         if (!entry) return undefined
-        return project(entry, resolveConnections(entry, yield* credentials.list(id)))
+        return project(entry, resolveConnections(entry, yield* credentials.list(id)), yield* loadSettings(id))
       }),
       list: Effect.fn("Integration.list")(function* () {
         const saved = Map.groupBy(yield* credentials.all(), (credential) => credential.integrationID)
-        return Array.from(state.get().integrations.values(), (entry) =>
-          project(entry, resolveConnections(entry, saved.get(entry.ref.id) ?? [])),
-        ).toSorted((a, b) => a.name.localeCompare(b.name))
+        return (yield* Effect.forEach(state.get().integrations.values(), (entry) =>
+          Effect.map(loadSettings(entry.ref.id), (settings) =>
+            project(entry, resolveConnections(entry, saved.get(entry.ref.id) ?? []), settings),
+          ),
+        )).toSorted((a, b) => a.name.localeCompare(b.name))
       }),
       connection: {
         active: Effect.fn("Integration.connection.active")(function* (id) {
@@ -712,6 +734,15 @@ const layer = Layer.effect(
           credentials.update(credentialID, updates),
         ),
         remove: Effect.fn("Integration.connection.remove")((credentialID) => credentials.remove(credentialID)),
+      },
+      settings: {
+        update: Effect.fn("Integration.settings.update")(function* (id, updates) {
+          const current = yield* loadSettings(id)
+          const next = { autoSwitch: updates.autoSwitch ?? current.autoSwitch }
+          if (next.autoSwitch === current.autoSwitch) return
+          yield* kv.set(settingsKey(id), next)
+          yield* bus.publish(Integration.Event.Updated, {})
+        }),
       },
       oauth: {
         connect: connectOAuth,
@@ -796,5 +827,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Credential.node, Bus.node, AppProcess.node],
+  deps: [Credential.node, KV.node, Bus.node, AppProcess.node],
 })

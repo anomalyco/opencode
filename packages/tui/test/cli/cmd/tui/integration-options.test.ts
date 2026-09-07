@@ -10,6 +10,7 @@ import {
 const integration = (value: Partial<IntegrationInfo> & Pick<IntegrationInfo, "id" | "name">): IntegrationInfo => ({
   methods: [],
   connections: [],
+  settings: { autoSwitch: false },
   ...value,
 })
 

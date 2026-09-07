@@ -53,6 +53,24 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       ),
   )
   .add(
+    HttpApiEndpoint.patch("integration.settings.update", "/api/integration/:integrationID/settings", {
+      params: { integrationID: Integration.ID },
+      query: LocationQuery,
+      payload: Schema.Struct({
+        autoSwitch: Schema.optional(Schema.Boolean),
+      }),
+      success: HttpApiSchema.NoContent,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.integration.settings.update",
+          summary: "Update integration settings",
+          description: "Change stored settings for one integration, such as automatic account switching.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.post("integration.connect.key", "/api/integration/:integrationID/connect/key", {
       params: { integrationID: Integration.ID },
       query: LocationQuery,

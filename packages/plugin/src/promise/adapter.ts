@@ -347,6 +347,12 @@ export function fromPromise(plugin: Plugin) {
           integration: {
             list: adaptApiMethod(IntegrationEndpoints["integration.list"], host.integration.list),
             get: adaptApiMethod(IntegrationEndpoints["integration.get"], host.integration.get),
+            settings: {
+              update: adaptApiMethod(
+                IntegrationEndpoints["integration.settings.update"],
+                host.integration.settings.update,
+              ),
+            },
             connect: {
               key: adaptApiMethod(IntegrationEndpoints["integration.connect.key"], host.integration.connect.key),
             },

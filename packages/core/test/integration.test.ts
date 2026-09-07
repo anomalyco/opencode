@@ -67,6 +67,7 @@ describe("Integration", () => {
           metadata: { source: "plugin", featured: true },
           methods: [],
           connections: [],
+          settings: { autoSwitch: false },
         }),
       )
 
@@ -673,4 +674,39 @@ describe("Integration", () => {
         }),
     )
   })
+
+  it.effect("stores per-integration settings and notifies clients", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const bus = yield* Bus.Service
+      const integrationID = Integration.ID.make("openai")
+      yield* integrations.transform((editor) => editor.method.update({ integrationID, method: { type: "key" } }))
+      expect((yield* integrations.get(integrationID))?.settings).toEqual({ autoSwitch: false })
+
+      const events: string[] = []
+      yield* bus.subscribe(Integration.Event.Updated).pipe(
+        Stream.runForEach((event) => Effect.sync(() => void events.push(event.type))),
+        Effect.forkScoped,
+      )
+      yield* Effect.yieldNow
+
+      yield* integrations.settings.update(integrationID, { autoSwitch: true })
+      expect((yield* integrations.get(integrationID))?.settings).toEqual({ autoSwitch: true })
+      expect((yield* integrations.list()).find((item) => item.id === integrationID)?.settings).toEqual({
+        autoSwitch: true,
+      })
+      yield* eventually(
+        Effect.sync(() => events.length),
+        (length) => length === 1,
+      )
+
+      // Writing the same value again is a no-op so clients are not asked to refetch.
+      yield* integrations.settings.update(integrationID, { autoSwitch: true })
+      yield* Effect.promise(() => Bun.sleep(5))
+      expect(events).toEqual([Integration.Event.Updated.type])
+
+      yield* integrations.settings.update(integrationID, { autoSwitch: false })
+      expect((yield* integrations.get(integrationID))?.settings).toEqual({ autoSwitch: false })
+    }),
+  )
 })

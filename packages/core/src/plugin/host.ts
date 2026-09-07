@@ -267,6 +267,10 @@ export const make = Effect.fn("PluginHost.make")(function* (
     integration: {
       list: () => response(integration.list()),
       get: (input) => response(integration.get(Integration.ID.make(input.integrationID))),
+      settings: {
+        update: (input) =>
+          integration.settings.update(Integration.ID.make(input.integrationID), { autoSwitch: input.autoSwitch }),
+      },
       connect: {
         key: (input) =>
           integration.connection.key({

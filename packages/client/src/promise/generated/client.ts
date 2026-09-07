@@ -110,6 +110,8 @@ import type {
   IntegrationGetOutput,
   IntegrationWellknownAddInput,
   IntegrationWellknownAddOutput,
+  IntegrationSettingsUpdateInput,
+  IntegrationSettingsUpdateOutput,
   IntegrationConnectKeyInput,
   IntegrationConnectKeyOutput,
   IntegrationOauthConnectInput,
@@ -1136,6 +1138,21 @@ export function make(options: ClientOptions) {
               path: `/api/experimental/integration/wellknown`,
               query: { location: input["location"] },
               body: { url: input["url"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401],
+              empty: true,
+            },
+            requestOptions,
+          ),
+      },
+      settings: {
+        update: (input: IntegrationSettingsUpdateInput, requestOptions?: RequestOptions) =>
+          request<IntegrationSettingsUpdateOutput>(
+            {
+              method: "PATCH",
+              path: `/api/integration/${encodeURIComponent(input.integrationID)}/settings`,
+              query: { location: input["location"] },
+              body: { autoSwitch: input["autoSwitch"] },
               successStatus: 204,
               declaredStatuses: [400, 401],
               empty: true,

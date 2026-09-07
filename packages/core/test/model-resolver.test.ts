@@ -361,6 +361,9 @@ describe("ModelResolver", () => {
         update: () => Effect.die("unused"),
         remove: () => Effect.die("unused"),
       },
+      settings: {
+        update: () => Effect.die("unused"),
+      },
       oauth: {
         connect: () => Effect.die("unused"),
         status: () => Effect.die("unused"),

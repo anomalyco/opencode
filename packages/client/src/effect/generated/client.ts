@@ -116,6 +116,8 @@ import type {
   IntegrationGetOutput,
   IntegrationWellknownAddInput,
   IntegrationWellknownAddOutput,
+  IntegrationSettingsUpdateInput,
+  IntegrationSettingsUpdateOutput,
   IntegrationConnectKeyInput,
   IntegrationConnectKeyOutput,
   IntegrationOauthConnectInput,
@@ -840,6 +842,16 @@ const EndpointIntegrationWellknownAdd =
       ),
     )
 
+const EndpointIntegrationSettingsUpdate =
+  (raw: RawClient["server.integration"]) => (input: IntegrationSettingsUpdateInput) =>
+    preserveEffect<IntegrationSettingsUpdateOutput>()(
+      raw["integration.settings.update"]({
+        params: { integrationID: input["integrationID"] },
+        query: { location: input["location"] },
+        payload: { autoSwitch: input["autoSwitch"] },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
 const EndpointIntegrationConnectKey = (raw: RawClient["server.integration"]) => (input: IntegrationConnectKeyInput) =>
   preserveEffect<IntegrationConnectKeyOutput>()(
     raw["integration.connect.key"]({
@@ -917,6 +929,7 @@ const adaptGroupIntegration = (raw: RawClient["server.integration"]) => ({
   list: EndpointIntegrationList(raw),
   get: EndpointIntegrationGet(raw),
   wellknown: { add: EndpointIntegrationWellknownAdd(raw) },
+  settings: { update: EndpointIntegrationSettingsUpdate(raw) },
   connect: { key: EndpointIntegrationConnectKey(raw) },
   oauth: {
     connect: EndpointIntegrationOauthConnect(raw),
