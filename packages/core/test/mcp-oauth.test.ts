@@ -176,10 +176,10 @@ describe("MCP OAuth", () => {
           const url = new URL(request.url)
           if (url.pathname === "/.well-known/oauth-authorization-server")
             return Response.json({
-              issuer: server.url.origin,
-              authorization_endpoint: `${server.url.origin}/authorize`,
-              token_endpoint: `${server.url.origin}/token`,
-              registration_endpoint: `${server.url.origin}/register`,
+              issuer: url.origin,
+              authorization_endpoint: `${url.origin}/authorize`,
+              token_endpoint: `${url.origin}/token`,
+              registration_endpoint: `${url.origin}/register`,
               response_types_supported: ["code"],
               ...metadata,
             })
