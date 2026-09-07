@@ -13,6 +13,14 @@ export default Plugin.define({
   id: "browser.smoke",
   effect: (ctx) =>
     Effect.gen(function* () {
+      const denied = new Set<string>()
+      yield* ctx.permission
+        .hook("evaluate", (event) =>
+          Effect.sync(() => {
+            if (event.action === "browser" && event.resources.some((url) => denied.has(url))) event.effect = "deny"
+          }),
+        )
+        .pipe(Effect.orDie)
       const tools = new Map<string, Tool.Info>()
       yield* ctx.tool
         .transform((editor) => {
@@ -24,6 +32,11 @@ export default Plugin.define({
         .pipe(Effect.orDie)
       yield* ctx.rpc
         .register(Smoke, {
+          deny: ({ urls }) =>
+            Effect.sync(() => {
+              denied.clear()
+              urls.forEach((url) => denied.add(url))
+            }),
           execute: (input) =>
             Effect.gen(function* () {
               const result = yield* CodeModeTool.create({ tools }, (name, tool, input, context) =>

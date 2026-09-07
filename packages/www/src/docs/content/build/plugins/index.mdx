@@ -648,6 +648,22 @@ const review = await ctx.generate.text({
 
 ### Permissions
 
+Assert permission before a plugin action. This plugin-only method uses the generated client's `PermissionCreateInput`
+and returns no value: `allow` completes immediately, `ask` waits for a reply, and `deny` fails.
+
+```ts
+await ctx.permission.assert({
+  sessionID,
+  action: "deploy",
+  resources: ["staging"],
+  save: ["staging"],
+})
+```
+
+Promise plugins receive `Promise<void>`. Effect plugins receive `Effect<void, unknown>` and run it with
+`yield* ctx.permission.assert(input)`. Let a rejection propagate so the action does not run. A rejection without feedback
+preserves the permission engine's session-interruption behavior; a rejection with feedback carries `Permission.CorrectedError`.
+
 Inspect or resolve pending permission requests.
 
 ```ts
