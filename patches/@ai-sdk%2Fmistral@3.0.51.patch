@@ -2,10 +2,12 @@ diff --git a/dist/index.d.mts b/dist/index.d.mts
 index 1bde0b9f8cbe6771a52c1041095c9dddfe8e5b6c..0ca2ffb2a0c9327aed5ddcf0004500dc8b42569f 100644
 --- a/dist/index.d.mts
 +++ b/dist/index.d.mts
-@@ -14,6 +14,7 @@ declare const mistralLanguageModelOptions: z.ZodObject<{
-         none: "none";
-         high: "high";
-     }>>;
+@@ -13,7 +13,5 @@ declare const mistralLanguageModelOptions: z.ZodObject<{
+-    reasoningEffort: z.ZodOptional<z.ZodEnum<{
+-        none: "none";
+-        high: "high";
+-    }>>;
++    reasoningEffort: z.ZodOptional<z.ZodString>;
 +    promptCacheKey: z.ZodOptional<z.ZodString>;
  }, z.core.$strip>;
  type MistralLanguageModelOptions = z.infer<typeof mistralLanguageModelOptions>;
@@ -14,10 +16,12 @@ diff --git a/dist/index.d.ts b/dist/index.d.ts
 index 1bde0b9f8cbe6771a52c1041095c9dddfe8e5b6c..0ca2ffb2a0c9327aed5ddcf0004500dc8b42569f 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
-@@ -14,6 +14,7 @@ declare const mistralLanguageModelOptions: z.ZodObject<{
-         none: "none";
-         high: "high";
-     }>>;
+@@ -13,7 +13,5 @@ declare const mistralLanguageModelOptions: z.ZodObject<{
+-    reasoningEffort: z.ZodOptional<z.ZodEnum<{
+-        none: "none";
+-        high: "high";
+-    }>>;
++    reasoningEffort: z.ZodOptional<z.ZodString>;
 +    promptCacheKey: z.ZodOptional<z.ZodString>;
  }, z.core.$strip>;
  type MistralLanguageModelOptions = z.infer<typeof mistralLanguageModelOptions>;
@@ -69,7 +73,7 @@ index d3f904c12a1d582cc7b9e9a2d30273e1a8505b28..267f34e20ea392b7a85ad5259d72d506
     * - `'none'`: Disable reasoning
     */
 -  reasoningEffort: import_v4.z.enum(["high", "none"]).optional()
-+  reasoningEffort: import_v4.z.enum(["high", "none"]).optional(),
++  reasoningEffort: import_v4.z.string().optional(),
 +  promptCacheKey: import_v4.z.string().optional()
  });
  
@@ -268,7 +272,7 @@ index d2eff622c1b84a96bdeb4012cb0206a33012a04d..3bff11ddd6136ada45809568828cbc8f
     * - `'none'`: Disable reasoning
     */
 -  reasoningEffort: z.enum(["high", "none"]).optional()
-+  reasoningEffort: z.enum(["high", "none"]).optional(),
++  reasoningEffort: z.string().optional(),
 +  promptCacheKey: z.string().optional()
  });
  
@@ -655,7 +659,8 @@ index 54b29c08517d348995b6ca093b11160e453d5c8b..de30c3e7d924889339e38b1067cb26e9
 @@ -64,6 +64,11 @@ export const mistralLanguageModelOptions = z.object({
     * - `'none'`: Disable reasoning
     */
-   reasoningEffort: z.enum(['high', 'none']).optional(),
+-  reasoningEffort: z.enum(['high', 'none']).optional(),
++  reasoningEffort: z.string().optional(),
 +
 +  /**
 +   * A stable identifier used to route requests with shared prompt prefixes.

@@ -69,7 +69,7 @@ export const dict = {
   "ui.sessionTurn.error.addCredits": "Илова кардани кредитҳо",
   "dialog.usageExceeded.freeTier.title": "Ба ҳадди ройгон расид",
   "dialog.usageExceeded.freeTier.description":
-    "Ба OpenCode Go обуна шавед, то дастрасии боэътимод ба беҳтарин моделҳои кушодаасос аз $5 дар як моҳ оғоз шавад.",
+    "Ба OpenCode Go бо нархи $10 дар як моҳ обуна шавед, то ба беҳтарин моделҳои кушодаасос дастрасии боэътимод дошта бошед.",
   "dialog.usageExceeded.freeTier.actionLabel": "Обуна шавед",
   "dialog.usageExceeded.accountRateLimit.title": "Ба маҳдудияти рафтан расид",
   "dialog.usageExceeded.accountRateLimit.description":
