@@ -216,7 +216,8 @@ export function parseHeap(value: unknown) {
             if (references.length < limit) references.push({ name, node: node(to) })
             else truncated = true
           }
-          if (to === target) {
+          // A weak edge (WeakRef, WeakMap key) does not keep the target alive, so it is not a retainer.
+          if (to === target && type !== "weak") {
             if (retainers.length < limit) retainers.push({ name, node: node(offset) })
             else truncated = true
           }

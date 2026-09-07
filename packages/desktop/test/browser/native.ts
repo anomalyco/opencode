@@ -100,7 +100,7 @@ async function main() {
     const crossOrigin = `http://${request.headers.host?.replace(/^[^:]+/, "localhost")}`
     response.setHeader("content-type", "text/html")
     response.end(
-      `<!doctype html><html lang="en"><head><title>Browser suite</title><meta name="description" content="Native browser test"><style>body{font:16px sans-serif;padding:20px}input,button,select{margin:6px}#space{height:1400px}</style></head><body><h1>Browser suite</h1><label>Name<input aria-label="Name"></label><button onclick="document.querySelector('output').textContent=document.querySelector('input').value">Apply</button><output>Waiting</output><input type="checkbox" aria-label="Remember"><select aria-label="Color"><option value="red">Red</option><option value="blue">Blue</option></select><input type="file" aria-label="Upload"><button onclick="alert('hello dialog')">Dialog</button><form onsubmit="event.preventDefault();document.querySelector('output').textContent='submitted:'+this.q.value"><input name="q" aria-label="Query"></form><a href="/download">Download</a><a href="/frame" target="_blank">Popup</a><iframe title="Child frame" src="/frame"></iframe><iframe name="scaled" title="Scaled frame" src="/frame" style="transform:scale(0.5);transform-origin:0 0"></iframe><iframe name="outer" title="Nested frame" src="${crossOrigin}/nested"></iframe><div id="space">Scroll content</div><script>console.log('fixture log'); console.error('fixture error'); fetch('/api/test'); fetch('/missing'); window.heapFixture={value:'heap marker'};</script></body></html>`,
+      `<!doctype html><html lang="en"><head><title>Browser suite</title><meta name="description" content="Native browser test"><style>body{font:16px sans-serif;padding:20px}input,button,select{margin:6px}#space{height:1400px}</style></head><body><h1>Browser suite</h1><label>Name<input aria-label="Name"></label><button onclick="document.querySelector('output').textContent=document.querySelector('input').value">Apply</button><output>Waiting</output><input type="checkbox" aria-label="Remember"><select aria-label="Color"><option value="red">Red</option><option value="blue">Blue</option></select><input type="file" aria-label="Upload"><button onclick="alert('hello dialog')">Dialog</button><form onsubmit="event.preventDefault();document.querySelector('output').textContent='submitted:'+this.q.value"><input name="q" aria-label="Query"></form><a href="/download">Download</a><a href="/frame" target="_blank">Popup</a><iframe title="Child frame" src="/frame"></iframe><iframe name="scaled" title="Scaled frame" src="/frame" style="transform:scale(0.5);transform-origin:0 0"></iframe><iframe name="outer" title="Nested frame" src="${crossOrigin}/nested"></iframe><input aria-label="Validated" onchange="alert('invalid value')"><input aria-label="After"><input type="date" aria-label="Date"><input type="time" aria-label="Time"><div id="space">Scroll content</div><script>console.log('fixture log'); console.error('fixture error'); fetch('/api/test'); fetch('/missing'); window.heapFixture={value:'heap marker'};</script></body></html>`,
     )
   })
   web.on("upgrade", (request, socket) => {
@@ -354,6 +354,34 @@ async function main() {
       (await call("evaluate", { tabID, script: "document.querySelector('output').textContent" })).value,
       "element dropped",
     )
+    // The first field's change validation alerts while the second takes focus; once the dialog
+    // is dismissed the second field must still be untouched.
+    await fails(
+      "fill_form",
+      {
+        tabID,
+        fields: [
+          { type: "text", ref: ref("Validated"), value: "first" },
+          { type: "text", ref: ref("After"), value: "late mutation" },
+        ],
+      },
+      /Inspect it with browser\.dialog/,
+    )
+    await call("dialog", { tabID, action: "dismiss" })
+    // Date and time controls take their value directly; keyboard input cannot compose it.
+    await call("fill", { tabID, ref: ref("Date"), text: "2026-09-07" })
+    await call("fill", { tabID, ref: ref("Time"), text: "14:45" })
+    await fails("fill", { tabID, ref: ref("Date"), text: "next week" }, /Use its required format/)
+    assert.deepEqual(
+      (
+        await call("evaluate", {
+          tabID,
+          script:
+            "[...document.querySelectorAll('[aria-label=Validated],[aria-label=After],[type=date],[type=time]')].map(input => input.value)",
+        })
+      ).value,
+      ["first", "", "2026-09-07", "14:45"],
+    )
     const frames = await call("frames", { tabID })
     const child = frames.frames.find((frame) => frame.parentID && !frame.name)
     assert(child)
@@ -408,6 +436,12 @@ async function main() {
     assert(screenshot.files[0].path.startsWith(process.env.SMOKE_SERVER_FILES!))
     const logs = await call("console", { tabID, level: "debug" })
     assert(logs.messages.some((message) => message.text.includes("fixture error")))
+    // Chromium's own report of the failed /missing fetch is a Log entry, not a console call.
+    const errors = await call("console", { tabID, level: "error" })
+    assert(
+      errors.messages.some((message) => message.text.includes("404") && message.source?.url.endsWith("/missing")),
+      JSON.stringify(errors),
+    )
     const network = await call("network.list", { tabID, urlContains: "/api/test" })
     assert(network.requests.length)
     const detail = await call("network.get", { tabID, id: network.requests[0].id, includeBody: true })
@@ -439,6 +473,13 @@ async function main() {
     assert.equal(
       (await call("evaluate", { tabID, script: "document.querySelector('input[type=file]').files[0].text()" })).value,
       "server upload bytes",
+    )
+    // The page reads the temp file's basename as File.name, so spaces and non-ASCII must survive.
+    const named = await rpc.write({ text: "q1", name: "Quarter 1 日本語.csv" }, { location })
+    await call("files.upload", { tabID, ref: Browser.Ref.make(input), paths: [named] })
+    assert.equal(
+      (await call("evaluate", { tabID, script: "document.querySelector('input[type=file]').files[0].name" })).value,
+      "Quarter 1 日本語.csv",
     )
     const drop = fileSnap.content
       .split("\n")

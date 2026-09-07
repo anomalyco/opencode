@@ -78,6 +78,19 @@ export function createDiagnostics(cdp: Cdp) {
         : undefined,
     )
   })
+  // Chromium's own messages (CSP refusals, mixed content, failed resource loads, deprecations)
+  // are Log entries, not Runtime console calls.
+  cdp.on("Log.entryAdded", (event) => {
+    const entry = event.entry
+    add(
+      entry.level === "verbose" ? "debug" : entry.level,
+      entry.text,
+      entry.timestamp,
+      entry.url
+        ? { url: entry.url.slice(0, Browser.MAX_TEXT), line: (entry.lineNumber ?? 0) + 1, column: 1 }
+        : undefined,
+    )
+  })
   cdp.on("Runtime.exceptionThrown", (event) => {
     const error = event.exceptionDetails
     add(
@@ -261,6 +274,7 @@ export function createDiagnostics(cdp: Cdp) {
     },
     async enable(sessionID?: string) {
       await cdp.send("Runtime.enable", {}, sessionID)
+      await cdp.send("Log.enable", {}, sessionID)
       await cdp.send(
         "Network.enable",
         { maxTotalBufferSize: 5 * 1024 * 1024, maxResourceBufferSize: 1024 * 1024, maxPostDataSize: 20_000 },

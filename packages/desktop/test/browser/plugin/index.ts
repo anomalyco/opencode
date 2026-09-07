@@ -42,9 +42,9 @@ export default Plugin.define({
                 Schema.Struct({ output: Schema.String, error: Schema.optionalKey(Schema.Boolean) }),
               )(result.output)
             }).pipe(Effect.orDie),
-          write: ({ text }) =>
+          write: ({ text, name }) =>
             Effect.promise(async () => {
-              const file = path.join(process.env.SMOKE_SERVER_FILES!, "upload.txt")
+              const file = path.join(process.env.SMOKE_SERVER_FILES!, name ?? "upload.txt")
               await writeFile(file, text)
               return file
             }),

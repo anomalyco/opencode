@@ -312,23 +312,32 @@ export function createBrowserPage(
         )
       const modal = Promise.withResolvers<never>()
       const cancelled = Promise.withResolvers<never>()
-      const cancel = () =>
+      // The action underneath the race keeps running after a dialog wins it; it checks this
+      // signal before each further step, so a validation alert on one field stops the rest.
+      // A navigation is left alone: its beforeunload dialog is answered through browser.dialog
+      // and the pending load then proceeds or not.
+      const run = new AbortController()
+      const cancel = () => {
+        run.abort()
         cancelled.reject(
           new Error(
             "Browser operation was cancelled. Inspect the tab before deciding to repeat an action; cancellation does not undo changes already made.",
           ),
         )
+      }
       signal.addEventListener("abort", cancel, { once: true })
-      const reject = () =>
+      const reject = () => {
+        if (command.action.type !== "navigate") run.abort()
         modal.reject(
           new Error(
             'A JavaScript dialog opened while the action was running. Inspect it with browser.dialog({tabID,action:"get"}) and accept or dismiss it. Do not repeat the original action just to close the dialog.',
           ),
         )
+      }
       if (command.action.type !== "dialog") dialogs.add(reject)
       try {
         return await Promise.race([
-          execute(command.action, command.files, signal, command.target),
+          execute(command.action, command.files, run.signal, command.target),
           modal.promise,
           cancelled.promise,
         ])
@@ -475,12 +484,12 @@ export function createBrowserPage(
         break
       }
       case "fill":
-        await fill(target(action.ref), action.text)
+        await fill(target(action.ref), action.text, signal)
         break
       case "fill_form":
         for (const field of action.fields) {
           abortError(signal)
-          if (field.type === "text") await fill(target(field.ref), field.value)
+          if (field.type === "text") await fill(target(field.ref), field.value, signal)
           if (field.type === "select") await select(target(field.ref), field.values)
           if (field.type === "check") await check(target(field.ref), field.checked)
         }
@@ -869,18 +878,30 @@ export function createBrowserPage(
     }
   }
 
-  async function fill(element: Element, value: string) {
-    const editable = await call(
+  async function fill(element: Element, value: string, signal: AbortSignal) {
+    const kind = await call(
       element,
-      "function() { const input = this instanceof HTMLInputElement && !['file','checkbox','radio','button','submit','reset','image','hidden','range','color'].includes(this.type); return (input || this instanceof HTMLTextAreaElement || this.isContentEditable) && !this.disabled && !this.readOnly; }",
+      "function() { if (this.disabled || this.readOnly) return; if (this instanceof HTMLTextAreaElement || this.isContentEditable) return 'text'; if (!(this instanceof HTMLInputElement)) return; if (['date','time','datetime-local','month','week'].includes(this.type)) return 'structured'; if (!['file','checkbox','radio','button','submit','reset','image','hidden','range','color'].includes(this.type)) return 'text'; }",
     )
-    if (!editable)
+    if (!kind)
       throw new Error(
         "Target is not an enabled editable text field. Take a fresh snapshot and choose a textbox; use browser.select for dropdowns, browser.check for checkboxes/radios, or browser.files.upload for file inputs.",
       )
+    // Keyboard input cannot compose a date or time control's value; Chromium clears a malformed one.
+    if (kind === "structured") {
+      await call(
+        element,
+        "function(value) { const previous = this.value; this.focus(); this.value = value; if (this.value !== value) { this.value = previous; throw new Error('The ' + this.type + ' input rejected this value and keeps its previous one. Use its required format, for example 2026-09-07 for date, 14:45 for time, 2026-09-07T14:45 for datetime-local, 2026-09 for month, or 2026-W37 for week.'); } this.dispatchEvent(new Event('input',{bubbles:true})); this.dispatchEvent(new Event('change',{bubbles:true})); }",
+        [value],
+      )
+      return
+    }
     await cdp.send("DOM.focus", { backendNodeId: element.backendID }, element.sessionID)
+    // Focusing this field blurs the previous one; a validation dialog from that blur must stop here.
+    abortError(signal)
     await key(process.platform === "darwin" ? "Meta+A" : "Control+A")
     await key("Backspace")
+    abortError(signal)
     await cdp.send("Input.insertText", { text: value })
   }
 

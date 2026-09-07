@@ -9,7 +9,10 @@ export const Smoke = Rpc.define({
       input: Schema.Struct({ sessionID: Session.ID, code: Schema.String }),
       output: Schema.Struct({ output: Schema.String, error: Schema.optionalKey(Schema.Boolean) }),
     },
-    write: { input: Schema.Struct({ text: Schema.String }), output: Schema.String },
+    write: {
+      input: Schema.Struct({ text: Schema.String, name: Schema.optionalKey(Schema.String) }),
+      output: Schema.String,
+    },
     read: { input: Schema.Struct({ path: Schema.String }), output: Schema.String },
   },
   events: {},

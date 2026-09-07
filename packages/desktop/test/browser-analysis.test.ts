@@ -43,17 +43,20 @@ test("heap queries and object links use snapshot IDs and shallow sizes", () => {
         node_fields: ["type", "name", "id", "self_size", "edge_count"],
         node_types: [["object"], "string", "number", "number", "number"],
         edge_fields: ["type", "name_or_index", "to_node"],
-        edge_types: [["property"], "string", "node"],
+        edge_types: [["property", "weak"], "string", "node"],
       },
     },
-    nodes: [0, 0, 1, 10, 1, 0, 1, 3, 20, 0],
-    edges: [0, 2, 5],
-    strings: ["root", "child", "next"],
+    // root -next-> child, plus a WeakRef whose weak "target" edge points at child too.
+    nodes: [0, 0, 1, 10, 1, 0, 1, 3, 20, 0, 0, 3, 5, 8, 1],
+    edges: [0, 2, 5, 1, 4, 5],
+    strings: ["root", "child", "next", "WeakRef", "target"],
   })
-  expect(heap.summary()).toMatchObject({ nodes: 2, edges: 1, selfBytes: 30 })
+  expect(heap.summary()).toMatchObject({ nodes: 3, edges: 2, selfBytes: 38 })
   expect(heap.query("", 1)).toMatchObject({ nodes: [{ id: 3, selfBytes: 20 }], truncated: true })
   expect(heap.object(1).references).toMatchObject([{ name: "next", node: { id: 3 } }])
-  expect(heap.object(3).retainers).toMatchObject([{ name: "next", node: { id: 1 } }])
+  expect(heap.object(5).references).toMatchObject([{ name: "target", node: { id: 3 } }])
+  // The weak edge is visible from its owner but never counts as keeping the child alive.
+  expect(heap.object(3).retainers).toEqual([{ name: "next", node: expect.objectContaining({ id: 1 }) }])
   expect(() => heap.object(99)).toThrow("Object ID was not found")
 })
 

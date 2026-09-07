@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { rm } from "node:fs/promises"
+import path from "node:path"
 import { Browser } from "@opencode-ai/plugin-browser/rpc"
 import { browserFailure, protocolError } from "../src/main/browser/errors"
 import { createBrowserFiles } from "../src/main/browser/files"
@@ -62,10 +63,12 @@ test("files distinguish pending, failed, unknown and missing desktop copies", as
     await expect(
       files.save("large.bin", "application/octet-stream", new Uint8Array(Browser.MAX_FILE_BYTES + 1)),
     ).rejects.toThrow("Do not retry an identical capture")
-    await expect(files.save(".", "text/plain", new Uint8Array([1]))).rejects.toThrow(
-      "Cannot write the capture on the desktop",
-    )
-    expect(files.list().find((file) => file.name === ".")?.state).toBe("failed")
+    // The page sees the temp basename as File.name: spaces and non-ASCII stay, only characters no
+    // filesystem accepts change, and a bare dot or separator cannot leave the per-file directory.
+    expect(path.basename(files.add("Quarter 1 日本語.csv", "text/csv").path)).toBe("Quarter 1 日本語.csv")
+    expect(path.basename(files.add("a/b:c?.txt", "text/plain").path)).toBe("a_b_c_.txt")
+    expect(path.basename(files.add("..", "text/plain").path)).toBe("file")
+    expect(path.dirname(files.add(".", "text/plain").path).startsWith(files.directory)).toBe(true)
   } finally {
     await files.dispose()
   }

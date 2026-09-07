@@ -37,7 +37,16 @@ export function createBrowserFiles(source: () => readonly string[]) {
         mime,
         bytes: 0,
         state: "pending" as "pending" | "completed" | "failed",
-        path: path.join(target, name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "file"),
+        // A page receives this basename as the uploaded File.name, so spaces and non-ASCII stay;
+        // only characters no supported filesystem accepts are replaced. Each file has its own
+        // directory, so names never collide.
+        path: path.join(
+          target,
+          name
+            .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
+            .replace(/[. ]+$/, "")
+            .slice(-120) || "file",
+        ),
         resources: [...new Set(resources)].sort(),
       }
       files.set(id, file)
