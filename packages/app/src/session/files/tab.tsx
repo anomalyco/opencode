@@ -1,4 +1,4 @@
-import { createMemo, Show } from "solid-js"
+import { children, createMemo, Show } from "solid-js"
 import type { JSX } from "solid-js"
 import { useSortable } from "@dnd-kit/solid/sortable"
 import { Keybind } from "@opencode-ai/ui/keybind"
@@ -33,6 +33,7 @@ export function SortableTab(props: {
     },
   })
   const path = createMemo(() => file.pathFromTab(props.tab))
+  const custom = children(() => props.children)
   const content = createMemo(() => {
     const value = path()
     if (!value) return
@@ -69,8 +70,8 @@ export function SortableTab(props: {
           }
           hideCloseButton
         >
-          <Show when={props.children} fallback={<Show when={content()}>{(value) => value()}</Show>}>
-            {props.children}
+          <Show when={custom()} fallback={<Show when={content()}>{(value) => value()}</Show>}>
+            {custom()}
           </Show>
         </Tabs.Trigger>
       </div>

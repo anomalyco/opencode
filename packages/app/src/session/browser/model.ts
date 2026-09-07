@@ -1,4 +1,4 @@
-import { batch, createEffect, createMemo, on } from "solid-js"
+import { batch, createEffect, createMemo, on, onCleanup } from "solid-js"
 import type { Browser } from "@opencode-ai/plugin-browser/rpc"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -49,7 +49,9 @@ export function createSessionBrowser(session: SessionModel) {
   }
   createEffect(() => {
     const sessionID = session.identity.sessionID()
-    if (sessionID && attachments.enabled()) attachments.attach(server, sessionID)
+    if (!sessionID) return
+    if (attachments.enabled()) attachments.attach(server, sessionID)
+    onCleanup(attachments.onFocus(server, sessionID, focus))
   })
   createEffect(
     on(
@@ -94,14 +96,6 @@ export function createSessionBrowser(session: SessionModel) {
       },
     ),
   )
-  createEffect(
-    on(
-      () => attachment()?.focus,
-      (request) => request && focus(request.tabID),
-      { defer: true },
-    ),
-  )
-
   return {
     available,
     attached,

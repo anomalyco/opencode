@@ -1,4 +1,4 @@
-import { batch, createEffect, createMemo, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, getOwner, onCleanup, runWithOwner } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { Browser } from "@opencode-ai/plugin-browser/rpc"
@@ -7,7 +7,7 @@ import type { BrowserPaneCommand, BrowserPaneRegistration, BrowserPaneState } fr
 import { usePlatform } from "@/runtime/platform/platform"
 import type { useServer } from "@/runtime/server/current"
 import { useSettings } from "@/settings/model"
-import { sessionIDHasOpenTab, useTabs } from "@/shell/tabs/tabs"
+import { findSessionTab, tabKey, useTabs } from "@/shell/tabs/tabs"
 
 type Server = ReturnType<typeof useServer>
 
@@ -15,13 +15,13 @@ export type BrowserAttachment = {
   registration?: BrowserPaneRegistration
   browser: BrowserPaneState
   error?: string
-  /** Latest desktop focus request; a new object per event so route models can react to each one. */
-  focus?: { tabID: Browser.TabID }
 }
 
 type Live = {
   server: Server
   sessionID: string
+  /** Shell tab that owns this attachment once seen; it may route to a child session later. */
+  tab?: string
   registration?: BrowserPaneRegistration
   retry?: ReturnType<typeof setTimeout>
   attempts: number
@@ -38,10 +38,12 @@ export const { use: useBrowserAttachments, provider: BrowserAttachmentsProvider 
     const settings = useSettings()
     const language = useLanguage()
     const shellTabs = useTabs()
+    const owner = getOwner()
     const [store, setStore] = createStore<Record<string, BrowserAttachment | undefined>>({})
     // Servers whose plugin lacks the browser RPC; sessions on them stop retrying.
     const [unsupported, setUnsupported] = createStore<Record<string, true | undefined>>({})
     const live = new Map<string, Live>()
+    const focus = new Map<string, Set<(tabID: Browser.TabID) => void>>()
     const key = (server: Server, sessionID: string) => `${server.key}\n${sessionID}`
     const enabled = createMemo(
       () => !!platform.browserPane && settings.ready() && settings.general.experimentalBrowser(),
@@ -58,8 +60,12 @@ export const { use: useBrowserAttachments, provider: BrowserAttachmentsProvider 
       Object.keys(store).forEach((id) => {
         const entry = live.get(id)
         if (!entry) return
-        if (on && !entry.server.health?.incompatible && sessionIDHasOpenTab(tabs, entry.server.key, entry.sessionID))
-          return
+        // Tabs hydrate asynchronously, so the owner is learned when first seen rather than required up
+        // front. A tab keeps owning the attachment while it exists, even after routing back to its parent.
+        const current = findSessionTab(tabs, entry.server.key, entry.sessionID)
+        if (current) entry.tab = tabKey(current)
+        const owned = entry.tab === undefined || tabs.some((tab) => tabKey(tab) === entry.tab)
+        if (on && owned && !entry.server.health?.incompatible) return
         close(id)
       })
     })
@@ -71,16 +77,22 @@ export const { use: useBrowserAttachments, provider: BrowserAttachmentsProvider 
       state: (server: Server, sessionID: string) => store[key(server, sessionID)],
       attach(server: Server, sessionID: string) {
         const id = key(server, sessionID)
+        const existing = live.get(id)
+        // A restarted sidecar arrives as a new connection under the same key; retries must use it.
+        if (existing) {
+          existing.server = server
+          return
+        }
         const pane = platform.browserPane
-        if (live.has(id) || !pane || !enabled() || unsupported[server.key] || server.health?.incompatible) return
+        if (!pane || !enabled() || unsupported[server.key] || server.health?.incompatible) return
         const entry: Live = { server, sessionID, attempts: 0, dispose: () => undefined }
         live.set(id, entry)
         setStore(id, { browser: null })
         const register = () => {
           if (entry.registration || live.get(id) !== entry) return
-          const registration = pane.register({ sessionID, endpoint: server.conn.http }, (event) => {
+          const registration = pane.register({ sessionID, endpoint: entry.server.conn.http }, (event) => {
             if (live.get(id) !== entry) return
-            if (event.type === "focus") return setStore(id, "focus", { tabID: event.tabID })
+            if (event.type === "focus") return focus.get(id)?.forEach((listener) => listener(event.tabID))
             if (event.error === "browser.pane.unsupported") {
               setUnsupported(server.key, true)
               return close(id)
@@ -112,16 +124,30 @@ export const { use: useBrowserAttachments, provider: BrowserAttachmentsProvider 
           entry.registration = registration
           setStore(id, { registration, browser: null, error: undefined })
         }
-        // A new session appears in the UI before its server-side creation finishes.
+        // A new session appears in the UI before its server-side creation finishes. The listener
+        // belongs to this provider, not to the route effect that happened to call attach().
         const data = server.ctx.data
-        const unsubscribe = data.on("session.created", (event) => {
-          if (event.data.sessionID === sessionID) register()
-        })
+        const unsubscribe = runWithOwner(owner, () =>
+          data.on("session.created", (event) => {
+            if (event.data.sessionID === sessionID) register()
+          }),
+        )
         if (!data.session.creating(sessionID)) register()
         entry.dispose = () => {
-          unsubscribe()
+          unsubscribe?.()
           clearTimeout(entry.retry)
           entry.registration?.close()
+        }
+      },
+      /** Desktop focus requests for a mounted session route; nothing is replayed to routes mounted later. */
+      onFocus(server: Server, sessionID: string, listener: (tabID: Browser.TabID) => void) {
+        const id = key(server, sessionID)
+        const listeners = focus.get(id) ?? new Set()
+        listeners.add(listener)
+        focus.set(id, listeners)
+        return () => {
+          listeners.delete(listener)
+          if (!listeners.size) focus.delete(id)
         }
       },
       command(server: Server, sessionID: string, command: BrowserPaneCommand) {
