@@ -10,8 +10,14 @@ const hop = new Set([
   "upgrade",
   "host",
 ])
+const fieldName = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
 
 function sanitize(out: Headers) {
+  const connection = out.get("connection")
+  for (const key of connection?.split(",") ?? []) {
+    const name = key.trim()
+    if (fieldName.test(name)) out.delete(name)
+  }
   for (const key of hop) out.delete(key)
   out.delete("accept-encoding")
   out.delete("x-opencode-directory")
