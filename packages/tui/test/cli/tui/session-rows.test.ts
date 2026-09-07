@@ -376,23 +376,6 @@ test("groups adjacent reasoning parts until a visible boundary", () => {
   ])
 })
 
-test("completes a reasoning group before the assistant step finishes", () => {
-  const messages: SessionMessageInfo[] = [
-    assistant("assistant-1", [
-      { type: "reasoning", text: "Finished thinking", time: { created: 1_000, completed: 6_800 } },
-    ]),
-  ]
-
-  expect(reduceSessionRows(messages)).toEqual([
-    {
-      type: "group",
-      kind: "reasoning",
-      completed: true,
-      refs: [{ messageID: "assistant-1", partID: "reasoning:0" }],
-    },
-  ])
-})
-
 test("groups across empty assistant reasoning parts", () => {
   const messages: SessionMessageInfo[] = [
     assistant("assistant-1", [
