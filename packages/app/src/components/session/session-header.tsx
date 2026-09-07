@@ -148,12 +148,12 @@ export function SessionHeader() {
   const terminal = useTerminal()
   const { params, view } = useSessionLayout()
 
-  const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
-  const project = createMemo(() => {
-    const directory = projectDirectory()
-    if (!directory) return
-    return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
+  const projectDirectory = createMemo(() => {
+    const directory = decode64(params.dir)
+    if (directory) return directory
+    return params.id ? (sync().session.get(params.id)?.directory ?? "") : ""
   })
+  const project = createMemo(() => sync().project)
   const name = createMemo(() => {
     const current = project()
     if (current) return current.name || getFilename(current.worktree)
