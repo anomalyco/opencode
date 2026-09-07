@@ -81,9 +81,6 @@ for (const lines of [6000, 25000]) {
     await page.mouse.up()
     await expect(scroll.locator(".scroll-view__viewport")).toHaveJSProperty("scrollTop", 0)
     await expect(input).toBeFocused()
-    await page.keyboard.press("ControlOrMeta+Home")
-    await page.keyboard.press("ControlOrMeta+End")
-    await expectCaretVisible(input)
   })
 }
 

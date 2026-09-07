@@ -607,6 +607,17 @@ export namespace Compaction {
 }
 
 export namespace RevertEvent {
+  export const Prepared = Event.durable({
+    type: "session.revert.prepared",
+    ...options,
+    schema: {
+      ...Base,
+      /** The original tree, only when no staged or pending revert already records it. */
+      snapshot: Snapshot.ID.pipe(optional),
+      /** Newly protected paths; projection retains previously protected paths. */
+      paths: Schema.Array(RelativePath),
+    },
+  })
   export const Staged = Event.durable({
     type: "session.revert.staged",
     ...options,
@@ -671,10 +682,11 @@ export const Definitions = Event.inventory(
   MessageContentUpdated,
 )
 
-// UsageRecorded is durable but internal: excluded from Definitions so it never reaches the public manifest.
+// Internal durable events stay out of the live public manifest, but remain available in the session log.
 export const DurableDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "durable"),
   UsageRecorded,
+  RevertEvent.Prepared,
 )
 export const EphemeralDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "ephemeral"),

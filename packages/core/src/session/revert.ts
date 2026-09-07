@@ -11,7 +11,8 @@ import { SessionEvent } from "./event.js"
 import { MessageNotFoundError } from "./error.js"
 import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
-import { SessionMessageTable } from "./sql.js"
+import { SessionMessageTable, SessionTable } from "./sql.js"
+import type { SessionStore } from "./store.js"
 
 export { MessageNotFoundError }
 
@@ -28,18 +29,30 @@ export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
   const instances = yield* Instance.Service
   const database = yield* Database.Service
   const bus = yield* Bus.Service
-
+  const next = yield* plan(database.db, { sessionID: input.session.id, messageID: input.messageID })
+  const pending = yield* loadPending(database.db, input.session.id)
   return yield* Effect.gen(function* () {
     const snapshot = yield* Snapshot.Service
-    const original = input.session.revert?.snapshot
-      ? Snapshot.ID.make(input.session.revert.snapshot)
-      : yield* snapshot.capture()
-    const next = yield* plan(database.db, { sessionID: input.session.id, messageID: input.messageID })
+    const recorded = pending?.snapshot ?? input.session.revert?.snapshot
+    const original = recorded ?? (yield* snapshot.capture())
+    const previous = new Set(
+      pending?.paths ?? (input.session.revert?.files ?? []).map((file) => RelativePath.make(file.file)),
+    )
     const restore = new Map<RelativePath, Snapshot.ID>()
-    if (original) {
-      for (const file of input.session.revert?.files ?? []) restore.set(RelativePath.make(file.file), original)
-    }
+    if (original) for (const file of previous) restore.set(file, original)
     if (input.files !== false) for (const [file, tree] of next) restore.set(file, tree)
+    if (restore.size && !original)
+      return yield* new Snapshot.Error({
+        operation: "capture",
+        message: "Cannot restore files without an original snapshot",
+      })
+    const added = Array.from(restore.keys()).filter((file) => !previous.has(file))
+    if (restore.size && (!recorded || added.length))
+      yield* bus.publish(SessionEvent.RevertEvent.Prepared, {
+        sessionID: input.session.id,
+        snapshot: recorded ? undefined : original,
+        paths: added,
+      })
     if (restore.size) yield* snapshot.restore({ files: restore })
     const paths = input.files === false ? [] : Array.from(next.keys())
     const files = original
@@ -60,14 +73,20 @@ export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
 
 export const clear = Effect.fn("SessionRevert.clear")(function* (session: SessionSchema.Info) {
   const instances = yield* Instance.Service
+  const database = yield* Database.Service
   const bus = yield* Bus.Service
+  const pending = yield* loadPending(database.db, session.id)
+  if (!session.revert && !pending) return
   yield* Effect.gen(function* () {
     const snapshot = yield* Snapshot.Service
-    if (!session.revert) return
-    const original = session.revert.snapshot ? Snapshot.ID.make(session.revert.snapshot) : undefined
+    const original = pending?.snapshot ?? session.revert?.snapshot
     if (original)
       yield* snapshot.restore({
-        files: new Map((session.revert.files ?? []).map((file) => [RelativePath.make(file.file), original])),
+        files: new Map(
+          (pending?.paths ?? (session.revert?.files ?? []).map((file) => RelativePath.make(file.file))).map(
+            (file) => [file, original] as const,
+          ),
+        ),
       })
     yield* bus.publish(SessionEvent.RevertEvent.Cleared, {
       sessionID: session.id,
@@ -75,13 +94,35 @@ export const clear = Effect.fn("SessionRevert.clear")(function* (session: Sessio
   }).pipe(instances.provide(session))
 })
 
-export const commit = Effect.fn("SessionRevert.commit")(function* (bus: Bus.Interface, session: SessionSchema.Info) {
-  if (!session.revert) return
-  yield* bus.publish(SessionEvent.RevertEvent.Committed, {
-    sessionID: session.id,
-    to: session.revert.messageID,
-  })
+export const commit = Effect.fn("SessionRevert.commit")(function* (
+  bus: Bus.Interface,
+  store: SessionStore.Interface,
+  session: SessionSchema.Info,
+) {
+  if (session.revert) {
+    yield* bus.publish(SessionEvent.RevertEvent.Committed, {
+      sessionID: session.id,
+      to: session.revert.messageID,
+    })
+    return
+  }
+  if (!(yield* store.hasPendingRevert(session.id))) return
+  // Failed preparation has no boundary to commit. Accept the current files without
+  // deleting history, and retire protection before new work can change those files.
+  yield* bus.publish(SessionEvent.RevertEvent.Cleared, { sessionID: session.id })
 })
+
+function loadPending(db: Database.Interface["db"], sessionID: SessionSchema.ID) {
+  return db
+    .select({ pending: SessionTable.revert_pending })
+    .from(SessionTable)
+    .where(eq(SessionTable.id, sessionID))
+    .get()
+    .pipe(
+      Effect.orDie,
+      Effect.map((row) => row?.pending),
+    )
+}
 
 const plan = Effect.fn("SessionRevert.plan")(function* (db: Database.Interface["db"], input: BoundaryInput) {
   const boundary = yield* db
