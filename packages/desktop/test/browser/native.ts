@@ -63,6 +63,17 @@ async function main() {
       response.end('<iframe name="inner" title="Inner frame" src="/frame"></iframe>')
       return
     }
+    // One Chromium request ID spans both hops; each hop must keep its own wire headers.
+    if (request.url === "/redirect") {
+      response.writeHead(302, { location: "/redirected", "set-cookie": "hop=1; Path=/" })
+      response.end()
+      return
+    }
+    if (request.url === "/redirected") {
+      response.writeHead(200, { "content-type": "text/plain" })
+      response.end("landed")
+      return
+    }
     // Revalidation: the wire answers 304 while the renderer reports the cached 200.
     if (request.url === "/etag") {
       if (request.headers["if-none-match"] === '"v1"') {
@@ -182,6 +193,8 @@ async function main() {
         websocket: await new Promise((resolve, reject) => { const socket = new WebSocket('ws://localhost:${address.port}/hmr'); socket.onmessage = event => { resolve(event.data); socket.close(); }; socket.onerror = () => reject(new Error('WebSocket failed')); }),
         cookie: (document.cookie = 'wire=1', await fetch('/api/test?cookie').then(response => response.ok)),
         etag: [await fetch('/etag').then(response => response.status), await fetch('/etag').then(response => response.status)],
+        redirect: await fetch('/redirect').then(response => response.text()),
+        refused: await new Promise((resolve) => { const socket = new WebSocket('ws://127.0.0.1:1/refused'); socket.onerror = () => resolve('refused'); socket.onopen = () => resolve('opened'); }),
       }))()`,
     })
     assert.deepEqual(networkProof.value, {
@@ -191,10 +204,38 @@ async function main() {
       websocket: "rpc websocket proof",
       cookie: true,
       etag: [200, 200],
+      redirect: "landed",
+      refused: "refused",
     })
     const sockets = await call("network.list", { tabID, resourceType: "websocket" })
-    assert.equal(sockets.requests[0]?.statusCode, 101, JSON.stringify(sockets))
-    assert.equal(sockets.requests[0]?.state, "completed")
+    const opened = sockets.requests.find((request) => request.url.includes("/hmr"))
+    const refused = sockets.requests.find((request) => request.url.includes("/refused"))
+    assert.equal(opened?.statusCode, 101, JSON.stringify(sockets))
+    assert.equal(opened?.state, "completed")
+    assert.equal(refused?.state, "failed", JSON.stringify(refused))
+    assert(
+      refused?.state === "failed" && refused.durationMs >= 0 && refused.durationMs < 60_000,
+      JSON.stringify(refused),
+    )
+    const chain = await call("network.list", { tabID, urlContains: "/redirect" })
+    assert.deepEqual(
+      chain.requests.map((request) => [request.url.endsWith("/redirect"), request.statusCode]),
+      [
+        [true, 302],
+        [false, 200],
+      ],
+      JSON.stringify(chain),
+    )
+    const hop = await call("network.get", { tabID, id: chain.requests[0].id })
+    const landed = await call("network.get", { tabID, id: chain.requests[1].id })
+    const names = (headers: { name: string }[]) => headers.map((header) => header.name)
+    assert(names(hop.responseHeaders).includes("set-cookie"), JSON.stringify(hop.responseHeaders))
+    assert(names(hop.responseHeaders).includes("location"), JSON.stringify(hop.responseHeaders))
+    assert(!names(landed.responseHeaders).includes("location"), JSON.stringify(landed.responseHeaders))
+    assert(
+      hop.responseHeaders.every((header) => header.name !== "set-cookie" || header.value === "<redacted>"),
+      JSON.stringify(hop.responseHeaders),
+    )
     const revalidated = await call("network.list", { tabID, urlContains: "/etag" })
     assert.deepEqual(
       revalidated.requests.map((request) => request.statusCode),
@@ -203,10 +244,12 @@ async function main() {
     )
     const withCookie = await call("network.list", { tabID, urlContains: "/api/test?cookie" })
     const cookieDetail = await call("network.get", { tabID, id: withCookie.requests[0].id })
+    // The wire header proves the cookie was sent; its value never reaches the model.
     assert(
-      cookieDetail.requestHeaders.some((header) => header.name.toLowerCase() === "cookie" && header.value === "wire=1"),
+      cookieDetail.requestHeaders.some((header) => header.name === "cookie" && header.value === "<redacted>"),
       JSON.stringify(cookieDetail.requestHeaders),
     )
+    assert(!cookieDetail.requestHeaders.some((header) => header.name !== header.name.toLowerCase()))
     const upload = await rpc.write({ text: "server upload bytes" }, { location })
     await fails("trace.stop", { tabID }, /browser\.trace\.start/)
     await fails("cpu.stop", { tabID }, /browser\.cpu\.start/)

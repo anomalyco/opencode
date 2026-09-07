@@ -47,6 +47,7 @@ test.skipIf(!!process.env.CI)(
     let native: ReturnType<typeof Bun.spawn> | undefined
     let proxy: Bun.Server<undefined> | undefined
     let tunnels = 0
+    let rejectedStates = 0
     try {
       const url = await Promise.race([
         ready.promise,
@@ -56,6 +57,8 @@ test.skipIf(!!process.env.CI)(
       ])
       // Exercise the real HTTP boundary with delayed state acknowledgments, as on
       // a remote server. Neither endpoint can rely on synchronous UI/state updates.
+      // The first inventory that carries a tab is rejected twice: the desktop must
+      // keep it pending and resend, or the server never learns the tab exists.
       proxy = Bun.serve({
         hostname: "127.0.0.1",
         port: 0,
@@ -63,8 +66,13 @@ test.skipIf(!!process.env.CI)(
         async fetch(request) {
           const incoming = new URL(request.url)
           if (incoming.pathname.endsWith("/tunnel.open")) tunnels++
-          if (incoming.pathname.endsWith("/experimental.browser/state"))
+          if (incoming.pathname.endsWith("/experimental.browser/state")) {
+            if (rejectedStates < 2 && (await request.clone().text()).includes('"tab_')) {
+              rejectedStates++
+              return new Response(null, { status: 503 })
+            }
             await new Promise((resolve) => setTimeout(resolve, 75))
+          }
           return fetch(new Request(new URL(incoming.pathname + incoming.search, url), request), { decompress: false })
         },
       })
@@ -90,6 +98,7 @@ test.skipIf(!!process.env.CI)(
         ]),
       ).toBe(0)
       expect(tunnels).toBeGreaterThan(0)
+      expect(rejectedStates).toBe(2)
     } finally {
       if (native?.exitCode === null) {
         native.kill()

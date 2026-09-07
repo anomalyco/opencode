@@ -6,20 +6,27 @@ type Request = {
   info: Browser.NetworkRequest
   nativeID: string
   sessionID?: string
-  started: number
+  /** Monotonic start; unknown for a WebSocket until its handshake is sent. */
+  started?: number
   request: Pick<Protocol.Network.Request, "headers" | "postData" | "hasPostData">
   response?: Pick<Protocol.Network.Response, "headers" | "mimeType">
   headersTruncated: boolean
   postDataTruncated: boolean
   redirected?: boolean
+  /** ExtraInfo arrives once per redirect hop, in order; these mark which hops consumed theirs. */
+  wire: { request: boolean; response: boolean }
 }
 type Wire = { headers: Protocol.Network.Headers; statusCode: number }
 const levels = ["debug", "info", "warning", "error"] as const
+// Values the model must not read; the header name still shows it was sent.
+const redacted = new Set(["cookie", "set-cookie", "authorization", "proxy-authorization"])
 
 export function createDiagnostics(cdp: Cdp) {
   const messages: Browser.ConsoleEntry[] = []
   const requests = new Map<string, Request>()
-  const current = new Map<string, Request>()
+  // Chromium reuses one request ID across a redirect chain; every hop is retained in order.
+  const hops = new Map<string, Request[]>()
+  const latest = (key: string) => hops.get(key)?.at(-1)
   // Network-stack headers and wire status arrive as ExtraInfo events, in either order relative to
   // the renderer-side events; stash whichever comes first.
   const extra = new Map<string, { request?: Protocol.Network.Headers; response?: Wire }>()
@@ -84,7 +91,7 @@ export function createDiagnostics(cdp: Cdp) {
     key: string,
     sessionID: string | undefined,
     nativeID: string,
-    started: number,
+    started: number | undefined,
     wallTime: number,
     info: Pick<Browser.NetworkRequest, "url" | "method" | "resourceType">,
     request: Request["request"],
@@ -97,6 +104,7 @@ export function createDiagnostics(cdp: Cdp) {
       request: { ...request, headers: headers.headers, postData: request.postData?.slice(0, 20_000) },
       headersTruncated: headers.truncated,
       postDataTruncated: (request.postData?.length ?? 0) > 20_000,
+      wire: { request: false, response: false },
       info: {
         id: `${scope}:${++sequence}`,
         ...info,
@@ -106,7 +114,8 @@ export function createDiagnostics(cdp: Cdp) {
       },
     }
     requests.set(entry.info.id, entry)
-    current.set(key, entry)
+    hops.set(key, [...(hops.get(key) ?? []), entry])
+    // A stash can only belong to this hop: earlier hops would have consumed it on arrival.
     const stashed = extra.get(key)
     if (stashed?.request) requestHeaders(entry, stashed.request)
     if (stashed?.response) responseInfo(entry, stashed.response)
@@ -115,8 +124,10 @@ export function createDiagnostics(cdp: Cdp) {
       const first = requests.values().next().value
       if (first) {
         requests.delete(first.info.id)
-        if (current.get(`${first.sessionID ?? ""}:${first.nativeID}`) === first)
-          current.delete(`${first.sessionID ?? ""}:${first.nativeID}`)
+        const firstKey = `${first.sessionID ?? ""}:${first.nativeID}`
+        const rest = hops.get(firstKey)?.filter((hop) => hop !== first) ?? []
+        if (rest.length) hops.set(firstKey, rest)
+        if (!rest.length) hops.delete(firstKey)
       }
       droppedRequests++
     }
@@ -126,17 +137,19 @@ export function createDiagnostics(cdp: Cdp) {
     const trimmed = trimHeaders({ ...request.request.headers, ...headers })
     request.request = { ...request.request, headers: trimmed.headers }
     request.headersTruncated ||= trimmed.truncated
+    request.wire.request = true
   }
   const responseInfo = (request: Request, wire: Wire) => {
     const trimmed = trimHeaders({ ...request.response?.headers, ...wire.headers })
     request.response = { mimeType: request.response?.mimeType ?? "", headers: trimmed.headers }
     request.headersTruncated ||= trimmed.truncated
     request.info = { ...request.info, statusCode: wire.statusCode }
+    request.wire.response = true
   }
   const finish = (key: string, timestamp: number, failure?: string) => {
-    const request = current.get(key)
+    const request = latest(key)
     if (!request) return
-    const durationMs = Math.max(0, (timestamp - request.started) * 1000)
+    const durationMs = request.started === undefined ? 0 : Math.max(0, (timestamp - request.started) * 1000)
     request.info =
       failure === undefined
         ? { ...request.info, state: "completed", durationMs }
@@ -144,17 +157,18 @@ export function createDiagnostics(cdp: Cdp) {
   }
   cdp.on("Network.requestWillBeSent", (event, sessionID) => {
     const key = `${sessionID ?? ""}:${event.requestId}`
-    const previous = current.get(key)
+    const previous = latest(key)
     if (previous && event.redirectResponse) {
-      const response = trimHeaders(event.redirectResponse.headers)
+      // Wire headers for this hop may already be merged in; the renderer copy lacks set-cookie.
+      const response = trimHeaders({ ...event.redirectResponse.headers, ...previous.response?.headers })
       previous.response = { mimeType: event.redirectResponse.mimeType, headers: response.headers }
       previous.headersTruncated ||= response.truncated
       previous.redirected = true
       previous.info = {
         ...previous.info,
         state: "completed",
-        statusCode: event.redirectResponse.status,
-        durationMs: Math.max(0, (event.timestamp - previous.started) * 1000),
+        statusCode: previous.info.statusCode ?? event.redirectResponse.status,
+        durationMs: Math.max(0, (event.timestamp - (previous.started ?? event.timestamp)) * 1000),
       }
     }
     begin(
@@ -171,14 +185,16 @@ export function createDiagnostics(cdp: Cdp) {
       { headers: event.request.headers, hasPostData: event.request.hasPostData, postData: event.request.postData },
     )
   })
+  // ExtraInfo for a redirect hop can land after the renderer already started the next hop, so it
+  // goes to the earliest hop that has not consumed its own rather than to the latest.
   cdp.on("Network.requestWillBeSentExtraInfo", (event, sessionID) => {
     const key = `${sessionID ?? ""}:${event.requestId}`
-    const request = current.get(key)
+    const request = hops.get(key)?.find((hop) => !hop.wire.request)
     if (request) return requestHeaders(request, event.headers)
     extra.set(key, { ...extra.get(key), request: event.headers })
   })
   cdp.on("Network.responseReceived", (event, sessionID) => {
-    const request = current.get(`${sessionID ?? ""}:${event.requestId}`)
+    const request = latest(`${sessionID ?? ""}:${event.requestId}`)
     if (!request) return
     const headers = trimHeaders({ ...event.response.headers, ...request.response?.headers })
     request.response = { mimeType: event.response.mimeType, headers: headers.headers }
@@ -188,7 +204,7 @@ export function createDiagnostics(cdp: Cdp) {
   })
   cdp.on("Network.responseReceivedExtraInfo", (event, sessionID) => {
     const key = `${sessionID ?? ""}:${event.requestId}`
-    const request = current.get(key)
+    const request = hops.get(key)?.find((hop) => !hop.wire.response)
     if (request) return responseInfo(request, event)
     extra.set(key, { ...extra.get(key), response: event })
   })
@@ -198,14 +214,14 @@ export function createDiagnostics(cdp: Cdp) {
       `${sessionID ?? ""}:${event.requestId}`,
       sessionID,
       event.requestId,
-      0,
+      undefined,
       Date.now() / 1000,
       { url: event.url, method: "GET", resourceType: "websocket" },
       { headers: {}, hasPostData: false },
     )
   })
   cdp.on("Network.webSocketWillSendHandshakeRequest", (event, sessionID) => {
-    const request = current.get(`${sessionID ?? ""}:${event.requestId}`)
+    const request = latest(`${sessionID ?? ""}:${event.requestId}`)
     if (!request) return
     request.started = event.timestamp
     request.info = { ...request.info, timestampMs: event.wallTime * 1000 }
@@ -213,7 +229,7 @@ export function createDiagnostics(cdp: Cdp) {
   })
   cdp.on("Network.webSocketHandshakeResponseReceived", (event, sessionID) => {
     const key = `${sessionID ?? ""}:${event.requestId}`
-    const request = current.get(key)
+    const request = latest(key)
     if (!request) return
     responseInfo(request, { headers: event.response.headers, statusCode: event.response.status })
     finish(key, event.timestamp)
@@ -221,6 +237,10 @@ export function createDiagnostics(cdp: Cdp) {
   cdp.on("Network.webSocketFrameError", (event, sessionID) =>
     finish(`${sessionID ?? ""}:${event.requestId}`, event.timestamp, event.errorMessage),
   )
+  cdp.on("Network.webSocketClosed", (event, sessionID) => {
+    const key = `${sessionID ?? ""}:${event.requestId}`
+    if (latest(key)?.info.state === "pending") finish(key, event.timestamp, "Closed before the handshake completed")
+  })
   cdp.on("Network.loadingFinished", (event, sessionID) =>
     finish(`${sessionID ?? ""}:${event.requestId}`, event.timestamp),
   )
@@ -231,7 +251,7 @@ export function createDiagnostics(cdp: Cdp) {
     clear() {
       messages.length = 0
       requests.clear()
-      current.clear()
+      hops.clear()
       extra.clear()
       droppedMessages = 0
       droppedRequests = 0
@@ -346,8 +366,9 @@ function trimHeaders(headers: Protocol.Network.Headers) {
   let size = 0
   let truncated = entries.length > 100
   for (const [key, value] of entries.slice(0, 100)) {
-    const name = key.slice(0, 2_048)
-    const text = String(value)
+    // Lower-case names so renderer and wire copies of one header merge instead of duplicating.
+    const name = key.toLowerCase().slice(0, 2_048)
+    const text = redacted.has(name) ? "<redacted>" : String(value)
     const remaining = Math.max(0, 16_000 - size - name.length)
     if (!remaining) {
       truncated = true

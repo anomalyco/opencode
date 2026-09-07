@@ -4,7 +4,7 @@ import { Browser } from "@opencode-ai/plugin-browser/rpc"
 import { OpenCode } from "@opencode-ai/client/effect"
 import { SessionID } from "@opencode-ai/schema/session-id"
 import type { BrowserWindow } from "electron"
-import { Deferred, Effect, ManagedRuntime, Queue, Schema, Stream } from "effect"
+import { Deferred, Effect, ManagedRuntime, Queue, Schedule, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { BrowserPaneEvent } from "../shared/ipc-rpc/events"
 import { createBrowserPage, type BrowserPage } from "./browser-chromium"
@@ -103,13 +103,17 @@ export function createBrowserPane() {
                 outbound,
                 effect.pipe(Effect.catchCause((cause) => Effect.logWarning("Browser send failed", cause))),
               )
-            // Report state before publishing it locally or completing a command.
+            // Report state before publishing it locally or completing a command. The server's copy of
+            // the inventory resolves every tab ID, so a state that never arrived must not count as published.
             entry.report = (event) => {
+              const local = Effect.sync(() => publish(entry, event))
+              if (event.type !== "state") return send(local)
               send(
-                (event.type === "state"
-                  ? rpc.state({ ...attachment, state: event.state ?? { tabs: [], focusedTabID: null } }, options)
-                  : Effect.void
-                ).pipe(Effect.ensuring(Effect.sync(() => publish(entry, event)))),
+                rpc.state({ ...attachment, state: event.state ?? { tabs: [], focusedTabID: null } }, options).pipe(
+                  Effect.retry({ times: 4, schedule: Schedule.exponential("250 millis") }),
+                  Effect.tapError(() => Effect.sync(() => (entry.lastState = undefined))),
+                  Effect.ensuring(local),
+                ),
               )
             }
             const receive = client.event.subscribe().pipe(
@@ -159,12 +163,11 @@ export function createBrowserPane() {
                       }),
                     ),
                     Effect.ensuring(Effect.sync(() => entry.requests.delete(message.requestID))),
-                    // Only a server cancel or tab close aborts the signal; any other failure means
-                    // the command could not be retrieved, and the attachment is no longer trustworthy.
+                    // A request that vanished (cancelled before retrieval) or an operation this desktop
+                    // cannot decode fails only that request; the server times it out. Transport loss
+                    // surfaces through the event stream and attach call instead.
                     Effect.catchCause((cause) =>
-                      abort.signal.aborted
-                        ? Effect.void
-                        : Effect.logError("Browser command failed", cause).pipe(Effect.andThen(Effect.sync(stop))),
+                      abort.signal.aborted ? Effect.void : Effect.logWarning("Browser command failed", cause),
                     ),
                     Effect.forkScoped,
                   )
