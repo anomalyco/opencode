@@ -36,6 +36,49 @@ test("renders account management with an uncategorized add row and marks the act
   }
 })
 
+test("toggles the account switching setting between the add row and the connected accounts", async () => {
+  const fixture = await renderIntegration()
+
+  try {
+    const frame = fixture.app.captureCharFrame()
+    const row = (source: string) =>
+      source.split("\n").find((line) => line.includes("Switch accounts when rate limited"))
+
+    expect(frame.indexOf("Add account")).toBeLessThan(frame.indexOf("Settings"))
+    expect(frame.indexOf("Settings")).toBeLessThan(frame.indexOf("Switch accounts when rate limited"))
+    expect(frame.indexOf("Switch accounts when rate limited")).toBeLessThan(frame.indexOf("Connected accounts"))
+    expect(row(frame)?.trimEnd().endsWith("off")).toBe(true)
+    expect(row(frame)).not.toContain("\u25cf")
+
+    fixture.app.mockInput.pressArrow("down")
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitForFrame((current) => row(current)?.trimEnd().endsWith("on") === true)
+
+    expect(fixture.requests).toEqual([
+      { method: "PATCH", path: "/api/integration/openai/settings", body: { autoSwitch: true } },
+    ])
+    expect(fixture.settings).toEqual({ autoSwitch: true })
+    const updated = fixture.app.captureCharFrame()
+    expect(row(updated)).not.toContain("\u25cf")
+    expect(updated.split("\n").find((line) => line.includes("Personal"))).toContain("\u25cf")
+
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitForFrame((current) => row(current)?.trimEnd().endsWith("off") === true)
+
+    expect(fixture.requests.at(-1)).toEqual({
+      method: "PATCH",
+      path: "/api/integration/openai/settings",
+      body: { autoSwitch: false },
+    })
+    expect(fixture.settings).toEqual({ autoSwitch: false })
+
+    await fixture.app.mockInput.typeText("out of quota")
+    await fixture.app.waitForFrame((current) => row(current) !== undefined && !current.includes("Personal"))
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
 test("opens the key connection prompt from the initially focused add account row", async () => {
   const fixture = await renderIntegration()
 
@@ -53,6 +96,7 @@ test("switches the selected account with enter and keeps the reactive account ma
   const fixture = await renderIntegration()
 
   try {
+    fixture.app.mockInput.pressArrow("down")
     fixture.app.mockInput.pressArrow("down")
     fixture.app.mockInput.pressArrow("down")
     fixture.app.mockInput.pressEnter()
@@ -79,6 +123,7 @@ test("does not refetch when selecting the already-active account", async () => {
 
   try {
     fixture.app.mockInput.pressArrow("down")
+    fixture.app.mockInput.pressArrow("down")
     fixture.app.mockInput.pressEnter()
 
     expect(fixture.requests).toEqual([])
@@ -93,6 +138,7 @@ test("renames the selected account through a prefilled prompt and reopens the ac
   const fixture = await renderIntegration()
 
   try {
+    fixture.app.mockInput.pressArrow("down")
     fixture.app.mockInput.pressArrow("down")
     fixture.app.mockInput.pressArrow("down")
     fixture.app.mockInput.pressKey("r", { ctrl: true })
@@ -121,6 +167,7 @@ test("requires delete confirmation and preserves the account manager when anothe
   try {
     fixture.app.mockInput.pressArrow("down")
     fixture.app.mockInput.pressArrow("down")
+    fixture.app.mockInput.pressArrow("down")
     fixture.app.mockInput.pressKey("d", { ctrl: true })
 
     expect(fixture.requests).toEqual([])
@@ -145,6 +192,7 @@ test("renames the account label rather than its delete-confirmation message", as
   try {
     fixture.app.mockInput.pressArrow("down")
     fixture.app.mockInput.pressArrow("down")
+    fixture.app.mockInput.pressArrow("down")
     fixture.app.mockInput.pressKey("d", { ctrl: true })
     await fixture.app.waitForFrame((frame) => frame.includes("again to confirm"))
 
@@ -164,6 +212,7 @@ test("marks the remaining account active after deleting the active credential", 
 
   try {
     fixture.app.mockInput.pressArrow("down")
+    fixture.app.mockInput.pressArrow("down")
     fixture.app.mockInput.pressKey("d", { ctrl: true })
     fixture.app.mockInput.pressKey("d", { ctrl: true })
 
@@ -179,7 +228,7 @@ test("marks the remaining account active after deleting the active credential", 
   }
 })
 
-test("hides account rename and delete actions while the add account row is selected", async () => {
+test("hides account rename and delete actions while a non-account row is selected", async () => {
   const fixture = await renderIntegration()
 
   try {
@@ -193,6 +242,10 @@ test("hides account rename and delete actions while the add account row is selec
     expect(fixture.requests).toEqual([])
     expect(fixture.app.renderer.currentFocusedEditor).toBeInstanceOf(InputRenderable)
     expect(fixture.app.captureCharFrame()).toContain("Connected accounts")
+
+    fixture.app.mockInput.pressArrow("down")
+    expect(fixture.app.captureCharFrame()).not.toContain("rename")
+    expect(fixture.app.captureCharFrame()).not.toContain("delete")
 
     fixture.app.mockInput.pressArrow("down")
     await fixture.app.waitForFrame((frame) => frame.includes("rename") && frame.includes("delete"))
@@ -211,6 +264,7 @@ test("uses the active location for integration data and credential requests", as
   try {
     fixture.app.mockInput.pressArrow("down")
     fixture.app.mockInput.pressArrow("down")
+    fixture.app.mockInput.pressArrow("down")
     fixture.app.mockInput.pressEnter()
 
     await fixture.app.waitFor(() => fixture.requests.length === 1)
@@ -223,13 +277,14 @@ test("uses the active location for integration data and credential requests", as
 
 async function renderIntegration(activeLocation?: LocationRef) {
   const events = createEventStream()
-  const requests: Array<{ method: string; path: string; body?: { label: string } }> = []
+  const requests: Array<{ method: string; path: string; body?: { label: string } | { autoSwitch?: boolean } }> = []
   const locations: LocationRef[] = []
   const reads = { integration: 0, model: 0, provider: 0 }
   let accounts = [
     { type: "credential" as const, id: "cred_personal", label: "Personal" },
     { type: "credential" as const, id: "cred_work", label: "Work" },
   ]
+  let settings = { autoSwitch: false }
 
   const calls = createFetch(async (url, request) => {
     const directory =
@@ -254,6 +309,7 @@ async function renderIntegration(activeLocation?: LocationRef) {
             name: "OpenAI",
             methods: [{ type: "key", label: "API key" }],
             connections: [...accounts, { type: "env", name: "OPENAI_API_KEY" }],
+            settings,
           },
         ],
       })
@@ -267,6 +323,21 @@ async function renderIntegration(activeLocation?: LocationRef) {
     if (url.pathname === "/api/provider") {
       reads.provider++
       return json({ location, data: [] })
+    }
+
+    if (request.method === "PATCH" && /^\/api\/integration\/[^/]+\/settings$/.test(url.pathname)) {
+      locations.push(requestedLocation)
+      const body = (await request.json()) as { autoSwitch?: boolean }
+      settings = { autoSwitch: body.autoSwitch ?? settings.autoSwitch }
+      requests.push({ method: request.method, path: url.pathname, body })
+      events.emit({
+        id: `evt_settings_${requests.length}`,
+        created: Date.now(),
+        type: "integration.updated",
+        data: {},
+        location: requestedLocation,
+      })
+      return new Response(null, { status: 204 })
     }
 
     if (request.method === "POST" && /^\/api\/credential\/[^/]+\/activate$/.test(url.pathname)) {
@@ -364,6 +435,9 @@ async function renderIntegration(activeLocation?: LocationRef) {
     locations,
     get accounts() {
       return accounts
+    },
+    get settings() {
+      return settings
     },
   }
 }

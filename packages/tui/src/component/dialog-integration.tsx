@@ -164,6 +164,9 @@ function manageConnections(
     const current = createMemo(() =>
       data.location.integration.list(location)?.find((item) => item.id === integration.id),
     )
+    const autoSwitch = createMemo(() => (current() ?? integration).settings.autoSwitch)
+    // The add and settings rows are not accounts, so the account actions never apply to them.
+    const isAccount = (value?: string) => value !== undefined && value !== "add" && value !== "auto-switch"
 
     return (
       <DialogSelect
@@ -185,6 +188,23 @@ function manageConnections(
                 },
               ]
             : []),
+          {
+            title: "Switch accounts when rate limited",
+            // The row title fills the fixed dialog width, so the explanation stays searchable instead of clipped.
+            searchText: "Use the next connected account when the active one is rate limited or out of quota",
+            footer: autoSwitch() ? "on" : "off",
+            value: "auto-switch",
+            category: "Settings",
+            onSelect: () => {
+              void client.api.integration.settings
+                .update({
+                  integrationID: integration.id,
+                  location: locationQuery(location),
+                  autoSwitch: !autoSwitch(),
+                })
+                .catch(toast.error)
+            },
+          },
           ...credentialConnections(current() ?? integration)
             .toSorted((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id))
             .map((connection) => {
@@ -210,8 +230,8 @@ function manageConnections(
           {
             command: "dialog.integration.rename",
             title: "rename",
-            hidden: selected() === "add",
-            disabled: (option) => !option || option.value === "add",
+            hidden: !isAccount(selected()),
+            disabled: (option) => !isAccount(option?.value),
             onTrigger: (option) => {
               dialog.replace(() => (
                 <DialogPrompt
@@ -235,8 +255,8 @@ function manageConnections(
           {
             command: "dialog.integration.delete",
             title: "delete",
-            hidden: selected() === "add",
-            disabled: (option) => !option || option.value === "add",
+            hidden: !isAccount(selected()),
+            disabled: (option) => !isAccount(option?.value),
             onTrigger: (option) => {
               if (deleting() !== option.value) return setDeleting(option.value)
               const final = credentialConnections(current() ?? integration).length === 1
@@ -312,7 +332,13 @@ async function beginKey(
     : undefined
   if (answer === null) return
   dialog.replace(() => (
-    <KeyMethod integration={integration} method={method} location={location} answer={answer} onConnected={onConnected} />
+    <KeyMethod
+      integration={integration}
+      method={method}
+      location={location}
+      answer={answer}
+      onConnected={onConnected}
+    />
   ))
 }
 
