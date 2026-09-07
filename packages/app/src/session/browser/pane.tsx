@@ -42,7 +42,6 @@ export function SessionBrowserPane(props: {
       return r.width > 0 && r.left < rect.right && r.right > rect.left && r.top < rect.bottom && r.bottom > rect.top
     })
   const measure = () => {
-    frame = undefined
     if (!surface) return
     const tab = state()
     if (!tab) {
@@ -80,11 +79,15 @@ export function SessionBrowserPane(props: {
         radius: Math.round(10 * zoom),
       })
     }
-    if (performance.now() < until) frame = requestAnimationFrame(measure)
+  }
+  const tick = () => {
+    frame = undefined
+    measure()
+    if (performance.now() < until) frame = requestAnimationFrame(tick)
   }
   const schedule = (duration = 0) => {
     until = Math.max(until, performance.now() + duration)
-    if (frame === undefined) frame = requestAnimationFrame(measure)
+    if (frame === undefined) frame = requestAnimationFrame(tick)
   }
 
   createEffect(() => !store.editing && setStore("address", state()?.url ?? ""))
@@ -100,7 +103,9 @@ export function SessionBrowserPane(props: {
       () => schedule(300),
     ),
   )
-  createResizeObserver(() => surface, schedule.bind(null, 0))
+  // ResizeObserver runs after layout in the same frame; measuring here instead of on the next
+  // animation frame keeps the native view in step with a pane drag.
+  createResizeObserver(() => surface, measure)
   createEventListener(window, "resize", () => schedule(300))
   // Floating content portals directly into <body>; keep measuring briefly so
   // the positioner has settled before the overlap check runs.
