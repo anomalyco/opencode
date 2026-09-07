@@ -6,7 +6,7 @@ export const prerender = false
 
 const slug = Astro.params.slug || "index"
 const entry = (await getEntry("docs", slug)) ?? (await getEntry("docs", `${slug}/index`))
-if (!entry) return new Response("Not found", { status: 404, headers: { "Cache-Control": "no-store" } })
+if (!entry) return Astro.rewrite("/404")
 
 const headers = {
   "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
