@@ -20,6 +20,7 @@ export const DraftsGet = Rpc.make("DraftsGet", {
 })
 export const DraftsSet = Rpc.make("DraftsSet", {
   payload: { key: Schema.String, value: Schema.String },
+  success: Schema.Array(Schema.String),
 })
 export const DraftsDelete = Rpc.make("DraftsDelete", { payload: { key: Schema.String } })
 export const DraftsPutBlob = Rpc.make("DraftsPutBlob", {

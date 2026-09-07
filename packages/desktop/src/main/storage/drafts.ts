@@ -73,7 +73,17 @@ export function createDraftStore(
       if (writer.has(key)) return writer.get(key) ?? null
       return read.get({ key })?.value ?? null
     },
-    set: (key: string, value: string | null) => writer.set(key, value),
+    // Returns the referenced blob ids this store does not hold so the renderer can upload them
+    // again; ids are content hashes, so the queued document becomes valid without a rewrite.
+    set(key: string, value: string | null) {
+      writer.set(key, value)
+      if (value === null || !json(value)) return []
+      return db
+        .all<{
+          id: string
+        }>(sql`SELECT ref.id FROM (${referenced(value)}) AS ref WHERE ref.id NOT IN (SELECT ${blobs.id} FROM ${blobs})`)
+        .map((row) => row.id)
+    },
     putBlob(data: Uint8Array) {
       const id = createHash("sha256").update(data).digest("hex")
       const touched_at = now()

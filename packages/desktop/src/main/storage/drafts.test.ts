@@ -84,6 +84,26 @@ describe("draft store", () => {
     expect(drafts.getBlob(b)).toBeNull()
   })
 
+  test("set reports referenced blobs the store does not hold so the renderer can upload them again", () => {
+    const database = openDatabase(":memory:")
+    const drafts = createDraftStore(database.db, { delay: 1_000 })
+    const kept = drafts.putBlob(new TextEncoder().encode("kept"))
+    const image = drafts.putBlob(new Uint8Array([9]))
+    const document = JSON.stringify({
+      prompt: [
+        { type: "text", content: { blob: { kind: "text", ids: [kept, "gone-chunk"] } } },
+        { type: "image", blob: { id: image } },
+        { type: "image", blob: { id: "gone-image" } },
+      ],
+    })
+    expect(drafts.set("doc", document).sort()).toEqual(["gone-chunk", "gone-image"])
+    expect(drafts.set("plain", "not json")).toEqual([])
+    expect(drafts.set("doc", null)).toEqual([])
+    // Once the bytes are uploaded again the same document references nothing missing.
+    drafts.putBlob(new TextEncoder().encode("gone-chunk bytes"))
+    expect(drafts.set("doc", document)).not.toContain(kept)
+  })
+
   test("an uploaded attachment survives a due collection before its document is written", () => {
     const database = openDatabase(":memory:")
     let clock = 0

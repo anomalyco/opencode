@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createDraftStore, draftChunkCacheTtl, draftTextChunk, draftTextThreshold } from "./drafts"
+import { createDraftStore, draftTextChunk, draftTextThreshold } from "./drafts"
 
 function memoryDriver() {
   const documents = new Map<string, string>()
@@ -11,7 +11,17 @@ function memoryDriver() {
     puts: () => puts,
     driver: {
       get: async (key: string) => documents.get(key) ?? null,
-      set: async (key: string, value: string) => void documents.set(key, value),
+      // Like the real stores: write, then report referenced blobs that are not held.
+      set: async (key: string, value: string) => {
+        documents.set(key, value)
+        const ids = new Set<string>()
+        JSON.parse(value, (_key, item) => {
+          if (item?.blob && typeof item.blob.id === "string") ids.add(item.blob.id)
+          if (item?.blob && Array.isArray(item.blob.ids)) item.blob.ids.forEach((id: unknown) => ids.add(String(id)))
+          return item
+        })
+        return [...ids].filter((id) => !blobs.has(id))
+      },
       remove: async (key: string) => void documents.delete(key),
       putBlob: async (blob: Blob) => {
         puts++
@@ -79,22 +89,31 @@ describe("draft store text externalization", () => {
     expect(JSON.parse((await store.getItem("doc"))!)).toEqual({ prompt: [{ type: "text", content: "" }] })
   })
 
-  test("a cached chunk id is uploaded again once it is older than the cache ttl", async () => {
+  test("a cached chunk id the store no longer holds is uploaded again on the next save", async () => {
     const memory = memoryDriver()
-    let clock = 0
-    const store = createDraftStore(memory.driver, { now: () => clock })
+    const store = createDraftStore(memory.driver)
     await store.setDocument("doc", { prompt: [{ type: "text", content: large }] })
-    clock = draftChunkCacheTtl
-    await store.setDocument("doc", { prompt: [{ type: "text", content: large }], cursor: 1 })
-    expect(memory.puts()).toBe(1)
-    // Simulate the host having collected the chunk in the meantime; the next save past the ttl
-    // uploads it again, so the document never references a missing blob.
+    const [id] = JSON.parse(memory.documents.get("doc")!).prompt[0].content.blob.ids
+    await store.setDocument("doc", { prompt: [{ type: "text", content: `${large}!` }] })
+    // Another tab collected the chunk for `large` while this tab still caches its id.
     memory.blobs.clear()
-    clock = draftChunkCacheTtl * 2 + 1
-    await store.setDocument("doc", { prompt: [{ type: "text", content: large }], cursor: 2 })
-    expect(memory.puts()).toBe(2)
+    // Undo republishes the cached id; the write reports it missing and the chunk is uploaded again.
+    await store.setDocument("doc", { prompt: [{ type: "text", content: large }] })
+    expect(memory.puts()).toBe(3)
     const fresh = createDraftStore(memory.driver)
     expect(JSON.parse((await fresh.getItem("doc"))!).prompt[0].content).toBe(large)
+    expect(memory.blobs.has(id)).toBe(true)
+  })
+
+  test("an image reference whose blob was collected is restored from its object url", async () => {
+    const memory = memoryDriver()
+    const store = createDraftStore(memory.driver)
+    const image = await store.putBlob(new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }))
+    // The composer kept this reference (for example in its history) while the store collected the bytes.
+    memory.blobs.clear()
+    await store.setDocument("doc", { prompt: [{ type: "image", blob: { id: image.id, url: image.url } }] })
+    expect(memory.blobs.has(image.id)).toBe(true)
+    expect(new Uint8Array(await memory.blobs.get(image.id)!.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]))
   })
 
   test("chunk boundaries never split a surrogate pair", async () => {

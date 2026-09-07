@@ -5,7 +5,8 @@ export type BlobReference = { id: string; url: string }
 
 type Driver = {
   get(key: string): Promise<string | null>
-  set(key: string, value: string): Promise<void>
+  /** Store the document and report every blob id it references that the store does not hold. */
+  set(key: string, value: string): Promise<readonly string[]>
   remove(key: string): Promise<void>
   putBlob(blob: Blob): Promise<string>
   getBlob(id: string): Promise<Blob | null>
@@ -21,19 +22,19 @@ export type DraftStore = AsyncStorage & {
 // after a large paste changes only the final chunk, so a save uploads one chunk, not the paste.
 export const draftTextThreshold = 16 * 1024
 export const draftTextChunk = 64 * 1024
-// A cached chunk id may be republished without an upload for this long after its last use. The
-// host keeps unreferenced blobs for much longer (desktop `blobGrace`) and refreshes a blob every
-// time a written document references it, so a hit here always points at a retained blob.
-export const draftChunkCacheTtl = 5 * 60_000
 const textCacheLimit = 64
 
 const urls = new Map<string, string>()
+// The object URL already pins the Blob for the page's lifetime; keeping the Blob itself lets a
+// collected image be uploaded again without fetching the URL.
+const held = new Map<string, Blob>()
 
 function blobUrl(id: string, blob: Blob) {
   const existing = urls.get(id)
   if (existing) return existing
   const url = URL.createObjectURL(blob)
   urls.set(id, url)
+  held.set(id, blob)
   return url
 }
 
@@ -52,8 +53,7 @@ export async function createBlobReference(blob: Blob): Promise<BlobReference> {
   return { id, url: blobUrl(id, blob) }
 }
 
-export function createDraftStore(driver: Driver, options: { now?: () => number } = {}): DraftStore {
-  const now = options.now ?? Date.now
+export function createDraftStore(driver: Driver): DraftStore {
   const versions = new Map<string, number>()
   const loading = new Map<string, Promise<string | undefined>>()
   const loadBlobUrl = (id: string) => {
@@ -73,15 +73,16 @@ export function createDraftStore(driver: Driver, options: { now?: () => number }
     return { id, url: blobUrl(id, blob) }
   }
   // Keyed by chunk content so unchanged chunks are never hashed or sent again while the draft is
-  // edited. Bounded because each entry pins up to draftTextChunk characters.
-  const chunkIds = new Map<string, { id: Promise<string>; used: number }>()
+  // edited. Bounded because each entry pins up to draftTextChunk characters. A hit is safe even if
+  // the store has since collected the blob: the write reports it missing and it is uploaded again.
+  const chunkIds = new Map<string, Promise<string>>()
   const chunks = new Map<string, string>()
   const remember = <V>(cache: Map<string, V>, key: string, value: V) => {
     cache.set(key, value)
     if (cache.size > textCacheLimit) cache.delete(cache.keys().next().value!)
     return value
   }
-  const upload = (chunk: string, at: number) => {
+  const upload = (chunk: string) => {
     const id = driver.putBlob(new Blob([chunk])).then(
       (id) => {
         remember(chunks, id, chunk)
@@ -89,24 +90,13 @@ export function createDraftStore(driver: Driver, options: { now?: () => number }
       },
       (error: unknown) => {
         // A failed upload must not be reused as the answer for this content on later saves.
-        if (chunkIds.get(chunk)?.id === id) chunkIds.delete(chunk)
+        if (chunkIds.get(chunk) === id) chunkIds.delete(chunk)
         throw error
       },
     )
-    remember(chunkIds, chunk, { id, used: at })
-    return id
+    return remember(chunkIds, chunk, id)
   }
-  const externalize = (text: string) => {
-    const at = now()
-    return Promise.all(
-      split(text).map((chunk) => {
-        const cached = chunkIds.get(chunk)
-        if (!cached || at - cached.used > draftChunkCacheTtl) return upload(chunk, at)
-        cached.used = at
-        return cached.id
-      }),
-    )
-  }
+  const externalize = (text: string) => Promise.all(split(text).map((chunk) => chunkIds.get(chunk) ?? upload(chunk)))
   const loadChunk = async (id: string) => {
     const cached = chunks.get(id)
     if (cached !== undefined) return cached
@@ -114,29 +104,46 @@ export function createDraftStore(driver: Driver, options: { now?: () => number }
     // A missing chunk loses that text but keeps the rest of the document decodable.
     return remember(chunks, id, blob ? await blob.text() : "")
   }
-  const encode = async (value: unknown): Promise<unknown> => {
+  // `sources` collects, for every blob id the encoded document references, a way to produce its
+  // bytes again: the chunk text itself, or the object URL an image reference still carries.
+  type Sources = Map<string, () => Promise<Blob>>
+  const encode = async (value: unknown, sources: Sources): Promise<unknown> => {
     if (typeof value === "string" && value.length >= draftTextThreshold) {
-      return { blob: { kind: "text", ids: await externalize(value) } }
+      const pieces = split(value)
+      const ids = await externalize(value)
+      ids.forEach((id, index) => sources.set(id, async () => new Blob([pieces[index]!])))
+      return { blob: { kind: "text", ids } }
     }
-    if (Array.isArray(value)) return Promise.all(value.map(encode))
+    if (Array.isArray(value)) return Promise.all(value.map((entry) => encode(entry, sources)))
     if (!value || typeof value !== "object") return value
     const item = value as Record<string, unknown>
     if (item.type === "image" && typeof item.dataUrl === "string") {
       const blob = await fetch(item.dataUrl).then((response) => response.blob())
       const { dataUrl: _, ...rest } = item
-      return { ...rest, blob: { id: await driver.putBlob(blob) } }
+      const id = await driver.putBlob(blob)
+      sources.set(id, async () => blob)
+      return { ...rest, blob: { id } }
     }
     if ("blob" in item && item.blob && typeof item.blob === "object") {
       const blob = item.blob as Record<string, unknown>
       if (blob.kind === "text") return item
       if (typeof blob.id === "string" && blob.id.startsWith("data:")) {
         const data = await fetch(blob.id).then((response) => response.blob())
-        return { ...item, blob: { id: await driver.putBlob(data) } }
+        const id = await driver.putBlob(data)
+        sources.set(id, async () => data)
+        return { ...item, blob: { id } }
+      }
+      if (typeof blob.id === "string") {
+        const id = blob.id
+        const kept = held.get(id)
+        const url = typeof blob.url === "string" ? blob.url : urls.get(id)
+        if (kept) sources.set(id, async () => kept)
+        else if (url) sources.set(id, () => fetch(url).then((response) => response.blob()))
       }
       return { ...item, blob: { id: blob.id } }
     }
     return Object.fromEntries(
-      await Promise.all(Object.entries(item).map(async ([key, entry]) => [key, await encode(entry)])),
+      await Promise.all(Object.entries(item).map(async ([key, entry]) => [key, await encode(entry, sources)])),
     )
   }
   const decode = async (value: unknown): Promise<unknown> => {
@@ -160,8 +167,20 @@ export function createDraftStore(driver: Driver, options: { now?: () => number }
   const setDocument = async (key: string, document: unknown) => {
     const version = (versions.get(key) ?? 0) + 1
     versions.set(key, version)
-    const encoded = JSON.stringify(await encode(document))
-    if (versions.get(key) === version) await driver.set(key, encoded)
+    const sources: Sources = new Map()
+    const encoded = JSON.stringify(await encode(document, sources))
+    if (versions.get(key) !== version) return
+    // Ids are content hashes, so uploading the bytes again makes the stored reference valid
+    // without rewriting the document. Covers a blob the store collected while a cache, another
+    // tab, or the composer's history still held its id.
+    const missing = await driver.set(key, encoded)
+    await Promise.all(
+      missing.map(async (id) => {
+        const source = sources.get(id)
+        if (!source) return console.error(`[persistence] draft ${key} references blob ${id} with no bytes to restore`)
+        await driver.putBlob(await source())
+      }),
+    )
   }
   return {
     getItem: async (key) => {
@@ -208,12 +227,7 @@ export function createBrowserDraftStore(): DraftStore {
       const transaction = database.transaction(["documents", "blobs"], "readwrite")
       const documents = transaction.objectStore("documents").getAll()
       documents.addEventListener("success", () => {
-        const used = new Set<string>()
-        JSON.parse(`[${documents.result.join(",")}]`, (_key, item) => {
-          if (item?.blob && typeof item.blob.id === "string") used.add(item.blob.id)
-          if (item?.blob && Array.isArray(item.blob.ids)) item.blob.ids.forEach((id: unknown) => used.add(String(id)))
-          return item
-        })
+        const used = referenced(`[${documents.result.join(",")}]`)
         const store = transaction.objectStore("blobs")
         const blobs = store.openKeyCursor()
         blobs.addEventListener("success", () => {
@@ -246,7 +260,13 @@ export function createBrowserDraftStore(): DraftStore {
   }
   return createDraftStore({
     get: async (key) => ((await get("documents", key)) as string | undefined) ?? null,
-    set: (key, value) => write("documents", key, value),
+    set: async (key, value) => {
+      await write("documents", key, value)
+      // Another tab may have collected a blob this document still references.
+      const ids = [...referenced(value)]
+      const present = await Promise.all(ids.map((id) => get("blobs", id)))
+      return ids.filter((_, index) => present[index] === undefined)
+    },
     remove: (key) => write("documents", key),
     putBlob: async (blob) => {
       const id = await blobID(blob)
@@ -255,6 +275,17 @@ export function createBrowserDraftStore(): DraftStore {
     },
     getBlob: async (id) => ((await get("blobs", id)) as Blob | undefined) ?? null,
   })
+}
+
+// Every blob id a serialized document (or array of documents) references.
+function referenced(json: string) {
+  const ids = new Set<string>()
+  JSON.parse(json, (_key, item) => {
+    if (item?.blob && typeof item.blob.id === "string") ids.add(item.blob.id)
+    if (item?.blob && Array.isArray(item.blob.ids)) item.blob.ids.forEach((id: unknown) => ids.add(String(id)))
+    return item
+  })
+  return ids
 }
 
 export async function blobDataUrl(blob: BlobReference, mime: string) {

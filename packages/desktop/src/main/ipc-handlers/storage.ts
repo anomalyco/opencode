@@ -27,7 +27,7 @@ export const storageHandlers = StorageRpcs.toLayer(
       StorageClear: ({ name }) => Effect.sync(() => storage.state.clear(name)),
       DraftsGet: ({ key }) => Effect.sync(() => storage.drafts.get(key)),
       DraftsSet: ({ key, value }) => Effect.sync(() => storage.drafts.set(key, value)),
-      DraftsDelete: ({ key }) => Effect.sync(() => storage.drafts.set(key, null)),
+      DraftsDelete: ({ key }) => Effect.sync(() => void storage.drafts.set(key, null)),
       DraftsPutBlob: ({ data }) => Effect.sync(() => storage.drafts.putBlob(data)),
       DraftsGetBlob: ({ id }) => Effect.sync(() => storage.drafts.getBlob(id)),
     })

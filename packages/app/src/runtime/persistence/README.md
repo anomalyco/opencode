@@ -117,10 +117,16 @@ stored as `{ blob: { kind: "text", ids: [...] } }`; reads join the chunks again.
 content-keyed cache means unchanged chunks are not hashed or sent on later saves, so
 typing after a large paste uploads one chunk per save rather than the paste. Chunk
 boundaries never split a surrogate pair, and a failed upload is evicted so the next save
-retries it. A cached id is reused without an upload for at most `draftChunkCacheTtl`; the
-desktop host refreshes a blob whenever a written document references it and collects only
-blobs that are unreferenced and untouched for `blobGrace` (much longer than the ttl), so a
-republished id always points at a retained blob.
+retries it.
+
+Blob collection is made safe by validation on write, not by timing. Every document write
+reports the referenced blob ids the store does not hold, and the renderer uploads their
+bytes again from the chunk text or the image `Blob` it still holds; because ids are content
+hashes the already-written reference becomes valid without a rewrite. This covers a chunk
+another tab collected, and an image the composer kept in its history long after its blob
+was collected. The desktop host additionally refreshes `touched_at` for every blob a written
+document references and collects only blobs unreferenced and untouched for `blobGrace`, so
+repairs stay rare.
 `persisted()` hands the draft store the encoded document (`setDocument`) rather than
 a serialized string, so the store does not re-parse the full document to externalize
 it. Both blob collectors (desktop SQL, browser IndexedDB) keep chunk ids alive. This
