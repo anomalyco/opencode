@@ -5,7 +5,7 @@ import type { Entry } from "@opencode-ai/schema/config"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import path from "path"
-import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
+import { Effect, FiberMap, PubSub, Queue, Semaphore, Stream } from "effect"
 import { Config } from "../../config.js"
 import { Watcher } from "../../filesystem/watcher.js"
 import { Location } from "../../location.js"
@@ -25,6 +25,13 @@ export const Plugin = define({
     const global = yield* Global.Service
     const location = yield* Location.Service
     const watcher = yield* Watcher.Service
+    // Retain updates during initial loading, but process them only after registering the transform.
+    const configUpdates = yield* Queue.unbounded<void>()
+    yield* ctx.event.subscribe().pipe(
+      Stream.filter((event) => event.type === "config.updated"),
+      Stream.runForEach(() => Queue.offer(configUpdates, undefined)),
+      Effect.forkScoped({ startImmediately: true }),
+    )
     const loaded: { entries: Entry[]; skills: Skill.Info[] } = {
       entries: yield* config.entries(),
       skills: [],
@@ -183,8 +190,7 @@ export const Plugin = define({
     yield* ctx.skill.transform((editor) => {
       for (const skill of loaded.skills) editor.add(skill)
     })
-    yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "config.updated"),
+    yield* Stream.fromQueue(configUpdates).pipe(
       Stream.runForEach(() =>
         config.entries().pipe(
           Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),

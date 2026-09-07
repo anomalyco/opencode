@@ -1,9 +1,10 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, PubSub, Ref, Schema, Stream } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { AgentsDirectory, ClaudeDirectory, Directory, Document, type Entry, Info } from "@opencode-ai/schema/config"
+import { Event } from "@opencode-ai/schema/event"
 import { ConfigSkillPlugin } from "@opencode-ai/core/config/plugin/skill"
 import { SkillFile } from "@opencode-ai/core/config/plugin/skill-file"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -161,6 +162,76 @@ metadata:
 })
 
 describe("ConfigSkillPlugin.Plugin", () => {
+  it.live("retains a config update received during initial skill loading", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(tmp.path, "latest"), { recursive: true })
+            await write(tmp.path, "latest", "Latest configuration")
+          })
+          const current = yield* Ref.make<Entry[]>([
+            new Document({ type: "document", info: decode({ skills: ["https://example.test/skills/"] }) }),
+          ])
+          const events = yield* PubSub.unbounded<{
+            id: Event.ID
+            created: number
+            type: "config.updated"
+            data: {}
+          }>()
+          const loading = yield* Deferred.make<void>()
+          const release = yield* Deferred.make<void>()
+          const reloaded = yield* Deferred.make<void>()
+          const skill = yield* Skill.Service
+          const startup = yield* ConfigSkillPlugin.Plugin.effect(
+            host({
+              event: { subscribe: () => Stream.fromPubSub(events) },
+              skill: {
+                list: () => Effect.die("unused skill.list"),
+                transform: skill.transform,
+                reload: () => skill.reload().pipe(Effect.andThen(Deferred.succeed(reloaded, undefined))),
+              },
+            }),
+          ).pipe(
+            Effect.provideService(
+              Config.Service,
+              Config.Service.of({
+                entries: () => Ref.get(current),
+                changes: () => Stream.empty,
+              }),
+            ),
+            Effect.provideService(
+              SkillDiscovery.Service,
+              SkillDiscovery.Service.of({
+                pull: () =>
+                  Deferred.succeed(loading, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as([])),
+              }),
+            ),
+            Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home: tmp.path })),
+            Effect.provideService(
+              Location.Service,
+              Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+            ),
+            Effect.forkScoped,
+          )
+          yield* Deferred.await(loading)
+          yield* Ref.set(current, [new Document({ type: "document", info: decode({ skills: [tmp.path] }) })])
+          yield* PubSub.publish(events, {
+            id: Event.ID.create(),
+            created: Date.now(),
+            type: "config.updated" as const,
+            data: {},
+          })
+          expect(yield* Deferred.isDone(reloaded)).toBe(false)
+          yield* Deferred.succeed(release, undefined)
+          yield* Fiber.join(startup)
+          yield* Deferred.await(reloaded).pipe(Effect.timeout("2 seconds"))
+          expect((yield* skill.list()).map((item) => item.id)).toEqual([Skill.ID.make("latest")])
+        }),
+      ),
+    ),
+  )
+
   it.live("maps config entry types to skill directories", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
