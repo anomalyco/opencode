@@ -380,40 +380,23 @@ describe("OpencodePlugin", () => {
     ),
   )
 
-  it.live("normalizes legacy Console OpenAI variant bodies without changing native bodies", () =>
+  it.live("preserves native Console OpenAI variant bodies in inference requests", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
         const variants = [
           {
-            id: "legacy",
-            body: { reasoningEffort: "high", reasoningSummary: "auto" },
-            expected: { reasoning: { effort: "high", summary: "auto" } },
-          },
-          {
             id: "effort-only",
-            body: { reasoningEffort: "low" },
-            expected: { reasoning: { effort: "low" } },
+            body: { reasoning: { effort: "low" } },
           },
           {
             id: "summary-only",
-            body: { reasoningSummary: "detailed" },
-            expected: { reasoning: { summary: "detailed" } },
+            body: { reasoning: { summary: "detailed" } },
           },
           {
             id: "native",
             body: { reasoning: { effort: "high", summary: "auto" } },
-            expected: { reasoning: { effort: "high", summary: "auto" } },
           },
-          {
-            id: "mixed",
-            body: {
-              reasoningEffort: "low",
-              reasoningSummary: "auto",
-              reasoning: { effort: "high", summary: "detailed" },
-            },
-            expected: { reasoning: { effort: "high", summary: "detailed" } },
-          },
-          { id: "plain", body: {}, expected: {} },
+          { id: "plain", body: {} },
         ]
         const models = {
           astra: {
@@ -481,7 +464,7 @@ describe("OpencodePlugin", () => {
             Effect.gen(function* () {
               const projected = required(model.variants.find((item) => item.id === variant.id))
               expect(projected.body).toEqual({
-                ...variant.expected,
+                ...variant.body,
                 include: ["reasoning.encrypted_content"],
                 metadata: { custom: "unchanged" },
               })
@@ -495,7 +478,7 @@ describe("OpencodePlugin", () => {
               const request = required(requests.at(-1))
               expect(request.variant).toBe(variant.id)
               expect(request.body).toMatchObject({
-                ...variant.expected,
+                ...variant.body,
                 model: "api-astra",
                 include: ["reasoning.encrypted_content"],
                 metadata: { custom: "unchanged" },
@@ -508,9 +491,8 @@ describe("OpencodePlugin", () => {
           const compatible = required(yield* catalog.model.get(Provider.ID.make("compatible"), Model.ID.make("astra")))
           const override = required(yield* catalog.model.get(Provider.ID.make("remote"), Model.ID.make("override")))
           for (const model of [compatible, override]) {
-            expect(model.variants.find((variant) => variant.id === "legacy")?.body).toEqual({
-              reasoningEffort: "high",
-              reasoningSummary: "auto",
+            expect(model.variants.find((variant) => variant.id === "native")?.body).toEqual({
+              reasoning: { effort: "high", summary: "auto" },
               include: ["reasoning.encrypted_content"],
               metadata: { custom: "unchanged" },
             })
