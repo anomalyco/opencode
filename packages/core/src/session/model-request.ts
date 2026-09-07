@@ -232,9 +232,8 @@ const applyModelHooks = (hooks: PluginHooks.Interface, scope: HookScope, request
     return LLMRequest.update(request, {
       model: route === request.model.route ? request.model : LanguageModel.update(request.model, { route }),
       http: new HttpOptions({
-        body: request.http?.body,
+        ...request.http,
         headers: Object.keys(event.headers).length === 0 ? undefined : event.headers,
-        query: request.http?.query,
       }),
     })
   })

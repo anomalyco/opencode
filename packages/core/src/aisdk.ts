@@ -16,6 +16,7 @@ import type {
   SharedV3ProviderOptions,
 } from "@ai-sdk/provider"
 import {
+  DEFAULT_HTTP_TIMEOUT_MS,
   FinishReason,
   LLMEvent,
   AIError,
@@ -126,21 +127,28 @@ function prepareOptions(model: Info, pkg: string) {
   }
 
   const customFetch = options.fetch
-  const chunkTimeout = options.chunkTimeout
+  const timeouts = Provider.timeouts(options)
+  const chunkTimeout = timeouts.chunkTimeout ?? DEFAULT_HTTP_TIMEOUT_MS
+  const headerTimeout = timeouts.headerTimeout ?? DEFAULT_HTTP_TIMEOUT_MS
   delete options.chunkTimeout
+  delete options.headerTimeout
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const opts = { ...(init ?? {}) }
-    const signals = [
-      opts.signal,
-      typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined,
-      options.timeout !== undefined && options.timeout !== null && options.timeout !== false
-        ? AbortSignal.timeout(options.timeout)
-        : undefined,
-    ].filter((item): item is AbortSignal | AbortController => item !== undefined && item !== null)
-    const chunkAbortCtl = signals.find((item): item is AbortController => item instanceof AbortController)
-    const abortSignals = signals.map((item) => (item instanceof AbortController ? item.signal : item))
-    if (abortSignals.length === 1) opts.signal = abortSignals[0]
-    if (abortSignals.length > 1) opts.signal = AbortSignal.any(abortSignals)
+    const ctl = new AbortController()
+    // Only covers the wait for response headers; wrapSSE takes over once the body streams.
+    const headerTimer =
+      headerTimeout === false
+        ? undefined
+        : setTimeout(() => ctl.abort(new Error(HEADER_TIMEOUT_MESSAGE)), headerTimeout)
+    opts.signal = AbortSignal.any(
+      [
+        opts.signal,
+        ctl.signal,
+        options.timeout !== undefined && options.timeout !== null && options.timeout !== false
+          ? AbortSignal.timeout(options.timeout)
+          : undefined,
+      ].filter((item): item is AbortSignal => item !== undefined && item !== null),
+    )
 
     if (typeof opts.body === "string" && model.body !== undefined) {
       const decoded = Option.getOrUndefined(decodeJson(opts.body))
@@ -152,13 +160,15 @@ function prepareOptions(model: Info, pkg: string) {
     const res = await (typeof customFetch === "function" ? customFetch : fetch)(input, {
       ...opts,
       timeout: false,
-    })
-    if (!chunkAbortCtl || typeof chunkTimeout !== "number") return res
-    return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+    }).finally(() => clearTimeout(headerTimer))
+    if (chunkTimeout === false) return res
+    return wrapSSE(res, chunkTimeout, ctl)
   }
 
   return options
 }
+
+const HEADER_TIMEOUT_MESSAGE = "Response headers timed out"
 
 export class InitError extends Schema.TaggedError<InitError>()("AISDK.InitError", {
   providerID: Provider.ID,
@@ -388,7 +398,7 @@ function requestSettings(settings: Readonly<Record<string, unknown>> | undefined
   if (settings === undefined) return undefined
   const result = Object.fromEntries(
     Object.entries(settings).filter(
-      ([key]) => !["apiKey", "authToken", "baseURL", "chunkTimeout", "fetch", "timeout"].includes(key),
+      ([key]) => !["apiKey", "authToken", "baseURL", "chunkTimeout", "fetch", "headerTimeout", "timeout"].includes(key),
     ),
   )
   return Object.keys(result).length === 0 ? undefined : result
@@ -843,7 +853,7 @@ function llmError(error: unknown, operation: "request" | "read") {
 
 // Runtime-generated network failure shapes. The codes mirror the AI SDK's own
 // Bun network error list in handleFetchError; the messages are undici's fetch
-// TypeError and stream termination strings plus our SSE chunk timeout error.
+// TypeError and stream termination strings plus our header and chunk timeout errors.
 // Unrecognized shapes still retry via the UnknownProvider default; this match
 // only adds transport semantics (continuation eligibility, display).
 const NETWORK_ERROR_CODES = new Set([
@@ -861,6 +871,7 @@ const NETWORK_ERROR_MESSAGES = new Set([
   "terminated",
   "other side closed",
   "sse read timed out",
+  HEADER_TIMEOUT_MESSAGE.toLowerCase(),
 ])
 
 const NativeErrorShape = Schema.Struct({
