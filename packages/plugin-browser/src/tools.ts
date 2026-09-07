@@ -116,15 +116,18 @@ function exportResult(output: Schema.Schema.Type<Browser.Operation["output"]>, f
 const invalidURL =
   "Invalid browser URL. Use an HTTP/HTTPS URL or about:blank without embedded credentials. Paths such as /tmp/page.html are not browser URLs. The connected server must be able to reach the address; localhost refers to that server."
 
-function normalizeAction(action: Browser.Action): Browser.Action {
+export function normalizeAction(action: Browser.Action): Browser.Action {
   if (action.type !== "navigate" && action.type !== "tabs.open") return action
   if (action.type === "tabs.open" && action.url === undefined) return action
   const value = action.url?.trim() || "about:blank"
+  // A filesystem path would otherwise gain a scheme and parse as a hostname: /tmp/x becomes https://tmp/x.
+  if (/^(?:[\\/.]|[a-zA-Z]:[\\/])/.test(value)) throw new Error("Unsupported browser URL")
   const local = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(value)
   const url = new URL(
     value === "about:blank" || /^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `${local ? "http" : "https"}://${value}`,
   )
   if ((url.href !== "about:blank" && !/^https?:$/.test(url.protocol)) || url.username || url.password)
     throw new Error("Unsupported browser URL")
-  return { ...action, url: url.href }
+  // Percent-encoding can grow the URL past the bound the desktop decodes from `command`.
+  return Schema.decodeUnknownSync(Browser.Action)({ ...action, url: url.href })
 }

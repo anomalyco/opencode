@@ -72,7 +72,7 @@ export const save = Effect.fn("BrowserFiles.save")((files: readonly Browser.File
       const directory = await mkdtemp(join(tmpdir(), "opencode-browser-"))
       return Promise.all(
         files.map(async (file, index) => {
-          const name = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-160) || "capture"
+          const name = captureName(file.name)
           await mkdir(join(directory, String(index)))
           const path = join(directory, String(index), name)
           await writeFile(path, file.data, { flag: "wx" })
@@ -83,6 +83,14 @@ export const save = Effect.fn("BrowserFiles.save")((files: readonly Browser.File
     catch: (error) => failure("save", error),
   }),
 )
+
+// `.`/`..` escape the per-file directory and Windows resolves device names such as CON.txt regardless of directory.
+export function captureName(name: string) {
+  const sanitized = name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-160)
+  if (!sanitized || /^\.{1,2}$/.test(sanitized) || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(sanitized))
+    return "capture"
+  return sanitized
+}
 
 function failure(operation: "read" | "save", error: unknown) {
   const detail = error instanceof Error ? error.message.slice(0, 400) : String(error).slice(0, 400)
