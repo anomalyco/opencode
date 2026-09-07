@@ -1,6 +1,6 @@
 # @opencode-ai/ai
 
-Schema-first AI primitives for opencode. Provider quirks live in adapters, not in calling code.
+Schema-first language model and image-generation APIs built with Effect.
 
 ```ts
 import { Effect, Layer } from "effect"
@@ -255,7 +255,7 @@ over the same implementation, including the legacy live `requests` array. New te
 
 ## Provider compaction
 
-Compaction is opt-in. The package supports automatic compaction in OpenAI/Azure Responses and Anthropic Messages (including Claude on Vertex), and explicit compaction calls in OpenAI/Azure/xAI Responses. Model and deployment support still depends on the provider. Bedrock compaction is deferred to a separate follow-up.
+Compaction is opt-in. The package supports automatic compaction in OpenAI/Azure Responses and Anthropic Messages (including Claude on Vertex), and explicit compaction calls in OpenAI/Azure/xAI Responses. Model and deployment support still depends on the provider.
 
 This is different from prompt caching, server-side history storage, or truncation. Compaction returns provider-owned context that must be replayed to continue the conversation.
 
@@ -298,7 +298,7 @@ result.responseID
 result.usage
 ```
 
-This appends a native `compaction_trigger` control item to the full input and sends a normal Responses request. It follows the [Codex V2 request shape](https://github.com/openai/codex/blob/728cb12/codex-rs/core/src/compact_remote_v2_attempt.rs), with tools and instructions retained, `stream: true`, `store: false`, and parallel tool calls enabled. It removes normal-answer text/output-format controls, forced tool choices, output-token/tool-call limits, and automatic `context_management`. Body overlays cannot replace `input` or supply `previous_response_id`/`conversation`; the complete canonical history is required for safe stateless replay. Session/cache identifiers, auth, headers, query parameters, service tier, and supported prompt-cache settings are preserved.
+This appends a native `compaction_trigger` control item to the full input and sends a normal Responses request, with tools and instructions retained, `stream: true`, `store: false`, and parallel tool calls enabled. It removes normal-answer text/output-format controls, forced tool choices, output-token/tool-call limits, and automatic `context_management`. Body overlays cannot replace `input` or supply `previous_response_id`/`conversation`; the complete canonical history is required for safe stateless replay. Request metadata, auth, headers, query parameters, service tier, and supported prompt-cache settings are preserved.
 
 Only a successful `response.completed` with a response ID and exactly one logical encrypted checkpoint succeeds. Repeated item events are correlated by ID/output slot, including ID-less checkpoints. Other output is ignored, not returned as assistant text or dispatched as tools. Failed, incomplete, malformed, and interrupted responses return errors rather than partial checkpoints.
 
@@ -372,9 +372,7 @@ providerOptions: {
 - Anthropic can return a compaction block with `content: null` when summarization fails. This becomes a compaction part with `text: null`, which is **not** a successful replacement for prior history. The package never prunes history automatically.
 - `Usage` totals include all reported Anthropic `usage.iterations`, including compaction. `contextTokens` separately reports the final message iteration's inclusive input size, when available. A compaction-only pause does not report a post-compaction context size. Raw iteration usage remains in `providerMetadata`.
 
-### Ownership and verification
-
-The AI package transports options and typed conversation parts. It does not schedule compaction, persist Session checkpoints, select history, switch providers, or replace Core's existing local compaction policy. Native compaction is not enabled for OpenCode Sessions by this feature; Session integration must persist these parts before enabling it. The AI SDK bridge rejects native compaction parts rather than dropping them. Provider-executed tool APIs and persistence changes are a separate follow-up.
+### Recording tests
 
 Tests cover serialized round trips, real local HTTP plus a tool loop, WebSocket recovery, provider errors, malformed blocks, and usage accounting. Live provider tests are gated by `RECORD=true` and the relevant API keys:
 
@@ -393,7 +391,7 @@ Prompt caching is **on by default**. Every `LLMRequest` resolves to `cache: "aut
 
 ### Auto placement
 
-`"auto"` places up to four breakpoints — the last tool definition, the first system part, the last system part when distinct, and the final message boundary. These expose successively larger reusable prefixes for tools, the base agent, project instructions, and the active conversation. The rolling final-message boundary advances on every request so recent conversation prefixes remain reusable during tool loops.
+`"auto"` places up to four breakpoints — the last tool definition, the first system part, the last system part when distinct, and the final message boundary. These expose successively larger reusable prefixes for tool definitions, system instructions, and the active conversation. The rolling final-message boundary advances on every request so recent conversation prefixes remain reusable during tool loops.
 
 Tools precede every system and conversation block in the provider prefix, so tool definitions must remain byte-stable and deterministically ordered for downstream breakpoints to remain reusable.
 
@@ -474,20 +472,20 @@ const fireworks = Fireworks.configure({ apiKey }).model("accounts/fireworks/mode
 
 The former `OpenAICompatible.baseten`, `.cerebras`, `.deepinfra`, `.deepseek`, `.fireworks`, `.groq`, and `.togetherai` presets are replaced by the top-level `Baseten`, `Cerebras`, `DeepInfra`, `DeepSeek`, `Fireworks`, `Groq`, and `TogetherAI` exports. Use `CloudflareAIGateway` and `CloudflareWorkersAI` directly; each has its own module. `OpenAICompatible` configures generic endpoints with an explicit `baseURL`.
 
-### Package-like entrypoints
+### Provider entrypoints
 
-Native catalog integrations load provider behavior through package-like entrypoints. These are export paths from the same `@opencode-ai/ai` npm package, not independently published packages. Each entrypoint exports the same `model(modelID, settings)` contract, and `settings` contains serializable provider configuration plus common `headers` and `body` overlays.
+Provider modules are available through dedicated exports from `@opencode-ai/ai`. Each LLM entrypoint exports `model(modelID, settings)`, where `settings` contains provider configuration plus common `headers` and `body` overlays.
 
 ```ts
 import { model } from "@opencode-ai/ai/providers/openai/responses"
 
 const selected = model("gpt-5", {
   apiKey: process.env.OPENAI_API_KEY,
-  headers: { "x-application": "opencode" },
+  headers: { "x-application": "example" },
 })
 ```
 
-OpenAI Chat and OpenAI Responses are separate semantic entrypoints:
+APIs have separate entrypoints:
 
 - `@opencode-ai/ai/providers/openai/chat`
 - `@opencode-ai/ai/providers/openai/responses`
@@ -528,17 +526,13 @@ import { model } from "@opencode-ai/ai/providers/google-vertex/messages"
 model("claude-sonnet-4-6", { project: "my-project", location: "global" })
 ```
 
-Provider facades such as `OpenAI.configure(...).responses(...)` remain the direct application API. Package-like entrypoints are the self-similar loading contract used when a catalog selects behavior by export path.
-
-Every named LLM provider listed above also exports `model(modelID, settings)` from its own package entrypoint. The extracted providers are available at:
+Additional provider entrypoints include:
 
 - `@opencode-ai/ai/providers/baseten`
 - `@opencode-ai/ai/providers/deepseek`
 - `@opencode-ai/ai/providers/fireworks`
 - `@opencode-ai/ai/providers/cloudflare-ai-gateway`
 - `@opencode-ai/ai/providers/cloudflare-workers-ai`
-
-Core resolves known compatible catalog providers through their dedicated entrypoints, including the `fireworks-ai` catalog ID through `providers/fireworks`.
 
 ## Provider options & HTTP overlays
 
@@ -565,7 +559,7 @@ LLM.request({
 
 ## Routes
 
-Adding a new model or deployment is usually 5-15 lines using `Route.make({ protocol, endpoint, auth, framing, ... })`. The route owns endpoint/auth/framing and the protocol owns body construction plus stream parsing. Transports are reusable IO templates that receive route endpoint/auth at compile time. Capability/catalog metadata lives outside this low-level package; unsupported request shapes fail during protocol lowering. See `AGENTS.md` for the architectural detail.
+Compose a route with `Route.make({ protocol, endpoint, auth, framing, ... })`. The route owns endpoint/auth/framing and the protocol owns body construction plus stream parsing. Transports receive the route's endpoint and auth when preparing requests. Unsupported request shapes fail during protocol lowering.
 
 ## Effect
 
