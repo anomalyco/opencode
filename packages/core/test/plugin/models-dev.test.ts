@@ -10,6 +10,9 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { Model } from "@opencode-ai/core/model"
+import { ModelResolver } from "@opencode-ai/core/model-resolver"
+import { LLM } from "@opencode-ai/ai"
+import { compileRequest } from "@opencode-ai/ai/route/client"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { ModelsDevPlugin } from "@opencode-ai/core/plugin/models-dev"
 import { Plugin } from "@opencode-ai/core/plugin"
@@ -115,6 +118,112 @@ const richSnapshot = (name = "Acme") => {
 }
 
 describe("ModelsDevPlugin", () => {
+  it.effect("selects native compatible providers at ingestion and preserves package overrides", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const integrations = yield* Integration.Service
+      const cases = [
+        ["baseten", "baseten"],
+        ["cerebras", "cerebras"],
+        ["deepinfra", "deepinfra"],
+        ["deepseek", "deepseek"],
+        ["fireworks-ai", "fireworks"],
+        ["groq", "groq"],
+        ["togetherai", "togetherai"],
+      ] as const
+      const generic = Provider.aisdk("@ai-sdk/openai-compatible")
+      const high = Model.VariantID.make("high")
+      const snapshots = cases.map(([id]) => {
+        const providerID = Provider.ID.make(id)
+        return {
+          info: {
+            ...Provider.Info.empty(providerID),
+            package: generic,
+            settings: { apiKey: "fixture", baseURL: "https://provider.example/v1/openai" },
+          },
+          environment: [],
+          models: [
+            {
+              ...Model.Info.default(providerID, Model.ID.make("model")),
+              settings: { reasoningEffort: "low" },
+              variants: [{ id: high, settings: { reasoningEffort: "high" } }],
+            },
+            {
+              ...Model.Info.default(providerID, Model.ID.make("explicit-compatible")),
+              package: generic,
+              settings: { baseURL: "https://model.example/v1/openai", reasoningEffort: "high" },
+            },
+            {
+              ...Model.Info.default(providerID, Model.ID.make("messages")),
+              package: Provider.aisdk("@ai-sdk/anthropic"),
+              settings: { thinking: { type: "adaptive" } },
+              variants: [{ id: high, settings: { effort: "high" } }],
+            },
+          ],
+        }
+      }) satisfies readonly ModelsDev.Snapshot[]
+      const pristine = JSON.stringify(snapshots)
+      yield* ModelsDevPlugin.effect(
+        host({ catalog: catalogHost(catalog), integration: integrationHost(integrations) }),
+      ).pipe(
+        Effect.provideService(
+          ModelsDev.Service,
+          ModelsDev.Service.of({
+            get: () => Effect.succeed(snapshots),
+            refresh: () => Effect.void,
+          }),
+        ),
+      )
+
+      for (const [id, native] of cases) {
+        const providerID = Provider.ID.make(id)
+        const packageName = `@opencode-ai/ai/providers/${native}`
+        expect((yield* catalog.provider.get(providerID))?.package).toBe(packageName)
+        const selected = required(yield* catalog.model.get(providerID, Model.ID.make("model")))
+        expect(selected.package).toBe(packageName)
+        expect(selected.settings).toEqual({
+          apiKey: "fixture",
+          baseURL: "https://provider.example/v1/openai",
+          providerOptions: { reasoningEffort: "low" },
+        })
+        expect(selected.variants).toEqual([{ id: high, settings: { providerOptions: { reasoningEffort: "high" } } }])
+        const runtime = yield* ModelResolver.resolveModel(selected, high)
+        expect(runtime.route.id).toBe(`${native}-chat`)
+        const request = yield* compileRequest(LLM.request({ model: runtime, prompt: "Hello" }))
+        expect(request.body.reasoning_effort).toBe("high")
+
+        const explicit = required(yield* catalog.model.get(providerID, Model.ID.make("explicit-compatible")))
+        expect(explicit.package).toBe(packageName)
+        expect(explicit.settings).toEqual({
+          apiKey: "fixture",
+          baseURL: "https://model.example/v1/openai",
+          providerOptions: { reasoningEffort: "high" },
+        })
+        const messages = required(yield* catalog.model.get(providerID, Model.ID.make("messages")))
+        expect(messages.package).toBe(Provider.aisdk("@ai-sdk/anthropic"))
+        expect(messages.settings?.thinking).toEqual({ type: "adaptive" })
+        expect(messages.variants).toEqual([{ id: high, settings: { effort: "high" } }])
+      }
+
+      // Later config transforms own explicit package choices; runtime resolution must honor them.
+      const deepseek = Provider.ID.make("deepseek")
+      yield* catalog.transform((editor) => {
+        editor.provider.update(deepseek, (draft) => {
+          draft.package = "@opencode-ai/ai/providers/openai-compatible"
+        })
+      })
+      const configured = required(yield* catalog.model.get(deepseek, Model.ID.make("model")))
+      const runtime = yield* ModelResolver.resolveModel(configured, high)
+      expect(runtime.route.id).toBe("openai-compatible-chat")
+      expect((yield* compileRequest(LLM.request({ model: runtime, prompt: "Hello" }))).body.reasoning_effort).toBe(
+        "high",
+      )
+      yield* catalog.reload()
+      expect((yield* catalog.model.get(deepseek, Model.ID.make("model")))?.package).toBe(configured.package)
+      expect(JSON.stringify(snapshots)).toBe(pristine)
+    }),
+  )
+
   isolated.effect("shares one snapshot between Locations while each catalog mutates only its own copies", () =>
     Effect.gen(function* () {
       const { providerID, modelID, snapshot } = richSnapshot()

@@ -130,22 +130,17 @@ export function map(input: MapInput): Mapping | undefined {
           ...mapProviderOptions(input.settings, ["apiKey", "baseURL", "organization", "project", "queryParams"]),
         },
       }
-    case "@ai-sdk/openai-compatible": {
+    case "@ai-sdk/openai-compatible":
       if (typeof input.settings.baseURL !== "string") return
-      const provider = input.providerID === "fireworks-ai" ? "fireworks" : input.providerID
-      const native = ["baseten", "cerebras", "deepinfra", "deepseek", "fireworks", "groq", "togetherai"].includes(
-        provider,
-      )
       return {
-        package: `@opencode-ai/ai/providers/${native ? provider : "openai-compatible"}`,
+        package: "@opencode-ai/ai/providers/openai-compatible",
         settings: {
           ...baseSettings,
           ...mapAPIKey(input.settings),
-          ...(native ? {} : { provider: input.providerID }),
+          provider: input.providerID,
           ...mapProviderOptions(input.settings, ["apiKey", "baseURL"]),
         },
       }
-    }
     case "@openrouter/ai-sdk-provider":
       return mapOpenRouter(input.settings, baseSettings)
     case "@ai-sdk/xai":

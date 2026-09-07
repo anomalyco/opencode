@@ -132,17 +132,9 @@ describe("ModelResolver", () => {
     }),
   )
 
-  it.effect("resolves compatible catalog providers through their own packages", () =>
+  it.effect("keeps explicitly selected compatible packages generic for known provider IDs", () =>
     Effect.gen(function* () {
-      for (const [providerID, native] of [
-        ["baseten", "baseten"],
-        ["cerebras", "cerebras"],
-        ["deepinfra", "deepinfra"],
-        ["deepseek", "deepseek"],
-        ["fireworks-ai", "fireworks"],
-        ["groq", "groq"],
-        ["togetherai", "togetherai"],
-      ] as const) {
+      for (const providerID of ["baseten", "cerebras", "deepinfra", "deepseek", "fireworks-ai", "groq", "togetherai"]) {
         const selected = yield* ModelResolver.fromCatalogModel(
           model(Provider.aisdk("@ai-sdk/openai-compatible"), {
             providerID: Provider.ID.make(providerID),
@@ -150,7 +142,7 @@ describe("ModelResolver", () => {
           }),
         )
         expect(String(selected.provider)).toBe(providerID)
-        expect(selected.route.id).toBe(`${native}-chat`)
+        expect(selected.route.id).toBe("openai-compatible-chat")
         expect(selected.route.endpoint.baseURL).toBe("https://provider.example/v1/openai")
         const prepared = yield* compileRequest(LLM.request({ model: selected, prompt: "Hello" }))
         expect(prepared.body.messages).toEqual([{ role: "user", content: "Hello" }])
@@ -475,7 +467,7 @@ describe("ModelResolver", () => {
       })
 
       expect(headers.authorization).toBe("Bearer settings-secret")
-      expect(resolved.route.id).toBe("deepseek-chat")
+      expect(resolved.route.id).toBe("openai-compatible-chat")
       expect(String(resolved.provider)).toBe("deepseek")
       expect(resolved.route.providerMetadataKey).toBe("deepseek")
       expect(resolved.compatibility?.reasoningField).toBe("vendor_reasoning")
