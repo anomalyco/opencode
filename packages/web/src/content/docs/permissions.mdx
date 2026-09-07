@@ -161,7 +161,7 @@ OpenCode permissions are keyed by tool name, plus a couple of safety guards:
 - `webfetch` — fetching a URL (matches the URL)
 - `websearch` — web search (matches the query)
 - `external_directory` — triggered when a tool touches paths outside the project working directory
-- `doom_loop` — triggered when the same tool call repeats 3 times with identical input
+- `doom_loop` — triggered when a sequence of 1–10 tool calls repeats 3 consecutive times with identical tool names and inputs within one processor
 
 ---
 
