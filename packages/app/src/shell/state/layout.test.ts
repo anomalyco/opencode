@@ -14,6 +14,19 @@ describe("layout persistence", () => {
   const schema = Persistence.withInitial(layoutPersistence, initialLayout(ServerConnection.Key.make("local")))
   const decode = Schema.decodeUnknownSync(schema)
 
+  test("restores layout without an initial server and retains a saved selection", () => {
+    const schema = Persistence.withInitial(layoutPersistence, initialLayout())
+    const decode = Schema.decodeUnknownSync(schema)
+    const empty = decode({})
+    expect(empty.home.selection).toEqual({})
+    expect(decode(Schema.encodeSync(schema)(empty)).home.selection).toEqual({})
+
+    const selection = { server: ServerConnection.Key.make("https://server.example.test"), directory: "/project" }
+    const saved = decode({ home: { selection } })
+    expect(saved.home.selection).toEqual(selection)
+    expect(decode(Schema.encodeSync(schema)(saved)).home.selection).toEqual(selection)
+  })
+
   test("uses supplied initial preferences after legacy migration", () => {
     const initial = initialLayout(ServerConnection.Key.make("remote"))
     initial.sidebar.width = 420

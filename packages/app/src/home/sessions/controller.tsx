@@ -318,8 +318,10 @@ export function createHomeSessionsController(home: HomeController) {
         dialog.show(() => <DeleteDialog server={server} session={session} />),
     },
     tab: {
-      isOpen: (record: HomeSessionRecord) =>
-        sessionHasOpenTab(tabs.store, home.selection.value().server, record.session),
+      isOpen: (record: HomeSessionRecord) => {
+        const server = home.selection.value().server
+        return !!server && sessionHasOpenTab(tabs.store, server, record.session)
+      },
     },
   }
 }
