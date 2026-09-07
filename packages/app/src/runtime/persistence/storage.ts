@@ -609,7 +609,10 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
     write: draft
       ? (value, serialized) => {
           draftLatest = serialized
-          void draft.setDocument(prefix + config.key, encode(value))
+          // A failed chunk upload is retried by the next save; see drafts.ts.
+          void draft
+            .setDocument(prefix + config.key, encode(value))
+            .catch((error: unknown) => console.error(`[persistence] draft write failed for ${config.key}`, error))
         }
       : undefined,
   })

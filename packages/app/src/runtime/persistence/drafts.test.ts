@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createDraftStore, draftTextChunk, draftTextThreshold } from "./drafts"
+import { createDraftStore, draftChunkCacheTtl, draftTextChunk, draftTextThreshold } from "./drafts"
 
 function memoryDriver() {
   const documents = new Map<string, string>()
@@ -77,6 +77,55 @@ describe("draft store text externalization", () => {
     )
     const store = createDraftStore(memory.driver)
     expect(JSON.parse((await store.getItem("doc"))!)).toEqual({ prompt: [{ type: "text", content: "" }] })
+  })
+
+  test("a cached chunk id is uploaded again once it is older than the cache ttl", async () => {
+    const memory = memoryDriver()
+    let clock = 0
+    const store = createDraftStore(memory.driver, { now: () => clock })
+    await store.setDocument("doc", { prompt: [{ type: "text", content: large }] })
+    clock = draftChunkCacheTtl
+    await store.setDocument("doc", { prompt: [{ type: "text", content: large }], cursor: 1 })
+    expect(memory.puts()).toBe(1)
+    // Simulate the host having collected the chunk in the meantime; the next save past the ttl
+    // uploads it again, so the document never references a missing blob.
+    memory.blobs.clear()
+    clock = draftChunkCacheTtl * 2 + 1
+    await store.setDocument("doc", { prompt: [{ type: "text", content: large }], cursor: 2 })
+    expect(memory.puts()).toBe(2)
+    const fresh = createDraftStore(memory.driver)
+    expect(JSON.parse((await fresh.getItem("doc"))!).prompt[0].content).toBe(large)
+  })
+
+  test("chunk boundaries never split a surrogate pair", async () => {
+    const memory = memoryDriver()
+    const store = createDraftStore(memory.driver)
+    const text = "x".repeat(draftTextChunk - 1) + "😀tail"
+    await store.setDocument("doc", { prompt: [{ type: "text", content: text }] })
+    const stored = JSON.parse(memory.documents.get("doc")!)
+    const bytes = await Promise.all(stored.prompt[0].content.blob.ids.map((id: string) => memory.blobs.get(id)!.text()))
+    expect(bytes.join("")).toBe(text)
+    expect(bytes[0]!.length).toBe(draftTextChunk + 1)
+    const fresh = createDraftStore(memory.driver)
+    expect(JSON.parse((await fresh.getItem("doc"))!).prompt[0].content).toBe(text)
+  })
+
+  test("a failed chunk upload is retried on the next save instead of being reused", async () => {
+    const memory = memoryDriver()
+    let failNext = true
+    const putBlob = memory.driver.putBlob
+    memory.driver.putBlob = async (blob) => {
+      if (failNext) {
+        failNext = false
+        throw new Error("offline")
+      }
+      return putBlob(blob)
+    }
+    const store = createDraftStore(memory.driver)
+    await expect(store.setDocument("doc", { prompt: [{ type: "text", content: paste }] })).rejects.toThrow("offline")
+    await store.setDocument("doc", { prompt: [{ type: "text", content: `${paste}!` }] })
+    const fresh = createDraftStore(memory.driver)
+    expect(JSON.parse((await fresh.getItem("doc"))!).prompt[0].content).toBe(`${paste}!`)
   })
 
   test("setItem still accepts a serialized document", async () => {

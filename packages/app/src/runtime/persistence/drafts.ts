@@ -21,6 +21,10 @@ export type DraftStore = AsyncStorage & {
 // after a large paste changes only the final chunk, so a save uploads one chunk, not the paste.
 export const draftTextThreshold = 16 * 1024
 export const draftTextChunk = 64 * 1024
+// A cached chunk id may be republished without an upload for this long after its last use. The
+// host keeps unreferenced blobs for much longer (desktop `blobGrace`) and refreshes a blob every
+// time a written document references it, so a hit here always points at a retained blob.
+export const draftChunkCacheTtl = 5 * 60_000
 const textCacheLimit = 64
 
 const urls = new Map<string, string>()
@@ -48,7 +52,8 @@ export async function createBlobReference(blob: Blob): Promise<BlobReference> {
   return { id, url: blobUrl(id, blob) }
 }
 
-export function createDraftStore(driver: Driver): DraftStore {
+export function createDraftStore(driver: Driver, options: { now?: () => number } = {}): DraftStore {
+  const now = options.now ?? Date.now
   const versions = new Map<string, number>()
   const loading = new Map<string, Promise<string | undefined>>()
   const loadBlobUrl = (id: string) => {
@@ -69,30 +74,39 @@ export function createDraftStore(driver: Driver): DraftStore {
   }
   // Keyed by chunk content so unchanged chunks are never hashed or sent again while the draft is
   // edited. Bounded because each entry pins up to draftTextChunk characters.
-  const chunkIds = new Map<string, Promise<string>>()
+  const chunkIds = new Map<string, { id: Promise<string>; used: number }>()
   const chunks = new Map<string, string>()
   const remember = <V>(cache: Map<string, V>, key: string, value: V) => {
     cache.set(key, value)
     if (cache.size > textCacheLimit) cache.delete(cache.keys().next().value!)
     return value
   }
-  const externalize = (text: string) =>
-    Promise.all(
-      Array.from({ length: Math.ceil(text.length / draftTextChunk) }, (_, index) => {
-        const chunk = text.slice(index * draftTextChunk, (index + 1) * draftTextChunk)
-        return (
-          chunkIds.get(chunk) ??
-          remember(
-            chunkIds,
-            chunk,
-            driver.putBlob(new Blob([chunk])).then((id) => {
-              remember(chunks, id, chunk)
-              return id
-            }),
-          )
-        )
+  const upload = (chunk: string, at: number) => {
+    const id = driver.putBlob(new Blob([chunk])).then(
+      (id) => {
+        remember(chunks, id, chunk)
+        return id
+      },
+      (error: unknown) => {
+        // A failed upload must not be reused as the answer for this content on later saves.
+        if (chunkIds.get(chunk)?.id === id) chunkIds.delete(chunk)
+        throw error
+      },
+    )
+    remember(chunkIds, chunk, { id, used: at })
+    return id
+  }
+  const externalize = (text: string) => {
+    const at = now()
+    return Promise.all(
+      split(text).map((chunk) => {
+        const cached = chunkIds.get(chunk)
+        if (!cached || at - cached.used > draftChunkCacheTtl) return upload(chunk, at)
+        cached.used = at
+        return cached.id
       }),
     )
+  }
   const loadChunk = async (id: string) => {
     const cached = chunks.get(id)
     if (cached !== undefined) return cached
@@ -166,6 +180,20 @@ export function createDraftStore(driver: Driver): DraftStore {
     },
     putBlob,
   }
+}
+
+// Fixed-size pieces, except that a piece never ends between the two halves of a surrogate pair:
+// each piece becomes its own Blob, and an unpaired surrogate would be encoded as U+FFFD.
+function split(text: string) {
+  const pieces: string[] = []
+  for (let start = 0; start < text.length; ) {
+    const end = Math.min(start + draftTextChunk, text.length)
+    const code = text.charCodeAt(end - 1)
+    const stop = end < text.length && code >= 0xd800 && code <= 0xdbff ? end + 1 : end
+    pieces.push(text.slice(start, stop))
+    start = stop
+  }
+  return pieces
 }
 
 export function createBrowserDraftStore(): DraftStore {

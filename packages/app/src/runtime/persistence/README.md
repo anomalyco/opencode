@@ -115,7 +115,12 @@ Draft documents never carry large text inline. Any string of `draftTextThreshold
 characters or more is split into `draftTextChunk`-sized content-addressed blobs and
 stored as `{ blob: { kind: "text", ids: [...] } }`; reads join the chunks again. A
 content-keyed cache means unchanged chunks are not hashed or sent on later saves, so
-typing after a large paste uploads one chunk per save rather than the paste.
+typing after a large paste uploads one chunk per save rather than the paste. Chunk
+boundaries never split a surrogate pair, and a failed upload is evicted so the next save
+retries it. A cached id is reused without an upload for at most `draftChunkCacheTtl`; the
+desktop host refreshes a blob whenever a written document references it and collects only
+blobs that are unreferenced and untouched for `blobGrace` (much longer than the ttl), so a
+republished id always points at a retained blob.
 `persisted()` hands the draft store the encoded document (`setDocument`) rather than
 a serialized string, so the store does not re-parse the full document to externalize
 it. Both blob collectors (desktop SQL, browser IndexedDB) keep chunk ids alive. This

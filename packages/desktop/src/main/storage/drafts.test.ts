@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { sql } from "drizzle-orm"
 import { openDatabase } from "./database"
-import { createDraftStore } from "./drafts"
+import { blobGrace, createDraftStore } from "./drafts"
 
 describe("draft store", () => {
   test("queues documents and reads them back before and after flush", () => {
@@ -30,25 +30,77 @@ describe("draft store", () => {
     expect(second.getBlob(unused)).toBeNull()
   })
 
-  test("keeps text chunks alive and collects retired ones after a flush once the interval passed", () => {
+  test("collects a retired chunk only once it is unreferenced and past the grace period", () => {
     const database = openDatabase(":memory:")
     let clock = 0
     const drafts = createDraftStore(database.db, { delay: 1_000, now: () => clock })
+    const text = (...ids: string[]) =>
+      JSON.stringify({ prompt: [{ type: "text", content: { blob: { kind: "text", ids } } }] })
     const a = drafts.putBlob(new TextEncoder().encode("chunk a"))
     const b = drafts.putBlob(new TextEncoder().encode("chunk b"))
-    drafts.set("doc", JSON.stringify({ prompt: [{ type: "text", content: { blob: { kind: "text", ids: [a, b] } } }] }))
+    drafts.set("doc", text(a, b))
     drafts.flush()
     const c = drafts.putBlob(new TextEncoder().encode("chunk c"))
-    drafts.set("doc", JSON.stringify({ prompt: [{ type: "text", content: { blob: { kind: "text", ids: [a, c] } } }] }))
+    drafts.set("doc", text(a, c))
     drafts.flush()
-    // Too soon: the retired chunk survives this flush.
-    expect(drafts.getBlob(b)).not.toBeNull()
+    // Retired but recently touched: survives a due collection.
     clock = 120_000
     drafts.putBlob(new TextEncoder().encode("chunk d"))
+    drafts.set("other", "{}")
+    drafts.flush()
+    expect(drafts.getBlob(b)).not.toBeNull()
+    // Past the grace period and still unreferenced: collected. Referenced chunks stay.
+    clock = 120_000 + blobGrace + 1
+    drafts.putBlob(new TextEncoder().encode("chunk e"))
     drafts.set("other", "{}")
     drafts.flush()
     expect(drafts.getBlob(a)).not.toBeNull()
     expect(drafts.getBlob(c)).not.toBeNull()
     expect(drafts.getBlob(b)).toBeNull()
   })
+
+  test("a document that republishes a cached chunk id refreshes the chunk without an upload", () => {
+    const database = openDatabase(":memory:")
+    let clock = 0
+    const drafts = createDraftStore(database.db, { delay: 1_000, now: () => clock })
+    const text = (...ids: string[]) =>
+      JSON.stringify({ prompt: [{ type: "text", content: { blob: { kind: "text", ids } } }] })
+    const a = drafts.putBlob(new TextEncoder().encode("A"))
+    drafts.set("doc", text(a))
+    drafts.flush()
+    // Edit away from A; A becomes unreferenced.
+    const b = drafts.putBlob(new TextEncoder().encode("A!"))
+    drafts.set("doc", text(b))
+    drafts.flush()
+    // Long after, undo republishes A from the renderer cache with no upload. The write touches A.
+    clock = blobGrace - 1
+    drafts.set("doc", text(a))
+    drafts.flush()
+    clock = blobGrace + collectInterval
+    drafts.putBlob(new TextEncoder().encode("unrelated"))
+    drafts.set("other", "{}")
+    drafts.flush()
+    expect(drafts.getBlob(a)).not.toBeNull()
+    expect(drafts.getBlob(b)).toBeNull()
+  })
+
+  test("an uploaded attachment survives a due collection before its document is written", () => {
+    const database = openDatabase(":memory:")
+    let clock = 0
+    const drafts = createDraftStore(database.db, { delay: 1_000, now: () => clock })
+    drafts.putBlob(new TextEncoder().encode("old"))
+    drafts.set("other", JSON.stringify({ n: 1 }))
+    drafts.flush()
+    clock = collectInterval + 1
+    // The renderer uploads first and saves the referencing document up to a second later.
+    const image = drafts.putBlob(new Uint8Array([1, 2, 3]))
+    drafts.set("other", JSON.stringify({ n: 2 }))
+    drafts.flush()
+    expect(drafts.getBlob(image)).not.toBeNull()
+    drafts.set("doc", JSON.stringify({ prompt: [{ type: "image", blob: { id: image } }] }))
+    drafts.flush()
+    expect(drafts.getBlob(image)).not.toBeNull()
+  })
 })
+
+const collectInterval = 60_000
