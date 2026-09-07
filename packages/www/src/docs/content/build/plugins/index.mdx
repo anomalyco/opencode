@@ -345,6 +345,8 @@ Read the commands available at a location.
 const commands = await ctx.command.list()
 ```
 
+#### Template commands
+
 Register a prompt command with the same fields used by configured commands. OpenCode expands `$ARGUMENTS`, positional
 arguments such as `$1`, and shell substitutions before submitting the prompt. Setting `subagent` runs it in a child
 session.
@@ -361,8 +363,27 @@ await ctx.command.transform((editor) => {
 })
 ```
 
+#### Callback commands
+
 Use `execute` instead of `template` when the command needs custom behavior. The callback receives the session, prompt
 attachments, and requested delivery mode.
+
+```ts
+await ctx.command.transform((editor) => {
+  editor.add({
+    name: "security-review-custom",
+    description: "Review changes with custom behavior",
+    execute: async ({ sessionID, prompt, delivery }) => {
+      await ctx.session.prompt({
+        ...prompt,
+        sessionID,
+        text: `Review these changes for security issues.\n\n${prompt.text}`,
+        delivery,
+      })
+    },
+  })
+})
+```
 
 Reload commands after external state used by a transform changes.
 

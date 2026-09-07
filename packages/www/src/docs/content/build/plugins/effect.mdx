@@ -366,8 +366,10 @@ effect: (ctx) =>
   }),
 ```
 
+#### Template commands
+
 The command transform is add-only. Template commands use the configured-command argument expansion, agent and model
-selection, and optional subagent execution. Use an `execute` callback instead when the command needs custom behavior.
+selection, and optional subagent execution.
 
 ```ts
 effect: (ctx) =>
@@ -383,6 +385,32 @@ effect: (ctx) =>
       })
     })
     yield* command.reload()
+  }),
+```
+
+#### Callback commands
+
+Use an `execute` callback instead when the command needs custom behavior. It receives the session, prompt attachments,
+and delivery mode.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const command = ctx.command
+    const session = ctx.session
+    yield* command.transform((editor) => {
+      editor.add({
+        name: "security-review-custom",
+        description: "Review changes with custom behavior",
+        execute: (input) =>
+          session.prompt({
+            ...input.prompt,
+            sessionID: input.sessionID,
+            text: `Review these changes for security issues.\n\n${input.prompt.text}`,
+            delivery: input.delivery,
+          }).pipe(Effect.asVoid),
+      })
+    })
   }),
 ```
 
