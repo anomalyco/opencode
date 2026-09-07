@@ -278,19 +278,11 @@ export const authorize = (input: {
       try: () => discoverOAuthServerInfo(input.config.url, { fetchFn }),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     })
-    const registration = oauth?.client_registration ?? "auto"
     const cimd =
-      registration !== "dcr" &&
       !oauth?.client_id &&
       !oauth?.redirect_uri &&
       discovery.authorizationServerMetadata?.client_id_metadata_document_supported === true &&
       (discovery.authorizationServerMetadata.token_endpoint_auth_methods_supported?.includes("none") ?? false)
-    if (registration === "cimd" && !cimd)
-      return yield* Effect.fail(
-        new Error(
-          `MCP server "${input.name}" cannot use a Client ID Metadata Document: the authorization server must advertise client_id_metadata_document_supported and accept the "none" token endpoint auth method, and the OAuth config must not set client_id or redirect_uri`,
-        ),
-      )
     yield* Effect.logInfo("mcp oauth client registration selected", {
       ...fields,
       registration: oauth?.client_id ? "static" : cimd ? "cimd" : "dcr",

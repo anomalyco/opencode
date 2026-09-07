@@ -1966,7 +1966,6 @@ export type ConfigEntry =
                         scope?: string
                         callback_port?: number
                         redirect_uri?: string
-                        client_registration?: "auto" | "cimd" | "dcr"
                       }
                     | false
                   disabled?: boolean
@@ -4592,7 +4591,6 @@ export type McpAddInput = {
                 readonly scope?: string
                 readonly callback_port?: number
                 readonly redirect_uri?: string
-                readonly client_registration?: "auto" | "cimd" | "dcr"
               }
             | false
           readonly disabled?: boolean

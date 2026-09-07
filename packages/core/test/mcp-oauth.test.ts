@@ -248,23 +248,5 @@ describe("MCP OAuth", () => {
       expect(url.searchParams.get("client_id")).toBe("registered")
       expect(registrations).toHaveLength(1)
     })
-
-    test("honors client_registration: dcr", async () => {
-      const { server, registrations } = authorizationServer(cimd)
-      const { url } = await Effect.runPromise(Effect.scoped(start(server, { client_registration: "dcr" }))).finally(
-        () => server.stop(true),
-      )
-      expect(url.searchParams.get("client_id")).toBe("registered")
-      expect(registrations).toHaveLength(1)
-    })
-
-    test("fails client_registration: cimd when the server lacks support", async () => {
-      const { server } = authorizationServer({})
-      await expect(
-        Effect.runPromise(Effect.scoped(start(server, { client_registration: "cimd" }))).finally(() =>
-          server.stop(true),
-        ),
-      ).rejects.toThrow(/Client ID Metadata Document/)
-    })
   })
 })
