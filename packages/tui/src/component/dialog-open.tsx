@@ -95,10 +95,17 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
     setDirectory(next)
   }
   const [worktrees] = createResource(projectID, (projectID) =>
-    client.api.worktree.list({ projectID }).catch((error: unknown) => {
-      toast.show({ title: "Loading worktrees failed", message: errorMessage(error), variant: "error" })
-      return []
-    }),
+    client.api.worktree
+      .list({
+        location: {
+          directory: data.project.get(projectID)!.canonical,
+          workspace: location.ref?.workspaceID ?? data.location.default().workspaceID,
+        },
+      })
+      .catch((error: unknown) => {
+        toast.show({ title: "Loading worktrees failed", message: errorMessage(error), variant: "error" })
+        return []
+      }),
   )
   const [entries] = createResource(directory, (directory) =>
     client.api.file
@@ -151,7 +158,10 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
       const project = data.project.get(session.projectID)
       const name = projectName(project)
       const basename = path.basename(session.location.directory)
-      const label = name && name.toLowerCase() !== basename.toLowerCase() ? `${name} · ${basename}` : name || basename
+      const label =
+        name && session.location.directory !== project?.canonical && name.toLowerCase() !== basename.toLowerCase()
+          ? `${name} · ${basename}`
+          : name || basename
       const running =
         data.session.status(session.id) === "running" ||
         data.session.family(session.id).some((id) => data.session.status(id) === "running")
@@ -402,8 +412,8 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
               : recent.loading || projects.loading || matched.loading
                 ? "Searching sessions and projects…"
                 : shortcuts.get("session.list")
-                ? `No matches · search all sessions with ${shortcuts.get("session.list")}`
-                : "No matches"}
+                  ? `No matches · search all sessions with ${shortcuts.get("session.list")}`
+                  : "No matches"}
           </text>
         </box>
       }
@@ -415,7 +425,14 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         if (option.value.type === "new") {
           const id = option.value.projectID
           void client.api.worktree
-            .create({ projectID: id, strategy: "git", directory: path.join(paths.worktree, id.slice(0, 6)) })
+            .create({
+              location: {
+                directory: data.project.get(id)!.canonical,
+                workspace: location.ref?.workspaceID ?? data.location.default().workspaceID,
+              },
+              strategy: "git",
+              directory: path.join(paths.worktree, id.slice(0, 6)),
+            })
             .then((created) => {
               const target = {
                 directory: created.directory,

@@ -262,7 +262,9 @@ test("loads Git worktrees only when drilling into a project or its associated di
           workspaceID,
           project: { id: "proj_git", directory: current, canonical: root },
         })
-      if (url.pathname !== "/api/worktree/proj_git") return undefined
+      if (url.pathname !== "/api/worktree") return undefined
+      expect(url.searchParams.get("location[directory]")).toBe(root)
+      expect(url.searchParams.get("location[workspace]")).toBe(workspaceID)
       requests++
       return json([{ directory: other, strategy: "git" }, { directory: root }, { directory: current, strategy: "git" }])
     },
@@ -331,7 +333,7 @@ test("does not show or trigger worktree navigation for non-Git and global direct
         ],
         cursor: {},
       })
-    if (!url.pathname.startsWith("/api/worktree/")) return undefined
+    if (url.pathname !== "/api/worktree") return undefined
     requests++
     return json([])
   })
@@ -374,7 +376,9 @@ test("creates an unnamed Git worktree and opens it in the current workspace", as
         ])
       if (url.pathname === "/api/location")
         return json({ directory: root, workspaceID, project: { id: projectID, directory: root, canonical: root } })
-      if (url.pathname !== `/api/worktree/${projectID}`) return undefined
+      if (url.pathname !== "/api/worktree") return undefined
+      expect(url.searchParams.get("location[directory]")).toBe(root)
+      expect(url.searchParams.get("location[workspace]")).toBe(workspaceID)
       if (request.method === "GET") return json([{ directory: root }])
       payload = await request.json()
       return json({ directory: created })

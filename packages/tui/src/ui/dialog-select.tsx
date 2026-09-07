@@ -782,7 +782,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       </box>
       <Show when={props.footer || visibleActions().length} fallback={<box flexShrink={0} />}>
         <box paddingRight={2} paddingLeft={4} flexDirection="row" justifyContent="space-between" flexShrink={0}>
-          <box flexDirection="row" gap={2}>
+          <box flexDirection={dimensions().width < 60 ? "column" : "row"} gap={dimensions().width < 60 ? 0 : 2}>
             {props.footer}
             <For each={left()}>{(item) => <FooterAction item={item} />}</For>
           </box>
