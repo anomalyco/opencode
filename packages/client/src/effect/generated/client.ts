@@ -392,6 +392,7 @@ const EndpointSessionCreate = (raw: RawClient["server.session"]) => (input?: Ses
     raw["session.create"]({
       payload: {
         id: input?.["id"],
+        parentID: input?.["parentID"],
         title: input?.["title"],
         agent: input?.["agent"],
         model: input?.["model"],

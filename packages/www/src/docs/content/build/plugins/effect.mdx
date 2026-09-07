@@ -698,6 +698,25 @@ effect: (ctx) =>
   }),
 ```
 
+Pass `parentID` to create a linked child session at the parent's Location. Prompt admission starts execution
+asynchronously; use `wait` when the plugin must block for completion.
+
+```ts
+import { Agent } from "@opencode-ai/plugin/effect"
+
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const parent = yield* ctx.session.create({ title: "Orchestrator" }).pipe(Effect.orDie)
+    const child = yield* ctx.session
+      .create({
+        parentID: parent.id,
+        agent: Agent.ID.make("reviewer"),
+      })
+      .pipe(Effect.orDie)
+    yield* ctx.session.prompt({ sessionID: child.id, text: "Review this service" }).pipe(Effect.orDie)
+  }),
+```
+
 Send prompts, transient generation requests, commands, or synthetic messages.
 
 ```ts
