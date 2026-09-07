@@ -3,11 +3,11 @@
     <picture>
       <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
       <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="لوگوی OpenCode">
+      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="لوگوی اپن‌کد">
     </picture>
   </a>
 </p>
-<p align="center">عامل کدنویسی متن‌باز مبتنی بر هوش مصنوعی.</p>
+<p align="center" dir="rtl">ایجنت کدنویسی متن‌باز مبتنی بر هوش مصنوعی.</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
@@ -44,7 +44,7 @@
 
 ---
 
-### نصب
+<h3 dir="rtl">نصب</h3>
 
 ```bash
 # YOLO
@@ -63,18 +63,38 @@ nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev
 ```
 
 > [!TIP]
-> پیش از نصب، نسخه‌های قدیمی‌تر از `0.1.x` را حذف کنید.
+> <div dir="rtl">پیش از نصب، نسخه‌های قدیمی‌تر از <code>0.1.x</code> را حذف کنید.</div>
 
-### برنامه دسکتاپ (BETA)
+<h3 dir="rtl">برنامه دسکتاپ (بتا)</h3>
 
-OpenCode به‌صورت برنامه دسکتاپ هم در دسترس است. می‌توانید آن را مستقیماً از [صفحه انتشارها](https://github.com/anomalyco/opencode/releases) یا [opencode.ai/download](https://opencode.ai/download) دانلود کنید.
+<p dir="rtl">اپن‌کد به‌صورت برنامه دسکتاپ هم در دسترس است. می‌توانید آن را مستقیماً از <a href="https://github.com/anomalyco/opencode/releases">صفحه releases</a> یا <a href="https://opencode.ai/download"><code>opencode.ai/download</code></a> دانلود کنید.</p>
 
-| پلتفرم                | فایل دانلود                         |
-| --------------------- | ---------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
-| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm`, یا `.AppImage`     |
+<table dir="rtl">
+  <thead>
+    <tr>
+      <th>پلتفرم</th>
+      <th>فایل دانلود</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td dir="ltr">macOS (Apple Silicon)</td>
+      <td dir="ltr"><code>opencode-desktop-mac-arm64.dmg</code></td>
+    </tr>
+    <tr>
+      <td dir="ltr">macOS (Intel)</td>
+      <td dir="ltr"><code>opencode-desktop-mac-x64.dmg</code></td>
+    </tr>
+    <tr>
+      <td dir="ltr">Windows</td>
+      <td dir="ltr"><code>opencode-desktop-windows-x64.exe</code></td>
+    </tr>
+    <tr>
+      <td dir="ltr">Linux</td>
+      <td dir="ltr"><code>.deb</code>، <code>.rpm</code>، یا <code>.AppImage</code></td>
+    </tr>
+  </tbody>
+</table>
 
 ```bash
 # macOS (Homebrew)
@@ -83,14 +103,16 @@ brew install --cask opencode-desktop
 scoop bucket add extras; scoop install extras/opencode-desktop
 ```
 
-#### مسیر نصب
+<h4 dir="rtl">مسیر نصب</h4>
 
-اسکریپت نصب برای انتخاب مسیر نصب از اولویت‌های زیر استفاده می‌کند:
+<p dir="rtl">اسکریپت نصب برای انتخاب مسیر نصب از اولویت‌های زیر استفاده می‌کند:</p>
 
-1. `$OPENCODE_INSTALL_DIR` - مسیر نصب سفارشی
-2. `$XDG_BIN_DIR` - مسیر سازگار با مشخصات XDG Base Directory
-3. `$HOME/bin` - پوشه استاندارد فایل‌های اجرایی کاربر، اگر وجود داشته باشد یا قابل ایجاد باشد
-4. `$HOME/.opencode/bin` - مسیر پیش‌فرض جایگزین
+<ol dir="rtl">
+  <li><code>$OPENCODE_INSTALL_DIR</code> — مسیر نصب سفارشی</li>
+  <li><code>$XDG_BIN_DIR</code> — مسیر سازگار با استاندارد XDG Base Directory</li>
+  <li><code>$HOME/bin</code> — پوشه استاندارد فایل‌های اجرایی کاربر، اگر وجود داشته باشد یا قابل ایجاد باشد</li>
+  <li><code>$HOME/.opencode/bin</code> — مسیر پیش‌فرض جایگزین</li>
+</ol>
 
 ```bash
 # Examples
@@ -98,33 +120,37 @@ OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bas
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 
-### عامل‌ها
+<h3 dir="rtl">ایجنت‌ها</h3>
 
-OpenCode دو عامل داخلی دارد که می‌توانید با کلید `Tab` بین آن‌ها جابه‌جا شوید.
+<p dir="rtl">اپن‌کد دو ایجنت داخلی دارد که می‌توانید با کلید <code>Tab</code> بین آن‌ها جابه‌جا شوید.</p>
 
-- **build** - عامل پیش‌فرض با دسترسی کامل برای کارهای توسعه
-- **plan** - عامل فقط‌خواندنی برای تحلیل و بررسی کد
-  - به‌طور پیش‌فرض اجازه ویرایش فایل‌ها را نمی‌دهد
-  - پیش از اجرای دستورهای bash اجازه می‌گیرد
-  - برای بررسی کدبیس‌های ناآشنا یا برنامه‌ریزی تغییرات مناسب است
+<ul dir="rtl">
+  <li><code>build</code> — ایجنت پیش‌فرض با دسترسی کامل برای کارهای توسعه</li>
+  <li><code>plan</code> — ایجنت فقط‌خواندنی برای تحلیل و بررسی کد
+    <ul>
+      <li>به‌طور پیش‌فرض اجازه ویرایش فایل‌ها را نمی‌دهد</li>
+      <li>پیش از اجرای دستورهای <code>bash</code> اجازه می‌گیرد</li>
+      <li>برای بررسی کدبیس‌های ناآشنا یا برنامه‌ریزی تغییرات مناسب است</li>
+    </ul>
+  </li>
+</ul>
 
-همچنین یک زیرعامل **general** برای جست‌وجوهای پیچیده و کارهای چندمرحله‌ای وجود دارد.
-این زیرعامل به‌صورت داخلی استفاده می‌شود و با نوشتن `@general` در پیام‌ها قابل فراخوانی است.
+<p dir="rtl">علاوه بر این، یک ساب‌ایجنت <code>general</code> برای جست‌وجوهای پیچیده و کارهای چندمرحله‌ای وجود دارد. این ساب‌ایجنت به‌صورت داخلی استفاده می‌شود و با نوشتن <code>@general</code> در پیام‌ها قابل فراخوانی است.</p>
 
-اطلاعات بیشتر درباره [عامل‌ها](https://opencode.ai/docs/agents).
+<p dir="rtl">اطلاعات بیشتر درباره <a href="https://opencode.ai/docs/agents">ایجنت‌ها</a>.</p>
 
-### مستندات
+<h3 dir="rtl">مستندات</h3>
 
-برای اطلاعات بیشتر درباره پیکربندی OpenCode، [**مستندات را ببینید**](https://opencode.ai/docs).
+<p dir="rtl">برای اطلاعات بیشتر درباره پیکربندی اپن‌کد، <a href="https://opencode.ai/docs"><strong>مستندات را ببینید</strong></a>.</p>
 
-### مشارکت
+<h3 dir="rtl">مشارکت</h3>
 
-اگر می‌خواهید در توسعه OpenCode مشارکت کنید، پیش از ارسال pull request لطفاً [راهنمای مشارکت](./CONTRIBUTING.md) را مطالعه کنید.
+<p dir="rtl">اگر می‌خواهید در توسعه اپن‌کد مشارکت کنید، پیش از ارسال <code>pull request</code> لطفاً <a href="./CONTRIBUTING.md">راهنمای مشارکت</a> را مطالعه کنید.</p>
 
-### ساخت پروژه بر پایه OpenCode
+<h3 dir="rtl">ساخت پروژه بر پایه اپن‌کد</h3>
 
-اگر روی پروژه‌ای مرتبط با OpenCode کار می‌کنید و در نام آن از "opencode" استفاده شده است، برای مثال "opencode-dashboard" یا "opencode-mobile"، لطفاً در README توضیح دهید که آن پروژه توسط تیم OpenCode ساخته نشده و هیچ وابستگی رسمی به OpenCode ندارد.
+<p dir="rtl">اگر روی پروژه‌ای مرتبط با اپن‌کد کار می‌کنید و در نام آن از <code>opencode</code> استفاده شده است، برای مثال <code>opencode-dashboard</code> یا <code>opencode-mobile</code>، لطفاً در فایل <code>README</code> توضیح دهید که آن پروژه توسط تیم اپن‌کد ساخته نشده و هیچ وابستگی رسمی به اپن‌کد ندارد.</p>
 
 ---
 
-**به جامعه ما بپیوندید** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+<p dir="rtl"><strong>به جامعه ما بپیوندید:</strong> <a href="https://discord.gg/opencode">Discord</a> | <a href="https://x.com/opencode">X.com</a></p>
