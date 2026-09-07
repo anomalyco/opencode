@@ -718,6 +718,10 @@ export type QuestionInfo = {
   options: Array<QuestionOption>
   multiple?: boolean
   custom?: boolean
+  /**
+   * Pre-fill the custom answer field with this text (for review/edit workflows)
+   */
+  default?: string
 }
 
 export type QuestionTool = {
