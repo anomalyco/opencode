@@ -66,10 +66,17 @@ export function abortError(signal: AbortSignal) {
 
 export async function waitFor(check: () => boolean | Promise<boolean>, signal: AbortSignal, timeoutMs = 10_000) {
   const deadline = Date.now() + timeoutMs
-  while (!(await check())) {
+  const timeout = () => new Error(`Condition was not met within ${timeoutMs} ms.`)
+  // A busy renderer can hold one check past the deadline, so each check races the remaining time.
+  while (true) {
     abortError(signal)
-    if (Date.now() >= deadline) throw new Error(`Condition was not met within ${timeoutMs} ms.`)
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) throw timeout()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const expired = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(timeout()), remaining)
+    })
+    if (await Promise.race([check(), expired]).finally(() => clearTimeout(timer))) return
     await new Promise((resolve) => setTimeout(resolve, 50))
   }
-  abortError(signal)
 }

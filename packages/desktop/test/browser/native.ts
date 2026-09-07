@@ -57,9 +57,27 @@ async function main() {
       response.end("<button onclick=\"this.textContent='Frame clicked'\">Frame button</button>")
       return
     }
+    // A same-origin child inside a cross-origin frame shares its parent's renderer and has no CDP target.
+    if (request.url === "/nested") {
+      response.setHeader("content-type", "text/html")
+      response.end('<iframe name="inner" title="Inner frame" src="/frame"></iframe>')
+      return
+    }
+    // Revalidation: the wire answers 304 while the renderer reports the cached 200.
+    if (request.url === "/etag") {
+      if (request.headers["if-none-match"] === '"v1"') {
+        response.writeHead(304)
+        response.end()
+        return
+      }
+      response.writeHead(200, { etag: '"v1"', "cache-control": "no-cache", "content-type": "text/plain" })
+      response.end("etag body")
+      return
+    }
+    const crossOrigin = `http://${request.headers.host?.replace(/^[^:]+/, "localhost")}`
     response.setHeader("content-type", "text/html")
     response.end(
-      `<!doctype html><html lang="en"><head><title>Browser suite</title><meta name="description" content="Native browser test"><style>body{font:16px sans-serif;padding:20px}input,button,select{margin:6px}#space{height:1400px}</style></head><body><h1>Browser suite</h1><label>Name<input aria-label="Name"></label><button onclick="document.querySelector('output').textContent=document.querySelector('input').value">Apply</button><output>Waiting</output><input type="checkbox" aria-label="Remember"><select aria-label="Color"><option value="red">Red</option><option value="blue">Blue</option></select><input type="file" aria-label="Upload"><button onclick="alert('hello dialog')">Dialog</button><a href="/download">Download</a><a href="/frame" target="_blank">Popup</a><iframe title="Child frame" src="/frame"></iframe><div id="space">Scroll content</div><script>console.log('fixture log'); console.error('fixture error'); fetch('/api/test'); fetch('/missing'); window.heapFixture={value:'heap marker'};</script></body></html>`,
+      `<!doctype html><html lang="en"><head><title>Browser suite</title><meta name="description" content="Native browser test"><style>body{font:16px sans-serif;padding:20px}input,button,select{margin:6px}#space{height:1400px}</style></head><body><h1>Browser suite</h1><label>Name<input aria-label="Name"></label><button onclick="document.querySelector('output').textContent=document.querySelector('input').value">Apply</button><output>Waiting</output><input type="checkbox" aria-label="Remember"><select aria-label="Color"><option value="red">Red</option><option value="blue">Blue</option></select><input type="file" aria-label="Upload"><button onclick="alert('hello dialog')">Dialog</button><form onsubmit="event.preventDefault();document.querySelector('output').textContent='submitted:'+this.q.value"><input name="q" aria-label="Query"></form><a href="/download">Download</a><a href="/frame" target="_blank">Popup</a><iframe title="Child frame" src="/frame"></iframe><iframe name="scaled" title="Scaled frame" src="/frame" style="transform:scale(0.5);transform-origin:0 0"></iframe><iframe name="outer" title="Nested frame" src="${crossOrigin}/nested"></iframe><div id="space">Scroll content</div><script>console.log('fixture log'); console.error('fixture error'); fetch('/api/test'); fetch('/missing'); window.heapFixture={value:'heap marker'};</script></body></html>`,
     )
   })
   web.on("upgrade", (request, socket) => {
@@ -161,7 +179,9 @@ async function main() {
         origin: location.origin,
         denied: await fetch('http://localhost:${address.port}/cors-denied').then(() => false, () => true),
         allowed: await fetch('http://localhost:${address.port}/cors-allowed').then(response => response.text()),
-        websocket: await new Promise((resolve, reject) => { const socket = new WebSocket('ws://localhost:${address.port}/hmr'); socket.onmessage = event => { resolve(event.data); socket.close(); }; socket.onerror = () => reject(new Error('WebSocket failed')); })
+        websocket: await new Promise((resolve, reject) => { const socket = new WebSocket('ws://localhost:${address.port}/hmr'); socket.onmessage = event => { resolve(event.data); socket.close(); }; socket.onerror = () => reject(new Error('WebSocket failed')); }),
+        cookie: (document.cookie = 'wire=1', await fetch('/api/test?cookie').then(response => response.ok)),
+        etag: [await fetch('/etag').then(response => response.status), await fetch('/etag').then(response => response.status)],
       }))()`,
     })
     assert.deepEqual(networkProof.value, {
@@ -169,7 +189,24 @@ async function main() {
       denied: true,
       allowed: "cors proof",
       websocket: "rpc websocket proof",
+      cookie: true,
+      etag: [200, 200],
     })
+    const sockets = await call("network.list", { tabID, resourceType: "websocket" })
+    assert.equal(sockets.requests[0]?.statusCode, 101, JSON.stringify(sockets))
+    assert.equal(sockets.requests[0]?.state, "completed")
+    const revalidated = await call("network.list", { tabID, urlContains: "/etag" })
+    assert.deepEqual(
+      revalidated.requests.map((request) => request.statusCode),
+      [200, 304],
+      JSON.stringify(revalidated),
+    )
+    const withCookie = await call("network.list", { tabID, urlContains: "/api/test?cookie" })
+    const cookieDetail = await call("network.get", { tabID, id: withCookie.requests[0].id })
+    assert(
+      cookieDetail.requestHeaders.some((header) => header.name.toLowerCase() === "cookie" && header.value === "wire=1"),
+      JSON.stringify(cookieDetail.requestHeaders),
+    )
     const upload = await rpc.write({ text: "server upload bytes" }, { location })
     await fails("trace.stop", { tabID }, /browser\.trace\.start/)
     await fails("cpu.stop", { tabID }, /browser\.cpu\.start/)
@@ -238,6 +275,13 @@ async function main() {
       ],
     })
     await call("press", { tabID, key: "Tab" })
+    await call("fill", { tabID, ref: ref("Query"), text: "typed" })
+    await call("press", { tabID, key: "Space" })
+    await call("press", { tabID, key: "Enter" })
+    assert.equal(
+      (await call("evaluate", { tabID, script: "document.querySelector('output').textContent" })).value,
+      "submitted:typed ",
+    )
     await call("scroll", { tabID, deltaY: 100 })
     await call("wait", { tabID, condition: "text", text: "Scroll content" })
     await call("drag", { tabID, from: ref("Drag source"), to: ref("Drop target") })
@@ -246,7 +290,7 @@ async function main() {
       "element dropped",
     )
     const frames = await call("frames", { tabID })
-    const child = frames.frames.find((frame) => frame.parentID)
+    const child = frames.frames.find((frame) => frame.parentID && !frame.name)
     assert(child)
     assert.equal(
       (await call("evaluate", { tabID, frameID: child.id, script: "document.querySelector('button').textContent" }))
@@ -265,6 +309,26 @@ async function main() {
         .value,
       "Frame clicked",
     )
+    const frameButton = (content: string) =>
+      Browser.Ref.make(
+        content
+          .split("\n")
+          .find((line) => line.includes('[button] "Frame button"'))
+          ?.match(/@e\d+/)?.[0] ?? assert.fail(content),
+      )
+    // Input coordinates must follow the iframe's CSS transform, not only its offset.
+    const scaled = frames.frames.find((frame) => frame.name === "scaled")
+    assert(scaled)
+    await call("click", { tabID, ref: frameButton((await call("snapshot", { tabID, frameID: scaled.id })).content) })
+    assert.equal(
+      (await call("evaluate", { tabID, frameID: scaled.id, script: "document.querySelector('button').textContent" }))
+        .value,
+      "Frame clicked",
+    )
+    // The inner frame shares its cross-origin parent's renderer, so it has no CDP target of its own.
+    const inner = frames.frames.find((frame) => frame.name === "inner")
+    assert(inner?.parentID && frames.frames.find((frame) => frame.id === inner.parentID)?.parentID)
+    frameButton((await call("snapshot", { tabID, frameID: inner.id })).content)
     const found = await call("find", { tabID, text: "Apply" })
     assert(found.content.includes("Apply"))
     await fails("screenshot", { tabID }, /Screenshot needs a visible tab/)

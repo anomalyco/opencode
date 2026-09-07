@@ -7,10 +7,12 @@ import type { BrowserWindow } from "electron"
 import { Deferred, Effect, ManagedRuntime, Queue, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { BrowserPaneEvent } from "../shared/ipc-rpc/events"
-import { createBrowserPage, destinationOrigin, type BrowserPage } from "./browser-chromium"
+import { createBrowserPage, type BrowserPage } from "./browser-chromium"
 import { browserFailure } from "./browser/errors"
 import { createBrowserNetwork, type BrowserNetwork } from "./browser/network"
+import { destinationOrigin } from "./browser/policy"
 import { emitIpcEvent } from "./ipc-events"
+import { SidecarCredentials } from "./service/sidecar-credentials"
 
 type Entry = {
   bindingID: string
@@ -67,14 +69,16 @@ export function createBrowserPane() {
         .runPromise(
           Effect.gen(function* () {
             const http = yield* HttpClient.HttpClient
+            // The renderer never holds the managed sidecar's password; Node requests bypass
+            // the webRequest header injection, so resolve the credential here in main.
+            const authorization = target.endpoint.password
+              ? `Basic ${Buffer.from(`${target.endpoint.username ?? "opencode"}:${target.endpoint.password}`).toString("base64")}`
+              : SidecarCredentials.authorization(SidecarCredentials.get(), target.endpoint.url)
             const client = yield* OpenCode.make({ baseUrl: target.endpoint.url }).pipe(
               Effect.provideService(
                 HttpClient.HttpClient,
-                target.endpoint.password
-                  ? HttpClient.mapRequest(
-                      http,
-                      HttpClientRequest.basicAuth(target.endpoint.username ?? "opencode", target.endpoint.password),
-                    )
+                authorization
+                  ? HttpClient.mapRequest(http, HttpClientRequest.setHeader("authorization", authorization))
                   : http,
               ),
             )
@@ -91,15 +95,21 @@ export function createBrowserPane() {
               partition: entry.partition,
             })
             const connected = yield* Deferred.make<void>()
-            const outbound = yield* Queue.unbounded<Effect.Effect<void, unknown>>()
-            // Report state before publishing it locally or completing a command.
-            entry.report = (event) => {
+            const outbound = yield* Queue.unbounded<Effect.Effect<void>>()
+            // A send that fails because the server already replaced or closed this attachment must
+            // not decide the close reason; only the attach call's outcome does.
+            const send = (effect: Effect.Effect<unknown, unknown>) =>
               Queue.offerUnsafe(
                 outbound,
+                effect.pipe(Effect.catchCause((cause) => Effect.logWarning("Browser send failed", cause))),
+              )
+            // Report state before publishing it locally or completing a command.
+            entry.report = (event) => {
+              send(
                 (event.type === "state"
                   ? rpc.state({ ...attachment, state: event.state ?? { tabs: [], focusedTabID: null } }, options)
                   : Effect.void
-                ).pipe(Effect.andThen(Effect.sync(() => publish(entry, event)))),
+                ).pipe(Effect.ensuring(Effect.sync(() => publish(entry, event)))),
               )
             }
             const receive = client.event.subscribe().pipe(
@@ -136,8 +146,7 @@ export function createBrowserPane() {
                           (result) => ({ type: "success" as const, result }),
                           (error: unknown) => browserFailure(command.action, error),
                         )
-                        Queue.offerUnsafe(
-                          outbound,
+                        send(
                           rpc.result(
                             {
                               ...attachment,
@@ -149,12 +158,9 @@ export function createBrowserPane() {
                         )
                       }),
                     ),
-                    Effect.ensuring(
-                      Effect.sync(() => {
-                        abort.abort()
-                        entry.requests.delete(message.requestID)
-                      }),
-                    ),
+                    Effect.ensuring(Effect.sync(() => entry.requests.delete(message.requestID))),
+                    // Only a server cancel or tab close aborts the signal; any other failure means
+                    // the command could not be retrieved, and the attachment is no longer trustworthy.
                     Effect.catchCause((cause) =>
                       abort.signal.aborted
                         ? Effect.void
@@ -221,7 +227,7 @@ export function createBrowserPane() {
     },
     async dispose() {
       disposed = true
-      entries.forEach(close)
+      entries.forEach((entry) => close(entry))
       await runtime.dispose()
     },
   }

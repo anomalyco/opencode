@@ -8,11 +8,13 @@ import { createDiagnostics } from "./browser/diagnostics"
 import { createProfiling } from "./browser/profiling"
 import { createCornerImages } from "./browser/corners"
 import type { BrowserNetwork } from "./browser/network"
+import { destinationOrigin, normalizeURL } from "./browser/policy"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 let nextRef = 0
-// Captures and downloads belong to the tab, not whichever document it now shows.
+// Captures and downloads belong to the tab, not whichever document it now shows; navigate replaces it anyway.
 const retainedOperations = new Set<Browser.Method>([
+  "navigate",
   "files.list",
   "files.get",
   "trace.stop",
@@ -126,8 +128,9 @@ export function createBrowserPage(
   contents.session.setDevicePermissionHandler(() => false)
   contents.session.setDisplayMediaRequestHandler((_request, callback) => callback({}))
   contents.on("content-bounds-updated", (event) => event.preventDefault())
-  const guard = (event: Electron.Event<{ url: string }>) => {
-    if (event.url === "about:blank" || destinationOrigin(event.url)) return
+  // Sub-frames keep Chromium's own rules so blob:/data: viewers and sandboxed previews still load.
+  const guard = (event: Electron.Event<{ url: string; isMainFrame: boolean }>) => {
+    if (!event.isMainFrame || event.url === "about:blank" || destinationOrigin(event.url)) return
     event.preventDefault()
     options.publish("ERR_BLOCKED_BY_CLIENT")
   }
@@ -812,18 +815,31 @@ export function createBrowserPage(
     const tree = await frames()
     let frame = tree.find((frame) => frame.id === element.frameID)
     while (frame?.parentID) {
-      const owner = await cdp.send("DOM.getFrameOwner", { frameId: frame.id }, sessions.get(frame.parentID))
-      const offset = Schema.decodeUnknownSync(shape)(
+      const parent = { frameID: frame.parentID, sessionID: sessionFor(frame.parentID, tree) }
+      const owner = await cdp.send("DOM.getFrameOwner", { frameId: frame.id }, parent.sessionID)
+      // A CSS transform on the iframe scales its content box; the child's own coordinates are unscaled.
+      const box = Schema.decodeUnknownSync(
+        Schema.Struct({ ...shape.fields, scaleX: Schema.Finite, scaleY: Schema.Finite }),
+      )(
         await call(
-          { backendID: owner.backendNodeId, frameID: frame.parentID, sessionID: sessions.get(frame.parentID) },
-          "function() { const r = this.getBoundingClientRect(); return {x:r.x+this.clientLeft,y:r.y+this.clientTop,width:r.width,height:r.height}; }",
+          { backendID: owner.backendNodeId, ...parent },
+          "function() { const r = this.getBoundingClientRect(); const sx = this.offsetWidth ? r.width / this.offsetWidth : 1; const sy = this.offsetHeight ? r.height / this.offsetHeight : 1; return {x:r.x+this.clientLeft*sx,y:r.y+this.clientTop*sy,width:r.width,height:r.height,scaleX:sx,scaleY:sy}; }",
         ),
       )
-      value.x += offset.x
-      value.y += offset.y
+      value.x = box.x + value.x * box.scaleX
+      value.y = box.y + value.y * box.scaleY
+      value.width *= box.scaleX
+      value.height *= box.scaleY
       frame = tree.find((item) => item.id === frame?.parentID)
     }
     return value
+  }
+
+  // Same-process child frames have no CDP target of their own; the nearest ancestor with one owns them.
+  function sessionFor(frameID: string, tree: { id: string; parentID?: string }[]) {
+    let id: string | undefined = frameID
+    while (id && !sessions.has(id)) id = tree.find((frame) => frame.id === id)?.parentID
+    return id ? sessions.get(id) : undefined
   }
 
   async function point(element: Element) {
@@ -931,11 +947,13 @@ export function createBrowserPage(
       throw new Error(
         `Unknown key ${JSON.stringify(key)}. Use Enter, Tab, Escape, Backspace, Delete, ArrowUp/Down/Left/Right, PageUp/Down, Home, End, Space, F1–F12, or one character. Use browser.fill for text.`,
       )
+    // Named keys need their character data too: Enter submits forms and inserts newlines only with "\r".
+    const text = key === "Enter" ? "\r" : key === "Space" ? " " : key.length === 1 ? key : undefined
     const params = {
       key: key === "Space" ? " " : key,
       windowsVirtualKeyCode: code,
       modifiers,
-      ...(key.length === 1 && !(modifiers & 6) ? { text: key } : {}),
+      ...(text !== undefined && !(modifiers & 6) ? { text } : {}),
     }
     await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", ...params })
     await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...params })
@@ -949,7 +967,7 @@ export function createBrowserPage(
       throw new Error(
         "Frame is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab; omit frameID for the main frame.",
       )
-    const sessionID = sessions.get(frameID)
+    const sessionID = sessionFor(frameID, tree)
     const depth = action.type === "snapshot" ? (action.depth ?? 8) : 8
     const ax = await cdp.send("Accessibility.getFullAXTree", { frameId: frameID, depth }, sessionID)
     const nodes = new Map(ax.nodes.map((node) => [node.nodeId, node]))
@@ -1004,20 +1022,4 @@ export function createBrowserPage(
     ).join("\n")
     return { content: content.slice(0, Browser.MAX_TEXT), truncated: truncated || content.length > Browser.MAX_TEXT }
   }
-}
-
-export function destinationOrigin(input: string) {
-  if (!URL.canParse(input)) return
-  const url = new URL(input)
-  return /^https?:$/.test(url.protocol) && !url.username && !url.password ? url.origin : undefined
-}
-
-export function normalizeURL(input: string) {
-  const value = input.trim() || "about:blank"
-  const local = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(value)
-  const url =
-    value === "about:blank" || /^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `${local ? "http" : "https"}://${value}`
-  if (url !== "about:blank" && !destinationOrigin(url))
-    throw new Error("Only HTTP, HTTPS, and about:blank URLs are supported.")
-  return url
 }

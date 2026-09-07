@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { destinationOrigin } from "./browser-chromium"
+import { destinationOrigin } from "./browser/policy"
 
 test("allows cross-origin HTTP navigation but rejects unsafe destinations and embedded credentials", () => {
   expect(destinationOrigin("https://other.example/path")).toBe("https://other.example")
