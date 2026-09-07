@@ -1621,14 +1621,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }
@@ -5525,6 +5518,113 @@
                   }
                 },
                 "required": ["url"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/integration/{integrationID}/settings": {
+      "patch": {
+        "tags": ["integration"],
+        "operationId": "v2.integration.settings.update",
+        "parameters": [
+          {
+            "name": "integrationID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Change stored settings for one integration, such as automatic account switching.",
+        "summary": "Update integration settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "autoSwitch": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
                 "additionalProperties": false
               }
             }
@@ -15857,9 +15957,12 @@
             "items": {
               "$ref": "#/components/schemas/Connection.Info"
             }
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Integration.Settings"
           }
         },
-        "required": ["id", "name", "methods", "connections"],
+        "required": ["id", "name", "methods", "connections", "settings"],
         "additionalProperties": false
       },
       "Integration.KeyMethod": {
@@ -15913,6 +16016,16 @@
           }
         },
         "required": ["id", "type", "label"],
+        "additionalProperties": false
+      },
+      "Integration.Settings": {
+        "type": "object",
+        "properties": {
+          "autoSwitch": {
+            "type": "boolean"
+          }
+        },
+        "required": ["autoSwitch"],
         "additionalProperties": false
       },
       "InvalidCursorErrorEncoded": {
