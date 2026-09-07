@@ -48,7 +48,9 @@ type Workspace = {
   project: Project
 }
 
-export const SettingsWorkspaces: Component<{ activeDirectory?: string; resetProjectFilter: () => number }> = (props) => {
+export const SettingsWorkspaces: Component<{ activeDirectory?: string; resetProjectFilter: () => number }> = (
+  props,
+) => {
   const dialog = useDialog()
   const language = useLanguage()
   const serverSDK = useServerSDK()
@@ -73,7 +75,7 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string; resetProj
       Promise.all(
         (await serverSDK.api.project.list()).map(async (project) => {
           const worktrees = await serverSDK.api.worktree
-            .list({ projectID: project.id })
+            .list({ location: { directory: project.canonical } })
             .catch(() => [{ directory: project.canonical }, ...project.sandboxes.map((directory) => ({ directory }))])
           return normalizeProjectInfo({ ...project, worktrees })
         }),
@@ -208,7 +210,7 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string; resetProj
       }
       const removed = await context.sdk.api.worktree
         .remove({
-          projectID: workspace.project.id,
+          location: { directory: workspace.project.worktree },
           directory: workspace.directory,
           force,
         })
@@ -324,9 +326,7 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string; resetProj
         <div class="settings-tab-header-row">
           <div class="flex flex-col gap-1">
             <h2 class="settings-tab-title">{language.t("settings.tab.workspaces")}</h2>
-            <span class="text-11-regular text-v2-text-text-muted">
-              {language.t("settings.workspaces.description")}
-            </span>
+            <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.workspaces.description")}</span>
           </div>
           <InlineServerSelect />
         </div>
@@ -450,9 +450,7 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string; resetProj
                               </>
                             }
                           >
-                            <span class="settings-workspaces-active">
-                              {language.t("workspace.lifecycle.deleting")}
-                            </span>
+                            <span class="settings-workspaces-active">{language.t("workspace.lifecycle.deleting")}</span>
                           </Show>
                         </div>
                       </div>
@@ -598,12 +596,7 @@ function DialogDeleteWorkspace(props: {
         <Button type="button" variant="neutral" onClick={() => dialog.close()}>
           {language.t("common.cancel")}
         </Button>
-        <Button
-          type="button"
-          variant="danger"
-          disabled={status.isPending || status.isError}
-          onClick={remove}
-        >
+        <Button type="button" variant="danger" disabled={status.isPending || status.isError} onClick={remove}>
           {language.t("workspace.delete.button")}
         </Button>
       </DialogFooter>

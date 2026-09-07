@@ -56,15 +56,20 @@ export function createNewSessionWorkspaceController(input: {
     const current = projectID ? data.project.get(projectID) : undefined
     return current ? normalizeProjectInfo(current) : undefined
   })
-  const [worktrees, worktreeActions] = createResource(
-    () => currentProject()?.id,
-    async (projectID) => ({
-      projectID,
-      items: await serverSDK.api.worktree
-        .list({ projectID })
-        .catch(() => (currentProject()?.id === projectID ? currentProject()?.worktrees : undefined) ?? []),
-    }),
+  const worktreeSource = createMemo(
+    () => {
+      const project = currentProject()
+      return project ? { projectID: project.id, directory: project.worktree } : undefined
+    },
+    undefined,
+    { equals: (a, b) => a?.projectID === b?.projectID && a?.directory === b?.directory },
   )
+  const [worktrees, worktreeActions] = createResource(worktreeSource, async (source) => ({
+    projectID: source.projectID,
+    items: await serverSDK.api.worktree
+      .list({ location: { directory: source.directory } })
+      .catch(() => (currentProject()?.id === source.projectID ? currentProject()?.worktrees : undefined) ?? []),
+  }))
   onCleanup(
     serverSDK.event.listen((event) => {
       if (event.type === "worktree.updated") void worktreeActions.refetch()
@@ -105,7 +110,8 @@ export function createNewSessionWorkspaceController(input: {
     const project = currentProject()
     const worktree = input.selectedWorktree()
     if (!project || !worktree) return
-    return isWorkspaceSelection(project, worktree) || worktreeDirectories().some((item) => sameDirectory(item, worktree))
+    return isWorkspaceSelection(project, worktree) ||
+      worktreeDirectories().some((item) => sameDirectory(item, worktree))
       ? worktree
       : undefined
   })
@@ -166,7 +172,8 @@ export function createNewSessionWorkspaceController(input: {
         return (
           current === "create" ||
           (!!project &&
-            (isWorkspaceDirectory(project, current) || worktreeDirectories().some((item) => sameDirectory(item, current))))
+            (isWorkspaceDirectory(project, current) ||
+              worktreeDirectories().some((item) => sameDirectory(item, current))))
         )
       }),
       reset: () => {

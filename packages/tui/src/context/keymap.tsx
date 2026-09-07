@@ -13,9 +13,19 @@ import { formatCommandBindings, formatKeySequence } from "@opentui/keymap/extras
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { KeymapProvider, useBindings, useKeymapSelector } from "@opentui/keymap/solid"
 import { useRenderer } from "@opentui/solid"
-import { createContext, onCleanup, useContext, type Accessor, type ParentProps } from "solid-js"
+import {
+  createComputed,
+  createContext,
+  createMemo,
+  createSignal,
+  onCleanup,
+  useContext,
+  type Accessor,
+  type ParentProps,
+} from "solid-js"
 import { useConfig } from "../config"
 import { TuiKeybind } from "../config/keybind"
+import { resolveInteractivity, useInteractivity } from "./interactivity"
 
 declare module "@opentui/keymap" {
   interface Command {
@@ -175,13 +185,17 @@ export interface Keymap {
 
 function use(): Keymap {
   const value = useValue()
+  const enabled = useInteractivity()
   const leader = value.config.keybinds.get("leader")?.[0]?.key
   const isLeader = leader ? value.keymap.createKeyMatcher(leader) : () => false
   return {
     dispatch(id, input) {
       value.dispatch(id, input)
     },
-    mode: value.mode,
+    mode: {
+      current: value.mode.current,
+      push: (mode) => value.mode.push(mode, resolveInteractivity(enabled)),
+    },
     intercept: value.keymap.intercept.bind(value.keymap),
     isLeader,
   }
@@ -189,6 +203,7 @@ function use(): Keymap {
 
 function createLayer(input: () => KeymapLayer) {
   const value = useValue()
+  const enabled = useInteractivity()
   useBindings(() => {
     const layer = input()
     const { commands, bindings, mode, ...options } = layer
@@ -215,6 +230,7 @@ function createLayer(input: () => KeymapLayer) {
     )
     return {
       ...options,
+      enabled: enabled() ? options.enabled : false,
       ...(mode === "global" ? {} : { mode: mode ?? MODE.base }),
       commands: grouped.named.map((command) => {
         const { id, description, group, palette, bind, run, ...definition } = command
@@ -397,37 +413,34 @@ export const Keymap = {
 } as const
 
 function createMode(keymap: OpenTuiKeymap) {
-  keymap.setData(MODE.key, MODE.base)
+  const [stack, setStack] = createSignal<
+    { readonly id: symbol; readonly mode: string; readonly enabled: Accessor<boolean> }[]
+  >([])
+  const current = createMemo(() => stack().findLast((item) => item.enabled())?.mode ?? MODE.base)
+  // Publish mode changes before another command can be dispatched in the same callback.
+  createComputed(() => keymap.setData(MODE.key, current()))
   const unregister = keymap.registerLayerFields({
     mode(value, context) {
       context.require(MODE.key, value)
     },
   })
-  const stack: { readonly id: symbol; readonly mode: string }[] = []
   let disposed = false
 
-  const update = () => keymap.setData(MODE.key, stack.at(-1)?.mode ?? MODE.base)
-
   return {
-    current() {
-      return stack.at(-1)?.mode ?? MODE.base
-    },
-    push(mode: string) {
+    current,
+    push(mode: string, enabled: Accessor<boolean>) {
       if (disposed) return () => {}
       const id = Symbol(mode)
-      stack.push({ id, mode })
-      update()
+      // Inactive scopes retain their stack position beneath any newer modes.
+      setStack((items) => [...items, { id, mode, enabled }])
       return () => {
-        const index = stack.findIndex((item) => item.id === id)
-        if (index < 0) return
-        stack.splice(index, 1)
-        update()
+        setStack((items) => items.filter((item) => item.id !== id))
       }
     },
     dispose() {
       if (disposed) return
       disposed = true
-      stack.length = 0
+      setStack([])
       unregister()
       keymap.setData(MODE.key, undefined)
     },

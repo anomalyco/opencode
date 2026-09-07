@@ -19,9 +19,14 @@ export function primitiveInputSummary(input: Record<string, unknown>, omit: read
   return `[${entries.map(([key, value]) => `${key}=${String(value)}`).join(", ")}]`
 }
 
+export function webSearchProviderName(provider: unknown) {
+  if (typeof provider !== "string" || !provider) return ""
+  return `${provider[0].toUpperCase()}${provider.slice(1)}`
+}
+
 export function webSearchProviderLabel(provider: unknown) {
-  if (typeof provider !== "string" || !provider) return "Web Search"
-  return `Web Search via ${provider[0].toUpperCase()}${provider.slice(1)}`
+  const name = webSearchProviderName(provider)
+  return name ? `Web Search via ${name}` : "Web Search"
 }
 
 export function toolDisplayMetadata(state: unknown): Record<string, unknown> {

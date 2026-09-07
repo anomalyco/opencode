@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
-import { createConnectionSync } from "./connection"
+import { createConnectionSync, reconnectOrder } from "./connection"
 
 test("invalidates disconnected data and synchronizes after the handshake", () => {
   const calls: string[] = []
@@ -18,4 +18,10 @@ test("invalidates disconnected data and synchronizes after the handshake", () =>
     return dispose
   })
   dispose()
+})
+
+test("held directories refresh before the rest, otherwise keeping their order", () => {
+  const held = new Set(["/b", "/d"])
+  expect(reconnectOrder(["/a", "/b", "/c", "/d"], (directory) => held.has(directory))).toEqual(["/b", "/d", "/a", "/c"])
+  expect(reconnectOrder(["/a", "/c"], (directory) => held.has(directory))).toEqual(["/a", "/c"])
 })

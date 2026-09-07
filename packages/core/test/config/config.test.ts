@@ -666,14 +666,14 @@ describe("Config", () => {
   test("migrates the v1 update policy", () => {
     expect(ConfigMigrateV1.migrate({ autoupdate: false }).update).toBe("disable")
     expect(ConfigMigrateV1.migrate({ autoupdate: "notify" }).update).toBe("notify")
-    expect(ConfigMigrateV1.migrate({ autoupdate: true }).update).toBe("notify")
+    expect(ConfigMigrateV1.migrate({ autoupdate: true }).update).toBe("auto")
     expect(ConfigMigrateV1.migrate({}).update).toBeUndefined()
   })
 
-  test("normalizes the previous native auto update policy", () => {
+  test("normalizes the native auto update policy", () => {
     expect(ConfigNormalize.normalize({ update: "auto" })).toEqual({
       type: "normalized",
-      encoded: { update: "notify" },
+      encoded: { update: "auto" },
       diagnostics: [],
     })
   })

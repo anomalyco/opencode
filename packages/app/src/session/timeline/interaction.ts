@@ -24,6 +24,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       pinned: true,
     },
     refs: {
+      scroller: undefined as HTMLDivElement | undefined,
       content: undefined as HTMLDivElement | undefined,
       dock: undefined as HTMLDivElement | undefined,
     },
@@ -38,7 +39,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   }
   let scroller: HTMLDivElement | undefined
   let dockHeight = 0
-  let revealMessage = (_id: string) => {}
+  let revealMessage = (_id: string, _partID?: string) => {}
   let scrollToEnd = () => {}
   let scrollMark = 0
   let messageMark = 0
@@ -157,6 +158,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   }
   const setScrollRef = (element: HTMLDivElement | undefined) => {
     scroller = element
+    setState("refs", "scroller", element)
     if (!element) return
     scheduleScrollState(element)
     fill()
@@ -290,6 +292,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   return {
     actions: {
       navigateMessage,
+      revealMessage: (id: string, partID?: string) => revealMessage(id, partID),
       resume,
       setActiveMessage,
     },
@@ -297,7 +300,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     resource: timeline.resource,
     ready: timeline.ready,
     scroll: state.scroll,
-    scroller: () => scroller,
+    scroller: () => state.refs.scroller,
     view: {
       anchor,
       markUserScroll,
@@ -313,7 +316,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       setDockRef: (element: HTMLDivElement | undefined) => {
         setState("refs", "dock", element)
       },
-      setRevealMessage: (reveal: (id: string) => void) => {
+      setRevealMessage: (reveal: (id: string, partID?: string) => void) => {
         revealMessage = reveal
       },
       setScrollRef,

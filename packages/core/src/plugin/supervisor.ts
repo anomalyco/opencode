@@ -13,8 +13,10 @@ import { PluginInternal } from "./internal.js"
 import { PluginModule } from "./module.js"
 import { SdkPlugins } from "./sdk.js"
 import { PluginUpdate } from "./update.js"
+import { Watcher } from "../filesystem/watcher.js"
 
 const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
+  modules: Effect.Success<ReturnType<typeof PluginModule.make>>,
   pre: readonly Plugin.Generation[],
   post: readonly Plugin.Generation[],
   operations: readonly ConfigPluginSource.Operation[],
@@ -53,7 +55,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
       continue
     }
 
-    const plugin = yield* PluginModule.load(operation, { install }).pipe(
+    const plugin = yield* modules.load(operation, { install }).pipe(
       Effect.catchCause((cause) => {
         const ref = `err_${crypto.randomUUID().slice(0, 8)}`
         const error = Cause.squash(cause)
@@ -117,6 +119,7 @@ export const layer = Layer.effectDiscard(
     const sdk = yield* SdkPlugins.Service
     const instance = yield* InstancePlugins.Service
     const sources = yield* ConfigPluginSource.Service
+    const modules = yield* PluginModule.make()
     const bus = yield* Bus.Service
     const updates = yield* PluginUpdate.Service
     const internal = yield* PluginInternal.list()
@@ -149,7 +152,7 @@ export const layer = Layer.effectDiscard(
       }))
       const operations = yield* sources.operations()
       // Activate everything available locally before waiting on missing package installs.
-      const immediate = yield* resolve(pre, post, operations, false, running)
+      const immediate = yield* resolve(modules, pre, post, operations, false, running)
       const source = (source: Plugin.Source) =>
         source.type === "package"
           ? {
@@ -164,7 +167,9 @@ export const layer = Layer.effectDiscard(
           resolved.failures.map((failure) => ({ ...failure, source: source(failure.source) })),
         )
       yield* apply(immediate)
-      const resolved = immediate.pending.length ? yield* resolve(pre, post, operations, true, running) : immediate
+      const resolved = immediate.pending.length
+        ? yield* resolve(modules, pre, post, operations, true, running)
+        : immediate
       if (resolved !== immediate) yield* apply(resolved)
       running = resolved.packages
       const targets = new Set(
@@ -203,6 +208,7 @@ export const layer = Layer.effectDiscard(
         Effect.forkScoped({ startImmediately: true }),
       )
     yield* watch(sources.changes())
+    yield* watch(modules.changes())
     yield* watch(Stream.fromEffectRepeat(Effect.sleep("24 hours")))
     yield* watch(bus.subscribe([Event.Updated, SdkPlugins.Updated]))
     yield* watch(
@@ -240,6 +246,7 @@ const nodeDeps = [
   PluginUpdate.node,
   Bus.node,
   Npm.node,
+  Watcher.node,
   PluginInternal.requirements,
 ] as const
 

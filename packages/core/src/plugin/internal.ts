@@ -27,6 +27,8 @@ import { ConfigSnapshotPlugin } from "../config/plugin/snapshot.js"
 import { ConfigSkillPlugin } from "../config/plugin/skill.js"
 import { ConfigToolOutputPlugin } from "../config/plugin/tool-output.js"
 import { ConfigWebSearchPlugin } from "../config/plugin/websearch.js"
+import { ConfigWorktreePlugin } from "../config/plugin/worktree.js"
+import { Worktree } from "../worktree.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
 import { FileMutation } from "../file-mutation.js"
@@ -85,7 +87,7 @@ import { ProviderPlugins } from "./provider.js"
 import { WebSearchPlugins } from "./websearch/index.js"
 import { SkillPlugin } from "./skill.js"
 import { VcsHgPlugin } from "./vcs/hg.js"
-import { SystemPromptPlugin } from "./system-prompt.js"
+import { OptimizePlugin } from "./optimize.js"
 import { VariantPlugin } from "./variant.js"
 import { VcsGitPlugin } from "./vcs/git.js"
 import { WarmingPlugin } from "./warming.js"
@@ -135,6 +137,7 @@ const services = [
   ToolOutput.Service,
   Watcher.Service,
   WellKnown.Service,
+  Worktree.Service,
 ] as const
 
 export type Requirements = Context.Service.Identifier<(typeof services)[number]>
@@ -183,6 +186,7 @@ export const requirements = LayerNode.group([
   ToolOutput.node,
   Watcher.node,
   WellKnown.node,
+  Worktree.node,
 ])
 
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
@@ -197,11 +201,12 @@ const pre = [
   CommandPlugin.Plugin,
   SkillPlugin.Plugin,
   VcsHgPlugin.Plugin,
-  ...SystemPromptPlugin.Plugins,
   ModelsDevPlugin,
   ...ProviderPlugins,
   ...WebSearchPlugins,
   PatchTool.Plugin,
+  // Render model prompts after the patch plugin selects the available editing tools.
+  ...OptimizePlugin.Plugins,
   EditTool.Plugin,
   GlobTool.Plugin,
   GrepTool.Plugin,
@@ -232,6 +237,7 @@ const post = [
   ConfigSkillPlugin.Plugin,
   ConfigProviderPlugin.Plugin,
   ConfigWebSearchPlugin.Plugin,
+  ConfigWorktreePlugin.Plugin,
   VariantPlugin.Plugin,
   ConfigPolicyPlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]

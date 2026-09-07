@@ -6,8 +6,16 @@ function sessionTreeRequest<T>(
   sessionID?: string,
   include: (item: T) => boolean = () => true,
 ) {
-  if (!sessionID) return
+  const ids = sessionTreeIDs(session, sessionID)
+  if (!ids.length) return
+  const list = (id: string) => (typeof request === "function" ? request(id) : request[id])
+  const id = ids.find((id) => list(id)?.some(include))
+  if (!id) return
+  return list(id)?.find(include)
+}
 
+export function sessionTreeIDs(session: SessionInfo[], sessionID?: string) {
+  if (!sessionID) return []
   const map = session.reduce((acc, item) => {
     if (!item.parentID) return acc
     const list = acc.get(item.parentID)
@@ -27,11 +35,7 @@ function sessionTreeRequest<T>(
       ids.push(child)
     }
   }
-
-  const list = (id: string) => (typeof request === "function" ? request(id) : request[id])
-  const id = ids.find((id) => list(id)?.some(include))
-  if (!id) return
-  return list(id)?.find(include)
+  return ids
 }
 
 export function sessionPermissionRequest(
@@ -43,10 +47,15 @@ export function sessionPermissionRequest(
   return sessionTreeRequest(session, request, sessionID, include)
 }
 
-export function sessionQuestionForm(
+export function sessionFormRequest(
   session: SessionInfo[],
   request: Record<string, FormInfo[] | undefined> | ((sessionID: string) => FormInfo[] | undefined),
   sessionID?: string,
 ) {
-  return sessionTreeRequest(session, request, sessionID, (item) => item.metadata?.kind === "question")
+  return sessionTreeRequest(
+    session,
+    request,
+    sessionID,
+    (item) => item.metadata?.kind === "question" || item.metadata?.kind === "websearch.provider",
+  )
 }

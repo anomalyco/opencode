@@ -1,6 +1,6 @@
 import { readdir, stat } from "node:fs/promises"
 import path from "node:path"
-import { fileURLToPath, pathToFileURL } from "node:url"
+export { localSource } from "@opencode-ai/plugin/source"
 import { isMissingPath, localProjectDirectory, projectConfigDirectories } from "../util/config-directories"
 
 export async function localPluginDirectories(cwd: string, configDirectory: string) {
@@ -48,22 +48,4 @@ export async function discoverPluginTargets(directories: string[]) {
       }),
     )
   ).flat()
-}
-
-export function localSource(spec: string, directory: string) {
-  if (spec.startsWith("file://")) return new URL(spec)
-  if (spec.startsWith("./") || spec.startsWith("../") || path.isAbsolute(spec))
-    return pathToFileURL(path.resolve(directory, spec))
-  return undefined
-}
-
-// Key local plugin imports by a numeric source version so edited sources
-// re-import fresh instead of hitting the ESM cache. Bun ignores query params
-// when caching file:// URL imports, so bust with a plain path there; Node keys
-// its cache on the full URL. Fractional versions break Bun's runtime JSX/solid
-// plugin hooks, so always truncate them.
-export function freshSpecifier(entrypoint: string, sourceVersion: number) {
-  const version = Math.trunc(sourceVersion)
-  if (typeof Bun !== "undefined") return `${fileURLToPath(entrypoint).replaceAll("\\", "/")}?mtime=${version}`
-  return `${entrypoint}?mtime=${version}`
 }

@@ -34,6 +34,14 @@ export function createHomeController() {
     const conn = list[0]
     if (conn) setSelection({ server: ServerConnection.key(conn) })
   })
+  createEffect(() => {
+    const ctx = focusedServerCtx()
+    const id = selectedProject()?.id
+    if (!ctx || !id || ctx.sdk.connection.status() !== "connected") return
+    // Selecting a project is the demand for its worktree inventory: the session filter spans its worktrees.
+    const root = ctx.sync.data.project.find((project) => project.id === id)?.worktree
+    if (root) void ctx.sync.worktrees.load(root)
+  })
 
   function setSelection(next: HomeProjectSelection) {
     layout.home.setSelection(next)

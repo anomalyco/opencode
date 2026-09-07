@@ -74,9 +74,7 @@ export function normalize(input: unknown): Result {
     ? decodeValue(ConfigV1.Info.fields.autoupdate, input.autoupdate, ["autoupdate"], diagnostics)
     : undefined
   const nativeUpdate = own(input, "update")
-    ? input.update === "auto"
-      ? "notify"
-      : decodeEncoded(Info.fields.update, input.update, ["update"], diagnostics)
+    ? decodeEncoded(Info.fields.update, input.update, ["update"], diagnostics)
     : undefined
   const legacyShare = own(input, "autoshare")
     ? decodeValue(Schema.Boolean, input.autoshare, ["autoshare"], diagnostics) === true
@@ -211,6 +209,7 @@ export function normalize(input: unknown): Result {
     media: Info.fields.media,
     tool_output: Info.fields.tool_output,
     websearch: Info.fields.websearch,
+    worktree: Info.fields.worktree,
     warming: Info.fields.warming,
   }
   Object.entries(nativeAtomic).forEach(([key, schema]) => {

@@ -184,7 +184,6 @@ describe("contract hygiene", () => {
       Model.Variant,
       Project.Current,
       Worktree.Directory,
-      Worktree.ListInput,
       Worktree.List,
       Project.Icon,
       Project.Commands,

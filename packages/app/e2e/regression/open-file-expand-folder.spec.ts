@@ -7,11 +7,13 @@ const directory = "C:/OpenCode/OpenFileExpand"
 const projectID = "proj_open_file_expand"
 const sessionID = "ses_open_file_expand"
 const title = "Open file expand"
+const longFilename = "a-very-long-file-name-that-must-overflow-the-file-sidebar-instead-of-being-truncated.ts"
+const longPath = `frontend/${longFilename}`
 const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
-test("expands a folder whose path has a trailing Windows separator", async ({ page }) => {
+test("expands Windows paths and horizontally scrolls long filenames", async ({ page }) => {
   await mockOpenCodeServer(page, {
     directory,
     project: {
@@ -44,7 +46,17 @@ test("expands a folder whose path has a trailing Windows separator", async ({ pa
         time: { created: 1700000000000, updated: 1700000000000 },
       },
     ],
-    vcsDiff: [],
+    vcsDiff: [
+      {
+        file: longPath,
+        before: "",
+        after: "export const added = true\n",
+        additions: 1,
+        deletions: 0,
+        status: "added",
+        patch: "@@ -0,0 +1 @@\n+export const added = true\n",
+      },
+    ],
     fileList: (path) => {
       if (path === "frontend\\" || path === "frontend") {
         return [
@@ -52,6 +64,13 @@ test("expands a folder whose path has a trailing Windows separator", async ({ pa
             name: "app.ts",
             path: "frontend\\app.ts",
             absolute: `${directory}/frontend/app.ts`,
+            type: "file" as const,
+            ignored: false,
+          },
+          {
+            name: longFilename,
+            path: `frontend\\${longFilename}`,
+            absolute: `${directory}/${longPath}`,
             type: "file" as const,
             ignored: false,
           },
@@ -75,6 +94,7 @@ test("expands a folder whose path has a trailing Windows separator", async ({ pa
         },
       ]
     },
+    findFiles: ({ query }) => (longPath.includes(query) ? [longPath] : []),
     fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
     pageMessages: () => ({ items: [] }),
   })
@@ -118,6 +138,93 @@ test("expands a folder whose path has a trailing Windows separator", async ({ pa
   await expect(frontendRow).toHaveAttribute("aria-expanded", "false")
   await frontendRow.click()
   await expect(frontendRow).toHaveAttribute("aria-expanded", "true")
+
+  const viewport = sidebar.locator('[data-slot="session-review-v2-sidebar-tree"] .scroll-view__viewport')
+  const longRow = panel.getByRole("button", { name: longFilename })
+  await expect(longRow).toBeVisible()
+  await expect.poll(() => viewport.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0)
+  expect(
+    await longRow.evaluate((element) => getComputedStyle(element.querySelector("bdi")!.parentElement!).textOverflow),
+  ).toBe("clip")
+  expect(await longRow.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThanOrEqual(
+    await viewport.evaluate((element) => element.clientWidth),
+  )
+  await expect
+    .poll(() =>
+      panel.locator('[data-slot="file-tree-v2-row"]').evaluateAll((rows) => {
+        const widths = rows.map((row) => row.getBoundingClientRect().width)
+        return Math.max(...widths) - Math.min(...widths)
+      }),
+    )
+    .toBeLessThanOrEqual(0.5)
+  await expect(longRow.locator('[data-slot="file-tree-v2-label"]')).toHaveCSS("margin-inline-end", "12px")
+  const status = longRow.locator('[data-slot="file-tree-v2-change"]')
+  await expect(status).toHaveText("A")
+  const statusBox = await status.boundingBox()
+  if (!statusBox) throw new Error("File status has no bounding box")
+  const viewportBox = await viewport.boundingBox()
+  if (!viewportBox) throw new Error("File tree viewport has no bounding box")
+  expect(viewportBox.x + viewportBox.width - statusBox.x - statusBox.width).toBeLessThanOrEqual(24)
+
+  await viewport.hover()
+  const horizontalThumb = sidebar.locator('.scroll-view__thumb[data-orientation="horizontal"]')
+  await expect(horizontalThumb).toHaveCSS("opacity", "1")
+  await page.mouse.wheel(1_000, 0)
+  await expect.poll(() => viewport.evaluate((element) => Math.abs(element.scrollLeft))).toBeGreaterThan(0)
+  await expect(horizontalThumb).toHaveAttribute("data-visible", "true")
+  await expect
+    .poll(() =>
+      status.evaluate((element) => {
+        const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!.getBoundingClientRect()
+        return viewport.right - element.getBoundingClientRect().right
+      }),
+    )
+    .toBeLessThanOrEqual(24)
+
+  const beforeDrag = await viewport.evaluate((element) => Math.abs(element.scrollLeft))
+  const thumbBox = await horizontalThumb.boundingBox()
+  if (!thumbBox) throw new Error("Horizontal scrollbar thumb has no bounding box")
+  await page.mouse.move(thumbBox.x + thumbBox.width / 2, thumbBox.y + thumbBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(thumbBox.x + thumbBox.width / 2 - 40, thumbBox.y + thumbBox.height / 2)
+  await page.mouse.up()
+  await expect.poll(() => viewport.evaluate((element) => Math.abs(element.scrollLeft))).toBeLessThan(beforeDrag)
+
+  const filter = panel.getByRole("combobox", { name: "Filter files" })
+  await filter.fill(longFilename)
+  const filteredRow = panel.getByRole("option", { name: longFilename })
+  await expect(filteredRow).toBeVisible()
+  const filteredStatus = filteredRow.locator('[data-slot="file-tree-v2-change"]')
+  await expect(filteredStatus).toHaveText("A")
+  await expect.poll(() => viewport.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0)
+
+  await viewport.evaluate((element) => {
+    element.setAttribute("dir", "rtl")
+    element.scrollLeft = 0
+    element.dispatchEvent(new Event("scroll"))
+  })
+  await expect
+    .poll(() =>
+      filteredStatus.evaluate((element) => {
+        const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!.getBoundingClientRect()
+        return element.getBoundingClientRect().left - viewport.left
+      }),
+    )
+    .toBeLessThanOrEqual(24)
+  const rtlThumbBox = await horizontalThumb.boundingBox()
+  if (!rtlThumbBox) throw new Error("RTL horizontal scrollbar thumb has no bounding box")
+  await page.mouse.move(rtlThumbBox.x + rtlThumbBox.width / 2, rtlThumbBox.y + rtlThumbBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(rtlThumbBox.x + rtlThumbBox.width / 2 - 40, rtlThumbBox.y + rtlThumbBox.height / 2)
+  await page.mouse.up()
+  await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeLessThan(0)
+  await viewport.evaluate((element) => {
+    element.removeAttribute("dir")
+    element.scrollLeft = 0
+    element.dispatchEvent(new Event("scroll"))
+  })
+
+  await filter.fill("")
 
   const appRow = panel.locator('[data-slot="file-tree-v2-row"][data-path="frontend/app.ts"]')
   await expect(appRow).toBeVisible()

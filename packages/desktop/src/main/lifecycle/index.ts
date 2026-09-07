@@ -6,9 +6,11 @@ import { Context, Effect, Layer } from "effect"
 import { DeepLinksOpened } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 import { DesktopLogging, scoped } from "../native/logging"
+import { DesktopStorage } from "../storage"
 import { safeWebContentsURL } from "../windows/state"
 import { getLastFocusedWindow, makeMainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
 import { acquireApplicationLock, configureApplication } from "./environment"
+import { initializeFirstLaunchOnboarding } from "./onboarding"
 import { Shutdown } from "./shutdown"
 
 export interface Interface {
@@ -143,13 +145,22 @@ const runtime = Layer.effect(
   }),
 )
 
-const platform = Layer.merge(DesktopLogging.layer, Shutdown.layer)
+// Storage opens after configureApplication has set userData and before windows exist, so window
+// teardown can clear a window's persisted state and every renderer request finds it ready.
+const platform = Layer.mergeAll(
+  DesktopLogging.layer,
+  Shutdown.layer,
+  DesktopStorage.layer.pipe(Layer.provide(DesktopLogging.layer)),
+)
 
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
     // Electron scopes the single-instance lock to userData.
     yield* configureApplication()
     if (!acquireApplicationLock()) return yield* Effect.interrupt
+    // Decide first-launch state before the storage layer creates drafts.sqlite, which would
+    // otherwise read as evidence of an earlier launch on a fresh install.
+    yield* initializeFirstLaunchOnboarding(app.getPath("userData"))
     return runtime.pipe(Layer.provideMerge(platform))
   }),
 )

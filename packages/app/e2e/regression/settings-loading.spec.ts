@@ -87,16 +87,24 @@ test("recording a new session shortcut stays in settings until recording finishe
 test("workspaces opens without waiting for inventory or sessions", async ({ page }) => {
   const inventory = Promise.withResolvers<void>()
   const sessions = Promise.withResolvers<void>()
-  await page.route("**/api/worktree/*", async (route) => {
-    await inventory.promise
-    await route.fallback()
-  })
+  await page.route(
+    (url) => url.pathname === "/api/worktree",
+    async (route) => {
+      await inventory.promise
+      await route.fallback()
+    },
+  )
   await page.route("**/api/session?*", async (route) => {
     if (new URL(route.request().url()).searchParams.has("directory")) await sessions.promise
     await route.fallback()
   })
   const settings = page.getByTestId("settings-screen")
-  const requested = page.waitForRequest((request) => new URL(request.url()).pathname.startsWith("/api/worktree/"))
+  const requested = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === "/api/worktree" &&
+      new URL(request.url()).searchParams.get("location[directory]") === directory &&
+      request.method() === "GET",
+  )
   await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
   await requested
   await expect(settings.getByRole("heading", { name: "Worktrees", exact: true })).toBeVisible()
@@ -110,14 +118,55 @@ test("workspaces opens without waiting for inventory or sessions", async ({ page
   await expect(settings.getByText("Workspace 1 session", { exact: true })).toBeVisible()
 
   const refresh = Promise.withResolvers<void>()
-  await page.route("**/api/worktree/*", async (route) => {
-    await refresh.promise
-    await route.fallback()
-  })
+  await page.route(
+    (url) => url.pathname === "/api/worktree",
+    async (route) => {
+      await refresh.promise
+      await route.fallback()
+    },
+  )
   await settings.getByRole("tab", { name: "Preferences", exact: true }).click()
   await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
   await expect(settings.getByText("Workspace 1 session", { exact: true })).toBeVisible()
   refresh.resolve()
+})
+
+test("worktree deletion sends the project location separately from the target", async ({ page }) => {
+  const removed = new Set<string>()
+  await page.route(
+    (url) => url.pathname === "/api/worktree",
+    async (route) => {
+      if (route.request().method() === "GET") {
+        return route.fulfill({
+          json: [
+            { directory },
+            ...sandboxes.filter((item) => !removed.has(item)).map((directory) => ({ directory, strategy: "git" })),
+          ],
+        })
+      }
+      if (route.request().method() === "DELETE") {
+        removed.add(route.request().postDataJSON().directory)
+        return route.fulfill({ status: 204 })
+      }
+      return route.fallback()
+    },
+  )
+  const settings = page.getByTestId("settings-screen")
+  await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
+  await expect(settings.getByText(sandboxes[0], { exact: true })).toBeVisible()
+  await settings.getByRole("button", { name: 'Delete worktree "workspace-1"?', exact: true }).click()
+  const confirmation = page.getByRole("dialog", { name: "Delete worktree", exact: true })
+  const remove = confirmation.getByRole("button", { name: "Delete worktree", exact: true })
+  await expect(remove).toBeEnabled()
+  const deleting = page.waitForRequest(
+    (request) => new URL(request.url()).pathname === "/api/worktree" && request.method() === "DELETE",
+  )
+  await remove.click()
+  const request = await deleting
+  expect(new URL(request.url()).searchParams.get("location[directory]")).toBe(directory)
+  expect(request.postDataJSON()).toEqual({ directory: sandboxes[0], force: true })
+  await expect(settings.getByText(sandboxes[0], { exact: true })).toHaveCount(0)
+  await expect(settings.getByText("11 worktrees", { exact: true })).toBeVisible()
 })
 
 test("extensions opens without waiting for MCPs", async ({ page }) => {

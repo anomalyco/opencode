@@ -1,24 +1,34 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Scope } from "effect"
+import { Deferred, Effect, Exit, Fiber, Scope } from "effect"
+import { TestClock } from "effect/testing"
 import { KV } from "@opencode-ai/core/kv"
+import { Bus } from "@opencode-ai/core/bus"
 import { WebSearch } from "@opencode-ai/core/websearch"
+import { Session } from "@opencode-ai/schema/session"
+import { SessionEvent } from "@opencode-ai/schema/session-event"
+import { Project } from "@opencode-ai/schema/project"
+import { AbsolutePath } from "@opencode-ai/schema/schema"
 import { testEffect } from "./lib/effect"
 import { TestWebSearch } from "./lib/websearch"
 
 const it = testEffect(TestWebSearch.layer)
+const firstSession = Session.ID.make("ses_search_first")
+const secondSession = Session.ID.make("ses_search_second")
 
 const register = (id: string) =>
   Effect.gen(function* () {
     const websearch = yield* WebSearch.Service
     const providerID = WebSearch.ID.make(id)
     const calls: WebSearch.ProviderInput[] = []
-    yield* websearch.transform((editor) => {
+    const failure: { cause?: unknown } = {}
+    const registration = yield* websearch.transform((editor) => {
       editor.add({
         id: providerID,
         name: id.toUpperCase(),
         execute: (input) =>
-          Effect.sync(() => {
+          Effect.gen(function* () {
             calls.push(input)
+            if (failure.cause !== undefined) return yield* Effect.fail(failure.cause)
             return [
               {
                 url: `https://${id}.example.com`,
@@ -30,7 +40,7 @@ const register = (id: string) =>
           }),
       })
     })
-    return { providerID, calls }
+    return { providerID, calls, failure, dispose: registration.dispose }
   })
 
 describe("WebSearch", () => {
@@ -137,16 +147,444 @@ describe("WebSearch", () => {
     }),
   )
 
-  it.effect("chooses a registered provider for random selection", () =>
+  it.effect("keeps the random provider across queries, default lookups, and reloads", () =>
     Effect.gen(function* () {
       yield* register("exa")
       yield* register("parallel")
       const websearch = yield* WebSearch.Service
       yield* websearch.transform((editor) => editor.default.set("random"))
 
-      expect(["exa", "parallel"]).toContain((yield* websearch.query({ query: "random" })).providerID)
+      const first = yield* websearch.query({ query: "first" })
+      expect(["exa", "parallel"]).toContain(first.providerID)
+      expect((yield* websearch.default())?.id).toBe(first.providerID)
+      yield* websearch.reload()
+      const results = yield* Effect.all(
+        Array.from({ length: 10 }, () => websearch.query({ query: "next" })),
+        { concurrency: "unbounded" },
+      )
+      expect(results.every((result) => result.providerID === first.providerID)).toBe(true)
     }),
   )
+
+  it.effect("preserves persisted random selection and keeps its provider", () =>
+    Effect.gen(function* () {
+      yield* register("exa")
+      yield* register("parallel")
+      const websearch = yield* WebSearch.Service
+      const kv = yield* KV.Service
+      yield* kv.set(WebSearch.ProviderKey, "random")
+      const first = yield* websearch.query({ query: "legacy" })
+      expect((yield* websearch.query({ query: "sticky" })).providerID).toBe(first.providerID)
+      yield* websearch.select("random")
+      expect(yield* kv.get(WebSearch.ProviderKey)).toBe("random")
+      expect((yield* websearch.query({ query: "canonical" })).providerID).toBe(first.providerID)
+    }),
+  )
+  it.effect("fails over on rate limits with random and keeps the replacement after cooldown", () =>
+    Effect.gen(function* () {
+      const exa = yield* register("exa")
+      const parallel = yield* register("parallel")
+      const websearch = yield* WebSearch.Service
+      yield* websearch.transform((editor) => editor.default.set("random"))
+      const first = yield* websearch.query({ query: "first" })
+      const limited = first.providerID === exa.providerID ? exa : parallel
+      const replacement = first.providerID === exa.providerID ? parallel : exa
+      limited.failure.cause = TestWebSearch.httpError()
+      const progress: WebSearch.ID[] = []
+      expect(
+        (yield* websearch.query(
+          { query: "retry" },
+          {
+            onProvider: (provider) =>
+              Effect.sync(() => {
+                progress.push(provider.id)
+              }),
+          },
+        )).providerID,
+      ).toBe(replacement.providerID)
+      expect(progress).toEqual([limited.providerID, replacement.providerID])
+      expect(limited.calls.at(-1)).toEqual({ query: "retry" })
+      expect(replacement.calls).toEqual([{ query: "retry" }])
+
+      limited.failure.cause = undefined
+      yield* TestClock.adjust("59 seconds")
+      expect((yield* websearch.query({ query: "cooling" })).providerID).toBe(replacement.providerID)
+      expect(limited.calls).toHaveLength(2)
+      yield* TestClock.adjust("1 second")
+      expect((yield* websearch.query({ query: "still sticky" })).providerID).toBe(replacement.providerID)
+      replacement.failure.cause = TestWebSearch.httpError()
+      expect((yield* websearch.query({ query: "recovered" })).providerID).toBe(limited.providerID)
+    }),
+  )
+
+  it.effect("reselects when a concurrent query cools down the provider while progress is pending", () =>
+    Effect.gen(function* () {
+      const exa = yield* register("exa")
+      const parallel = yield* register("parallel")
+      const websearch = yield* WebSearch.Service
+      yield* websearch.select("random")
+      yield* websearch.query({ query: "seed" })
+      const first = yield* websearch.default()
+      if (!first) return yield* Effect.die("Expected an automatic provider")
+      const limited = first.id === exa.providerID ? exa : parallel
+      const replacement = first.id === exa.providerID ? parallel : exa
+      const paused = yield* Deferred.make<void>()
+      const resume = yield* Deferred.make<void>()
+      const progress: WebSearch.ID[] = []
+      const pending = yield* websearch
+        .query(
+          { query: "pending" },
+          {
+            onProvider: (provider) =>
+              Effect.gen(function* () {
+                progress.push(provider.id)
+                if (provider.id !== first.id) return
+                yield* Deferred.succeed(paused, undefined)
+                yield* Deferred.await(resume)
+              }),
+          },
+        )
+        .pipe(Effect.forkChild)
+      yield* Deferred.await(paused)
+      limited.failure.cause = TestWebSearch.httpError()
+      expect((yield* websearch.query({ query: "trigger" })).providerID).toBe(replacement.providerID)
+      yield* Deferred.succeed(resume, undefined)
+      expect((yield* Fiber.join(pending)).providerID).toBe(replacement.providerID)
+      expect(progress).toEqual([limited.providerID, replacement.providerID])
+      expect(limited.calls).toEqual([{ query: "seed" }, { query: "trigger" }])
+      expect(replacement.calls).toEqual([{ query: "trigger" }, { query: "pending" }])
+    }),
+  )
+
+  it.effect("fails promptly when all providers are cooling down without asking for a provider", () =>
+    Effect.gen(function* () {
+      const providers = [yield* register("exa"), yield* register("parallel"), yield* register("tavily")]
+      const websearch = yield* WebSearch.Service
+      yield* websearch.select("random")
+      providers.forEach((provider) => {
+        provider.failure.cause = TestWebSearch.httpError()
+      })
+      expect(yield* websearch.query({ query: "limited" }).pipe(Effect.flip)).toBeInstanceOf(WebSearch.RequestError)
+      expect(providers.map((provider) => provider.calls.length)).toEqual([1, 1, 1])
+      expect(yield* websearch.default()).toBeDefined()
+      expect(yield* websearch.query({ query: "still limited" }).pipe(Effect.flip)).toBeInstanceOf(
+        WebSearch.RequestError,
+      )
+      expect(providers.map((provider) => provider.calls.length)).toEqual([1, 1, 1])
+    }),
+  )
+
+  it.effect("tries each provider only once per query even with a zero cooldown", () =>
+    Effect.gen(function* () {
+      const providers = [yield* register("exa"), yield* register("parallel")]
+      const websearch = yield* WebSearch.Service
+      yield* websearch.select("random")
+      providers.forEach((provider) => {
+        provider.failure.cause = TestWebSearch.httpError(429, "0")
+      })
+      expect(yield* websearch.query({ query: "limited" }).pipe(Effect.flip)).toBeInstanceOf(WebSearch.RequestError)
+      expect(providers.map((provider) => provider.calls.length)).toEqual([1, 1])
+    }),
+  )
+  ;[
+    { header: "120", millis: 120_000 },
+    { header: "Thu, 01 Jan 1970 00:02:00 GMT", millis: 120_000 },
+    { header: undefined, millis: 60_000 },
+    { header: "invalid", millis: 60_000 },
+    { header: "", millis: 60_000 },
+    { header: "-1", millis: 60_000 },
+  ].forEach(({ header, millis }) => {
+    it.effect(`respects Retry-After ${JSON.stringify(header)} and recovers after cooldown`, () =>
+      Effect.gen(function* () {
+        const provider = yield* register("exa")
+        const websearch = yield* WebSearch.Service
+        yield* websearch.select("random")
+        provider.failure.cause = TestWebSearch.httpError(429, header)
+        expect(yield* websearch.query({ query: "limited" }).pipe(Effect.flip)).toBeInstanceOf(WebSearch.RequestError)
+        provider.failure.cause = undefined
+        yield* TestClock.adjust(millis - 1)
+        expect(yield* websearch.query({ query: "early" }).pipe(Effect.flip)).toBeInstanceOf(WebSearch.RequestError)
+        expect(provider.calls).toHaveLength(1)
+        yield* TestClock.adjust(1)
+        expect((yield* websearch.query({ query: "recovered" })).providerID).toBe(provider.providerID)
+        expect(provider.calls).toHaveLength(2)
+      }),
+    )
+  })
+
+  it.effect("does not rotate or cool down providers for other failures", () =>
+    Effect.gen(function* () {
+      const exa = yield* register("exa")
+      const parallel = yield* register("parallel")
+      const websearch = yield* WebSearch.Service
+      yield* websearch.select("random")
+      const first = yield* websearch.query({ query: "first" })
+      const provider = first.providerID === exa.providerID ? exa : parallel
+      yield* Effect.forEach(
+        [TestWebSearch.httpError(401), TestWebSearch.httpError(500), new Error("timeout")],
+        (cause) =>
+          Effect.gen(function* () {
+            provider.failure.cause = cause
+            expect(yield* websearch.query({ query: "failure" }).pipe(Effect.flip)).toMatchObject({
+              providerID: first.providerID,
+              cause,
+            })
+            expect((yield* websearch.default())?.id).toBe(first.providerID)
+          }),
+      )
+      provider.failure.cause = undefined
+      expect((yield* websearch.query({ query: "recovered" })).providerID).toBe(first.providerID)
+      expect((first.providerID === exa.providerID ? parallel : exa).calls).toEqual([])
+    }),
+  )
+
+  it.effect("does not fail over fixed or explicitly requested providers", () =>
+    Effect.gen(function* () {
+      const exa = yield* register("exa")
+      const parallel = yield* register("parallel")
+      const websearch = yield* WebSearch.Service
+      exa.failure.cause = TestWebSearch.httpError()
+      yield* websearch.select(exa.providerID)
+      expect(yield* websearch.query({ query: "fixed" }).pipe(Effect.flip)).toMatchObject({ providerID: exa.providerID })
+      yield* websearch.select("random")
+      expect(yield* websearch.query({ query: "explicit", providerID: exa.providerID }).pipe(Effect.flip)).toMatchObject(
+        {
+          providerID: exa.providerID,
+        },
+      )
+      expect(exa.calls).toHaveLength(2)
+      expect(parallel.calls).toEqual([])
+    }),
+  )
+
+  it.effect("reselects when the active provider is removed", () =>
+    Effect.gen(function* () {
+      const exa = yield* register("exa")
+      const websearch = yield* WebSearch.Service
+      yield* websearch.select("random")
+      expect((yield* websearch.query({ query: "first" })).providerID).toBe(exa.providerID)
+      const parallel = yield* register("parallel")
+      expect((yield* websearch.query({ query: "still sticky" })).providerID).toBe(exa.providerID)
+      yield* exa.dispose
+      expect((yield* websearch.query({ query: "removed" })).providerID).toBe(parallel.providerID)
+    }),
+  )
+
+  it.effect("uses updated registrations for the sticky provider", () =>
+    Effect.gen(function* () {
+      const exa = yield* register("exa")
+      const websearch = yield* WebSearch.Service
+      yield* websearch.select("random")
+      expect((yield* websearch.query({ query: "original" })).results).toHaveLength(1)
+      const updated = yield* websearch.transform((editor) =>
+        editor.add({
+          id: exa.providerID,
+          name: "Updated Exa",
+          execute: () => Effect.succeed([]),
+        }),
+      )
+      expect(yield* websearch.default()).toEqual({ id: exa.providerID, name: "Updated Exa" })
+      expect((yield* websearch.query({ query: "updated" })).results).toEqual([])
+      yield* updated.dispose
+      expect((yield* websearch.query({ query: "restored" })).results).toHaveLength(1)
+      expect(exa.calls).toEqual([{ query: "original" }, { query: "restored" }])
+    }),
+  )
+
+  it.effect("keeps independent session affinities across parallel initial and subsequent searches", () =>
+    Effect.gen(function* () {
+      yield* register("exa")
+      yield* register("parallel")
+      yield* register("tavily")
+      const websearch = yield* WebSearch.Service
+      yield* websearch.select("random")
+      const results = yield* Effect.forEach(
+        [firstSession, secondSession],
+        (sessionID) =>
+          Effect.all(
+            Array.from({ length: 8 }, () => websearch.query({ query: "parallel" }, { sessionID })),
+            {
+              concurrency: "unbounded",
+            },
+          ),
+        { concurrency: "unbounded" },
+      )
+      expect(results.map((group) => new Set(group.map((result) => result.providerID)).size)).toEqual([1, 1])
+      expect((yield* websearch.query({ query: "later" }, { sessionID: firstSession })).providerID).toBe(
+        results[0]?.[0]?.providerID,
+      )
+      expect((yield* websearch.query({ query: "later" }, { sessionID: secondSession })).providerID).toBe(
+        results[1]?.[0]?.providerID,
+      )
+    }),
+  )
+
+  it.effect("does not overwrite peer or Location affinity when a session switches providers", () =>
+    Effect.gen(function* () {
+      const exa = yield* register("exa")
+      const websearch = yield* WebSearch.Service
+      yield* websearch.select("random")
+      yield* websearch.query({ query: "location" })
+      yield* websearch.query({ query: "first" }, { sessionID: firstSession })
+      yield* websearch.query({ query: "second" }, { sessionID: secondSession })
+      const parallel = yield* register("parallel")
+      exa.failure.cause = TestWebSearch.httpError()
+      expect((yield* websearch.query({ query: "switch" }, { sessionID: firstSession })).providerID).toBe(
+        parallel.providerID,
+      )
+      // Even while Exa is cooling down, inspection must not reroute any caller.
+      expect((yield* websearch.default())?.id).toBe(exa.providerID)
+      exa.failure.cause = undefined
+      yield* TestClock.adjust("1 minute")
+      expect((yield* websearch.query({ query: "peer" }, { sessionID: secondSession })).providerID).toBe(exa.providerID)
+      expect((yield* websearch.query({ query: "location" })).providerID).toBe(exa.providerID)
+      expect((yield* websearch.query({ query: "sticky replacement" }, { sessionID: firstSession })).providerID).toBe(
+        parallel.providerID,
+      )
+    }),
+  )
+
+  it.effect("shares cooldowns without sending a peer back to the rate-limited provider", () =>
+    Effect.gen(function* () {
+      const exa = yield* register("exa")
+      const websearch = yield* WebSearch.Service
+      yield* websearch.select("random")
+      yield* websearch.query({ query: "first" }, { sessionID: firstSession })
+      yield* websearch.query({ query: "second" }, { sessionID: secondSession })
+      const parallel = yield* register("parallel")
+      exa.failure.cause = TestWebSearch.httpError(429, "120")
+      yield* websearch.query({ query: "switch" }, { sessionID: firstSession })
+      expect((yield* websearch.query({ query: "peer" }, { sessionID: secondSession })).providerID).toBe(
+        parallel.providerID,
+      )
+      expect(exa.calls).toHaveLength(3)
+      exa.failure.cause = undefined
+      yield* TestClock.adjust("2 minutes")
+      expect((yield* websearch.query({ query: "sticky peer" }, { sessionID: secondSession })).providerID).toBe(
+        parallel.providerID,
+      )
+    }),
+  )
+
+  it.effect("converges overlapping session failures and ignores a late success on the old provider", () =>
+    Effect.gen(function* () {
+      const websearch = yield* WebSearch.Service
+      const arrived = yield* Deferred.make<void>()
+      const failures = yield* Deferred.make<void>()
+      const lateStarted = yield* Deferred.make<void>()
+      const lateRelease = yield* Deferred.make<void>()
+      const calls: string[] = []
+      yield* websearch.transform((editor) =>
+        editor.add({
+          id: WebSearch.ID.make("exa"),
+          name: "Exa",
+          execute: (input) =>
+            Effect.gen(function* () {
+              if (input.query === "seed") return []
+              if (input.query === "late") {
+                yield* Deferred.succeed(lateStarted, undefined)
+                yield* Deferred.await(lateRelease)
+                return []
+              }
+              calls.push(input.query)
+              if (calls.length === 3) yield* Deferred.succeed(arrived, undefined)
+              yield* Deferred.await(failures)
+              return yield* TestWebSearch.httpError()
+            }),
+        }),
+      )
+      yield* websearch.select("random")
+      yield* websearch.query({ query: "seed" }, { sessionID: firstSession })
+      const late = yield* websearch.query({ query: "late" }, { sessionID: firstSession }).pipe(Effect.forkChild)
+      yield* Deferred.await(lateStarted)
+      yield* register("parallel")
+      yield* register("tavily")
+      const pending = yield* Effect.all(
+        Array.from({ length: 3 }, (_, index) =>
+          websearch.query({ query: `fail-${index}` }, { sessionID: firstSession }),
+        ),
+        { concurrency: "unbounded" },
+      ).pipe(Effect.forkChild)
+      yield* Deferred.await(arrived)
+      yield* Deferred.succeed(failures, undefined)
+      const results = yield* Fiber.join(pending)
+      expect(new Set(results.map((result) => result.providerID)).size).toBe(1)
+      expect(results[0]?.providerID).not.toBe(WebSearch.ID.make("exa"))
+      yield* Deferred.succeed(lateRelease, undefined)
+      expect((yield* Fiber.join(late)).providerID).toBe(WebSearch.ID.make("exa"))
+      expect((yield* websearch.query({ query: "later" }, { sessionID: firstSession })).providerID).toBe(
+        results[0]?.providerID,
+      )
+    }),
+  )
+
+  it.effect("keeps fixed and explicit providers pinned with session context", () =>
+    Effect.gen(function* () {
+      const exa = yield* register("exa")
+      const parallel = yield* register("parallel")
+      const websearch = yield* WebSearch.Service
+      exa.failure.cause = TestWebSearch.httpError()
+      yield* websearch.select(exa.providerID)
+      expect(yield* websearch.query({ query: "fixed" }, { sessionID: firstSession }).pipe(Effect.flip)).toMatchObject({
+        providerID: exa.providerID,
+      })
+      yield* websearch.select("random")
+      expect(
+        yield* websearch
+          .query({ query: "explicit", providerID: exa.providerID }, { sessionID: firstSession })
+          .pipe(Effect.flip),
+      ).toMatchObject({ providerID: exa.providerID })
+      expect(parallel.calls).toEqual([])
+    }),
+  )
+  ;["delete", "move"].forEach((operation) => {
+    it.effect(`forgets affinity on session ${operation} without retaining it through an in-flight query`, () =>
+      Effect.gen(function* () {
+        const exa = yield* register("exa")
+        const websearch = yield* WebSearch.Service
+        const bus = yield* Bus.Service
+        yield* websearch.select("random")
+        yield* websearch.query({ query: "seed" }, { sessionID: firstSession })
+        const started = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const pending = yield* websearch
+          .query(
+            { query: "pending" },
+            {
+              sessionID: firstSession,
+              onProvider: (provider) =>
+                provider.id === exa.providerID
+                  ? Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release)))
+                  : Effect.void,
+            },
+          )
+          .pipe(Effect.forkChild)
+        yield* Deferred.await(started)
+        yield* operation === "delete"
+          ? bus.publish(SessionEvent.Deleted, { sessionID: firstSession })
+          : bus.publish(SessionEvent.Moved, {
+              sessionID: firstSession,
+              location: { directory: AbsolutePath.make("/moved") },
+              projectID: Project.ID.global,
+            })
+        yield* Effect.yieldNow
+        yield* exa.dispose
+        const parallel = yield* register("parallel")
+        expect((yield* websearch.query({ query: "new affinity" }, { sessionID: firstSession })).providerID).toBe(
+          parallel.providerID,
+        )
+        yield* parallel.dispose
+        const tavily = yield* register("tavily")
+        exa.failure.cause = TestWebSearch.httpError()
+        yield* Deferred.succeed(release, undefined)
+        expect((yield* Fiber.join(pending)).providerID).toBe(tavily.providerID)
+        yield* register("parallel")
+        expect((yield* websearch.query({ query: "still new affinity" }, { sessionID: firstSession })).providerID).toBe(
+          parallel.providerID,
+        )
+      }),
+    )
+  })
 
   it.effect("fails when web search is explicitly disabled", () =>
     Effect.gen(function* () {

@@ -36,4 +36,26 @@ describe("buildHomeSessionRecords", () => {
 
     expect(records.map((record) => record.session.id)).toEqual(["a"])
   })
+
+  test("labels a worktree session with its project before that project's inventory has loaded", () => {
+    const records = buildHomeSessionRecords({
+      sessions: () => [session("w", "/repo/a/.worktrees/feature", "project-a")],
+      projectDirectories: () => undefined,
+      projects: () => [{ ...opened, name: "Project A" }],
+    })
+
+    expect(records[0]?.project).toMatchObject({ id: "project-a", worktree: "/repo/a" })
+    expect(records[0]?.projectName).toBe("Project A")
+  })
+
+  test("prefers the added project whose directory matches over a sibling entry with the same ID", () => {
+    const nested = { id: "project-a", worktree: "/repo/a/packages/app", expanded: true } as LocalProject
+    const records = buildHomeSessionRecords({
+      sessions: () => [session("n", "/repo/a/packages/app", "project-a")],
+      projectDirectories: () => undefined,
+      projects: () => [opened, nested],
+    })
+
+    expect(records[0]?.project.worktree).toBe("/repo/a/packages/app")
+  })
 })

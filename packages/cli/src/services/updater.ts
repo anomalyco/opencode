@@ -1,7 +1,7 @@
 import { Global } from "@opencode-ai/util/global"
 import { AppProcess } from "@opencode-ai/util/process"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../version"
-import { Context, Duration, Effect, FileSystem, Layer, Schedule } from "effect"
+import { Context, Duration, Effect, FileSystem, Layer, Ref, Schedule } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"
 import path from "node:path"
@@ -9,28 +9,28 @@ import { action, parseReleaseVersion, type Policy } from "./updater-action"
 
 export const methods = ["curl", "npm", "pnpm", "bun", "yarn"] as const
 export type Method = (typeof methods)[number]
+export type RunResult = { readonly type: "available" | "installed"; readonly version: string }
+export type CheckResult = RunResult | { readonly type: "unavailable"; readonly message: string }
 
 export interface Interface {
-  readonly monitor: (notify: (version: string) => Effect.Effect<void>) => Effect.Effect<void>
+  readonly run: () => Effect.Effect<RunResult | undefined>
+  readonly check: () => Effect.Effect<CheckResult | undefined, Error>
   readonly apply: (version: string) => Effect.Effect<void, Error>
   readonly method: () => Effect.Effect<Method | undefined>
   readonly latest: () => Effect.Effect<string, Error>
   readonly upgrade: (method: Method, version: string) => Effect.Effect<void, Error>
 }
 
-export const monitorUpdates = Effect.fnUntraced(function* (input: {
-  readonly inspect: () => Effect.Effect<string | undefined, Error>
-  readonly notify: (version: string) => Effect.Effect<void>
+export const pollUpdates = Effect.fnUntraced(function* (input: {
+  readonly check: Effect.Effect<unknown>
   readonly initialDelay?: Duration.Input
   readonly interval?: Duration.Input
 }) {
   const interval = input.interval ?? "10 minutes"
-  const initialDelay = input.initialDelay ?? "90 seconds"
-  const check = Effect.gen(function* () {
-    const version = yield* input.inspect()
-    if (version !== undefined) yield* input.notify(version)
-  }).pipe(Effect.catch((error) => Effect.logWarning("update check failed", { error })))
-  return yield* check.pipe(Effect.repeat(Schedule.spaced(interval)), Effect.delay(initialDelay))
+  return yield* input.check.pipe(
+    Effect.repeat(Schedule.spaced(interval)),
+    Effect.delay(input.initialDelay ?? "1 minute"),
+  )
 })
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/Updater") {}
@@ -43,20 +43,20 @@ export function decodePolicy(text: string): Policy | undefined {
   if (errors.length || typeof input !== "object" || input === null) return
   if ("update" in input) {
     const value = input.update
-    if (value === "disable" || value === "notify") return value
-    if (value === "auto") return "notify"
+    if (value === "disable" || value === "notify" || value === "auto") return value
     return
   }
   if (!("autoupdate" in input)) return
   if (input.autoupdate === false) return "disable"
   if (input.autoupdate === "notify") return "notify"
-  if (input.autoupdate === true) return "notify"
+  if (input.autoupdate === true) return "auto"
 }
 
 const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const global = yield* Global.Service
   const appProcess = yield* AppProcess.Service
+  const installedVersion = yield* Ref.make(OPENCODE_VERSION)
   const channel = OPENCODE_CHANNEL.replace(/[^a-zA-Z0-9._-]/g, "-")
   const installedPackage = yield* Effect.gen(function* () {
     const executable = yield* fs.realPath(process.execPath)
@@ -78,7 +78,7 @@ const make = Effect.gen(function* () {
     return values.findLast((value) => value !== undefined) ?? "notify"
   })
 
-  const run = Effect.fnUntraced(function* (command: string[], timeout: Duration.Input = "10 seconds") {
+  const exec = Effect.fnUntraced(function* (command: string[], timeout: Duration.Input = "10 seconds") {
     return yield* appProcess
       .run(ChildProcess.make(command[0], command.slice(1)), {
         timeout,
@@ -113,7 +113,7 @@ const make = Effect.gen(function* () {
     ]
     const results = yield* Effect.forEach(
       checks,
-      (check) => run(check.command).pipe(Effect.map((result) => ({ check, result }))),
+      (check) => exec(check.command).pipe(Effect.map((result) => ({ check, result }))),
       { concurrency: "unbounded" },
     )
     return results.find((result) => result.result.stdout.includes(installedPackage))?.check.method
@@ -121,12 +121,12 @@ const make = Effect.gen(function* () {
 
   const release = Effect.fnUntraced(function* () {
     const response = yield* Effect.tryPromise({
-      try: () =>
+      try: (signal) =>
         fetch(
           `https://update.opencode.ai/api/${encodeURIComponent(channel)}/${encodeURIComponent(OPENCODE_ARTIFACT)}/npm`,
           {
             headers: { "User-Agent": `opencode/${OPENCODE_VERSION}` },
-            signal: AbortSignal.timeout(10_000),
+            signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
           },
         ),
       catch: (cause) => new Error("Failed to check for updates", { cause }),
@@ -168,17 +168,20 @@ const make = Effect.gen(function* () {
           // Bun does not prune old versions from its shared package cache.
           yield* fs.makeDirectory(global.cache, { recursive: true })
           const cache = yield* fs.makeTempDirectoryScoped({ directory: global.cache, prefix: "update-" })
-          return yield* run(["bun", "install", "--global", "--trust", "--cache-dir", cache, target], "5 minutes")
+          return yield* exec(["bun", "install", "--global", "--trust", "--cache-dir", cache, target], "5 minutes")
         }
         if (method === "curl") {
           yield* fs.makeDirectory(global.cache, { recursive: true })
           const directory = yield* fs.makeTempDirectoryScoped({ directory: global.cache, prefix: "update-" })
           const installer = path.join(directory, "install")
-          const download = yield* run(["curl", "-fsSL", "-o", installer, "https://opencode.ai/v2/install"], "5 minutes")
+          const download = yield* exec(
+            ["curl", "-fsSL", "-o", installer, "https://opencode.ai/v2/install"],
+            "5 minutes",
+          )
           if (download.code !== 0) return download
-          return yield* run(["bash", installer, "--version", version, "--no-modify-path"], "5 minutes")
+          return yield* exec(["bash", installer, "--version", version, "--no-modify-path"], "5 minutes")
         }
-        return yield* run(commands[method], "5 minutes")
+        return yield* exec(commands[method], "5 minutes")
       }),
     ).pipe(Effect.mapError((cause) => new Error(`Failed to update with ${method}`, { cause })))
     if (result.code === 0) return
@@ -200,18 +203,19 @@ const make = Effect.gen(function* () {
       return undefined
     }
 
+    const current = yield* Ref.get(installedVersion)
     const version = yield* latest()
     yield* Effect.logInfo("update check", {
-      current: OPENCODE_VERSION,
+      current,
       latest: version,
     })
-    const next = action(OPENCODE_VERSION, version, policy)
+    const next = action(current, version, policy)
     if (next === "none") {
       yield* Effect.logInfo("update check done", { action: "up-to-date" })
       return undefined
     }
-    yield* Effect.logInfo("OpenCode update available", { current: OPENCODE_VERSION, latest: version })
-    return version
+    yield* Effect.logInfo("OpenCode update available", { current, latest: version, action: next })
+    return { policy, version }
   })
 
   const install = Effect.fnUntraced(function* (version: string) {
@@ -220,8 +224,10 @@ const make = Effect.gen(function* () {
       yield* Effect.logWarning("update skipped: installation method not found")
       return false
     }
+    const current = yield* Ref.get(installedVersion)
     yield* upgrade(detected, version)
-    yield* Effect.logInfo("updated OpenCode", { from: OPENCODE_VERSION, to: version, method: detected })
+    yield* Ref.set(installedVersion, version)
+    yield* Effect.logInfo("updated OpenCode", { from: current, to: version, method: detected })
     return true
   })
 
@@ -229,9 +235,36 @@ const make = Effect.gen(function* () {
     if (!(yield* install(version))) return yield* Effect.fail(new Error("Installation method not found"))
   })
 
-  const monitor = (notify: (version: string) => Effect.Effect<void>) => monitorUpdates({ inspect, notify })
+  const check = Effect.fn("cli.updater.check")(function* () {
+    if (OPENCODE_LOCAL)
+      return {
+        type: "unavailable" as const,
+        message: "This build runs from a source checkout. Use an installed OpenCode release to check for updates.",
+      }
+    const version = yield* latest()
+    if (!parseReleaseVersion(version)) return yield* Effect.fail(new Error(`Invalid version: ${version}`))
+    const current = yield* Ref.get(installedVersion)
+    if (action(current, version, "auto") === "none") {
+      // An earlier check may have installed the update while this client is still running.
+      return action(OPENCODE_VERSION, current, "auto") === "none"
+        ? undefined
+        : { type: "installed" as const, version: current }
+    }
+    return { type: "available" as const, version }
+  })
 
-  return Service.of({ monitor, apply, method, latest, upgrade })
+  const run = Effect.fn("cli.updater.run")(
+    function* () {
+      const result = yield* inspect()
+      if (!result) return undefined
+      if (result.policy === "notify") return { type: "available" as const, version: result.version }
+      if (!(yield* install(result.version))) return yield* Effect.fail(new Error("Installation method not found"))
+      return { type: "installed" as const, version: result.version }
+    },
+    Effect.catch((error) => Effect.logWarning("update check failed", { error }).pipe(Effect.as(undefined))),
+  )
+
+  return Service.of({ run, check, apply, method, latest, upgrade })
 })
 
 export const layer = Layer.effect(Service, make)

@@ -10,7 +10,6 @@ import {
   prepareApplicationEnvironment,
   prepareDesktop,
 } from "./environment"
-import { initializeFirstLaunchOnboarding } from "./onboarding"
 
 export interface Interface {
   readonly version: string
@@ -23,7 +22,6 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const logging = yield* DesktopLogging.Service
-    yield* initializeFirstLaunchOnboarding(app.getPath("userData"))
     yield* prepareApplicationEnvironment
     yield* preferApplicationEnvironment
     yield* loadProxyEnvironment
