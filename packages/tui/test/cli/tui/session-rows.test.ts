@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
-import { createMemo, createRoot } from "solid-js"
+import { createMemo, createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
   cacheReuseDrop,
+  isToolRow,
   messageBoundaryIDs,
   reduceSessionRows,
   sessionRowID,
@@ -559,6 +560,69 @@ function assistant(id: string, content: SessionMessageAssistant["content"]): Ses
   }
 }
 
+test("hides grouped and individual tools without removing text, reasoning, or errors", () => {
+  const message = assistant("assistant", [
+    { type: "text", text: "Checking files" },
+    { type: "reasoning", text: "Reasoning", time: { created: 1 } },
+    ...["read", "glob", "grep", "shell", "patch", "subagent", "question", "custom.lookup"].map((name) => ({
+      type: "tool" as const,
+      id: name,
+      name,
+      state: pending(),
+      time: { created: 1 },
+    })),
+    { type: "text", text: "Finished" },
+  ])
+  message.error = { type: "provider.transport", message: "Disconnected" }
+  const messages: SessionMessageInfo[] = [
+    { type: "user", id: "user", text: "Check files", time: { created: 0 } },
+    message,
+  ]
+  const rows = reduceSessionRows(messages)
+  const lookup = (id: string) => messages.find((message) => message.id === id)
+  expect(rows.filter((row) => isToolRow(row, lookup))).toHaveLength(6)
+  expect(rows.filter((row) => !isToolRow(row, lookup))).toEqual([
+    { type: "message", messageID: "user" },
+    { type: "part", ref: { messageID: "assistant", partID: "text:0" } },
+    { type: "group", kind: "reasoning", refs: [{ messageID: "assistant", partID: "reasoning:0" }], completed: true },
+    { type: "part", ref: { messageID: "assistant", partID: "text:1" } },
+    { type: "assistant-footer", messageID: "assistant" },
+  ])
+  expect(message.content).toHaveLength(11)
+})
+
 function pending() {
   return { status: "streaming" as const, input: "" }
 }
+
+test("restores hidden history and keeps newly streamed tools hidden", () => {
+  createRoot((dispose) => {
+    try {
+      const [hidden, setHidden] = createSignal(false)
+      const [messages, setMessages] = createStore([
+        assistant("assistant", [{ type: "tool", id: "shell", name: "shell", state: pending(), time: { created: 1 } }]),
+      ])
+      const rows = createMemo(() => reduceSessionRows(messages))
+      const visible = createMemo(() =>
+        hidden() ? rows().filter((row) => !isToolRow(row, (id) => messages.find((item) => item.id === id))) : rows(),
+      )
+      expect(visible()).toHaveLength(1)
+      setHidden(true)
+      expect(visible()).toHaveLength(0)
+      setMessages(0, "content", 1, {
+        type: "tool",
+        id: "read",
+        name: "read",
+        state: pending(),
+        time: { created: 2 },
+      })
+      expect(visible()).toHaveLength(0)
+      setMessages(0, "content", 2, { type: "text", text: "Done" })
+      expect(visible()).toEqual([{ type: "part", ref: { messageID: "assistant", partID: "text:0" } }])
+      setHidden(false)
+      expect(visible()).toHaveLength(3)
+    } finally {
+      dispose()
+    }
+  })
+})

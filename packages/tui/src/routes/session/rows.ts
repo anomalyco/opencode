@@ -340,6 +340,13 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
   }, [])
 }
 
+export function isToolRow(row: SessionRow, message: (id: string) => SessionMessageInfo | undefined) {
+  if (row.type === "group") return row.kind === "exploration"
+  if (row.type !== "part") return false
+  const item = message(row.ref.messageID)
+  return item?.type === "assistant" && resolvePart(item, row.ref.partID)?.type === "tool"
+}
+
 export function cacheReuseDrop(previous: CacheUsage | undefined, current: CacheUsage) {
   if (previous === undefined) return
   if (

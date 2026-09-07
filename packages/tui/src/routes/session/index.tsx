@@ -89,6 +89,7 @@ import { usePlugin } from "../../plugin/context"
 import {
   cacheReuseDrop,
   createSessionRows,
+  isToolRow,
   messageBoundaryIDs,
   resolvePart,
   sessionRowID,
@@ -280,13 +281,18 @@ export function Session(props: {
   })
   const editor = useEditorContext()
   const [rowsSynced, setRowsSynced] = createSignal(false)
-  const rows = createSessionRows(
+  const transcript = createSessionRows(
     () => route.sessionID,
     (id) => {
       if (id === sessionID) setRowsSynced(true)
     },
   )
-  const boundaries = createMemo(() => messageBoundaryIDs(rows, messages()))
+  const rows = createMemo(() =>
+    config.session?.tool_calls === "hide"
+      ? transcript.filter((row) => !isToolRow(row, (id) => data.session.message.get(route.sessionID, id)))
+      : transcript,
+  )
+  const boundaries = createMemo(() => messageBoundaryIDs(rows(), messages()))
   const boundaryIDs = createMemo(() => new Set(boundaries().filter((id) => id !== undefined)))
   const [navigationMessage, setNavigationMessage] = createSignal<string>()
   const [navigationSlack, setNavigationSlack] = createSignal(0)
@@ -406,9 +412,9 @@ export function Session(props: {
   // at the bottom the hidden span follows appends; leaving the bottom pins it to preserve the viewport.
   const [hiddenRows, setHiddenRows] = createSignal<number>()
   const [visibleRowsEnd, setVisibleRowsEnd] = createSignal<number>()
-  const hidden = createMemo(() => Math.max(0, Math.min(hiddenRows() ?? Infinity, rows.length - TRANSCRIPT_TAIL_ROWS)))
-  const visibleEnd = createMemo(() => Math.max(hidden(), Math.min(visibleRowsEnd() ?? rows.length, rows.length)))
-  const visibleRows = createMemo(() => rows.slice(hidden(), visibleEnd()))
+  const hidden = createMemo(() => Math.max(0, Math.min(hiddenRows() ?? Infinity, rows().length - TRANSCRIPT_TAIL_ROWS)))
+  const visibleEnd = createMemo(() => Math.max(hidden(), Math.min(visibleRowsEnd() ?? rows().length, rows().length)))
+  const visibleRows = createMemo(() => rows().slice(hidden(), visibleEnd()))
   const prependHistory = createHistoryPrepend({
     sessionID: () => route.sessionID,
     more: (id) => data.session.message.more(id),
@@ -442,15 +448,15 @@ export function Session(props: {
     const current = visibleEnd()
     if (
       revealingNewerRows ||
-      current === rows.length ||
+      current === rows().length ||
       !scroll ||
       scroll.isDestroyed ||
       scroll.scrollTop + scroll.viewport.height < scroll.scrollHeight - scroll.viewport.height
     )
       return false
     revealingNewerRows = true
-    const next = Math.min(rows.length, current + TRANSCRIPT_BACKFILL_CHUNK)
-    setVisibleRowsEnd(next === rows.length ? undefined : next)
+    const next = Math.min(rows().length, current + TRANSCRIPT_BACKFILL_CHUNK)
+    setVisibleRowsEnd(next === rows().length ? undefined : next)
     afterLayout(() => {
       revealingNewerRows = false
       scroll.scrollBy(scrollBy)
@@ -461,7 +467,7 @@ export function Session(props: {
   /** Message navigation needs the full transcript mounted before walking or jumping. */
   const ensureAllRows = (continuation: () => void) => {
     if (firstJump()) clearMessageNavigation()
-    if (!ensureAllRowsPending && hidden() === 0 && visibleEnd() === rows.length) return continuation()
+    if (!ensureAllRowsPending && hidden() === 0 && visibleEnd() === rows().length) return continuation()
     if (ensureAllRowsPending) {
       ensureAllRowsPending.push(continuation)
       return
@@ -480,7 +486,7 @@ export function Session(props: {
   function isAwayFromBottom() {
     if (revealingOlderRows || revealingNewerRows || ensureAllRowsPending || navigationMessage() || firstJump())
       return true
-    if (visibleEnd() < rows.length) return true
+    if (visibleEnd() < rows().length) return true
     return scroll.scrollTop < Math.max(0, scroll.scrollHeight - scroll.viewport.height)
   }
   function updateAwayFromBottom() {
@@ -527,8 +533,8 @@ export function Session(props: {
       return
     }
     setHiddenRows(Math.max(0, index - TRANSCRIPT_BACKFILL_CHUNK))
-    const end = Math.min(rows.length, index + TRANSCRIPT_BACKFILL_CHUNK)
-    setVisibleRowsEnd(end === rows.length ? undefined : end)
+    const end = Math.min(rows().length, index + TRANSCRIPT_BACKFILL_CHUNK)
+    setVisibleRowsEnd(end === rows().length ? undefined : end)
     scroll.stickyScroll = false
     const restore = () =>
       afterLayout(() => {
@@ -543,9 +549,9 @@ export function Session(props: {
         const contentY = scroll.scrollTop + boundary.y - scroll.viewport.y
         const target = contentY - anchor.screenY
         const maximum = Math.max(0, scroll.scrollHeight - scroll.viewport.height)
-        if (target > maximum && visibleEnd() < rows.length) {
-          const next = Math.min(rows.length, visibleEnd() + TRANSCRIPT_BACKFILL_CHUNK)
-          setVisibleRowsEnd(next === rows.length ? undefined : next)
+        if (target > maximum && visibleEnd() < rows().length) {
+          const next = Math.min(rows().length, visibleEnd() + TRANSCRIPT_BACKFILL_CHUNK)
+          setVisibleRowsEnd(next === rows().length ? undefined : next)
           restore()
           return
         }
@@ -794,7 +800,7 @@ export function Session(props: {
               () => {
                 commit()
                 if (firstJump() !== cancel || scroll.isDestroyed) return
-                if (rows.length <= TRANSCRIPT_BACKFILL_CHUNK) setVisibleRowsEnd(undefined)
+                if (rows().length <= TRANSCRIPT_BACKFILL_CHUNK) setVisibleRowsEnd(undefined)
                 scroll.scrollTo(0)
                 afterLayout(() => {
                   if (firstJump() !== cancel) return
@@ -1515,7 +1521,8 @@ function TurnTokenUsage(props: {
   // open the full per-step table, click again to close.
   const [expanded, setExpanded] = createSignal(false)
   const [hover, setHover] = createSignal(false)
-  const verbose = () => config.data.debug?.turn_tokens === "verbose"
+  const verbose = () =>
+    config.data.debug?.turn_tokens === "verbose" && (config.data.session?.tool_calls ?? "show") === "show"
   const steps = createMemo(() => {
     let previousCache = props.previousCache
     return props.messageIDs.flatMap((messageID) => {
@@ -1923,7 +1930,7 @@ function SessionGroupView(props: {
   return (
     <Show when={grouped().length > 0 || pending().length > 0}>
       <Show
-        when={ctx.groupExploration()}
+        when={ctx.groupExploration() && ctx.config.session?.tool_calls !== "minimal"}
         fallback={<For each={[...grouped(), ...pending()]}>{(part) => <ToolPart part={part} />}</For>}
       >
         <Show when={grouped().length > 0}>
@@ -2619,6 +2626,56 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText; mes
 // Pending messages moved to individual tool pending functions
 
 function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }) {
+  const ctx = use()
+  const renderer = useRenderer()
+  const theme = useTheme()
+  return (
+    <Show
+      when={ctx.config.session?.tool_calls === "minimal"}
+      fallback={<ToolPartContent part={props.part} images={props.images} />}
+    >
+      {(_) => {
+        const [expanded, setExpanded] = createSignal(false)
+        const [hover, setHover] = createSignal(false)
+        const failed = () => props.part.state.status === "error"
+        const summary = createMemo(() => {
+          const input = props.part.state.input
+          const label = minimalToolSummary(props.part.name, typeof input === "string" ? {} : input)
+          const error = props.part.state.status === "error" ? ` — failed: ${props.part.state.error.message}` : ""
+          return `${label}${error}`.replace(/\s+/g, " ")
+        })
+        return (
+          <>
+            <InlineToolRow
+              id={`minimal-tool:${props.part.name}:${props.part.id}`}
+              singleLine
+              icon={failed() ? "✗" : expanded() ? "▾" : "▸"}
+              complete
+              pending={props.part.name}
+              spinner={props.part.state.status === "streaming" || props.part.state.status === "running"}
+              failed={failed()}
+              color={hover() ? theme.text.default : theme.text.subdued}
+              errorColor={theme.text.feedback.error.default}
+              onMouseOver={() => setHover(true)}
+              onMouseOut={() => setHover(false)}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                setExpanded((value) => !value)
+              }}
+            >
+              {summary()}
+            </InlineToolRow>
+            <Show when={expanded()}>
+              <ToolPartContent part={props.part} images={props.images} />
+            </Show>
+          </>
+        )
+      }}
+    </Show>
+  )
+}
+
+function ToolPartContent(props: { part: SessionMessageAssistantTool; images?: boolean }) {
   const display = createMemo(() => toolDisplay(props.part.name))
 
   const toolprops = {
@@ -2834,6 +2891,16 @@ export function genericToolSummary(tool: string, input: Record<string, unknown>)
   return `${tool}${args ? ` ${args}` : ""}`
 }
 
+export function minimalToolSummary(tool: string, input: Record<string, unknown>) {
+  const patch = stringValue(input.patchText)
+  const primary = patch
+    ? [...patch.matchAll(/\*\*\* (?:Add|Update|Delete) File: ([^\r\n]+)/g)].map((match) => match[1].trim()).join(", ")
+    : ["description", "path", "filePath", "command", "pattern", "url", "query"]
+        .map((key) => stringValue(input[key]))
+        .find((value) => value?.trim())
+  return `${tool}${primary ? ` ${primary}` : ""}`.replace(/\s+/g, " ")
+}
+
 function useToolPermission(part: () => SessionMessageAssistantTool | undefined) {
   const ctx = use()
   const data = useData()
@@ -2919,6 +2986,8 @@ function InlineTool(props: {
 }
 
 export function InlineToolRow(props: {
+  id?: string
+  singleLine?: boolean
   icon: string
   iconColor?: RGBA
   color?: RGBA
@@ -2938,8 +3007,36 @@ export function InlineToolRow(props: {
   onMouseUp?: () => void
 }) {
   return (
-    <box paddingLeft={3} onMouseOver={props.onMouseOver} onMouseOut={props.onMouseOut} onMouseUp={props.onMouseUp}>
+    <box
+      id={props.id}
+      paddingLeft={3}
+      onMouseOver={props.onMouseOver}
+      onMouseOut={props.onMouseOut}
+      onMouseUp={props.onMouseUp}
+    >
       <Switch>
+        <Match when={props.singleLine}>
+          <box flexDirection="row" height={1}>
+            <box width={INLINE_TOOL_ICON_WIDTH} flexShrink={0}>
+              <Show
+                when={props.spinner}
+                fallback={<text fg={props.failed ? props.errorColor : props.color}>{props.icon}</text>}
+              >
+                <Spinner color={props.color} />
+              </Show>
+            </box>
+            <text
+              flexGrow={1}
+              minWidth={0}
+              height={1}
+              wrapMode="none"
+              truncate
+              fg={props.failed ? props.errorColor : props.color}
+            >
+              {props.children}
+            </text>
+          </box>
+        </Match>
         <Match when={props.spinner}>
           <Show when={props.status} fallback={<Spinner color={props.color} children={props.children} />}>
             {(status) => (
