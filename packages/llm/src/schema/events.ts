@@ -185,6 +185,7 @@ export const StepFinish = Schema.Struct({
   index: Schema.Number,
   reason: FinishReason,
   usage: Schema.optional(Usage),
+  responseModelID: Schema.optional(Schema.String),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.StepFinish" })
 export type StepFinish = Schema.Schema.Type<typeof StepFinish>
@@ -193,6 +194,7 @@ export const Finish = Schema.Struct({
   type: Schema.tag("finish"),
   reason: FinishReason,
   usage: Schema.optional(Usage),
+  responseModelID: Schema.optional(Schema.String),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.Finish" })
 export type Finish = Schema.Schema.Type<typeof Finish>
@@ -352,6 +354,7 @@ interface ResponseState {
   readonly message: Message
   readonly usage?: Usage
   readonly finishReason?: FinishReason
+  readonly responseModelID?: string
   readonly textParts: Readonly<Record<string, ContentAssembly>>
   readonly reasoningParts: Readonly<Record<string, ContentAssembly>>
   readonly toolInputs: Readonly<Record<string, ToolInputAssembly>>
@@ -363,6 +366,7 @@ const emptyResponseState = (): ResponseState => ({
   textParts: {},
   reasoningParts: {},
   toolInputs: {},
+  responseModelID: undefined,
 })
 
 const appendEvent = (state: ResponseState, event: LLMEvent): ResponseState => {
@@ -373,6 +377,15 @@ const appendEvent = (state: ResponseState, event: LLMEvent): ResponseState => {
       events,
       usage: event.usage ?? state.usage,
       finishReason: event.reason,
+      responseModelID: event.responseModelID ?? state.responseModelID,
+    }
+  }
+  if (LLMEvent.is.stepFinish(event)) {
+    return {
+      ...state,
+      events,
+      usage: event.usage ?? state.usage,
+      responseModelID: event.responseModelID ?? state.responseModelID,
     }
   }
   if (LLMEvent.is.providerError(event)) {
@@ -385,7 +398,7 @@ const appendEvent = (state: ResponseState, event: LLMEvent): ResponseState => {
   return {
     ...state,
     events,
-    usage: "usage" in event && event.usage !== undefined ? event.usage : state.usage,
+    usage: "usage" in event && event.usage != null ? Usage.from(event.usage) : state.usage,
   }
 }
 
@@ -563,6 +576,7 @@ export class LLMResponse extends Schema.Class<LLMResponse>("LLM.Response")({
   events: Schema.Array(LLMEvent),
   usage: Schema.optional(Usage),
   finishReason: FinishReason,
+  responseModelID: Schema.optional(Schema.String),
 }) {
   /** Concatenated assistant text assembled from streamed `text-delta` events. */
   get text() {
@@ -599,6 +613,7 @@ export namespace LLMResponse {
           events: [...state.events],
           usage: state.usage,
           finishReason: state.finishReason,
+          responseModelID: state.responseModelID,
         })
 
   /** Convenience reducer for callers that already have a collected event list. */
