@@ -31,6 +31,13 @@ export class WindowZoomChanged extends Schema.TaggedClass<WindowZoomChanged>()("
   factor: Schema.Number,
 }) {}
 
+// Another window wrote to a storage namespace; recipients refresh their in-memory copy.
+export class StorageChanged extends Schema.TaggedClass<StorageChanged>()("StorageChanged", {
+  name: Schema.String,
+  insert: Schema.Record(Schema.String, Schema.String),
+  remove: Schema.Array(Schema.String),
+}) {}
+
 export const DesktopEvent = Schema.Union([
   DeepLinksOpened,
   MenuCommandTriggered,
@@ -39,6 +46,7 @@ export const DesktopEvent = Schema.Union([
   WindowFullscreenChanged,
   WindowPinchZoomChanged,
   WindowZoomChanged,
+  StorageChanged,
 ])
 export type DesktopEvent = Schema.Schema.Type<typeof DesktopEvent>
 

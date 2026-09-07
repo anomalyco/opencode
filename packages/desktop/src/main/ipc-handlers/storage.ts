@@ -1,17 +1,29 @@
+import { BrowserWindow } from "electron"
 import { Effect } from "effect"
 import { StorageRpcs } from "../../shared/ipc-rpc"
+import { StorageChanged } from "../../shared/ipc-rpc/events"
+import { emitIpcEvent } from "../ipc-events"
+import { IpcPortHandoff } from "../ipc-transport"
 import { DesktopStorage } from "../storage"
+import { sender } from "./context"
 
 export const storageHandlers = StorageRpcs.toLayer(
   Effect.gen(function* () {
     const storage = yield* DesktopStorage.Service
+    const handoff = yield* IpcPortHandoff
     return StorageRpcs.of({
-      StorageGet: ({ name, key }) => Effect.sync(() => storage.state.get(name, key)),
-      StorageSet: ({ name, key, value }) => Effect.sync(() => storage.state.set(name, key, value)),
-      StorageDelete: ({ name, key }) => Effect.sync(() => storage.state.delete(name, key)),
+      StorageItems: ({ name }) => Effect.sync(() => storage.state.items(name)),
+      StorageUpdate: ({ name, insert, remove }, context) =>
+        Effect.sync(() => {
+          storage.state.update(name, insert, remove)
+          // Other windows hold their own copy of this namespace; tell them what moved.
+          const origin = sender(handoff, context)
+          const event = new StorageChanged({ name, insert, remove })
+          for (const win of BrowserWindow.getAllWindows()) {
+            if (win.webContents !== origin) emitIpcEvent(win.webContents, event)
+          }
+        }),
       StorageClear: ({ name }) => Effect.sync(() => storage.state.clear(name)),
-      StorageKeys: ({ name }) => Effect.sync(() => storage.state.keys(name)),
-      StorageLength: ({ name }) => Effect.sync(() => storage.state.length(name)),
       DraftsGet: ({ key }) => Effect.sync(() => storage.drafts.get(key)),
       DraftsSet: ({ key, value }) => Effect.sync(() => storage.drafts.set(key, value)),
       DraftsDelete: ({ key }) => Effect.sync(() => storage.drafts.set(key, null)),
