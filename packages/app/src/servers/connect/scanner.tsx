@@ -16,29 +16,29 @@ export function PairingScanner(props: {
   video.setAttribute("playsinline", "")
   video.muted = true
 
-  const scanner = new QrScanner(
-    video,
-    (result) => {
-      const pairing = decodePairingCode(result.data)
-      if (!pairing) {
-        setState("error", language.t("server.connect.scan.invalid"))
-        return
-      }
-      scanner.stop()
-      props.onScan(pairing)
-    },
-    { preferredCamera: "environment", maxScansPerSecond: 10, returnDetailedScanResult: true },
-  )
-  // Terminal QR codes can be light-on-dark depending on the terminal theme.
-  scanner.setInversionMode("both")
-
   onMount(() => {
+    // QrScanner hides detached videos, so initialize only after this preview is mounted.
+    const scanner = new QrScanner(
+      video,
+      (result) => {
+        const pairing = decodePairingCode(result.data)
+        if (!pairing) {
+          setState("error", language.t("server.connect.scan.invalid"))
+          return
+        }
+        scanner.stop()
+        props.onScan(pairing)
+      },
+      { preferredCamera: "environment", maxScansPerSecond: 10, returnDetailedScanResult: true },
+    )
+    // Terminal QR codes can be light-on-dark depending on the terminal theme.
+    scanner.setInversionMode("both")
+    onCleanup(() => scanner.destroy())
     void scanner.start().then(
       () => setState("ready", true),
       () => setState("error", language.t("server.connect.camera.error")),
     )
   })
-  onCleanup(() => scanner.destroy())
 
   return (
     <section class="server-connect-scanner" aria-label={language.t("server.connect.scan")}>

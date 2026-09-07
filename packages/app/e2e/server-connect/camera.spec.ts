@@ -7,6 +7,8 @@ test("stops the camera on cancel", async ({ page }) => {
   await page.getByRole("button", { name: "Scan QR code" }).click()
   const video = page.getByLabel("Pairing camera")
   await expect(video).toHaveJSProperty("readyState", 4)
+  await expect(video).toBeVisible()
+  await expect(video).toHaveCSS("opacity", "1")
   const stream = await video.evaluateHandle((element: HTMLVideoElement) => element.srcObject as MediaStream)
   await page.getByRole("button", { name: "Cancel", exact: true }).click()
   await expect(page.getByLabel("Password", { exact: true })).toBeVisible()
