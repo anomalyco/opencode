@@ -1,4 +1,4 @@
-import type { Plugin } from "@opencode-ai/plugin/tui"
+import type { Plugin } from "@opencode/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
 import { createSignal } from "solid-js"

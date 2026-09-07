@@ -1,6 +1,6 @@
 export * as WebSearchTavily from "./tavily.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Duration, Effect, Schema, Scope } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { App } from "../../app.js"

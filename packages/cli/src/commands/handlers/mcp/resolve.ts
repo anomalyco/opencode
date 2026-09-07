@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import type { OpenCodeClient } from "@opencode-ai/client"
+import type { OpenCodeClient } from "@opencode/client"
 
 // Resolve through the MCP-owned integrationID rather than matching integration names: the shared
 // integration registry also holds provider/plugin integrations, whose names could collide with a server.

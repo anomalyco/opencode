@@ -2,7 +2,7 @@ import { EOL } from "node:os"
 import { Effect, Option } from "effect"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
-import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
+import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { ServerConnection } from "../../services/server-connection"
 
 const methods = new Set(["delete", "get", "head", "options", "patch", "post", "put"])

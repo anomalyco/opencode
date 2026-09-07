@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import type { KeymapCommand } from "@opencode-ai/plugin/tui/context"
+import type { KeymapCommand } from "@opencode/plugin/tui/context"
 import {
   directoryAutocomplete,
   directoryAutocompleteExactValue,

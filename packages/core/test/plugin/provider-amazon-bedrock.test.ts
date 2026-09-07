@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Integration } from "@opencode-ai/core/integration"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { AmazonBedrockPlugin } from "@opencode-ai/core/plugin/provider/amazon-bedrock"
-import { Provider } from "@opencode-ai/core/provider"
+import { Catalog } from "@opencode/core/catalog"
+import { Integration } from "@opencode/core/integration"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { AmazonBedrockPlugin } from "@opencode/core/plugin/provider/amazon-bedrock"
+import { Provider } from "@opencode/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -209,7 +209,7 @@ describe("AmazonBedrockPlugin", () => {
             item.package = Provider.aisdk("@ai-sdk/amazon-bedrock/mantle")
           })
           catalog.provider.update(Provider.ID.make("native"), (item) => {
-            item.package = "@opencode-ai/ai/providers/amazon-bedrock"
+            item.package = "@opencode/ai/providers/amazon-bedrock"
           })
           catalog.provider.update(Provider.ID.make("other"), (item) => {
             item.package = Provider.aisdk("@ai-sdk/anthropic")

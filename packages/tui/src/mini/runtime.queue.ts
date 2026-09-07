@@ -8,7 +8,7 @@
 // and tracks per-turn wall-clock duration for the footer status line.
 //
 // Resolves when the footer closes and all in-flight work finishes.
-import { SessionMessage } from "@opencode-ai/schema/session-message"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { Locale } from "../util/locale"
 import { isCompactCommand, isExitCommand, isNewCommand } from "./prompt.shared"
 import type { FooterApi, FooterEvent, RunDelivery, RunPrompt } from "./types"

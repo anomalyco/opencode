@@ -1,13 +1,14 @@
 #!/usr/bin/env bun
 import { $ } from "bun"
 import pkg from "../package.json"
-import { Script } from "@opencode-ai/script"
+import { Script } from "@opencode/script"
 import { fileURLToPath } from "url"
 import { existsSync } from "fs"
 import { UpdateArtifact } from "../../../script/update-artifact"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
+const dryRun = process.argv.includes("--dry-run")
 
 async function published(name: string, version: string) {
   return (await $`npm view ${name}@${version} version`.nothrow()).exitCode === 0
@@ -15,11 +16,11 @@ async function published(name: string, version: string) {
 
 async function publish(dir: string, name: string, version: string) {
   if (process.platform !== "win32") await $`chmod -R 755 .`.cwd(dir)
-  const exists = await published(name, version)
+  const exists = !dryRun && (await published(name, version))
   if (exists) console.log(`already published ${name}@${version}`)
   if (!exists) {
     await $`bun pm pack`.cwd(dir)
-    await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(dir)
+    if (!dryRun) await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(dir)
   }
 }
 
@@ -74,10 +75,11 @@ async function publishDistribution(input: {
 
   await Promise.all(
     Object.entries(binaries).map(([name, version]) =>
-      publish(`${input.root}/${name.replace("@opencode-ai/", "")}`, name, version),
+      publish(`${input.root}/${name.replace("@opencode/", "")}`, name, version),
     ),
   )
   await publish(`${input.root}/${input.name}`, input.name, version)
+  if (dryRun) return
   await UpdateArtifact.publish({
     channel: Script.channel,
     name: input.artifact,
@@ -91,15 +93,15 @@ await publishDistribution({
   root: "./dist",
   name: pkg.name,
   binary: "opencode2",
-  packagePrefix: "@opencode-ai/cli-",
+  packagePrefix: "@opencode/cli-",
   artifact: "cli",
 })
 if (existsSync("./dist/node")) {
   await publishDistribution({
     root: "./dist/node",
-    name: "opencode-node",
+    name: "@opencode/cli-node",
     binary: "opencode2-node",
-    packagePrefix: "@opencode-ai/cli-node-",
+    packagePrefix: "@opencode/cli-node-",
     artifact: "cli-node",
   })
 }

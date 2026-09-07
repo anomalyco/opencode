@@ -1,9 +1,9 @@
 export * as ShellTool from "./shell.js"
 
-import { ToolFailure } from "@opencode-ai/ai"
-import type { Context } from "@opencode-ai/plugin/effect/plugin"
-import type { ShellCreateBefore } from "@opencode-ai/plugin/effect/shell"
-import type { Tool } from "@opencode-ai/schema/tool"
+import { ToolFailure } from "@opencode/ai"
+import type { Context } from "@opencode/plugin/effect/plugin"
+import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
+import type { Tool } from "@opencode/schema/tool"
 import { Deferred, Effect, Schema, Scope } from "effect"
 import { Config } from "../../config.js"
 import { Environment } from "../../environment/index.js"

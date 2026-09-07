@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import type { OpenCodeEvent, WorktreeDirectory } from "@opencode-ai/client/promise"
-import { base64Encode } from "@opencode-ai/util/encode"
+import type { OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
+import { base64Encode } from "@opencode/util/encode"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible, expectSessionReady } from "../utils/waits"
 

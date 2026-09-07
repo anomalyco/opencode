@@ -2,7 +2,7 @@ import type {
   SessionMessageAssistant,
   SessionMessageAssistantTool,
   SessionMessageUser,
-} from "@opencode-ai/client/promise"
+} from "@opencode/client/promise"
 import { Match, Switch, type ComponentProps } from "solid-js"
 import type { SessionUserActions, SessionUserComment } from "../actions"
 import { AssistantReasoningContent, AssistantTextContent, CurrentUserMessageDisplay } from "./message-content"

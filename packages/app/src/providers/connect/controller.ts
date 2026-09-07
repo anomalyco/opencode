@@ -1,4 +1,4 @@
-import type { FormAnswer, IntegrationMethod, IntegrationOauthConnectOutput } from "@opencode-ai/client/promise"
+import type { FormAnswer, IntegrationMethod, IntegrationOauthConnectOutput } from "@opencode/client/promise"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useServerSDK } from "@/runtime/server/client"

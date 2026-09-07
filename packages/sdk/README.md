@@ -1,9 +1,9 @@
-# @opencode-ai/sdk
+# @opencode/sdk
 
 In-process OpenCode host for Promise and Effect applications. The SDK executes Server's assembled HTTP router in memory, opening no listener and adding no network hop.
 
 ```ts
-import { OpenCode } from "@opencode-ai/sdk"
+import { OpenCode } from "@opencode/sdk"
 
 await using opencode = await OpenCode.create()
 const session = await opencode.sessions.create({
@@ -13,7 +13,7 @@ const session = await opencode.sessions.create({
 
 Pass imported Promise plugins in `plugins`, or register one later with `await opencode.plugin(plugin)`.
 
-The Promise API uses the same values, errors, request options, and `AsyncIterable` streams as `@opencode-ai/client`.
+The Promise API uses the same values, errors, request options, and `AsyncIterable` streams as `@opencode/client`.
 
 Embedded hosts are silent by default. Set `log` to receive structured log entries:
 
@@ -33,7 +33,7 @@ await using opencode = await OpenCode.create({
 Use `instances` when Sessions in the same directory need different application plugins. The application selects a stable key from Session metadata; the SDK constructs and caches an instance for that key and the Session's current Location.
 
 ```ts
-import { OpenCode } from "@opencode-ai/sdk"
+import { OpenCode } from "@opencode/sdk"
 import { threads } from "./threads"
 import { slackPlugin } from "./slack-plugin"
 
@@ -80,7 +80,7 @@ Promise plugin resources should be acquired in `setup` and released by its clean
 Use the Workerd entrypoint inside a Cloudflare Durable Object. Hold one host for the lifetime of the object instance rather than creating one per request.
 
 ```ts
-import { OpenCodeWorkerd } from "@opencode-ai/sdk/workerd"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
 import myPlugin from "./my-plugin"
 
 export class OpenCodeDO {
@@ -107,21 +107,21 @@ export class OpenCodeDO {
 
 ## Effect
 
-The Effect-native API remains available from `@opencode-ai/sdk/effect`:
+The Effect-native API remains available from `@opencode/sdk/effect`:
 
 ```ts
-import { OpenCode } from "@opencode-ai/sdk/effect"
+import { OpenCode } from "@opencode/sdk/effect"
 
 const opencode = yield * OpenCode.create()
 const session = yield * opencode.sessions.get({ sessionID })
 ```
 
-The Effect Workerd entrypoint is `@opencode-ai/sdk/workerd/effect`.
+The Effect Workerd entrypoint is `@opencode/sdk/workerd/effect`.
 
 Effect configuration uses the same keys and lifetime rules, with canonical `Session.Info` values and an Effect-returning factory. `configure` may require services; `OpenCode.create` and `OpenCode.layer` carry those requirements, so the application satisfies them where it builds the SDK, as with any other Effect callback:
 
 ```ts
-import { OpenCode } from "@opencode-ai/sdk/effect"
+import { OpenCode } from "@opencode/sdk/effect"
 import { Effect, Layer, Schema } from "effect"
 import { Threads } from "./threads-effect"
 import { slackPlugin } from "./slack-plugin-effect"

@@ -1,6 +1,6 @@
 export * as ModalModels from "./models.js"
 
-import { Money } from "@opencode-ai/schema/money"
+import { Money } from "@opencode/schema/money"
 import { Option, Schema } from "effect"
 import { Model } from "../model.js"
 import { Provider } from "../provider.js"

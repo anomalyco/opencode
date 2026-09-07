@@ -1,5 +1,5 @@
-import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Deferred, Effect, Option, Schema, Semaphore, Stream } from "effect"
 import type { Server } from "node:http"
 import { App } from "../../app.js"

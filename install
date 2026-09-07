@@ -165,22 +165,30 @@ else
         exit 1
     fi
 
+    package_scope="@opencode"
     if [ -z "$requested_version" ]; then
-        metadata=$(curl -fsSL https://registry.npmjs.org/@opencode-ai%2fcli/beta || true)
+        metadata=$(curl -fsSL https://update.opencode.ai/api/beta/cli/npm || true)
         specific_version=$(echo "$metadata" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+        package=$(echo "$metadata" | sed -n 's/.*"package":"\([^"]*\)".*/\1/p')
 
-        if [ -z "$specific_version" ]; then
+        if [ -z "$specific_version" ] || [ -z "$package" ]; then
             echo -e "${RED}Failed to fetch version information${NC}"
             exit 1
         fi
+        package_scope="${package%/cli}"
     else
         # Strip leading 'v' if present
         requested_version="${requested_version#v}"
         specific_version=$requested_version
     fi
 
-    package_name="@opencode-ai/cli-$target"
-    http_status=$(curl -s -o /dev/null -w "%{http_code}" "https://registry.npmjs.org/@opencode-ai%2fcli-$target/$specific_version" || true)
+    package_name="$package_scope/cli-$target"
+    http_status=$(curl -s -o /dev/null -w "%{http_code}" "https://registry.npmjs.org/$package_scope%2fcli-$target/$specific_version" || true)
+    # Older clients install the minimum release before they can migrate package names.
+    if [ "$http_status" = "404" ] && [ -n "$requested_version" ]; then
+        package_name="@opencode-ai/cli-$target"
+        http_status=$(curl -s -o /dev/null -w "%{http_code}" "https://registry.npmjs.org/@opencode-ai%2fcli-$target/$specific_version" || true)
+    fi
     if [ "$http_status" = "404" ]; then
         echo -e "${RED}Error: Version ${specific_version} is not available for $target${NC}"
         echo -e "${MUTED}Available versions: https://www.npmjs.com/package/$package_name?activeTab=versions${NC}"

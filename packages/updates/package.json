@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/updates",
+  "name": "@opencode/updates",
   "version": "1.18.4",
   "private": true,
   "type": "module",

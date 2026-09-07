@@ -1,4 +1,4 @@
-import { Worktree } from "@opencode-ai/schema/worktree"
+import { Worktree } from "@opencode/schema/worktree"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"

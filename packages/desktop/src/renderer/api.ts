@@ -1,5 +1,5 @@
 import type { ElectronAPI } from "./api-types"
-import type { UpdaterState } from "@opencode-ai/app/updater"
+import type { UpdaterState } from "@opencode/app/updater"
 import { invoke, listen, send } from "./ipc-client"
 
 type Mutable<Value> =

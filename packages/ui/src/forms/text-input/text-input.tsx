@@ -1,5 +1,5 @@
 import { type ComponentProps, type JSX, Show, splitProps } from "solid-js"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@opencode/ui/icon"
 import { useI18n } from "../../context/i18n"
 import "./text-input.css"
 

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises"
 import net from "node:net"
 import path from "node:path"
 import { Data, Duration, Effect, Schema, Semaphore } from "effect"
-import type { Handoff } from "@opencode-ai/schema/persistent-pty"
+import type { Handoff } from "@opencode/schema/persistent-pty"
 
 const ProtocolVersion = 7
 const MaxFrameBytes = 8 * 1024 * 1024

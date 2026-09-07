@@ -1,4 +1,4 @@
-import type { Plugin } from "@opencode-ai/plugin/tui"
+import type { Plugin } from "@opencode/plugin/tui"
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { batch, createEffect, createMemo, createSignal, For, Show } from "solid-js"

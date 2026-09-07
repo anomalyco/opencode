@@ -1,9 +1,9 @@
 import { afterAll, describe, expect, test } from "bun:test"
 import { auth, refreshAuthorization } from "@modelcontextprotocol/sdk/client/auth.js"
-import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
-import { Credential } from "@opencode-ai/schema/credential"
-import { Integration } from "@opencode-ai/core/integration"
-import { McpOAuth } from "@opencode-ai/core/mcp/oauth"
+import { ConfigMCP } from "@opencode/schema/config/mcp"
+import { Credential } from "@opencode/schema/credential"
+import { Integration } from "@opencode/core/integration"
+import { McpOAuth } from "@opencode/core/mcp/oauth"
 import { Effect } from "effect"
 
 const authServer = Bun.serve({ port: 0, fetch: () => new Response(null, { status: 404 }) })

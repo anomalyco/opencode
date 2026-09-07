@@ -1,8 +1,8 @@
-import type { BrowserPaneEvent } from "@opencode-ai/app/desktop"
-import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
-import type { DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
-import type { UpdaterState } from "@opencode-ai/app/updater"
-import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
+import type { BrowserPaneEvent } from "@opencode/app/desktop"
+import type { DesktopMenuAction } from "@opencode/app/desktop-menu"
+import type { DesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
+import type { UpdaterState } from "@opencode/app/updater"
+import type { WslServersPlatform } from "@opencode/app/wsl/types"
 import type { BrowserPaneRequest } from "../shared/ipc-rpc/browser"
 import type {
   ClipboardImage,

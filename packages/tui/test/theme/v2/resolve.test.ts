@@ -8,7 +8,7 @@ import {
   selectTheme,
   type Mode,
   type ThemeDefinition,
-} from "@opencode-ai/theme/tui"
+} from "@opencode/theme/tui"
 import { parseTheme, type ThemeDocumentSource } from "../../../src/theme"
 
 const light = selectTheme(DEFAULT_THEME, "light")

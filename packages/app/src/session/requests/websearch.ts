@@ -1,4 +1,4 @@
-import type { FormInfo, FormOption, FormReplyInput, FormStringField } from "@opencode-ai/client/promise"
+import type { FormInfo, FormOption, FormReplyInput, FormStringField } from "@opencode/client/promise"
 import { createEffect, createMemo, createResource, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { OpenCodeEventStream } from "@/runtime/server/client"

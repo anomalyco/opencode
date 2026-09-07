@@ -1,11 +1,11 @@
-import { PersistentPty } from "@opencode-ai/core/persistent-pty"
-import { PtyTicket } from "@opencode-ai/core/pty/ticket"
-import { ForbiddenError, PtyNotFoundError, ServiceUnavailableError } from "@opencode-ai/protocol/errors"
+import { PersistentPty } from "@opencode/core/persistent-pty"
+import { PtyTicket } from "@opencode/core/pty/ticket"
+import { ForbiddenError, PtyNotFoundError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import {
   PTY_CONNECT_TICKET_QUERY,
   PTY_CONNECT_TOKEN_HEADER,
   PTY_CONNECT_TOKEN_HEADER_VALUE,
-} from "@opencode-ai/protocol/groups/persistent-pty"
+} from "@opencode/protocol/groups/persistent-pty"
 import { Effect, Queue, Semaphore } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"

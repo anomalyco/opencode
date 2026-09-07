@@ -1,8 +1,8 @@
 export * as ConfigProviderPlugin from "./provider.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Document, type Entry } from "@opencode-ai/schema/config"
-import { Money } from "@opencode-ai/schema/money"
+import { define } from "@opencode/plugin/effect/plugin"
+import { Document, type Entry } from "@opencode/schema/config"
+import { Money } from "@opencode/schema/money"
 import { Effect } from "effect"
 import { Config } from "../../config.js"
 import { Provider } from "../../provider.js"

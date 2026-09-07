@@ -1,5 +1,5 @@
 import { createMemo, createResource, type Accessor } from "solid-js"
-import type { SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { SessionMessageInfo } from "@opencode/client/promise"
 import { useData } from "@/runtime/server/current"
 import type { SessionModel } from "../model"
 

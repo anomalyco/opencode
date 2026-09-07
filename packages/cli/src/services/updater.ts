@@ -1,5 +1,5 @@
-import { Global } from "@opencode-ai/util/global"
-import { AppProcess } from "@opencode-ai/util/process"
+import { Global } from "@opencode/util/global"
+import { AppProcess } from "@opencode/util/process"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../version"
 import { Context, Duration, Effect, FileSystem, Layer, Ref, Schedule } from "effect"
 import { ChildProcess } from "effect/unstable/process"

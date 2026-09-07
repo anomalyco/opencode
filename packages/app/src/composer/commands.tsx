@@ -1,7 +1,7 @@
 import { useCommand, type CommandOption } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { getCursorPosition, setCursorPosition } from "./editor/dom"
 import { useSessionLayout } from "@/session/session-layout"
 import { createSessionOwnership } from "@/session/session-ownership"

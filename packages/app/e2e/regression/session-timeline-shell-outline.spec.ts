@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import { timelinePresets } from "@opencode-ai/session-ui/timeline/detail"
+import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import {
   assistantMessage,
   setupTimeline,

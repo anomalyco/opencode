@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test"
 import path from "node:path"
 import { RGBA, type CliRenderer, type TerminalColors } from "@opentui/core"
-import { DEFAULT_THEME, resolveThemeDocument, type ResolvedTheme } from "@opencode-ai/theme/tui"
+import { DEFAULT_THEME, resolveThemeDocument, type ResolvedTheme } from "@opencode/theme/tui"
 import {
   RUN_THEME_MONO,
   RUN_THEME_FALLBACK,

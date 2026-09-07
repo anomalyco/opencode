@@ -1,12 +1,12 @@
-# @opencode-ai/ai
+# @opencode/ai
 
 Schema-first language model and image-generation APIs built with Effect.
 
 ```ts
 import { Effect, Layer } from "effect"
-import { LLM, LLMClient } from "@opencode-ai/ai"
-import { RequestExecutor } from "@opencode-ai/ai/route"
-import { OpenAI } from "@opencode-ai/ai/providers"
+import { LLM, LLMClient } from "@opencode/ai"
+import { RequestExecutor } from "@opencode/ai/route"
+import { OpenAI } from "@opencode/ai/providers"
 
 const model = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY }).responses("gpt-4o-mini")
 
@@ -35,9 +35,9 @@ MiniMax defaults to its Messages API and reads `MINIMAX_API_KEY` when `apiKey` i
 
 ```ts
 import { Effect, Layer } from "effect"
-import { LLM, LLMClient } from "@opencode-ai/ai"
-import { MiniMax } from "@opencode-ai/ai/providers"
-import { RequestExecutor } from "@opencode-ai/ai/route"
+import { LLM, LLMClient } from "@opencode/ai"
+import { MiniMax } from "@opencode/ai/providers"
+import { RequestExecutor } from "@opencode/ai/route"
 
 const minimax = MiniMax.configure({ apiKey: process.env.MINIMAX_API_KEY })
 const request = LLM.request({
@@ -53,8 +53,8 @@ console.log(response.text)
 ```
 
 Select `minimax.chat("MiniMax-M3")` or `minimax.responses("MiniMax-M3")` for MiniMax's native Chat Completions
-and Responses APIs. The matching package entrypoints are `@opencode-ai/ai/providers/minimax/messages`,
-`@opencode-ai/ai/providers/minimax/chat`, and `@opencode-ai/ai/providers/minimax/responses`.
+and Responses APIs. The matching package entrypoints are `@opencode/ai/providers/minimax/messages`,
+`@opencode/ai/providers/minimax/chat`, and `@opencode/ai/providers/minimax/responses`.
 
 - **Messages:** M3 thinking defaults off. Set `thinking: { type: "adaptive" }` to enable it or
   `thinking: { type: "disabled" }` to disable it.
@@ -74,7 +74,7 @@ Chat and Responses. `configure({ baseURL })` replaces the selected API's base, i
 Use Meta's direct [Model API](https://dev.meta.ai/docs/overview) with `META_API_KEY`:
 
 ```ts
-import { Meta } from "@opencode-ai/ai/providers"
+import { Meta } from "@opencode/ai/providers"
 
 const meta = Meta.configure() // or Meta.configure({ apiKey })
 const request = LLM.request({
@@ -87,7 +87,7 @@ const request = LLM.request({
 
 `meta.chat("muse-spark-1.3")` selects Chat Completions; `meta.messages("muse-spark-1.3")` selects
 the Anthropic-compatible Messages API. All use `https://api.meta.ai/v1`. The package entrypoints
-`@opencode-ai/ai/providers/meta/responses`, `meta/chat`, and `meta/messages` expose `model(modelID, settings)`.
+`@opencode/ai/providers/meta/responses`, `meta/chat`, and `meta/messages` expose `model(modelID, settings)`.
 
 [Muse Spark](https://dev.meta.ai/docs/models) supports `minimal`, `low`, `medium`, `high`, and
 `xhigh` reasoning effort; standard-tier 1.3 also supports `max`. Omitting effort uses the model's
@@ -114,7 +114,7 @@ citations or separate result blocks. Retain `response.message` for either API's 
 Use `Image.generate` for one-off generation or editing:
 
 ```ts
-import { Image, ImageInput } from "@opencode-ai/ai"
+import { Image, ImageInput } from "@opencode/ai"
 
 const generation = Image.generate({
   model: meta.image("muse-image-1.0"),
@@ -144,8 +144,8 @@ Meta Responses is explicitly HTTP/SSE-only and does not use WebSockets, even whe
 Use `Image.generate` with an image model for direct asset generation:
 
 ```ts
-import { Image, ImageInput } from "@opencode-ai/ai"
-import { OpenAI } from "@opencode-ai/ai/providers"
+import { Image, ImageInput } from "@opencode/ai"
+import { OpenAI } from "@opencode/ai/providers"
 
 const program = Effect.gen(function* () {
   const response = yield* Image.generate({
@@ -241,7 +241,7 @@ yield *
 Google's current Gemini image models use the same direct API:
 
 ```ts
-import { Google } from "@opencode-ai/ai/providers"
+import { Google } from "@opencode/ai/providers"
 
 const googleProgram = Effect.gen(function* () {
   const response = yield* Image.generate({
@@ -317,12 +317,12 @@ The hosted result is represented as a provider-executed tool call and tool resul
 
 ## Testing
 
-Use the deterministic test client from `@opencode-ai/ai/testing` to script provider-neutral responses and inspect
+Use the deterministic test client from `@opencode/ai/testing` to script provider-neutral responses and inspect
 the requests sent by code under test:
 
 ```ts
 import { Effect } from "effect"
-import { TestLLM } from "@opencode-ai/ai/testing"
+import { TestLLM } from "@opencode/ai/testing"
 
 const programWithTestClient = Effect.gen(function* () {
   const test = yield* TestLLM.Test
@@ -433,8 +433,8 @@ This capability describes protocol implementation, **not universal availability 
 Inside an `Effect.gen`, enable OpenAI compaction with typed provider options:
 
 ```ts
-import { LLM, LLMClient, LLMRequest, Message } from "@opencode-ai/ai"
-import { OpenAI } from "@opencode-ai/ai/providers"
+import { LLM, LLMClient, LLMRequest, Message } from "@opencode/ai"
+import { OpenAI } from "@opencode/ai/providers"
 
 const request = LLM.request({
   model: OpenAI.configure({ apiKey }).responses("gpt-5.3-codex"),
@@ -454,7 +454,7 @@ const next = LLMRequest.update(request, {
 A compaction part has `provider` and exactly one representation: `encrypted` for Responses, or `text` for Anthropic. Responses also preserves the optional checkpoint `id`. These fields survive message serialization without becoming visible assistant text. Sending a checkpoint to another provider or an incompatible API fails rather than silently losing context.
 
 ```ts
-import { CompactionPart, ProviderID } from "@opencode-ai/ai"
+import { CompactionPart, ProviderID } from "@opencode/ai"
 
 CompactionPart.make({ provider: ProviderID.make("openai"), id: "cmp_123", encrypted: "..." })
 CompactionPart.make({ provider: ProviderID.make("anthropic"), text: "Summary of the conversation..." })
@@ -560,7 +560,7 @@ Normalized cache usage is read back into `response.usage.cacheReadInputTokens` a
 Provider facades configure endpoint/auth/deployment details first, then expose model selectors that take only a model or deployment id. The selected model carries the executable route value used at runtime.
 
 ```ts
-import { OpenAI, CloudflareAIGateway } from "@opencode-ai/ai/providers"
+import { OpenAI, CloudflareAIGateway } from "@opencode/ai/providers"
 
 const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY }).responses("gpt-4o-mini")
 const gateway = CloudflareAIGateway.configure({
@@ -574,7 +574,7 @@ Included LLM providers: OpenAI, Anthropic, Google (Gemini), Google Vertex, Amazo
 Each named provider owns its module, endpoint, authentication, and route setup. Providers with the same wire format compose the shared protocol directly:
 
 ```ts
-import { DeepSeek, Fireworks } from "@opencode-ai/ai/providers"
+import { DeepSeek, Fireworks } from "@opencode/ai/providers"
 
 const deepseek = DeepSeek.configure({ apiKey }).model("deepseek-chat")
 const fireworks = Fireworks.configure({ apiKey }).model("accounts/fireworks/models/my-model")
@@ -584,10 +584,10 @@ The former `OpenAICompatible.baseten`, `.cerebras`, `.deepinfra`, `.deepseek`, `
 
 ### Provider entrypoints
 
-Provider modules are available through dedicated exports from `@opencode-ai/ai`. Each LLM entrypoint exports `model(modelID, settings)`, where `settings` contains provider configuration plus common `headers` and `body` overlays.
+Provider modules are available through dedicated exports from `@opencode/ai`. Each LLM entrypoint exports `model(modelID, settings)`, where `settings` contains provider configuration plus common `headers` and `body` overlays.
 
 ```ts
-import { model } from "@opencode-ai/ai/providers/openai/responses"
+import { model } from "@opencode/ai/providers/openai/responses"
 
 const selected = model("gpt-5", {
   apiKey: process.env.OPENAI_API_KEY,
@@ -597,14 +597,14 @@ const selected = model("gpt-5", {
 
 APIs have separate entrypoints:
 
-- `@opencode-ai/ai/providers/openai/chat`
-- `@opencode-ai/ai/providers/openai/responses`
-- `@opencode-ai/ai/providers/openai-compatible/responses`
-- `@opencode-ai/ai/providers/anthropic-compatible`
-- `@opencode-ai/ai/providers/google-vertex/gemini`
-- `@opencode-ai/ai/providers/google-vertex/chat`
-- `@opencode-ai/ai/providers/google-vertex/responses`
-- `@opencode-ai/ai/providers/google-vertex/messages`
+- `@opencode/ai/providers/openai/chat`
+- `@opencode/ai/providers/openai/responses`
+- `@opencode/ai/providers/openai-compatible/responses`
+- `@opencode/ai/providers/anthropic-compatible`
+- `@opencode/ai/providers/google-vertex/gemini`
+- `@opencode/ai/providers/google-vertex/chat`
+- `@opencode/ai/providers/google-vertex/responses`
+- `@opencode/ai/providers/google-vertex/messages`
 
 OpenAI Responses has one semantic route and uses HTTP by default. Advanced callers may supply a per-call WebSocket channel executor through `StreamOptions`; transport policy does not change provider settings, model identity, or route identity. The provider-neutral Open Responses implementation owns the reusable WebSocket request and event contract, while each provider opts in with its own handshake and connection policy. Azure follows the same Chat/Responses split at `providers/azure/chat` and `providers/azure/responses`. Generic OpenAI-compatible Chat remains at `providers/openai-compatible`; the Responses adapter at `providers/openai-compatible/responses` uses the provider-neutral Open Responses protocol. OpenAI Responses extends that baseline with OpenAI tools, event variants, metadata, and defaults. Generic Anthropic Messages-compatible providers use `providers/anthropic-compatible`, which the named Anthropic provider composes. Google Gemini and Amazon Bedrock expose their single native API through their existing provider paths.
 
@@ -613,36 +613,36 @@ Vertex Gemini, Vertex Chat, Vertex Responses, and Vertex Messages are separate A
 Tuned Vertex Gemini deployments use model ids shaped like `endpoints/1234567890` and require OAuth or ADC; Vertex express-mode API keys support publisher models only.
 
 ```ts
-import { model } from "@opencode-ai/ai/providers/google-vertex/gemini"
+import { model } from "@opencode/ai/providers/google-vertex/gemini"
 
 model("gemini-3.5-flash", { project: "my-project", location: "global" })
 ```
 
 ```ts
-import { model } from "@opencode-ai/ai/providers/google-vertex/chat"
+import { model } from "@opencode/ai/providers/google-vertex/chat"
 
 model("deepseek-ai/deepseek-v3.2-maas", { project: "my-project", location: "global" })
 ```
 
 ```ts
-import { model } from "@opencode-ai/ai/providers/google-vertex/responses"
+import { model } from "@opencode/ai/providers/google-vertex/responses"
 
 model("xai/grok-4.20-reasoning", { project: "my-project", location: "global" })
 ```
 
 ```ts
-import { model } from "@opencode-ai/ai/providers/google-vertex/messages"
+import { model } from "@opencode/ai/providers/google-vertex/messages"
 
 model("claude-sonnet-4-6", { project: "my-project", location: "global" })
 ```
 
 Additional provider entrypoints include:
 
-- `@opencode-ai/ai/providers/baseten`
-- `@opencode-ai/ai/providers/deepseek`
-- `@opencode-ai/ai/providers/fireworks`
-- `@opencode-ai/ai/providers/cloudflare-ai-gateway`
-- `@opencode-ai/ai/providers/cloudflare-workers-ai`
+- `@opencode/ai/providers/baseten`
+- `@opencode/ai/providers/deepseek`
+- `@opencode/ai/providers/fireworks`
+- `@opencode/ai/providers/cloudflare-ai-gateway`
+- `@opencode/ai/providers/cloudflare-workers-ai`
 
 ## Provider options & HTTP overlays
 

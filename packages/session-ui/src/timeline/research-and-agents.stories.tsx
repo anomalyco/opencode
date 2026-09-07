@@ -1,4 +1,4 @@
-import type { JsonValue, SessionMessageAssistant, SessionMessageAssistantTool } from "@opencode-ai/client/promise"
+import type { JsonValue, SessionMessageAssistant, SessionMessageAssistantTool } from "@opencode/client/promise"
 import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"

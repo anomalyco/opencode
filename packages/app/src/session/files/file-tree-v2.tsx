@@ -1,6 +1,6 @@
 import { useFile } from "@/workspaces/files/model"
-import { FileIcon } from "@opencode-ai/ui/file-icon"
-import "@opencode-ai/ui/file-tree.css"
+import { FileIcon } from "@opencode/ui/file-icon"
+import "@opencode/ui/file-tree.css"
 import {
   createEffect,
   createMemo,
@@ -13,7 +13,7 @@ import {
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import type { FileNode } from "@/runtime/server/types"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@opencode/ui/icon"
 import { pathToFileUrl, withFileDragImage, type Kind } from "@/session/files/file-tree"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
 import {

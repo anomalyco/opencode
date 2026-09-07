@@ -1,5 +1,5 @@
-import type { OpenCodeEvent } from "@opencode-ai/client/promise"
-import { createClientConnection, createPtyClient, type ClientConnectionStatus } from "@opencode-ai/client/solid"
+import type { OpenCodeEvent } from "@opencode/client/promise"
+import { createClientConnection, createPtyClient, type ClientConnectionStatus } from "@opencode/client/solid"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { type Accessor, onCleanup } from "solid-js"
 import { createApiForServer, type ServerApi } from "@/runtime/server/api"

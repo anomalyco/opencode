@@ -49,7 +49,7 @@ jobs:
             echo "app=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          bun x turbo@2.10.2 ls --affected --filter=@opencode-ai/app --output=json > affected.json
+          bun x turbo@2.10.2 ls --affected --filter=@opencode/app --output=json > affected.json
           bun -e 'const result = await Bun.file("affected.json").json(); console.log(`app=${result.packages.count > 0}`)' >> "$GITHUB_OUTPUT"
 
   unit:
@@ -132,10 +132,10 @@ jobs:
         timeout-minutes: 15
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            bun turbo verify:package --filter=@opencode-ai/sdk
+            bun turbo verify:package --filter=@opencode/sdk
             exit 0
           fi
-          bun turbo verify:package --affected --filter=@opencode-ai/sdk
+          bun turbo verify:package --affected --filter=@opencode/sdk
         env:
           TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
           TURBO_SCM_HEAD: ${{ github.sha }}

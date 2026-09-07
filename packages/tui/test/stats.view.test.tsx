@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { Effect, FileSystem } from "effect"
 import { createEventStream, createFetch, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"

@@ -1,4 +1,4 @@
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Show } from "solid-js"
 import { createHomeController } from "./model"

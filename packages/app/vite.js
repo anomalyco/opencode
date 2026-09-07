@@ -45,7 +45,7 @@ export default [
         },
         optimizeDeps: {
           exclude: ["@shikijs/stream", "marked", "marked-shiki", "remend"],
-          include: ["@opencode-ai/session-ui > mermaid", "@opencode-ai/session-ui > mermaid > katex"],
+          include: ["@opencode/session-ui > mermaid", "@opencode/session-ui > mermaid > katex"],
         },
       }
     },

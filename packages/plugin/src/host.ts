@@ -1,7 +1,7 @@
 export * as Host from "./host.js"
 
 import path from "node:path"
-import { importModule, resolveModule } from "@opencode-ai/util/runtime-import"
+import { importModule, resolveModule } from "@opencode/util/runtime-import"
 
 export interface Target {
   readonly directory: string

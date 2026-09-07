@@ -4,7 +4,7 @@ import { createStore } from "solid-js/store"
 import type { State } from "./types"
 import type { QueryOptionsApi } from "../sync"
 import { ServerScope } from "@/runtime/server/scope"
-import type { Data } from "@opencode-ai/client/solid"
+import type { Data } from "@opencode/client/solid"
 import type { persisted } from "@/runtime/persistence/storage"
 
 let createChildStoreManager: typeof import("./child-store").createChildStoreManager

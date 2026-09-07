@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { createComputed, createRoot } from "solid-js"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { ServerScope } from "@/runtime/server/scope"
 import { createComposerState, type ComposerStore } from "@/composer/state"
 import { createComposerEditorActions } from "@/composer/editor/actions"

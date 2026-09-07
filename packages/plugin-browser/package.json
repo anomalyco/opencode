@@ -27,8 +27,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/schema": "workspace:*",
+    "@opencode/plugin": "workspace:*",
+    "@opencode/schema": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

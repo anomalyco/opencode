@@ -1,5 +1,5 @@
-import type { SkillApi } from "@opencode-ai/client/promise/api"
-import type { Skill } from "@opencode-ai/schema/skill"
+import type { SkillApi } from "@opencode/client/promise/api"
+import type { Skill } from "@opencode/schema/skill"
 import type { Transform } from "./registration.js"
 import type { DeepMutable } from "./types.js"
 

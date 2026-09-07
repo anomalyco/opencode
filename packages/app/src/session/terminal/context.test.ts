@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test"
 import { ServerScope } from "@/runtime/server/scope"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import { Persist } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import type { Platform } from "@/runtime/platform/platform"

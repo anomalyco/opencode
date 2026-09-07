@@ -1,4 +1,4 @@
-import { Project } from "@opencode-ai/schema/project"
+import { Project } from "@opencode/schema/project"
 import { Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
