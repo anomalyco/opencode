@@ -29,6 +29,46 @@ await Effect.runPromise(program.pipe(Effect.provide(llmLayer)))
 
 Run `LLMClient.stream(request)` instead of `generate` when you want incremental `LLMEvent`s. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses, Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
+## MiniMax
+
+MiniMax defaults to its Messages API and reads `MINIMAX_API_KEY` when `apiKey` is omitted:
+
+```ts
+import { Effect, Layer } from "effect"
+import { LLM, LLMClient } from "@opencode-ai/ai"
+import { MiniMax } from "@opencode-ai/ai/providers"
+import { RequestExecutor } from "@opencode-ai/ai/route"
+
+const minimax = MiniMax.configure({ apiKey: process.env.MINIMAX_API_KEY })
+const request = LLM.request({
+  model: minimax.model("MiniMax-M3"), // also minimax.messages("MiniMax-M3")
+  prompt: "What is 173 multiplied by 219?",
+  providerOptions: { thinking: { type: "adaptive" } },
+  generation: { maxTokens: 1536 },
+})
+
+const layer = LLMClient.layer.pipe(Layer.provide(RequestExecutor.fetchLayer))
+const response = await Effect.runPromise(LLMClient.generate(request).pipe(Effect.provide(layer)))
+console.log(response.text)
+```
+
+Select `minimax.chat("MiniMax-M3")` or `minimax.responses("MiniMax-M3")` for MiniMax's native Chat Completions
+and Responses APIs. The matching package entrypoints are `@opencode-ai/ai/providers/minimax/messages`,
+`@opencode-ai/ai/providers/minimax/chat`, and `@opencode-ai/ai/providers/minimax/responses`.
+
+- **Messages:** M3 thinking defaults off. Set `thinking: { type: "adaptive" }` to enable it or
+  `thinking: { type: "disabled" }` to disable it.
+- **Chat:** M3 thinking defaults on and uses the same `thinking` control. The provider enables `reasoning_split`
+  by default so reasoning is separate from answer text; `reasoningSplit: false` selects native `<think>`-tagged text.
+- **Responses:** M3 reasoning defaults off. `reasoningEffort: "none"` disables it; `"minimal"`, `"low"`,
+  `"medium"`, and `"high"` enable reasoning without changing its depth.
+
+M2.x models always think, even when a disabling option is supplied. For tool continuations, retain the complete
+`response.message` in history before adding `Message.tool(...)` results; this preserves reasoning and any signatures.
+
+The default API bases are `https://api.minimax.io/anthropic/v1` for Messages and `https://api.minimax.io/v1` for
+Chat and Responses. `configure({ baseURL })` replaces the selected API's base, including its version prefix.
+
 ## Image generation
 
 Use `Image.generate` with an image model for direct asset generation:
