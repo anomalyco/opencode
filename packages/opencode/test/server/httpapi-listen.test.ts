@@ -4,6 +4,8 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Server } from "../../src/server/server"
+import { Provider } from "../../src/provider/provider"
+import { Schema } from "effect"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import { withTimeout } from "../../src/util/timeout"
 import { resetDatabase } from "../fixture/db"
@@ -17,6 +19,39 @@ const original = {
 }
 const auth = { username: "opencode", password: "listen-secret" }
 const testPty = process.platform === "win32" ? test.skip : test
+
+test("provider catalog revalidates after configuration changes", async () => {
+  await using dir = await tmpdir({ config: { snapshot: false, formatter: false, lsp: false } })
+  const listener = await startListener()
+  const headers = {
+    authorization: authorization(),
+    "x-opencode-directory": dir.path,
+    "content-type": "application/json",
+  }
+  const url = new URL("/provider", listener.url)
+  try {
+    const first = await fetch(url, { headers })
+    expect(first.status).toBe(200)
+    const body = await first.text()
+    const catalog = Schema.decodeUnknownSync(Provider.ListResult)(JSON.parse(body))
+    expect(catalog.all.length).toBeGreaterThan(0)
+    const repeated = await fetch(url, { headers })
+    expect(repeated.status).toBe(200)
+    expect(await repeated.text()).toBe(body)
+    const disabled = catalog.all[0].id
+    await Bun.write(path.join(dir.path, "opencode.json"), JSON.stringify({ disabled_providers: [disabled] }))
+    const changed = await fetch(new URL("/instance/dispose", listener.url), { method: "POST", headers })
+    expect(changed.status).toBe(200)
+    await changed.text()
+    const refreshed = await fetch(url, { headers })
+    expect(refreshed.status).toBe(200)
+    const next = Schema.decodeUnknownSync(Provider.ListResult)(await refreshed.json())
+    expect(next.all.length).toBe(catalog.all.length - 1)
+    expect(next.all.some((provider) => provider.id === disabled)).toBe(false)
+  } finally {
+    await stop(listener, "provider catalog listener did not stop")
+  }
+}, 30000)
 
 afterEach(async () => {
   Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD

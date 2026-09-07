@@ -3,6 +3,7 @@ import { Config } from "@/config/config"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
 import { Auth } from "@/auth"
+import { InstanceState } from "@/effect/instance-state"
 
 import { mapValues } from "remeda"
 import { Effect, Schema } from "effect"
@@ -38,27 +39,37 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
     const provider = yield* Provider.Service
     const svc = yield* ProviderAuth.Service
     const authStore = yield* Auth.Service
+    const state = yield* InstanceState.make(() =>
+      Effect.sync(() => new WeakMap<object, { authorization: string; response: HttpServerResponse.HttpServerResponse }>()),
+    )
 
     const list = Effect.fn("ProviderHttpApi.list")(function* () {
       const config = yield* cfg.get()
       const all = yield* ModelsDev.Service.use((s) => s.get())
+      const connected = yield* provider.list()
+      const credentials = yield* authStore.all().pipe(Effect.orDie)
+      const authorization = Object.keys(credentials).sort().join("\0")
+      // Config changes dispose the instance; a catalog refresh replaces `all`.
+      const cache = yield* InstanceState.get(state)
+      const cached = cache.get(all)
+      if (cached?.authorization === authorization) return cached.response
       const disabled = new Set(config.disabled_providers ?? [])
       const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
       const filtered: Record<string, (typeof all)[string]> = {}
       for (const [key, value] of Object.entries(all)) {
         if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) filtered[key] = value
       }
-      const connected = yield* provider.list()
-      const credentials = yield* authStore.all().pipe(Effect.orDie)
       const providers = Object.assign(
         mapValues(filtered, (item) => Provider.fromModelsDevProvider(item)),
         connected,
       )
-      return {
+      const response = HttpServerResponse.jsonUnsafe({
         all: Object.values(providers).map(Provider.toPublicInfo),
         default: Provider.defaultModelIDs(providers),
         connected: Object.keys(providers).filter((id) => id in connected || credentials[id]),
-      }
+      })
+      cache.set(all, { authorization, response })
+      return response
     })
 
     const auth = Effect.fn("ProviderHttpApi.auth")(function* () {
@@ -108,7 +119,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
     })
 
     return handlers
-      .handle("list", list)
+      .handleRaw("list", list)
       .handle("auth", auth)
       .handleRaw("authorize", authorizeRaw)
       .handle("callback", callback)
