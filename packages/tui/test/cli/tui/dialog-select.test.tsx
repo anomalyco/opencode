@@ -82,10 +82,10 @@ async function renderSelect(
   return app
 }
 
-async function mountSelect(
+async function mountSelect<T>(
   root: string,
-  initial: DialogSelectOption<string>[],
-  current?: string,
+  initial: DialogSelectOption<T>[],
+  current?: T,
   focusCurrent?: boolean,
   select?: { flat?: boolean },
 ) {
@@ -108,13 +108,16 @@ async function mountSelect(
     import("../../../src/ui/toast"),
   ])
 
-  const selected: string[] = []
-  const moved: string[] = []
-  let replaceOptions!: (options: DialogSelectOption<string>[]) => void
+  const selected: T[] = []
+  const moved: T[] = []
+  let replaceOptions!: (options: DialogSelectOption<T>[]) => void
+  let replaceCurrent!: (value: T | undefined) => void
 
   function Harness() {
     const [options, setOptions] = createSignal(initial)
     replaceOptions = setOptions
+    const [value, setCurrent] = createSignal(current)
+    replaceCurrent = (value) => setCurrent(() => value)
 
     function Fixture() {
       const dialog = useDialog()
@@ -123,7 +126,7 @@ async function mountSelect(
           <DialogSelect
             title="Mutable options"
             options={options()}
-            current={current}
+            current={value()}
             focusCurrent={focusCurrent}
             flat={select?.flat}
             onMove={(option) => moved.push(option.value)}
@@ -155,7 +158,7 @@ async function mountSelect(
   app.renderer.start()
   await app.waitForFrame((frame) => frame.includes("Mutable options"))
   await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
-  return { app, moved, replaceOptions, selected }
+  return { app, moved, replaceOptions, replaceCurrent, selected }
 }
 
 test("budgets option content for constrained and full-width large dialogs", () => {
@@ -441,6 +444,58 @@ test("keeps the current option selected when options reorder", async () => {
     select.app.renderer.destroy()
   }
 })
+
+test.each([false, 0, "", null, "current", undefined])("focuses current %p when it changes", async (current) => {
+  await using tmp = await tmpdir()
+  const select = await mountSelect<string | typeof current>(
+    tmp.path,
+    [
+      { title: "First", value: "first" },
+      { title: "Current", value: current === undefined ? "current" : current },
+    ],
+    "first",
+  )
+
+  try {
+    select.replaceCurrent(current)
+    await select.app.waitForVisualIdle()
+    select.app.mockInput.pressEnter()
+    await select.app.waitFor(() => select.selected.length === 1)
+
+    expect(select.selected).toEqual([current === undefined ? "first" : current])
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
+test.each([false, 0, "", null, "current", undefined])(
+  "restores current %p after clearing a filter",
+  async (current) => {
+    await using tmp = await tmpdir()
+    const select = await mountSelect<string | typeof current>(
+      tmp.path,
+      [
+        ...Array.from({ length: 6 }, (_, index) => ({ title: `Item-${index}`, value: `item-${index}` })),
+        { title: "Current", value: current === undefined ? "current" : current },
+      ],
+      current,
+    )
+
+    try {
+      await select.app.mockInput.typeText("Item-0")
+      await select.app.waitForFrame((frame) => frame.includes("Item-0") && !frame.includes("Item-1"))
+      select.app.mockInput.pressKey("c", { ctrl: true })
+      await select.app.waitForVisualIdle()
+      select.app.mockInput.pressEnter()
+      await select.app.waitFor(() => select.selected.length === 1)
+
+      expect(select.selected).toEqual([current === undefined ? "item-0" : current])
+      expect(select.app.captureCharFrame().includes("Current")).toBe(current !== undefined)
+    } finally {
+      select.app.renderer.destroy()
+    }
+  },
+)
 
 test("shows no-match and still closes after a flat filter goes empty", async () => {
   await using tmp = await tmpdir()
