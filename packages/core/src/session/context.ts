@@ -128,7 +128,7 @@ const layer = Layer.effect(
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
       const loaded = yield* Effect.all(
         {
-          tools: registry.snapshot(agent.info.permissions),
+          tools: registry.snapshot(agent.info.permissions, { sessionID, agent: agent.id }),
           builtins: builtins.load(sessionID),
           discovery: discovery.load(),
           skills: skillInstructions.load(agent),

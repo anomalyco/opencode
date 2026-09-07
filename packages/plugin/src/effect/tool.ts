@@ -18,6 +18,12 @@ export interface ToolEditor {
 }
 
 export interface ToolHooks {
+  readonly snapshot: {
+    readonly sessionID: Session.ID
+    readonly agent: Agent.ID
+    /** Effective tool names advertised to this request. Remove names to hide tools; added names are ignored. */
+    tools: string[]
+  }
   readonly "execute.before": {
     tool: string
     readonly sessionID: Session.ID
@@ -47,6 +53,7 @@ export interface ToolHooks {
 
 // Only execute.before may fail: a Tool.Error rejects the call before the tool runs.
 export interface ToolFailures extends Record<keyof ToolHooks, unknown> {
+  readonly snapshot: never
   readonly "execute.before": Tool.Error
   readonly "execute.after": never
 }

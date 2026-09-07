@@ -35,6 +35,12 @@ export interface ToolEditor {
 }
 
 interface ToolHooks {
+  readonly snapshot: {
+    readonly sessionID: Session.ID
+    readonly agent: Agent.ID
+    /** Effective tool names advertised to this request. Remove names to hide tools; added names are ignored. */
+    tools: string[]
+  }
   readonly "execute.before": {
     tool: string
     readonly sessionID: Session.ID

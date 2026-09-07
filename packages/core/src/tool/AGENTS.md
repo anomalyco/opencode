@@ -53,6 +53,10 @@ The registry has no `Permission.Service` dependency and performs no execution au
 
 Tool filtering is catalog visibility, not execution authorization. A call still executes the captured tool's leaf policy if it reaches execution.
 
+## Per-request visibility
+
+`Tool.Service.snapshot(permissions, request)` triggers the `tool.snapshot` plugin hook after permission filtering, passing the session and agent plus the permitted effective names. Hooks can only remove names; added names are ignored, so a plugin cannot reveal a denied tool. The result filters both the native definitions and the Code Mode inventory, so the rendered catalog and the `execute` runtime stay consistent. Registration remains Location-wide; this hook is how availability varies per session, such as a client connected to one session.
+
 ## Output
 
 Built-ins return complete tool responses. `Tool.Snapshot.execute` is the local execution boundary. Generic output bounding is applied by the Session runner after execution.
@@ -61,4 +65,4 @@ Producer capture remains local to producers. Shell stores combined process outpu
 
 ## Current Gaps
 
-- Future Session-scoped registrations still need an explicit canonical registration design.
+- Future Session-scoped registrations still need an explicit canonical registration design. The `tool.snapshot` hook covers per-session visibility of Location-wide registrations, not per-session definitions.

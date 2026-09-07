@@ -39,7 +39,11 @@ type Data = {
 }
 
 export interface Interface extends State.Transformable<Editor> {
-  readonly snapshot: (permissions?: Permission.Ruleset) => Effect.Effect<Snapshot>
+  /** Filters by permissions, then lets `tool.snapshot` hooks hide tools for the given request. */
+  readonly snapshot: (
+    permissions?: Permission.Ruleset,
+    request?: { readonly sessionID: SessionSchema.ID; readonly agent: Agent.ID },
+  ) => Effect.Effect<Snapshot>
 }
 
 /** A local execution result after hooks and content normalization. */
@@ -217,58 +221,62 @@ const layer = Layer.effect(
     return Service.of({
       transform: state.transform,
       reload: state.reload,
-      snapshot: Effect.fn("Tool.snapshot")((permissions) =>
-        Effect.sync(() => {
-          const active = new Map<string, Tool.Info>()
-          const rules = permissions ?? []
-          for (const [name, tool] of state.get().tools) {
-            if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
-            active.set(name, tool)
-          }
-          const direct = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
-          const codeModeTools = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
-          const namespaces = state.get().namespaces
-          const codeModeInventory = { tools: codeModeTools, namespaces }
-          const codeModeEnabled = !whollyDisabled("execute", rules)
-          const codeModeTool = codeModeEnabled
-            ? CodeModeTool.create(codeModeInventory, (name, tool, input, context) =>
-                beforeExecute(name, input, context).pipe(
-                  Effect.flatMap((event) => executeTool(tool, name, event.input, context)),
-                ),
-              )
-            : undefined
-          const codeModeCatalog = codeModeEnabled ? CodeModeTool.catalog(codeModeInventory) : undefined
-          return {
-            ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
-            definitions: [
-              ...Array.from(direct)
-                .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-                .map(([, tool]) => definition(tool)),
-              ...(codeModeTool ? [definition(codeModeTool)] : []),
-            ],
-            execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
-              const context: Tool.Context = {
-                sessionID: input.sessionID,
-                agent: input.agent,
-                messageID: input.messageID,
-                id: Tool.CallID.make(input.call.id),
-                progress: input.progress ?? (() => Effect.void),
-              }
-              const event = yield* beforeExecute(input.call.name, input.call.input, context)
-              const requested = input.definitions?.get(event.tool)
-              // Preserve session context removal and alias resolution, now after the repair hook.
-              if (!requested && input.definitions && (direct.has(event.tool) || codeModeTool?.name === event.tool))
-                return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
-              const name = requested?.name ?? event.tool
-              if (name === "execute" && codeModeTool)
-                return yield* executeTool(codeModeTool, name, event.input, context)
-              const tool = direct.get(name)
-              if (tool) return yield* executeTool(tool, name, event.input, context)
-              return yield* new Tool.Error({ message: `Unknown tool: ${name}` })
-            }),
-          }
-        }),
-      ),
+      snapshot: Effect.fn("Tool.snapshot")(function* (permissions, request) {
+        const rules = permissions ?? []
+        const permitted = new Map(
+          Array.from(state.get().tools).filter(
+            ([name, tool]) => !whollyDisabled(tool.options?.permission ?? name, rules),
+          ),
+        )
+        // Hooks see only permitted names and can only remove them, so a plugin cannot reveal a denied tool.
+        const visible = request
+          ? new Set(
+              (yield* hooks.trigger("tool", "snapshot", { ...request, tools: Array.from(permitted.keys()) })).tools,
+            )
+          : undefined
+        const active = visible ? new Map(Array.from(permitted).filter(([name]) => visible.has(name))) : permitted
+        const direct = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
+        const codeModeTools = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
+        const namespaces = state.get().namespaces
+        const codeModeInventory = { tools: codeModeTools, namespaces }
+        const codeModeEnabled = !whollyDisabled("execute", rules)
+        const codeModeTool = codeModeEnabled
+          ? CodeModeTool.create(codeModeInventory, (name, tool, input, context) =>
+              beforeExecute(name, input, context).pipe(
+                Effect.flatMap((event) => executeTool(tool, name, event.input, context)),
+              ),
+            )
+          : undefined
+        const codeModeCatalog = codeModeEnabled ? CodeModeTool.catalog(codeModeInventory) : undefined
+        return {
+          ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
+          definitions: [
+            ...Array.from(direct)
+              .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+              .map(([, tool]) => definition(tool)),
+            ...(codeModeTool ? [definition(codeModeTool)] : []),
+          ],
+          execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
+            const context: Tool.Context = {
+              sessionID: input.sessionID,
+              agent: input.agent,
+              messageID: input.messageID,
+              id: Tool.CallID.make(input.call.id),
+              progress: input.progress ?? (() => Effect.void),
+            }
+            const event = yield* beforeExecute(input.call.name, input.call.input, context)
+            const requested = input.definitions?.get(event.tool)
+            // Preserve session context removal and alias resolution, now after the repair hook.
+            if (!requested && input.definitions && (direct.has(event.tool) || codeModeTool?.name === event.tool))
+              return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
+            const name = requested?.name ?? event.tool
+            if (name === "execute" && codeModeTool) return yield* executeTool(codeModeTool, name, event.input, context)
+            const tool = direct.get(name)
+            if (tool) return yield* executeTool(tool, name, event.input, context)
+            return yield* new Tool.Error({ message: `Unknown tool: ${name}` })
+          }),
+        }
+      }),
     })
   }),
 )

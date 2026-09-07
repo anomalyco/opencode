@@ -706,6 +706,49 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("hides tools per request through the snapshot hook after permission filtering", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
+      yield* transform(service, { question: make(), edit: make() }, { codemode: false })
+      yield* transform(service, { open: make(), list: make() }, { namespace: "browser" })
+      const seen: string[][] = []
+      const hidden = Session.ID.make("ses_without_browser")
+      yield* hooks.register("tool", "snapshot", (event) =>
+        Effect.sync(() => {
+          seen.push(event.tools)
+          event.tools = [...event.tools.filter((name) => !name.startsWith("browser_")), "invented"]
+          if (event.sessionID !== hidden) event.tools.push("browser_open")
+        }),
+      )
+      const names = (snapshot: Tool.Snapshot) => ({
+        direct: snapshot.definitions.map((tool) => tool.name),
+        codemode: codeModeListings(snapshot.codeModeCatalog!).map((tool) => tool.path),
+      })
+
+      const attached = yield* service.snapshot([{ action: "edit", resource: "*", effect: "deny" }], {
+        sessionID,
+        agent: identity.agent,
+      })
+      expect(seen).toEqual([["question", "browser_open", "browser_list"]])
+      expect(names(attached)).toEqual({ direct: ["question", "execute"], codemode: ["browser.open"] })
+
+      const detached = yield* service.snapshot(undefined, { sessionID: hidden, agent: identity.agent })
+      expect(names(detached)).toEqual({ direct: ["edit", "question", "execute"], codemode: [] })
+      expect((yield* detached.execute(call("edit"))).output).toEqual({ text: "edit" })
+      const result = yield* detached.execute({
+        ...call("execute"),
+        call: { type: "tool-call", id: "hidden-codemode", name: "execute", input: { code: "return tools.browser" } },
+      })
+      expect(result.output).toMatchObject({ error: true })
+
+      expect(names(yield* service.snapshot())).toEqual({
+        direct: ["edit", "question", "execute"],
+        codemode: ["browser.list", "browser.open"],
+      })
+    }),
+  )
+
   it.effect("keeps permission options isolated between registrations", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service

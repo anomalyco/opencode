@@ -1438,6 +1438,20 @@ interface ShellCreateBefore {
 
 ### Tools
 
+Hide tools from one request. The hook runs when a model request captures its tool
+snapshot and receives the effective tool names permitted for that session and agent.
+Removing a name hides the tool from both the native tool list and the Code Mode catalog.
+
+```ts
+await ctx.tool.hook("snapshot", (event) => {
+  if (!browsers.has(event.sessionID)) event.tools = event.tools.filter((name) => !name.startsWith("browser_"))
+})
+```
+
+- Names added by a hook are ignored; a hook cannot reveal a tool that permissions removed.
+- Registration stays location-wide. Use this hook when availability depends on the session, such as a connected client.
+- Hiding is catalog visibility, not authorization. A tool still enforces its own permission when it runs.
+
 Inspect or replace tool input before execution.
 
 ```ts
@@ -1459,8 +1473,15 @@ await ctx.tool.hook("execute.after", (event) => {
 
 ```ts
 interface ToolHooks {
+  snapshot: ToolSnapshot
   "execute.before": ToolExecuteBefore
   "execute.after": ToolExecuteCompleted | ToolExecuteFailed
+}
+
+interface ToolSnapshot {
+  readonly sessionID: string
+  readonly agent: string
+  tools: string[]
 }
 
 interface ToolHookContext {
