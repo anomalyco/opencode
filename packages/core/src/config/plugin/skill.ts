@@ -186,11 +186,19 @@ export const Plugin = define({
     yield* ctx.event.subscribe().pipe(
       Stream.filter((event) => event.type === "config.updated"),
       Stream.runForEach(() =>
-        config.entries().pipe(
-          Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
-          Effect.andThen(refresh()),
-          Effect.andThen(ctx.skill.reload()),
-        ),
+        Effect.gen(function* () {
+          const previous = sources()
+          loaded.entries = yield* config.entries()
+          const current = sources()
+          // Source order controls precedence. File events still refresh unchanged sources.
+          if (
+            previous.length === current.length &&
+            previous.every((source, index) => Skill.Source.equals(source, current[index]))
+          )
+            return
+          yield* refresh()
+          yield* ctx.skill.reload()
+        }),
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
