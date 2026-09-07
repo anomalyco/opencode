@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
+import path from "node:path"
 import { BoxRenderable, ImageRenderable, RGBA, type CliRenderer, type RootRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
@@ -458,8 +459,16 @@ test("mini attaches dropped image paths and removes attachments with their label
     await sent.promise
     expect(submitted[0].text).toBe("\u4e2d\u6587 [Image 1] [Image 2] ")
     expect(submitted[0].parts).toMatchObject([
-      { type: "file", filename: "one image.png", source: { text: { start: 5, end: 14, value: "[Image 1]" } } },
-      { type: "file", filename: "two.png", source: { text: { start: 15, end: 24, value: "[Image 2]" } } },
+      {
+        type: "file",
+        filename: path.join(tmp.path, "one image.png"),
+        source: { text: { start: 5, end: 14, value: "[Image 1]" } },
+      },
+      {
+        type: "file",
+        filename: path.join(tmp.path, "two.png"),
+        source: { text: { start: 15, end: 24, value: "[Image 2]" } },
+      },
     ])
     await app.waitFor(() => app.renderer.currentFocusedEditor?.plainText === "")
     app.mockInput.pressKey("ARROW_UP")
