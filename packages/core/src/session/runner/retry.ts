@@ -6,10 +6,12 @@ import { Model } from "@opencode-ai/schema/model"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Clock, Duration, Effect, Pull, Schedule } from "effect"
 import { Bus } from "../../bus.js"
+import type { Credential } from "../../credential.js"
 import type { PluginHooks } from "../../plugin/hooks.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
+import type { SessionRunnerFailover } from "./failover.js"
 
 interface Input {
   readonly cause: AIError
@@ -78,37 +80,67 @@ const schedule = Schedule.max([Schedule.exponential("2 seconds"), Schedule.recur
   }),
 )
 
-export const policy = (sessionID: SessionSchema.ID) =>
+/** Retries on the current account before treating it as exhausted. */
+const ACCOUNT_ATTEMPTS = 2
+
+/** A provider asking for a longer wait than this exhausts the account instead. */
+const ACCOUNT_RETRY_AFTER_MAX = Duration.toMillis("30 seconds")
+
+/** The next account starts immediately; the pause only covers credential propagation. */
+const SWITCH_DELAY = 1_000
+
+export const policy = (sessionID: SessionSchema.ID, failover?: SessionRunnerFailover.Interface) =>
   Effect.gen(function* () {
-    const step = yield* Schedule.toStep(schedule)
+    let step = yield* Schedule.toStep(schedule)
     let attempt = 1
+    let accountAttempts = 0
+    const exhausted = new Set<Credential.ID>()
+    const propose = Effect.fnUntraced(function* (input: Input, retry: boolean, delay: number) {
+      attempt++
+      const event: PluginHooks.Domains["session"]["retry"] = {
+        sessionID,
+        agent: input.agent,
+        model: input.model,
+        error: input.error,
+        attempt,
+        decision: retry ? { retry: true, delay } : { retry: false },
+      }
+      yield* input.hook(event)
+      if (!event.decision.retry) return event.decision
+      const normalized =
+        Number.isFinite(event.decision.delay) && event.decision.delay >= 0 ? Math.ceil(event.decision.delay) : delay
+      return { retry: true as const, attempt, delay: normalized }
+    })
     return (input: Input) =>
       Effect.gen(function* () {
+        const reason = input.cause.reason._tag
+        if (failover && (reason === "RateLimit" || reason === "QuotaExceeded")) {
+          const requested = retryAfter(input)
+          const spent =
+            reason === "QuotaExceeded" ||
+            accountAttempts >= ACCOUNT_ATTEMPTS ||
+            (requested !== undefined && requested > ACCOUNT_RETRY_AFTER_MAX)
+          const previous = spent ? yield* failover.next(input.model, exhausted) : undefined
+          if (previous) {
+            exhausted.add(previous)
+            accountAttempts = 0
+            // The account that just took over owns a full retry budget.
+            step = yield* Schedule.toStep(schedule)
+            return yield* propose(input, true, SWITCH_DELAY)
+          }
+          accountAttempts++
+        }
         const now = yield* Clock.currentTimeMillis
         const next = yield* step(now, input).pipe(Pull.catchDone(() => Effect.succeed(undefined)))
         if (!next) return { retry: false as const }
         const [, duration] = next
-        attempt++
-        const delay = Math.ceil(Duration.toMillis(duration))
-        const event: PluginHooks.Domains["session"]["retry"] = {
-          sessionID,
-          agent: input.agent,
-          model: input.model,
-          error: input.error,
-          attempt,
-          decision: input.retry ? { retry: true, delay } : { retry: false },
-        }
-        yield* input.hook(event)
-        if (!event.decision.retry) return event.decision
-        const normalized =
-          Number.isFinite(event.decision.delay) && event.decision.delay >= 0 ? Math.ceil(event.decision.delay) : delay
-        return { retry: true as const, attempt, delay: normalized }
+        return yield* propose(input, input.retry, Math.ceil(Duration.toMillis(duration)))
       })
   })
 
-export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID) =>
+export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID, failover: SessionRunnerFailover.Interface) =>
   Effect.gen(function* () {
-    const decide = yield* policy(sessionID)
+    const decide = yield* policy(sessionID, failover)
     const wait = (input: {
       readonly decision: Decision
       readonly assistantMessageID: SessionMessage.ID

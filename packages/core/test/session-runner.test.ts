@@ -12,6 +12,7 @@ import {
   TransportError,
   InvalidProviderOutputError,
   InvalidRequestError,
+  QuotaExceededError,
   RateLimitError,
   UnknownProviderError,
 } from "@opencode-ai/ai"
@@ -20,6 +21,8 @@ import { AnthropicMessages, OpenAIResponses } from "@opencode-ai/ai/protocols"
 import { compileRequest } from "@opencode-ai/ai/route/client"
 import { TestLLM } from "@opencode-ai/ai/testing"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Credential } from "@opencode-ai/core/credential"
+import { Integration } from "@opencode-ai/core/integration"
 import { Database } from "@opencode-ai/core/database/database"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -81,7 +84,7 @@ import { Location } from "@opencode-ai/core/location"
 import { Provider } from "@opencode-ai/core/provider"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { asc, desc, eq, sql } from "drizzle-orm"
+import { and, asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 import { promptLocationNode } from "./fixture/prompt-location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
@@ -461,6 +464,8 @@ const layer = Layer.unwrap(
         SessionInbox.node,
         Agent.node,
         Catalog.node,
+        Credential.node,
+        Integration.node,
         Tool.node,
         PluginHooks.node,
         echoNode,
@@ -642,6 +647,70 @@ const invalidRequest = () =>
 const rateLimited = (retryAfterMs?: number) =>
   new AIError({
     reason: new RateLimitError({ message: "Rate limited", retryAfterMs }),
+  })
+
+const quotaExceeded = () =>
+  new AIError({
+    reason: new QuotaExceededError({ message: "Usage limit reached" }),
+  })
+
+// The test model's provider has no catalog entry, so its integration is the provider id.
+const fakeIntegrationID = Integration.ID.make("fake")
+
+/** Connects `count` accounts; the last one created is the active connection. */
+const connectAccounts = Effect.fnUntraced(function* (count: number, autoSwitch: boolean) {
+  const integrations = yield* Integration.Service
+  const credentials = yield* Credential.Service
+  yield* integrations.transform((editor) =>
+    editor.update(fakeIntegrationID, (integration) => (integration.name = "Fake")),
+  )
+  const accounts = yield* Effect.forEach(
+    Array.from({ length: count }, (_, index) => index + 1),
+    (index) =>
+      credentials.create({
+        integrationID: fakeIntegrationID,
+        label: `Account ${index}`,
+        value: Credential.Key.make({ type: "key", key: `key-${index}` }),
+      }),
+  )
+  if (autoSwitch) yield* integrations.settings.update(fakeIntegrationID, { autoSwitch: true })
+  return accounts
+})
+
+const activeAccount = Effect.gen(function* () {
+  const integrations = yield* Integration.Service
+  const active = yield* integrations.connection.active(fakeIntegrationID)
+  return active?.type === "credential" ? active.id : undefined
+})
+
+const isSwitch = Schema.is(Credential.Event.Switched.data)
+
+/** Collects the account each `credential.switched` activates. Listeners run inside publish, so they never lag. */
+const recordSwitches = (s: Scenario) =>
+  Effect.gen(function* () {
+    const switches = new Array<Credential.ID>()
+    yield* s.bus.listen((event) =>
+      Effect.sync(() => {
+        if (event.type !== Credential.Event.Switched.type || !isSwitch(event.data)) return
+        if (event.data.credentialID) switches.push(event.data.credentialID)
+      }),
+    )
+    return switches
+  })
+
+const recordedRetries = (id: Session.ID) =>
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    return yield* db
+      .select({ data: EventTable.data })
+      .from(EventTable)
+      .where(and(eq(EventTable.aggregate_id, id), eq(EventTable.type, "session.retry.scheduled.1")))
+      .orderBy(asc(EventTable.seq))
+      .all()
+      .pipe(
+        Effect.orDie,
+        Effect.map((rows) => rows.map((row) => row.data)),
+      )
   })
 
 const setupOverflowRecovery = Effect.fnUntraced(function* (s: Scenario) {
@@ -4979,6 +5048,111 @@ describe("SessionRunnerLLM", () => {
     yield* TestClock.adjust("1 millis")
     yield* Fiber.join(run)
     expect(s.requests).toHaveLength(2)
+  })
+
+  scenario("switches to the next connected account when the active one is out of quota", function* (s) {
+    const accounts = yield* connectAccounts(2, true)
+    const switches = yield* recordSwitches(s)
+    yield* s.admit("Switch on quota")
+    yield* s.llm.push(Stream.fail(quotaExceeded()))
+    yield* s.llm.push(TestLLM.text("Recovered", "quota-switch-success"))
+
+    const scheduled = yield* subscribeRetries(s)
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* Queue.take(scheduled)
+    yield* TestClock.adjust("1000 millis")
+    yield* Fiber.join(run)
+
+    expect(s.requests).toHaveLength(2)
+    expect(yield* activeAccount).toBe(accounts[0].id)
+    expect(switches).toEqual([accounts[0].id])
+    const retries = yield* recordedRetries(sessionID)
+    expect(retries).toHaveLength(1)
+    expect(retries[0]?.attempt).toBeGreaterThanOrEqual(1)
+    expect(retries[0]?.at).toBe(1_000)
+    expect(yield* s.context).toMatchObject([
+      { type: "user" },
+      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
+    ])
+  })
+
+  scenario("switches accounts instead of waiting out a long provider retry-after", function* (s) {
+    const accounts = yield* connectAccounts(2, true)
+    const switches = yield* recordSwitches(s)
+    yield* s.admit("Switch on long rate limit")
+    yield* s.llm.push(Stream.fail(rateLimited(3_600_000)))
+    yield* s.llm.push(TestLLM.text("Recovered", "long-rate-limit-success"))
+
+    const scheduled = yield* subscribeRetries(s)
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* Queue.take(scheduled)
+    yield* TestClock.adjust("1000 millis")
+    yield* Fiber.join(run)
+
+    expect(s.requests).toHaveLength(2)
+    expect(yield* activeAccount).toBe(accounts[0].id)
+    expect(switches).toEqual([accounts[0].id])
+  })
+
+  scenario("retries the active account twice before switching on a plain rate limit", function* (s) {
+    const accounts = yield* connectAccounts(2, true)
+    const switches = yield* recordSwitches(s)
+    yield* s.admit("Retry then switch")
+    yield* s.llm.push(Stream.fail(rateLimited()), Stream.fail(rateLimited()), Stream.fail(rateLimited()))
+    yield* s.llm.push(TestLLM.text("Recovered", "rate-limit-switch-success"))
+
+    const scheduled = yield* subscribeRetries(s)
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    // Each scheduled retry observes the decision that produced it, before its backoff runs.
+    for (const delay of [2_400, 4_800]) {
+      yield* Queue.take(scheduled)
+      expect(switches).toEqual([])
+      expect(yield* activeAccount).toBe(accounts[1].id)
+      yield* TestClock.adjust(delay)
+    }
+    yield* Queue.take(scheduled)
+    expect(switches).toEqual([accounts[0].id])
+    yield* TestClock.adjust("1000 millis")
+    yield* Fiber.join(run)
+
+    expect(s.requests).toHaveLength(4)
+    expect(switches).toEqual([accounts[0].id])
+    expect(yield* activeAccount).toBe(accounts[0].id)
+  })
+
+  scenario("fails with the provider error once every connected account is exhausted", function* (s) {
+    const accounts = yield* connectAccounts(3, true)
+    const switches = yield* recordSwitches(s)
+    const failure = quotaExceeded()
+    yield* s.admit("Exhaust every account")
+    yield* s.llm.always(Stream.fail(failure))
+
+    const scheduled = yield* subscribeRetries(s)
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    // Every account but the last one gives up its turn through one switch retry.
+    for (const _ of accounts.slice(1)) {
+      yield* Queue.take(scheduled)
+      yield* TestClock.adjust("1000 millis")
+    }
+    expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
+
+    expect(s.requests).toHaveLength(accounts.length)
+    expect(switches).toEqual([accounts[1].id, accounts[0].id])
+    expect(yield* activeAccount).toBe(accounts[0].id)
+  })
+
+  scenario("keeps quota failures terminal while auto-switch is off", function* (s) {
+    const accounts = yield* connectAccounts(2, false)
+    const switches = yield* recordSwitches(s)
+    const failure = quotaExceeded()
+    yield* s.llm.push(Stream.fail(failure), TestLLM.text("Must not run", "unused-switch"))
+
+    expect(yield* s.runPrompt("Do not switch accounts").pipe(Effect.flip)).toBe(failure)
+
+    expect(s.requests).toHaveLength(1)
+    expect(switches).toEqual([])
+    expect(yield* activeAccount).toBe(accounts[1].id)
+    expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
   })
 
   scenario("continues an incomplete stream after observable text", function* (s) {
