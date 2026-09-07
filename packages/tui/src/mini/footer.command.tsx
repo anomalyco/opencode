@@ -27,6 +27,7 @@ import type {
   RunInput,
   RunProvider,
 } from "./types"
+import { matchMiniVerbosity, verbosityChange } from "./verbosity"
 
 type PanelEntry = RunFooterMenuItem & {
   category: string
@@ -78,7 +79,7 @@ type SubagentEntry = PanelEntry & {
 }
 
 type SettingEntry = PanelEntry & {
-  key: keyof MiniSettings
+  key: keyof MiniSettings | "verbosity"
 }
 
 const PANEL_PAD = 2
@@ -711,8 +712,16 @@ export function RunSettingsBody(props: {
   mono?: boolean
   animations?: boolean
 }) {
-  const [saving, setSaving] = createSignal<keyof MiniSettings>()
+  const [saving, setSaving] = createSignal<SettingEntry["key"]>()
   const entries = createMemo<SettingEntry[]>(() => [
+    {
+      category: "Transcript",
+      display: "Verbosity",
+      footer: saving() === "verbosity" ? "saving" : matchMiniVerbosity(props.settings()),
+      footerTone: saving() === "verbosity" ? "running" : "selection",
+      keywords: `verbosity quiet default verbose custom noise ${matchMiniVerbosity(props.settings())}`,
+      key: "verbosity",
+    },
     {
       category: "Transcript",
       display: "Thinking",
@@ -793,18 +802,21 @@ export function RunSettingsBody(props: {
   const change = (item: SettingEntry, direction = 1) => {
     if (saving()) return
     const spinners = Config.MiniWorkSpinner.literals
-    const next: MiniSettingChange =
-      item.key === "work_spinner"
-        ? {
-            key: "work_spinner",
-            value:
-              spinners[
-                (spinners.indexOf(props.settings().work_spinner) + direction + spinners.length) % spinners.length
-              ]!,
-          }
-        : item.key === "mono"
-          ? { key: "mono", value: !props.settings().mono }
-          : { key: item.key, value: props.settings()[item.key] === "show" ? "hide" : "show" }
+    const next: MiniSettingChange | undefined =
+      item.key === "verbosity"
+        ? verbosityChange(props.settings(), direction < 0 ? -1 : 1)
+        : item.key === "work_spinner"
+          ? {
+              key: "work_spinner",
+              value:
+                spinners[
+                  (spinners.indexOf(props.settings().work_spinner) + direction + spinners.length) % spinners.length
+                ]!,
+            }
+          : item.key === "mono"
+            ? { key: "mono", value: !props.settings().mono }
+            : { key: item.key, value: props.settings()[item.key] === "show" ? "hide" : "show" }
+    if (!next) return
     setSaving(item.key)
     void Promise.resolve(props.onChange(next))
       .catch(() => {})

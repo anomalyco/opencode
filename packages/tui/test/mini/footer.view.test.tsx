@@ -24,6 +24,7 @@ import { RunEntryContent } from "../../src/mini/scrollback.writer"
 import { RUN_THEME_FALLBACK, RUN_THEME_FALLBACK_LIGHT, resolveRunTheme, type RunTheme } from "../../src/mini/theme"
 import { BLOCK_SOFT_SLIDE, SEED_MONO, WORK_SPINNERS } from "../../src/ui/one-cell-motion"
 import { resolveMiniSettings } from "../../src/mini/runtime.boot"
+import { applyMiniSettingChange } from "../../src/mini/verbosity"
 import type {
   FooterQueuedPrompt,
   FooterState,
@@ -936,7 +937,7 @@ test.each([false, true])("settings change preferences and preview the work spinn
           settings={settings}
           onClose={() => {}}
           onChange={(change) => {
-            setSettings((current) => ({ ...current, [change.key]: change.value }))
+            setSettings((current) => applyMiniSettingChange(current, change))
           }}
           mono={mono}
           animations={animations()}
@@ -951,6 +952,7 @@ test.each([false, true])("settings change preferences and preview the work spinn
     const frame = app.captureCharFrame()
     expect(frame).toContain("Settings")
     expect(frame).toMatch(/^ +Settings/m)
+    expect(frame).toContain("Verbosity")
     expect(frame).toContain("Thinking")
     expect(frame).toContain("Tools")
     expect(frame).toContain("Shell")
@@ -963,11 +965,33 @@ test.each([false, true])("settings change preferences and preview the work spinn
 
     app.mockInput.pressKey("ARROW_RIGHT")
     await app.renderOnce()
+    expect(settings()).toEqual(applyMiniSettingChange(resolveMiniSettings(), { key: "verbosity", value: "verbose" }))
+
+    app.mockInput.pressKey("ARROW_LEFT")
+    await app.renderOnce()
+    expect(settings()).toEqual(resolveMiniSettings())
+
+    app.mockInput.pressKey("ARROW_LEFT")
+    await app.renderOnce()
+    expect(settings()).toEqual(applyMiniSettingChange(resolveMiniSettings(), { key: "verbosity", value: "quiet" }))
+
+    app.mockInput.pressKey("ARROW_LEFT")
+    await app.renderOnce()
+    expect(settings()).toEqual(applyMiniSettingChange(resolveMiniSettings(), { key: "verbosity", value: "quiet" }))
+
+    app.mockInput.pressKey("ARROW_RIGHT")
+    await app.renderOnce()
+    expect(settings()).toEqual(resolveMiniSettings())
+
+    app.mockInput.pressKey("ARROW_DOWN")
+    app.mockInput.pressKey("ARROW_RIGHT")
+    await app.renderOnce()
 
     expect(settings()).toEqual({
       ...resolveMiniSettings(),
       thinking: "show",
     })
+    expect(app.captureCharFrame()).toContain("custom")
 
     app.mockInput.pressKey("ARROW_DOWN")
     app.mockInput.pressKey("ARROW_DOWN")

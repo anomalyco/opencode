@@ -411,9 +411,13 @@ export type MiniSettings = {
   mono: boolean
 }
 
-export type MiniSettingChange = {
-  [Key in keyof MiniSettings]: { key: Key; value: MiniSettings[Key] }
-}[keyof MiniSettings]
+export type MiniVerbosity = "quiet" | "default" | "verbose"
+
+export type MiniSettingChange =
+  | {
+      [Key in keyof MiniSettings]: { key: Key; value: MiniSettings[Key] }
+    }[keyof MiniSettings]
+  | { key: "verbosity"; value: MiniVerbosity }
 
 // Lifecycle phase of a scrollback entry. "start" opens the entry, "progress"
 // appends content (coalesced in the footer queue), "final" closes it.
