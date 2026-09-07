@@ -55,10 +55,10 @@ function consoleServer(orgID: string | null | undefined, unavailable = false) {
           { id: "org-a", name: "Alpha" },
         ])
       }
-      if (path === "/api/config") {
+      if (path === "/api/v2/config") {
         config.push({ authorization: request.headers.get("authorization"), orgID: request.headers.get("x-org-id") })
         if (orgID === "org-missing") return new Response("Forbidden", { status: 403 })
-        return Response.json({ config: {} })
+        return Response.json({ providers: {} })
       }
       return new Response("Not found", { status: 404 })
     },
@@ -308,7 +308,7 @@ describe("OpencodePlugin", () => {
               expect(
                 yield* integrations.connection.resolve({ type: "credential", id: initial.id, label: initial.label }),
               ).toEqual(stored.value)
-              expect(requests).toEqual(["/auth/device/token", "/api/config"])
+              expect(requests).toEqual(["/auth/device/token", "/api/v2/config"])
             }),
           ({ server }) => Effect.promise(() => server.stop(true)),
         ),
