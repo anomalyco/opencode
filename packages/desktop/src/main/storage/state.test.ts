@@ -37,18 +37,19 @@ describe("state store", () => {
     store.flush()
     store.delete("global", "model")
     expect(store.get("global", "model")).toBeNull()
-    expect(store.items("global")).toEqual({})
+    expect(store.items("global").items).toEqual({})
     store.flush()
     expect(rows(db)).toEqual([])
   })
 
-  test("items merges stored rows with queued changes and update queues a batch", () => {
+  test("items merges stored rows with queued changes and update returns a rising revision", () => {
     const { db, store } = open()
-    store.update("w", { tabs: "[]", recent: "{}" }, [])
+    expect(store.items("w")).toEqual({ items: {}, revision: 0 })
+    expect(store.update("w", { tabs: "[]", recent: "{}" }, [])).toBe(1)
     store.flush()
-    store.update("w", { info: "{}" }, ["recent"])
-    expect(store.items("w")).toEqual({ tabs: "[]", info: "{}" })
-    expect(store.items("other")).toEqual({})
+    expect(store.update("w", { info: "{}" }, ["recent"])).toBe(2)
+    expect(store.items("w")).toEqual({ items: { tabs: "[]", info: "{}" }, revision: 2 })
+    expect(store.items("other")).toEqual({ items: {}, revision: 2 })
     store.flush()
     expect(rows(db)).toEqual([
       { name: "w", key: "info", value: "{}" },

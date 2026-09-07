@@ -60,7 +60,11 @@ flush on page hide is on the wire before the page goes away; the desktop platfor
 every namespace before the IPC runtime is disposed and whenever the window is hidden. Each
 local write carries a sequence number that is kept until the host accepts that exact write;
 until then neither the initial load, a change from another window (`accept`), nor the retry
-of an older failed batch can replace the key.
+of an older failed batch can replace the key. The host also stamps every update with a
+monotonic revision, returned in the ack and carried by change events and loads, so an event
+that reaches a window after a newer ack or load for the same key is recognised as stale and
+dropped; an event held back during an in-flight write is applied after the ack when the host
+ordered it later.
 
 ## Migrations
 

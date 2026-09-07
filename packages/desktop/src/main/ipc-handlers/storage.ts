@@ -15,13 +15,14 @@ export const storageHandlers = StorageRpcs.toLayer(
       StorageItems: ({ name }) => Effect.sync(() => storage.state.items(name)),
       StorageUpdate: ({ name, insert, remove }, context) =>
         Effect.sync(() => {
-          storage.state.update(name, insert, remove)
+          const revision = storage.state.update(name, insert, remove)
           // Other windows hold their own copy of this namespace; tell them what moved.
           const origin = sender(handoff, context)
-          const event = new StorageChanged({ name, insert, remove })
+          const event = new StorageChanged({ name, insert, remove, revision })
           for (const win of BrowserWindow.getAllWindows()) {
             if (win.webContents !== origin) emitIpcEvent(win.webContents, event)
           }
+          return revision
         }),
       StorageClear: ({ name }) => Effect.sync(() => storage.state.clear(name)),
       DraftsGet: ({ key }) => Effect.sync(() => storage.drafts.get(key)),

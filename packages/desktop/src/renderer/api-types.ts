@@ -32,10 +32,12 @@ export type ElectronAPI = {
   finishFirstLaunchOnboarding(createDefaultProject: boolean): Promise<string | null>
   checkAppExists(appName: string): Promise<boolean>
   resolveAppPath(appName: string): Promise<string | null>
-  storeItems(name: string): Promise<Record<string, string>>
-  storeUpdate(name: string, insert: Record<string, string>, remove: string[]): Promise<void>
+  storeItems(name: string): Promise<{ items: Record<string, string>; revision: number }>
+  storeUpdate(name: string, insert: Record<string, string>, remove: string[]): Promise<number>
   storeClear(name: string): Promise<void>
-  onStoreChanged(cb: (name: string, insert: Record<string, string>, remove: string[]) => void): () => void
+  onStoreChanged(
+    cb: (name: string, insert: Record<string, string>, remove: string[], revision: number) => void,
+  ): () => void
   draftGet(key: string): Promise<string | null>
   draftSet(key: string, value: string): Promise<void>
   draftDelete(key: string): Promise<void>

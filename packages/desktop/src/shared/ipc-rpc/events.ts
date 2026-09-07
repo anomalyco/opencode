@@ -36,6 +36,7 @@ export class StorageChanged extends Schema.TaggedClass<StorageChanged>()("Storag
   name: Schema.String,
   insert: Schema.Record(Schema.String, Schema.String),
   remove: Schema.Array(Schema.String),
+  revision: Schema.Number,
 }) {}
 
 export const DesktopEvent = Schema.Union([

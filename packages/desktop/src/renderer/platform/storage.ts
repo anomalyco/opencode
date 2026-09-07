@@ -19,7 +19,7 @@ export function createDesktopStorage(api: ElectronAPI) {
   }
   const flush = () => Promise.all([...namespaces.values()].map((namespace) => namespace.flush()))
 
-  api.onStoreChanged((name, insert, remove) => namespaces.get(name)?.accept(insert, remove))
+  api.onStoreChanged((name, insert, remove, revision) => namespaces.get(name)?.accept(insert, remove, revision))
   // Durability boundaries: the window going away, and it leaving the foreground.
   onBeforeDispose(flush)
   document.addEventListener("visibilitychange", () => {

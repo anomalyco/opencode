@@ -42,6 +42,10 @@ export function createStateStore(db: Database, input: { delay?: number; onError?
   const id = (name: string, key: string) => `${name}\0${key}`
   const set = (name: string, key: string, value: string) => writer.set(id(name, key), { name, key, value })
   const unset = (name: string, key: string) => writer.set(id(name, key), { name, key, value: null })
+  // Orders updates for renderer caches: acks and change events reach a window on different
+  // paths, so a window compares revisions rather than arrival order. Process-local is enough
+  // because every renderer cache dies with the process too.
+  let revision = 0
 
   return {
     get(name: string, key: string) {
@@ -54,7 +58,7 @@ export function createStateStore(db: Database, input: { delay?: number; onError?
     // A renderer loads a namespace once, so queued rows must be folded in for it to see its own
     // writes from a previous window session that have not flushed yet.
     items(name: string) {
-      const result = Object.fromEntries(
+      const items = Object.fromEntries(
         db
           .select({ key: state.key, value: state.value })
           .from(state)
@@ -64,14 +68,15 @@ export function createStateStore(db: Database, input: { delay?: number; onError?
       )
       for (const row of writer.entries()) {
         if (row.name !== name) continue
-        if (row.value === null) delete result[row.key]
-        else result[row.key] = row.value
+        if (row.value === null) delete items[row.key]
+        else items[row.key] = row.value
       }
-      return result
+      return { items, revision }
     },
     update(name: string, insert: Record<string, string>, removed: readonly string[]) {
       for (const [key, value] of Object.entries(insert)) set(name, key, value)
       for (const key of removed) unset(name, key)
+      return ++revision
     },
     // Rare (window closed for good, explicit clear) so it goes straight to the database.
     clear(name: string) {

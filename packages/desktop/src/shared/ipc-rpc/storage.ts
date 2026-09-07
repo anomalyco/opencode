@@ -3,7 +3,7 @@ import { Rpc, RpcGroup } from "effect/unstable/rpc"
 
 export const StorageItems = Rpc.make("StorageItems", {
   payload: { name: Schema.String },
-  success: Schema.Record(Schema.String, Schema.String),
+  success: Schema.Struct({ items: Schema.Record(Schema.String, Schema.String), revision: Schema.Number }),
 })
 export const StorageUpdate = Rpc.make("StorageUpdate", {
   payload: {
@@ -11,6 +11,7 @@ export const StorageUpdate = Rpc.make("StorageUpdate", {
     insert: Schema.Record(Schema.String, Schema.String),
     remove: Schema.Array(Schema.String),
   },
+  success: Schema.Number,
 })
 export const StorageClear = Rpc.make("StorageClear", { payload: { name: Schema.String } })
 export const DraftsGet = Rpc.make("DraftsGet", {
