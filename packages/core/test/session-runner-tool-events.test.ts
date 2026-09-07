@@ -540,11 +540,24 @@ test("success event data can carry provider-executed result state", () => {
 
 test("step finish records settlement without publishing step ended", async () => {
   const { published, publisher } = capture()
+  const usageMetadata = { anthropic: { cache_creation: { ephemeral_1h_input_tokens: 8_000 } } }
   await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
-  await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" } })))
+  await Effect.runPromise(
+    publisher.publish(
+      LLMEvent.stepFinish({
+        index: 0,
+        reason: { normalized: "stop" },
+        usage: { cacheWriteInputTokens: 10_000, providerMetadata: usageMetadata },
+      }),
+    ),
+  )
 
   expect(published.map((event) => event.type)).toEqual(["session.step.started.1"])
-  expect(publisher.record().finish).toMatchObject({ finish: "stop" })
+  expect(publisher.record().finish).toMatchObject({
+    finish: "stop",
+    tokens: { cache: { write: 10_000 } },
+    usageMetadata,
+  })
 })
 
 test("content-filter finish retains failure evidence until step closeout", async () => {
