@@ -6,9 +6,10 @@ import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"
 import path from "node:path"
 import { action, parseReleaseVersion, type Policy } from "./updater-action"
+import { Installation } from "./installation"
 
-export const methods = ["curl", "npm", "pnpm", "bun", "yarn"] as const
-export type Method = (typeof methods)[number]
+export const methods = Installation.methods
+export type Method = Installation.Method
 export type RunResult = { readonly type: "available" | "installed"; readonly version: string }
 export type CheckResult = RunResult | { readonly type: "unavailable"; readonly message: string }
 
@@ -56,17 +57,10 @@ const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const global = yield* Global.Service
   const appProcess = yield* AppProcess.Service
+  const installation = yield* Installation.make()
   const installedVersion = yield* Ref.make(OPENCODE_VERSION)
   const channel = OPENCODE_CHANNEL.replace(/[^a-zA-Z0-9._-]/g, "-")
-  const installedPackage = yield* Effect.gen(function* () {
-    const executable = yield* fs.realPath(process.execPath)
-    const directory = path.dirname(path.dirname(executable))
-    const manifest: { name: string; bin?: Record<string, string> } = yield* fs
-      .readFileString(path.join(directory, "package.json"))
-      .pipe(Effect.flatMap((text) => Effect.try(() => JSON.parse(text))))
-    if (Object.values(manifest.bin ?? {}).some((bin) => path.resolve(directory, bin) === executable))
-      return manifest.name
-  }).pipe(Effect.orElseSucceed(() => undefined))
+  const installedPackage = installation.installedPackage
 
   const readPolicy = Effect.fnUntraced(function* () {
     const values = yield* Effect.forEach(["config.json", "opencode.json", "opencode.jsonc"], (name) =>
@@ -95,29 +89,7 @@ const make = Effect.gen(function* () {
       )
   })
 
-  const method = Effect.fnUntraced(function* () {
-    const binary = path.join(
-      global.home,
-      ".opencode",
-      "bin",
-      process.platform === "win32" ? "opencode2.exe" : "opencode2",
-    )
-    if (path.resolve(process.execPath) === path.resolve(binary)) return "curl"
-    if (!installedPackage) return
-
-    const checks: ReadonlyArray<{ method: Method; command: string[] }> = [
-      { method: "npm", command: ["npm", "list", "-g", "--depth=0", installedPackage] },
-      { method: "pnpm", command: ["pnpm", "list", "-g", "--depth=0", installedPackage] },
-      { method: "bun", command: ["bun", "pm", "ls", "-g"] },
-      { method: "yarn", command: ["yarn", "global", "list"] },
-    ]
-    const results = yield* Effect.forEach(
-      checks,
-      (check) => exec(check.command).pipe(Effect.map((result) => ({ check, result }))),
-      { concurrency: "unbounded" },
-    )
-    return results.find((result) => result.result.stdout.includes(installedPackage))?.check.method
-  })
+  const method = installation.method
 
   const release = Effect.fnUntraced(function* () {
     const response = yield* Effect.tryPromise({
