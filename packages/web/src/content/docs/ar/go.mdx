@@ -75,6 +75,7 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
+- **Omen Alpha**
 
 قد تتغير قائمة النماذج مع استمرارنا في اختبار نماذج جديدة وإضافتها.
 
@@ -94,11 +95,13 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 
 ## حدود الاستخدام
 
-يتضمن OpenCode Go الحدود التالية:
+يتضمن OpenCode Go الحدود الأساسية التالية:
 
 - **حد 5 ساعات** — استخدام بقيمة $12
 - **الحد الأسبوعي** — استخدام بقيمة $30
 - **الحد الشهري** — استخدام بقيمة $60
+
+يختلف الحد الفعلي حسب النموذج؛ راجع الجدول أدناه.
 
 تُحدَّد الحدود بالقيمة بالدولار. وهذا يعني أن عدد طلباتك الفعلي يعتمد على النموذج الذي تستخدمه. تتيح النماذج الأقل تكلفة مثل MiMo-V2.5 عددًا أكبر من الطلبات، بينما تتيح النماذج الأعلى تكلفة مثل GLM-5.2 عددًا أقل.
 
@@ -132,8 +135,9 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 | DeepSeek V4 Flash Vision Exp | 3,800               | 9,450              | 18,900           |
 | Hy4 preview                  | 1,350               | 3,380              | 6,770            |
 | Hy3                          | 4,300               | 10,750             | 21,500           |
+| Omen Alpha                   | 11,600              | 29,000             | 57,900           |
 
-تستند التقديرات إلى أنماط الطلبات المرصودة:
+تستخدم التقديرات أعداد tokens التالية لكل طلب؛ ويختلف الاستخدام الفعلي.
 
 - Grok 4.6 — ‏390 input، و32,500 cached، و120 output tokens لكل طلب
 - GLM-5.3-Flash — ‏1,000 input، و55,000 cached، و200 output tokens لكل طلب
@@ -158,6 +162,7 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 - Hy3 — ‏830 input، و71,500 cached، و295 output tokens لكل طلب
 - MiMo-V2.5 — ‏830 input، و71,500 cached، و295 output tokens لكل طلب
 - MiMo-V2.5-Pro — ‏790 input، و86,000 cached، و305 output tokens لكل طلب
+- Omen Alpha — ‏300 input، و40,000 cached، و100 output tokens لكل طلب
 
 تستند التقديرات أيضًا إلى الأسعار التالية لكل 1M tokens والاستخدام الشهري المتضمن مع كل نموذج:
 
@@ -197,6 +202,7 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44   | $1.32   | $0.014          | -               | $15       |
 | Hy4 preview                             | $0.834  | $2.501  | $0.042          | -               | $30       |
 | Hy3                                     | $0.14   | $0.58   | $0.035          | -               | $60       |
+| Omen Alpha                              | $0.20   | $0.66   | $0.04           | -               | $100      |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** ساعات Peak هي 01:00-04:00 و06:00-10:00 UTC من الاثنين إلى الجمعة؛ وجميع الساعات الأخرى، بما في ذلك عطلات نهاية الأسبوع، Off-Peak. [اعرف المزيد](https://api-docs.deepseek.com/quick_start/pricing/).
 
@@ -220,7 +226,7 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 
 ### لماذا يكون الاستخدام أقل لبعض النماذج
 
-مع Go، تدفع $10 شهريًا، ونهدف إلى منحك استخدامًا بقيمة تعادل 6 أضعاف هذا المبلغ.
+مع Go، تدفع $10 شهريًا، ونهدف لمعظم النماذج إلى منحك استخدامًا بقيمة تعادل 6 أضعاف هذا المبلغ.
 
 نحقق ذلك لمعظم النماذج من خلال الخصومات على الكميات الكبيرة وسعة GPU المحجوزة. ثم ننقل هذه الوفورات إليك من خلال معامل مضاعفة قدره 6.
 
@@ -263,6 +269,7 @@ OpenCode Go هو اشتراك منخفض التكلفة بقيمة **$10/شهر�
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Omen Alpha                   | omen-alpha                   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 يستخدم [model id](/docs/config/#models) في إعدادات OpenCode لديك التنسيق `opencode-go/<model-id>`. على سبيل المثال، بالنسبة إلى Kimi K3، ستستخدم `opencode-go/kimi-k3` في إعداداتك.
 
@@ -308,12 +315,13 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash Vision Exp | غير مستخدَمة  | 0 أيام             |
 | Hy4 preview                  | غير مستخدَمة  | 0 أيام             |
 | Hy3                          | غير مستخدَمة  | 0 أيام             |
+| Omen Alpha                   | غير مستخدَمة  | 0 أيام             |
 
 - **Grok 4.6:** تعطّل ZDR ميزات API مهمة تعتمد على البيانات المخزنة، بما في ذلك Responses API ذات الحالة، وFiles and Collections، وBatch API. [اعرف المزيد](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** تُنشأ سجلات مراقبة إساءة الاستخدام لكل استخدام لميزات API، ويُحتفظ بها لمدة تصل إلى 30 يومًا. [اعرف المزيد](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
 - **Muse Spark 1.3 Contributor:** أسعار توكنات مخفّضة للغاية مقابل منح الإذن باستخدام مطالباتك وإكمالات النموذج لتدريب نماذج Meta المستقبلية. يقتصر التوفر على المناطق التي تسمح بها [سياسة الاستخدام الجغرافي](https://ai.developer.meta.com/legal/geographic-use-policy) الخاصة بـ Meta. [اعرف المزيد](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Muse Spark 1.2 Contributor:** أسعار توكنات مخفّضة للغاية مقابل منح الإذن باستخدام مطالباتك وإكمالات النموذج لتدريب نماذج Meta المستقبلية. يقتصر التوفر على المناطق التي تسمح بها [سياسة الاستخدام الجغرافي](https://ai.developer.meta.com/legal/geographic-use-policy) الخاصة بـ Meta. [اعرف المزيد](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
-- **DeepSeek V4 Flash:** تُجدَّد اتفاقية ZDR شهريًا. الاتفاقية الحالية سارية حتى 31 أغسطس 2026.
+- **DeepSeek V4 Flash:** تُجدَّد اتفاقية ZDR شهريًا. الاتفاقية الحالية سارية حتى 30 سبتمبر 2026.
 
 ---
 

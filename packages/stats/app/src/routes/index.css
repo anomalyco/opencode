@@ -5320,6 +5320,10 @@ body {
   text-decoration: none;
 }
 
+[data-page="stats"] [data-component="model-peer-list"] a[data-providerless="true"] {
+  grid-template-columns: 32px minmax(0, 1fr) minmax(64px, auto);
+}
+
 [data-page="stats"] [data-component="model-peer-list"] a:hover,
 [data-page="stats"] [data-component="model-peer-list"] a[data-active="true"] {
   border-color: var(--stats-text);
@@ -8481,6 +8485,10 @@ body {
   [data-page="stats"] [data-component="model-peer-list"] a {
     grid-template-columns: 28px 32px minmax(0, 1fr) minmax(56px, auto);
     gap: 12px;
+  }
+
+  [data-page="stats"] [data-component="model-peer-list"] a[data-providerless="true"] {
+    grid-template-columns: 28px minmax(0, 1fr) minmax(56px, auto);
   }
 
   [data-page="stats"] [data-slot="model-peer-rank"] {
