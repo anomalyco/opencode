@@ -30,7 +30,7 @@ export const ProjectCopyGroup = HttpApiGroup.make("server.projectCopy")
       error: ProjectCopyError,
     })
       .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(OpenApi.annotations({ identifier: "v2.projectCopy.create" })),
+      .annotateMerge(OpenApi.annotations({ identifier: "projectCopy.create" })),
   )
   .add(
     HttpApiEndpoint.delete("projectCopy.remove", root, {
@@ -41,7 +41,7 @@ export const ProjectCopyGroup = HttpApiGroup.make("server.projectCopy")
       error: ProjectCopyError,
     })
       .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(OpenApi.annotations({ identifier: "v2.projectCopy.remove" })),
+      .annotateMerge(OpenApi.annotations({ identifier: "projectCopy.remove" })),
   )
   .add(
     HttpApiEndpoint.post("projectCopy.refresh", `${root}/refresh`, {
@@ -51,6 +51,6 @@ export const ProjectCopyGroup = HttpApiGroup.make("server.projectCopy")
       error: ProjectCopyError,
     })
       .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(OpenApi.annotations({ identifier: "v2.projectCopy.refresh" })),
+      .annotateMerge(OpenApi.annotations({ identifier: "projectCopy.refresh" })),
   )
   .annotateMerge(OpenApi.annotations({ title: "projectCopy", description: "Project copy management routes." }))

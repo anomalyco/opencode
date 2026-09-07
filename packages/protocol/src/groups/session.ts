@@ -118,7 +118,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         error: [InvalidCursorError, InvalidRequestError],
       }).annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.session.list",
+          identifier: "session.list",
           summary: "List sessions",
           description:
             "Retrieve sessions in the requested order. Items keep that order across pages; use cursor.next or cursor.previous to move through the ordered list.",
@@ -136,7 +136,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         success: Schema.Struct({ data: Session.Info }),
       }).annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.session.create",
+          identifier: "session.create",
           summary: "Create session",
           description: "Create a session at the requested location.",
         }),
@@ -147,7 +147,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         success: Schema.Struct({ data: Schema.Record(Session.ID, SessionActive) }),
       }).annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.session.active",
+          identifier: "session.active",
           summary: "List active sessions",
           description:
             "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive.",
@@ -163,7 +163,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.get",
+            identifier: "session.get",
             summary: "Get session",
             description: "Retrieve a session by ID.",
           }),
@@ -179,7 +179,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.switchAgent",
+            identifier: "session.switchAgent",
             summary: "Switch session agent",
             description: "Switch the agent used by subsequent provider turns.",
           }),
@@ -195,7 +195,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.switchModel",
+            identifier: "session.switchModel",
             summary: "Switch session model",
             description: "Switch the model used by subsequent provider turns.",
           }),
@@ -216,7 +216,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.prompt",
+            identifier: "session.prompt",
             summary: "Send message",
             description: "Durably admit one session input and schedule agent-loop execution unless resume is false.",
           }),
@@ -231,7 +231,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.compact",
+            identifier: "session.compact",
             summary: "Compact session",
             description: "Compact a session conversation.",
           }),
@@ -246,7 +246,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.wait",
+            identifier: "session.wait",
             summary: "Wait for session",
             description: "Wait for a session agent loop to become idle.",
           }),
@@ -262,7 +262,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.revert.stage",
+            identifier: "session.revert.stage",
             summary: "Stage session revert",
             description: "Stage or move a reversible session boundary and optionally apply its file changes.",
           }),
@@ -275,7 +275,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         error: [SessionNotFoundError, UnknownError],
       })
         .middleware(sessionLocationMiddleware)
-        .annotateMerge(OpenApi.annotations({ identifier: "v2.session.revert.clear", summary: "Clear staged revert" })),
+        .annotateMerge(OpenApi.annotations({ identifier: "session.revert.clear", summary: "Clear staged revert" })),
     )
     .add(
       HttpApiEndpoint.post("session.revert.commit", "/api/session/:sessionID/revert/commit", {
@@ -285,7 +285,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
-          OpenApi.annotations({ identifier: "v2.session.revert.commit", summary: "Commit staged revert" }),
+          OpenApi.annotations({ identifier: "session.revert.commit", summary: "Commit staged revert" }),
         ),
     )
     .add(
@@ -297,7 +297,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.context",
+            identifier: "session.context",
             summary: "Get session context",
             description: "Retrieve the active context messages for a session (all messages after the last compaction).",
           }),
@@ -316,7 +316,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.history",
+            identifier: "session.history",
             summary: "Get session history",
             description:
               "Read one finite page of public durable Session events after an exclusive aggregate sequence. Newly committed events may appear on later pages.",
@@ -335,7 +335,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.events",
+            identifier: "session.events",
             summary: "Subscribe to session events",
             description: "Replay durable events after an aggregate sequence, then continue with new durable events.",
           }),
@@ -350,7 +350,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.interrupt",
+            identifier: "session.interrupt",
             summary: "Interrupt session execution",
             description: "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op.",
           }),
@@ -365,7 +365,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.message",
+            identifier: "session.message",
             summary: "Get session message",
             description: "Retrieve one projected message owned by the Session.",
           }),

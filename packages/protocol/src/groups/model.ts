@@ -15,7 +15,7 @@ export const ModelGroup = HttpApiGroup.make("server.model")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.model.list",
+          identifier: "model.list",
           summary: "List models",
           description: "Retrieve available models ordered by release date.",
         }),

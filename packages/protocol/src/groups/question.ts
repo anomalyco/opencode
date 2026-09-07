@@ -24,7 +24,7 @@ export const makeQuestionGroup = <
         .annotateMerge(locationQueryOpenApi)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.question.request.list",
+            identifier: "question.request.list",
             summary: "List pending question requests",
             description: "Retrieve pending question requests for a location.",
           }),
@@ -42,7 +42,7 @@ export const makeQuestionGroup = <
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.question.list",
+            identifier: "session.question.list",
             summary: "List session question requests",
             description: "Retrieve pending question requests owned by a session.",
           }),
@@ -58,7 +58,7 @@ export const makeQuestionGroup = <
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.question.reply",
+            identifier: "session.question.reply",
             summary: "Reply to pending question request",
             description: "Answer a pending question request owned by a session.",
           }),
@@ -73,7 +73,7 @@ export const makeQuestionGroup = <
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.question.reject",
+            identifier: "session.question.reject",
             summary: "Reject pending question request",
             description: "Reject a pending question request owned by a session.",
           }),
