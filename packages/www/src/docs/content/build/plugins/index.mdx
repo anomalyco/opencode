@@ -666,6 +666,18 @@ const session = await ctx.session.get({ sessionID })
 const messages = await ctx.session.context({ sessionID })
 ```
 
+Create a linked child session by passing `parentID`. The child inherits the parent's Location. Prompt admission starts
+execution asynchronously; call `wait` only when the plugin needs the result before it can continue.
+
+```ts
+const child = await ctx.session.create({
+  parentID: sessionID,
+  title: "Review billing",
+  agent: "reviewer",
+})
+await ctx.session.prompt({ sessionID: child.id, text: "Review this service" })
+```
+
 Change the agent or model used by subsequent requests.
 
 ```ts
