@@ -75,8 +75,6 @@ interface PrepareInput {
   readonly transcript: {
     readonly system: Array<SystemPart>
     readonly messages: Array<Message>
-    /** Selected durable window, checked again after model request hooks resolve the route. */
-    readonly providerContext?: SessionProviderContext.Provenance
   }
   readonly toolChoice?: LLM.RequestInput["toolChoice"]
   /**
@@ -96,13 +94,8 @@ export const baseTranscript = (input: {
   readonly messages: ReadonlyArray<SessionMessage.Info>
 }) => {
   const providerMetadataKey = input.model.model.route.providerMetadataKey ?? input.model.model.provider
-  const checkpoint = input.messages.findLast(
-    (message): message is SessionMessage.CompactionCompleted =>
-      message.type === "compaction" && message.status === "completed" && message.providerContext !== undefined,
-  )
   return {
     providerMetadataKey,
-    providerContext: checkpoint?.providerContext?.provenance,
     system: [
       input.agent.system
         ? input.agent.system
@@ -111,12 +104,7 @@ export const baseTranscript = (input: {
     ]
       .filter((part) => part.length > 0)
       .map(SystemPart.make),
-    messages: toLLMMessages(
-      input.messages,
-      input.model.ref,
-      providerMetadataKey,
-      SessionProviderContext.provenance(input.model),
-    ),
+    messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey),
   }
 }
 
@@ -358,14 +346,17 @@ export const layer = Layer.effect(
           providerOptions: Object.keys(context.providerOptions).length === 0 ? undefined : context.providerOptions,
         }),
       )
-      // A newly installed routing hook must not send an existing opaque window to another deployment.
-      // Checkpoint producers stamp the final prepared route, not the pre-hook catalog selection.
+      // History selects native windows against the catalog route before hooks run. A newly installed
+      // routing hook must not send an existing opaque window to another deployment; `prepare` has no
+      // error channel, so like hook failures this surfaces as a defect.
+      const selected = SessionProviderContext.provenance(resolved)
       if (
-        input.transcript.providerContext &&
+        selected &&
         !SessionProviderContext.compatible(
-          input.transcript.providerContext,
+          selected,
           SessionProviderContext.provenance({ model: request.model, ref: resolved.ref }),
-        )
+        ) &&
+        request.messages.some((message) => message.content.some((part) => part.type === "compaction"))
       )
         return yield* Effect.die(
           new Error("Provider context is incompatible with the route selected by model request hooks"),

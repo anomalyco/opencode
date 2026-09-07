@@ -161,7 +161,7 @@ const layer = Layer.effect(
         db,
         selection.session.id,
         selection.instructions,
-        SessionProviderContext.provenance(model),
+        SessionProviderContext.provenance(model) ?? "local",
       )
       return {
         session: selection.session,

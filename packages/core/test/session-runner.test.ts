@@ -1454,7 +1454,6 @@ describe("SessionRunnerLLM", () => {
       })
       if (!target) throw new Error("Expected concrete fixture endpoint")
       const replacement = [
-        Message.system("Checkpoint instructions"),
         Message.assistant(CompactionPart.make({ provider: s.currentModel.provider, encrypted: "checkpoint" })),
       ]
       const providerContext = SessionProviderContext.encode(target, replacement)
@@ -1472,14 +1471,14 @@ describe("SessionRunnerLLM", () => {
       const after = yield* s.runPrompt("After checkpoint")
       const continued = s.requests.at(-1)
       if (!continued) throw new Error("Expected continuation request")
-      expect(continued.messages[0]).toEqual(replacement[1])
+      expect(continued.messages[0]).toEqual(replacement[0])
       expect(continued.system.map((part) => part.text)).toContain("Checkpoint instructions")
       expect(systemTexts(continued)).toEqual(["Newest instructions"])
 
       const forked = yield* s.session.fork({ sessionID, boundary: { type: "before", messageID: after.id } })
       yield* s.session.prompt({ sessionID: forked.id, text: "Fork prompt", resume: false })
       yield* s.session.resume(forked.id)
-      expect(s.requests.at(-1)?.messages[0]).toEqual(replacement[1])
+      expect(s.requests.at(-1)?.messages[0]).toEqual(replacement[0])
       expect(s.requests.at(-1)?.system.map((part) => part.text)).toContain("Newest instructions")
       expect(s.requests.at(-1)?.messages.filter((message) => message.role === "system")).toEqual([
         Message.system("Newest instructions"),

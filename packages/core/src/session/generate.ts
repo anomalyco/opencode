@@ -34,7 +34,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       database.db,
       selection.session.id,
       selection.instructions,
-      SessionProviderContext.provenance(model),
+      SessionProviderContext.provenance(model) ?? "local",
     )
     const transcript = SessionModelRequest.baseTranscript({
       agent: selection.agent.info,
@@ -48,7 +48,6 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       scope: { session: selection.session, agentID: selection.agent.id, model, tools: selection.tools },
       transcript: {
         system: transcript.system,
-        providerContext: transcript.providerContext,
         messages: [
           ...transcript.messages,
           ...(history.instructionUpdate ? [Message.system(history.instructionUpdate)] : []),

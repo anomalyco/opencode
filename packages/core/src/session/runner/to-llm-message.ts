@@ -222,12 +222,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
   ]
 }
 
-function toLLMMessage(
-  message: SessionMessage.Info,
-  model: Model.Ref,
-  providerMetadataKey: string,
-  target?: SessionProviderContext.Provenance,
-): Message[] {
+function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMetadataKey: string): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
@@ -280,12 +275,9 @@ function toLLMMessage(
       return assistant(message, model, providerMetadataKey)
     case "compaction":
       if (message.status !== "completed") return []
-      // Explicit system updates inside a native replacement predate its completed
-      // compaction epoch; the current epoch baseline supersedes those instructions.
-      if (message.providerContext)
-        return SessionProviderContext.compatible(message.providerContext.provenance, target)
-          ? SessionProviderContext.decode(message.providerContext).filter((message) => message.role !== "system")
-          : []
+      // History selection only keeps native windows the target model can replay.
+      if (SessionProviderContext.isCheckpoint(message))
+        return [...SessionProviderContext.decode(message.providerContext)]
       return [
         Message.make({
           id: message.id,
@@ -312,5 +304,4 @@ export const toLLMMessages = (
   messages: readonly SessionMessage.Info[],
   model: Model.Ref,
   providerMetadataKey: string = model.providerID,
-  target?: SessionProviderContext.Provenance,
-) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey, target))
+) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))

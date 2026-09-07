@@ -3,7 +3,9 @@ export * as SessionProviderContext from "./provider-context.js"
 import { Message } from "@opencode-ai/ai"
 import { SessionProviderContext } from "@opencode-ai/schema/session-provider-context"
 import { Schema } from "effect"
+import { isDeepStrictEqual } from "node:util"
 import { Hash } from "@opencode-ai/util/hash"
+import type { SessionMessage } from "./message.js"
 import type { SessionRunnerModel } from "./runner/model.js"
 
 export type Provenance = SessionProviderContext.Provenance
@@ -34,13 +36,13 @@ export function provenance(resolved: Pick<SessionRunnerModel.Resolved, "model" |
 }
 
 export const compatible = (source: Provenance, target: Provenance | undefined) =>
-  target !== undefined &&
-  source.providerID === target.providerID &&
-  source.provider === target.provider &&
-  source.modelID === target.modelID &&
-  source.route === target.route &&
-  source.protocol === target.protocol &&
-  source.endpoint === target.endpoint
+  target !== undefined && isDeepStrictEqual(source, target)
+
+/** A completed compaction that installed a native replacement window instead of a local summary. */
+export const isCheckpoint = (
+  message: SessionMessage.Info,
+): message is SessionMessage.CompactionCompleted & { readonly providerContext: Info } =>
+  message.type === "compaction" && message.status === "completed" && message.providerContext !== undefined
 
 /** Stores the canonical replacement, not a local summary or transport continuation.
  * Provider and attachment metadata can contain optional undefined entries. Use JSON's

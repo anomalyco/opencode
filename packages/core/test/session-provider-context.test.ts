@@ -19,7 +19,7 @@ import { SessionProviderContext } from "@opencode-ai/core/session/provider-conte
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
-import { InstructionStateTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { InstructionStateTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Model } from "@opencode-ai/schema/model"
@@ -39,7 +39,6 @@ const target = SessionProviderContext.provenance(model)
 if (!target) throw new Error("Fixture must have a concrete endpoint")
 const replacement = [
   Message.user("retained request"),
-  Message.system("changed instructions"),
   Message.assistant(
     CompactionPart.make({ provider: model.model.provider, encrypted: "opaque-checkpoint", id: "cp_1" }),
   ),
@@ -91,8 +90,8 @@ const setup = Effect.gen(function* () {
       recent: "",
       providerContext: context,
     })
-  const load = (identity?: SessionProviderContext.Provenance) =>
-    SessionHistory.entriesForRunner(database.db, sessionID, instructions, identity)
+  const load = (boundary: SessionHistory.Boundary) =>
+    SessionHistory.entriesForRunner(database.db, sessionID, instructions, boundary)
   return { db: database.db, bus, state, instructions, prepare, prompt, compact, load }
 })
 
@@ -199,17 +198,14 @@ it.effect(
           toLLMMessages(
             native.entries.map((entry) => entry.message),
             model.ref,
-            "openai",
-            target,
           ),
         ).toEqual([
-          replacement[0],
-          replacement[2],
+          ...replacement,
           Message.system("newest instructions"),
           expect.objectContaining({ role: "user", content: [Message.text("continue")] }),
         ])
         for (const incompatible of [
-          undefined,
+          "local" as const,
           { ...providerContext.provenance, modelID: "other" },
           { ...providerContext.provenance, provider: "other" },
         ]) {
@@ -285,39 +281,23 @@ it.effect("falls back to an earlier compatible native or local checkpoint", () =
       toLLMMessages(
         native.entries.map((entry) => entry.message),
         model.ref,
-        "openai",
-        target,
       ).filter((message) => message.role === "system"),
     ).toEqual([Message.system("post-epoch update")])
-    const local = yield* s.load()
+    const local = yield* s.load("local")
     expect(local.initial).toBe("new native baseline")
     expect(local.entries.map((entry) => entry.message.type)).toEqual(["compaction", "user", "user", "system"])
     expect(local.entries[0]?.message).toMatchObject({ summary: "local summary" })
   }),
 )
 
-it.effect("rejects malformed installed or persisted native windows instead of silently dropping them", () =>
+it.effect("rejects malformed persisted native windows instead of silently dropping them", () =>
   Effect.gen(function* () {
     const s = yield* setup
-    const malformed = { ...providerContext, messages: [{ role: "invalid", content: [] }] }
-    expect(yield* s.compact(malformed).pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
-    yield* s.compact(providerContext)
-    const row = yield* s.db
-      .select()
-      .from(SessionMessageTable)
-      .where(eq(SessionMessageTable.session_id, sessionID))
-      .get()
-    if (!row) throw new Error("Expected projected checkpoint")
-    const data = Schema.encodeSync(SessionMessage.CompactionCompleted)(
-      Schema.decodeUnknownSync(SessionMessage.CompactionCompleted)({ ...row.data, id: row.id, type: row.type }),
-    )
-    yield* s.db
-      .update(SessionMessageTable)
-      .set({ data: { ...data, providerContext: malformed } })
-      .where(eq(SessionMessageTable.id, row.id))
-      .run()
+    yield* s.compact({ ...providerContext, messages: [{ role: "invalid", content: [] }] })
     expect(yield* SessionHistory.load(s.db, sessionID, target).pipe(Effect.flip)).toMatchObject({
       _tag: "Session.MessageDecodeError",
     })
+    const store = yield* SessionStore.Service
+    expect(yield* store.context(sessionID).pipe(Effect.flip)).toMatchObject({ _tag: "Session.MessageDecodeError" })
   }),
 )

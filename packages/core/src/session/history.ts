@@ -7,16 +7,28 @@ import { SessionSchema } from "./schema.js"
 import { Instructions } from "../instructions/index.js"
 import { InstructionState } from "./instruction-state.js"
 import { SessionProviderContext } from "./provider-context.js"
-import { InstructionStateTable, SessionMessageTable } from "./sql.js"
+import { SessionMessageTable } from "./sql.js"
 
 type DatabaseService = Database.Interface["db"]
 
 const decode = Schema.decodeUnknownEffect(SessionMessage.Info)
 
+/**
+ * Which completed compactions bound a history read. Local summaries always do. Native
+ * windows do for model-neutral readers (`latest`), never for the original transcript
+ * (`local`), and only when the target model can replay them (a provenance).
+ */
+export type Boundary = "latest" | "local" | SessionProviderContext.Provenance
+
+const replayable = (message: SessionMessage.Info, boundary: Boundary) =>
+  !SessionProviderContext.isCheckpoint(message) ||
+  boundary === "latest" ||
+  (boundary !== "local" && SessionProviderContext.compatible(message.providerContext.provenance, boundary))
+
 export const latestCompaction = Effect.fnUntraced(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
-  target?: SessionProviderContext.Provenance,
+  boundary: Boundary,
 ) {
   return yield* db
     .select({ seq: SessionMessageTable.seq })
@@ -26,17 +38,19 @@ export const latestCompaction = Effect.fnUntraced(function* (
         eq(SessionMessageTable.session_id, sessionID),
         eq(SessionMessageTable.type, "compaction"),
         sql`json_extract(${SessionMessageTable.data}, '$.status') = 'completed'`,
-        or(
-          sql`json_extract(${SessionMessageTable.data}, '$.providerContext') is null`,
-          target === undefined
-            ? undefined
-            : and(
-                ...Object.entries(target).map(
-                  ([key, value]) =>
-                    sql`json_extract(${SessionMessageTable.data}, ${`$.providerContext.provenance.${key}`}) = ${value}`,
-                ),
-              ),
-        ),
+        boundary === "latest"
+          ? undefined
+          : or(
+              sql`json_extract(${SessionMessageTable.data}, '$.providerContext') is null`,
+              boundary === "local"
+                ? undefined
+                : and(
+                    ...Object.entries(boundary).map(
+                      ([key, value]) =>
+                        sql`json_extract(${SessionMessageTable.data}, ${`$.providerContext.provenance.${key}`}) = ${value}`,
+                    ),
+                  ),
+            ),
       ),
     )
     .orderBy(desc(SessionMessageTable.seq))
@@ -48,7 +62,7 @@ export const latestCompaction = Effect.fnUntraced(function* (
 export const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
   decode({ ...row.data, id: row.id, type: row.type }).pipe(
     Effect.tap((message) =>
-      message.type === "compaction" && message.status === "completed" && message.providerContext
+      SessionProviderContext.isCheckpoint(message)
         ? SessionProviderContext.validate(message.providerContext)
         : Effect.void,
     ),
@@ -64,9 +78,9 @@ export const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =
 const messageEntries = Effect.fnUntraced(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
-  target?: SessionProviderContext.Provenance,
+  boundary: Boundary,
 ) {
-  const compaction = yield* latestCompaction(db, sessionID, target)
+  const compaction = yield* latestCompaction(db, sessionID, boundary)
   const rows = yield* db
     .select()
     .from(SessionMessageTable)
@@ -82,54 +96,35 @@ const messageEntries = Effect.fnUntraced(function* (
   const entries = yield* Effect.forEach(rows, (row) =>
     decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
   )
-  const native = entries.findLast(
-    (entry) =>
-      entry.message.type === "compaction" && entry.message.status === "completed" && entry.message.providerContext,
-  )
-  const epoch = native
-    ? yield* db
-        .select({ start: InstructionStateTable.epoch_start })
-        .from(InstructionStateTable)
-        .where(eq(InstructionStateTable.session_id, sessionID))
-        .get()
-        .pipe(Effect.orDie)
-    : undefined
+  // Re-expansion may cross a native checkpoint whose completion already advanced the instruction
+  // epoch: the baseline supersedes the chronological updates before it. Forks seed their baseline
+  // at sequence 0 but retain parent sequences, so the copied checkpoint still retires them.
+  const native = entries.findLast((entry) => SessionProviderContext.isCheckpoint(entry.message))
   // Skipped native checkpoints are not textual summaries. Their original transcript remains available.
-  return entries.filter((entry) => {
-    const message = entry.message
-    // Re-expansion may cross native checkpoints, but their advanced baseline still applies.
-    // Do not replay superseded instruction updates ahead of post-epoch updates.
-    // Forks seed their baseline at sequence 0 but retain parent message sequences.
-    // The copied native boundary still retires the instructions preceding it.
-    if (message.type === "system" && native && entry.seq < Math.max(epoch?.start ?? 0, native.seq)) return false
-    return (
-      message.type !== "compaction" ||
-      message.status !== "completed" ||
-      !message.providerContext ||
-      SessionProviderContext.compatible(message.providerContext.provenance, target)
-    )
-  })
+  return entries.filter(
+    (entry) =>
+      !(entry.message.type === "system" && native && entry.seq < native.seq) && replayable(entry.message, boundary),
+  )
 })
 
-/** Without a resolved target, native checkpoints are conservatively skipped. */
 export const load = Effect.fn("SessionHistory.load")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
-  target?: SessionProviderContext.Provenance,
+  boundary: Boundary,
 ) {
-  return (yield* messageEntries(db, sessionID, target)).map((entry) => entry.message)
+  return (yield* messageEntries(db, sessionID, boundary)).map((entry) => entry.message)
 })
 
 export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
   instructions: Instructions.List,
-  target?: SessionProviderContext.Provenance,
+  boundary: Boundary,
 ) {
   return yield* db
     .transaction(() =>
       Effect.gen(function* () {
-        const messages = yield* messageEntries(db, sessionID, target)
+        const messages = yield* messageEntries(db, sessionID, boundary)
         return {
           initial: yield* InstructionState.initial(db, sessionID, instructions),
           entries: messages,
@@ -143,13 +138,13 @@ export const preview = Effect.fn("SessionHistory.preview")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
   instructions: Instructions.List,
-  target?: SessionProviderContext.Provenance,
+  boundary: Boundary,
 ) {
   const observed = yield* Instructions.read(instructions)
   return yield* db
     .transaction(() =>
       Effect.gen(function* () {
-        const messages = yield* messageEntries(db, sessionID, target)
+        const messages = yield* messageEntries(db, sessionID, boundary)
         // An active assistant may contain an unresolved tool call, so only preview the settled prefix.
         const unsettled = messages.findIndex(
           (entry) => entry.message.type === "assistant" && entry.message.time.completed === undefined,
