@@ -13,6 +13,7 @@ import { SessionMessage } from "./message.js"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionMessageTable, SessionTable } from "./sql.js"
 import { fromRow } from "./info.js"
+import { Timeline } from "./timeline.js"
 
 const ListInputBase = {
   workspaceID: Workspace.ID.pipe(Schema.optional),
@@ -56,6 +57,7 @@ export interface Interface {
   readonly context: (sessionID: Session.ID) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   readonly message: (
     messageID: SessionMessage.ID,
+    sessionID?: Session.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
   /**
    * Top-level Sessions holding an execution claim. Recoverable background
@@ -140,49 +142,36 @@ const layer = Layer.effect(
         const direction = input.cursor?.direction ?? "next"
         const requestedOrder = input.order ?? "desc"
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
-        const anchor = input.cursor
-          ? yield* db
-              .select({ seq: SessionMessageTable.seq })
-              .from(SessionMessageTable)
-              .where(
-                and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, input.cursor.id)),
-              )
-              .get()
-              .pipe(Effect.orDie)
-          : undefined
+        const anchor = input.cursor ? yield* Timeline.find(db, input.sessionID, input.cursor.id) : undefined
         if (input.cursor && !anchor) return []
         const boundary = anchor
           ? order === "asc"
             ? gt(SessionMessageTable.seq, anchor.seq)
             : lt(SessionMessageTable.seq, anchor.seq)
           : undefined
-        const where = boundary
-          ? and(eq(SessionMessageTable.session_id, input.sessionID), boundary)
-          : eq(SessionMessageTable.session_id, input.sessionID)
-        const query = db
-          .select()
-          .from(SessionMessageTable)
-          .where(where)
-          .orderBy(order === "asc" ? asc(SessionMessageTable.seq) : desc(SessionMessageTable.seq))
-        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
-          Effect.orDie,
-        )
+        const rows = yield* Timeline.rows(db, yield* Timeline.forSession(db, input.sessionID), {
+          where: boundary,
+          order,
+          limit: input.limit,
+        })
         return yield* Effect.forEach(
           direction === "previous" ? rows.toReversed() : rows,
           SessionHistory.decodeMessageRow,
         )
       }),
       context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID)),
-      message: Effect.fn("SessionStore.message")(function* (messageID) {
-        const row = yield* db
-          .select()
-          .from(SessionMessageTable)
-          .where(eq(SessionMessageTable.id, messageID))
-          .get()
-          .pipe(Effect.orDie)
+      message: Effect.fn("SessionStore.message")(function* (messageID, sessionID) {
+        const row = sessionID
+          ? yield* Timeline.find(db, sessionID, messageID)
+          : yield* db
+              .select()
+              .from(SessionMessageTable)
+              .where(eq(SessionMessageTable.id, messageID))
+              .get()
+              .pipe(Effect.orDie)
         return row
           ? {
-              sessionID: Session.ID.make(row.session_id),
+              sessionID: sessionID ?? Session.ID.make(row.session_id),
               message: yield* SessionHistory.decodeMessageRow(row).pipe(Effect.orDie),
             }
           : undefined

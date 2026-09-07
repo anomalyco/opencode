@@ -17,6 +17,7 @@ import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { SessionMessageTable } from "../sql.js"
+import { Timeline } from "../timeline.js"
 import { SessionTitle } from "../title.js"
 import { DrainResult, Service, type Interface } from "./index.js"
 import { Snapshot } from "../../snapshot.js"
@@ -293,7 +294,7 @@ const layer = Layer.effect(
         .from(SessionMessageTable)
         .where(
           and(
-            eq(SessionMessageTable.session_id, sessionID),
+            eq(SessionMessageTable.timeline_id, Timeline.current(sessionID)),
             eq(SessionMessageTable.type, "compaction"),
             sql`json_extract(${SessionMessageTable.data}, '$.status') = 'running'`,
           ),

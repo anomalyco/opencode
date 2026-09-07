@@ -158,12 +158,13 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         CREATE TABLE \`session_message\` (
           \`id\` text PRIMARY KEY,
           \`session_id\` text NOT NULL,
+          \`timeline_id\` text NOT NULL,
           \`type\` text NOT NULL,
           \`seq\` integer NOT NULL,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL,
           \`data\` text NOT NULL,
-          CONSTRAINT \`fk_session_message_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
+          CONSTRAINT \`fk_session_message_timeline_id_timeline_id_fk\` FOREIGN KEY (\`timeline_id\`) REFERENCES \`timeline\`(\`id\`) ON DELETE CASCADE
         );
       `)
       yield* tx.run(`
@@ -181,6 +182,7 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       yield* tx.run(`
         CREATE TABLE \`session_v2\` (
           \`id\` text PRIMARY KEY,
+          \`timeline_id\` text NOT NULL,
           \`project_id\` text NOT NULL,
           \`workspace_id\` text,
           \`parent_id\` text,
@@ -216,7 +218,16 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`time_archived\` integer,
           \`time_suspended\` integer,
           \`resume_attempts\` integer DEFAULT 0 NOT NULL,
+          CONSTRAINT \`fk_session_v2_timeline_id_timeline_id_fk\` FOREIGN KEY (\`timeline_id\`) REFERENCES \`timeline\`(\`id\`),
           CONSTRAINT \`fk_session_v2_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`timeline\` (
+          \`id\` text PRIMARY KEY,
+          \`base_id\` text,
+          \`base_seq\` integer,
+          CONSTRAINT \`fk_timeline_base_id_timeline_id_fk\` FOREIGN KEY (\`base_id\`) REFERENCES \`timeline\`(\`id\`)
         );
       `)
       yield* tx.run(`
@@ -249,9 +260,17 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       yield* tx.run(
         `CREATE UNIQUE INDEX \`session_inbox_session_enqueued_seq_idx\` ON \`session_inbox\` (\`session_id\`,\`enqueued_seq\`);`,
       )
+      yield* tx.run(`CREATE INDEX \`session_message_session_seq_idx\` ON \`session_message\` (\`session_id\`,\`seq\`);`)
       yield* tx.run(
-        `CREATE UNIQUE INDEX \`session_message_session_seq_idx\` ON \`session_message\` (\`session_id\`,\`seq\`);`,
+        `CREATE UNIQUE INDEX \`session_message_timeline_seq_idx\` ON \`session_message\` (\`timeline_id\`,\`seq\`);`,
       )
+      yield* tx.run(
+        `CREATE INDEX \`session_message_timeline_type_seq_idx\` ON \`session_message\` (\`timeline_id\`,\`type\`,\`seq\`);`,
+      )
+      yield* tx.run(`
+        CREATE INDEX \`session_message_unsettled_idx\` ON \`session_message\` (\`timeline_id\`,\`seq\`) WHERE (("session_message"."type" = 'assistant' AND json_extract("session_message"."data", '$.time.completed') IS NULL)
+            OR ("session_message"."type" IN ('shell', 'compaction') AND json_extract("session_message"."data", '$.status') = 'running'));
+      `)
       yield* tx.run(
         `CREATE INDEX \`session_message_session_type_seq_idx\` ON \`session_message\` (\`session_id\`,\`type\`,\`seq\`);`,
       )

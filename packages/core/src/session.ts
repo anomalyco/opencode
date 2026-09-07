@@ -4,7 +4,7 @@ export * from "./session/schema.js"
 import { Effect, Layer, Schema, Context, Stream } from "effect"
 import { LLMClient } from "@opencode-ai/ai"
 import { ListAnchor } from "@opencode-ai/schema/session"
-import { and, desc, eq } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 import { Project } from "./project.js"
 import { Model } from "@opencode-ai/schema/model"
 import { Location } from "./location.js"
@@ -63,6 +63,7 @@ import { Job } from "./job.js"
 import type { Command } from "./command.js"
 import { SessionEnvironment } from "./session/environment.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
+import { Timeline } from "./session/timeline.js"
 
 // get project -> project.locations
 //
@@ -292,19 +293,11 @@ const layer = Layer.effect(
       }),
       fork: Effect.fn("Session.fork")(function* (input) {
         const parent = yield* result.get(input.sessionID)
-        const boundary = yield* db
-          .select({ id: SessionMessageTable.id })
-          .from(SessionMessageTable)
-          .where(
-            and(
-              eq(SessionMessageTable.session_id, input.sessionID),
-              input.boundary.type === "before" ? eq(SessionMessageTable.id, input.boundary.messageID) : undefined,
-            ),
-          )
-          .orderBy(desc(SessionMessageTable.seq))
-          .limit(1)
-          .get()
-          .pipe(Effect.orDie)
+        const ranges = yield* Timeline.forSession(db, input.sessionID)
+        const [boundary] = yield* Timeline.rows(db, ranges, {
+          where: input.boundary.type === "before" ? eq(SessionMessageTable.id, input.boundary.messageID) : undefined,
+          limit: 1,
+        })
         if (!boundary && input.boundary.type === "before")
           return yield* new MessageNotFoundError({
             sessionID: input.sessionID,

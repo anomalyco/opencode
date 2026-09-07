@@ -1,6 +1,6 @@
 export * as SessionRevert from "./revert.js"
 
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq, gt } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
@@ -12,6 +12,7 @@ import { MessageNotFoundError } from "./error.js"
 import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import { SessionMessageTable } from "./sql.js"
+import { Timeline } from "./timeline.js"
 
 export { MessageNotFoundError }
 
@@ -84,26 +85,12 @@ export const commit = Effect.fn("SessionRevert.commit")(function* (bus: Bus.Inte
 })
 
 const plan = Effect.fn("SessionRevert.plan")(function* (db: Database.Interface["db"], input: BoundaryInput) {
-  const boundary = yield* db
-    .select({ seq: SessionMessageTable.seq })
-    .from(SessionMessageTable)
-    .where(and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, input.messageID)))
-    .get()
-    .pipe(Effect.orDie)
+  const boundary = yield* Timeline.find(db, input.sessionID, input.messageID)
   if (!boundary) return yield* new MessageNotFoundError(input)
-  const rows = yield* db
-    .select()
-    .from(SessionMessageTable)
-    .where(
-      and(
-        eq(SessionMessageTable.session_id, input.sessionID),
-        eq(SessionMessageTable.type, "assistant"),
-        gt(SessionMessageTable.seq, boundary.seq),
-      ),
-    )
-    .orderBy(asc(SessionMessageTable.seq))
-    .all()
-    .pipe(Effect.orDie)
+  const rows = yield* Timeline.rows(db, yield* Timeline.forSession(db, input.sessionID), {
+    where: and(eq(SessionMessageTable.type, "assistant"), gt(SessionMessageTable.seq, boundary.seq)),
+    order: "asc",
+  })
   const decode = Schema.decodeUnknownEffect(SessionMessage.Info)
   const files = new Map<RelativePath, Snapshot.ID>()
   for (const row of rows) {

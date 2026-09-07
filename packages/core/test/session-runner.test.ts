@@ -1,3 +1,4 @@
+import { Timeline } from "@opencode-ai/core/session/timeline"
 import { describe, expect, test } from "bun:test"
 import {
   AIError,
@@ -495,6 +496,7 @@ const insertSession = (id: Session.ID) =>
     yield* db
       .insert(SessionTable)
       .values({
+        timeline_id: yield* Timeline.create(db),
         id,
         project_id: Project.ID.global,
         slug: id,
@@ -1465,6 +1467,7 @@ describe("SessionRunnerLLM", () => {
       .all()
     yield* s.bus.remove(forked.id)
     yield* s.db.delete(SessionTable).where(eq(SessionTable.id, forked.id)).run()
+    yield* Timeline.collect(s.db)
     yield* Effect.forEach(
       recorded.map((event) => ({
         id: event.id,

@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { Timeline } from "@opencode-ai/core/session/timeline"
 import { DateTime, Effect, Fiber, Layer, LayerMap, Schema, Stream } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -113,6 +114,7 @@ const setup = Effect.gen(function* () {
   yield* db
     .insert(SessionTable)
     .values({
+      timeline_id: yield* Timeline.create(db),
       id: sessionID,
       project_id: Project.ID.global,
       slug: "test",
@@ -165,7 +167,7 @@ const assistantRow = (id: SessionMessage.ID, seq: number) => {
       time: { created: DateTime.makeUnsafe(0) },
     }),
   )
-  return { id, session_id: sessionID, type, seq, time_created: 0, data }
+  return { id, session_id: sessionID, timeline_id: Timeline.current(sessionID), type, seq, time_created: 0, data }
 }
 
 describe("Session.prompt", () => {
@@ -277,9 +279,7 @@ describe("Session.prompt", () => {
 
       expect((yield* session.get(sessionID)).revert).toBeUndefined()
       expect(
-        (yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all().pipe(Effect.orDie)).map(
-          (row) => row.id,
-        ),
+        (yield* Timeline.rows(db, yield* Timeline.forSession(db, sessionID))).map((row) => row.id),
       ).not.toContainAnyValues([boundary.id, stale])
       expect(yield* SessionInbox.find(db, boundary.id)).toBeUndefined()
     }),
@@ -813,6 +813,7 @@ describe("Session.prompt", () => {
       yield* db
         .insert(SessionTable)
         .values({
+          timeline_id: yield* Timeline.create(db),
           id: other,
           project_id: Project.ID.global,
           slug: "other",
@@ -849,7 +850,15 @@ describe("Session.prompt", () => {
       })
       yield* db
         .insert(SessionMessageTable)
-        .values({ id: messageID, session_id: sessionID, type, seq: 0, time_created: 0, data })
+        .values({
+          id: messageID,
+          session_id: sessionID,
+          timeline_id: Timeline.current(sessionID),
+          type,
+          seq: 0,
+          time_created: 0,
+          data,
+        })
         .run()
         .pipe(Effect.orDie)
 

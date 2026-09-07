@@ -1,3 +1,4 @@
+import { Timeline } from "@opencode-ai/core/session/timeline"
 import { expect, test } from "bun:test"
 import { LLMClient, LLMEvent, LanguageModel, ToolDefinition, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
@@ -284,6 +285,7 @@ const insertSession = (id: Session.ID, overrides?: Partial<typeof SessionTable.$
     yield* db
       .insert(SessionTable)
       .values({
+        timeline_id: yield* Timeline.create(db),
         id,
         project_id: Project.ID.global,
         slug: id,
