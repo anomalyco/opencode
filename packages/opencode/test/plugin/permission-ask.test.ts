@@ -41,20 +41,25 @@ const it = testEffect(
   ),
 )
 
-function withProject<A, E, R>(source: string, self: Effect.Effect<A, E, R>) {
+// `plugin` takes an array, so several plugins can be registered at once. They load,
+// and their hooks run, in the order listed here.
+function withProject<A, E, R>(sources: string | string[], self: Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {
     const test = yield* TestInstance
-    const file = path.join(test.directory, "plugin.ts")
+    const files = (Array.isArray(sources) ? sources : [sources]).map((source, index) => ({
+      path: path.join(test.directory, `plugin-${index}.ts`),
+      source,
+    }))
     yield* Effect.all(
       [
-        Effect.promise(() => Bun.write(file, source)),
+        ...files.map((file) => Effect.promise(() => Bun.write(file.path, file.source))),
         Effect.promise(() =>
           Bun.write(
             path.join(test.directory, "opencode.json"),
             JSON.stringify(
               {
                 $schema: "https://opencode.ai/config.json",
-                plugin: [pathToFileURL(file).href],
+                plugin: files.map((file) => pathToFileURL(file.path).href),
               },
               null,
               2,
@@ -62,7 +67,7 @@ function withProject<A, E, R>(source: string, self: Effect.Effect<A, E, R>) {
           ),
         ),
       ],
-      { discard: true, concurrency: 2 },
+      { discard: true, concurrency: "unbounded" },
     )
     return yield* self
   })
@@ -239,6 +244,44 @@ describe("plugin permission.ask", () => {
     () =>
       withProject(
         hookPlugin('output.status = "allow"\n    throw new Error("hook exploded")'),
+        Effect.gen(function* () {
+          const fiber = yield* ask(request([{ permission: "bash", pattern: "*", action: "ask" }])).pipe(
+            Effect.forkScoped,
+          )
+
+          const items = yield* waitForPending(1)
+          expect(items[0]).toMatchObject({ permission: "bash", patterns: ["ls"] })
+
+          yield* rejectAll()
+          const exit = yield* Fiber.await(fiber)
+          expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toBeInstanceOf(PermissionV1.RejectedError)
+        }),
+      ),
+    { git: true },
+  )
+
+  it.instance(
+    "a later hook that throws does not undo an earlier deny",
+    () =>
+      withProject(
+        [
+          hookPlugin('output.status = "deny"\n    output.message = "blocked by plugin"'),
+          hookPlugin('throw new Error("hook exploded")'),
+        ],
+        Effect.gen(function* () {
+          const err = yield* fail(ask(request([{ permission: "bash", pattern: "*", action: "allow" }])))
+          expect(err).toBeInstanceOf(PermissionV1.DeniedError)
+          expect((err as PermissionV1.DeniedError).message).toBe("blocked by plugin")
+        }),
+      ),
+    { git: true },
+  )
+
+  it.instance(
+    "a later hook that throws discards an earlier allow",
+    () =>
+      withProject(
+        [hookPlugin('output.status = "allow"'), hookPlugin('throw new Error("hook exploded")')],
         Effect.gen(function* () {
           const fiber = yield* ask(request([{ permission: "bash", pattern: "*", action: "ask" }])).pipe(
             Effect.forkScoped,
