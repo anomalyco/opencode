@@ -353,6 +353,7 @@ export interface DialogSelectOption<Value> {
   readonly title: string
   readonly value: Value
   readonly description?: string
+  readonly footer?: string
   readonly category?: string
   readonly disabled?: boolean
 }
