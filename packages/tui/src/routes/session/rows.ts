@@ -171,15 +171,11 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
   const appendPart = (ref: PartRef, part: AppendPart) =>
     setRows(
       produce((draft) => {
-        if (hasPart(draft, ref)) return
-        append(draft, ref, part, queuedStart(draft))
-      }),
-    )
-
-  const completeReasoning = (ref: PartRef) =>
-    setRows(
-      produce((draft) => {
-        if (!hasPart(draft, ref)) append(draft, ref, { type: "reasoning" }, queuedStart(draft))
+        if (!hasPart(draft, ref)) {
+          append(draft, ref, part, queuedStart(draft))
+          return
+        }
+        if (part.type !== "reasoning" || part.time?.completed === undefined) return
         const row = draft.find(
           (row) =>
             row.type === "group" &&
@@ -262,7 +258,10 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     }),
     data.on("session.reasoning.ended", (event) => {
       if (event.data.sessionID === sessionID() && event.data.text.trim())
-        completeReasoning({ messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` })
+        appendPart(
+          { messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` },
+          { type: "reasoning", time: { completed: event.created } },
+        )
     }),
     data.on("session.tool.input.started", (event) => {
       if (event.data.sessionID === sessionID())
