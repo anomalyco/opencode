@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import type { OpenCodeEvent } from "@opencode-ai/client"
+import type { OpenCodeEvent, SessionInboxInfo } from "@opencode-ai/client"
 import { testRender } from "@opentui/solid"
 import { mkdirSync, watch } from "fs"
 import path from "path"
@@ -38,6 +38,8 @@ async function renderSessionTabs(
     sessionParents?: Record<string, string>
     sessionTimes?: Record<string, { idle?: number; viewed?: number }>
     sessionOutcomes?: Record<string, "succeeded" | "failed" | "interrupted">
+    active?: () => Record<string, { type: "running" }>
+    inbox?: Record<string, SessionInboxInfo[]>
     newLocation?: "launch" | "inherit"
     launchDirectory?: string
     tabsEnabled?: boolean
@@ -69,10 +71,17 @@ async function renderSessionTabs(
   const viewWatermarks: number[] = []
   const locations: string[] = []
   const vcsLocations: string[] = []
+  let activeRequests = 0
   const sessionTimes = Object.fromEntries(
     Object.entries(options?.sessionTimes ?? {}).map(([sessionID, time]) => [sessionID, { ...time }]),
   )
   const calls = createFetch(async (url, request) => {
+    if (url.pathname === "/api/session/active") {
+      activeRequests++
+      return json({ data: options?.active?.() ?? {} })
+    }
+    const inboxID = url.pathname.match(/^\/api\/session\/([^/]+)\/inbox$/)?.[1]
+    if (inboxID && options?.inbox) return json({ data: options.inbox[inboxID] ?? [] })
     if (url.pathname === "/api/location") {
       const requested = url.searchParams.get("location[directory]") ?? directory
       locations.push(requested)
@@ -199,6 +208,8 @@ async function renderSessionTabs(
       sessionTimes[sessionID] = time
     },
     emit: (event: OpenCodeEvent) => events.emit({ ...event, location: { directory } }),
+    disconnect: () => events.disconnect(),
+    activeRequests: () => activeRequests,
     focus: () => app.renderer.emit("focus"),
     blur: () => app.renderer.emit("blur"),
     flush: () => storage.flush(),
@@ -227,6 +238,28 @@ function admitted(sessionID: string, inboxID: string): OpenCodeEvent {
       item: { type: "user", payload: { text: inboxID }, delivery: "steer" },
     },
   }
+}
+
+function execution(
+  sessionID: string,
+  state: "started" | "succeeded" | "failed" | "interrupted",
+  seq: number,
+): OpenCodeEvent {
+  const event = {
+    id: `evt_${sessionID}_${seq}`,
+    created: Date.now(),
+    durable: { aggregateID: sessionID, seq, version: 1 as const },
+    data: { sessionID },
+  }
+  if (state === "failed")
+    return {
+      ...event,
+      type: "session.execution.failed",
+      data: { sessionID, error: { type: "provider.transport", message: "Disconnected" } },
+    }
+  if (state === "interrupted")
+    return { ...event, type: "session.execution.interrupted", data: { sessionID, reason: "user" } }
+  return { ...event, type: `session.execution.${state}` }
 }
 
 test("loads persisted tab metadata concurrently on connect", async () => {
@@ -801,6 +834,9 @@ test("distinguishes family questions and permissions without clearing them on se
     await wait(() => setup.data.session.get("child") !== undefined)
     expect(setup.tabs.status("root").attention).toBe(false)
 
+    setup.emit(execution("child", "started", 1))
+    await wait(() => setup.tabs.status("root").busy)
+
     setup.emit({
       id: "evt_question",
       created: 1,
@@ -844,6 +880,7 @@ test("distinguishes family questions and permissions without clearing them on se
       data: { sessionID: "child", id: "frm_question", answer: {} },
     })
     await wait(() => setup.tabs.status("root").attention === false)
+    expect(setup.tabs.status("root").busy).toBe(true)
   } finally {
     await setup.destroy()
   }
@@ -933,7 +970,202 @@ test("closing a tab is not undone by another TUI viewing the same session", asyn
   }
 })
 
-test("user prompt admissions pulse an already-busy background tab", async () => {
+test.each(["shell", "child"])("a completed user shell in %s does not leave an idle tab busy", async (sessionID) => {
+  const setup = await renderSessionTabs("shell", { persisted: ["shell"], sessionParents: { child: "shell" } })
+
+  try {
+    await wait(() => setup.data.session.get(sessionID) !== undefined)
+    expect(setup.tabs.status("shell").busy).toBe(false)
+    setup.emit({
+      id: "evt_shell_completion",
+      created: Date.now(),
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: sessionID, seq: 1, version: 1 },
+      data: {
+        sessionID,
+        inboxID: "msg_shell_completion",
+        item: {
+          type: "synthetic",
+          delivery: "steer",
+          payload: {
+            text: "Shell completed with exit code 0: done",
+            metadata: { source: "shell", shellID: "sh_done", state: "completed", exit: 0, truncated: false },
+          },
+        },
+      },
+    })
+    await wait(() => setup.data.session.pending.list(sessionID).length === 1)
+    expect(setup.data.session.status(sessionID)).toBe("idle")
+    expect(setup.tabs.status("shell").busy).toBe(false)
+
+    setup.emit({
+      id: "evt_execution_started",
+      created: Date.now(),
+      type: "session.execution.started",
+      durable: { aggregateID: sessionID, seq: 2, version: 1 },
+      data: { sessionID },
+    })
+    await wait(() => setup.data.session.status(sessionID) === "running")
+    expect(setup.tabs.status("shell").busy).toBe(true)
+
+    setup.emit({
+      id: "evt_execution_succeeded",
+      created: Date.now(),
+      type: "session.execution.succeeded",
+      durable: { aggregateID: sessionID, seq: 3, version: 1 },
+      data: { sessionID },
+    })
+    await wait(() => setup.data.session.status(sessionID) === "idle")
+    expect(setup.data.session.pending.list(sessionID)).toHaveLength(1)
+    expect(setup.tabs.status("shell").busy).toBe(false)
+
+    setup.emit(admitted(sessionID, "msg_4"))
+    await wait(() => setup.data.session.pending.list(sessionID).length === 2)
+    expect(setup.tabs.status("shell").busy).toBe(false)
+  } finally {
+    await setup.destroy()
+  }
+})
+
+for (const delivery of ["steer", "queue"] as const) {
+  for (const item of [
+    { type: "user", payload: { text: "Run later" } },
+    { type: "synthetic", payload: { text: "Saved context" } },
+    { type: "compaction", payload: {} },
+    { type: "move", payload: { location: { directory }, projectID: "project" } },
+  ] as const) {
+    test(`${delivery} ${item.type} inbox admission and removal do not control the tab spinner`, async () => {
+      const setup = await renderSessionTabs("root", { persisted: ["root"], sessionParents: { child: "root" } })
+      try {
+        await wait(() => setup.data.session.get("child") !== undefined)
+        setup.emit({
+          id: "evt_pending",
+          created: Date.now(),
+          type: "session.inbox.enqueued",
+          durable: { aggregateID: "child", seq: 1, version: 1 },
+          data: { sessionID: "child", inboxID: "msg_pending", item: { ...item, delivery } },
+        })
+        await wait(() => setup.data.session.pending.list("child").length === 1)
+        expect(setup.tabs.status("root").busy).toBe(false)
+
+        setup.emit(execution("child", "started", 2))
+        await wait(() => setup.tabs.status("root").busy)
+        setup.emit({
+          id: "evt_delivered",
+          created: Date.now(),
+          type: delivery === "steer" ? "session.inbox.delivered" : "session.inbox.cancelled",
+          durable: { aggregateID: "child", seq: 3, version: 1 },
+          data: { sessionID: "child", inboxID: "msg_pending" },
+        })
+        await wait(() => setup.data.session.pending.list("child").length === 0)
+        expect(setup.tabs.status("root").busy).toBe(true)
+
+        setup.emit(execution("child", "succeeded", 4))
+        await wait(() => setup.data.session.status("child") === "idle")
+        expect(setup.tabs.status("root").busy).toBe(false)
+      } finally {
+        await setup.destroy()
+      }
+    })
+  }
+}
+
+for (const state of ["succeeded", "failed", "interrupted"] as const) {
+  test.each(["root", "grandchild"])(
+    `${state} execution in %s clears busy despite retained input`,
+    async (sessionID) => {
+      const setup = await renderSessionTabs("root", {
+        persisted: ["root", "other"],
+        sessionParents: { child: "root", grandchild: "child" },
+      })
+      try {
+        await setup.data.session.sync("child", { children: true })
+        await wait(() => setup.data.session.get("grandchild") !== undefined)
+        setup.emit(execution(sessionID, "started", 1))
+        setup.emit(admitted(sessionID, "msg_2"))
+        await wait(() => setup.data.session.pending.list(sessionID).length === 1)
+        expect(setup.tabs.status("root").busy).toBe(true)
+        expect(setup.tabs.status("other").busy).toBe(false)
+
+        setup.emit(execution(sessionID, state, 3))
+        await wait(() => setup.data.session.status(sessionID) === "idle")
+        expect(setup.data.session.pending.list(sessionID)).toHaveLength(1)
+        expect(setup.tabs.status("root").busy).toBe(false)
+
+        setup.emit(execution(sessionID, "started", 4))
+        await wait(() => setup.data.session.status(sessionID) === "running")
+        expect(setup.tabs.status("root").busy).toBe(true)
+      } finally {
+        await setup.destroy()
+      }
+    },
+  )
+}
+
+test("tab busy state recovers from active snapshots when lifecycle events were missed", async () => {
+  let active: Record<string, { type: "running" }> = { root: { type: "running" }, child: { type: "running" } }
+  const setup = await renderSessionTabs("root", {
+    persisted: ["root"],
+    sessionParents: { child: "root" },
+    active: () => active,
+    inbox: {
+      root: [
+        {
+          id: "msg_saved",
+          sessionID: "root",
+          timeCreated: 1,
+          type: "user",
+          delivery: "queue",
+          payload: { text: "Later" },
+        },
+      ],
+    },
+  })
+  try {
+    await wait(() => setup.tabs.status("root").busy)
+    await setup.data.session.pending.sync("root")
+    expect(setup.data.session.pending.list("root")).toHaveLength(1)
+
+    setup.emit(execution("child", "succeeded", 1))
+    await wait(() => setup.data.session.status("child") === "idle")
+    expect(setup.tabs.status("root").busy).toBe(true)
+
+    // Completion happened while disconnected; no terminal event is delivered to this client.
+    active = {}
+    setup.disconnect()
+    await wait(() => setup.activeRequests() >= 2 && setup.data.session.status("root") === "idle", 5_000)
+    expect(setup.data.session.pending.list("root")).toHaveLength(1)
+    expect(setup.tabs.status("root").busy).toBe(false)
+
+    active = { child: { type: "running" } }
+    setup.disconnect()
+    await wait(() => setup.activeRequests() >= 3 && setup.data.session.status("child") === "running", 5_000)
+    expect(setup.tabs.status("root").busy).toBe(true)
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("optimistic submission and failed setup do not claim the session is executing", async () => {
+  const setup = await renderSessionTabs("root", { persisted: ["root"] })
+  const gate = Promise.withResolvers<void>()
+  try {
+    await wait(() => setup.data.session.get("root") !== undefined)
+    const sending = setup.data.session.prompt({ sessionID: "root", text: "Hello", gate: gate.promise })
+    expect(setup.data.session.pending.list("root")).toHaveLength(1)
+    expect(setup.tabs.status("root").busy).toBe(false)
+
+    gate.reject(new Error("Setup failed"))
+    await expect(sending).rejects.toThrow("Setup failed")
+    expect(setup.data.session.pending.list("root")).toHaveLength(0)
+    expect(setup.tabs.status("root").busy).toBe(false)
+  } finally {
+    gate.resolve()
+    await setup.destroy()
+  }
+})
+
+test("user prompt admissions pulse a background tab independently of execution", async () => {
   const setup = await renderSessionTabs("background", { persisted: ["background"] })
 
   try {
@@ -952,16 +1184,21 @@ test("user prompt admissions pulse an already-busy background tab", async () => 
         item: { type: "synthetic", payload: { text: "editor context" }, delivery: "steer" },
       },
     })
-    await Bun.sleep(20)
+    await wait(() => setup.data.session.pending.list("background").length === 1)
     expect(setup.tabs.status("background").promptPulse).toBe(0)
+    expect(setup.tabs.status("background").busy).toBe(false)
 
     setup.emit(admitted("background", "msg_1"))
-    await wait(() => setup.tabs.status("background").promptPulse === 1 && setup.tabs.status("background").busy)
+    await wait(() => setup.tabs.status("background").promptPulse === 1)
+    expect(setup.tabs.status("background").busy).toBe(false)
 
-    setup.emit(admitted("background", "msg_2"))
+    setup.emit(execution("background", "started", 2))
+    await wait(() => setup.tabs.status("background").busy)
+
+    setup.emit(admitted("background", "msg_3"))
     await wait(() => setup.tabs.status("background").promptPulse === 2)
 
-    setup.emit(admitted("active", "msg_3"))
+    setup.emit(admitted("active", "msg_4"))
     await Bun.sleep(20)
     expect(setup.tabs.status("active").promptPulse).toBe(0)
     expect(setup.tabs.status("background")).toMatchObject({ promptPulse: 2, busy: true })
