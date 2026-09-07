@@ -56,12 +56,13 @@ it.live(
 
       yield* list(".")
       expect(yield* loaded).toEqual([{ directory: current }])
+      // Automatic negotiation starts a disposable probe before the live MCP process.
       expect(
         yield* count.pipe(
-          Effect.repeat({ while: (n) => n === 0, schedule: Schedule.spaced("25 millis") }),
+          Effect.repeat({ while: (n) => n < 2, schedule: Schedule.spaced("25 millis") }),
           Effect.timeout("5 seconds"),
         ),
-      ).toBe(1)
+      ).toBe(2)
 
       yield* list("..")
       const sibling = yield* list("../sibling")
@@ -73,7 +74,7 @@ it.live(
       yield* list("../sibling/nested")
       yield* list("../sibling")
       expect(yield* loaded).toEqual([{ directory: current }])
-      expect(yield* count).toBe(1)
+      expect(yield* count).toBe(2)
     }),
   15_000,
 )
