@@ -38,7 +38,8 @@ pure and does not load any of these runtime modules.
 ## Tests
 
 Run `bun test` and `bun typecheck` from this package for its contract checks.
-Native browser coverage lives in `packages/desktop/test/browser-native.test.ts`.
+Native browser coverage lives with the desktop implementation
+(`packages/desktop/test/browser-native.test.ts`), not in this package.
 
 ## RPC
 
@@ -48,7 +49,9 @@ filesystem code. The desktop subscribes
 to control events before starting `attach` with `version: 4`. The attachment call
 stays pending for its lifetime. A matching `attached` event is the readiness barrier.
 
-- `state` publishes the authoritative tab inventory.
+- `state` publishes the authoritative tab inventory. Tab lookups read only this
+  inventory, so the desktop must publish `state` and wait for its acknowledgment
+  before sending `result` for `tabs.open` or `tabs.close`.
 - `control` announces a request ID or cancellation; it never broadcasts arguments,
   script source, file bytes, or browser results on the server-wide event feed.
 - `command` retrieves the pending request through authenticated RPC.
@@ -83,6 +86,8 @@ authenticated plugin RPC route. The desktop-only `/proxy` entrypoint adapts
 Chromium's HTTP/CONNECT proxy traffic, including WebSockets, to those methods.
 Network bytes never go onto the global event stream. Attachment closure releases
 the sockets; failed writes are not replayed and there is no direct-network fallback.
+The tunnel relays whatever a loaded page requests and is not filtered per request:
+page traffic has the server host's network reach, including its loopback and LAN.
 
 Remote endpoints can use HTTPS and the existing server credentials. A reverse
 proxy must allow long-lived event and attachment requests; the attachment RPC
