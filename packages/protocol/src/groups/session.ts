@@ -246,15 +246,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         params: { sessionID: Session.ID },
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "v2.session.remove",
-            summary: "Delete session",
-            description: "Delete a session and its child sessions.",
-          }),
-        ),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.remove",
+          summary: "Delete session",
+          description: "Delete a session and its child sessions.",
+        }),
+      ),
     )
     .add(
       HttpApiEndpoint.post("session.fork", "/api/session/:sessionID/fork", {
