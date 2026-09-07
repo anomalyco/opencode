@@ -169,7 +169,12 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
     yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: id })
   })
   const load = Effect.gen(function* () {
-    const history = yield* SessionHistory.preview(db, sessionID, instructions, SessionProviderContext.provenance(model))
+    const history = yield* SessionHistory.preview(
+      db,
+      sessionID,
+      instructions,
+      SessionProviderContext.provenance(model) ?? "local",
+    )
     return {
       session,
       model,
@@ -259,6 +264,9 @@ it.live(
       ).toEqual([[Message.text("First real user request")], [Message.text("Second real user request")]])
       expect(JSON.stringify(second.messages)).not.toContain("encrypted_1")
       expect(yield* fixture.store.get(fixture.sessionID)).toMatchObject({ tokens: { input: 40, output: 8 } })
+      // Nothing new since the checkpoint is not compactable, exactly like a fresh local summary.
+      expect(yield* fixture.compact).toMatchObject({ status: "failed", error: { type: "compaction.unavailable" } })
+      yield* fixture.prompt("Third real user request")
       fixture.state.failure = true
       expect(yield* fixture.compact).toMatchObject({ status: "failed", error: { type: "provider.rate-limit" } })
       expect(fixture.state.calls).toBe(4)
@@ -321,8 +329,8 @@ test("retained user budget counts attachments and drops whole oldest messages", 
     ...user("x".repeat(63_000 * 4)),
     files: [{ mime: "image/png", data: "aGVsbG8=", source: { type: "inline" as const } }],
   }
-  expect(SessionCompaction.retainUsers([user("old"), newest], model)).toEqual([])
-  expect(SessionCompaction.retainUsers([user("x".repeat(63_000 * 4)), { ...newest, text: "new" }], model)).toHaveLength(
-    1,
-  )
+  expect(SessionCompaction.retainUsers([user("old"), newest], model, 64_000)).toEqual([])
+  expect(
+    SessionCompaction.retainUsers([user("x".repeat(63_000 * 4)), { ...newest, text: "new" }], model, 64_000),
+  ).toHaveLength(1)
 })

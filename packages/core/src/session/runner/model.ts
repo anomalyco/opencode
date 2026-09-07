@@ -35,6 +35,8 @@ export const UnsupportedPackageError = ModelResolver.UnsupportedPackageError
 export type UnsupportedPackageError = ModelResolver.UnsupportedPackageError
 export const UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
 export type UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
+export const UnsupportedCompactionError = ModelResolver.UnsupportedCompactionError
+export type UnsupportedCompactionError = ModelResolver.UnsupportedCompactionError
 
 export type Error = ModelNotSelectedError | ModelUnavailableError | ModelResolver.Error
 export type Resolved = ModelResolver.Resolved

@@ -1,7 +1,7 @@
 export * as ModelResolver from "./model-resolver.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { AIError, LanguageModel, LLM, LLMClient, UnsupportedOperationError } from "@opencode-ai/ai"
+import { LanguageModel } from "@opencode-ai/ai"
 import { Auth } from "@opencode-ai/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
@@ -52,11 +52,24 @@ export class UnresolvedProviderVariablesError extends Schema.TaggedError<Unresol
   }
 }
 
+export class UnsupportedCompactionError extends Schema.TaggedError<UnsupportedCompactionError>()(
+  "SessionRunnerModel.UnsupportedCompactionError",
+  {
+    providerID: Provider.ID,
+    modelID: ID,
+    route: Schema.String,
+  },
+) {
+  override get message() {
+    return `Provider compaction is not supported by ${this.providerID}/${this.modelID} (${this.route})`
+  }
+}
+
 export type Error =
-  | AIError
   | VariantUnavailableError
   | UnsupportedPackageError
   | UnresolvedProviderVariablesError
+  | UnsupportedCompactionError
   | Integration.AuthorizationError
 
 export interface Resolved {
@@ -118,23 +131,18 @@ export const fromCatalogModel = (
   model: Info,
   credential?: Credential.Value,
   dependencies?: Dependencies,
-): Effect.Effect<LanguageModel, AIError | UnsupportedPackageError | UnresolvedProviderVariablesError> =>
+): Effect.Effect<
+  LanguageModel,
+  UnsupportedPackageError | UnresolvedProviderVariablesError | UnsupportedCompactionError
+> =>
   resolveCatalogModel(model, credential, dependencies).pipe(
     Effect.flatMap((resolved) => validateProviderVariables(model, resolved)),
     Effect.flatMap((resolved) => {
-      if (model.compaction?.mode !== "provider") return Effect.succeed(resolved)
-      const request = LLM.request({ model: resolved, messages: [] })
-      if (LLMClient.canCompact(request, { mechanism: "trigger" }) || LLMClient.canCompact(request))
+      // Reject provider compaction policies up front so the misconfiguration surfaces before any step runs.
+      if (model.compaction?.mode !== "provider" || resolved.route.compact?.trigger || resolved.route.compact?.endpoint)
         return Effect.succeed(resolved)
       return Effect.fail(
-        new AIError({
-          reason: new UnsupportedOperationError({
-            operation: "compact",
-            provider: resolved.provider,
-            route: resolved.route.id,
-            message: `Provider compaction is not supported by ${model.providerID}/${model.id} (${resolved.route.id})`,
-          }),
-        }),
+        new UnsupportedCompactionError({ providerID: model.providerID, modelID: model.id, route: resolved.route.id }),
       )
     }),
   )
