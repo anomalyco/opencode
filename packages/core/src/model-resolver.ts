@@ -382,6 +382,9 @@ function usesAPIKeyAuth(packageName: string | undefined) {
     name === "@opencode-ai/ai/providers/openai-compatible" ||
     name === "@opencode-ai/ai/providers/google" ||
     name === "@opencode-ai/ai/providers/groq" ||
+    name === "@opencode-ai/ai/providers/meta" ||
+    name === "@opencode-ai/ai/providers/meta/chat" ||
+    name === "@opencode-ai/ai/providers/meta/responses" ||
     name === "@opencode-ai/ai/providers/mistral" ||
     name === "@opencode-ai/ai/providers/togetherai" ||
     name === "@opencode-ai/ai/providers/xai" ||

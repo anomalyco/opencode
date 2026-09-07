@@ -69,6 +69,38 @@ M2.x models always think, even when a disabling option is supplied. For tool con
 The default API bases are `https://api.minimax.io/anthropic/v1` for Messages and `https://api.minimax.io/v1` for
 Chat and Responses. `configure({ baseURL })` replaces the selected API's base, including its version prefix.
 
+## Meta
+
+Use Meta's direct [Model API](https://dev.meta.ai/docs/overview) with `META_API_KEY`:
+
+```ts
+import { Meta } from "@opencode-ai/ai/providers"
+
+const meta = Meta.configure() // or Meta.configure({ apiKey })
+const request = LLM.request({
+  model: meta.responses("muse-spark-1.3"), // meta.model(...) also selects Responses
+  prompt: "What is 173 multiplied by 219? Reply with the integer.",
+  providerOptions: { reasoningEffort: "low" },
+  generation: { maxTokens: 1024 },
+})
+```
+
+`meta.chat("muse-spark-1.3")` selects Chat Completions. Both use `https://api.meta.ai/v1`.
+The package entrypoints `@opencode-ai/ai/providers/meta/responses` and
+`@opencode-ai/ai/providers/meta/chat` expose `model(modelID, settings)`.
+
+[Muse Spark](https://dev.meta.ai/docs/models) supports `minimal`, `low`, `medium`, `high`, and
+`xhigh` reasoning effort; standard-tier 1.3 also supports `max`. Omitting effort uses the model's
+default. Muse Spark always reasons and rejects `none`. The output-token budget includes private reasoning.
+
+Responses defaults to `store: false` and `include: ["reasoning.encrypted_content"]`. Preserve
+`response.message` along with matching `Message.tool(...)` results in subsequent requests to replay
+reasoning through tool loops. Optional `reasoningSummary: "auto"` requests a readable summary.
+For server-managed history, override `store: true, include: []` and send the response ID through
+`http: { body: { previous_response_id: responseID } }` with only the new input.
+Chat Completions redacts private reasoning and cannot carry it between calls.
+Both APIs support only `toolChoice: "auto"` (the default); forced, named, and `"none"` choices are rejected.
+
 ## Image generation
 
 Use `Image.generate` with an image model for direct asset generation:

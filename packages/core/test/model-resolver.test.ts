@@ -320,7 +320,16 @@ describe("ModelResolver", () => {
         settings: { baseURL: "https://native-mistral.example.com/v1" },
         headers: { "cf-access-token": "access-token" },
       }),
-      ...["baseten", "cloudflare-ai-gateway", "cloudflare-workers-ai", "deepseek", "fireworks"].map((name) =>
+      ...[
+        "baseten",
+        "cloudflare-ai-gateway",
+        "cloudflare-workers-ai",
+        "deepseek",
+        "fireworks",
+        "meta",
+        "meta/chat",
+        "meta/responses",
+      ].map((name) =>
         model(`@opencode-ai/ai/providers/${name}`, {
           providerID: Provider.ID.make("gateway"),
           settings: { baseURL: `https://${name}.example.com/v1` },
