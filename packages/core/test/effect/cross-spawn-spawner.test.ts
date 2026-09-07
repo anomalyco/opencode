@@ -423,4 +423,81 @@ describe("cross-spawn spawner", () => {
       }),
     )
   })
+
+  describe("non-interactive execution", () => {
+    fx.effect(
+      "defaults stdin to 'ignore' to prevent hangs",
+      Effect.gen(function* () {
+        const handle = yield* js(
+          'process.stdin.on("data", () => process.stdout.write("should not receive data")); ' +
+          'process.stdin.on("end", () => process.stdout.write("stdin ended")); ' +
+          'setTimeout(() => process.stdout.write("timeout"), 100)',
+        ).pipe(
+          ChildProcess.withDefaultOptions(), // Uses default stdin: "ignore"
+        )
+        
+        const out = yield* decodeByteStream(handle.stdout);
+        yield* handle.exitCode;
+        expect(out).toContain("stdin ended");
+        expect(out).not.toContain("should not receive data");
+      }),
+    )
+
+    fx.effect(
+      "respects explicit stdin configuration",
+      Effect.gen(function* () {
+        const handle = yield* js(
+          'process.stdin.setEncoding("utf8"); let out = ""; ' +
+          'process.stdin.on("data", (chunk) => out += chunk); ' +
+          'process.stdin.on("end", () => process.stdout.write(out))',
+        ).pipe(
+          ChildProcess.withStdin("pipe"), // Explicit stdin overrides default
+        )
+        
+        yield* handle.stdin.write("test data");
+        yield* handle.stdin.end();
+        
+        const out = yield* decodeByteStream(handle.stdout);
+        yield* handle.exitCode;
+        expect(out).toBe("test data");
+      }),
+    )
+  })
+
+  describe("environment hardening", () => {
+    fx.effect(
+      "includes non-interactive env vars by default",
+      Effect.gen(function* () {
+        const out = yield* ChildProcessSpawner.ChildProcessSpawner.use((svc) =>
+          svc.string(
+            ChildProcess.make(process.platform === "win32" ? "set" : "env", [], {
+              extendEnv: true,
+            }),
+          ),
+        )
+        
+        expect(out).toContain("CI=1");
+        expect(out).toContain("npm_config_yes=true");
+        expect(out).toContain("GIT_TERMINAL_PROMPT=0");
+        expect(out).toContain("NONINTERACTIVE=1");
+      }),
+    )
+
+    fx.effect(
+      "user env takes precedence over defaults",
+      Effect.gen(function* () {
+        const out = yield* ChildProcessSpawner.ChildProcessSpawner.use((svc) =>
+          svc.string(
+            ChildProcess.make(process.platform === "win32" ? "set" : "env", [], {
+              extendEnv: true,
+              env: { CI: "0", npm_config_yes: "false" }, // Override defaults
+            }),
+          ),
+        )
+        
+        expect(out).toContain("CI=0");
+        expect(out).toContain("npm_config_yes=false");
+      }),
+    )
+  })
 })
