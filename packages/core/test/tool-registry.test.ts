@@ -8,12 +8,15 @@ import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { State } from "@opencode-ai/core/state"
 import { Tool } from "@opencode-ai/core/tool"
+import { CodeModeTool } from "@opencode-ai/core/codemode/tool"
+import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
 import type { Info } from "@opencode-ai/schema/tool"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { codeModeListings, executeTool, toolDefinitions } from "./lib/tool"
 import { Deferred, Effect, Exit, Fiber, Layer, Logger, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
 import { z } from "zod"
 import { testEffect } from "./lib/effect"
+import { readInitial } from "./lib/instructions"
 
 const imageStore = Layer.mock(Image.Service, {
   normalize: (resource, content) => {
@@ -659,6 +662,178 @@ describe("Tool", () => {
       const snapshot = yield* service.snapshot()
       expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
       expect(codeModeListings(snapshot.codeModeCatalog!)[0]?.line).toContain("tools.echo")
+    }),
+  )
+
+  it.effect("reuses the last Code Mode catalog until the registry or visible tools change", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { echo: make(), constant: constant("text") }, { namespace: "acme" })
+
+      const first = yield* service.snapshot()
+      const second = yield* service.snapshot([])
+      expect(second.codeModeCatalog).toBe(first.codeModeCatalog)
+      expect(codeModeListings(first.codeModeCatalog!).map((tool) => tool.path)).toEqual(["acme.constant", "acme.echo"])
+
+      // Only the last visible set stays cached; an agent switch can replace it.
+      const denied = yield* service.snapshot([{ action: "acme_constant", resource: "*", effect: "deny" }])
+      expect(denied.codeModeCatalog).not.toBe(first.codeModeCatalog)
+      expect(codeModeListings(denied.codeModeCatalog!).map((tool) => tool.path)).toEqual(["acme.echo"])
+      expect((yield* service.snapshot()).codeModeCatalog).toEqual(first.codeModeCatalog)
+
+      // Registry changes replace the state and therefore the catalog.
+      const scope = yield* Scope.make()
+      yield* service.transform((draft) => draft.add({ ...make(), name: "extra" })).pipe(Scope.provide(scope))
+      const extended = yield* service.snapshot()
+      expect(extended.codeModeCatalog).not.toBe(first.codeModeCatalog)
+      expect(codeModeListings(extended.codeModeCatalog!).map((tool) => tool.path)).toEqual([
+        "acme.constant",
+        "acme.echo",
+        "extra",
+      ])
+      expect((yield* service.snapshot()).codeModeCatalog).toBe(extended.codeModeCatalog)
+
+      yield* Scope.close(scope, Exit.void)
+      const restored = yield* service.snapshot()
+      expect(restored.codeModeCatalog).not.toBe(extended.codeModeCatalog)
+      expect(codeModeListings(restored.codeModeCatalog!).map((tool) => tool.path)).toEqual([
+        "acme.constant",
+        "acme.echo",
+      ])
+    }),
+  )
+
+  it.effect("deduplicates equivalent visible sets without retaining historical permission catalogs", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const agents = yield* Agent.Service
+      let permissions: Permission.Rule[] = []
+      yield* agents.transform((draft) =>
+        draft.update(identity.agent, (agent) => {
+          agent.permissions = permissions
+        }),
+      )
+      yield* transform(service, { echo: make(), constant: constant("text") }, { namespace: "acme" })
+      const first = yield* service.snapshot()
+      for (let index = 0; index < 40; index++) {
+        // Agent-only source changes need not rebuild Tool state.
+        permissions = [{ action: "acme_*", resource: `project-${index}`, effect: "deny" }]
+        yield* agents.reload()
+        const agent = yield* agents.get(identity.agent)
+        if (!agent) throw new Error("Missing fixture agent")
+        const equivalent = yield* service.snapshot(agent.permissions)
+        expect(equivalent.codeModeCatalog).toBe(first.codeModeCatalog)
+      }
+      const rules: Permission.Rule[] = [{ action: "acme_constant", resource: "*", effect: "deny" }]
+      const denied = yield* service.snapshot(rules)
+      expect(codeModeListings(denied.codeModeCatalog!).map((entry) => entry.path)).toEqual(["acme.echo"])
+      expect((yield* service.snapshot(rules.map((rule) => ({ ...rule })))).codeModeCatalog).toBe(denied.codeModeCatalog)
+      rules.push({ action: "acme_*", resource: "*", effect: "ask" })
+      const restored = yield* service.snapshot(rules)
+      expect(restored.codeModeCatalog).toEqual(first.codeModeCatalog)
+      expect(restored.codeModeCatalog).not.toBe(first.codeModeCatalog)
+      expect((yield* service.snapshot(rules.toReversed())).codeModeCatalog).toEqual(denied.codeModeCatalog)
+      expect((yield* service.snapshot(rules.toReversed())).codeModeCatalog).not.toBe(denied.codeModeCatalog)
+      const search = yield* restored.execute({
+        ...call("execute"),
+        call: { type: "tool-call", id: "search-rules", name: "execute", input: { code: "return search({})" } },
+      })
+      expect(search.output).toMatchObject({ output: expect.stringContaining("tools.acme.constant") })
+      const filtered = yield* service.snapshot(rules.toReversed())
+      const hidden = yield* filtered.execute({
+        ...call("execute"),
+        call: { type: "tool-call", id: "search-filtered", name: "execute", input: { code: "return search({})" } },
+      })
+      expect(hidden.output).toMatchObject({ output: expect.not.stringContaining("tools.acme.constant") })
+    }).pipe(Effect.provide(AppNodeBuilder.build(Agent.node))),
+  )
+
+  it.effect("refreshes schema, description, namespace, and pin inputs on explicit reload", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const original = {
+        ...make(),
+        input: { type: "object", properties: { value: { type: "string" } }, required: ["value"] },
+        output: { type: "string" },
+        options: { namespace: "acme" },
+      }
+      let source: Info = original
+      let namespace = { name: "acme", description: "Original namespace" }
+      yield* service.transform((draft) => {
+        draft.namespace(namespace)
+        draft.add(source)
+      })
+      const first = yield* service.snapshot()
+      const initial = yield* readInitial(CodeModeInstructions.make(first.codeModeCatalog))
+      for (const changed of [
+        { tool: { ...original, input: { type: "object", properties: { value: { type: "number" } } } }, namespace },
+        { tool: { ...original, output: { type: "number" } }, namespace },
+        { tool: { ...original, description: "Changed description" }, namespace },
+        { tool: original, namespace: { name: "acme", description: "Changed namespace" } },
+        { tool: { ...original, options: { namespace: "acme", pinned: true } }, namespace },
+        { tool: { ...original, options: { namespace: "other" } }, namespace: { name: "other", description: "Other" } },
+      ]) {
+        source = changed.tool
+        namespace = changed.namespace
+        yield* service.reload()
+        const current = yield* service.snapshot()
+        const fresh = CodeModeTool.catalog({
+          tools: new Map([[`${source.options?.namespace}_echo`, source]]),
+          namespaces: new Map([[namespace.name, namespace]]),
+        })
+        expect(current.codeModeCatalog).not.toEqual(first.codeModeCatalog)
+        expect(current.codeModeCatalog).toEqual(fresh)
+        expect((yield* service.snapshot()).codeModeCatalog).toBe(current.codeModeCatalog)
+        expect(yield* readInitial(CodeModeInstructions.make(current.codeModeCatalog))).toEqual(
+          yield* readInitial(CodeModeInstructions.make(fresh)),
+        )
+        const search = yield* current.execute({
+          ...call("execute"),
+          call: {
+            type: "tool-call",
+            id: "search-reload",
+            name: "execute",
+            input: { code: "return search({}).items[0].signature" },
+          },
+        })
+        const entries = current.codeModeCatalog?.tools[0]
+        const entry = entries?.type === "namespace" ? entries.tools[0] : entries
+        if (entry?.type !== "tool") throw new Error("Missing catalog tool")
+        expect(search.output).toMatchObject({ output: entry.signature })
+      }
+      expect(yield* readInitial(CodeModeInstructions.make(first.codeModeCatalog))).toEqual(initial)
+    }),
+  )
+
+  it.effect("reevaluates lazy schema conversion when its producer reloads", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      let type = "string"
+      const input = {
+        "~standard": {
+          version: 1 as const,
+          vendor: "fixture",
+          validate: (value: unknown) => ({ value }),
+          jsonSchema: {
+            input: () => ({ type: "object", properties: { value: { type } }, required: ["value"] }),
+            output: () => ({}),
+          },
+        },
+      }
+      yield* service.transform((draft) => draft.add({ ...make(), input }))
+      const first = yield* service.snapshot()
+      expect(JSON.stringify(first.codeModeCatalog)).toContain("value: string")
+      type = "number"
+      yield* service.reload()
+      const second = yield* service.snapshot()
+      expect(JSON.stringify(second.codeModeCatalog)).toContain("value: number")
+      expect(JSON.stringify(first.codeModeCatalog)).toContain("value: string")
+      const search = yield* second.execute({
+        ...call("execute"),
+        call: { type: "tool-call", id: "search-lazy", name: "execute", input: { code: "return search({})" } },
+      })
+      expect(search.output).toMatchObject({ output: expect.stringContaining("value: number") })
+      expect((yield* readInitial(CodeModeInstructions.make(second.codeModeCatalog))).text).toContain("value: number")
     }),
   )
 

@@ -214,20 +214,34 @@ const layer = Layer.effect(
         ),
     })
 
+    // Producers replace changed schemas/options and reload when source data (including schema
+    // conversion dependencies) changes. Keep only the last visible tool set per State generation:
+    // agent-only rule churn must not retain every historical catalog.
+    const catalogs = new WeakMap<Data, { key: string; value: CodeModeCatalog.Inventory }>()
+    const catalog = (data: Data, inventory: CodeModeTool.Inventory) => {
+      const key = JSON.stringify(Array.from(inventory.tools.keys()))
+      const cached = catalogs.get(data)
+      if (cached?.key === key) return cached.value
+      const rendered = CodeModeTool.catalog(inventory)
+      catalogs.set(data, { key, value: rendered })
+      return rendered
+    }
+
     return Service.of({
       transform: state.transform,
       reload: state.reload,
       snapshot: Effect.fn("Tool.snapshot")((permissions) =>
         Effect.sync(() => {
+          const data = state.get()
           const active = new Map<string, Tool.Info>()
           const rules = permissions ?? []
-          for (const [name, tool] of state.get().tools) {
+          for (const [name, tool] of data.tools) {
             if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
             active.set(name, tool)
           }
           const direct = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
           const codeModeTools = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
-          const namespaces = state.get().namespaces
+          const namespaces = data.namespaces
           const codeModeInventory = { tools: codeModeTools, namespaces }
           const codeModeEnabled = !whollyDisabled("execute", rules)
           const codeModeTool = codeModeEnabled
@@ -237,7 +251,7 @@ const layer = Layer.effect(
                 ),
               )
             : undefined
-          const codeModeCatalog = codeModeEnabled ? CodeModeTool.catalog(codeModeInventory) : undefined
+          const codeModeCatalog = codeModeEnabled ? catalog(data, codeModeInventory) : undefined
           return {
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
             definitions: [

@@ -24,6 +24,20 @@ const lookup: CodeModeCatalog.Tool = {
 }
 
 describe("CodeModeInstructions", () => {
+  it.effect("summarizes caller-owned inventories again when their contents change", () =>
+    Effect.gen(function* () {
+      const inventory = { tools: [echo] }
+      const first = yield* readInitial(CodeModeInstructions.make(inventory))
+      inventory.tools.push(lookup)
+      const changed = yield* readUpdate(CodeModeInstructions.make(inventory), first)
+      expect(changed.changed).toBe(true)
+      expect(changed.text).toContain(lookup.signature)
+      expect(yield* readInitial(CodeModeInstructions.make(inventory))).toEqual(
+        yield* readInitial(CodeModeInstructions.make({ tools: [echo, lookup] })),
+      )
+    }),
+  )
+
   it.effect("instructs the model not to call execute while the catalog is empty", () =>
     Effect.gen(function* () {
       const initialized = yield* readInitial(CodeModeInstructions.make({ tools: [] }))
