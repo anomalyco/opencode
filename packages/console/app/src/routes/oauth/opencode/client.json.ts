@@ -1,17 +1,18 @@
 import type { APIEvent } from "@solidjs/start/server"
 
-// OAuth Client ID Metadata Document for the opencode client (draft-ietf-oauth-client-id-metadata-document,
-// MCP authorization "Client ID Metadata Documents"). opencode presents this URL as its OAuth client_id when an
-// MCP authorization server advertises client_id_metadata_document_supported, and the authorization server
-// fetches it to learn the client name and allowed redirect URIs. The spec requires the client_id field to equal
-// the exact URL the document is served from, so it is derived from the request origin to stay self-consistent
-// on every stage.
+// OAuth Client ID Metadata Document for the opencode client.
+// Spec: https://datatracker.ietf.org/doc/draft-ietf-oauth-client-id-metadata-document/
 //
-// redirect_uris are portless loopback URIs: opencode binds an ephemeral port per login, and RFC 8252 section 7.3
-// tells authorization servers to ignore the port when matching loopback redirects for native applications.
+// When an MCP server's authorization server supports this, opencode sends this URL as its OAuth client_id
+// instead of registering a new client. The authorization server fetches the document to learn our name and
+// allowed redirect URIs. The client_id field must equal the exact URL the document was fetched from, so it is
+// built from the request origin and stays valid on dev.opencode.ai as well as production.
+//
+// redirect_uris have no port because opencode binds an ephemeral port per login. RFC 8252 section 7.3 has
+// authorization servers ignore the port when matching loopback redirects for native apps.
 const PATH = "/oauth/opencode/client.json"
 
-const cache = "public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400, stale-if-error=604800"
+const cache = "public, max-age=300"
 
 export function GET(event: APIEvent) {
   const origin = new URL(event.request.url).origin
