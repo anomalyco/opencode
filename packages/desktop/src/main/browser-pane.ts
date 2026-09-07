@@ -103,15 +103,23 @@ export function createBrowserPane() {
                 outbound,
                 effect.pipe(Effect.catchCause((cause) => Effect.logWarning("Browser send failed", cause))),
               )
+            const reply = (requestID: string, outcome: Browser.Outcome) =>
+              send(
+                rpc.result({ ...attachment, requestID, outcome: Schema.encodeSync(Browser.Outcome)(outcome) }, options),
+              )
             // Report state before publishing it locally or completing a command. The server's copy of
-            // the inventory resolves every tab ID, so a state that never arrived must not count as published.
+            // the inventory resolves every tab ID, so a state is retried until it arrives or the
+            // attachment ends; the results queued behind it then never name a tab the server lacks.
+            // "unavailable" means the server already dropped this attachment, which attach reports.
             entry.report = (event) => {
               const local = Effect.sync(() => publish(entry, event))
               if (event.type !== "state") return send(local)
               send(
                 rpc.state({ ...attachment, state: event.state ?? { tabs: [], focusedTabID: null } }, options).pipe(
-                  Effect.retry({ times: 4, schedule: Schedule.exponential("250 millis") }),
-                  Effect.tapError(() => Effect.sync(() => (entry.lastState = undefined))),
+                  Effect.retry({
+                    while: (error) => !("type" in error && error.type === "unavailable"),
+                    schedule: Schedule.min([Schedule.exponential("250 millis"), Schedule.spaced("10 seconds")]),
+                  }),
                   Effect.ensuring(local),
                 ),
               )
@@ -146,26 +154,31 @@ export function createBrowserPane() {
                           abort,
                           ...("tabID" in command.action ? { tabID: command.action.tabID } : {}),
                         })
-                        const outcome: Browser.Outcome = await execute(entry, command, abort.signal).then(
-                          (result) => ({ type: "success" as const, result }),
-                          (error: unknown) => browserFailure(command.action, error),
-                        )
-                        send(
-                          rpc.result(
-                            {
-                              ...attachment,
-                              requestID: message.requestID,
-                              outcome: Schema.encodeSync(Browser.Outcome)(outcome),
-                            },
-                            options,
+                        reply(
+                          message.requestID,
+                          await execute(entry, command, abort.signal).then(
+                            (result) => ({ type: "success" as const, result }),
+                            (error: unknown) => browserFailure(command.action, error),
                           ),
                         )
                       }),
                     ),
                     Effect.ensuring(Effect.sync(() => entry.requests.delete(message.requestID))),
-                    // A request that vanished (cancelled before retrieval) or an operation this desktop
-                    // cannot decode fails only that request; the server times it out. Transport loss
-                    // surfaces through the event stream and attach call instead.
+                    // An operation this desktop cannot decode comes from a newer plugin; answer it so
+                    // the agent does not wait out the server's timeout.
+                    Effect.tapError((error) =>
+                      Effect.sync(() => {
+                        if (!Schema.isSchemaError(error)) return
+                        reply(message.requestID, {
+                          type: "failure",
+                          code: "unsupported",
+                          message:
+                            "This desktop app does not support the requested browser operation. Ask the user to update the desktop app, or use another operation.",
+                        })
+                      }),
+                    ),
+                    // A request that vanished (cancelled before retrieval) fails only that request.
+                    // Transport loss surfaces through the event stream and attach call instead.
                     Effect.catchCause((cause) =>
                       abort.signal.aborted ? Effect.void : Effect.logWarning("Browser command failed", cause),
                     ),

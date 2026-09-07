@@ -57,8 +57,9 @@ test.skipIf(!!process.env.CI)(
       ])
       // Exercise the real HTTP boundary with delayed state acknowledgments, as on
       // a remote server. Neither endpoint can rely on synchronous UI/state updates.
-      // The first inventory that carries a tab is rejected twice: the desktop must
-      // keep it pending and resend, or the server never learns the tab exists.
+      // The first inventory that carries a tab is rejected five times, an outage of almost
+      // eight seconds: the desktop must keep resending until the server has it, or the
+      // server never learns the tab exists.
       proxy = Bun.serve({
         hostname: "127.0.0.1",
         port: 0,
@@ -67,7 +68,7 @@ test.skipIf(!!process.env.CI)(
           const incoming = new URL(request.url)
           if (incoming.pathname.endsWith("/tunnel.open")) tunnels++
           if (incoming.pathname.endsWith("/experimental.browser/state")) {
-            if (rejectedStates < 2 && (await request.clone().text()).includes('"tab_')) {
+            if (rejectedStates < 5 && (await request.clone().text()).includes('"tab_')) {
               rejectedStates++
               return new Response(null, { status: 503 })
             }
@@ -98,7 +99,7 @@ test.skipIf(!!process.env.CI)(
         ]),
       ).toBe(0)
       expect(tunnels).toBeGreaterThan(0)
-      expect(rejectedStates).toBe(2)
+      expect(rejectedStates).toBe(5)
     } finally {
       if (native?.exitCode === null) {
         native.kill()

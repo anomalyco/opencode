@@ -74,6 +74,18 @@ async function main() {
       response.end("landed")
       return
     }
+    // Fetched twice: the second 301 comes from Chromium's cache without ExtraInfo events, while
+    // the uncacheable target still emits them for the same request ID.
+    if (request.url === "/moved") {
+      response.writeHead(301, { location: "/moved-target", "cache-control": "max-age=60" })
+      response.end()
+      return
+    }
+    if (request.url === "/moved-target") {
+      response.writeHead(201, { "content-type": "text/plain", "cache-control": "no-store", "x-hop": "target" })
+      response.end("moved")
+      return
+    }
     // Revalidation: the wire answers 304 while the renderer reports the cached 200.
     if (request.url === "/etag") {
       if (request.headers["if-none-match"] === '"v1"') {
@@ -194,6 +206,7 @@ async function main() {
         cookie: (document.cookie = 'wire=1', await fetch('/api/test?cookie').then(response => response.ok)),
         etag: [await fetch('/etag').then(response => response.status), await fetch('/etag').then(response => response.status)],
         redirect: await fetch('/redirect').then(response => response.text()),
+        moved: [await fetch('/moved').then(response => response.status), await fetch('/moved').then(response => response.status)],
         refused: await new Promise((resolve) => { const socket = new WebSocket('ws://127.0.0.1:1/refused'); socket.onerror = () => resolve('refused'); socket.onopen = () => resolve('opened'); }),
       }))()`,
     })
@@ -205,6 +218,7 @@ async function main() {
       cookie: true,
       etag: [200, 200],
       redirect: "landed",
+      moved: [201, 201],
       refused: "refused",
     })
     const sockets = await call("network.list", { tabID, resourceType: "websocket" })
@@ -236,6 +250,14 @@ async function main() {
       hop.responseHeaders.every((header) => header.name !== "set-cookie" || header.value === "<redacted>"),
       JSON.stringify(hop.responseHeaders),
     )
+    const moved = await call("network.list", { tabID, urlContains: "/moved" })
+    assert.deepEqual(
+      moved.requests.map((request) => request.statusCode),
+      [301, 201, 301, 201],
+      JSON.stringify(moved),
+    )
+    const cachedHop = await call("network.get", { tabID, id: moved.requests[2].id })
+    assert(!names(cachedHop.responseHeaders).includes("x-hop"), JSON.stringify(cachedHop.responseHeaders))
     const revalidated = await call("network.list", { tabID, urlContains: "/etag" })
     assert.deepEqual(
       revalidated.requests.map((request) => request.statusCode),

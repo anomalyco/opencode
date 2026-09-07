@@ -164,6 +164,8 @@ export function createDiagnostics(cdp: Cdp) {
       previous.response = { mimeType: event.redirectResponse.mimeType, headers: response.headers }
       previous.headersTruncated ||= response.truncated
       previous.redirected = true
+      // A cached redirect never gets ExtraInfo; the next hop's must not be attributed to it.
+      if (!event.redirectHasExtraInfo) previous.wire = { request: true, response: true }
       previous.info = {
         ...previous.info,
         state: "completed",
@@ -201,6 +203,7 @@ export function createDiagnostics(cdp: Cdp) {
     request.headersTruncated ||= headers.truncated
     // ExtraInfo already carries the wire status when it arrived first; the renderer may report 200 for a 304.
     request.info = { ...request.info, statusCode: request.info.statusCode ?? event.response.status }
+    if (!event.hasExtraInfo) request.wire = { request: true, response: true }
   })
   cdp.on("Network.responseReceivedExtraInfo", (event, sessionID) => {
     const key = `${sessionID ?? ""}:${event.requestId}`
