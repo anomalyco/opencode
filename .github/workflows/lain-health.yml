@@ -1,0 +1,26 @@
+name: Lain architecture health
+
+on:
+  pull_request:
+    branches: [dev]
+
+permissions:
+  # The action posts a commit status and a sticky PR comment; the
+  # default GITHUB_TOKEN is read-only.
+  statuses: write
+  pull-requests: write
+
+jobs:
+  lain-health:
+    name: Lain architecture health badge
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Pinned to a SHA on the per-pr-blast-radius feature branch in
+      # lain's main repo. Move to @v0.7.4 (or the next tagged release)
+      # when the per-PR blast-radius feature lands in a release.
+      - uses: spuentesp/lain/.github/actions/lain-health-badge@6a2f5fb9180e717057d82429dc19292918a37277
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          min-fan-out: '15'
+          lsp-languages: 'auto'

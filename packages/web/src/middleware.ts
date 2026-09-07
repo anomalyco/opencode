@@ -47,6 +47,12 @@ function localeFromCookie(header: string | null) {
   return matchLocale(raw)
 }
 
+function localeFromQuery(url: URL) {
+  const value = url.searchParams.get("lang")
+  if (!value) return null
+  return matchLocale(value)
+}
+
 function localeFromAcceptLanguage(header: string | null) {
   if (!header) return "root"
 
@@ -86,6 +92,7 @@ export const onRequest = defineMiddleware((ctx, next) => {
   if (ctx.url.pathname !== "/docs" && ctx.url.pathname !== "/docs/") return next()
 
   const locale =
+    localeFromQuery(ctx.url) ??
     localeFromCookie(ctx.request.headers.get("cookie")) ??
     localeFromAcceptLanguage(ctx.request.headers.get("accept-language"))
   if (!locale || locale === "root") return next()
