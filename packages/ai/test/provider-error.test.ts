@@ -160,6 +160,10 @@ describe("provider error rawBody classification", () => {
       ['{"type":"error","error":{"type":"overloaded_error","message":"Try again"}}', "ProviderInternal"],
       ['{"error":{"code":"insufficient_quota","message":"Request failed"}}', "QuotaExceeded"],
       [
+        '{"error":{"type":"usage_limit_reached","message":"You have hit your usage limit.","resets_in_seconds":3600}}',
+        "QuotaExceeded",
+      ],
+      [
         '{"type":"response.failed","response":{"error":{"code":"authentication_error","message":"Denied"}}}',
         "Authentication",
       ],

@@ -59,7 +59,9 @@ export const isContextOverflowFailure = (failure: unknown) =>
     : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "context-overflow"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
-const QUOTA_CODES = new Set(["insufficient_quota", "usage_not_included", "billing_error"])
+// `usage_limit_reached` is the ChatGPT subscription quota (5-hour or weekly
+// window) reported by the Codex backend; it resets in hours, not seconds.
+const QUOTA_CODES = new Set(["insufficient_quota", "usage_not_included", "usage_limit_reached", "billing_error"])
 const AUTH_CODES = new Set(["authentication_error", "permission_error"])
 const SERVER_CODES = new Set([
   "api_error",
