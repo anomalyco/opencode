@@ -104,6 +104,11 @@ export function analyzeCpu(value: unknown, limit = 100) {
   }
 }
 
+const malformedHeap = () =>
+  new Error(
+    "Heap snapshot layout is unsupported or incomplete. Use a complete capture from browser.heap.snapshot; if this tool produced it, report a parser/Chromium compatibility issue instead of repeatedly capturing the same heap.",
+  )
+
 export function parseHeap(value: unknown) {
   const decoded = Schema.decodeUnknownOption(Heap)(value)
   if (decoded._tag === "None")
@@ -132,9 +137,7 @@ export function parseHeap(value: unknown) {
     heap.nodes.length % width ||
     heap.edges.length % edgeWidth
   )
-    throw new Error(
-      "Heap snapshot layout is unsupported or incomplete. Use a complete capture from browser.heap.snapshot; if this tool produced it, report a parser/Chromium compatibility issue instead of repeatedly capturing the same heap.",
-    )
+    throw malformedHeap()
   const types = heap.snapshot.meta.node_types[indexes.type]
   const edgeTypes = heap.snapshot.meta.edge_types[indexes.edgeType]
   if (!Array.isArray(types) || !Array.isArray(edgeTypes))
@@ -150,14 +153,23 @@ export function parseHeap(value: unknown) {
   })
   const classes = new Map<string, { name: string; count: number; bytes: number }>()
   let selfBytes = 0
+  let edgeTotal = 0
   for (let offset = 0; offset < heap.nodes.length; offset += width) {
     const item = node(offset)
+    if (!Number.isSafeInteger(item.edgeCount) || item.edgeCount < 0) throw malformedHeap()
+    edgeTotal += item.edgeCount
     const name = item.name.slice(0, 2_048)
     const entry = classes.get(name) ?? { name, count: 0, bytes: 0 }
     entry.count++
     entry.bytes += item.selfBytes
     selfBytes += item.selfBytes
     classes.set(name, entry)
+  }
+  // Edge counts drive the traversal below; a downloaded file can claim trillions of edges it does not carry.
+  if (edgeTotal * edgeWidth !== heap.edges.length) throw malformedHeap()
+  for (let offset = indexes.to; offset < heap.edges.length; offset += edgeWidth) {
+    const to = heap.edges[offset]
+    if (!Number.isSafeInteger(to) || to < 0 || to >= heap.nodes.length || to % width) throw malformedHeap()
   }
   return {
     summary(limit = 100) {

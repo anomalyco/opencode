@@ -20,7 +20,8 @@ export function createBrowserFiles(source: () => readonly string[]) {
       resources: readonly string[]
     }
   >()
-  const ready = mkdir(directory, { recursive: true })
+  // Captures, uploads, and heap snapshots sit in the shared temp directory; keep them owner-only.
+  const ready = mkdir(directory, { recursive: true, mode: 0o700 })
   return {
     directory,
     ready,
@@ -29,7 +30,7 @@ export function createBrowserFiles(source: () => readonly string[]) {
       const id = Browser.FileID.make(`file_${crypto.randomUUID()}`)
       const target = path.join(directory, id)
       // setSavePath must run during Electron's synchronous will-download callback.
-      mkdirSync(target, { recursive: true })
+      mkdirSync(target, { recursive: true, mode: 0o700 })
       const file = {
         id,
         name: name.slice(0, 2_048),
@@ -49,7 +50,7 @@ export function createBrowserFiles(source: () => readonly string[]) {
         )
       await ready
       const file = this.add(name, mime, resources)
-      await writeFile(file.path, data).catch((error: unknown) => {
+      await writeFile(file.path, data, { mode: 0o600 }).catch((error: unknown) => {
         file.state = "failed"
         throw new Error(
           "Cannot write the capture on the desktop. Ask the user to check desktop temporary-directory access and free space before retrying.",

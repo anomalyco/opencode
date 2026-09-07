@@ -56,3 +56,19 @@ test("heap queries and object links use snapshot IDs and shallow sizes", () => {
   expect(heap.object(3).retainers).toMatchObject([{ name: "next", node: { id: 1 } }])
   expect(() => heap.object(99)).toThrow("Object ID was not found")
 })
+
+test("heap parsing rejects edge counts and targets the file does not carry", () => {
+  const meta = {
+    node_fields: ["type", "name", "id", "self_size", "edge_count"],
+    node_types: [["object"], "string", "number", "number", "number"],
+    edge_fields: ["type", "name_or_index", "to_node"],
+    edge_types: [["property"], "string", "node"],
+  }
+  // A trillion claimed edges with an empty edge array must fail at parse time, not traverse.
+  expect(() => parseHeap({ snapshot: { meta }, nodes: [0, 0, 1, 10, 1e12], edges: [], strings: ["root"] })).toThrow(
+    "unsupported or incomplete",
+  )
+  expect(() => parseHeap({ snapshot: { meta }, nodes: [0, 0, 1, 10, 1], edges: [0, 0, 7], strings: ["root"] })).toThrow(
+    "unsupported or incomplete",
+  )
+})

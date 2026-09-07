@@ -13,12 +13,16 @@ type Request = {
   postDataTruncated: boolean
   redirected?: boolean
 }
+type Wire = { headers: Protocol.Network.Headers; statusCode: number }
 const levels = ["debug", "info", "warning", "error"] as const
 
 export function createDiagnostics(cdp: Cdp) {
   const messages: Browser.ConsoleEntry[] = []
   const requests = new Map<string, Request>()
   const current = new Map<string, Request>()
+  // Network-stack headers and wire status arrive as ExtraInfo events, in either order relative to
+  // the renderer-side events; stash whichever comes first.
+  const extra = new Map<string, { request?: Protocol.Network.Headers; response?: Wire }>()
   const scope = crypto.randomUUID()
   let sequence = 0
   let droppedMessages = 0
@@ -76,6 +80,68 @@ export function createDiagnostics(cdp: Cdp) {
       error.url ? { url: error.url, line: error.lineNumber + 1, column: error.columnNumber + 1 } : undefined,
     )
   })
+  const begin = (
+    key: string,
+    sessionID: string | undefined,
+    nativeID: string,
+    started: number,
+    wallTime: number,
+    info: Pick<Browser.NetworkRequest, "url" | "method" | "resourceType">,
+    request: Request["request"],
+  ) => {
+    const headers = trimHeaders(request.headers)
+    const entry: Request = {
+      nativeID,
+      sessionID,
+      started,
+      request: { ...request, headers: headers.headers, postData: request.postData?.slice(0, 20_000) },
+      headersTruncated: headers.truncated,
+      postDataTruncated: (request.postData?.length ?? 0) > 20_000,
+      info: {
+        id: `${scope}:${++sequence}`,
+        ...info,
+        url: info.url.slice(0, 16_384),
+        timestampMs: wallTime * 1000,
+        state: "pending",
+      },
+    }
+    requests.set(entry.info.id, entry)
+    current.set(key, entry)
+    const stashed = extra.get(key)
+    if (stashed?.request) requestHeaders(entry, stashed.request)
+    if (stashed?.response) responseInfo(entry, stashed.response)
+    extra.delete(key)
+    if (requests.size > 500) {
+      const first = requests.values().next().value
+      if (first) {
+        requests.delete(first.info.id)
+        if (current.get(`${first.sessionID ?? ""}:${first.nativeID}`) === first)
+          current.delete(`${first.sessionID ?? ""}:${first.nativeID}`)
+      }
+      droppedRequests++
+    }
+    return entry
+  }
+  const requestHeaders = (request: Request, headers: Protocol.Network.Headers) => {
+    const trimmed = trimHeaders({ ...request.request.headers, ...headers })
+    request.request = { ...request.request, headers: trimmed.headers }
+    request.headersTruncated ||= trimmed.truncated
+  }
+  const responseInfo = (request: Request, wire: Wire) => {
+    const trimmed = trimHeaders({ ...request.response?.headers, ...wire.headers })
+    request.response = { mimeType: request.response?.mimeType ?? "", headers: trimmed.headers }
+    request.headersTruncated ||= trimmed.truncated
+    request.info = { ...request.info, statusCode: wire.statusCode }
+  }
+  const finish = (key: string, timestamp: number, failure?: string) => {
+    const request = current.get(key)
+    if (!request) return
+    const durationMs = Math.max(0, (timestamp - request.started) * 1000)
+    request.info =
+      failure === undefined
+        ? { ...request.info, state: "completed", durationMs }
+        : { ...request.info, state: "failed", failure: failure.slice(0, 2_048), durationMs }
+  }
   cdp.on("Network.requestWillBeSent", (event, sessionID) => {
     const key = `${sessionID ?? ""}:${event.requestId}`
     const previous = current.get(key)
@@ -91,73 +157,82 @@ export function createDiagnostics(cdp: Cdp) {
         durationMs: Math.max(0, (event.timestamp - previous.started) * 1000),
       }
     }
-    const type = (event.type ?? "other").toLowerCase()
-    const id = `${scope}:${++sequence}`
-    const headers = trimHeaders(event.request.headers)
-    const request: Request = {
-      nativeID: event.requestId,
+    begin(
+      key,
       sessionID,
-      started: event.timestamp,
-      request: {
-        headers: headers.headers,
-        hasPostData: event.request.hasPostData,
-        postData: event.request.postData?.slice(0, 20_000),
-      },
-      headersTruncated: headers.truncated,
-      postDataTruncated: (event.request.postData?.length ?? 0) > 20_000,
-      info: {
-        id,
-        url: event.request.url.slice(0, 16_384),
+      event.requestId,
+      event.timestamp,
+      event.wallTime,
+      {
+        url: event.request.url,
         method: event.request.method,
-        resourceType: resourceType(type),
-        timestampMs: event.wallTime * 1000,
-        state: "pending",
+        resourceType: resourceType((event.type ?? "other").toLowerCase()),
       },
-    }
-    requests.set(id, request)
-    current.set(key, request)
-    if (requests.size > 500) {
-      const first = requests.values().next().value
-      if (first) {
-        requests.delete(first.info.id)
-        if (current.get(`${first.sessionID ?? ""}:${first.nativeID}`) === first)
-          current.delete(`${first.sessionID ?? ""}:${first.nativeID}`)
-      }
-      droppedRequests++
-    }
+      { headers: event.request.headers, hasPostData: event.request.hasPostData, postData: event.request.postData },
+    )
+  })
+  cdp.on("Network.requestWillBeSentExtraInfo", (event, sessionID) => {
+    const key = `${sessionID ?? ""}:${event.requestId}`
+    const request = current.get(key)
+    if (request) return requestHeaders(request, event.headers)
+    extra.set(key, { ...extra.get(key), request: event.headers })
   })
   cdp.on("Network.responseReceived", (event, sessionID) => {
     const request = current.get(`${sessionID ?? ""}:${event.requestId}`)
     if (!request) return
-    const headers = trimHeaders(event.response.headers)
+    const headers = trimHeaders({ ...event.response.headers, ...request.response?.headers })
     request.response = { mimeType: event.response.mimeType, headers: headers.headers }
     request.headersTruncated ||= headers.truncated
-    request.info = { ...request.info, statusCode: event.response.status }
+    // ExtraInfo already carries the wire status when it arrived first; the renderer may report 200 for a 304.
+    request.info = { ...request.info, statusCode: request.info.statusCode ?? event.response.status }
   })
-  cdp.on("Network.loadingFinished", (event, sessionID) => {
+  cdp.on("Network.responseReceivedExtraInfo", (event, sessionID) => {
+    const key = `${sessionID ?? ""}:${event.requestId}`
+    const request = current.get(key)
+    if (request) return responseInfo(request, event)
+    extra.set(key, { ...extra.get(key), response: event })
+  })
+  // WebSockets never emit requestWillBeSent; their handshake is the whole request lifecycle.
+  cdp.on("Network.webSocketCreated", (event, sessionID) => {
+    begin(
+      `${sessionID ?? ""}:${event.requestId}`,
+      sessionID,
+      event.requestId,
+      0,
+      Date.now() / 1000,
+      { url: event.url, method: "GET", resourceType: "websocket" },
+      { headers: {}, hasPostData: false },
+    )
+  })
+  cdp.on("Network.webSocketWillSendHandshakeRequest", (event, sessionID) => {
     const request = current.get(`${sessionID ?? ""}:${event.requestId}`)
-    if (request)
-      request.info = {
-        ...request.info,
-        state: "completed",
-        durationMs: Math.max(0, (event.timestamp - request.started) * 1000),
-      }
+    if (!request) return
+    request.started = event.timestamp
+    request.info = { ...request.info, timestampMs: event.wallTime * 1000 }
+    requestHeaders(request, event.request.headers)
   })
-  cdp.on("Network.loadingFailed", (event, sessionID) => {
-    const request = current.get(`${sessionID ?? ""}:${event.requestId}`)
-    if (request)
-      request.info = {
-        ...request.info,
-        state: "failed",
-        failure: event.errorText.slice(0, 2_048),
-        durationMs: Math.max(0, (event.timestamp - request.started) * 1000),
-      }
+  cdp.on("Network.webSocketHandshakeResponseReceived", (event, sessionID) => {
+    const key = `${sessionID ?? ""}:${event.requestId}`
+    const request = current.get(key)
+    if (!request) return
+    responseInfo(request, { headers: event.response.headers, statusCode: event.response.status })
+    finish(key, event.timestamp)
   })
+  cdp.on("Network.webSocketFrameError", (event, sessionID) =>
+    finish(`${sessionID ?? ""}:${event.requestId}`, event.timestamp, event.errorMessage),
+  )
+  cdp.on("Network.loadingFinished", (event, sessionID) =>
+    finish(`${sessionID ?? ""}:${event.requestId}`, event.timestamp),
+  )
+  cdp.on("Network.loadingFailed", (event, sessionID) =>
+    finish(`${sessionID ?? ""}:${event.requestId}`, event.timestamp, event.errorText),
+  )
   return {
     clear() {
       messages.length = 0
       requests.clear()
       current.clear()
+      extra.clear()
       droppedMessages = 0
       droppedRequests = 0
     },
@@ -208,7 +283,8 @@ export function createDiagnostics(cdp: Cdp) {
       const responseBody = async (): Promise<Browser.Body> => {
         if (!input.includeBody) return { state: "notRequested" }
         if (request.info.state === "pending") return { state: "pending" }
-        if (request.redirected || !request.response) return { state: "unavailable", reason: "notCaptured" }
+        if (request.redirected || !request.response || request.info.resourceType === "websocket")
+          return { state: "unavailable", reason: "notCaptured" }
         if (
           !/^(text\/|application\/(json|.*\+json|javascript|xml|.*\+xml|x-www-form-urlencoded))/i.test(
             request.response.mimeType,
