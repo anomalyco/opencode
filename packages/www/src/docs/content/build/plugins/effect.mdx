@@ -366,7 +366,32 @@ effect: (ctx) =>
   }),
 ```
 
-The current command transform is add-only. An executor receives the session, prompt attachments, and delivery mode.
+#### Template commands
+
+The command transform is add-only. Template commands use the configured-command argument expansion, agent and model
+selection, and optional subagent execution.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const command = ctx.command
+    yield* command.transform((editor) => {
+      editor.add({
+        name: "security-review",
+        description: "Review changes for security issues",
+        template: "Review these changes for security issues.\n\n$ARGUMENTS",
+        agent: "reviewer",
+        subagent: true,
+      })
+    })
+    yield* command.reload()
+  }),
+```
+
+#### Callback commands
+
+Use an `execute` callback instead when the command needs custom behavior. It receives the session, prompt attachments,
+and delivery mode.
 
 ```ts
 effect: (ctx) =>
@@ -375,8 +400,8 @@ effect: (ctx) =>
     const session = ctx.session
     yield* command.transform((editor) => {
       editor.add({
-        name: "security-review",
-        description: "Review changes for security issues",
+        name: "security-review-custom",
+        description: "Review changes with custom behavior",
         execute: (input) =>
           session.prompt({
             ...input.prompt,
@@ -386,7 +411,6 @@ effect: (ctx) =>
           }).pipe(Effect.asVoid),
       })
     })
-    yield* command.reload()
   }),
 ```
 
@@ -400,11 +424,22 @@ interface CommandInvocation {
   readonly delivery: SessionInbox.Delivery
 }
 
-interface CommandDefinition {
+interface CommandCallbackDefinition {
   readonly name: string
   readonly description?: string
   readonly execute: (input: CommandInvocation) => Effect.Effect<void, unknown>
 }
+
+interface CommandTemplateDefinition {
+  readonly name: string
+  readonly description?: string
+  readonly template: string
+  readonly agent?: string
+  readonly model?: { readonly providerID: string; readonly model: string; readonly variant?: string }
+  readonly subagent?: boolean
+}
+
+type CommandDefinition = CommandCallbackDefinition | CommandTemplateDefinition
 
 interface CommandEditor {
   add(definition: CommandDefinition): void

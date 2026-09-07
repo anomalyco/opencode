@@ -345,13 +345,34 @@ Read the commands available at a location.
 const commands = await ctx.command.list()
 ```
 
-Register commands with a transform. The executor receives the session, prompt attachments, and requested delivery mode.
+#### Template commands
+
+Register a prompt command with the same fields used by configured commands. OpenCode expands `$ARGUMENTS`, positional
+arguments such as `$1`, and shell substitutions before submitting the prompt. Setting `subagent` runs it in a child
+session.
 
 ```ts
 await ctx.command.transform((editor) => {
   editor.add({
     name: "security-review",
     description: "Review changes for security issues",
+    template: "Review these changes for security issues.\n\n$ARGUMENTS",
+    agent: "reviewer",
+    subagent: true,
+  })
+})
+```
+
+#### Callback commands
+
+Use `execute` instead of `template` when the command needs custom behavior. The callback receives the session, prompt
+attachments, and requested delivery mode.
+
+```ts
+await ctx.command.transform((editor) => {
+  editor.add({
+    name: "security-review-custom",
+    description: "Review changes with custom behavior",
     execute: async ({ sessionID, prompt, delivery }) => {
       await ctx.session.prompt({
         ...prompt,
@@ -386,11 +407,22 @@ interface CommandEditor {
   add(definition: CommandDefinition): void
 }
 
-interface CommandDefinition {
+interface CommandCallbackDefinition {
   name: string
   description?: string
   execute(input: CommandInvocation): Promise<void>
 }
+
+interface CommandTemplateDefinition {
+  name: string
+  description?: string
+  template: string
+  agent?: string
+  model?: { providerID: string; model: string; variant?: string }
+  subagent?: boolean
+}
+
+type CommandDefinition = CommandCallbackDefinition | CommandTemplateDefinition
 
 interface CommandInvocation {
   sessionID: string

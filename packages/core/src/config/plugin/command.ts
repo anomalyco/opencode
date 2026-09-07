@@ -3,19 +3,11 @@ export * as ConfigCommandPlugin from "./command.js"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Info, type Entry } from "@opencode-ai/schema/config"
 import { ConfigCommand } from "@opencode-ai/schema/config/command"
-import { Model } from "@opencode-ai/schema/model"
-import { Provider } from "@opencode-ai/schema/provider"
-import { AppProcess } from "@opencode-ai/util/process"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import path from "path"
 import { Effect, Option, PubSub, Schema, Stream } from "effect"
-import { ChildProcess } from "effect/unstable/process"
-import { Agent } from "../../agent.js"
+import { CommandTemplate } from "../../command/template.js"
 import { Config } from "../../config.js"
-import { Location } from "../../location.js"
-import { Session } from "../../session.js"
-import { SubagentJob } from "../../session/subagent-job.js"
-import { ShellSelect } from "../../shell/select.js"
-import { FSUtil } from "@opencode-ai/util/fs-util"
 import { ConfigMarkdown } from "../markdown.js"
 
 const decodeCommand = Schema.decodeUnknownOption(ConfigCommand.Info)
@@ -31,12 +23,7 @@ export const Plugin = define({
       const commands = yield* loadDirectory(fs, entry.path)
       return [{ commands: Object.fromEntries(commands.map((command) => [command.name, command.info])) }]
     })
-    const location = yield* Location.Service
-    const processes = yield* AppProcess.Service
-    const shell = yield* ShellSelect.Service
-    const sessions = yield* Session.Service
-    const agents = yield* Agent.Service
-    const subagents = yield* SubagentJob.make
+    const commandTemplate = yield* CommandTemplate.make(ctx)
     const load = Effect.fn("ConfigCommandPlugin.load")(function* () {
       return yield* Effect.forEach(yield* config.entries(), loadEntry).pipe(Effect.map((documents) => documents.flat()))
     })
@@ -72,68 +59,16 @@ export const Plugin = define({
     yield* ctx.command.transform((editor) => {
       for (const document of loaded.documents) {
         for (const [name, command] of Object.entries(document.commands ?? {})) {
-          const subagent = command.subagent ?? command.subtask
-          editor.add({
-            name,
-            description: command.description,
-            execute: (input) =>
-              Effect.gen(function* () {
-                const agent = command.agent === undefined ? undefined : Agent.ID.make(command.agent)
-                const commandAgent = agent === undefined ? undefined : (yield* ctx.agent.get({ agentID: agent })).data
-                const model =
-                  command.model === undefined
-                    ? commandAgent?.model
-                    : {
-                        id: Model.ID.make(command.model.model),
-                        providerID: Provider.ID.make(command.model.providerID),
-                        ...(command.model.variant === undefined
-                          ? {}
-                          : { variant: Model.VariantID.make(command.model.variant) }),
-                      }
-                const text = yield* evaluateTemplate(command.template, input.prompt.text, {
-                  location,
-                  processes,
-                  shell,
-                })
-                if (subagent ?? commandAgent?.mode === "subagent") {
-                  const parent = yield* sessions.get(input.sessionID)
-                  const selected = yield* agents.select(agent ?? parent.agent)
-                  const child = yield* sessions.create({
-                    parentID: parent.id,
-                    title: command.description ?? name,
-                    agent: selected.id,
-                    model: model ?? selected.info?.model ?? parent.model,
-                  })
-                  yield* sessions.prompt({
-                    ...input.prompt,
-                    sessionID: child.id,
-                    text: ["You are a subagent spawned by another session.", text].join("\n"),
-                    resume: false,
-                  })
-                  const recovery = {
-                    kind: "subagent" as const,
-                    parentSessionID: parent.id,
-                    childSessionID: child.id,
-                    agent: selected.id,
-                    description: command.description ?? name,
-                  }
-                  yield* subagents.start(recovery)
-                  yield* subagents.background(recovery)
-                  return
-                }
-                if (agent !== undefined) {
-                  const session = yield* ctx.session.get({ sessionID: input.sessionID })
-                  if (session.agent !== agent) yield* ctx.session.switchAgent({ sessionID: input.sessionID, agent })
-                }
-                if (model !== undefined) yield* ctx.session.switchModel({ sessionID: input.sessionID, model })
-                yield* ctx.session.prompt({
-                  ...input.prompt,
-                  sessionID: input.sessionID,
-                  text,
-                  delivery: input.delivery,
-                })
-              }).pipe(Effect.asVoid),
-          })
+          editor.add(
+            commandTemplate.definition({
+              name,
+              description: command.description,
+              template: command.template,
+              agent: command.agent,
+              model: command.model,
+              subagent: command.subagent ?? command.subtask,
+            }),
+          )
         }
       }
     })
@@ -185,66 +120,3 @@ function decode(directory: string, filepath: string, content: string) {
     info,
   }
 }
-
-function evaluateTemplate(
-  template: string,
-  input: string,
-  services: {
-    readonly location: Location.Info
-    readonly processes: AppProcess.Interface
-    readonly shell: ShellSelect.Interface
-  },
-) {
-  return Effect.gen(function* () {
-    const args = parseArguments(input)
-    const placeholders = template.match(placeholderRegex) ?? []
-    const last = Math.max(0, ...placeholders.map((item) => Number(item.slice(1))))
-    const expanded = template.replaceAll(placeholderRegex, (_, index) => {
-      const position = Number(index)
-      const argIndex = position - 1
-      if (argIndex >= args.length) return ""
-      if (position === last) return args.slice(argIndex).join(" ")
-      return args[argIndex]
-    })
-    const withArguments = expanded.replaceAll("$ARGUMENTS", input)
-    const text =
-      placeholders.length === 0 && !template.includes("$ARGUMENTS") && input.trim()
-        ? `${withArguments}\n\n${input}`.trim()
-        : withArguments.trim()
-    const matches = Array.from(text.matchAll(shellRegex))
-    if (matches.length === 0) return text
-    const shell = yield* services.shell.resolve({ priority: "config" })
-    const outputs = yield* Effect.forEach(
-      matches,
-      (match) => {
-        const source = match[1] ?? ""
-        return services.processes
-          .run(
-            ChildProcess.make(shell, ShellSelect.args(shell, source), {
-              cwd: services.location.directory,
-              stdin: "ignore",
-            }),
-            { combineOutput: true },
-          )
-          .pipe(
-            Effect.map((result) => (result.output ?? Buffer.concat([result.stdout, result.stderr])).toString("utf8")),
-            Effect.mapError(
-              (error) => new Error(`Shell interpolation failed for ${JSON.stringify(source)}: ${error.message}`),
-            ),
-          )
-      },
-      { concurrency: 2 },
-    )
-    const iterator = outputs[Symbol.iterator]()
-    return text.replace(shellRegex, () => iterator.next().value ?? "")
-  })
-}
-
-function parseArguments(input: string) {
-  return (input.match(argsRegex) ?? []).map((arg) => arg.replace(quoteTrimRegex, ""))
-}
-
-const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
-const placeholderRegex = /\$(\d+)/g
-const quoteTrimRegex = /^["']|["']$/g
-const shellRegex = /!`([^`]+)`/g

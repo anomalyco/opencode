@@ -315,12 +315,14 @@ export function fromPromise(plugin: Plugin) {
               register(
                 host.command.transform((editor) =>
                   callback({
-                    add: (definition) =>
+                    add: (definition) => {
+                      if (!("execute" in definition)) return editor.add(definition)
                       editor.add({
                         ...definition,
                         execute: (input) =>
                           Effect.tryPromise({ try: () => definition.execute(input), catch: (cause) => cause }),
-                      }),
+                      })
+                    },
                   }),
                 ),
               ),

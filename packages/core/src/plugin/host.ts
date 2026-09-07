@@ -11,6 +11,7 @@ import { Agent } from "../agent.js"
 import { AISDK } from "../aisdk.js"
 import { Catalog } from "../catalog.js"
 import { Command } from "../command.js"
+import { CommandTemplate } from "../command/template.js"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
 import { Integration } from "../integration.js"
@@ -53,6 +54,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
   const aisdk = yield* AISDK.Service
   const catalog = yield* Catalog.Service
   const commands = yield* Command.Service
+  const commandTemplate = yield* CommandTemplate.Service
   const bus = yield* Bus.Service
   const integration = yield* Integration.Service
   const kv = yield* KV.Service
@@ -243,7 +245,13 @@ export const make = Effect.fn("PluginHost.make")(function* (
     command: {
       list: () => response(commands.list()),
       reload: commands.reload,
-      transform: commands.transform,
+      transform: (callback) =>
+        commands.transform((editor) => {
+          callback({
+            add: (definition) =>
+              editor.add("execute" in definition ? definition : commandTemplate.definition(definition)),
+          })
+        }),
     },
     event: {
       subscribe: () =>
@@ -554,6 +562,7 @@ export const requirements = LayerNode.group([
   Permission.node,
   PluginHooks.node,
   Session.node,
+  CommandTemplate.node,
   PersistentPty.node,
   LocationServiceMap.node,
 ])
