@@ -4,7 +4,7 @@ import type {
   SessionMessageAssistantTool,
   SessionMessageInfo,
 } from "@opencode-ai/client/promise"
-import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
+import { storyDocument, storyPatchFile, storyTool } from "../storybook/current-session-scenarios"
 import { createTimelineProjection, Timeline, TimelineRow } from "./projection"
 
 describe("current session timeline rows", () => {
@@ -625,7 +625,7 @@ describe("current session timeline rows", () => {
     ])
   })
 
-  test("groups adjacent successful patches and leaves failed patches separate", () => {
+  test("groups adjacent patch, edit, and write calls and leaves failed calls separate", () => {
     const source = [
       { id: "msg_user", type: "user", text: "edit", time: { created: 1 } },
       {
@@ -681,15 +681,22 @@ describe("current session timeline rows", () => {
             type: "tool",
             id: "tool_edit_1",
             name: "edit",
-            state: { status: "running", input: {}, metadata: { files: [] } },
+            state: { status: "running", input: {}, metadata: { files: [storyPatchFile("src/edited.ts")] } },
             time: { created: 9 },
           },
           {
             type: "tool",
             id: "tool_edit_2",
             name: "edit",
-            state: { status: "running", input: {}, metadata: { files: [] } },
+            state: { status: "running", input: {}, metadata: { files: [storyPatchFile("src/edited.ts")] } },
             time: { created: 10 },
+          },
+          {
+            type: "tool",
+            id: "tool_write",
+            name: "write",
+            state: { status: "running", input: {}, metadata: { files: [storyPatchFile("src/written.ts")] } },
+            time: { created: 11 },
           },
         ],
         time: { created: 2, completed: 8 },
@@ -716,14 +723,11 @@ describe("current session timeline rows", () => {
       {
         type: "file",
         key: "part:msg_assistant:tool_patch_3",
-        refs: [{ messageID: "msg_assistant", partID: "tool_patch_3" }],
-      },
-      {
-        type: "file",
-        key: "part:msg_assistant:tool_edit_1",
         refs: [
+          { messageID: "msg_assistant", partID: "tool_patch_3" },
           { messageID: "msg_assistant", partID: "tool_edit_1" },
           { messageID: "msg_assistant", partID: "tool_edit_2" },
+          { messageID: "msg_assistant", partID: "tool_write" },
         ],
       },
     ])
@@ -790,8 +794,8 @@ describe("current session timeline rows", () => {
   test.each([
     { shell: false, edit: false, types: ["context"] },
     { shell: true, edit: false, types: ["part", "context"] },
-    { shell: false, edit: true, types: ["context", "file", "part", "file", "context"] },
-    { shell: true, edit: true, types: ["part", "file", "part", "file", "context"] },
+    { shell: false, edit: true, types: ["context", "part", "part", "file", "context"] },
+    { shell: true, edit: true, types: ["part", "part", "part", "file", "context"] },
   ])("keeps tools expanded by settings outside collapsed groups ($shell, $edit)", ({ shell, edit, types }) => {
     const source = [
       { id: "msg_user", type: "user", text: "work", time: { created: 1 } },

@@ -264,44 +264,98 @@ export const CreatedANewFile = {
 }
 
 export const FileToolFallbacks = {
-  args: { tool: "edit", empty: false, forceOpen: false, controlled: true },
+  args: {
+    tool: "edit",
+    empty: false,
+    forceOpen: false,
+    controlled: true,
+    timeline: false,
+    placement: "separate",
+    noOp: false,
+  },
   argTypes: {
     tool: { control: "select", options: ["edit", "write"] },
     empty: { control: "boolean" },
     forceOpen: { control: "boolean" },
     controlled: { control: "boolean" },
+    timeline: { control: "boolean" },
+    noOp: { control: "boolean" },
+    placement: { control: "select", options: ["separate", "grouped"] },
   },
-  render: (args: { tool: string; empty: boolean; forceOpen: boolean; controlled: boolean }) => {
+  render: (args: {
+    tool: string
+    empty: boolean
+    forceOpen: boolean
+    controlled: boolean
+    timeline: boolean
+    noOp: boolean
+    placement: "separate" | "grouped"
+  }) => {
     const [state, setState] = createStore({ completed: false, open: false })
+    const document = createMemo(() =>
+      storyDocument([
+        storyTool(
+          "tool_file_fallback",
+          args.tool,
+          state.completed ? "completed" : "running",
+          {
+            path: "src/example.ts",
+            oldString: "export const before = true\n",
+            newString: "export const after = true\n",
+            content: args.empty ? "" : "export const written = true\n",
+          },
+          {
+            metadata:
+              state.completed && args.noOp
+                ? {
+                    files: [
+                      {
+                        file: "src/example.ts",
+                        patch: createTwoFilesPatch("src/example.ts", "src/example.ts", "", ""),
+                        status: "modified",
+                        additions: 0,
+                        deletions: 0,
+                      },
+                    ],
+                  }
+                : undefined,
+          },
+        ),
+      ]),
+    )
     return (
       <section class="mx-auto flex w-full max-w-[860px] flex-col gap-4 p-6">
         <button type="button" onClick={() => setState("completed", true)}>
           Complete file tool
         </button>
-        <CurrentSessionProviders document={storyDocument([])}>
-          <ToolDisplay
-            id="tool_file_fallback"
-            tool={args.tool}
-            status={state.completed ? "completed" : "running"}
-            input={{
-              path: "src/example.ts",
-              oldString: "export const before = true\n",
-              newString: "export const after = true\n",
-              content: args.empty ? "" : "export const written = true\n",
-            }}
-            metadata={{
-              diagnostics: state.completed
-                ? {
-                    "src/example.ts": [
-                      { severity: 1, message: "Example diagnostic", range: { start: { line: 0, character: 0 } } },
-                    ],
-                  }
-                : {},
-            }}
-            open={args.controlled ? state.open : undefined}
-            onOpenChange={(open) => setState("open", open)}
-            forceOpen={args.forceOpen}
-          />
+        <CurrentSessionProviders document={document()}>
+          {args.timeline ? (
+            <SessionTimeline document={document()} editToolDefaultOpen={args.placement === "separate"} />
+          ) : (
+            <ToolDisplay
+              id="tool_file_fallback"
+              tool={args.tool}
+              status={state.completed ? "completed" : "running"}
+              input={{
+                path: "src/example.ts",
+                oldString: "export const before = true\n",
+                newString: "export const after = true\n",
+                content: args.empty ? "" : "export const written = true\n",
+              }}
+              metadata={{
+                diagnostics: state.completed
+                  ? {
+                      "src/example.ts": [
+                        { severity: 1, message: "Example diagnostic", range: { start: { line: 0, character: 0 } } },
+                      ],
+                    }
+                  : {},
+              }}
+              open={args.controlled ? state.open : undefined}
+              onOpenChange={(open) => setState("open", open)}
+              forceOpen={args.forceOpen}
+            />
+          )}
         </CurrentSessionProviders>
       </section>
     )

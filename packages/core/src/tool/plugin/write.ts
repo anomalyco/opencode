@@ -85,15 +85,18 @@ export const Plugin = {
                 source,
               })
               const result = yield* fileMutation.writeTextPreservingBom({ target, content: input.content })
-              const bom = (yield* FileMutation.readText(environment.files, target.absolute)).bom
-              if (yield* formatter.file(target.absolute)) {
-                yield* FileMutation.syncTextBom(environment.files, target.absolute, bom)
+              const written = yield* FileMutation.readText(environment.files, target.absolute)
+              const formatted = (yield* formatter.file(target.absolute))
+                ? yield* FileMutation.syncTextBom(environment.files, target.absolute, written.bom)
+                : written.text
+              return {
+                output: result,
+                content: toModelContent(result),
+                metadata: {
+                  files: [fileDiff(result.resource, current?.text ?? "", formatted, current ? "modified" : "added")],
+                },
               }
-              return result
-            }).pipe(
-              Effect.map((output) => ({ output, content: toModelContent(output) })),
-              Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),
-            ),
+            }).pipe(Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error }))),
         }),
       )
       .pipe(Effect.orDie)

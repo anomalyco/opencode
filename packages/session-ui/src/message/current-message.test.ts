@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { JsonValue, SessionMessageAssistantTool } from "@opencode-ai/client/promise"
-import { currentContentDefaultOpen } from "./current-tool-state"
+import { currentContentDefaultOpen, currentToolCanGroupFiles } from "./current-tool-state"
 
 function tool(name: string, files: JsonValue[] = []): SessionMessageAssistantTool {
   return {
@@ -16,6 +16,33 @@ function tool(name: string, files: JsonValue[] = []): SessionMessageAssistantToo
     time: { created: 1, completed: 2 },
   }
 }
+
+describe("current file grouping eligibility", () => {
+  test.each(["edit", "write"])("keeps %s input fallbacks unless changed files are available", (name) => {
+    const unchanged = { file: "src/example.ts", patch: "", status: "modified", additions: 0, deletions: 0 }
+    expect(currentToolCanGroupFiles(tool(name, [unchanged]))).toBe(false)
+    expect(currentToolCanGroupFiles(tool(name))).toBe(false)
+    expect(currentToolCanGroupFiles({ ...tool(name), state: { status: "running", input: {}, metadata: {} } })).toBe(
+      false,
+    )
+    expect(
+      currentToolCanGroupFiles(
+        tool(name, [{ ...unchanged, patch: "@@ -1 +1 @@\n-before\n+after", additions: 1, deletions: 1 }]),
+      ),
+    ).toBe(true)
+    expect(
+      currentToolCanGroupFiles({
+        ...tool(name),
+        state: {
+          status: "error",
+          input: {},
+          error: { type: "ToolError", message: "failed" },
+          metadata: { files: [{ ...unchanged, additions: 1 }] },
+        },
+      }),
+    ).toBe(false)
+  })
+})
 
 describe("current content default open", () => {
   test("uses the shell disclosure preference", () => {

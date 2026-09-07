@@ -8,7 +8,12 @@ import type {
 } from "@opencode-ai/client/promise"
 import { Option, Schema } from "effect"
 import { createMemo, mapArray, type Accessor } from "solid-js"
-import { currentContentDefaultOpen, currentToolFailed, currentToolHasLoadedFiles } from "../message/current-tool-state"
+import {
+  currentContentDefaultOpen,
+  currentToolCanGroupFiles,
+  currentToolFailed,
+  currentToolHasLoadedFiles,
+} from "../message/current-tool-state"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
 import { timelineCategory, timelineNoticeRequired, type TimelineDetail } from "./detail"
 
@@ -597,7 +602,7 @@ function groupContent(
   detail?: TimelineDetail,
 ): PartGroup[] {
   const groups: PartGroup[] = []
-  let adjacent: { type: "context" | "patch" | "edit"; refs: PartRef[]; tools: boolean } | undefined
+  let adjacent: { type: "context" | "file"; refs: PartRef[]; tools: boolean } | undefined
   const flush = () => {
     const current = adjacent
     const first = current?.refs[0]
@@ -665,8 +670,7 @@ function toolGroupType(
     const category = timelineCategory(content)!
     if (detail[category].placement === "grouped") return "context"
     if (currentToolFailed(content)) return undefined
-    if (content.name === "patch") return "patch"
-    if (content.name === "edit") return "edit"
+    if (currentToolCanGroupFiles(content)) return "file"
     return undefined
   }
   if (content.name === "question" || currentToolHasLoadedFiles(content)) return undefined
@@ -684,8 +688,7 @@ function toolGroupType(
   )
     return undefined
   if (currentContentDefaultOpen(content, shellExpanded, editExpanded) !== true) return "context"
-  if (content.name === "patch") return "patch"
-  if (content.name === "edit") return "edit"
+  if (currentToolCanGroupFiles(content)) return "file"
   return undefined
 }
 

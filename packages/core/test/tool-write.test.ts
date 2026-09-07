@@ -119,6 +119,17 @@ describe("WriteTool", () => {
               existed: false,
             },
             content: [{ type: "text", text: "Created file successfully: src/new.txt" }],
+            metadata: {
+              files: [
+                {
+                  file: "src/new.txt",
+                  status: "added",
+                  additions: 1,
+                  deletions: 0,
+                  patch: expect.stringContaining("+created"),
+                },
+              ],
+            },
           })
           expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "src", "new.txt"), "utf8"))).toBe(
             "created",
@@ -158,6 +169,20 @@ describe("WriteTool", () => {
         Effect.gen(function* () {
           expect(yield* executeTool(registry, call({ path: "formatted.txt", content: "format me" }))).toMatchObject({
             status: "completed",
+            metadata: {
+              files: [
+                {
+                  file: "formatted.txt",
+                  status: "added",
+                  additions: 1,
+                  deletions: 0,
+                  patch: expect.stringContaining("+FORMAT ME"),
+                },
+              ],
+            },
+          })
+          expect(fixture.assertions[0]?.metadata).toMatchObject({
+            files: [{ patch: expect.stringContaining("+format me") }],
           })
           expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("FORMAT ME")
         }),
@@ -180,6 +205,7 @@ describe("WriteTool", () => {
             if (settled.status !== "completed") return
             expect(settled.content).toEqual([{ type: "text", text: "Wrote file successfully: existing.txt" }])
             expect(settled.output).toMatchObject({ resource: "existing.txt", existed: true })
+            expect(settled.metadata).toEqual(fixture.assertions[0]?.metadata)
             expect(fixture.assertions[0]?.metadata).toMatchObject({
               files: [
                 {
@@ -215,7 +241,22 @@ describe("WriteTool", () => {
         Effect.andThen(
           withTool(tmp.path, fixture, (registry) =>
             Effect.gen(function* () {
-              yield* executeTool(registry, call({ path: "preserved.txt", content: "after" }, "call-preserved"))
+              const settled = yield* executeTool(
+                registry,
+                call({ path: "preserved.txt", content: "after" }, "call-preserved"),
+              )
+              expect(settled).toMatchObject({
+                metadata: {
+                  files: [
+                    {
+                      file: "preserved.txt",
+                      status: "modified",
+                      patch: expect.stringMatching(/-before[\s\S]*\+after/),
+                    },
+                  ],
+                },
+              })
+              if (settled.status === "completed") expect(JSON.stringify(settled.metadata)).not.toContain("\uFEFF")
               yield* executeTool(
                 registry,
                 call({ path: "deduplicated.txt", content: "\uFEFFafter" }, "call-deduplicated"),
@@ -226,6 +267,27 @@ describe("WriteTool", () => {
             }),
           ),
         ),
+      )
+    }),
+  )
+
+  it.live("reports zero-change metadata for empty and unchanged writes", () =>
+    withTempDir((tmp) => {
+      const fixture = makeWriteFixture()
+      return withTool(tmp.path, fixture, (registry) =>
+        Effect.gen(function* () {
+          const created = yield* executeTool(registry, call({ path: "empty.txt", content: "" }, "call-empty"))
+          expect(created).toMatchObject({
+            status: "completed",
+            metadata: { files: [{ file: "empty.txt", status: "added", additions: 0, deletions: 0 }] },
+          })
+          const unchanged = yield* executeTool(registry, call({ path: "empty.txt", content: "" }, "call-unchanged"))
+          expect(unchanged).toMatchObject({
+            status: "completed",
+            metadata: { files: [{ file: "empty.txt", status: "modified", additions: 0, deletions: 0 }] },
+          })
+          expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "empty.txt"), "utf8"))).toBe("")
+        }),
       )
     }),
   )

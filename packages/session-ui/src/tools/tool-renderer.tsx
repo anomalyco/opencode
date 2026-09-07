@@ -45,6 +45,7 @@ import type {
 import {
   currentToolError,
   currentToolHasLoadedFiles,
+  currentToolCanGroupFiles,
   currentToolInput,
   currentToolMetadata,
   currentToolOutput,
@@ -552,11 +553,10 @@ export function CurrentContextToolGroup(props: {
         }
         const previous = groups.at(-1)
         if (
-          tool.name === "patch" &&
-          tool.state.status !== "error" &&
+          currentToolCanGroupFiles(tool) &&
           Array.isArray(previous) &&
-          previous?.[0]?.name === "patch" &&
-          previous[0].state.status !== "error"
+          previous[0] &&
+          currentToolCanGroupFiles(previous[0])
         ) {
           previous.push(tool)
           return groups
@@ -582,7 +582,7 @@ export function CurrentContextToolGroup(props: {
   const patchKeys = createMemo(() => {
     const keys = new Map<SessionMessageAssistantTool, string>()
     items().forEach((item) => {
-      if (!Array.isArray(item) || item[0]?.name !== "patch" || item[0].state.status === "error") return
+      if (!Array.isArray(item) || !item[0] || !currentToolCanGroupFiles(item[0])) return
       const key = props.patchGroupKey?.(item) ?? item[0].id
       item.forEach((tool) => keys.set(tool, key))
     })
@@ -687,7 +687,7 @@ export function CurrentContextToolGroup(props: {
                               when={tool().name === "skill" && group().length > 1 && skills().length === group().length}
                               fallback={
                                 <Show
-                                  when={tool().name === "patch" && tool().state.status !== "error"}
+                                  when={currentToolCanGroupFiles(tool())}
                                   fallback={
                                     <ToolDisplay
                                       id={tool().id}
@@ -841,7 +841,7 @@ export function CurrentFileToolGroup(props: {
     props.tools.some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
   const render = ToolRegistry.render("patch") ?? GenericTool
-  const tool = createMemo(() => (props.tools[0]?.name === "edit" ? "edit" : "patch"))
+  const tool = createMemo(() => props.tools[0]?.name ?? "patch")
 
   return (
     <div
@@ -1884,7 +1884,11 @@ ToolRegistry.register({
     const files = createMemo(() => patchFileGroups(props.metadata.files))
     const [expanded, setExpanded] = createSignal<string[]>([])
     const title = createMemo(() =>
-      props.tool === "edit" ? i18n.t("ui.messagePart.title.edit") : i18n.t("ui.tool.patch"),
+      props.tool === "edit"
+        ? i18n.t("ui.messagePart.title.edit")
+        : props.tool === "write"
+          ? i18n.t("ui.messagePart.title.write")
+          : i18n.t("ui.tool.patch"),
     )
     const open = createMemo(() => {
       if (!props.fileOpen) return expanded()

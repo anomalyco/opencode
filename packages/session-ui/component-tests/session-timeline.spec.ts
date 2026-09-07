@@ -92,3 +92,36 @@ story("keeps patch file disclosures independent", async ({ mount }) => {
   await expect(modified).toHaveAttribute("aria-expanded", "true")
   await expect(deleted).toHaveAttribute("aria-expanded", "false")
 })
+
+for (const placement of ["separate", "grouped"]) {
+  for (const profile of [
+    { tool: "edit", empty: false, noOp: false },
+    { tool: "write", empty: false, noOp: false },
+    { tool: "write", empty: true, noOp: false },
+    { tool: "edit", empty: false, noOp: true },
+    { tool: "write", empty: true, noOp: true },
+  ]) {
+    story(
+      `keeps ${profile.empty ? "empty " : ""}${profile.tool} input fallback with ${profile.noOp ? "zero-change" : "missing"} metadata in ${placement} rows`,
+      async ({ mount }) => {
+        const root = await mount("current-session-file-changes--file-tool-fallbacks", {
+          args: { ...profile, timeline: true, placement },
+        })
+        const timeline = root.locator('[data-component="session-timeline"]')
+        if (placement === "grouped") await timeline.getByRole("button", { name: /^Used / }).click()
+        const fallback = timeline.locator(`[data-component="${profile.tool}-tool"]`)
+        await expect(fallback).toHaveCount(1)
+        await expect(fallback.getByText("example.ts", { exact: true })).toBeVisible()
+        if (placement === "grouped") await fallback.getByRole("button", { name: /example\.ts/ }).click()
+        await expect(fallback.locator('[data-component="file"]')).toBeAttached()
+        if (!profile.empty) await expect(fallback.locator('[data-component="file"]')).toBeVisible()
+        await root.getByRole("button", { name: "Complete file tool" }).click()
+        await expect(fallback.getByText("example.ts", { exact: true })).toBeVisible()
+        await expect(fallback.getByRole("button", { name: /example\.ts/ })).toHaveAttribute("aria-expanded", "true")
+        await expect(fallback.locator('[data-component="file"]')).toBeAttached()
+        if (!profile.empty) await expect(fallback.locator('[data-component="file"]')).toBeVisible()
+        await expect(timeline.locator('[data-component="apply-patch-tool"]')).toHaveCount(0)
+      },
+    )
+  }
+}

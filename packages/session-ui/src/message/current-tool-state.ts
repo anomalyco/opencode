@@ -14,6 +14,23 @@ export function currentToolMetadata(tool: SessionMessageAssistantTool): Record<s
   return tool.state.metadata ?? empty
 }
 
+export function currentToolCanGroupFiles(tool: SessionMessageAssistantTool) {
+  if (tool.state.status === "error") return false
+  if (tool.name === "patch") return true
+  // Keep the input-based renderer when older edit/write results have no file diffs.
+  if (tool.name !== "edit" && tool.name !== "write") return false
+  const files = currentToolMetadata(tool).files
+  if (!Array.isArray(files)) return false
+  // Empty and unchanged results still need their filename and content preview.
+  return files.some(
+    (file) =>
+      !!file &&
+      typeof file === "object" &&
+      (("additions" in file && typeof file.additions === "number" && file.additions > 0) ||
+        ("deletions" in file && typeof file.deletions === "number" && file.deletions > 0)),
+  )
+}
+
 export function currentToolOutput(tool: SessionMessageAssistantTool) {
   if (tool.state.status === "running") {
     const output = tool.state.metadata.output

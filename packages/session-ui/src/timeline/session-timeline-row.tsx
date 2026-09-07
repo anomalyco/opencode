@@ -23,7 +23,7 @@ import type { ContextGroupPart } from "../tools/tool-renderer"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
 import { timelineCategory, type TimelineDetail } from "./detail"
-import { currentToolFailed } from "../message/current-tool-state"
+import { currentToolCanGroupFiles, currentToolFailed } from "../message/current-tool-state"
 import {
   createReactiveTimelineProjection,
   Timeline,
@@ -72,7 +72,7 @@ export function createSessionTimelineRowRenderer(input: {
       if (row._tag !== "AssistantPart" || row.group.type !== "context") return
       row.group.refs.forEach((ref) => {
         const content = Timeline.resolveContent(input.projection.messageByID().get(ref.messageID), ref.partID)
-        if (content?.type !== "tool" || content.name !== "patch" || content.state.status === "error") return
+        if (content?.type !== "tool" || !currentToolCanGroupFiles(content)) return
         const part = `${ref.messageID}:${ref.partID}`
         const key = patchGroupKeys.get(part)
         if (key && !owners.has(key)) owners.set(key, part)
@@ -223,7 +223,7 @@ export function createSessionTimelineRowRenderer(input: {
             const open = input.disclosure.value(`${row().group.key}:file:${path}`)
             if (open !== undefined) return open
             if (input.timelineDetail) return input.timelineDetail().edit.details === "expanded"
-            if (tools()[0]?.name !== "edit" || path !== firstPath()) return false
+            if (!["edit", "write"].includes(tools()[0]?.name ?? "") || path !== firstPath()) return false
             return input.disclosure.value(row().group.key) ?? input.editToolDefaultOpen()
           }}
           onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
