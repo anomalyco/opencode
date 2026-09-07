@@ -60,30 +60,30 @@ function oauth(http: HttpClient.HttpClient) {
           callback: poll(http, server, device.device_code, Duration.seconds(device.interval)),
         }
       }),
-    refresh: (current) =>
+    refresh: (credential) =>
       Effect.gen(function* () {
-        const server = typeof current.metadata?.server === "string" ? current.metadata.server : defaultServer
+        const server = typeof credential.metadata?.server === "string" ? credential.metadata.server : defaultServer
         const token = yield* post(
           http,
           `${server}/auth/device/token`,
-          { grant_type: "refresh_token", refresh_token: current.refresh, client_id: clientID },
+          { grant_type: "refresh_token", refresh_token: credential.refresh, client_id: clientID },
           Token,
         )
         // Persist rotated tokens without depending on discovery requests.
         return {
-          ...current,
+          ...credential,
           access: token.access_token,
           refresh: token.refresh_token,
           expires: Date.now() + token.expires_in * 1000,
           metadata:
             token.org_id == null
-              ? current.metadata
+              ? credential.metadata
               : {
-                  ...current.metadata,
+                  ...credential.metadata,
                   orgID: token.org_id,
                   orgName:
-                    current.metadata?.orgID === token.org_id && typeof current.metadata.orgName === "string"
-                      ? current.metadata.orgName
+                    credential.metadata?.orgID === token.org_id && typeof credential.metadata.orgName === "string"
+                      ? credential.metadata.orgName
                       : token.org_id,
                 },
         }
