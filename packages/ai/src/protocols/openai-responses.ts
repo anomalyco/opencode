@@ -1,11 +1,11 @@
-import { Effect, Encoding, Schema } from "effect"
+import { Effect, Encoding, Option, Schema } from "effect"
 import { Headers } from "effect/unstable/http"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
-import { LLMRequest, mergeJsonRecords, type JsonSchema, type ToolDefinition, type ToolEntry } from "../schema/index.js"
+import { LLMRequest, mergeJsonRecords, type JsonSchema, ToolDefinition, type ToolEntry } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { OpenAIImage } from "./utils/openai-image.js"
@@ -41,6 +41,37 @@ const OpenAIResponsesImageGenerationTool = Schema.Struct({
   quality: Schema.optional(Schema.Literals(["auto", "low", "medium", "high"])),
   size: Schema.optional(OpenAIImage.Size),
 })
+
+const OpenAIResponsesCustomTool = Schema.Struct({
+  type: Schema.tag("custom"),
+  name: Schema.String,
+  description: Schema.optional(Schema.String),
+  format: Schema.optional(
+    Schema.Union([
+      Schema.Struct({ type: Schema.tag("text") }),
+      Schema.Struct({
+        type: Schema.tag("grammar"),
+        syntax: Schema.Literals(["lark", "regex"]),
+        definition: Schema.String,
+      }),
+    ]),
+  ),
+})
+
+const OpenAIResponsesCustomToolItem = Schema.Union([
+  Schema.Struct({
+    type: Schema.tag("custom_tool_call"),
+    id: Schema.optional(Schema.String),
+    call_id: Schema.String,
+    name: Schema.String,
+    input: Schema.String,
+  }),
+  Schema.Struct({
+    type: Schema.tag("custom_tool_call_output"),
+    call_id: Schema.String,
+    output: OpenResponses.FunctionCallOutput,
+  }),
+])
 
 const OpenAIResponsesHostedToolItem = Schema.Union([
   Schema.StructWithRest(
@@ -86,17 +117,31 @@ const OpenAIResponsesNamespace = Schema.Struct({
 const OpenAIResponsesTools = Schema.Union([
   OpenResponses.Tool,
   OpenAIResponsesNamespace,
+  OpenAIResponsesCustomTool,
   OpenAIResponsesImageGenerationTool,
 ])
 
 const OpenAIResponsesToolChoice = Schema.Union([
+  Schema.Struct({
+    type: Schema.tag("allowed_tools"),
+    mode: Schema.Literals(["auto", "none", "required"]),
+    tools: Schema.Array(
+      Schema.Union([
+        Schema.Struct({ type: Schema.tag("function"), name: Schema.String }),
+        Schema.Struct({ type: Schema.tag("custom"), name: Schema.String }),
+      ]),
+    ),
+  }),
   OpenResponses.ToolChoice,
+  Schema.Struct({ type: Schema.tag("custom"), name: Schema.String }),
   Schema.Struct({ type: Schema.tag("image_generation") }),
 ])
 
 const OpenAIResponsesCoreFields = {
   ...OpenResponses.coreFields,
-  input: Schema.Array(Schema.Union([OpenResponses.InputItem, OpenAIResponsesHostedToolItem])),
+  input: Schema.Array(
+    Schema.Union([OpenResponses.InputItem, OpenAIResponsesCustomToolItem, OpenAIResponsesHostedToolItem]),
+  ),
   tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   context_management: Schema.optional(
@@ -119,7 +164,14 @@ export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 export const CompactionTrigger = Schema.Struct({ type: Schema.Literal("compaction_trigger") })
 const CheckpointBody = Schema.Struct({
   ...OpenAIResponsesBody.fields,
-  input: Schema.Array(Schema.Union([OpenResponses.InputItem, OpenAIResponsesHostedToolItem, CompactionTrigger])),
+  input: Schema.Array(
+    Schema.Union([
+      OpenResponses.InputItem,
+      OpenAIResponsesCustomToolItem,
+      OpenAIResponsesHostedToolItem,
+      CompactionTrigger,
+    ]),
+  ),
   store: Schema.Literal(false),
   prompt_cache_retention: optionalNull(Schema.String),
   prompt_cache_options: optionalNull(
@@ -131,7 +183,36 @@ const adapter = {
   id: ADAPTER,
   name: NAME,
   restoreHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
+  freeformTools: (request: LLMRequest) =>
+    withFreeformSupport(request).tools.flatMap((tool) =>
+      tool.type === "tool" && tool.freeform
+        ? [{ name: tool.name, wireName: tool.freeform.name ?? tool.name, input: tool.freeform.input }]
+        : [],
+    ),
 } satisfies OpenResponses.ProviderAdapter
+
+// Custom tools are an OpenAI extension gated per model. Strip the facet once
+// for unsupported models so lowering keys off `tool.freeform` alone and those
+// models see the canonical function tool.
+const withFreeformSupport = (request: LLMRequest) => {
+  if (request.model.compatibility?.supportsFreeformTools === true) return request
+  return LLMRequest.update(request, {
+    tools: request.tools.map((tool) =>
+      tool.type === "tool" && tool.freeform ? new ToolDefinition({ ...tool, freeform: undefined }) : tool,
+    ),
+  })
+}
+
+// The wrapper object exists only to match the canonical JSON tool contract, so
+// its schema must be exactly the one required string property.
+const FreeformInputSchema = (input: string) =>
+  Schema.Struct({
+    type: Schema.Literal("object"),
+    properties: Schema.Struct({ [input]: Schema.Struct({ type: Schema.Literal("string") }) }).annotate({
+      parseOptions: { onExcessProperty: "error" },
+    }),
+    required: Schema.Tuple([Schema.Literal(input)]),
+  })
 
 const nativeImageToolInput = (tool: ToolDefinition) => {
   const native = tool.native?.openai
@@ -148,6 +229,27 @@ const lowerTool = Effect.fn("OpenAIResponses.lowerTool")(function* (tool: ToolDe
   if (native !== undefined) {
     if (Schema.is(OpenAIResponsesImageGenerationTool)(native)) return native
     return yield* ProviderShared.invalidRequest("OpenAI Responses image generation tool options are invalid")
+  }
+  if (tool.freeform) {
+    if (Option.isNone(Schema.decodeUnknownOption(FreeformInputSchema(tool.freeform.input))(tool.inputSchema)))
+      return yield* ProviderShared.invalidRequest(
+        `OpenAI Responses freeform tool ${tool.name} requires exactly one required string input property named ${tool.freeform.input}`,
+      )
+    const grammar = tool.freeform.grammars?.[0]
+    return {
+      type: "custom" as const,
+      name: tool.freeform.name ?? tool.name,
+      description: tool.description,
+      ...(grammar
+        ? {
+            format: {
+              type: "grammar" as const,
+              syntax: grammar.dialect === "oai-lark" ? ("lark" as const) : ("regex" as const),
+              definition: grammar.definition,
+            },
+          }
+        : {}),
+    }
   }
   return yield* OpenResponses.lowerTool(NAME, tool, inputSchema)
 })
@@ -177,19 +279,30 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tool
     auto: () => "auto" as const,
     none: () => "none" as const,
     required: () => "required" as const,
-    tool: (name) =>
-      tools.some((tool) => tool.type === "tool" && tool.name === name && nativeImageTool(tool) !== undefined)
-        ? ({ type: "image_generation" } as const)
-        : { type: "function" as const, name },
+    tool: (name) => {
+      const tool = tools.find((tool): tool is ToolDefinition => tool.type === "tool" && tool.name === name)
+      if (tool && nativeImageTool(tool) !== undefined) return { type: "image_generation" as const }
+      if (tool?.freeform) return { type: "custom" as const, name: tool.freeform.name ?? name }
+      return { type: "function" as const, name }
+    },
   })
 
 const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIResponsesBody))
 
-const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request: LLMRequest) {
+const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (input: LLMRequest) {
+  const request = withFreeformSupport(input)
   const management = yield* ProviderShared.validateWith(
     Schema.decodeUnknownEffect(Schema.UndefinedOr(ContextManagement)),
   )(request.providerOptions?.contextManagement)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
+  const names = request.tools.flatMap((tool) =>
+    tool.type === "tool" && tool.freeform ? [tool.freeform.name ?? tool.name] : [],
+  )
+  const duplicate = names.find((name, index) => names.indexOf(name) !== index)
+  if (duplicate)
+    return yield* ProviderShared.invalidRequest(
+      `OpenAI Responses has multiple tools with model-facing name ${duplicate}`,
+    )
   return yield* decodeBody({
     ...(yield* OpenResponses.lowerConversation(request, adapter)),
     ...OpenResponses.lowerGeneration(request),
@@ -199,7 +312,7 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
         ? undefined
         : yield* Effect.forEach(request.tools, (tool) => lowerToolEntry(tool, toolSchemaCompatibility)),
     tool_choice:
-      OpenResponses.allowedToolChoice(request) ??
+      OpenResponses.allowedToolChoice(request, adapter) ??
       (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined),
   })
 })

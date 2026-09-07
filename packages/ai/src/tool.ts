@@ -3,6 +3,7 @@ import { Tool } from "@opencode-ai/schema/tool"
 import type {
   ToolCallPart,
   ToolDefinition as ToolDefinitionClass,
+  ToolFreeform,
   ToolOutput as ToolOutputType,
 } from "./schema/index.js"
 import { ToolDefinition, ToolFailure, ToolOutput } from "./schema/index.js"
@@ -13,6 +14,13 @@ import { ToolDefinition, ToolFailure, ToolOutput } from "./schema/index.js"
  * beyond pure data conversion belongs in the handler closure.
  */
 export type ToolSchema<T> = Schema.Codec<T, any, never, never>
+type StringKeys<Value> = Extract<
+  { [Key in keyof Value]-?: Value[Key] extends string ? Key : never }[keyof Value],
+  string
+>
+export type Freeform<Parameters extends ToolSchema<any>> = Omit<ToolFreeform, "input"> & {
+  readonly input: unknown extends Schema.Schema.Type<Parameters> ? string : StringKeys<Schema.Schema.Type<Parameters>>
+}
 export interface ToolExecuteContext {
   readonly id: ToolCallPart["id"]
   readonly name: ToolCallPart["name"]
@@ -50,6 +58,7 @@ export interface Definition<Parameters extends ToolSchema<any>, Success extends 
   readonly description: string
   readonly parameters: Parameters
   readonly success: Success
+  readonly freeform?: Freeform<Parameters>
   readonly execute?: ToolExecute<Parameters, Success>
   readonly toModelOutput?: ToolToModelOutput<Parameters, Success>
   readonly toStructuredOutput?: (output: Success["Encoded"]) => unknown
@@ -86,6 +95,7 @@ type TypedToolConfig = {
   readonly description: string
   readonly parameters: ToolSchema<any>
   readonly success: ToolSchema<any>
+  readonly freeform?: ToolFreeform
   readonly execute?: ToolExecute<ToolSchema<any>, ToolSchema<any>>
   readonly toModelOutput?: ToolToModelOutput<ToolSchema<any>, ToolSchema<any>>
   readonly toStructuredOutput?: (output: unknown) => unknown
@@ -95,6 +105,7 @@ type DynamicToolConfig = {
   readonly description: string
   readonly jsonSchema: JsonSchema.JsonSchema
   readonly outputSchema?: JsonSchema.JsonSchema
+  readonly freeform?: ToolFreeform
   readonly execute?: (params: unknown, context?: ToolExecuteContext) => Effect.Effect<unknown, ToolFailure>
   readonly toModelOutput?: (input: ToolModelOutputInput<unknown, unknown>) => ReadonlyArray<Tool.Content>
   readonly toStructuredOutput?: (output: unknown) => unknown
@@ -135,6 +146,7 @@ export function make<Parameters extends ToolSchema<any>, Success extends ToolSch
   readonly description: string
   readonly parameters: Parameters
   readonly success: Success
+  readonly freeform?: Freeform<Parameters>
   readonly execute: ToolExecute<Parameters, Success>
   readonly toModelOutput?: ToolToModelOutput<Parameters, Success>
   readonly toStructuredOutput?: (output: Success["Encoded"]) => unknown
@@ -143,6 +155,7 @@ export function make<Parameters extends ToolSchema<any>, Success extends ToolSch
   readonly description: string
   readonly parameters: Parameters
   readonly success: Success
+  readonly freeform?: Freeform<Parameters>
   readonly execute?: undefined
   readonly toModelOutput?: ToolToModelOutput<Parameters, Success>
   readonly toStructuredOutput?: (output: Success["Encoded"]) => unknown
@@ -151,6 +164,7 @@ export function make(config: {
   readonly description: string
   readonly jsonSchema: JsonSchema.JsonSchema
   readonly outputSchema?: JsonSchema.JsonSchema
+  readonly freeform?: ToolFreeform
   readonly execute: (params: unknown, context?: ToolExecuteContext) => Effect.Effect<unknown, ToolFailure>
   readonly toModelOutput?: (input: ToolModelOutputInput<unknown, unknown>) => ReadonlyArray<Tool.Content>
   readonly toStructuredOutput?: (output: unknown) => unknown
@@ -159,6 +173,7 @@ export function make(config: {
   readonly description: string
   readonly jsonSchema: JsonSchema.JsonSchema
   readonly outputSchema?: JsonSchema.JsonSchema
+  readonly freeform?: ToolFreeform
   readonly execute?: undefined
   readonly toModelOutput?: (input: ToolModelOutputInput<unknown, unknown>) => ReadonlyArray<Tool.Content>
   readonly toStructuredOutput?: (output: unknown) => unknown
@@ -169,6 +184,7 @@ export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
       description: config.description,
       parameters: Schema.Unknown as ToolSchema<unknown>,
       success: Schema.Unknown as ToolSchema<unknown>,
+      freeform: config.freeform,
       execute: config.execute,
       toModelOutput: config.toModelOutput,
       toStructuredOutput: config.toStructuredOutput,
@@ -182,6 +198,7 @@ export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
         description: config.description,
         inputSchema: config.jsonSchema,
         outputSchema: config.outputSchema,
+        freeform: config.freeform,
       }),
     }
   }
@@ -189,6 +206,7 @@ export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
     description: config.description,
     parameters: config.parameters,
     success: config.success,
+    freeform: config.freeform,
     execute: config.execute,
     toModelOutput: config.toModelOutput,
     toStructuredOutput: config.toStructuredOutput,
@@ -202,6 +220,7 @@ export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
       description: config.description,
       inputSchema: toJsonSchema(config.parameters),
       outputSchema: toJsonSchema(config.success),
+      freeform: config.freeform,
     }),
   }
 }
@@ -227,6 +246,7 @@ export const toDefinitions = (tools: Tools): ReadonlyArray<ToolDefinitionClass> 
         description: item._definition.description,
         inputSchema: item._definition.inputSchema,
         outputSchema: item._definition.outputSchema,
+        freeform: item._definition.freeform,
       }),
   )
 

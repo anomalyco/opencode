@@ -82,6 +82,14 @@ const configuredRoute = <Body, Prepared, Compact extends CompactionOperations | 
     endpoint: { baseURL: input.baseURL, query: input.queryParams },
   })
 
+const supportsFreeformTools = (input: Config, modelID: string) => {
+  if (!modelID.toLowerCase().includes("gpt-5")) return false
+  if (input.baseURL === undefined) return true
+  return [OpenAIResponses.DEFAULT_BASE_URL, "https://chatgpt.com/backend-api/codex"].includes(
+    input.baseURL.replace(/\/+$/, ""),
+  )
+}
+
 export const configure = (input: Config = {}) => {
   const responsesRoute = configuredRoute(OpenAIResponses.route, input)
   const chatRoute = configuredRoute(OpenAIChat.route, input)
@@ -89,7 +97,10 @@ export const configure = (input: Config = {}) => {
   const responses = (id: string | ModelID) =>
     responsesRoute
       .with(withOpenAIOptions(id, modelDefaults, { textVerbosity: true }))
-      .model<OpenAIProviderOptionsInput>({ id })
+      .model<OpenAIProviderOptionsInput>({
+        id,
+        compatibility: supportsFreeformTools(input, id) ? { supportsFreeformTools: true } : undefined,
+      })
   const chat = (id: string | ModelID) =>
     chatRoute.with(withOpenAIOptions(id, modelDefaults)).model<OpenAIProviderOptionsInput>({ id })
   const image = (modelID: string | ModelID) =>

@@ -269,11 +269,19 @@ export namespace Message {
     make({ role: "tool", content: ["type" in result ? result : ToolResultPart.make(result)] })
 }
 
+export const ToolFreeformGrammar = Tool.FreeformGrammar
+export type ToolFreeformGrammar = Schema.Schema.Type<typeof ToolFreeformGrammar>
+
+export const ToolFreeform = Tool.Freeform
+export type ToolFreeform = Schema.Schema.Type<typeof ToolFreeform>
+
 const toolDefinitionFields = {
   name: Schema.String,
   description: Schema.String,
   inputSchema: JsonSchema,
   outputSchema: Schema.optional(JsonSchema),
+  /** Optional string-input representation for protocols and models that support freeform tools. */
+  freeform: Schema.optional(ToolFreeform),
   cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),

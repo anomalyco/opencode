@@ -3,6 +3,9 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Tool } from "@opencode-ai/core/tool"
+import { Agent } from "@opencode-ai/core/agent"
+import { Session } from "@opencode-ai/core/session"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Effect, Schema } from "effect"
 import { it } from "./lib/effect"
 
@@ -19,6 +22,14 @@ describe("CodeMode", () => {
           output: Schema.String,
           options: { pinned: true },
           execute: ({ text }) => Effect.succeed({ output: text }),
+        })
+        editor.add({
+          name: "script",
+          description: "Run script text",
+          input: Schema.Struct({ source: Schema.String }),
+          output: Schema.String,
+          freeform: { input: "source" },
+          execute: ({ source }) => Effect.succeed({ output: source }),
         })
       })
 
@@ -39,8 +50,27 @@ describe("CodeMode", () => {
             description: "No tools registered yet",
             tools: [],
           },
+          {
+            type: "tool",
+            name: "script",
+            description: "Run script text",
+            signature: "tools.script(input: string): Promise<string>",
+            pinned: false,
+          },
         ],
       })
+      const result = yield* snapshot.execute({
+        sessionID: Session.ID.make("ses_codemode_freeform"),
+        agent: Agent.ID.make("build"),
+        messageID: SessionMessage.ID.make("msg_codemode_freeform"),
+        call: {
+          type: "tool-call",
+          id: "call-codemode-freeform",
+          name: "execute",
+          input: { code: 'return await tools.script("hello")' },
+        },
+      })
+      expect(result.output).toMatchObject({ output: "hello" })
     }).pipe(
       Effect.scoped,
       Effect.provide(

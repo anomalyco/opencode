@@ -399,6 +399,27 @@ describe("LLMClient tools", () => {
     expect(dynamic?.outputSchema).toEqual(schema)
   })
 
+  test("preserves freeform representations in generated definitions", () => {
+    const freeform = {
+      input: "patchText",
+      name: "apply_patch",
+      grammars: [{ dialect: "oai-regex" as const, definition: "\\*\\*\\* Begin Patch(.|\\n)+" }],
+    }
+    const [definition] = toDefinitions({
+      patch: Tool.make({
+        description: "Apply a patch.",
+        jsonSchema: {
+          type: "object",
+          properties: { patchText: { type: "string" } },
+          required: ["patchText"],
+        },
+        freeform,
+      }),
+    })
+
+    expect(definition?.freeform).toEqual(freeform)
+  })
+
   it.effect("preserves content tool results from dynamic tools", () =>
     Effect.gen(function* () {
       const screenshot = Tool.make({
