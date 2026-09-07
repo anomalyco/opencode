@@ -280,7 +280,8 @@ export const loadCommands = (
   retry(async () => {
     if ((await protocol) === "v1" && legacy) {
       return ((await legacy.command.list()).data ?? []).map((command) => {
-        const [providerID, id] = command.model?.split("/") ?? []
+        const [providerID, ...rest] = command.model?.split("/") ?? []
+        const id = rest.join("/")
         return {
           name: command.name,
           template: command.template,
