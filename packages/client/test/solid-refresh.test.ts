@@ -1,7 +1,21 @@
 import { expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createData, settleMs, type CreateDataInput } from "../src/solid"
-import { OpenCode, type OpenCodeEvent, type SessionInfo } from "../src/promise"
+import { OpenCode, type LocationCatalog, type OpenCodeEvent, type SessionInfo } from "../src/promise"
+
+const catalog: LocationCatalog = {
+  agent: [],
+  command: [],
+  integration: [],
+  mcp: [],
+  mcpResource: { resources: [], templates: [] },
+  model: [],
+  provider: [],
+  reference: [],
+  skill: [],
+  shell: [],
+  form: [],
+}
 
 test("config reads and update refreshes are opt-in", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
@@ -16,6 +30,7 @@ test("config reads and update refreshes are opt-in", async () => {
       requests.push(url.pathname)
       if (url.pathname === "/api/location") return Response.json(location)
       if (url.pathname === "/api/config") return Response.json([{ type: "document", info: { model } }])
+      if (url.pathname === "/api/location/catalog") return Response.json({ location, data: catalog })
       if (url.pathname === "/api/mcp/resource")
         return Response.json({ location, data: { resources: [], templates: [] } })
       return Response.json({ location, data: [] })
@@ -166,6 +181,59 @@ test.each(["reconnecting", "disposed"] as const)("background reads respect %s ow
   expect(errors).toEqual([])
 })
 
+test("location.sync reads one catalog and seeds every per-resource key", async () => {
+  const requests: string[] = []
+  const location = { directory: "/project" }
+  const agent = {
+    id: "build",
+    name: "Build",
+    mode: "primary",
+    hidden: false,
+    permissions: [],
+    request: { settings: {}, headers: {}, body: {} },
+  }
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      requests.push(url.pathname)
+      if (url.pathname === "/api/location/catalog")
+        return Response.json({ location, data: { ...catalog, agent: [agent] } })
+      if (url.pathname === "/api/vcs") return Response.json({ location, data: { branch: "main" } })
+      return Response.json({ location, data: [] })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: location.directory,
+      event: { on: () => () => {}, listen: () => () => {} },
+    }),
+    dispose,
+  }))
+  try {
+    await setup.data.location.sync()
+    expect(requests.toSorted()).toEqual(["/api/location/catalog", "/api/vcs"])
+    expect(setup.data.location.info()?.directory).toBe("/project")
+    expect(setup.data.location.agent.list()).toEqual([agent])
+    expect(setup.data.location.mcp.resource.list()).toEqual([])
+    // Seeded keys are current: explicit per-resource reads do not fetch again.
+    await Promise.all([setup.data.location.agent.sync(), setup.data.location.model.sync(), setup.data.shell.sync()])
+    expect(requests).toHaveLength(2)
+    // A single invalidated key refetches only itself on the next location sync.
+    setup.data.location.agent.invalidate()
+    await setup.data.location.sync()
+    expect(requests.slice(2)).toEqual(["/api/agent"])
+    // Invalidating the location refetches the catalog as one read again.
+    setup.data.location.invalidate()
+    await setup.data.location.sync()
+    expect(requests.slice(3).toSorted()).toEqual(["/api/location/catalog", "/api/vcs"])
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("a burst of mcp.status.changed events refetches the server list once it settles", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const requests: string[] = []
@@ -196,7 +264,13 @@ test("a burst of mcp.status.changed events refetches the server list once it set
     await setup.data.location.mcp.server.sync()
     expect(requests.filter((path) => path === "/api/mcp")).toHaveLength(1)
     for (const server of ["a", "b", "c", "d", "e"]) {
-      const event: OpenCodeEvent = { id: `evt_${server}`, created: 1, type: "mcp.status.changed", location, data: { server } }
+      const event: OpenCodeEvent = {
+        id: `evt_${server}`,
+        created: 1,
+        type: "mcp.status.changed",
+        location,
+        data: { server },
+      }
       listeners.forEach((listener) => listener({ name: event.type, details: event }))
     }
     expect(requests.filter((path) => path === "/api/mcp")).toHaveLength(1)

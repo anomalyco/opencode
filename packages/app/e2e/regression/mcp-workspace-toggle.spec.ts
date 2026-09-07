@@ -1,6 +1,6 @@
 import { base64Encode } from "@opencode-ai/util/encode"
 import { expect, test } from "@playwright/test"
-import { mockOpenCodeServer } from "../utils/mock-server"
+import { catalog, mockOpenCodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
 
 const directory = "C:\\OpenCode\\main"
@@ -30,10 +30,21 @@ for (const shared of [true, false]) {
       sessions: [{ id: sessionID, projectID, directory: workspace, title }],
       pageMessages: () => ({ items: [] }),
     })
-    await page.route("**/api/mcp**", async (route) => {
+    const servers = (target: string) =>
+      !shared && target !== workspace
+        ? []
+        : [{ name: "figma-desktop", status: { status: connected.has(target) ? "connected" : "disabled" } }]
+    await page.route("**/api/{mcp,location/catalog}**", async (route) => {
       if (route.request().method() === "OPTIONS") return route.fallback()
       const url = new URL(route.request().url())
       const target = url.searchParams.get("location[directory]") ?? directory
+      if (url.pathname === "/api/location/catalog")
+        return route.fulfill({
+          json: {
+            location: { directory: target, project: { id: projectID, directory, canonical: directory } },
+            data: catalog({ mcp: servers(target) }),
+          },
+        })
       requests.push({ path: url.pathname, directory: target })
       if (url.pathname === "/api/mcp/figma-desktop/connect") {
         connected.add(target)
@@ -46,12 +57,7 @@ for (const shared of [true, false]) {
       return route.fulfill({
         json: {
           location: { directory: target },
-          data:
-            url.pathname === "/api/mcp/resource"
-              ? { resources: [], templates: [] }
-              : !shared && target !== workspace
-                ? []
-                : [{ name: "figma-desktop", status: { status: connected.has(target) ? "connected" : "disabled" } }],
+          data: url.pathname === "/api/mcp/resource" ? { resources: [], templates: [] } : servers(target),
         },
       })
     })
@@ -108,10 +114,20 @@ for (const surface of ["popover", "dialog"] as const) {
       sessions: [{ id: sessionID, projectID, directory: workspace, title }],
       pageMessages: () => ({ items: [] }),
     })
-    await page.route("**/api/mcp**", async (route) => {
+    const servers = (target: string) => [
+      { name: "figma-desktop", status: { status: target === workspace ? state.status : "connected", error } },
+    ]
+    await page.route("**/api/{mcp,location/catalog}**", async (route) => {
       if (route.request().method() === "OPTIONS") return route.fallback()
       const url = new URL(route.request().url())
       const target = url.searchParams.get("location[directory]") ?? directory
+      if (url.pathname === "/api/location/catalog")
+        return route.fulfill({
+          json: {
+            location: { directory: target, project: { id: projectID, directory, canonical: directory } },
+            data: catalog({ mcp: servers(target) }),
+          },
+        })
       requests.push({ path: url.pathname, directory: target })
       if (url.pathname === "/api/mcp/figma-desktop/connect") {
         state.status = state.fail ? "failed" : "connected"
@@ -121,15 +137,7 @@ for (const surface of ["popover", "dialog"] as const) {
       return route.fulfill({
         json: {
           location: { directory: target },
-          data:
-            url.pathname === "/api/mcp/resource"
-              ? { resources: [], templates: [] }
-              : [
-                  {
-                    name: "figma-desktop",
-                    status: { status: target === workspace ? state.status : "connected", error },
-                  },
-                ],
+          data: url.pathname === "/api/mcp/resource" ? { resources: [], templates: [] } : servers(target),
         },
       })
     })

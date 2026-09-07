@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/util/encode"
-import { currentSession } from "../utils/mock-server"
+import { catalog, currentSession } from "../utils/mock-server"
 import { installSseTransport } from "../utils/sse-transport"
 
 const serverA = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
@@ -67,6 +67,14 @@ async function mockServers(page: Page, requests: string[]) {
     if (url.pathname === "/api/session/active") return json(route, { data: {} })
     if (url.pathname === `/api/session/${current.id}`) return json(route, { data: currentSession(current) })
     if (url.pathname === `/api/session/${current.id}/message`) return json(route, { data: [], cursor: {} })
+    if (url.pathname === "/api/location/catalog")
+      return json(route, {
+        location: {
+          directory: current.directory,
+          project: { id: current.projectID, directory: current.directory, canonical: current.directory },
+        },
+        data: catalog(),
+      })
     if (["/api/agent", "/api/provider", "/api/model", "/api/command", "/api/reference"].includes(url.pathname))
       return json(route, { location: { directory: current.directory }, data: [] })
     if (url.pathname === "/api/model/default")

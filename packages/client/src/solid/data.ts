@@ -12,6 +12,7 @@ import type {
   FormReplyInput,
   IntegrationInfo,
   LocationRef,
+  LocationCatalogOutput,
   LocationGetOutput,
   McpResource,
   McpServer,
@@ -1261,40 +1262,121 @@ export function createData(config: CreateDataInput) {
     }
   }
 
-  // A cached per-location catalog. `sync` loads once per invalidation, keyed by the
-  // effective location, and publishes under the server's canonical location; `alias`
-  // also publishes under the requested key when the two differ.
+  type Located<Value> = { location: LocationRef; data: Value }
+
+  // A cached per-location catalog. `sync` loads once per invalidation, keyed by the effective
+  // location, and publishes under the server's canonical location; `alias` also publishes under
+  // the requested key when the two differ. `catalog` reads the same value out of the combined
+  // `location.catalog` response so one request can seed the field.
   function locationResource<Field extends keyof LocationData>(
     field: Field,
-    load: (location: ReturnType<typeof locationQuery>) => Promise<{ location: LocationRef; data: LocationData[Field] }>,
-    options?: { alias?: boolean },
+    load: (location: ReturnType<typeof locationQuery>) => Promise<Located<LocationData[Field]>>,
+    options?: { alias?: boolean; catalog?: (response: LocationCatalogOutput) => LocationData[Field] },
   ) {
-    const publish = (key: string, value: LocationData[Field]) => setStore("location", key, { [field]: value })
+    const key = (ref?: LocationRef) => `location.${field}:${locationKey(ref ?? defaultLocation())}`
+    const publish = (id: string, value: LocationData[Field]) => setStore("location", id, { [field]: value })
+    const apply = (id: string, response: Located<LocationData[Field]>) => {
+      const canonical = locationKey(response.location)
+      publish(canonical, response.data)
+      if (options?.alias && canonical !== id) publish(id, response.data)
+    }
     return {
       list: (ref?: LocationRef) => store.location[locationKey(ref ?? defaultLocation())]?.[field],
       sync: (ref?: LocationRef) => {
         const location = ref ?? defaultLocation()
-        const id = locationKey(location)
-        return sync.run(`location.${field}:${id}`, async () => {
-          const response = await load(locationQuery(location))
-          const key = locationKey(response.location)
-          publish(key, response.data)
-          if (options?.alias && key !== id) publish(id, response.data)
-        })
+        return sync.run(key(ref), async () => apply(locationKey(location), await load(locationQuery(location))))
       },
-      invalidate: (ref?: LocationRef) => sync.invalidate(`location.${field}:${locationKey(ref ?? defaultLocation())}`),
+      // Publishes this field from a catalog response and marks the key current until invalidated.
+      // A read that is current or in flight is newer than the catalog, so it is left alone.
+      seed: (ref: LocationRef, response: LocationCatalogOutput) => {
+        if (!options?.catalog || sync.has(key(ref))) return
+        apply(locationKey(ref), { location: response.location, data: options.catalog(response) })
+        sync.complete(key(ref))
+      },
+      invalidate: (ref?: LocationRef) => sync.invalidate(key(ref)),
     }
   }
 
+  function applyInfo(location: LocationGetOutput, setDefault: boolean) {
+    const key = locationKey(location)
+    if (!store.location[key]) setStore("location", key, {})
+    setStore("location", key, "info", location)
+    if (setDefault) setDefaultLocation({ directory: location.directory, workspaceID: location.workspaceID })
+  }
+
+  // Global forms from every location share one list; replace only the entries for this location.
+  function applyGlobalForms(location: LocationRef, forms: readonly FormInfo[]) {
+    const ref = { directory: location.directory, workspaceID: location.workspaceID }
+    const locationID = locationKey(ref)
+    setStore("session", "form", "global", [
+      ...(store.session.form.global ?? []).filter((form) => form.location && locationKey(form.location) !== locationID),
+      ...forms.filter((form) => form.sessionID === "global").map((form) => ({ ...form, location: ref })),
+    ])
+  }
+
+  const shellRecord = (location: LocationRef, list: readonly ShellInfo[]) => {
+    const ref = { directory: location.directory, workspaceID: location.workspaceID }
+    return Object.fromEntries(list.map((info) => [info.id, { ...info, location: ref }]))
+  }
+
+  // `git status` can take seconds on a large repository, so VCS is read on its own, never in the catalog.
   const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
-  const shells = locationResource("shell", async (location) => {
-    const response = await api().shell.list({ location })
-    const ref = { directory: response.location.directory, workspaceID: response.location.workspaceID }
-    return {
-      location: response.location,
-      data: Object.fromEntries(response.data.map((info) => [info.id, { ...info, location: ref }])),
-    }
+  const agents = locationResource("agent", (location) => api().agent.list({ location }), {
+    catalog: (response) => response.data.agent,
   })
+  const commands = locationResource("command", (location) => api().command.list({ location }), {
+    catalog: (response) => response.data.command,
+  })
+  const integrations = locationResource("integration", (location) => api().integration.list({ location }), {
+    catalog: (response) => response.data.integration,
+  })
+  const mcpServers = locationResource("mcpServer", (location) => api().mcp.list({ location }), {
+    catalog: (response) => response.data.mcp,
+  })
+  const mcpResources = locationResource(
+    "mcpResource",
+    async (location) => {
+      const response = await api().mcp.resource.catalog({ location })
+      return { location: response.location, data: response.data.resources }
+    },
+    { catalog: (response) => response.data.mcpResource.resources },
+  )
+  const models = locationResource("model", (location) => api().model.list({ location }), {
+    alias: true,
+    catalog: (response) => response.data.model,
+  })
+  const providers = locationResource("provider", (location) => api().provider.list({ location }), {
+    alias: true,
+    catalog: (response) => response.data.provider,
+  })
+  const references = locationResource("reference", (location) => api().reference.list({ location }), {
+    catalog: (response) => response.data.reference,
+  })
+  const skills = locationResource("skill", (location) => api().skill.list({ location }), {
+    catalog: (response) => response.data.skill,
+  })
+  const shells = locationResource(
+    "shell",
+    async (location) => {
+      const response = await api().shell.list({ location })
+      return { location: response.location, data: shellRecord(response.location, response.data) }
+    },
+    { catalog: (response) => shellRecord(response.location, response.data.shell) },
+  )
+  // The catalog covers exactly these; `location.sync` seeds them from one request and re-syncs any
+  // that an event invalidated since.
+  const catalogResources = [
+    agents,
+    commands,
+    integrations,
+    mcpServers,
+    mcpResources,
+    models,
+    providers,
+    references,
+    skills,
+    shells,
+  ]
 
   const result = {
     on: config.event.on,
@@ -1701,17 +1783,7 @@ export function createData(config: CreateDataInput) {
               const response = await api().form.request.list({
                 location: locationQuery(ref ?? defaultLocation()),
               })
-              const location = {
-                directory: response.location.directory,
-                workspaceID: response.location.workspaceID,
-              }
-              const locationID = locationKey(location)
-              setStore("session", "form", sessionID, [
-                ...(store.session.form[sessionID] ?? []).filter(
-                  (form) => form.location && locationKey(form.location) !== locationID,
-                ),
-                ...response.data.filter((form) => form.sessionID === "global").map((form) => ({ ...form, location })),
-              ])
+              applyGlobalForms(response.location, response.data)
               return
             }
             setStore("session", "form", sessionID, await api().form.list({ sessionID }))
@@ -1787,68 +1859,56 @@ export function createData(config: CreateDataInput) {
       syncInfo(ref?: LocationRef) {
         const current = ref ?? defaultLocation()
         return sync.run(`location:${locationKey(current)}`, async () => {
-          const location = await api().location.get({ location: locationQuery(current) })
-          const key = locationKey(location)
-          if (!store.location[key]) setStore("location", key, {})
-          setStore("location", key, "info", location)
-          if (!ref) {
-            setDefaultLocation({ directory: location.directory, workspaceID: location.workspaceID })
-          }
+          applyInfo(await api().location.get({ location: locationQuery(current) }), !ref)
         })
       },
+      // One `location.catalog` read seeds the info plus every catalog resource, then each resource
+      // syncs itself: a no-op for keys the catalog just filled, a fetch for keys an event invalidated.
       async sync(ref?: LocationRef) {
-        await result.location.syncInfo(ref)
         const location = ref ?? defaultLocation()
+        const id = locationKey(location)
+        await sync.run(`location.catalog:${id}`, async () => {
+          const response = await api().location.catalog({ location: locationQuery(location) })
+          batch(() => {
+            if (!sync.has(`location:${id}`)) {
+              applyInfo(response.location, !ref)
+              sync.complete(`location:${id}`)
+            }
+            catalogResources.forEach((resource) => resource.seed(location, response))
+            if (!sync.has(`session.form:global:${id}`)) {
+              applyGlobalForms(response.location, response.data.form)
+              sync.complete(`session.form:global:${id}`)
+            }
+          })
+        })
         await Promise.all([
-          result.location.vcs.sync(location),
-          result.location.agent.sync(location),
-          result.location.command.sync(location),
-          result.location.integration.sync(location),
-          result.location.mcp.server.sync(location),
-          result.location.mcp.resource.sync(location),
-          result.location.model.sync(location),
-          result.location.provider.sync(location),
-          result.location.reference.sync(location),
-          result.location.skill.sync(location),
-          result.shell.sync(location),
+          result.location.syncInfo(ref),
+          vcs.sync(location),
+          ...catalogResources.map((resource) => resource.sync(location)),
           result.session.form.sync("global", location),
         ])
       },
       invalidate(ref?: LocationRef) {
         const location = ref ?? defaultLocation()
+        sync.invalidate(`location.catalog:${locationKey(location)}`)
         sync.invalidate(`location:${locationKey(location)}`)
-        result.location.vcs.invalidate(location)
-        result.location.agent.invalidate(location)
-        result.location.command.invalidate(location)
+        vcs.invalidate(location)
         result.location.config.invalidate(location)
-        result.location.integration.invalidate(location)
-        result.location.mcp.server.invalidate(location)
-        result.location.mcp.resource.invalidate(location)
-        result.location.model.invalidate(location)
-        result.location.provider.invalidate(location)
-        result.location.reference.invalidate(location)
-        result.location.skill.invalidate(location)
-        result.shell.invalidate(location)
+        catalogResources.forEach((resource) => resource.invalidate(location))
         result.session.form.invalidate("global", location)
       },
       vcs: { info: vcs.list, sync: vcs.sync, invalidate: vcs.invalidate },
-      agent: locationResource("agent", (location) => api().agent.list({ location })),
-      command: locationResource("command", (location) => api().command.list({ location })),
+      agent: agents,
+      command: commands,
       config: locationResource("config", async (location) => ({
         location: { directory: location.directory, workspaceID: location.workspace },
         data: await api().config.get({ location }),
       })),
-      integration: locationResource("integration", (location) => api().integration.list({ location })),
-      mcp: {
-        server: locationResource("mcpServer", (location) => api().mcp.list({ location })),
-        resource: locationResource("mcpResource", async (location) => {
-          const response = await api().mcp.resource.catalog({ location })
-          return { location: response.location, data: response.data.resources }
-        }),
-      },
-      model: locationResource("model", (location) => api().model.list({ location }), { alias: true }),
-      provider: locationResource("provider", (location) => api().provider.list({ location }), { alias: true }),
-      reference: locationResource("reference", (location) => api().reference.list({ location })),
+      integration: integrations,
+      mcp: { server: mcpServers, resource: mcpResources },
+      model: models,
+      provider: providers,
+      reference: references,
       websearch: {
         list(location?: LocationRef) {
           return store.location[locationKey(location ?? defaultLocation())]?.websearch
@@ -1860,7 +1920,7 @@ export function createData(config: CreateDataInput) {
           setStore("location", key, { websearch: providers.data })
         },
       },
-      skill: locationResource("skill", (location) => api().skill.list({ location })),
+      skill: skills,
     },
   }
 
