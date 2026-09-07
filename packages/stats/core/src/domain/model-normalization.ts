@@ -14,6 +14,7 @@ export const MODEL_AUTHOR_RULES = [
   { match: "qwen", author: "qwen" },
 ] as const
 export const EXCLUDED_MODELS = new Set(["alpha-gpt-next"])
+export const STEALTH_MODELS = new Set(["omen-alpha"])
 export const FREE_MODELS = new Set(["gpt-5-nano", "grok-code", "big-pickle"])
 export const MODEL_NAME_ALIASES: Record<string, string> = {
   "deepseek-v4-flash-0731": "deepseek-v4-flash",
@@ -47,7 +48,10 @@ export function statProvider(
   providerModel: string | undefined,
   provider: string | undefined,
 ) {
-  const modelAuthorValue = modelAuthor(statModel(model, providerModel))
+  const normalized = statModel(model, providerModel)
+  if (STEALTH_MODELS.has(normalized)) return "unknown"
+
+  const modelAuthorValue = modelAuthor(normalized)
   if (!modelAuthorValue) return undefined
 
   const providerModelAuthor = modelAuthor(providerModel)

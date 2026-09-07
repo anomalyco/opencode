@@ -75,18 +75,33 @@ OpenCode Goをサブスクライブできるのは、1つのワークスペー�
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
+- **Omen Alpha**
 
 新しいモデルをテストして追加するにつれて、モデルのリストは変更される場合があります。
 
 ---
 
+## どこで使用できますか？
+
+OpenCode Goは、[OpenCode](https://opencode.ai)や、同様の種類のリクエストを生成するその他の一般的なコーディングエージェントで使用することを想定しています。
+
+他のユーザーの利用体験を損なう不正なトラフィックがないか監視されています。
+
+アカウントにフラグが付けられないよう、使用するツールが以下の条件を満たしていることを確認してください。
+
+1\. 不正なトラフィックを生成しない  
+2\. 自身を適切に識別する（汎用的すぎるユーザーエージェントを使用しない）  
+3\. プロンプトキャッシュを最適化できるよう、`x-opencode-session`ヘッダーを含める
+
 ## 利用制限
 
-OpenCode Goには以下の制限が含まれています：
+OpenCode Goには以下の基本制限が含まれています：
 
 - **5時間の制限** — 12ドル分の利用
 - **週間の制限** — 30ドル分の利用
 - **月間の制限** — 60ドル分の利用
+
+有効な利用枠はモデルによって異なります。下の表をご覧ください。
 
 制限はドル単位で定義されています。つまり、実際のリクエスト数は使用するモデルによって異なります。MiMo-V2.5のような安価なモデルではより多くのリクエストが可能ですが、GLM-5.2のような高コストのモデルではリクエスト数が少なくなります。
 
@@ -120,8 +135,9 @@ OpenCode Goには以下の制限が含まれています：
 | DeepSeek V4 Flash Vision Exp | 3,800                     | 9,450            | 18,900           |
 | Hy4 preview                  | 1,350                     | 3,380            | 6,770            |
 | Hy3                          | 4,300                     | 10,750           | 21,500           |
+| Omen Alpha                   | 11,600                    | 29,000           | 57,900           |
 
-推定値は、観測されたリクエストパターンに基づいています：
+推定値には、リクエストあたり以下のトークン数を使用しています。実際の使用量は異なります。
 
 - Grok 4.6 — リクエストあたり 入力 390トークン、キャッシュ 32,500トークン、出力 120トークン
 - GLM-5.3-Flash — リクエストあたり 入力 1,000トークン、キャッシュ 55,000トークン、出力 200トークン
@@ -146,6 +162,7 @@ OpenCode Goには以下の制限が含まれています：
 - Hy3 — リクエストあたり 入力 830トークン、キャッシュ 71,500トークン、出力 295トークン
 - MiMo-V2.5 — リクエストあたり 入力 830トークン、キャッシュ 71,500トークン、出力 295トークン
 - MiMo-V2.5-Pro — リクエストあたり 入力 790トークン、キャッシュ 86,000トークン、出力 305トークン
+- Omen Alpha — リクエストあたり 入力 300トークン、キャッシュ 40,000トークン、出力 100トークン
 
 推定値は、100万トークンあたりの以下の価格と、各モデルに含まれる月間利用枠にも基づいています：
 
@@ -185,6 +202,7 @@ OpenCode Goには以下の制限が含まれています：
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15   |
 | Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | $30   |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60   |
+| Omen Alpha                              | $0.20  | $0.66  | $0.04       | -            | $100  |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak時間は月曜日から金曜日の01:00-04:00と06:00-10:00 UTCで、週末を含むそれ以外の時間はすべてOff-Peakです。[詳しく見る](https://api-docs.deepseek.com/quick_start/pricing/)。
 
@@ -208,7 +226,7 @@ Zen残高にクレジットがある場合は、コンソールで**Use balance*
 
 ### 一部のモデルの利用枠が少ない理由
 
-Goでは月額$10を支払い、その6倍の利用枠を提供することを目指しています。
+Goでは月額$10を支払い、ほとんどのモデルでその6倍の利用枠を提供することを目指しています。
 
 ほとんどのモデルでは、ボリュームディスカウントと予約済みのGPUキャパシティによってこれを実現しています。そして、その節約分を6倍の倍率で還元しています。
 
@@ -251,6 +269,7 @@ Goでは月額$10を支払い、その6倍の利用枠を提供することを�
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Omen Alpha                   | omen-alpha                   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 OpenCode設定の[model id](/docs/config/#models)は、`opencode-go/<model-id>`という形式を使用します。たとえば、Kimi K3の場合は、設定で`opencode-go/kimi-k3`を使用します。
 
@@ -296,12 +315,13 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash Vision Exp | 使用なし             | 0日         |
 | Hy4 preview                  | 使用なし             | 0日         |
 | Hy3                          | 使用なし             | 0日         |
+| Omen Alpha                   | 使用なし             | 0日         |
 
 - **Grok 4.6:** ZDRでは、保存データに依存する重要なAPI機能（ステートフルなResponses API、Files and Collections、Batch APIなど）が無効になります。[詳しく見る](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)。
 - **GPT 5.6 Luna:** 不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。[詳しく見る](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)。
 - **Muse Spark 1.3 Contributor:** 将来のMetaモデルのトレーニングにプロンプトと生成結果を使用する許可と引き換えに、トークン料金が大幅に割引されます。利用できるのは、Metaの[地域別利用ポリシー](https://ai.developer.meta.com/legal/geographic-use-policy)で許可されている地域に限られます。[詳しく見る](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)。
 - **Muse Spark 1.2 Contributor:** 将来のMetaモデルのトレーニングにプロンプトと生成結果を使用する許可と引き換えに、トークン料金が大幅に割引されます。利用できるのは、Metaの[地域別利用ポリシー](https://ai.developer.meta.com/legal/geographic-use-policy)で許可されている地域に限られます。[詳しく見る](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)。
-- **DeepSeek V4 Flash:** ZDR契約は毎月更新されます。現在の契約は2026年8月31日まで有効です。
+- **DeepSeek V4 Flash:** ZDR契約は毎月更新されます。現在の契約は2026年9月30日まで有効です。
 
 ---
 
