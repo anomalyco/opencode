@@ -29,6 +29,67 @@ await Effect.runPromise(program.pipe(Effect.provide(llmLayer)))
 
 Run `LLMClient.stream(request)` instead of `generate` when you want incremental `LLMEvent`s. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses, Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
+## Moonshot
+
+Moonshot defaults to Chat Completions, with Messages and Responses selectors for Kimi K3:
+
+```ts
+import { LLM } from "@opencode/ai"
+import { Moonshot } from "@opencode/ai/providers"
+
+const moonshot = Moonshot.configure({ apiKey: process.env.MOONSHOT_API_KEY })
+
+const request = LLM.request({
+  model: moonshot.model("kimi-k3"), // also moonshot.chat("kimi-k3")
+  prompt: "Explain the tradeoffs in this design.",
+  providerOptions: { reasoningEffort: "high" },
+})
+
+const messages = LLM.request({
+  model: moonshot.messages("kimi-k3"),
+  prompt: "Explain the tradeoffs in this design.",
+  providerOptions: { effort: "high" },
+})
+
+const responses = LLM.request({
+  model: moonshot.responses("kimi-k3"),
+  prompt: "Explain the tradeoffs in this design.",
+  providerOptions: { reasoningEffort: "high" },
+})
+```
+
+When `apiKey` is omitted, authentication reads `MOONSHOT_API_KEY`, then `MOONSHOTAI_API_KEY`.
+Chat and Responses use `https://api.moonshot.ai/v1`; Messages uses
+`https://api.moonshot.ai/anthropic/v1`. `baseURL` overrides the selected API's complete base,
+including the version prefix, for regional endpoints or gateways. Each endpoint requires its own valid credentials.
+All three routes use HTTP/SSE.
+
+Reasoning options stay native to the selected API and model:
+
+| Model/API                   | Provider options                                                                        |
+| --------------------------- | --------------------------------------------------------------------------------------- |
+| K3 Chat / Responses         | `reasoningEffort: "low" \| "high" \| "max"`; default is `max`                           |
+| K3 Messages                 | `effort: "low" \| "high" \| "max"`; default is `max`                                    |
+| K2.6 Chat                   | `thinking: { type: "enabled" \| "disabled", keep?: "all" \| null }`; default is enabled |
+| K2.7 Code / high-speed Chat | Omit `thinking` to use always-on, preserved reasoning                                   |
+
+Omitting options preserves the model's defaults. K3 uses effort rather than the K2.x `thinking`
+parameter. Known effort values have autocomplete while future strings remain accepted.
+For K2.6, `thinking.keep: "all"` enables preservation of reasoning across user messages.
+K3 and both K2.7 Code variants always preserve reasoning. Continue with the returned
+`response.message` and matching tool results so reasoning content and any Messages signatures are retained.
+Leave sampling options such as `temperature` unset to use these models' fixed defaults.
+
+The recorded suite covers all three K3 APIs, default and explicit efforts, K2.6 thinking modes,
+both K2.7 Code variants, generated tool loops with a subsequent user follow-up, required/disabled
+tool choice, image-byte input, and native structured output through `http.body` overlays.
+K3 Chat and Messages accept required and disabled tool choice. Responses supports automatic tool
+choice only; explicit `required` and `none` produce a provider `InvalidRequest` error, also covered by recordings.
+The provider targets the Moonshot Open Platform; Kimi Code is a separate product and endpoint.
+
+Package entrypoints are `@opencode/ai/providers/moonshot`, `moonshot/chat`, `moonshot/messages`,
+and `moonshot/responses`; each exports `model(modelID, settings)`.
+
 ## MiniMax
 
 MiniMax defaults to its Messages API and reads `MINIMAX_API_KEY` when `apiKey` is omitted:

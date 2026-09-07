@@ -41,6 +41,10 @@ describe("provider package entrypoints", () => {
       import("@opencode/ai/providers/minimax/messages"),
       import("@opencode/ai/providers/minimax/chat"),
       import("@opencode/ai/providers/minimax/responses"),
+      import("@opencode/ai/providers/moonshot"),
+      import("@opencode/ai/providers/moonshot/chat"),
+      import("@opencode/ai/providers/moonshot/messages"),
+      import("@opencode/ai/providers/moonshot/responses"),
     ])
 
     for (const module of modules) expect(module.model).toBeFunction()
@@ -49,6 +53,31 @@ describe("provider package entrypoints", () => {
     expect(modules[12].model).toBe(modules[13].model)
     expect(modules[19].model).toBe(modules[21].model)
     expect(modules[19].model).not.toBe(modules[20].model)
+  })
+
+  test("maps Moonshot API entrypoints onto provider-owned routes", async () => {
+    const modules = await Promise.all([
+      import("@opencode/ai/providers/moonshot"),
+      import("@opencode/ai/providers/moonshot/chat"),
+      import("@opencode/ai/providers/moonshot/messages"),
+      import("@opencode/ai/providers/moonshot/responses"),
+    ])
+    expect(modules[0].model).toBe(modules[1].model)
+    const settings = {
+      apiKey: "fixture",
+      baseURL: "https://gateway.example/v1",
+      headers: { "x-application": "fixture" },
+      body: { future_option: true },
+    }
+    const routes = ["moonshot-chat", "moonshot-chat", "moonshot-messages", "moonshot-responses"]
+    modules.forEach((module, index) => {
+      const selected = module.model("kimi-k3", settings)
+      expect(selected.provider).toBe("moonshotai")
+      expect(selected.route.id).toBe(routes[index])
+      expect(selected.route.endpoint.baseURL).toBe(settings.baseURL)
+      expect(selected.route.defaults.headers).toEqual(settings.headers)
+      expect(selected.route.defaults.http?.body).toEqual(settings.body)
+    })
   })
 
   test("maps MiniMax API entrypoints onto provider-owned routes", async () => {
