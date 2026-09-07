@@ -11,11 +11,12 @@ export function flushPersisted() {
   for (const save of [...pending]) save()
 }
 
+// Covers synchronous web storage. Desktop registers its own pagehide handling earlier than this
+// module loads, so its shutdown path calls flushPersisted() itself before flushing namespaces.
 if (typeof document !== "undefined") {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") flushPersisted()
   })
-  // Runs before the desktop IPC runtime disposes on pagehide; see ipc-client.ts.
   window.addEventListener("pagehide", flushPersisted)
 }
 
@@ -36,6 +37,9 @@ export function persistStore<T extends object>(input: {
   let dirty = false
   let touched = false
   let last: string | undefined
+  // The newest value another window wrote while this store was dirty; applied at save time if the
+  // local setter calls turned out not to change anything.
+  let remote: string | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
 
   const save = () => {
@@ -44,8 +48,13 @@ export function persistStore<T extends object>(input: {
     pending.delete(save)
     if (!dirty) return
     dirty = false
+    const held = remote
+    remote = undefined
     const next = untrack(() => input.serialize(input.store))
-    if (next === last) return
+    if (next === last) {
+      if (held !== undefined && held !== last) hydrate(held)
+      return
+    }
     last = next
     input.sync?.[1](input.name, next)
     void input.storage.setItem(input.name, next)
@@ -72,8 +81,13 @@ export function persistStore<T extends object>(input: {
 
   input.sync?.[0]((data) => {
     if (data.key !== input.name || (data.url ?? location.href) !== location.href) return
-    // Unsaved local changes win over another window's write, as in VS Code's storage service.
-    if (dirty || !data.newValue || data.newValue === last) return
+    if (!data.newValue || data.newValue === last) return
+    // A real unsaved local change wins over another window's write, as in VS Code's storage
+    // service; whether the change is real is only known when the store is serialized.
+    if (dirty) {
+      remote = data.newValue
+      return
+    }
     hydrate(data.newValue)
   })
 

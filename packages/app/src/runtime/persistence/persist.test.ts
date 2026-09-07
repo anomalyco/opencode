@@ -91,6 +91,41 @@ describe("persistStore", () => {
     value.dispose()
   })
 
+  test("a remote value arriving during a no-op local set is adopted when the save finds no change", () => {
+    const listeners: PersistenceSyncCallback[] = []
+    const sent: string[] = []
+    const value = setup({
+      delay: 10_000,
+      sync: [(subscriber) => listeners.push(subscriber), (_key, next) => sent.push(String(next))],
+    })
+    value.set("count", 1)
+    value.persist.flush()
+    // Setting the same value again marks the store dirty without changing it.
+    value.set("count", 1)
+    listeners[0]!({ key: "state", newValue: JSON.stringify({ count: 1, label: "remote" }), timeStamp: 0 })
+    expect(value.store.label).toBe("")
+    value.persist.flush()
+    expect(value.store).toEqual({ count: 1, label: "remote" })
+    expect(value.writes).toHaveLength(1)
+    expect(sent).toHaveLength(1)
+    // A later save must not consider the adopted value a local change.
+    value.set("count", 1)
+    value.persist.flush()
+    expect(value.writes).toHaveLength(1)
+    value.dispose()
+  })
+
+  test("a remote value arriving during a real local change is dropped in favour of the local one", () => {
+    const listeners: PersistenceSyncCallback[] = []
+    const value = setup({ delay: 10_000, sync: [(subscriber) => listeners.push(subscriber), () => {}] })
+    value.set("count", 1)
+    listeners[0]!({ key: "state", newValue: JSON.stringify({ count: 9, label: "remote" }), timeStamp: 0 })
+    value.persist.flush()
+    expect(value.store).toEqual({ count: 1, label: "" })
+    expect(value.writes).toEqual([JSON.stringify({ count: 1, label: "" })])
+    value.dispose()
+  })
+
   test("disposing the owner and flushPersisted both save pending changes", () => {
     const first = setup({ delay: 10_000 })
     first.set("count", 1)

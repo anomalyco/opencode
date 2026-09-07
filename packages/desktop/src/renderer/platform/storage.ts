@@ -1,6 +1,7 @@
 import {
   createDraftStore,
   createNamespaceStorage,
+  flushPersisted,
   type NamespaceStorage,
   type Platform,
 } from "@opencode-ai/app/desktop"
@@ -17,7 +18,12 @@ export function createDesktopStorage(api: ElectronAPI) {
     namespaces.set(name, next)
     return next
   }
-  const flush = () => Promise.all([...namespaces.values()].map((namespace) => namespace.flush()))
+  // Dirty stores must serialize into their namespaces before the namespaces are sent; the app's
+  // own pagehide listener registers after the IPC client's, so it cannot be relied on here.
+  const flush = () => {
+    flushPersisted()
+    return Promise.all([...namespaces.values()].map((namespace) => namespace.flush()))
+  }
 
   api.onStoreChanged((name, insert, remove, revision) => namespaces.get(name)?.accept(insert, remove, revision))
   // Durability boundaries: the window going away, and it leaving the foreground.
