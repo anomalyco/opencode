@@ -8,10 +8,13 @@ import {
   Anthropic,
   AnthropicCompatible,
   Azure,
+  Baseten,
   Cerebras,
   CloudflareAIGateway,
   CloudflareWorkersAI,
   DeepInfra,
+  DeepSeek,
+  Fireworks,
   Google,
   GoogleVertex,
   GoogleVertexChat,
@@ -57,6 +60,9 @@ describe("native OpenAI-compatible providers", () => {
         "custom",
       ],
       [Cerebras.configure({ apiKey: "test" }).model("model"), "cerebras"],
+      [Baseten.configure({ apiKey: "test" }).model("model"), "baseten"],
+      [DeepSeek.configure({ apiKey: "test" }).model("model"), "deepseek"],
+      [Fireworks.configure({ apiKey: "test" }).model("model"), "fireworks"],
       [DeepInfra.configure({ apiKey: "test" }).model("model"), "deepinfra"],
       [TogetherAI.configure({ apiKey: "test" }).model("model"), "togetherai"],
       [CloudflareAIGateway.configure({ accountId: "account" }).model("model"), "cloudflare-ai-gateway"],
@@ -86,6 +92,36 @@ describe("native OpenAI-compatible providers", () => {
     })
     expect(cerebras.route.endpoint.baseURL).toBe("https://api.cerebras.ai/v1")
   })
+
+  it.effect("preserves extracted providers' Chat requests and identity through custom endpoints", () =>
+    Effect.gen(function* () {
+      for (const provider of [Baseten, DeepSeek, Fireworks]) {
+        const settings = {
+          apiKey: "fixture",
+          baseURL: "https://gateway.example/v1",
+          providerOptions: { reasoningEffort: "high" },
+        }
+        const selected = provider.configure(settings).model("test-model")
+        expect(selected.provider).toBe(provider.id)
+        expect(selected.route.id).toBe(`${provider.id}-chat`)
+        expect(selected.route.protocol).toBe("openai-chat")
+        expect(selected.route.endpoint.baseURL).toBe(settings.baseURL)
+        const input = {
+          prompt: "Use a tool.",
+          generation: { maxTokens: 48 },
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }
+        const native = yield* compileRequest(LLM.request({ ...input, model: selected }))
+        const generic = yield* compileRequest(
+          LLM.request({
+            ...input,
+            model: OpenAICompatible.configure({ ...settings, provider: provider.id }).model("test-model"),
+          }),
+        )
+        expect(native.body).toEqual(generic.body)
+      }
+    }),
+  )
 
   test("preserves native DeepInfra provider and route identity", () => {
     const deepinfra = DeepInfra.configure({ apiKey: "fixture" }).model("google/gemma-3-27b-it")
@@ -164,7 +200,7 @@ describe("native OpenAI-compatible providers", () => {
   })
 
   test("maps package settings onto native executable models", () => {
-    for (const native of [TogetherAI, Cerebras]) {
+    for (const native of [Baseten, Cerebras, DeepSeek, Fireworks, TogetherAI]) {
       const selected = native.model("provider-model", {
         apiKey: "fixture",
         baseURL: "https://gateway.example/v1",
@@ -183,6 +219,24 @@ describe("native OpenAI-compatible providers", () => {
   it.effect("resolves provider environment credentials and preserves deprecated Together credentials", () =>
     Effect.gen(function* () {
       const scenarios = [
+        {
+          model: Baseten.configure().model("model"),
+          env: { BASETEN_API_KEY: "baseten-secret" },
+          token: "baseten-secret",
+          url: "https://inference.baseten.co/v1/chat/completions",
+        },
+        {
+          model: DeepSeek.configure().model("deepseek-chat"),
+          env: { DEEPSEEK_API_KEY: "deepseek-secret" },
+          token: "deepseek-secret",
+          url: "https://api.deepseek.com/v1/chat/completions",
+        },
+        {
+          model: Fireworks.configure().model("model"),
+          env: { FIREWORKS_API_KEY: "fireworks-secret" },
+          token: "fireworks-secret",
+          url: "https://api.fireworks.ai/inference/v1/chat/completions",
+        },
         {
           model: TogetherAI.configure().model("llama"),
           env: { TOGETHER_API_KEY: "together-primary", TOGETHER_AI_API_KEY: "together-legacy" },

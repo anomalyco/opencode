@@ -461,7 +461,18 @@ const gateway = CloudflareAIGateway.configure({
 }).model("workers-ai/@cf/meta/llama-3.1-8b-instruct")
 ```
 
-Included providers: OpenAI, Anthropic, Google (Gemini), Google Vertex Gemini and Anthropic, Amazon Bedrock, Azure OpenAI, Cloudflare AI Gateway, Cloudflare Workers AI, GitHub Copilot, OpenRouter, xAI, Z.ai, plus generic OpenAI-compatible Chat and Responses entrypoints and an Anthropic Messages-compatible entrypoint.
+Included LLM providers: OpenAI, Anthropic, Google (Gemini), Google Vertex, Amazon Bedrock, Azure OpenAI, Baseten, Cerebras, Cloudflare AI Gateway, Cloudflare Workers AI, DeepInfra, DeepSeek, Fireworks, Groq, Mistral, OpenRouter, TogetherAI, and xAI. Z.ai currently exposes image generation. Generic Chat Completions, Responses, and Anthropic Messages-compatible entrypoints support custom endpoints.
+
+Each named provider owns its module, endpoint, authentication, and route setup. Providers with the same wire format compose the shared protocol directly:
+
+```ts
+import { DeepSeek, Fireworks } from "@opencode-ai/ai/providers"
+
+const deepseek = DeepSeek.configure({ apiKey }).model("deepseek-chat")
+const fireworks = Fireworks.configure({ apiKey }).model("accounts/fireworks/models/my-model")
+```
+
+The former `OpenAICompatible.baseten`, `.cerebras`, `.deepinfra`, `.deepseek`, `.fireworks`, `.groq`, and `.togetherai` presets are replaced by the top-level `Baseten`, `Cerebras`, `DeepInfra`, `DeepSeek`, `Fireworks`, `Groq`, and `TogetherAI` exports. Use `CloudflareAIGateway` and `CloudflareWorkersAI` directly; each has its own module. `OpenAICompatible` configures generic endpoints with an explicit `baseURL`.
 
 ### Package-like entrypoints
 
@@ -519,7 +530,15 @@ model("claude-sonnet-4-6", { project: "my-project", location: "global" })
 
 Provider facades such as `OpenAI.configure(...).responses(...)` remain the direct application API. Package-like entrypoints are the self-similar loading contract used when a catalog selects behavior by export path.
 
-Other provider exports listed above remain direct facades until they explicitly implement the package-like contract. Exporting a provider facade does not implicitly make it a catalog-loadable provider package.
+Every named LLM provider listed above also exports `model(modelID, settings)` from its own package entrypoint. The extracted providers are available at:
+
+- `@opencode-ai/ai/providers/baseten`
+- `@opencode-ai/ai/providers/deepseek`
+- `@opencode-ai/ai/providers/fireworks`
+- `@opencode-ai/ai/providers/cloudflare-ai-gateway`
+- `@opencode-ai/ai/providers/cloudflare-workers-ai`
+
+Core resolves known compatible catalog providers through their dedicated entrypoints, including the `fireworks-ai` catalog ID through `providers/fireworks`.
 
 ## Provider options & HTTP overlays
 

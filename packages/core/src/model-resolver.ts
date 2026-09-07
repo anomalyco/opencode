@@ -344,8 +344,13 @@ function usesAPIKeyAuth(packageName: string | undefined) {
     name?.startsWith("@opencode-ai/ai/providers/openai/") === true ||
     name === "@opencode-ai/ai/providers/anthropic" ||
     name === "@opencode-ai/ai/providers/anthropic-compatible" ||
+    name === "@opencode-ai/ai/providers/baseten" ||
     name === "@opencode-ai/ai/providers/cerebras" ||
+    name === "@opencode-ai/ai/providers/cloudflare-ai-gateway" ||
+    name === "@opencode-ai/ai/providers/cloudflare-workers-ai" ||
     name === "@opencode-ai/ai/providers/deepinfra" ||
+    name === "@opencode-ai/ai/providers/deepseek" ||
+    name === "@opencode-ai/ai/providers/fireworks" ||
     name === "@opencode-ai/ai/providers/openai-compatible" ||
     name === "@opencode-ai/ai/providers/google" ||
     name === "@opencode-ai/ai/providers/groq" ||

@@ -6,8 +6,8 @@ import { Endpoint } from "../route/endpoint.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
-export const id = ProviderID.make("deepinfra")
-const baseURL = "https://api.deepinfra.com/v1/openai"
+export const id = ProviderID.make("baseten")
+const baseURL = "https://inference.baseten.co/v1"
 
 export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
@@ -22,9 +22,9 @@ export interface Settings extends ProviderPackage.Settings {
 }
 
 export const route = Route.make({
-  id: "deepinfra-chat",
+  id: "baseten-chat",
   provider: id,
-  providerMetadataKey: "deepinfra",
+  providerMetadataKey: "baseten",
   protocol: OpenAIChat.protocol,
   endpoint: Endpoint.path("/chat/completions", { baseURL }),
   framing: OpenAIChat.framing,
@@ -34,21 +34,14 @@ export const routes = [route]
 
 export const configure = (input: LanguageModelOptions = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
-  const root = endpoint?.replace(/\/+$/, "")
   const configured = route.with({
     ...defaults,
-    endpoint: {
-      baseURL: root === undefined ? baseURL : root.endsWith("/openai") ? root : `${root}/openai`,
-    },
-    auth: AuthOptions.bearer(input, "DEEPINFRA_API_KEY"),
+    endpoint: { baseURL: endpoint ?? baseURL },
+    auth: AuthOptions.bearer(input, "BASETEN_API_KEY"),
   })
   return {
     id,
-    model: (modelID: string | ModelID) =>
-      configured.model<OpenAIProviderOptionsInput>({
-        id: modelID,
-        compatibility: { maxTokensField: "max_tokens", reasoningField: "reasoning_content", supportsStore: false },
-      }),
+    model: (modelID: string | ModelID) => configured.model<OpenAIProviderOptionsInput>({ id: modelID }),
     configure,
   }
 }
@@ -63,3 +56,5 @@ export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsIn
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
     providerOptions: settings.providerOptions,
   }).model(modelID)
+
+export * as Baseten from "./baseten.js"
