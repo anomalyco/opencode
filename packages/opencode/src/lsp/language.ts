@@ -118,4 +118,6 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".nix": "nix",
   ".typ": "typst",
   ".typc": "typst",
+  ".graphql": "graphql",
+  ".gql": "graphql",
 } as const
