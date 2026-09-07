@@ -10,6 +10,7 @@ if (Script.channel !== "beta" && Script.channel !== "latest") {
 }
 const beta = Script.channel === "beta"
 const name = beta ? "opencode-beta" : "opencode-bin"
+const command = beta ? "opencode2" : "opencode"
 if (!(beta ? /^\d+\.\d+\.\d+-beta[.-]\d+(?:\.\d+)?$/ : /^\d+\.\d+\.\d+$/).test(Script.version)) {
   throw new Error(`Expected a ${Script.channel} release version`)
 }
@@ -65,8 +66,8 @@ await Bun.write(
     "arch=('x86_64' 'aarch64')",
     "license=('MIT')",
     "depends=('glibc' 'gcc-libs' 'ripgrep')",
-    beta ? "provides=('opencode2')" : "provides=('opencode' 'opencode2')",
-    beta ? "conflicts=('opencode2')" : "conflicts=('opencode' 'opencode2')",
+    `provides=('${command}')`,
+    `conflicts=('${command}')`,
     // Stripping a compiled Bun executable can damage its embedded application.
     "options=('!strip' '!debug')",
     "source=('LICENSE')",
@@ -74,8 +75,7 @@ await Bun.write(
     ...sources,
     "",
     "package() {",
-    '  install -Dm755 "$srcdir/package/bin/opencode2" "$pkgdir/usr/bin/opencode2"',
-    ...(beta ? [] : ['  ln -s opencode2 "$pkgdir/usr/bin/opencode"']),
+    `  install -Dm755 "$srcdir/package/bin/opencode2" "$pkgdir/usr/bin/${command}"`,
     '  install -Dm644 "$srcdir/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"',
     "}",
     "",
