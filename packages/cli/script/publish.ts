@@ -18,10 +18,9 @@ async function publish(dir: string, name: string, version: string) {
   if (process.platform !== "win32") await $`chmod -R 755 .`.cwd(dir)
   const exists = !dryRun && (await published(name, version))
   if (exists) console.log(`already published ${name}@${version}`)
-  if (!exists) {
-    await $`bun pm pack`.cwd(dir)
-    if (!dryRun) await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(dir)
-  }
+  // Keep local tarballs available to downstream publishers when retrying a release.
+  await $`bun pm pack`.cwd(dir)
+  if (!exists && !dryRun) await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(dir)
 }
 
 async function publishDistribution(input: {

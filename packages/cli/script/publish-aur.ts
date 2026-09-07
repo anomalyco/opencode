@@ -4,6 +4,7 @@ import { $ } from "bun"
 import { mkdir, rm } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { UpdateArtifact } from "../../../script/update-artifact"
 
 if (Script.channel !== "beta" && Script.channel !== "latest") {
   throw new Error("AUR publishing requires the beta or latest channel")
@@ -15,19 +16,10 @@ if (!(beta ? /^\d+\.\d+\.\d+-beta[.-]\d+(?:\.\d+)?$/ : /^\d+\.\d+\.\d+$/).test(S
   throw new Error(`Expected a ${Script.channel} release version`)
 }
 
-const response = await fetch(`https://update.opencode.ai/api/${Script.channel}/cli/npm`)
-if (!response.ok) throw new Error(`Failed to resolve the ${Script.channel} release: ${response.status}`)
-const release: { version: string; metadata?: { package?: string } } = await response.json()
-if (release.version !== Script.version) throw new Error(`The active ${Script.channel} release is ${release.version}`)
-if (release.metadata?.package !== "@opencode/cli" && release.metadata?.package !== "@opencode-ai/cli") {
-  throw new Error("The release did not identify a supported CLI package")
-}
-
 const dir = fileURLToPath(new URL("..", import.meta.url))
 const outdir = path.join(dir, "dist", `aur-${name}`)
 const dryRun = process.argv.includes("--dry-run")
 const pkgver = Script.version.replaceAll("-", ".")
-const scope = release.metadata.package.slice(0, -"/cli".length)
 const license = Bun.file(path.join(dir, "..", "..", "LICENSE"))
 
 await rm(outdir, { recursive: true, force: true })
@@ -43,12 +35,13 @@ const sources = await Promise.all(
     { arch: "x86_64", target: "linux-x64-baseline" },
     { arch: "aarch64", target: "linux-arm64" },
   ].map(async (item) => {
+    const directory = path.join(dir, "dist", `cli-${item.target}`)
+    const pkg: { name: string; version: string } = await Bun.file(path.join(directory, "package.json")).json()
+    if (pkg.version !== Script.version) throw new Error(`Unexpected version for ${pkg.name}: ${pkg.version}`)
+    const archive = Bun.file(path.join(directory, `${pkg.name.replace("@", "").replace("/", "-")}-${pkg.version}.tgz`))
     const filename = `${name}-${pkgver}-${item.arch}.tgz`
-    const url = `https://registry.npmjs.org/${scope}/cli-${item.target}/-/cli-${item.target}-${Script.version}.tgz`
-    await $`curl --fail --location --retry 5 --retry-all-errors --output ${path.join(outdir, filename)} ${url}`
-    const sha256 = new Bun.CryptoHasher("sha256")
-      .update(await Bun.file(path.join(outdir, filename)).arrayBuffer())
-      .digest("hex")
+    const url = `https://registry.npmjs.org/${pkg.name}/-/${pkg.name.split("/").at(-1)}-${pkg.version}.tgz`
+    const sha256 = new Bun.CryptoHasher("sha256").update(await archive.arrayBuffer()).digest("hex")
     return [`source_${item.arch}=('${filename}::${url}')`, `sha256sums_${item.arch}=('${sha256}')`].join("\n")
   }),
 )
@@ -86,9 +79,14 @@ console.log(`Prepared ${name} ${pkgver} in ${outdir}`)
 if (dryRun) process.exit(0)
 
 await $`git add PKGBUILD .SRCINFO LICENSE`.cwd(outdir)
-if ((await $`git diff --cached --quiet`.cwd(outdir).nothrow()).exitCode === 0) {
-  console.log("AUR package is already up to date")
-  process.exit(0)
+if ((await $`git diff --cached --quiet`.cwd(outdir).nothrow()).exitCode !== 0) {
+  await $`git commit -m ${`chore: update ${name} to ${pkgver}`}`.cwd(outdir)
+  await $`git push origin master`.cwd(outdir)
 }
-await $`git commit -m ${`chore: update ${name} to ${pkgver}`}`.cwd(outdir)
-await $`git push origin master`.cwd(outdir)
+await UpdateArtifact.publish({
+  channel: Script.channel,
+  name: "cli",
+  distribution: "aur",
+  version: Script.version,
+  metadata: { package: name },
+})
