@@ -11,7 +11,6 @@ export function SessionTabAvatar(props: {
   directory: string
   sessionId: string
   server: ServerConnection.Key
-  revealProjectOnHover?: boolean
 }) {
   const state = useSessionTabAvatarState(
     () => props.server,
@@ -22,7 +21,6 @@ export function SessionTabAvatar(props: {
     <SessionTabAvatarView
       project={props.project}
       directory={props.directory}
-      revealProjectOnHover={props.revealProjectOnHover}
       unread={state.unread()}
       loading={state.loading()}
     />
@@ -32,28 +30,22 @@ export function SessionTabAvatar(props: {
 export function SessionTabAvatarView(props: {
   project?: LocalProject
   directory: string
-  revealProjectOnHover?: boolean
   unread: boolean
   loading: boolean
 }) {
-  const projectAvatar = () => (
-    <ProjectAvatar
-      fallback={displayName(props.project ?? { worktree: props.directory })}
-      src={getProjectAvatarSource(props.project?.id, props.project?.icon)}
-      variant={getProjectAvatarVariant(props.project?.icon?.color)}
-      unread={props.unread}
-    />
-  )
   return (
-    <Show when={props.loading} fallback={projectAvatar()}>
-      <span class="relative block size-4 shrink-0">
-        <SessionProgressIndicatorV2
-          class={`absolute inset-0 ${props.revealProjectOnHover === false ? "" : "group-hover:invisible"}`}
+    <Show
+      when={props.loading}
+      fallback={
+        <ProjectAvatar
+          fallback={displayName(props.project ?? { worktree: props.directory })}
+          src={getProjectAvatarSource(props.project?.id, props.project?.icon)}
+          variant={getProjectAvatarVariant(props.project?.icon?.color)}
+          unread={props.unread}
         />
-        <Show when={props.revealProjectOnHover !== false}>
-          <span class="invisible absolute inset-0 group-hover:visible">{projectAvatar()}</span>
-        </Show>
-      </span>
+      }
+    >
+      <SessionProgressIndicatorV2 />
     </Show>
   )
 }

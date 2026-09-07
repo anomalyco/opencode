@@ -180,7 +180,6 @@ function HomeSessionLeadingController(props: {
   server: HomeSessionsViewProps["server"]
   isOpenTab: HomeSessionsViewProps["isOpenTab"]
   record: HomeSessionRecord
-  revealProjectOnHover: boolean
 }) {
   return (
     <HomeSessionStatusController
@@ -190,7 +189,6 @@ function HomeSessionLeadingController(props: {
       render={(state) => (
         <HomeSessionLeading
           record={props.record}
-          revealProjectOnHover={props.revealProjectOnHover}
           open={state.open()}
           unread={state.unread()}
           loading={state.loading()}
@@ -202,7 +200,6 @@ function HomeSessionLeadingController(props: {
 
 function HomeSessionLeading(props: {
   record: HomeSessionRecord
-  revealProjectOnHover: boolean
   open: boolean
   unread: boolean
   loading: boolean
@@ -222,7 +219,6 @@ function HomeSessionLeading(props: {
       <SessionTabAvatarView
         project={props.record.project}
         directory={props.record.session.location.directory}
-        revealProjectOnHover={props.revealProjectOnHover}
         unread={props.unread}
         loading={props.loading}
       />
@@ -395,7 +391,6 @@ function HomeSessionSearchResultRow(
       `}
       classList={{
         "bg-v2-overlay-simple-overlay-hover": props.selected,
-        group: !!showProjectName(),
       }}
       onMouseEnter={() => props.onSearchHighlight(props.record)}
       onMouseDown={(event) => {
@@ -412,7 +407,6 @@ function HomeSessionSearchResultRow(
         server={props.server}
         isOpenTab={props.isOpenTab}
         record={props.record}
-        revealProjectOnHover={!!showProjectName()}
       />
       <div data-slot="home-session-labels" class="flex min-w-0 flex-1 items-center gap-1.5">
         <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} search />
@@ -524,7 +518,6 @@ function HomeSessionRow(
       data-project-name={!!showProjectName()}
       data-session-id={props.record.session.id}
       class="group/session relative flex h-10 min-w-0 items-center rounded-[6px] outline-none focus:outline-none focus-visible:outline-none"
-      classList={{ group: !!showProjectName() }}
       onContextMenu={(event) => {
         // While renaming, keep the native menu so paste and spelling work.
         if (editor()) return
@@ -543,7 +536,6 @@ function HomeSessionRow(
               server={props.server}
               isOpenTab={props.isOpenTab}
               record={props.record}
-              revealProjectOnHover={false}
             />
             <div data-slot="home-session-labels" class="contents">
               <InlineInput
@@ -656,7 +648,6 @@ function HomeSessionRow(
             server={props.server}
             isOpenTab={props.isOpenTab}
             record={props.record}
-            revealProjectOnHover={!!showProjectName()}
           />
           <div data-slot="home-session-labels" class="contents">
             <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} />
