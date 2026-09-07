@@ -2,6 +2,7 @@ import { Global } from "@opencode-ai/util/global"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
 import { Hash } from "@opencode-ai/util/hash"
 import { Service } from "@opencode-ai/client/effect/service"
+import { normalizeConnectionUrl } from "@opencode-ai/server/connection-url"
 import { Effect, FileSystem, Option, Schema } from "effect"
 import { randomBytes } from "crypto"
 import path from "path"
@@ -14,6 +15,7 @@ import { selfCommand } from "../util/process"
 export const Info = Schema.Struct({
   hostname: Schema.optional(Schema.String),
   port: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(65_535))),
+  urls: Schema.optional(Schema.Array(Schema.String)),
   password: Schema.optional(Schema.String),
   cors: Schema.optional(Schema.Array(Schema.String)),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
@@ -217,6 +219,32 @@ export const set = Effect.fn("cli.service-config.set")(function* (key: string, v
   }
 })
 
+export const addUrl = Effect.fn("cli.service-config.add-url")(function* (value: string) {
+  const url = normalizeUrl(value)
+  const existing = yield* read()
+  if (existing.urls?.includes(url)) return
+  yield* Service.stop(yield* options())
+  const current = yield* read()
+  if (current.urls?.includes(url)) return
+  yield* write({ ...current, urls: [...(current.urls ?? []), url] })
+})
+
+export const listUrls = Effect.fn("cli.service-config.list-urls")(function* () {
+  return (yield* read()).urls ?? []
+})
+
+export const removeUrl = Effect.fn("cli.service-config.remove-url")(function* (value: string) {
+  const url = normalizeUrl(value)
+  const existing = yield* read()
+  const urls = existing.urls?.filter((item) => item !== url) ?? []
+  if (urls.length === (existing.urls?.length ?? 0)) return
+  yield* Service.stop(yield* options())
+  const current = yield* read()
+  const next = current.urls?.filter((item) => item !== url) ?? []
+  const { urls: _urls, ...rest } = current
+  yield* write(next.length === 0 ? rest : { ...rest, urls: next })
+})
+
 export const unset = Effect.fn("cli.service-config.unset")(function* (key: string, name?: string) {
   const selected = configKey(key)
   if (selected !== "env" && name !== undefined) throw new Error(`Usage: opencode service unset ${selected}`)
@@ -256,5 +284,9 @@ export const unset = Effect.fn("cli.service-config.unset")(function* (key: strin
     }
   }
 })
+
+export function normalizeUrl(value: string) {
+  return normalizeConnectionUrl(value)
+}
 
 export * as ServiceConfig from "./service-config"

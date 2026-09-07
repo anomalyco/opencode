@@ -2,6 +2,7 @@ import { Effect, Option } from "effect"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { ServerProcess } from "../../server-process"
+import { ServiceConfig } from "../../services/service-config"
 
 export default Runtime.handler(
   Commands.commands.serve,
@@ -12,6 +13,7 @@ export default Runtime.handler(
       hostname: Option.getOrUndefined(input.hostname),
       port: Option.getOrUndefined(input.port),
       cors: input.cors.length > 0 ? input.cors : undefined,
+      additionalUrls: input.url.map((url) => ServiceConfig.normalizeUrl(url)),
     })
   }),
 )

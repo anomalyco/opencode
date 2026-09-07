@@ -133,6 +133,33 @@ it.live("allows browser preflight requests without credentials", () =>
   }),
 )
 
+it.live("reports additional URLs before automatically discovered URLs", () =>
+  Effect.gen(function* () {
+    const server = yield* ServerProcess.start<never, never>({
+      hostname: "127.0.0.1",
+      port: 0,
+      additionalUrls: [
+        "https://primary.example.com/",
+        "https://PRIMARY.example.com:443",
+        "https://secondary.example.com",
+      ],
+      password: "secret",
+      app: { version: "test-version" },
+      database: { path: ":memory:" },
+    })
+    const base = HttpServer.formatAddress(server.address)
+    const response = yield* Effect.promise(() =>
+      fetch(new URL("/api/server", base), {
+        headers: { authorization: `Basic ${btoa("opencode:secret")}` },
+      }).then((response) => response.json()),
+    )
+
+    expect(response).toEqual({
+      urls: ["https://primary.example.com", "https://secondary.example.com", base],
+    })
+  }),
+)
+
 async function readUntil(reader: ReadableStreamDefaultReader<Uint8Array>, expected: string) {
   while (true) {
     const next = await reader.read()
