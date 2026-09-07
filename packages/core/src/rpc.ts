@@ -8,7 +8,7 @@ import { Event } from "@opencode-ai/schema/event"
 import type { Tool } from "@opencode-ai/schema/tool"
 import type { StandardSchemaV1 } from "@standard-schema/spec"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Context, Effect, JsonSchema, Layer, Schema, SchemaRepresentation, Stream } from "effect"
+import { Context, Effect, Exit, JsonSchema, Layer, Schema, SchemaRepresentation, Scope, Stream } from "effect"
 import { Bus } from "./bus.js"
 import { Location } from "./location.js"
 import { optional, statics } from "./schema.js"
@@ -68,8 +68,11 @@ const layer = Layer.effect(
       definition: D,
       handlers: RpcHandlers<NoInfer<D>>,
     ) {
+      const owner = yield* Scope.Scope
+      // Explicit disposal must detach its cleanup from the long-lived owner too.
+      const scope = yield* Scope.fork(owner)
       const entry = { definition, handlers }
-      const dispose = Effect.sync(() => {
+      const remove = Effect.sync(() => {
         const remaining = (registrations.get(definition.id) ?? []).filter((candidate) => candidate !== entry)
         if (remaining.length === 0) {
           registrations.delete(definition.id)
@@ -78,20 +81,17 @@ const layer = Layer.effect(
         registrations.set(definition.id, remaining)
       })
       yield* Effect.acquireRelease(
-        Effect.sync(() =>
-          registrations.set(definition.id, [...(registrations.get(definition.id) ?? []), entry]),
-        ),
-        () => dispose,
-      )
+        Effect.sync(() => registrations.set(definition.id, [...(registrations.get(definition.id) ?? []), entry])),
+        () => remove,
+      ).pipe(Scope.provide(scope))
 
       const events = eventsFor(definition)
       return {
-        dispose,
+        dispose: Scope.close(scope, Exit.void),
         events: {
           emit: Effect.fn("Rpc.emit")(function* (...args: Rpc.EventInput<D>) {
             const registered = events.get(args[0])
-            if (!registered)
-              return yield* Effect.fail(new Error(`Unknown RPC event: ${definition.id}.${args[0]}`))
+            if (!registered) return yield* Effect.fail(new Error(`Unknown RPC event: ${definition.id}.${args[0]}`))
             const event = registered.event
             // SAFETY: The public event-schema contract guarantees an object encoded/output type.
             // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
@@ -104,12 +104,11 @@ const layer = Layer.effect(
           }),
         },
       }
-    })
+    }, Effect.uninterruptible)
 
     const call = Effect.fn("Rpc.call")(function* (rpcID: string, name: string, input: unknown) {
       const entry = registrations.get(rpcID)?.at(-1)
-      if (!entry)
-        return yield* Effect.fail(failure("rpc.unavailable", `RPC is unavailable: ${rpcID}`))
+      if (!entry) return yield* Effect.fail(failure("rpc.unavailable", `RPC is unavailable: ${rpcID}`))
       if (!Object.hasOwn(entry.definition.methods, name) || !Object.hasOwn(entry.handlers, name))
         return yield* Effect.fail(failure("rpc.method_not_found", `Unknown RPC method: ${rpcID}.${name}`))
       const method = entry.definition.methods[name]
