@@ -77,12 +77,7 @@ export const { use: useBrowserAttachments, provider: BrowserAttachmentsProvider 
       state: (server: Server, sessionID: string) => store[key(server, sessionID)],
       attach(server: Server, sessionID: string) {
         const id = key(server, sessionID)
-        const existing = live.get(id)
-        // A restarted sidecar arrives as a new connection under the same key; retries must use it.
-        if (existing) {
-          existing.server = server
-          return
-        }
+        if (live.has(id)) return
         const pane = platform.browserPane
         if (!pane || !enabled() || unsupported[server.key] || server.health?.incompatible) return
         const entry: Live = { server, sessionID, attempts: 0, dispose: () => undefined }
@@ -90,7 +85,10 @@ export const { use: useBrowserAttachments, provider: BrowserAttachmentsProvider 
         setStore(id, { browser: null })
         const register = () => {
           if (entry.registration || live.get(id) !== entry) return
-          const registration = pane.register({ sessionID, endpoint: entry.server.conn.http }, (event) => {
+          // The server's shared transport follows a restarted sidecar's port whether or not any route
+          // for this session is mounted; the connection captured at attach time may predate it.
+          const endpoint = { ...server.conn.http, url: server.ctx.sdk.url }
+          const registration = pane.register({ sessionID, endpoint }, (event) => {
             if (live.get(id) !== entry) return
             if (event.type === "focus") return focus.get(id)?.forEach((listener) => listener(event.tabID))
             if (event.error === "browser.pane.unsupported") {
