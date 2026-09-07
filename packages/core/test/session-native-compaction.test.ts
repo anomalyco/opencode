@@ -54,7 +54,7 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
   const hooks = yield* PluginHooks.Service
   const blocked = Deferred.makeUnsafe<void>()
   const hanging = Promise.withResolvers<Response>()
-  const state = { failure: false, hang: false, overflow: false, localFailure: false, calls: 0 }
+  const state = { failure: false, flaky: false, hang: false, overflow: false, localFailure: false, calls: 0 }
   const bodies: Record<string, unknown>[] = []
   const headers: Headers[] = []
   const server = yield* Effect.acquireRelease(
@@ -74,11 +74,15 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
             Deferred.doneUnsafe(blocked, Effect.void)
             return hanging.promise
           }
-          if (state.failure)
+          // Persistent failures opt out of retries so the schedule's backoff stays out of these tests.
+          if (state.failure || state.flaky) {
+            const retry = state.flaky
+            state.flaky = false
             return Response.json(
               { error: { message: "fixture rate limit", type: "rate_limit_error" } },
-              { status: 429 },
+              { status: 429, headers: retry ? {} : { "x-should-retry": "false" } },
             )
+          }
           const trigger = JSON.stringify(bodies.at(-1)).includes("compaction_trigger")
           if (state.overflow && (trigger || state.localFailure))
             return Response.json(
@@ -304,12 +308,36 @@ it.live(
       expect(yield* fixture.compact).toMatchObject({ status: "failed", error: { type: "provider.rate-limit" } })
       expect(fixture.state.calls).toBe(4)
       expect(yield* fixture.checkpoint).toEqual(second)
+      fixture.state.failure = false
       fixture.state.hang = true
       const pending = yield* fixture.compact.pipe(Effect.forkScoped)
       yield* Deferred.await(fixture.blocked)
       yield* Fiber.interrupt(pending)
       expect(fixture.state.calls).toBe(5)
       expect(yield* fixture.checkpoint).toEqual(second)
+      // A transient provider failure retries under the shared session policy and its plugin hook.
+      fixture.state.hang = false
+      const retries: PluginHooks.Domains["session"]["retry"][] = []
+      yield* fixture.hooks.register("session", "retry", (event) =>
+        Effect.sync(() => {
+          retries.push(event)
+          event.decision = { retry: true, delay: 0 }
+        }),
+      )
+      fixture.state.flaky = true
+      expect(yield* fixture.compact).toEqual({ status: "completed" })
+      expect(fixture.state.calls).toBe(7)
+      expect(retries).toMatchObject([
+        {
+          agent: "compaction",
+          attempt: 2,
+          error: { type: "provider.rate-limit" },
+          decision: { retry: true, delay: 0 },
+        },
+      ])
+      expect(
+        SessionProviderContext.decode(yield* fixture.checkpoint).filter((message) => message.role === "user"),
+      ).toHaveLength(3)
     }),
   15000,
 )

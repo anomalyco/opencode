@@ -475,19 +475,29 @@ export const layer = Layer.effect(
         return yield* reject(
           "Provider compaction requires the endpoint in provider/model settings, not a model.request rewrite",
         )
+      const transient = SessionRunnerRetry.transient(yield* SessionRunnerRetry.policy(context.session.id), {
+        agent: Agent.ID.make("compaction"),
+        model: context.model.ref,
+        hook: prepared.retry,
+      })
       yield* started(input, "")
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
-          // One native physical attempt; only a known automatic overflow permits local recovery.
+          // Transient provider failures retry like any other request; only a known automatic overflow permits
+          // local recovery, and nothing is installed until the provider returns a checkpoint.
           const result = yield* restore(
             Effect.gen(function* () {
               if (LLMClient.canCompact(request, { mechanism: "trigger" })) {
                 const retained = retainUsers(yield* original(context.session.id), context.model, state.get().tokens)
-                const result = yield* llm.compact(request, { ...prepared.options, mechanism: "trigger" })
+                const result = yield* llm
+                  .compact(request, { ...prepared.options, mechanism: "trigger" })
+                  .pipe(transient)
                 return { replacement: [...retained, Message.assistant(result.checkpoint)], usage: result.usage }
               }
               if (LLMClient.canCompact(request))
-                return yield* llm.compact(request, { mechanism: "endpoint", http: prepared.options.http })
+                return yield* llm
+                  .compact(request, { mechanism: "endpoint", http: prepared.options.http })
+                  .pipe(transient)
               // Model resolution admits provider policies only for routes with a compaction operation.
               return yield* Effect.die(
                 new Error(`${request.model.provider}/${request.model.route.id} has no compaction operation`),
@@ -562,8 +572,12 @@ export const layer = Layer.effect(
           ),
         ),
       ])
-      const retry = yield* SessionRunnerRetry.policy(context.session.id)
       // Both requests share the retry allowance; rejected output never enters the reminder request.
+      const transient = SessionRunnerRetry.transient(yield* SessionRunnerRetry.policy(context.session.id), {
+        agent: Agent.ID.make("compaction"),
+        model: context.model.ref,
+        hook: prepared.retry,
+      })
       for (const request of [
         prepared.request,
         LLMRequest.update(prepared.request, {
@@ -624,23 +638,7 @@ export const layer = Layer.effect(
             }
             return Effect.void
           }),
-          Effect.retry({
-            while: (cause) =>
-              Effect.gen(function* () {
-                if (isContextOverflowFailure(cause)) return false
-                const decision = yield* retry({
-                  cause,
-                  error: toSessionError(cause),
-                  agent: Agent.ID.make("compaction"),
-                  model: context.model.ref,
-                  hook: prepared.retry,
-                  retry: SessionRunnerRetry.isRetryable(cause),
-                })
-                if (!decision.retry) return false
-                yield* Effect.sleep(decision.delay)
-                return true
-              }),
-          }),
+          transient,
           Effect.catchTag("AI.Error", (error) =>
             Effect.sync(() => {
               failure = toSessionError(error)

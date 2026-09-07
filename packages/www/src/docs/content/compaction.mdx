@@ -106,7 +106,9 @@ provider policy. An individual model's policy replaces the entire provider polic
   usage anchor. Encrypted checkpoint bytes are not a meaningful token count.
 - OpenAI Responses uses a streamed compaction trigger when the route supports it.
   Endpoint-only routes use their standalone compaction endpoint. Deployment/model
-  support can vary; native operations make one attempt without generic retries.
+  support can vary. Transient provider failures retry under the same session retry
+  policy and plugin hook as other requests; nothing is installed until a checkpoint
+  is returned.
 - A known automatic context overflow uses local recovery over the durable original
   history, re-expanding native checkpoints. This applies both to ordinary model
   calls and native compaction rejection. If local recovery fails, the prior

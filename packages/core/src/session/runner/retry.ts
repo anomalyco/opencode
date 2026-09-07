@@ -1,6 +1,6 @@
 export * as SessionRunnerRetry from "./retry.js"
 
-import { AIError } from "@opencode-ai/ai"
+import { AIError, isContextOverflowFailure } from "@opencode-ai/ai"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Model } from "@opencode-ai/schema/model"
 import { SessionError } from "@opencode-ai/schema/session-error"
@@ -10,6 +10,7 @@ import type { PluginHooks } from "../../plugin/hooks.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
+import { toSessionError } from "../to-session-error.js"
 
 interface Input {
   readonly cause: AIError
@@ -105,6 +106,24 @@ export const policy = (sessionID: SessionSchema.ID) =>
         return { retry: true as const, attempt, delay: normalized }
       })
   })
+
+/**
+ * Retries one auxiliary request's transient failures under a shared `policy` allowance, letting the
+ * session retry hook adjust each decision. Context overflow is never transient: callers recover it.
+ */
+export const transient =
+  (decide: Effect.Success<ReturnType<typeof policy>>, input: Pick<Input, "agent" | "model" | "hook">) =>
+  <A, R>(effect: Effect.Effect<A, AIError, R>) =>
+    Effect.retry(effect, {
+      while: (cause) =>
+        Effect.gen(function* () {
+          if (isContextOverflowFailure(cause)) return false
+          const decision = yield* decide({ ...input, cause, error: toSessionError(cause), retry: isRetryable(cause) })
+          if (!decision.retry) return false
+          yield* Effect.sleep(decision.delay)
+          return true
+        }),
+    })
 
 export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID) =>
   Effect.gen(function* () {
