@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Effect, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -257,6 +257,33 @@ describe("Permission", () => {
       yield* Fiber.join(fiber)
       expect(yield* service.list()).toEqual([])
       expect(yield* service.get(request.id)).toBeUndefined()
+    }),
+  )
+
+  it.effect("drops undefined metadata values so pending requests encode as JSON", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      // Tools copy optional model inputs straight into metadata, so omitted inputs arrive as undefined values.
+      const { service, request } = yield* waitForRequest({
+        action: "glob",
+        resources: ["/project"],
+        metadata: { root: "/project", path: undefined, hidden: undefined, limit: undefined },
+      })
+      expect(request.metadata).toStrictEqual({ root: "/project" })
+      expect(yield* service.forSession(request.sessionID)).toEqual([request])
+      // HttpApi encodes JSON success bodies through Schema.toCodecJson, which rejects undefined values in Unknown.
+      const encode = Schema.encodeEffect(Schema.toCodecJson(Schema.Struct({ data: Schema.Array(Permission.Request) })))
+      expect(yield* encode({ data: yield* service.forSession(request.sessionID) })).toEqual({
+        data: [
+          {
+            id: request.id,
+            sessionID: request.sessionID,
+            action: "glob",
+            resources: ["/project"],
+            metadata: { root: "/project" },
+          },
+        ],
+      })
     }),
   )
 
