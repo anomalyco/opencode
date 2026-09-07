@@ -793,6 +793,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         location: state.location,
         sessionID: state.sessionID,
         thinking: thinking(),
+        tools: configState.current.tools === "show",
         replay: input.replay,
         replayLimit: input.replayLimit,
         footer,

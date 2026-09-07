@@ -191,6 +191,9 @@ export const Info = Schema.Struct({
       thinking: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide model reasoning",
       }),
+      tools: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
+        description: "Show or hide tool calls and the assistant text that precedes them",
+      }),
       shell_output: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide raw shell tool output",
       }),

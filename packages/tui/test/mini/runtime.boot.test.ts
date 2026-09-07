@@ -39,6 +39,7 @@ describe("run runtime boot", () => {
     expect(result.cursor).toEqual({ style: "underline", blinking: false })
     expect(resolveMiniSettings(result)).toEqual({
       thinking: "hide",
+      tools: "show",
       shell_output: "hide",
       turn_summary: "show",
       footer: "show",
@@ -50,6 +51,7 @@ describe("run runtime boot", () => {
       resolveMiniSettings({
         mini: {
           thinking: "show",
+          tools: "hide",
           shell_output: "show",
           turn_summary: "hide",
           footer: "hide",
@@ -60,6 +62,7 @@ describe("run runtime boot", () => {
       }),
     ).toEqual({
       thinking: "show",
+      tools: "hide",
       shell_output: "show",
       turn_summary: "hide",
       footer: "hide",

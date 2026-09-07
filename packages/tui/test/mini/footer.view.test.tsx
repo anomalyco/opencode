@@ -952,6 +952,7 @@ test.each([false, true])("settings change preferences and preview the work spinn
     expect(frame).toContain("Settings")
     expect(frame).toMatch(/^ +Settings/m)
     expect(frame).toContain("Thinking")
+    expect(frame).toContain("Tools")
     expect(frame).toContain("Shell")
     expect(frame).toContain("Turn summary")
     expect(frame).toContain("Footer details")
@@ -968,6 +969,7 @@ test.each([false, true])("settings change preferences and preview the work spinn
       thinking: "show",
     })
 
+    app.mockInput.pressKey("ARROW_DOWN")
     app.mockInput.pressKey("ARROW_DOWN")
     app.mockInput.pressKey("ARROW_DOWN")
     app.mockInput.pressKey("ARROW_RIGHT")
@@ -1987,6 +1989,7 @@ test.each([8, 12])("production footer grows for wrapped instructions in %i rows"
     miniSettings: {
       current: {
         thinking: "hide",
+        tools: "show",
         shell_output: "hide",
         turn_summary: "show",
         footer: "show",
@@ -2054,6 +2057,7 @@ test.each(["ctrl+i", "none"])("takeovers preserve configured shortcuts with hidd
     state: { phase: "running", interrupt: 1 },
     miniSettings: {
       thinking: "hide",
+      tools: "show",
       shell_output: "hide",
       turn_summary: "show",
       footer: "hide",
@@ -2371,6 +2375,7 @@ test("direct footer hides routine activity and shows explicit notices", async ()
     currentAgent: "Plan",
     miniSettings: {
       thinking: "hide",
+      tools: "show",
       shell_output: "hide",
       turn_summary: "show",
       footer: "hide",

@@ -723,6 +723,14 @@ export function RunSettingsBody(props: {
     },
     {
       category: "Transcript",
+      display: "Tools",
+      footer: saving() === "tools" ? "saving" : props.settings().tools,
+      footerTone: saving() === "tools" ? "running" : "selection",
+      keywords: `tools files skills activity work steps intermediate ${props.settings().tools}`,
+      key: "tools",
+    },
+    {
+      category: "Transcript",
       display: "Shell",
       footer: saving() === "shell_output" ? "saving" : props.settings().shell_output,
       footerTone: saving() === "shell_output" ? "running" : "selection",

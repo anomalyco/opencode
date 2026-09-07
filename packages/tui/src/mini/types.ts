@@ -402,6 +402,7 @@ export type RunTuiConfig = Pick<
 
 export type MiniSettings = {
   thinking: "show" | "hide"
+  tools: "show" | "hide"
   shell_output: "show" | "hide"
   turn_summary: "show" | "hide"
   footer: "show" | "hide"
