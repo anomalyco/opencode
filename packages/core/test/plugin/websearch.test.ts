@@ -31,24 +31,26 @@ beforeEach(() => {
 const it = webSearchIntegrationTest
 
 describe("built-in web search providers", () => {
-  ;[WebSearchExa.Plugin, WebSearchParallel.Plugin, WebSearchFirecrawl.Plugin, WebSearchTavily.Plugin].forEach(
-    (plugin) => {
-      it.effect(`releases rate-limited HTTP requests for ${plugin.id} before caching their errors`, () =>
-        Effect.gen(function* () {
-          resetWebSearchFixture("Rate limited", 429)
-          const integrations = yield* Integration.Service
-          const websearch = yield* WebSearch.Service
-          yield* plugin.effect(
-            host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
-          )
-          yield* websearch.select("random")
-          expect(yield* websearch.query({ query: "limited" }).pipe(Effect.flip)).toBeInstanceOf(WebSearch.RequestError)
-          expect(signals).toHaveLength(1)
-          expect(signals[0]?.aborted).toBe(true)
-        }),
-      )
-    },
-  )
+  ;[
+    WebSearchExa.Plugin,
+    WebSearchParallel.Plugin,
+    WebSearchFirecrawl.Plugin,
+    WebSearchTavily.Plugin,
+    WebSearchKeenable.Plugin,
+  ].forEach((plugin) => {
+    it.effect(`releases rate-limited HTTP requests for ${plugin.id} before caching their errors`, () =>
+      Effect.gen(function* () {
+        resetWebSearchFixture("Rate limited", 429)
+        const integrations = yield* Integration.Service
+        const websearch = yield* WebSearch.Service
+        yield* plugin.effect(host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }))
+        yield* websearch.select("random")
+        expect(yield* websearch.query({ query: "limited" }).pipe(Effect.flip)).toBeInstanceOf(WebSearch.RequestError)
+        expect(signals).toHaveLength(1)
+        expect(signals[0]?.aborted).toBe(true)
+      }),
+    )
+  })
 
   it.effect("registers a provider without an integration", () =>
     Effect.gen(function* () {

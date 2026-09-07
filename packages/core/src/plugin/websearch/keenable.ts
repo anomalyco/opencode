@@ -63,10 +63,11 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
                 snippet_max_length: 1000,
               }),
             )
-            const response = yield* HttpClient.filterStatusOk(http)
+            const response = yield* HttpClient.withScope(HttpClient.filterStatusOk(http))
               .execute(request)
               .pipe(
                 Effect.flatMap(HttpClientResponse.schemaBodyJson(SearchResponse)),
+                Effect.scoped,
                 Effect.timeoutOrElse({
                   duration: Duration.seconds(25),
                   orElse: () => Effect.fail(new Error("Keenable web search request timed out")),
