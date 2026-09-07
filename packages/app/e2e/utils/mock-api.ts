@@ -71,27 +71,23 @@ const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("projectList", "/api/project", { success: Json }))
   .add(HttpApiEndpoint.get("projectCurrent", "/api/project/current", { success: Json }))
   .add(
-    HttpApiEndpoint.get("worktreeList", "/api/worktree/:projectID", {
-      params: { projectID: Schema.String },
+    HttpApiEndpoint.get("worktreeList", "/api/worktree", {
       success: Json,
     }),
   )
   .add(
-    HttpApiEndpoint.post("worktreeCreate", "/api/worktree/:projectID", {
-      params: { projectID: Schema.String },
+    HttpApiEndpoint.post("worktreeCreate", "/api/worktree", {
       payload: JsonPayload,
       success: Json,
     }),
   )
   .add(
-    HttpApiEndpoint.delete("worktreeRemove", "/api/worktree/:projectID", {
-      params: { projectID: Schema.String },
+    HttpApiEndpoint.delete("worktreeRemove", "/api/worktree", {
       success: NoContent,
     }),
   )
   .add(
-    HttpApiEndpoint.post("worktreeRefresh", "/api/worktree/:projectID/refresh", {
-      params: { projectID: Schema.String },
+    HttpApiEndpoint.post("worktreeRefresh", "/api/worktree/refresh", {
       success: NoContent,
     }),
   )

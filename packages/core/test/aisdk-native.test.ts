@@ -311,7 +311,6 @@ describe("AISDKNative", () => {
             region: "eu-west-1",
           },
           baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/v1",
-          profile: "ignored",
           credentialProvider: "ignored",
           fetch: "ignored",
           store: false,
@@ -330,6 +329,19 @@ describe("AISDKNative", () => {
         baseURL: "https://bedrock-mantle.eu-west-1.api.aws/v1",
         providerOptions: { store: false },
       },
+    })
+  })
+
+  test("forwards Bedrock profile and auth mode for the default credential chain", () => {
+    expect(
+      map("@ai-sdk/amazon-bedrock", { profile: "work", auth: "sigv4", region: "eu-west-1" }, "anthropic.claude"),
+    ).toEqual({
+      package: "@opencode-ai/ai/providers/amazon-bedrock",
+      settings: { profile: "work", auth: "sigv4", region: "eu-west-1" },
+    })
+    expect(map("@ai-sdk/amazon-bedrock", { auth: "bogus" }, "anthropic.claude")).toEqual({
+      package: "@opencode-ai/ai/providers/amazon-bedrock",
+      settings: {},
     })
   })
 

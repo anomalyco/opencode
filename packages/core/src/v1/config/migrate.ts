@@ -29,9 +29,11 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
         update:
           info.autoupdate === false
             ? "disable"
-            : info.autoupdate === "notify" || info.autoupdate === true
+            : info.autoupdate === "notify"
               ? "notify"
-              : undefined,
+              : info.autoupdate === true
+                ? "auto"
+                : undefined,
         share: info.share ?? (info.autoshare ? "auto" : undefined),
         enterprise: info.enterprise,
         username: info.username,

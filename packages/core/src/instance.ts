@@ -17,7 +17,7 @@ import { Image } from "./image.js"
 import { LocationWatcher } from "./filesystem/location-watcher.js"
 import { Integration } from "./integration.js"
 import { Location } from "./location.js"
-import { LocationMutation } from "./location-mutation.js"
+import { FileAccess } from "./file-access.js"
 import { ModelResolver } from "./model-resolver.js"
 import { Mcp } from "./mcp/index.js"
 import { Permission } from "./permission.js"
@@ -25,6 +25,7 @@ import { Plugin } from "./plugin.js"
 import { PluginHooks } from "./plugin/hooks.js"
 import { InstancePlugins } from "./plugin/instance.js"
 import { PluginSupervisor } from "./plugin/supervisor.js"
+import { WorktreeRefresh } from "./worktree/refresh.js"
 import { Worktree } from "./worktree.js"
 import { Pty } from "./pty.js"
 import { Shell } from "./shell.js"
@@ -71,7 +72,8 @@ const nodes = [
   PluginHooks.node,
   InstancePlugins.node,
   PluginSupervisor.node,
-  Worktree.refreshNode,
+  WorktreeRefresh.node,
+  Worktree.node,
   FileSystemSearch.node,
   FileSystem.node,
   ShellSelect.node,
@@ -80,7 +82,7 @@ const nodes = [
   Skill.node,
   InstructionBuiltIns.node,
   InstructionDiscovery.node,
-  LocationMutation.node,
+  FileAccess.node,
   FileMutation.node,
   Formatter.node,
   Mcp.node,

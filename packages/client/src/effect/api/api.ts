@@ -605,7 +605,10 @@ export type SessionLogOutput =
           readonly type: "session.execution.interrupted"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?: Location.Ref | undefined
-          readonly data: { readonly sessionID: Session.ID; readonly reason: "user" | "shutdown" | "superseded" }
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly reason: "user" | "shutdown" | "superseded" | "inactivity"
+          }
         }
       | {
           readonly id: Event.ID
@@ -967,6 +970,20 @@ export type SessionLogOutput =
             readonly reason: "auto" | "manual"
             readonly model?: Model.Ref | undefined
             readonly providerState?: SessionMessage.ProviderState | undefined
+            readonly providerContext?:
+              | {
+                  readonly version: 1
+                  readonly provenance: {
+                    readonly providerID: Provider.ID
+                    readonly provider: string
+                    readonly modelID: string
+                    readonly route: string
+                    readonly protocol: string
+                    readonly endpoint: string
+                  }
+                  readonly messages: Schema.Json
+                }
+              | undefined
             readonly text: string
             readonly recent: string
           }
@@ -1426,6 +1443,7 @@ export type ProjectListOperation<E = never> = () => Effect.Effect<ProjectListOut
 
 export type ProjectUpdateInput = {
   readonly projectID: Project.ID
+  readonly canonical?: AbsolutePath | undefined
   readonly name?: string | undefined
   readonly icon?: Project.Icon | undefined
   readonly commands?: Project.Commands | undefined
@@ -1931,33 +1949,37 @@ export interface ReferenceApi<E = never> {
   readonly list: ReferenceListOperation<E>
 }
 
-export type WorktreeListInput = { readonly projectID: Project.ID }
+export type WorktreeListInput = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+}
 export type WorktreeListOutput = Worktree.List
-export type WorktreeListOperation<E = never> = (input: WorktreeListInput) => Effect.Effect<WorktreeListOutput, E>
+export type WorktreeListOperation<E = never> = (input?: WorktreeListInput) => Effect.Effect<WorktreeListOutput, E>
 
 export type WorktreeCreateInput = {
-  readonly projectID: Project.ID
-  readonly strategy: Worktree.StrategyID
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly strategy?: Worktree.StrategyID | undefined
   readonly from?: AbsolutePath | undefined
   readonly branch?: string | undefined
-  readonly directory: AbsolutePath
+  readonly directory?: AbsolutePath | undefined
   readonly name?: string | undefined
 }
 export type WorktreeCreateOutput = Worktree.Info
-export type WorktreeCreateOperation<E = never> = (input: WorktreeCreateInput) => Effect.Effect<WorktreeCreateOutput, E>
+export type WorktreeCreateOperation<E = never> = (input?: WorktreeCreateInput) => Effect.Effect<WorktreeCreateOutput, E>
 
 export type WorktreeRemoveInput = {
-  readonly projectID: Project.ID
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly directory: AbsolutePath
   readonly force: boolean
 }
 export type WorktreeRemoveOutput = void
 export type WorktreeRemoveOperation<E = never> = (input: WorktreeRemoveInput) => Effect.Effect<WorktreeRemoveOutput, E>
 
-export type WorktreeRefreshInput = { readonly projectID: Project.ID }
+export type WorktreeRefreshInput = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+}
 export type WorktreeRefreshOutput = void
 export type WorktreeRefreshOperation<E = never> = (
-  input: WorktreeRefreshInput,
+  input?: WorktreeRefreshInput,
 ) => Effect.Effect<WorktreeRefreshOutput, E>
 
 export interface WorktreeApi<E = never> {

@@ -9,6 +9,7 @@ import type { Instructions } from "../instructions/index.js"
 import { SessionContext } from "./context.js"
 import type { AgentNotFoundError } from "./error.js"
 import { SessionHistory } from "./history.js"
+import { SessionProviderContext } from "./provider-context.js"
 import { SessionModelRequest } from "./model-request.js"
 import type { SessionRunnerModel } from "./runner/model.js"
 import type { SessionSchema } from "./schema.js"
@@ -29,7 +30,12 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
     const context = yield* SessionContext.Service
     const selection = yield* context.select(input.session.id)
     const model = yield* context.resolveModel(selection.session)
-    const history = yield* SessionHistory.preview(database.db, selection.session.id, selection.instructions)
+    const history = yield* SessionHistory.preview(
+      database.db,
+      selection.session.id,
+      selection.instructions,
+      SessionProviderContext.provenance(model) ?? "local",
+    )
     const transcript = SessionModelRequest.baseTranscript({
       agent: selection.agent.info,
       model,

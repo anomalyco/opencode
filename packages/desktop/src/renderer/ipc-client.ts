@@ -28,7 +28,18 @@ const ClientProtocolLive = Layer.unwrap(Effect.promise(() => port).pipe(Effect.m
 const ClientLive = Layer.effect(DesktopClient, RpcClient.make(DesktopRpcs)).pipe(Layer.provide(ClientProtocolLive))
 const runtime = ManagedRuntime.make(ClientLive)
 const listeners = new Map<EventTag, Set<(value: unknown) => void>>()
-window.addEventListener("pagehide", () => void runtime.dispose(), { once: true })
+const beforeDispose = new Set<() => Promise<unknown> | void>()
+// Let queued work (storage flushes) hand its messages to the port before the runtime goes away.
+window.addEventListener(
+  "pagehide",
+  () => void Promise.allSettled([...beforeDispose].map((callback) => callback())).then(() => runtime.dispose()),
+  { once: true },
+)
+
+export function onBeforeDispose(callback: () => Promise<unknown> | void) {
+  beforeDispose.add(callback)
+  return () => beforeDispose.delete(callback)
+}
 
 runtime.runFork(
   Effect.gen(function* () {

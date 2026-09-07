@@ -116,15 +116,15 @@ opencode2 mcp list
 ```
 
 Remote servers use OAuth by default. If `mcp list` reports that a server needs
-authentication, run the OAuth flow and then verify the connection:
+authentication, tell the user to run `/mcps`, select the server, and sign in.
+Do not run `opencode2 mcp auth` through the shell tool: it starts an interactive
+flow whose authorization link can be hidden in background process output.
+Use the user-facing MCP interface instead.
 
-```sh
-opencode2 mcp auth <name>
-opencode2 mcp list
-```
+Report the server as configured but awaiting sign-in until its connection
+status confirms it is connected.
 
-The auth command prints an authorization URL, waits for the browser redirect,
-and stores credentials outside the OpenCode configuration. Do not ask for or
+OAuth credentials are stored outside the OpenCode configuration. Do not ask for or
 store an API key when the server supports OAuth. Use header-based credentials
 only when OAuth is unavailable or the user explicitly requires them, and use an
 environment substitution such as `{env:MCP_API_KEY}` instead of writing a

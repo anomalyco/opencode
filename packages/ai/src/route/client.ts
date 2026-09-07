@@ -14,6 +14,7 @@ import type { ProtocolID, ProviderOptions } from "../schema/index.js"
 import {
   AIError,
   CompactionResponse,
+  CompactionCheckpointResponse,
   AIErrorReason,
   GenerationOptions,
   HttpOptions,
@@ -38,7 +39,7 @@ export interface RouteBody<Body> {
 export interface Route<
   Body,
   Prepared = unknown,
-  Compact extends CompactOperation | undefined = CompactOperation | undefined,
+  Compact extends CompactionOperations | undefined = CompactionOperations | undefined,
 > {
   readonly compact: Compact
   readonly id: string
@@ -53,7 +54,15 @@ export interface Route<
   readonly transport: Transport<Body, Prepared, unknown>
   readonly defaults: RouteDefaults
   readonly body: RouteBody<Body>
-  readonly with: (patch: RoutePatch<Body, Prepared>) => Route<Body, Prepared, Compact>
+  readonly with: {
+    <Next extends CompactionOperations | undefined>(
+      patch: RoutePatch<Body, Prepared> & { readonly compact: Next },
+    ): Route<Body, Prepared, Next>
+    (
+      patch: Omit<RoutePatch<Body, Prepared>, "compact"> & { readonly compact?: undefined },
+    ): Route<Body, Prepared, Compact>
+    (patch: RoutePatch<Body, Prepared>): Route<Body, Prepared>
+  }
   readonly model: <Options extends ProviderOptions = ProviderOptions>(
     input: RouteMappedLanguageModelInput,
   ) => LanguageModel<Options, Compact>
@@ -74,7 +83,7 @@ export interface Route<
 // Normal call sites use `OpenAIChat.route`; callers only need body types
 // when preparing a request with a protocol-specific type assertion.
 // oxlint-disable-next-line typescript-eslint/no-explicit-any
-export type AnyRoute<Compact extends CompactOperation | undefined = CompactOperation | undefined> = Route<
+export type AnyRoute<Compact extends CompactionOperations | undefined = CompactionOperations | undefined> = Route<
   any,
   any,
   Compact
@@ -101,6 +110,7 @@ export interface RouteDefaultsInput {
 }
 
 export interface RoutePatch<Body, Prepared> extends RouteDefaultsInput {
+  readonly compact?: CompactionOperations
   readonly id?: string
   readonly provider?: string | ProviderID
   readonly providerMetadataKey?: string
@@ -111,7 +121,7 @@ export interface RoutePatch<Body, Prepared> extends RouteDefaultsInput {
 
 type RouteMappedLanguageModelInput = RouteLanguageModelInput | RouteRoutedLanguageModelInput
 
-const makeRouteLanguageModel = <Options extends ProviderOptions, Compact extends CompactOperation | undefined>(
+const makeRouteLanguageModel = <Options extends ProviderOptions, Compact extends CompactionOperations | undefined>(
   route: AnyRoute<Compact>,
   mapped: RouteMappedLanguageModelInput,
 ) => {
@@ -162,10 +172,7 @@ export const httpOptions = (input: HttpOptionsInput | undefined) => {
 }
 
 export interface Interface {
-  readonly compact: (
-    request: CompactionRequest,
-    options?: Pick<StreamOptions, "http">,
-  ) => Effect.Effect<CompactionResponse, AIError>
+  readonly compact: CompactMethod
   readonly stream: StreamMethod
   readonly generate: GenerateMethod
 }
@@ -189,12 +196,64 @@ export type CompactOperation = (
   options?: Pick<StreamOptions, "http">,
 ) => Effect.Effect<CompactionResponse, AIError>
 
-export type CompactionRequest = LLMRequest & {
-  readonly model: LanguageModel<ProviderOptions, CompactOperation>
+export type TriggerCompactOperation = (
+  request: LLMRequest,
+  executor: RequestExecutor.Interface,
+  options: TriggerCompactOptions,
+) => Effect.Effect<CompactionCheckpointResponse, AIError>
+
+/** Protocol capabilities, not deployment/model eligibility. */
+export interface CompactionOperations {
+  readonly endpoint?: CompactOperation
+  readonly trigger?: TriggerCompactOperation
 }
 
-export const canCompact = (request: LLMRequest): request is CompactionRequest =>
-  request.model.route.compact !== undefined
+export interface EndpointCompactOptions extends Pick<StreamOptions, "http"> {
+  readonly mechanism?: "endpoint"
+  readonly webSocket?: never
+}
+
+export interface TriggerCompactOptions extends StreamOptions {
+  readonly mechanism: "trigger"
+}
+
+// Keep the required route shape explicit: the schema class's self type erases its model parameter in assignability.
+export type CompactionRequest = LLMRequest & {
+  readonly model: LanguageModel<ProviderOptions, { readonly endpoint: CompactOperation }>
+}
+export type CheckpointRequest = LLMRequest & {
+  readonly model: LanguageModel<ProviderOptions, { readonly trigger: TriggerCompactOperation }>
+}
+
+export interface CompactMethod<R = never> {
+  (request: CheckpointRequest, options: TriggerCompactOptions): Effect.Effect<CompactionCheckpointResponse, AIError, R>
+  (request: CompactionRequest, options?: EndpointCompactOptions): Effect.Effect<CompactionResponse, AIError, R>
+}
+
+export function canCompact(
+  request: LLMRequest,
+  options?: { readonly mechanism?: "endpoint" },
+): request is CompactionRequest
+export function canCompact(
+  request: LLMRequest,
+  options: { readonly mechanism: "trigger" },
+): request is CheckpointRequest
+export function canCompact(request: LLMRequest, options?: { readonly mechanism?: string }) {
+  if (options?.mechanism === "trigger") return request.model.route.compact?.trigger !== undefined
+  if (options?.mechanism !== undefined && options.mechanism !== "endpoint") return false
+  return request.model.route.compact?.endpoint !== undefined
+}
+
+const unsupportedCompaction = (request: LLMRequest, mechanism: string | undefined) => {
+  if (mechanism !== undefined && mechanism !== "endpoint" && mechanism !== "trigger")
+    return ProviderShared.invalidRequest(`Unknown compaction mechanism: ${mechanism}`)
+  return ProviderShared.unsupportedOperation({
+    operation: mechanism === "trigger" ? "compact.trigger" : "compact",
+    provider: request.model.provider,
+    route: request.model.route.id,
+    message: `${request.model.provider}/${request.model.route.id} does not support ${mechanism === "trigger" ? "trigger" : "explicit"} compaction`,
+  })
+}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLMClient") {}
 
@@ -216,7 +275,7 @@ const resolveRequestOptions = (request: LLMRequest) => {
 }
 
 export interface MakeInput<Body, Frame, Event, State> {
-  readonly compact?: CompactOperation
+  readonly compact?: CompactionOperations
   /** Route id used in diagnostics and prepared request metadata. */
   readonly id: string
   /** Provider identity for route-owned model construction. */
@@ -238,7 +297,7 @@ export interface MakeInput<Body, Frame, Event, State> {
 }
 
 export interface MakeTransportInput<Body, Prepared, Frame, Event, State> {
-  readonly compact?: CompactOperation
+  readonly compact?: CompactionOperations
   /** Route id used in diagnostics and prepared request metadata. */
   readonly id: string
   /** Provider identity for route-owned model construction. */
@@ -326,9 +385,10 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       defaults: routeInput.defaults ?? {},
       body: protocol.body,
       with: (patch: RoutePatch<Body, Prepared>) => {
-        const { id, provider, providerMetadataKey, auth, transport, endpoint, ...defaults } = patch
+        const { compact, id, provider, providerMetadataKey, auth, transport, endpoint, ...defaults } = patch
         return build({
           ...routeInput,
+          compact: "compact" in patch ? compact : routeInput.compact,
           id: id ?? routeInput.id,
           provider: provider ?? routeInput.provider,
           providerMetadataKey:
@@ -343,7 +403,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
         })
       },
       model: <Options extends ProviderOptions = ProviderOptions>(input: RouteMappedLanguageModelInput) =>
-        makeRouteLanguageModel<Options, CompactOperation | undefined>(route, input),
+        makeRouteLanguageModel<Options, CompactionOperations | undefined>(route, input),
       prepareTransport: (body, request, options) =>
         routeInput.transport.prepare({
           body,
@@ -440,12 +500,12 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
   return build({ ...input, defaults: mergeRouteDefaults(undefined, input.defaults ?? {}) })
 }
 
-export function make<Body, Prepared, Frame, Event, State>(
-  input: MakeTransportInput<Body, Prepared, Frame, Event, State> & { readonly compact: CompactOperation },
-): Route<Body, Prepared, CompactOperation>
-export function make<Body, Frame, Event, State>(
-  input: MakeInput<Body, Frame, Event, State> & { readonly compact: CompactOperation },
-): Route<Body, HttpTransport.HttpPrepared<Frame>, CompactOperation>
+export function make<Body, Prepared, Frame, Event, State, Compact extends CompactionOperations>(
+  input: MakeTransportInput<Body, Prepared, Frame, Event, State> & { readonly compact: Compact },
+): Route<Body, Prepared, Compact>
+export function make<Body, Frame, Event, State, Compact extends CompactionOperations>(
+  input: MakeInput<Body, Frame, Event, State> & { readonly compact: Compact },
+): Route<Body, HttpTransport.HttpPrepared<Frame>, Compact>
 export function make<Body, Prepared, Frame, Event, State>(
   input: MakeTransportInput<Body, Prepared, Frame, Event, State>,
 ): Route<Body, Prepared>
@@ -561,14 +621,23 @@ export function generate(request: LLMRequest, options?: StreamOptions): Effect.E
   })
 }
 
-export const compact = (
+export function compact(
+  request: CheckpointRequest,
+  options: TriggerCompactOptions,
+): Effect.Effect<CompactionCheckpointResponse, AIError, Service>
+export function compact(
   request: CompactionRequest,
-  options?: Pick<StreamOptions, "http">,
-): Effect.Effect<CompactionResponse, AIError, Service> =>
-  Effect.gen(function* () {
+  options?: EndpointCompactOptions,
+): Effect.Effect<CompactionResponse, AIError, Service>
+export function compact(request: LLMRequest, options?: EndpointCompactOptions | TriggerCompactOptions) {
+  return Effect.gen(function* () {
     const client = yield* Service
-    return yield* client.compact(request, options)
+    if (options?.mechanism === "trigger" && canCompact(request, options)) return yield* client.compact(request, options)
+    if ((options?.mechanism === undefined || options.mechanism === "endpoint") && canCompact(request))
+      return yield* client.compact(request, options)
+    return yield* unsupportedCompaction(request, options?.mechanism)
   })
+}
 
 export const streamRequest = (request: LLMRequest, options?: StreamOptions) =>
   Stream.unwrap(
@@ -582,21 +651,27 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
   Effect.gen(function* () {
     const executor = yield* RequestExecutor.Service
     const stream = streamRequestWith({ http: executor })
+    function compact(
+      request: CompactionRequest,
+      options?: EndpointCompactOptions,
+    ): Effect.Effect<CompactionResponse, AIError>
+    function compact(
+      request: CheckpointRequest,
+      options: TriggerCompactOptions,
+    ): Effect.Effect<CompactionCheckpointResponse, AIError>
+    function compact(request: LLMRequest, options?: EndpointCompactOptions | TriggerCompactOptions) {
+      return Effect.suspend((): Effect.Effect<CompactionResponse | CompactionCheckpointResponse, AIError> => {
+        if (options?.mechanism === "trigger" && canCompact(request, options))
+          return request.model.route.compact.trigger(prepareRequest(request), executor, options)
+        if ((options?.mechanism === undefined || options.mechanism === "endpoint") && canCompact(request))
+          return request.model.route.compact.endpoint(prepareRequest(request), executor, options)
+        return unsupportedCompaction(request, options?.mechanism)
+      })
+    }
     return Service.of({
       stream,
       generate: generateWith(stream),
-      compact: (request, options) =>
-        Effect.suspend(() => {
-          const operation = request.model.route.compact
-          if (!operation)
-            return ProviderShared.unsupportedOperation({
-              operation: "compact",
-              provider: request.model.provider,
-              route: request.model.route.id,
-              message: `${request.model.provider}/${request.model.route.id} does not support explicit compaction`,
-            })
-          return operation(prepareRequest(request), executor, options)
-        }),
+      compact,
     })
   }),
 )

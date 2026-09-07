@@ -42,6 +42,7 @@ export const layer = Layer.effect(
             "SessionRunnerModel.VariantUnavailableError",
             "SessionRunnerModel.UnsupportedPackageError",
             "SessionRunnerModel.UnresolvedProviderVariablesError",
+            "SessionRunnerModel.UnsupportedCompactionError",
           ],
           (error) => {
             const mapped: Error = input.model

@@ -13,7 +13,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { ModelTooltip } from "./tooltip"
 
 type ModelState = ReturnType<typeof useLocal>["model"]
-const featuredProviders = ["opencode", "opencode-go", "openai", "anthropic", "google", "github-copilot"]
+const featuredProviders = ["opencode-go", "opencode", "openai", "anthropic", "google", "github-copilot"]
 const displayModelName = (name: string) => name.replace(/\s+(?:\(free\)|free)$/i, "")
 
 export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props) => {

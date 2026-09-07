@@ -115,6 +115,15 @@ describe("OpenAIPlugin", () => {
           model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
         })
         catalog.model.update(Provider.ID.openai, Model.ID.make("gpt-4.1"), () => {})
+        catalog.model.update(Provider.ID.openai, Model.ID.make("gpt-6-astra"), (model) => {
+          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+        })
+        catalog.model.update(Provider.ID.openai, Model.ID.make("gpt-5.10"), (model) => {
+          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+        })
+        catalog.model.update(Provider.ID.openai, Model.ID.make("gpt-5"), () => {})
+        catalog.model.update(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"), () => {})
+        catalog.model.update(Provider.ID.openai, Model.ID.make("gpt-4.99"), () => {})
       })
       yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
@@ -136,7 +145,11 @@ describe("OpenAIPlugin", () => {
       const provider = required(yield* catalog.provider.get(Provider.ID.openai))
       expect(provider.package).toBe(Provider.aisdk("@ai-sdk/openai"))
       expect(provider.settings).toMatchObject({ baseURL: "https://chatgpt.com/backend-api/codex" })
-      expect(provider.headers).toMatchObject({ originator: "opencode", "chatgpt-account-id": "acct_123" })
+      expect(provider.headers).toMatchObject({
+        originator: "opencode",
+        "chatgpt-account-id": "acct_123",
+        "x-codex-beta-features": "remote_compaction_v2",
+      })
       expect(direct.baseURL).toBe("https://chatgpt.com/backend-api/codex")
       expect(direct.headers).toMatchObject({ originator: "opencode", "session-id": "ses_test" })
       expect(direct.hasHttpHooks).toBe(false)
@@ -161,6 +174,11 @@ describe("OpenAIPlugin", () => {
       expect(gpt56.enabled).toBe(true)
       expect(gpt56.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-4.1"))).enabled).toBe(false)
+      expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-6-astra"))).enabled).toBe(true)
+      expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.10"))).enabled).toBe(true)
+      expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5"))).enabled).toBe(false)
+      expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"))).enabled).toBe(false)
+      expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-4.99"))).enabled).toBe(false)
     }),
   )
 
@@ -192,6 +210,8 @@ describe("OpenAIPlugin", () => {
       expect(model.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
       expect(model.capabilities.responsesWebsockets).toBe(true)
       expect(direct.headers).not.toHaveProperty("originator")
+      expect(direct.baseURL).toBe("https://api.openai.com/v1")
+      expect(provider.headers).not.toHaveProperty("x-codex-beta-features")
       expect(direct.hasHttpHooks).toBe(false)
       expect(provider.headers).not.toHaveProperty("originator")
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-4.1"))).enabled).toBe(true)

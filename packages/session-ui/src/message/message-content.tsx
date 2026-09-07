@@ -388,7 +388,13 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
   return (
     <div data-component="session-compaction-message">
       <div class="py-2">
-        <TimelineSeparator label={i18n.t("ui.messagePart.compaction")} />
+        <TimelineSeparator
+          label={i18n.t(
+            props.message.status === "completed" && props.message.providerContext
+              ? "ui.messagePart.providerCompaction"
+              : "ui.messagePart.compaction",
+          )}
+        />
       </div>
       <Show when={summary().trim()}>
         <div data-component="text-part" data-timeline-part-id={props.message.id}>

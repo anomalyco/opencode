@@ -13,7 +13,7 @@ import { Bom } from "@opencode-ai/util/bom"
 import { Environment } from "../../environment/index.js"
 import { FileMutation } from "../../file-mutation.js"
 import { Formatter } from "../../formatter.js"
-import { LocationMutation } from "../../location-mutation.js"
+import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
 import { fileDiff } from "./file-diff.js"
 
@@ -46,7 +46,7 @@ export const toModelContent = (output: Output) =>
 export const Plugin = {
   id: "opencode.tool.write",
   effect: Effect.fn("WriteTool.Plugin")(function* (ctx: Context) {
-    const mutation = yield* LocationMutation.Service
+    const access = yield* FileAccess.Service
     const fileMutation = yield* FileMutation.Service
     const environment = yield* Environment.Service
     const formatter = yield* Formatter.Service
@@ -68,15 +68,8 @@ export const Plugin = {
                 messageID: context.messageID,
                 id: context.id,
               }
-              const target = yield* mutation.resolve({ path: input.path, kind: "file" })
-              const external = target.externalDirectory
-              if (external)
-                yield* permission.assert({
-                  ...LocationMutation.externalDirectoryPermission(external),
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source,
-                })
+              const target = yield* access.resolve({ path: input.path, kind: "file" })
+              yield* access.authorizeExternal([target], context)
               const current = yield* FileMutation.readText(environment.files, target.absolute).pipe(
                 Effect.catchTag("Environment.NotFound", () => Effect.undefined),
               )

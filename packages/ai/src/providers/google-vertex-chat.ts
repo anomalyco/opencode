@@ -1,6 +1,7 @@
 import type { ProviderPackage } from "../provider-package.js"
-import { OpenAICompatibleChat } from "../protocols/openai-compatible-chat.js"
-import type { RouteDefaultsInput } from "../route/client.js"
+import { OpenAIChat } from "../protocols/openai-chat.js"
+import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Endpoint } from "../route/endpoint.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
@@ -24,10 +25,13 @@ export interface Settings extends ProviderPackage.Settings {
   readonly providerOptions?: OpenAIProviderOptionsInput
 }
 
-const route = OpenAICompatibleChat.route.with({
+const route = Route.make({
   id: "google-vertex-chat",
   provider: id,
   providerMetadataKey: "vertex",
+  protocol: OpenAIChat.protocol,
+  endpoint: Endpoint.path("/chat/completions"),
+  framing: OpenAIChat.framing,
 })
 
 export const routes = [route]

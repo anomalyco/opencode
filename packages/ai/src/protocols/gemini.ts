@@ -639,6 +639,14 @@ const step = (state: ParserState, event: GeminiEvent) => {
       : state.usage,
   }
   const candidate = event.candidates?.[0]
+  if (candidate?.finishReason && mapFinishReason(candidate.finishReason, state.hasToolCalls) === "error")
+    return Effect.fail(
+      ProviderShared.eventError(
+        state.route,
+        `Gemini stopped with ${candidate.finishReason}`,
+        ProviderShared.encodeJson(event),
+      ),
+    )
   if (!candidate?.content)
     return Effect.succeed([
       { ...nextState, finishReason: candidate?.finishReason ?? nextState.finishReason },

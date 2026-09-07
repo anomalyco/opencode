@@ -7,7 +7,7 @@ import { WebSearchFirecrawl } from "@opencode-ai/core/plugin/websearch/firecrawl
 import { WebSearchParallel } from "@opencode-ai/core/plugin/websearch/parallel"
 import { WebSearchTavily } from "@opencode-ai/core/plugin/websearch/tavily"
 import { host, integrationHost, webSearchHost } from "./host"
-import { requests, resetWebSearchFixture, webSearchIntegrationTest } from "./websearch-fixture"
+import { requests, signals, resetWebSearchFixture, webSearchIntegrationTest } from "./websearch-fixture"
 
 beforeEach(() => {
   resetWebSearchFixture(
@@ -30,6 +30,25 @@ beforeEach(() => {
 const it = webSearchIntegrationTest
 
 describe("built-in web search providers", () => {
+  ;[WebSearchExa.Plugin, WebSearchParallel.Plugin, WebSearchFirecrawl.Plugin, WebSearchTavily.Plugin].forEach(
+    (plugin) => {
+      it.effect(`releases rate-limited HTTP requests for ${plugin.id} before caching their errors`, () =>
+        Effect.gen(function* () {
+          resetWebSearchFixture("Rate limited", 429)
+          const integrations = yield* Integration.Service
+          const websearch = yield* WebSearch.Service
+          yield* plugin.effect(
+            host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+          )
+          yield* websearch.select("random")
+          expect(yield* websearch.query({ query: "limited" }).pipe(Effect.flip)).toBeInstanceOf(WebSearch.RequestError)
+          expect(signals).toHaveLength(1)
+          expect(signals[0]?.aborted).toBe(true)
+        }),
+      )
+    },
+  )
+
   it.effect("registers a provider without an integration", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service

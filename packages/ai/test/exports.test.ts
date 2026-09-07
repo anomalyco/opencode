@@ -3,8 +3,11 @@ import { AIError, ImageInput, LanguageModel, LLM, LLMClient, Provider } from "@o
 import { Route, Protocol, WebSocketTransport } from "@opencode-ai/ai/route"
 import { Provider as ProviderSubpath } from "@opencode-ai/ai/provider"
 import {
+  Baseten,
   CloudflareAIGateway,
   CloudflareWorkersAI,
+  DeepSeek,
+  Fireworks,
   OpenAI,
   OpenAICompatible,
   OpenRouter,
@@ -48,7 +51,13 @@ describe("public exports", () => {
     expect(OpenAI.model).toBeFunction()
     expect(OpenAI.provider.responses).toBe(OpenAI.responses)
     expect(OpenAI.configure({ apiKey: "fixture" }).responses).toBeFunction()
-    expect(OpenAICompatible.deepseek.model).toBeFunction()
+    for (const provider of [Baseten, DeepSeek, Fireworks]) {
+      expect(provider.configure).toBeFunction()
+      expect(provider.model).toBeFunction()
+    }
+    for (const name of ["baseten", "cerebras", "deepinfra", "deepseek", "fireworks", "groq", "togetherai"]) {
+      expect(OpenAICompatible).not.toHaveProperty(name)
+    }
     expect(
       OpenAICompatibleResponses.configure({ baseURL: "https://responses.test/v1" }).model("fixture").route.id,
     ).toBe("openai-compatible-responses")

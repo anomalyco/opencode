@@ -35,8 +35,6 @@ export type SessionRow =
   | { type: "assistant-footer"; messageID: string }
   | { type: "turn-usage"; messageIDs: string[]; previousCache?: CacheUsage }
 
-export type BackgroundToolTarget = { source: "shell"; id: string }
-
 export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessionID: string) => void) {
   const data = useData()
   const client = useClient()
@@ -173,8 +171,18 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
   const appendPart = (ref: PartRef, part: AppendPart) =>
     setRows(
       produce((draft) => {
-        if (hasPart(draft, ref)) return
-        append(draft, ref, part, queuedStart(draft))
+        if (!hasPart(draft, ref)) {
+          append(draft, ref, part, queuedStart(draft))
+          return
+        }
+        if (part.type !== "reasoning" || part.time?.completed === undefined) return
+        const row = draft.find(
+          (row) =>
+            row.type === "group" &&
+            row.kind === "reasoning" &&
+            row.refs.some((item) => item.messageID === ref.messageID && item.partID === ref.partID),
+        )
+        if (row?.type === "group" && row.kind === "reasoning") row.completed = true
       }),
     )
 
@@ -252,7 +260,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       if (event.data.sessionID === sessionID() && event.data.text.trim())
         appendPart(
           { messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` },
-          { type: "reasoning" },
+          { type: "reasoning", time: { completed: event.created } },
         )
     }),
     data.on("session.tool.input.started", (event) => {
@@ -409,29 +417,6 @@ export function sessionRowID(row: SessionRow, boundaryID?: string) {
   if (row.type === "part") return `session-part:${row.ref.messageID}:${row.ref.partID}`
 }
 
-export function backgroundToolRowIndex(
-  rows: SessionRow[],
-  messages: SessionMessageInfo[],
-  target: BackgroundToolTarget,
-  beforeMessageID: string,
-) {
-  const byID = new Map(messages.map((message) => [message.id, message]))
-  const end = rows.findIndex((row) => row.type === "message" && row.messageID === beforeMessageID)
-  return rows.slice(0, end === -1 ? rows.length : end).findLastIndex((row) => {
-    if (row.type !== "part") return false
-    if (row.ref.partID === target.id) return true
-    const message = byID.get(row.ref.messageID)
-    if (message?.type !== "assistant") return false
-    const part = resolvePart(message, row.ref.partID)
-    return (
-      part?.type === "tool" &&
-      part.name.toLowerCase() === "shell" &&
-      part.state.status !== "streaming" &&
-      part.state.metadata?.shellID === target.id
-    )
-  })
-}
-
 function rowBoundaryMessageID(row: SessionRow, messages: Map<string, SessionMessageInfo>) {
   if (row.type === "message") {
     const message = messages.get(row.messageID)
@@ -462,17 +447,26 @@ export function resolvePart(message: SessionMessageAssistant, partID: string) {
   return message.content.filter((part) => part.type === match[1])[ordinal]
 }
 
-type AppendPart = { type: "text" } | { type: "reasoning" } | { type: "tool"; name: string }
+type AppendPart =
+  | { type: "text" }
+  | { type: "reasoning"; time?: { completed?: number } }
+  | { type: "tool"; name: string }
 
 function append(rows: SessionRow[], ref: PartRef, part: AppendPart, index = rows.length) {
   if (part.type === "reasoning") {
     const previous = rows[index - 1]
     if (previous?.type === "group" && previous.kind === "reasoning") {
       previous.refs.push(ref)
+      previous.completed &&= part.time?.completed !== undefined
       return
     }
     completePrevious(rows, index)
-    rows.splice(index, 0, { type: "group", kind: "reasoning", refs: [ref], completed: false })
+    rows.splice(index, 0, {
+      type: "group",
+      kind: "reasoning",
+      refs: [ref],
+      completed: part.time?.completed !== undefined,
+    })
     return
   }
   if (part.type === "tool" && exploration(part.name)) {

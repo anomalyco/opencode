@@ -69,12 +69,15 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
       setStore()("context", "items", (items) => items.filter((item) => item.key !== key))
       clearRetry()
     },
-    addMention(mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart) {
+    addMention(
+      mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart,
+      range?: { start: number; end: number },
+    ) {
       const text = store()
         .prompt.map((part) => ("content" in part ? part.content : ""))
         .join("")
-      const end = store().cursor ?? text.length
-      const start = text.slice(0, end).lastIndexOf("@")
+      const end = range?.end ?? store().cursor ?? text.length
+      const start = range?.start ?? text.slice(0, end).lastIndexOf("@")
       setStore()("prompt", insertMention(store().prompt, start < 0 ? end : start, end, mention))
       setStore()("cursor", (start < 0 ? end : start) + mention.content.length + 1)
       clearRetry()
@@ -113,6 +116,9 @@ function insertMention(
   end: number,
   mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart,
 ): ComposerPrompt {
+  if (start === 0 && end === 0) {
+    return withOffsets([mention, { type: "text", content: " ", start: 0, end: 0 }, ...prompt])
+  }
   let position = 0
   const parts = prompt.flatMap<ComposerPrompt[number]>((part) => {
     if (part.type === "image") return [part]

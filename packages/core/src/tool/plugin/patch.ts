@@ -9,7 +9,7 @@ import { Environment } from "../../environment/index.js"
 import { Formatter } from "../../formatter.js"
 import { FileMutation } from "../../file-mutation.js"
 import { Location } from "../../location.js"
-import { LocationMutation } from "../../location-mutation.js"
+import { FileAccess } from "../../file-access.js"
 import { Patch } from "@opencode-ai/util/patch"
 import { Permission } from "../../permission.js"
 import DESCRIPTION from "../patch.txt"
@@ -45,29 +45,29 @@ export const toModelContent = (output: Output) =>
 
 type Prepared =
   | (Extract<Patch.Hunk, { readonly type: "add" }> & {
-      readonly target: LocationMutation.Target
+      readonly target: FileAccess.Target
       readonly content: string
       readonly before: string
       readonly after: string
     })
   | (Extract<Patch.Hunk, { readonly type: "delete" }> & {
-      readonly target: LocationMutation.Target
+      readonly target: FileAccess.Target
       readonly before: string
       readonly after: string
     })
   | (Extract<Patch.Hunk, { readonly type: "update" }> & {
-      readonly target: LocationMutation.Target
+      readonly target: FileAccess.Target
       readonly content: string
       readonly before: string
       readonly after: string
-      readonly moveTarget?: LocationMutation.Target
+      readonly moveTarget?: FileAccess.Target
     })
 
 export const Plugin = {
   id: "opencode.tool.patch",
   effect: Effect.fn("PatchTool.Plugin")(function* (ctx: Context) {
     const environment = yield* Environment.Service
-    const mutation = yield* LocationMutation.Service
+    const access = yield* FileAccess.Service
     const fileMutation = yield* FileMutation.Service
     const formatter = yield* Formatter.Service
     const location = yield* Location.Service
@@ -86,9 +86,9 @@ export const Plugin = {
             const parsed = Patch.parse(input.patchText)
             const lockTargets = Result.isSuccess(parsed)
               ? parsed.success.flatMap((hunk) => [
-                  LocationMutation.resolvePath(location.directory, hunk.path),
+                  FileAccess.resolvePath(location.directory, hunk.path),
                   ...(hunk.type === "update" && hunk.movePath
-                    ? [LocationMutation.resolvePath(location.directory, hunk.movePath)]
+                    ? [FileAccess.resolvePath(location.directory, hunk.movePath)]
                     : []),
                 ])
               : []
@@ -114,17 +114,11 @@ export const Plugin = {
               const prepared: Prepared[] = []
               const updates = new Map<string, string>()
               const resolveTarget = Effect.fnUntraced(function* (value: string) {
-                const target = yield* mutation.resolve({ path: value, kind: "file" })
+                const target = yield* access.resolve({ path: value, kind: "file" })
                 if (!target.externalDirectory) return target
-                yield* permission.assert({
-                  ...LocationMutation.externalDirectoryPermission(target.externalDirectory),
-                  metadata: {
-                    filepath: target.absolute,
-                    parentDir: target.externalDirectory.directory,
-                  },
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source,
+                yield* access.authorizeExternal([target], context, {
+                  filepath: target.absolute,
+                  parentDir: target.externalDirectory.directory,
                 })
                 return target
               })

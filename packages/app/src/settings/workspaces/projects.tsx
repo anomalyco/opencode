@@ -42,7 +42,7 @@ export const SettingsProjects: Component = () => {
     const name = () => displayName(props.project)
     return (
       <div
-        class="group flex items-center justify-between gap-5 px-4 py-2.5 rounded-lg bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)] transition-all hover:bg-v2-background-bg-layer-01"
+        class="group mx-px flex items-center justify-between gap-5 px-4 py-2.5 rounded-lg bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)] transition-all hover:bg-v2-background-bg-layer-01"
         onClick={() => openProjectSettings(props.project, props.server)}
       >
         <div class="flex items-center gap-2.5 min-w-0 flex-1">

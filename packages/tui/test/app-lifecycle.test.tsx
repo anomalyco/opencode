@@ -5,10 +5,9 @@ import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/util/global"
 import path from "node:path"
-import { createEventStream, createFetch, directory, json, type FetchHandler } from "./fixture/tui-client"
+import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
-import type { TuiInput } from "../src/app"
-import type { Config } from "../src/config"
+import { createAppFixture } from "./fixture/app"
 import type { PluginInfo } from "@opencode-ai/client"
 
 test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deletions at width %s", async (width) => {
@@ -1229,7 +1228,7 @@ test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => 
 })
 
 test.each(["manual", "select"] as const)(
-  "selection copy and dismissal respect %s mode in the prompt and terminal pane",
+  "selection copy and pane management respect %s mode in the prompt and terminal pane",
   async (copy) => {
     const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
     setup.renderer.start()
@@ -1359,6 +1358,19 @@ test.each(["manual", "select"] as const)(
       expect(input).toEqual(["\x03"])
       expect(setup.renderer.hasSelection).toBeFalse()
       expect(setup.renderer.isDestroyed).toBeFalse()
+
+      setup.mockInput.pressKey("x", { ctrl: true })
+      setup.mockInput.pressArrow("up")
+      await setup.waitFor(() => terminal.isDestroyed)
+      expect(setup.renderer.currentFocusedEditor?.plainText).toBe("")
+      setup.mockInput.pressKey("x", { ctrl: true })
+      setup.mockInput.pressKey("t")
+      await setup.waitForFrame((frame) => frame.includes("alpha beta gamma"))
+      expect(setup.renderer.currentFocusedRenderable).toBeInstanceOf(EmbeddedTerminalRenderable)
+      setup.mockInput.pressKey("x", { ctrl: true })
+      setup.mockInput.pressArrow("down")
+      await setup.waitForFrame((frame) => frame.includes("Subagents") && frame.includes("Terminals"))
+      expect(setup.renderer.currentFocusedRenderable).not.toBeInstanceOf(EmbeddedTerminalRenderable)
 
       setup.renderer.destroy()
       await task
@@ -1531,53 +1543,94 @@ test("server plugin failures share one notice and use source names before an ID 
   expect(setup.captureCharFrame()).toContain("Open plugins")
 })
 
-async function createAppFixture(
-  input: {
-    width?: number
-    height?: number
-    state?: string
-    config?: Config.Info
-    args?: TuiInput["args"]
-    fetch?: FetchHandler
-  } = {},
-) {
-  const { run } = await import("../src/app")
-  const setup = await createTestRenderer({
-    width: input.width ?? 100,
-    height: input.height ?? 30,
-    useThread: false,
-    kittyKeyboard: true,
-  })
-  setup.renderer.start()
-  const ready = Promise.withResolvers<void>()
-  const events = createEventStream()
-  const calls = createFetch(input.fetch, events)
-  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
-  const task = Effect.runPromise(
-    run({
-      app: { name: "test", version: "test", channel: "test" },
-      server: { endpoint: { url: server.url.toString() } },
-      config: { get: async () => input.config ?? { animations: false }, update: async () => ({}) },
-      packages: { prepare: async () => ({ directory: "" }) },
-      terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
-      args: input.args ?? {},
-      log: () => {},
-    }).pipe(
-      Effect.provide(input.state ? Global.layerWith({ state: input.state }) : AppNodeBuilder.build(Global.node)),
-      Effect.provide(FileSystem.layerNoop({})),
-    ),
-  )
-  return {
-    ...setup,
-    events,
-    ready: ready.promise,
-    async [Symbol.asyncDispose]() {
-      try {
-        if (!setup.renderer.isDestroyed) setup.renderer.destroy()
-        await task
-      } finally {
-        await server.stop()
-      }
-    },
-  }
-}
+test.each([44, 100])(
+  "retry countdown updates and clears with the retry lifecycle at width %s",
+  async (width) => {
+    await using state = await tmpdir()
+    const session = {
+      id: "ses_countdown",
+      projectID: "proj_test",
+      location: { directory },
+      title: "Retry countdown",
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 1, updated: 1 },
+    }
+    const model = { id: "model", providerID: "provider" }
+    const error = { type: "provider.transport" as const, message: "Provider unavailable" }
+    await using setup = await createAppFixture({
+      width,
+      state: state.path,
+      args: { sessionID: session.id },
+      config: { animations: false, tabs: { enabled: false } },
+      fetch: (url) => {
+        if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+        if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+        if (url.pathname === `/api/session/${session.id}/message`)
+          return json({
+            data: [
+              {
+                id: "msg_countdown",
+                type: "assistant",
+                agent: "build",
+                model,
+                content: [],
+                error,
+                retry: { attempt: 2, at: Date.now() + 2_500, error },
+                time: { created: 1 },
+              },
+            ],
+            cursor: {},
+          })
+        if ([`/api/session/${session.id}/inbox`, `/api/session/${session.id}/permission`].includes(url.pathname))
+          return json({ data: [] })
+        return undefined
+      },
+    })
+    await setup.ready
+    await setup.waitForFrame((frame) => frame.includes("Retrying in 3s"))
+    expect(setup.captureCharFrame()).toContain("attempt 2")
+    expect(setup.captureCharFrame()).toContain("Provider unavailable")
+    expect(setup.captureCharFrame()).not.toContain("Error:")
+    await setup.waitForFrame((frame) => frame.includes("Retrying in 2s"), { maxPasses: 200 })
+    await setup.waitForFrame((frame) => frame.includes("Retrying in 1s"), { maxPasses: 200 })
+    await setup.waitForFrame((frame) => frame.includes("Retry due"), { maxPasses: 200 })
+    expect(setup.captureCharFrame()).not.toContain("in 0s")
+
+    setup.events.emit({
+      id: "evt_countdown_rescheduled",
+      created: 2,
+      type: "session.retry.scheduled",
+      durable: { aggregateID: session.id, seq: 1, version: 1 },
+      data: { sessionID: session.id, assistantMessageID: "msg_countdown", attempt: 3, at: Date.now() + 10_500, error },
+    })
+    await setup.waitForFrame((frame) => frame.includes("Retrying in 11s") && frame.includes("attempt 3"))
+    setup.events.emit({
+      id: "evt_countdown_started",
+      created: 3,
+      type: "session.step.started",
+      durable: { aggregateID: session.id, seq: 2, version: 1 },
+      data: { sessionID: session.id, assistantMessageID: "msg_countdown", agent: "build", model },
+    })
+    await setup.waitForFrame((frame) => !frame.includes("Retrying") && !frame.includes("Retry due"))
+
+    setup.events.emit({
+      id: "evt_countdown_expired",
+      created: 4,
+      type: "session.retry.scheduled",
+      durable: { aggregateID: session.id, seq: 3, version: 1 },
+      data: { sessionID: session.id, assistantMessageID: "msg_countdown", attempt: 4, at: Date.now() - 1_000, error },
+    })
+    await setup.waitForFrame((frame) => frame.includes("Retry due") && frame.includes("attempt 4"))
+    expect(setup.captureCharFrame()).not.toContain("in -")
+    setup.events.emit({
+      id: "evt_countdown_interrupted",
+      created: 5,
+      type: "session.execution.interrupted",
+      durable: { aggregateID: session.id, seq: 4, version: 1 },
+      data: { sessionID: session.id, reason: "shutdown" },
+    })
+    await setup.waitForFrame((frame) => !frame.includes("Retrying") && !frame.includes("Retry due"))
+  },
+  15_000,
+)

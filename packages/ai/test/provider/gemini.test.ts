@@ -1643,19 +1643,14 @@ describe("Gemini route", () => {
     }),
   )
 
-  it.effect("maps current blocking and invalid-output finish reasons", () =>
+  it.effect("preserves blocking finishes and rejects invalid-output finish reasons", () =>
     Effect.gen(function* () {
       const reasons = [
         ["MODEL_ARMOR", "content-filter"],
         ["IMAGE_PROHIBITED_CONTENT", "content-filter"],
         ["IMAGE_RECITATION", "content-filter"],
         ["LANGUAGE", "content-filter"],
-        ["UNEXPECTED_TOOL_CALL", "error"],
-        ["NO_IMAGE", "error"],
         ["IMAGE_OTHER", "unknown"],
-        ["TOO_MANY_TOOL_CALLS", "error"],
-        ["MISSING_THOUGHT_SIGNATURE", "error"],
-        ["MALFORMED_RESPONSE", "error"],
       ] as const
 
       for (const [raw, normalized] of reasons) {
@@ -1665,6 +1660,26 @@ describe("Gemini route", () => {
           ),
         )
         expect(response.finishReason).toEqual({ normalized, raw })
+      }
+
+      for (const raw of [
+        "MALFORMED_FUNCTION_CALL",
+        "UNEXPECTED_TOOL_CALL",
+        "NO_IMAGE",
+        "TOO_MANY_TOOL_CALLS",
+        "MISSING_THOUGHT_SIGNATURE",
+        "MALFORMED_RESPONSE",
+      ]) {
+        const event = { candidates: [{ finishReason: raw, finishMessage: "Provider detail" }], responseId: "failure" }
+        const error = yield* LLMClient.generate(request).pipe(
+          Effect.provide(fixedResponse(sseEvents(event))),
+          Effect.flip,
+        )
+        expect(error).toMatchObject({
+          _tag: "AI.Error",
+          reason: { _tag: "InvalidProviderOutput", body: JSON.stringify(event), http: { status: 200 } },
+          message: `Gemini stopped with ${raw}`,
+        })
       }
     }),
   )

@@ -155,11 +155,11 @@ export function Titlebar(props: {
         height:
           platform.platform === "web"
             ? bottom()
-              ? "calc(28px + max(8px, env(safe-area-inset-bottom, 0px)))"
+              ? "calc(28px + max(8px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))))"
               : "calc(28px + max(8px, env(safe-area-inset-top, 0px)))"
             : undefined,
         "padding-top": bottom() ? "0px" : "env(safe-area-inset-top, 0px)",
-        "padding-bottom": bottom() ? "env(safe-area-inset-bottom, 0px)" : "0px",
+        "padding-bottom": bottom() ? "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))" : "0px",
         "min-height": minHeight(),
         // Keep native macOS traffic lights clear even when the desktop window is narrow.
         "padding-left": macTrafficLights() ? `${macTrafficLightsBaseWidth / zoom()}px` : 0,
@@ -356,10 +356,10 @@ export function Titlebar(props: {
                   aria-label={language.t("home.title")}
                   aria-pressed={layout.route().type === "home"}
                 >
-                  <Icon name="grid-plus" />
+                  <Icon name="grid-plus" class="shrink-0" />
                   <span class="min-w-0 truncate">{language.t("home.title")}</span>
                   <span
-                    class="ms-auto shrink-0 whitespace-nowrap text-v2-text-text-faint opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+                    class="ms-auto hidden min-w-0 truncate text-v2-text-text-faint group-hover:block group-focus-visible:block"
                     aria-hidden="true"
                   >
                     <bdi dir="ltr">{command.keybind("home.toggle")}</bdi>
@@ -440,7 +440,7 @@ export function Titlebar(props: {
                 class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2 md:pe-3"
                 classList={{
                   "pt-[max(0px,calc(8px-env(safe-area-inset-top,0px)))]": !bottom() && !windows(),
-                  "pb-[max(0px,calc(8px-env(safe-area-inset-bottom,0px)))]": bottom(),
+                  "pb-[max(0px,calc(8px-var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))))]": bottom(),
                   "pl-4": macTrafficLights(),
                   // Center the 20px app icon over the sidebar's 16px icon column.
                   "ps-3.5": windows(),
@@ -654,10 +654,10 @@ export function Titlebar(props: {
                               onClick={openNewTab}
                               aria-label={language.t("command.session.new")}
                             >
-                              <Icon name="edit" />
+                              <Icon name="edit" class="shrink-0" />
                               <span class="min-w-0 truncate">{language.t("command.session.new")}</span>
                               <span
-                                class="ms-auto shrink-0 whitespace-nowrap text-v2-text-text-faint opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+                                class="ms-auto hidden min-w-0 truncate text-v2-text-text-faint group-hover:block group-focus-visible:block"
                                 aria-hidden="true"
                               >
                                 <bdi dir="ltr">{command.keybind("tab.new")}</bdi>
@@ -680,20 +680,8 @@ export function Titlebar(props: {
                                 onReorder={(keys) => tabsStoreActions.reorder(keys)}
                               />
                             </div>
-                            <button
-                              type="button"
-                              data-action="vertical-tabs-settings"
-                              data-state={layout.route().type === "settings" ? "pressed" : undefined}
-                              class="mt-2 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base data-[state=pressed]:bg-v2-background-bg-layer-02 data-[state=pressed]:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02 [app-region:no-drag]"
-                              onClick={openSettings}
-                              aria-label={language.t("sidebar.settings")}
-                              aria-pressed={layout.route().type === "settings"}
-                            >
-                              <Icon name="settings-gear" />
-                              {language.t("sidebar.settings")}
-                            </button>
-                            <div data-slot="vertical-tabs-footer" class="flex w-full shrink-0 items-center gap-1.5">
-                              <TitlebarRightMount />
+                            <div data-slot="vertical-tabs-footer" class="mt-2 flex w-full shrink-0 flex-col">
+                              <TitlebarRightMount vertical />
                             </div>
                           </Portal>
                         )}

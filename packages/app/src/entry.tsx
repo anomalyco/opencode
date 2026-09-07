@@ -7,6 +7,7 @@ import { loadInitialLocale } from "@/runtime/i18n/language"
 import { PlatformProvider } from "@/runtime/platform/platform"
 import { createWebPlatform } from "@/runtime/platform/web"
 import { isStandalone, PwaRoutePersistence, restorePwaRoute } from "@/runtime/platform/pwa"
+import { KeyboardInsets } from "@/runtime/platform/keyboard"
 import en from "@/runtime/i18n/en"
 import zh from "@/runtime/i18n/zh"
 import { authFromToken } from "@/runtime/server/api"
@@ -94,6 +95,7 @@ if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
               canonicalLocalServer={server ? ServerConnection.key(server) : undefined}
               servers={server ? [server] : []}
             >
+              <KeyboardInsets />
               {standalone && <PwaRoutePersistence />}
             </AppInterface>
           </AppBaseProviders>

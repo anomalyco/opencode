@@ -78,7 +78,10 @@ const require = __cjs_mod__.createRequire(import.meta.url);
         input: { index: "src/preload/index.ts" },
         output: {
           format: "cjs",
-          entryFileNames: "[name].js",
+          // The package is "type": "module". Under --no-sandbox Electron loads the preload
+          // through Node's module loader, which treats a .js file as ESM and fails on
+          // require("electron"). The sandboxed path ignores the extension.
+          entryFileNames: "[name].cjs",
         },
       },
     },

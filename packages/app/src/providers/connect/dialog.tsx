@@ -110,7 +110,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
     active: undefined as string | undefined,
     connecting: undefined as string | undefined,
   })
-  const featured = ["opencode", "opencode-go", "anthropic", "openai", "google", "openrouter", "vercel"]
+  const featured = ["opencode-go", "opencode", "anthropic", "openai", "google", "openrouter", "vercel"]
   const custom = () => ({ id: CUSTOM_ID, name: language.t("dialog.provider.custom.label") })
   const all = createMemo(() => {
     language.locale()

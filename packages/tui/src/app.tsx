@@ -64,7 +64,6 @@ import { DialogStatus } from "./component/dialog-status"
 import { DialogConfig } from "./component/dialog-config"
 import { DialogDebug } from "./component/dialog-debug"
 import { DialogPair, type DialogPairCredentials } from "./component/dialog-pair"
-import { DialogUpdate } from "./component/dialog-update"
 import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
@@ -88,6 +87,7 @@ import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
 import { newSessionLocation } from "./config/new-session-location"
+import { UpdateNotificationProvider, useUpdateNotification, type UpdateSource } from "./context/update-notification"
 import { PluginProvider, usePlugin, type PackageSource } from "./plugin/context"
 import { localPluginDirectories } from "./plugin/discovery"
 import { PluginRoute, Slot } from "./plugin/render"
@@ -100,6 +100,7 @@ import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
 import { StorageProvider, useStorage } from "./context/storage"
 import { SessionTerminalsProvider } from "./context/session-terminals"
+import { PanelProvider, usePanel } from "./context/panel"
 import { SessionFrame } from "./component/session-frame"
 import { createTuiClipboard } from "./clipboard"
 
@@ -154,6 +155,7 @@ const appBindingCommands = [
   "provider.connect",
   "opencode.settings",
   "opencode.status",
+  "opencode.update",
   "server.pair",
   "service.restart",
   "opencode.debug",
@@ -185,10 +187,7 @@ export type TuiInput = {
   }
   args: Args
   config: Config.Interface
-  updater?: {
-    monitor: (notify: (version: string) => void, signal: AbortSignal) => Promise<void>
-    apply: (version: string) => Promise<void>
-  }
+  updater?: UpdateSource
   packages: PackageSource
   environment?: Readonly<Record<string, string>>
   terminalHandoff?: () => Promise<
@@ -397,22 +396,27 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                     <PromptRefProvider>
                                                                       <EditorContextProvider>
                                                                         <AttentionProvider>
-                                                                          <PluginProvider
-                                                                            packages={input.packages}
-                                                                            directories={pluginDirectories}
+                                                                          <UpdateNotificationProvider
+                                                                            updater={input.updater}
                                                                           >
-                                                                            <App
-                                                                              updater={input.updater}
-                                                                              pair={
-                                                                                input.server.endpoint.auth
-                                                                                  ? input.server.endpoint.auth
-                                                                                  : {
-                                                                                      username: "opencode",
-                                                                                      password: "",
-                                                                                    }
-                                                                              }
-                                                                            />
-                                                                          </PluginProvider>
+                                                                            <PanelProvider>
+                                                                              <PluginProvider
+                                                                                packages={input.packages}
+                                                                                directories={pluginDirectories}
+                                                                              >
+                                                                                <App
+                                                                                  pair={
+                                                                                    input.server.endpoint.auth
+                                                                                      ? input.server.endpoint.auth
+                                                                                      : {
+                                                                                          username: "opencode",
+                                                                                          password: "",
+                                                                                        }
+                                                                                  }
+                                                                                />
+                                                                              </PluginProvider>
+                                                                            </PanelProvider>
+                                                                          </UpdateNotificationProvider>
                                                                         </AttentionProvider>
                                                                       </EditorContextProvider>
                                                                     </PromptRefProvider>
@@ -462,7 +466,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
 })
 
-function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"] }) {
+function App(props: { pair?: DialogPairCredentials }) {
   const log = useLog({ component: "app" })
   const app = useTuiApp()
   const startup = useTuiStartup()
@@ -474,10 +478,12 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
   const dialog = useDialog()
   const local = useLocal()
   const sessionTabs = useSessionTabs()
+  const panels = usePanel()
   const keymap = Keymap.use()
   const event = useEvent()
   const client = useClient()
   const toast = useToast()
+  const updater = useUpdateNotification()
   const theme = useTheme()
   const { mode, supports, setMode, locked, lock, unlock } = useThemes()
   const data = useData()
@@ -500,40 +506,6 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
   })
   const [layout, updateLayout] = useStorage().store<{ verticalTabsWidth?: number }>("layout", {
     initial: { verticalTabsWidth: SESSION_SIDEBAR_WIDTH },
-  })
-  const [updateNotifications, markUpdateNotification] = useStorage().store<{ versions: string[] }>(
-    "update-notifications",
-    { initial: { versions: [] } },
-  )
-  const showUpdate = (version: string) => {
-    const updater = props.updater
-    if (!updater || updateNotifications.versions.includes(version)) return
-    void markUpdateNotification((draft) => {
-      draft.versions = [...draft.versions, version].slice(-100)
-    }).catch((error) => log.error("failed to persist update notification", { error }))
-    const key = `update:${version}`
-    dialog.replace(
-      () => (
-        <DialogUpdate
-          dialogKey={key}
-          version={version}
-          install={() => updater.apply(version)}
-          restart={client.restart}
-        />
-      ),
-      undefined,
-      { key },
-    )
-    dialog.setCentered(true)
-  }
-  onMount(() => {
-    const updater = props.updater
-    if (!updater) return
-    const controller = new AbortController()
-    onCleanup(() => controller.abort())
-    void updater.monitor(showUpdate, controller.signal).catch((error) => {
-      if (!controller.signal.aborted) log.error("update monitor failed", { error })
-    })
   })
   const tabsResize = createPaneResize({
     value: () => layout.verticalTabsWidth ?? SESSION_SIDEBAR_WIDTH,
@@ -608,8 +580,21 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
   const pasteSummaryEnabled = () => config.data.prompt?.paste !== "full"
   const tabsVertical = () =>
     config.data.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width, tabsResize.preferredSize())
-  const tabsVisible = () => sessionTabs.enabled() && sessionTabs.tabs().length > 0 && route.data.type !== "plugin"
+  const tabsAvailable = () => sessionTabs.enabled() && sessionTabs.tabs().length > 0 && route.data.type !== "plugin"
+  const fullscreenPanel = () =>
+    route.data.type === "session" &&
+    panels.current()?.sessionID === route.data.sessionID &&
+    panels.presentation() === "fullscreen"
+  const tabsVisible = () => tabsAvailable() && !fullscreenPanel()
   const verticalTabsVisible = () => tabsVisible() && tabsVertical()
+
+  // Measure the prospective split layout, even while full-screen hides the tabs.
+  createEffect(() => panels.setWidth(dimensions().width - (tabsAvailable() && tabsVertical() ? tabsResize.size() : 0)))
+  createEffect(() => {
+    const current = panels.current()
+    if (!current || (route.data.type === "session" && route.data.sessionID === current.sessionID)) return
+    panels.close()
+  })
 
   createEffect(() => {
     renderer.useMouse = config.data.mouse
@@ -737,6 +722,7 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
         slash: { name: "new", aliases: ["clear"] },
         run: () => {
           const model = local.model.current()
+          const agent = local.agent.current()
           const current =
             route.data.type === "session"
               ? (data.session.get(route.data.sessionID)?.location ?? location.ref)
@@ -750,6 +736,7 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
               location.error?.location,
             ),
           })
+          if (agent) local.agent.set(agent.id)
           if (model) local.model.set(model)
           dialog.clear()
         },
@@ -970,6 +957,17 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
         },
         category: "System",
       },
+      ...(updater.open
+        ? [
+            {
+              name: "opencode.update",
+              title: "Update OpenCode",
+              slash: { name: "update" },
+              run: () => updater.open?.("manual"),
+              category: "System",
+            },
+          ]
+        : []),
       {
         name: "server.pair",
         title: "Pair device",

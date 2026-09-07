@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js"
+import { createSignal, For, Show, type ParentProps } from "solid-js"
 import { AppIcon } from "@opencode-ai/ui/app-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
@@ -10,7 +10,7 @@ import { type OpenApp, useOpenInApp } from "@/session/files/open-in-app"
 
 export function OpenInAppButton(props: { directory: () => string }) {
   const language = useLanguage()
-  const state = useOpenInApp(props)
+  const state = useOpenInApp({ path: props.directory })
 
   return (
     <Show when={props.directory() && state.canOpen()}>
@@ -25,7 +25,7 @@ export function OpenInAppButton(props: { directory: () => string }) {
             onClick={(event) => {
               event.stopPropagation()
               if (state.opening()) return
-              state.openDir(state.current().id)
+              state.openPath(state.current().id)
             }}
             disabled={state.opening()}
             aria-label={language.t("session.header.open.ariaLabel", { app: state.current().label })}
@@ -52,46 +52,124 @@ export function OpenInAppButton(props: { directory: () => string }) {
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content class="open-in-app-v2-menu">
-              <Menu.Group>
-                <Menu.GroupLabel>{language.t("session.header.openIn")}</Menu.GroupLabel>
-                <Menu.RadioGroup
-                  value={state.current().id}
-                  onChange={(value) => {
-                    state.selectApp(value as OpenApp)
-                  }}
-                >
-                  <For each={state.options()}>
-                    {(option) => (
-                      <Menu.RadioItem
-                        value={option.id}
-                        disabled={state.opening()}
-                        onSelect={() => {
-                          state.selectApp(option.id)
-                          state.setMenu("open", false)
-                          state.openDir(option.id)
-                        }}
-                      >
-                        <AppIcon id={option.icon} />
-                        {option.label}
-                      </Menu.RadioItem>
-                    )}
-                  </For>
-                </Menu.RadioGroup>
-              </Menu.Group>
-              <Menu.Separator />
-              <Menu.Item
-                onSelect={() => {
-                  state.setMenu("open", false)
-                  state.copyPath()
-                }}
-              >
-                <Icon name="copy" size="small" class="text-icon-weak" />
-                {language.t("session.header.open.copyPath")}
-              </Menu.Item>
+              <OpenInAppMenuItemsV2 state={state} close={() => state.setMenu("open", false)} />
             </Menu.Content>
           </Menu.Portal>
         </Menu>
       </SplitButton>
+    </Show>
+  )
+}
+
+type OpenInAppState = ReturnType<typeof useOpenInApp>
+
+function OpenInAppMenuItemsV2(props: {
+  state: OpenInAppState
+  path?: () => string
+  reveal?: boolean
+  selection?: boolean
+  close?: () => void
+}) {
+  const language = useLanguage()
+  const path = () => props.path?.()
+
+  return (
+    <>
+      <Menu.Group>
+        <Menu.GroupLabel>{language.t("session.header.openIn")}</Menu.GroupLabel>
+        <Show
+          when={props.selection !== false}
+          fallback={
+            <For each={props.state.options()}>
+              {(option) => (
+                <Menu.Item
+                  disabled={props.state.opening()}
+                  onSelect={() => {
+                    props.state.selectApp(option.id)
+                    props.close?.()
+                    props.state.openPath(option.id, path(), props.reveal)
+                  }}
+                >
+                  <AppIcon id={option.icon} />
+                  {option.label}
+                </Menu.Item>
+              )}
+            </For>
+          }
+        >
+          <Menu.RadioGroup
+            value={props.state.current().id}
+            onChange={(value) => {
+              props.state.selectApp(value as OpenApp)
+            }}
+          >
+            <For each={props.state.options()}>
+              {(option) => (
+                <Menu.RadioItem
+                  value={option.id}
+                  closeOnSelect
+                  disabled={props.state.opening()}
+                  onSelect={() => {
+                    props.state.selectApp(option.id)
+                    props.close?.()
+                    props.state.openPath(option.id, path(), props.reveal)
+                  }}
+                >
+                  <AppIcon id={option.icon} />
+                  {option.label}
+                </Menu.RadioItem>
+              )}
+            </For>
+          </Menu.RadioGroup>
+        </Show>
+      </Menu.Group>
+      <Menu.Separator />
+      <Menu.Item
+        onSelect={() => {
+          props.close?.()
+          props.state.copyPath(path())
+        }}
+      >
+        <Icon name="copy" size="small" class="text-icon-weak" />
+        {language.t("session.header.open.copyPath")}
+      </Menu.Item>
+    </>
+  )
+}
+
+export function OpenInAppContextMenuV2(
+  props: ParentProps<{
+    state?: OpenInAppState
+    path: () => string
+  }>,
+) {
+  const state = props.state
+  if (!state) return props.children
+  const [open, setOpen] = createSignal(false)
+
+  return (
+    <Show when={state.canOpen() && props.path()} fallback={props.children}>
+      <Menu.Context modal={false} onOpenChange={setOpen}>
+        <Menu.Context.Trigger
+          as="div"
+          class="h-full w-full min-w-max"
+          data-slot="file-tree-v2-context-trigger"
+          data-context-menu-open={open() ? "" : undefined}
+        >
+          {props.children}
+        </Menu.Context.Trigger>
+        <Menu.Context.Portal>
+          <Menu.Context.Content class="open-in-app-v2-menu">
+            <OpenInAppMenuItemsV2
+              state={state}
+              path={props.path}
+              reveal
+              selection={false}
+              close={() => setOpen(false)}
+            />
+          </Menu.Context.Content>
+        </Menu.Context.Portal>
+      </Menu.Context>
     </Show>
   )
 }

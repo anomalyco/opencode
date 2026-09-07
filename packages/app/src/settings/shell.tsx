@@ -1,4 +1,5 @@
 import { Component, createEffect, createMemo, For, Show, onMount, startTransition } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Menu } from "@opencode-ai/ui/menu"
@@ -35,7 +36,7 @@ const sections = [
   [
     { value: "servers", icon: "server", label: "status.popover.tab.servers" },
     { value: "projects", icon: "folder", label: "settings.tab.projects" },
-    { value: "workspaces", icon: "workspace-isolated", label: "settings.tab.workspaces" },
+    { value: "workspaces", icon: "outline-worktree", label: "settings.tab.workspaces" },
   ],
   [
     { value: "providers", icon: "providers", label: "settings.providers.title" },
@@ -54,6 +55,7 @@ export const SettingsScreen: Component = () => {
   const servers = useServers()
   const tabs = useTabs()
   const global = useGlobal()
+  const [state, setState] = createStore({ worktreeFilterReset: 0 })
   let root: HTMLDivElement | undefined
 
   onMount(() => {
@@ -146,7 +148,14 @@ export const SettingsScreen: Component = () => {
                         </Show>
                         <For each={group}>
                           {(section) => (
-                            <Menu.RadioItem value={section.value} closeOnSelect>
+                            <Menu.RadioItem
+                              value={section.value}
+                              closeOnSelect
+                              onSelect={() => {
+                                if (section.value === "workspaces")
+                                  setState("worktreeFilterReset", (value) => value + 1)
+                              }}
+                            >
                               <Icon name={section.icon} />
                               {language.t(section.label)}
                             </Menu.RadioItem>
@@ -172,7 +181,12 @@ export const SettingsScreen: Component = () => {
                   <div class="flex flex-col gap-1 w-full">
                     <For each={group}>
                       {(section) => (
-                        <Tabs.Trigger value={section.value}>
+                        <Tabs.Trigger
+                          value={section.value}
+                          onClick={() => {
+                            if (section.value === "workspaces") setState("worktreeFilterReset", (value) => value + 1)
+                          }}
+                        >
                           <Icon name={section.icon} />
                           {language.t(section.label)}
                         </Tabs.Trigger>
@@ -208,7 +222,10 @@ export const SettingsScreen: Component = () => {
         </Tabs.Content>
         <SettingsServerScope directory={directory()}>
           <Tabs.Content value="workspaces" class="settings-panel">
-            <SettingsWorkspaces activeDirectory={directory()} />
+            <SettingsWorkspaces
+              activeDirectory={directory()}
+              resetProjectFilter={() => state.worktreeFilterReset}
+            />
           </Tabs.Content>
           <Tabs.Content value="providers" class="settings-panel">
             <SettingsProviders directory={directory()} onBack={showProviders} />

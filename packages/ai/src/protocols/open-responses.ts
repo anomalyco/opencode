@@ -923,7 +923,7 @@ const joinReasoningText = (parts: ReadonlyArray<string | undefined>) => {
   return parts.filter((part) => part !== undefined).join("\n\n")
 }
 
-const outputItemID = (state: ParserState, event: Event) =>
+const outputItemID = (state: Pick<ParserState, "outputItems">, event: Event) =>
   event.output_index === undefined ? event.item_id : (state.outputItems[event.output_index] ?? event.item_id)
 
 const ITEM_ID_PREFIX: Readonly<Record<string, string>> = {
@@ -935,7 +935,11 @@ const ITEM_ID_PREFIX: Readonly<Record<string, string>> = {
 
 // An item without an id adopts the id already open in its output slot,
 // otherwise it gets a locally minted one.
-const resolveItem = (state: ParserState, item: StreamItem, index: number | undefined): OutputItem => ({
+const resolveItem = (
+  state: Pick<ParserState, "outputItems">,
+  item: StreamItem,
+  index: number | undefined,
+): OutputItem => ({
   ...item,
   id:
     item.id ??
@@ -945,7 +949,7 @@ const resolveItem = (state: ParserState, item: StreamItem, index: number | undef
 
 // Registered output slots are authoritative for `item_id` routing, and items
 // are resolved here so everything downstream can rely on `item.id`.
-export const normalize = (state: ParserState, input: Event): NormalizedEvent => ({
+export const normalize = (state: Pick<ParserState, "outputItems">, input: Event): NormalizedEvent => ({
   ...input,
   item_id: input.item_id === undefined ? undefined : outputItemID(state, input),
   item: input.item ? resolveItem(state, input.item, input.output_index) : input.item,
