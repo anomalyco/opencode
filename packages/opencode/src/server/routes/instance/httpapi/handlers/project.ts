@@ -5,7 +5,7 @@ import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { ProjectNotFoundError } from "../errors"
-import { markInstanceForReload } from "../lifecycle"
+import { reloadInstance } from "../lifecycle"
 
 export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", (handlers) =>
   Effect.gen(function* () {
@@ -25,7 +25,7 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
       const next = yield* svc.initGit({ directory: ctx.directory, project: ctx.project })
       if (next.id === ctx.project.id && next.vcs === ctx.project.vcs && next.worktree === ctx.project.worktree)
         return next
-      yield* markInstanceForReload(ctx, {
+      yield* reloadInstance(ctx, {
         directory: ctx.directory,
         worktree: ctx.directory,
         project: next,

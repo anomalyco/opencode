@@ -11,7 +11,7 @@ import { InstanceStore } from "../../src/project/instance-store"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import { Snapshot } from "../../src/snapshot"
 import { resetDatabase } from "../fixture/db"
-import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
@@ -53,13 +53,13 @@ const disposedEvents = (seen: GlobalEvent[], dir: string) =>
   seen.filter((evt) => evt.directory === dir && evt.payload.type === "server.instance.disposed").length
 
 describe("project.initGit endpoint", () => {
-  it.instance("initializes git and reloads immediately", () =>
+  it.effect("initializes git and reloads immediately", () =>
     Effect.gen(function* () {
-      const tmp = yield* TestInstance
+      const directory = yield* tmpdirScoped()
       const fs = yield* FSUtil.Service
       const events = yield* collectGlobalEvents()
 
-      const init = yield* request(tmp.directory, "/project/git/init", {
+      const init = yield* request(directory, "/project/git/init", {
         method: "POST",
       })
       const body = yield* json(init)
@@ -67,21 +67,21 @@ describe("project.initGit endpoint", () => {
       expect(body).toMatchObject({
         id: "global",
         vcs: "git",
-        worktree: tmp.directory,
+        worktree: directory,
       })
       // Reload behavior: bus emits exactly one server.instance.disposed for the directory.
-      expect(disposedEvents(events.seen, tmp.directory)).toBe(1)
-      expect(yield* fs.exists(path.join(tmp.directory, ".git", "opencode"))).toBe(false)
+      expect(disposedEvents(events.seen, directory)).toBe(1)
+      expect(yield* fs.exists(path.join(directory, ".git", "opencode"))).toBe(false)
 
-      const current = yield* request(tmp.directory, "/project/current")
+      const current = yield* request(directory, "/project/current")
       expect(current.status).toBe(200)
       expect(yield* json(current)).toMatchObject({
         id: "global",
         vcs: "git",
-        worktree: tmp.directory,
+        worktree: directory,
       })
 
-      const ctx = yield* InstanceStore.use.reload({ directory: tmp.directory })
+      const ctx = yield* InstanceStore.use.reload({ directory })
       const tracked = yield* Snapshot.Service.use((snapshot) => snapshot.track()).pipe(
         Effect.provideService(InstanceRef, ctx),
       )
