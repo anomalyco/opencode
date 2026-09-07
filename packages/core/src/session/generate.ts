@@ -1,6 +1,6 @@
 export * as SessionGenerate from "./generate.js"
 
-import { LLMClient, Message, type AIError } from "@opencode-ai/ai"
+import { AIError, ContentPolicyError, InvalidProviderOutputError, LLMClient, Message } from "@opencode-ai/ai"
 import { Effect } from "effect"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
@@ -56,6 +56,16 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
     })
     const response = yield* llm.generate(prepared.request, prepared.options)
     yield* Effect.logInfo("session generation usage diagnostic", { usage: response.usage })
+    if (response.finishReason.normalized === "content-filter")
+      return yield* new AIError({
+        reason: new ContentPolicyError({ message: "Provider blocked the response" }),
+      })
+    if (response.finishReason.normalized === "length" && !response.text && response.toolCalls.length === 0)
+      return yield* new AIError({
+        reason: new InvalidProviderOutputError({
+          message: "The model reached its output limit before producing text or a tool call",
+        }),
+      })
     return response.text
   }).pipe(instances.provide(input.session))
 })
