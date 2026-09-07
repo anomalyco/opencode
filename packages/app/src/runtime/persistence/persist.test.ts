@@ -115,6 +115,20 @@ describe("persistStore", () => {
     value.dispose()
   })
 
+  test("a remote revert to the saved value during a no-op local set clears an earlier held change", () => {
+    const listeners: PersistenceSyncCallback[] = []
+    const value = setup({ delay: 10_000, sync: [(subscriber) => listeners.push(subscriber), () => {}] })
+    value.set("label", "saved")
+    value.persist.flush()
+    value.set("label", "saved")
+    listeners[0]!({ key: "state", newValue: JSON.stringify({ count: 0, label: "changed" }), timeStamp: 0 })
+    listeners[0]!({ key: "state", newValue: JSON.stringify({ count: 0, label: "saved" }), timeStamp: 0 })
+    value.persist.flush()
+    expect(value.store).toEqual({ count: 0, label: "saved" })
+    expect(value.writes).toHaveLength(1)
+    value.dispose()
+  })
+
   test("a remote value arriving during a real local change is dropped in favour of the local one", () => {
     const listeners: PersistenceSyncCallback[] = []
     const value = setup({ delay: 10_000, sync: [(subscriber) => listeners.push(subscriber), () => {}] })

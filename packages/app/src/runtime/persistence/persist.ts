@@ -81,13 +81,16 @@ export function persistStore<T extends object>(input: {
 
   input.sync?.[0]((data) => {
     if (data.key !== input.name || (data.url ?? location.href) !== location.href) return
-    if (!data.newValue || data.newValue === last) return
+    if (!data.newValue) return
     // A real unsaved local change wins over another window's write, as in VS Code's storage
-    // service; whether the change is real is only known when the store is serialized.
+    // service; whether the change is real is only known when the store is serialized. Every
+    // remote value replaces the held one, including a revert to `last`, so the save sees the
+    // other window's final state rather than an intermediate one.
     if (dirty) {
       remote = data.newValue
       return
     }
+    if (data.newValue === last) return
     hydrate(data.newValue)
   })
 
