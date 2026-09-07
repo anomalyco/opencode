@@ -6,9 +6,10 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Skill } from "@opencode-ai/core/skill"
+import { Preferences } from "@opencode-ai/core/preferences"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Skill.node, Agent.node, Bus.node])))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Skill.node, Agent.node, Bus.node, Preferences.node])))
 
 const info = (id: string, description: string) =>
   Skill.Info.make({
@@ -20,6 +21,23 @@ const info = (id: string, description: string) =>
   })
 
 describe("Skill", () => {
+  it.effect("applies preferences after registration precedence and preserves disabled inventory", () =>
+    Effect.gen(function* () {
+      const skills = yield* Skill.Service
+      const preferences = yield* Preferences.Service
+      const target = { kind: "skill.activation", id: Skill.ID.make("review") } as const
+      yield* skills.transform((editor) => editor.add(info("review", "First")))
+      yield* preferences.set(target, "disabled")
+      yield* skills.transform((editor) => editor.add(info("review", "Override")))
+      yield* skills.reload()
+      expect(yield* skills.list()).toEqual([info("review", "Override")])
+      expect(yield* skills.get(target.id).pipe(Effect.flip)).toBeInstanceOf(Skill.DisabledError)
+      yield* preferences.reset(target)
+      expect(yield* skills.get(target.id)).toEqual(info("review", "Override"))
+      expect(yield* skills.list()).toEqual([info("review", "Override")])
+    }),
+  )
+
   it.effect("reads the current editor entry by ID", () =>
     Effect.gen(function* () {
       const skill = yield* Skill.Service

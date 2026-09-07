@@ -9,6 +9,7 @@ import { useMcpToggle } from "@/providers/connect/mcp"
 import { pluginLabels } from "@/providers/catalog/plugin"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { InlineServerSelect } from "@/settings/server-select"
+import { SkillToggle } from "./skill-toggle"
 import "@/settings/settings.css"
 
 interface McpRowItem {
@@ -140,11 +141,14 @@ export const SettingsExtensions: Component = () => {
               <div class="bg-[var(--v2-background-bg-base)] border-[0.5px] border-[var(--v2-border-border-base)] rounded-[8px] pl-4 pr-3 overflow-hidden">
                 <For each={skills()}>
                   {(skill) => (
-                    <div class="py-4 flex items-center justify-between border-b-[0.5px] border-[var(--v2-border-border-base)] last:border-b-0">
+                    <div class="py-4 flex items-center justify-between gap-3 border-b-[0.5px] border-[var(--v2-border-border-base)] last:border-b-0">
                       <div class="flex items-center gap-2.5 min-w-0">
                         <Icon name="post-skill" class="text-v2-icon-icon-muted shrink-0" />
-                        <span class="text-13-medium text-v2-text-text-base truncate">{skill.name}</span>
+                        <span dir="auto" class="text-13-medium text-v2-text-text-base truncate">
+                          {skill.name}
+                        </span>
                       </div>
+                      <SkillToggle id={skill.id} name={skill.name} />
                     </div>
                   )}
                 </For>

@@ -96,11 +96,20 @@ export async function loadRunCommands(
   ref: LocationRef,
   signal?: AbortSignal,
 ): Promise<RunCommand[]> {
-  const [commands, skills] = await Promise.all([
+  const [commands, skills, preferences] = await Promise.all([
     sdk.command.list(location(ref), ...requestOptions(signal)),
     sdk.skill.list(location(ref), ...requestOptions(signal)),
+    sdk.preferences.list(...requestOptions(signal)),
   ])
-  return [...commands.data.map(runCommand), ...skills.data.filter((skill) => skill.slash !== false).map(runSkill)]
+  const disabled = new Set(
+    preferences
+      .filter((entry) => entry.target.kind === "skill.activation" && entry.value === "disabled")
+      .map((entry) => entry.target.id),
+  )
+  return [
+    ...commands.data.map(runCommand),
+    ...skills.data.filter((skill) => !disabled.has(skill.id) && skill.slash !== false).map(runSkill),
+  ]
 }
 
 export async function loadRunReferences(

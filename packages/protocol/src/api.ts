@@ -35,6 +35,7 @@ import { VcsGroup } from "./groups/vcs.js"
 import { MigrationGroup } from "./groups/migration.js"
 import { ConfigGroup } from "./groups/config.js"
 import { WorkspaceGroup } from "./groups/workspace.js"
+import { PreferencesGroup } from "./groups/preferences.js"
 
 type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
   | HttpApiGroup.AddMiddleware<typeof LocationGroup, LocationId>
@@ -90,6 +91,7 @@ type ApiGroups<
   | typeof DebugGroup
   | typeof MigrationGroup
   | typeof WorkspaceGroup
+  | typeof PreferencesGroup
   | typeof GenerateGroup
   | typeof PersistentPtyGroup
   | LocationGroups<LocationId>
@@ -178,6 +180,7 @@ const makeApiFromGroup = <
     .add(ReferenceGroup.middleware(locationMiddleware))
     .add(WorktreeGroup.middleware(locationMiddleware))
     .add(WorkspaceGroup)
+    .add(PreferencesGroup)
     .add(VcsGroup.middleware(locationMiddleware))
     .add(DebugGroup)
     .add(MigrationGroup)

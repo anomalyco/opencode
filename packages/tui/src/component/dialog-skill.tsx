@@ -1,10 +1,13 @@
 import { TextAttributes } from "@opentui/core"
-import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
+import { DialogSelect, type DialogSelectOption, type DialogSelectRef } from "../ui/dialog-select"
 import { createResource, createMemo, createSignal, Match, Switch } from "solid-js"
 import { useDialog } from "../ui/dialog"
 import { useTheme } from "../context/theme"
 import { errorMessage } from "../util/error"
 import { useData } from "../context/data"
+import { useClient } from "../context/client"
+import { useToast } from "../ui/toast"
+import type { Skill } from "@opencode-ai/schema/skill"
 import type { LocationRef } from "@opencode-ai/client"
 
 export type DialogSkillProps = {
@@ -14,37 +17,57 @@ export type DialogSkillProps = {
 
 export function DialogSkill(props: DialogSkillProps) {
   const dialog = useDialog()
+  dialog.setSize("medium")
+  const list = () => dialog.replace(() => <DialogSkillList {...props} />)
+  const toggle = () => dialog.replace(() => <DialogSkillToggle location={props.location} />)
+  return (
+    <DialogSelect
+      title="Skills"
+      renderFilter={false}
+      options={[
+        { title: "1. List skills", description: "Select a skill to use", value: "list", onSelect: list },
+        {
+          title: "2. Toggle skills",
+          description: "Enable or disable skills globally",
+          value: "toggle",
+          onSelect: toggle,
+        },
+      ]}
+      bindings={[
+        { bind: "1", title: "List skills", run: list },
+        { bind: "2", title: "Toggle skills", run: toggle },
+      ]}
+    />
+  )
+}
+
+export function DialogSkillList(props: DialogSkillProps) {
+  const dialog = useDialog()
   const data = useData()
+  const client = useClient()
   const theme = useTheme()
   dialog.setSize("large")
 
   const [loadError, setLoadError] = createSignal<unknown>()
 
-  const [skills] = createResource(() =>
-    Promise.resolve()
-      .then(async () => {
-        const current = data.location.skill.list(props.location)
-        if (current) return current
-        await data.location.skill.sync(props.location)
-        return data.location.skill.list(props.location) ?? []
-      })
-      // Catch so the rejected resource never reaches the memo below: reading
-      // skills() in an errored state re-throws and tears down the dialog.
-      .catch((error) => {
-        setLoadError(error)
-        return undefined
-      }),
+  const [loaded] = createResource(
+    () => ({ location: props.location, status: client.connection.status() }),
+    async () => {
+      setLoadError(undefined)
+      await data.location.skill.sync(props.location).catch(setLoadError)
+    },
   )
 
   const showError = createMemo(() => Boolean(loadError()))
 
   const options = createMemo<DialogSelectOption<string>[]>(() => {
     if (showError()) return []
-    const list = skills() ?? []
+    const list = data.location.skill.available(props.location) ?? []
     const maxWidth = Math.max(0, ...list.map((s) => s.name.length))
     return list.map((skill) => ({
       title: skill.name.padEnd(maxWidth),
       description: skill.description?.replace(/\s+/g, " ").trim(),
+      searchText: `${skill.id} ${skill.description ?? ""}`,
       value: skill.id,
       onSelect: () => {
         props.onSelect(skill.id)
@@ -57,8 +80,8 @@ export function DialogSkill(props: DialogSkillProps) {
     <DialogSelect
       title="Skills"
       options={options()}
-      renderFilter={!showError() && !skills.loading}
-      locked={showError() || skills.loading}
+      renderFilter={!showError() && !loaded.loading}
+      locked={showError() || loaded.loading}
       emptyView={
         <Switch
           fallback={
@@ -76,12 +99,132 @@ export function DialogSkill(props: DialogSkillProps) {
               <text fg={theme.text.subdued}>Close and reopen Skills to try again.</text>
             </box>
           </Match>
-          <Match when={skills.loading}>
+          <Match when={loaded.loading}>
             <box paddingLeft={4} paddingRight={4}>
               <text fg={theme.text.subdued}>Loading skills…</text>
             </box>
           </Match>
         </Switch>
+      }
+      noMatchView={
+        <box paddingLeft={4} paddingRight={4}>
+          <text fg={theme.text.subdued}>No skills found</text>
+        </box>
+      }
+    />
+  )
+}
+
+export function DialogSkillToggle(props: { location?: LocationRef }) {
+  const dialog = useDialog()
+  const data = useData()
+  const client = useClient()
+  const theme = useTheme("elevated")
+  const toast = useToast()
+  dialog.setSize("large")
+
+  const [loadError, setLoadError] = createSignal<unknown>()
+  const [pending, setPending] = createSignal<string>()
+  const [select, setSelect] = createSignal<DialogSelectRef<string>>()
+  const [loaded] = createResource(
+    () => ({ location: props.location, status: client.connection.status() }),
+    async () => {
+      setLoadError(undefined)
+      await data.location.skill.sync(props.location).catch(setLoadError)
+    },
+  )
+  const preferences = createMemo(
+    () =>
+      new Map(
+        (data.preferences.list() ?? [])
+          .filter((entry) => entry.target.kind === "skill.activation")
+          .map((entry) => [entry.target.id, entry.value]),
+      ),
+  )
+
+  const change = async (id: string, value?: Skill.Activation) => {
+    if (pending() || loaded.loading || loadError()) return
+    setPending(id)
+    const target = { kind: "skill.activation", id }
+    await (
+      value === undefined ? client.api.preferences.reset(target) : client.api.preferences.set({ ...target, value })
+    )
+      .then(async () => {
+        data.preferences.invalidate()
+        await data.preferences.sync()
+      })
+      .catch((error) => toast.show({ title: "Could not update skill", message: errorMessage(error), variant: "error" }))
+      .finally(() => setPending(undefined))
+  }
+
+  const options = createMemo<DialogSelectOption<string>[]>(() => {
+    if (loadError()) return []
+    return (data.location.skill.list(props.location) ?? [])
+      .toSorted((a, b) => a.name.localeCompare(b.name))
+      .map((skill) => {
+        const enabled = preferences().get(skill.id) !== "disabled"
+        return {
+          title: skill.name,
+          value: skill.id,
+          description: skill.description?.replace(/\s+/g, " ").trim(),
+          searchText: `${skill.id} ${skill.description ?? ""}`,
+          footer: pending() === skill.id ? "Saving …" : enabled ? "Enabled ✓" : "Disabled ○",
+          footerColor:
+            pending() === skill.id
+              ? theme.text.subdued
+              : enabled
+                ? theme.text.formfield.selected
+                : theme.text.formfield.default,
+          onSelect: () => void change(skill.id, enabled ? "disabled" : "enabled"),
+        }
+      })
+  })
+
+  return (
+    <DialogSelect
+      title="Toggle skills"
+      titleView={
+        <box flexShrink={1}>
+          <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
+            Toggle skills
+          </text>
+          <text fg={theme.text.subdued}>Applies across all projects on this server</text>
+        </box>
+      }
+      placeholder="Search skills"
+      ref={setSelect}
+      options={options()}
+      preserveSelection
+      locked={loaded.loading || Boolean(loadError())}
+      footerHints={[
+        {
+          title: "enter",
+          label: preferences().get(select()?.selected?.value ?? "") === "disabled" ? "enable" : "disable",
+        },
+        { title: "ctrl+r", label: "reset to default" },
+      ]}
+      bindings={[
+        {
+          bind: "ctrl+r",
+          title: "Reset skill preference",
+          run: () => {
+            const id = select()?.selected?.value
+            if (id) void change(id)
+          },
+        },
+      ]}
+      emptyView={
+        <box paddingLeft={4} paddingRight={4}>
+          <Switch fallback={<text fg={theme.text.subdued}>No skills available</text>}>
+            <Match when={loadError()}>
+              <text fg={theme.text.feedback.error.default}>Could not load skills: {errorMessage(loadError())}</text>
+              <text fg={theme.text.subdued}>Close and reopen Toggle skills to try again.</text>
+            </Match>
+            <Match when={loaded.loading}>
+              <text fg={theme.text.subdued}>Loading skills…</text>
+            </Match>
+          </Switch>
+        </box>
       }
       noMatchView={
         <box paddingLeft={4} paddingRight={4}>

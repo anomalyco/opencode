@@ -11,6 +11,9 @@ export type ID = typeof ID.Type
 export const Name = Schema.String.pipe(Schema.brand("Skill.Name"))
 export type Name = typeof Name.Type
 
+export const Activation = Schema.Literals(["enabled", "disabled"]).annotate({ identifier: "Skill.Activation" })
+export type Activation = typeof Activation.Type
+
 export interface DirectorySource extends Schema.Schema.Type<typeof DirectorySource> {}
 export const DirectorySource = Schema.Struct({
   type: Schema.tag("directory"),

@@ -30,6 +30,7 @@ type FixtureHandler = (
 
 type FixtureOptions = {
   readonly fetch?: FixtureHandler
+  readonly onUpdate?: (update: Parameters<AgentSideConnection["sessionUpdate"]>[0]) => void
   readonly models?: readonly ModelInfo[]
   readonly defaultModel?: ModelInfo
   readonly agents?: readonly AgentInfo[]
@@ -127,6 +128,7 @@ export function makeACPFixture(options: FixtureOptions = {}) {
   const requests: FixtureRequest[] = []
   const updates: Parameters<AgentSideConnection["sessionUpdate"]>[0][] = []
   const encoder = new TextEncoder()
+  const connection = new AbortController()
   let eventController: ReadableStreamDefaultController<Uint8Array> | undefined
   const models = options.models ?? [testModel, secondModel]
   const context: FixtureContext = {
@@ -182,14 +184,17 @@ export function makeACPFixture(options: FixtureOptions = {}) {
       if (request.path === "/api/skill") {
         return Response.json({ location, data: options.skills ?? [verifySkill] })
       }
+      if (request.path === "/api/preferences") return Response.json([])
       return new Response(null, { status: 404 })
     },
   })
   const service = ACPService.make({
     client: OpenCode.make({ baseUrl: server.url.toString() }),
     connection: {
+      signal: connection.signal,
       sessionUpdate: async (update) => {
         updates.push(update)
+        options.onUpdate?.(update)
       },
       requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
     },
@@ -199,8 +204,9 @@ export function makeACPFixture(options: FixtureOptions = {}) {
     service,
     requests,
     updates,
+    send: context.send,
     async [Symbol.asyncDispose]() {
-      eventController?.close()
+      connection.abort()
       await server.stop(true)
     },
   }

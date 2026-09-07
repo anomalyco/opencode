@@ -69,6 +69,56 @@ describe("acp service prompt routing and usage", () => {
     expect(fixture.requests.some((request) => request.path === "/api/session/ses_routes/prompt")).toBe(false)
   })
 
+  test("refreshes skill activation before routing prompts even without a preference event", async () => {
+    let disabled = true
+    await using fixture = makeACPFixture({
+      fetch(request, context) {
+        if (request.path === "/api/preferences")
+          return Response.json(
+            disabled ? [{ target: { kind: "skill.activation", id: "verify" }, value: "disabled" }] : [],
+          )
+        if (request.path === "/api/session" && request.method === "POST")
+          return Response.json({ data: makeSession("ses_activation") })
+        if (request.method === "POST" && request.path === "/api/session/ses_activation/skill") {
+          const id = requestID(request)
+          completeTurn(context, "ses_activation", {
+            id: id.replace(/^msg_/, "evt_"),
+            type: "session.skill.activated",
+            data: { sessionID: "ses_activation", skill: "verify" },
+          })
+          return new Response(null, { status: 204 })
+        }
+        if (request.method === "POST" && request.path === "/api/session/ses_activation/prompt") {
+          const id = requestID(request)
+          completeTurn(context, "ses_activation", {
+            id: `evt_${id}`,
+            type: "session.inbox.delivered",
+            data: { sessionID: "ses_activation", inboxID: id },
+          })
+          return Response.json({ data: {} })
+        }
+        return undefined
+      },
+    })
+    const session = await fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
+    disabled = false
+    await fixture.service.prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "/verify" }] })
+    expect(fixture.requests.filter((request) => request.path.endsWith("/skill") && request.method === "POST")).toEqual([
+      expect.objectContaining({
+        path: "/api/session/ses_activation/skill",
+        body: { id: expect.any(String), skill: "verify" },
+      }),
+    ])
+    disabled = true
+    await fixture.service.prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "/verify" }] })
+    expect(fixture.requests.filter((request) => request.path.endsWith("/prompt"))).toEqual([
+      expect.objectContaining({
+        path: "/api/session/ses_activation/prompt",
+        body: expect.objectContaining({ text: "/verify" }),
+      }),
+    ])
+  })
+
   test("returns turn usage and publishes current context usage with cumulative session cost", async () => {
     const assistantTokens = {
       input: 100,

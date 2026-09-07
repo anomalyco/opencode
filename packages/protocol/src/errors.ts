@@ -128,6 +128,15 @@ export class SkillNotFoundError extends Schema.TaggedError<SkillNotFoundError>()
   { httpApiStatus: 404 },
 ) {}
 
+export class SkillDisabledError extends Schema.TaggedError<SkillDisabledError>()(
+  "SkillDisabledError",
+  {
+    skill: Skill.ID,
+    message: Schema.String,
+  },
+  { httpApiStatus: 409 },
+) {}
+
 export class McpServerNotFoundError extends Schema.TaggedError<McpServerNotFoundError>()(
   "McpServerNotFoundError",
   {

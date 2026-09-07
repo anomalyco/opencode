@@ -93,6 +93,7 @@ export function dialogSelectContentWidth(dialogWidth: number) {
 export type DialogSelectRef<T> = {
   filter: string
   filtered: DialogSelectOption<T>[]
+  readonly selected: DialogSelectOption<T> | undefined
   moveTo(value: T): void
 }
 
@@ -180,7 +181,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const filtered = createMemo(() => {
     if (props.skipFilter || props.renderFilter === false) return props.options.filter((x) => x.disabled !== true)
-    const needle = store.filter.toLowerCase()
+    const needle = store.filter.trim().toLowerCase()
     const options = pipe(
       props.options,
       filter((x) => x.disabled !== true),
@@ -513,6 +514,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     },
     get filtered() {
       return filtered()
+    },
+    get selected() {
+      return selected()
     },
     moveTo(value) {
       const index = flat().findIndex((option) => isDeepEqual(option.value, value))

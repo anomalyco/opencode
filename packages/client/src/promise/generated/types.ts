@@ -330,6 +330,8 @@ export type RpcOutput = { output?: any }
 
 export type PermissionReply = "once" | "always" | "reject"
 
+export type PreferencesTarget = { kind: string; id: string }
+
 export type Pty = {
   id: string
   title: string
@@ -411,6 +413,8 @@ export type WorktreeDirectory = { directory: string; strategy?: string }
 export type WorktreeInfo = { directory: string }
 
 export type WorkspaceDestroyResult = { destroyed: boolean }
+
+export type PreferencesValue = JsonValue
 
 export type VcsBranch = { current?: string; default?: string }
 
@@ -1516,6 +1520,15 @@ export type PermissionReplied = {
   data: { sessionID: string; requestID: string; reply: PermissionReply }
 }
 
+export type PreferencesUpdated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "preferences.updated"
+  location?: LocationRef
+  data: { target: PreferencesTarget }
+}
+
 export type PtyCreated = {
   id: string
   created: number
@@ -1627,6 +1640,8 @@ export type SessionStatusUpdated = {
 export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
 
 export type WorktreeList = Array<WorktreeDirectory>
+
+export type PreferencesEntry = { target: PreferencesTarget; value: PreferencesValue }
 
 export type VcsInfo = { branch: VcsBranch }
 
@@ -2329,6 +2344,7 @@ export type V2Event =
   | CommandUpdated
   | ConfigUpdated
   | SkillUpdated
+  | PreferencesUpdated
   | PtyCreated
   | PtyUpdated
   | PtyExited
@@ -2423,6 +2439,14 @@ export type MessageNotFoundError = {
 }
 export const isMessageNotFoundError = (value: unknown): value is MessageNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "MessageNotFoundError"
+
+export type SkillDisabledError = {
+  readonly _tag: "SkillDisabledError"
+  readonly skill: string
+  readonly message: string
+}
+export const isSkillDisabledError = (value: unknown): value is SkillDisabledError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SkillDisabledError"
 
 export type CommandNotFoundError = {
   readonly _tag: "CommandNotFoundError"
@@ -6223,6 +6247,30 @@ export type WorkspaceCreateOutput = { data: string }["data"]
 export type WorkspaceDestroyInput = { readonly workspaceID: { readonly workspaceID: string }["workspaceID"] }
 
 export type WorkspaceDestroyOutput = WorkspaceDestroyResult
+
+export type PreferencesListOutput = Array<PreferencesEntry>
+
+export type PreferencesGetInput = {
+  readonly kind: { readonly kind: string; readonly id: string }["kind"]
+  readonly id: { readonly kind: string; readonly id: string }["id"]
+}
+
+export type PreferencesGetOutput = PreferencesEntry | null
+
+export type PreferencesSetInput = {
+  readonly kind: { readonly kind: string; readonly id: string }["kind"]
+  readonly id: { readonly kind: string; readonly id: string }["id"]
+  readonly value: { readonly value: JsonValue }["value"]
+}
+
+export type PreferencesSetOutput = void
+
+export type PreferencesResetInput = {
+  readonly kind: { readonly kind: string; readonly id: string }["kind"]
+  readonly id: { readonly kind: string; readonly id: string }["id"]
+}
+
+export type PreferencesResetOutput = void
 
 export type VcsGetInput = {
   readonly location?: {

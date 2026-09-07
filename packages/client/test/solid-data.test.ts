@@ -14,6 +14,77 @@ const session = (viewed: number): SessionInfo => ({
   location: { directory: "/project" },
 })
 
+test("global preferences reproject skill availability across locations without refetching definitions", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const skill = { id: "effect", name: "Effect", location: "/skills/effect.md", content: "Use Effect" }
+  let disabled = false
+  let skillReads = 0
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
+      if (url.pathname === "/api/preferences")
+        return Response.json(
+          disabled ? [{ target: { kind: "skill.activation", id: skill.id }, value: "disabled" }] : [],
+        )
+      const location = { directory: url.searchParams.get("location[directory]") ?? "/first" }
+      if (url.pathname === "/api/skill") {
+        skillReads++
+        return Response.json({ location, data: [skill] })
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/first",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+  try {
+    await Promise.all([
+      setup.data.preferences.sync(),
+      setup.data.location.skill.sync({ directory: "/first" }),
+      setup.data.location.skill.sync({ directory: "/second" }),
+    ])
+    disabled = true
+    const event: OpenCodeEvent = {
+      id: "evt_preference",
+      type: "preferences.updated",
+      created: 1,
+      data: { target: { kind: "skill.activation", id: skill.id } },
+    }
+    listeners.forEach((listener) => listener({ name: event.type, details: event }))
+    await wait(
+      () =>
+        setup.data.location.skill.available({ directory: "/first" })?.length === 0 &&
+        setup.data.location.skill.available({ directory: "/second" })?.length === 0 &&
+        setup.data.preferences.list()?.[0]?.value === "disabled",
+    )
+    expect(setup.data.location.skill.list({ directory: "/first" })).toEqual([skill])
+
+    disabled = false
+    listeners.forEach((listener) => listener({ name: event.type, details: event }))
+    await wait(
+      () =>
+        setup.data.location.skill.available({ directory: "/first" })?.length === 1 &&
+        setup.data.location.skill.available({ directory: "/second" })?.length === 1 &&
+        setup.data.preferences.list()?.length === 0,
+    )
+    expect(skillReads).toBe(2)
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("revalidates after an event overtakes an active session read", async () => {
   let release!: () => void
   const gate = new Promise<void>((resolve) => (release = resolve))

@@ -15,7 +15,8 @@ export const SkillGroup = HttpApiGroup.make("server.skill")
         OpenApi.annotations({
           identifier: "v2.skill.list",
           summary: "List skills",
-          description: "Retrieve currently registered skills.",
+          description:
+            "Retrieve all registered skill definitions. Activation overrides are available through the preferences API.",
         }),
       ),
   )

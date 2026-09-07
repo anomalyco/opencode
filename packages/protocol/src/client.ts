@@ -65,6 +65,7 @@ export const groupNames = {
   "server.workspace": "workspace",
   "server.vcs": "vcs",
   "server.config": "config",
+  "server.preferences": "preferences",
 } as const
 
 export const promiseOmitEndpoints = new Set(["pty.connect", "persistentPty.connect"])

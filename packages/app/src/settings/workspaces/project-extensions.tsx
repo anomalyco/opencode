@@ -9,8 +9,10 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
 import { pluginLabels } from "@/providers/catalog/plugin"
 import { ExternalLink } from "@/runtime/platform/external-link"
+import { SkillToggle } from "../providers/skill-toggle"
 
 type SkillItem = {
+  id: string
   name: string
   location: string
 }
@@ -29,7 +31,9 @@ const ExtensionRow: Component<{
   <div class="project-settings-extension-row">
     <div class="project-settings-extension-row-main">
       <Icon name={props.icon} class="project-settings-extension-row-icon" />
-      <span class="project-settings-extension-row-name">{props.name}</span>
+      <span dir="auto" class="project-settings-extension-row-name">
+        {props.name}
+      </span>
     </div>
     {props.children}
   </div>
@@ -141,7 +145,13 @@ export const ProjectSettingsExtensions: Component = () => {
   const pluginRows = (items: string[]) => <For each={items}>{(name) => <ExtensionRow icon="cube" name={name} />}</For>
 
   const skillRows = (items: SkillItem[]) => (
-    <For each={items}>{(item) => <ExtensionRow icon="post-skill" name={item.name} />}</For>
+    <For each={items}>
+      {(item) => (
+        <ExtensionRow icon="post-skill" name={item.name}>
+          <SkillToggle id={item.id} name={item.name} />
+        </ExtensionRow>
+      )}
+    </For>
   )
 
   return (
