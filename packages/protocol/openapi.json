@@ -16070,6 +16070,10 @@
           },
           "redirect_uri": {
             "type": "string"
+          },
+          "client_registration": {
+            "type": "string",
+            "enum": ["auto", "cimd", "dcr"]
           }
         },
         "additionalProperties": false

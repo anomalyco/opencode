@@ -1,6 +1,12 @@
 export * as McpOAuth from "./oauth.js"
 
-import { auth, parseErrorResponse, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
+import {
+  auth,
+  discoverOAuthServerInfo,
+  parseErrorResponse,
+  type OAuthClientProvider,
+  type OAuthServerInfo,
+} from "@modelcontextprotocol/sdk/client/auth.js"
 import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js"
 import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js"
 import { Cause, Deferred, Effect } from "effect"
@@ -9,6 +15,12 @@ import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 import { OauthCallbackPage } from "../oauth/page.js"
 import type { Integration } from "../integration.js"
 import { ErrorSummary } from "../util/error-summary.js"
+
+/**
+ * opencode's OAuth Client ID Metadata Document. Authorization servers that support CIMD accept this URL as the
+ * client_id and fetch it to learn our name and redirect URIs, so no per-server dynamic registration is needed.
+ */
+export const CLIENT_METADATA_URL = "https://opencode.ai/oauth/opencode/client.json"
 
 /** Observe OAuth failures before the SDK handles them by invalidating credentials or redirecting. */
 export const loggedFetch = (fields: { readonly server: string; readonly directory?: string }) =>
@@ -79,6 +91,10 @@ export interface Options {
   readonly state?: string
   /** Statically pre-registered client credentials from config; when set, the SDK skips dynamic registration. */
   readonly client?: { readonly id: string; readonly secret?: string }
+  /** Use opencode's Client ID Metadata Document as the client_id instead of registering dynamically. */
+  readonly clientMetadataUrl?: string
+  /** Pre-fetched authorization server discovery so the SDK does not repeat it. */
+  readonly discovery?: OAuthServerInfo
   /** Invoked by the SDK to drop credentials it has determined are invalid (e.g. a rejected refresh token). */
   readonly invalidate?: (scope: "all" | "client" | "tokens" | "verifier" | "discovery") => void | Promise<void>
   /** Receives the authorization URL so the caller can open a browser and capture the eventual code. */
@@ -95,6 +111,8 @@ export const provider = (options: Options): OAuthClientProvider => {
   const client = options.client
   return {
     redirectUrl: options.redirectUrl,
+    ...(options.clientMetadataUrl ? { clientMetadataUrl: options.clientMetadataUrl } : {}),
+    ...(options.discovery ? { discoveryState: () => options.discovery } : {}),
     clientMetadata: {
       redirect_uris: [options.redirectUrl],
       client_name: "opencode",
@@ -252,12 +270,40 @@ export const authorize = (input: {
     })
     yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
 
+    // Discover the authorization server up front so we can decide how to identify ourselves. CIMD only works
+    // when the server advertises it, accepts public clients (our document declares no client secret), and the
+    // redirect is our own loopback URL (a user-configured redirect_uri is not in the published document).
+    // A configured client_id is pre-registered and always wins.
+    const discovery = yield* Effect.tryPromise({
+      try: () => discoverOAuthServerInfo(input.config.url, { fetchFn }),
+      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    })
+    const registration = oauth?.client_registration ?? "auto"
+    const cimd =
+      registration !== "dcr" &&
+      !oauth?.client_id &&
+      !oauth?.redirect_uri &&
+      discovery.authorizationServerMetadata?.client_id_metadata_document_supported === true &&
+      (discovery.authorizationServerMetadata.token_endpoint_auth_methods_supported?.includes("none") ?? false)
+    if (registration === "cimd" && !cimd)
+      return yield* Effect.fail(
+        new Error(
+          `MCP server "${input.name}" cannot use a Client ID Metadata Document: the authorization server must advertise client_id_metadata_document_supported and accept the "none" token endpoint auth method, and the OAuth config must not set client_id or redirect_uri`,
+        ),
+      )
+    yield* Effect.logInfo("mcp oauth client registration selected", {
+      ...fields,
+      registration: oauth?.client_id ? "static" : cimd ? "cimd" : "dcr",
+    })
+
     let authorizationUrl: URL | undefined
     const oauthProvider = provider({
       redirectUrl: oauth?.redirect_uri ?? `http://127.0.0.1:${port}${redirectPath}`,
       scope: oauth?.scope,
       state,
       client: oauth?.client_id ? { id: oauth.client_id, secret: oauth.client_secret } : undefined,
+      clientMetadataUrl: cimd ? CLIENT_METADATA_URL : undefined,
+      discovery,
       onRedirect: (url) => {
         authorizationUrl = url
         return run(Effect.logInfo("mcp oauth awaiting authorization", fields))

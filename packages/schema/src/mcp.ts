@@ -36,6 +36,15 @@ export class OAuthConfig extends Schema.Class<OAuthConfig>("Mcp.OAuthConfig")({
   scope: Schema.String.pipe(optional),
   callback_port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).pipe(optional),
   redirect_uri: Schema.String.pipe(optional),
+  client_registration: Schema.Literals(["auto", "cimd", "dcr"])
+    .pipe(optional)
+    .annotate({
+      description:
+        "How opencode identifies itself to the authorization server when no client_id is configured. " +
+        "'auto' (default) uses opencode's Client ID Metadata Document when the server advertises support for it " +
+        "and falls back to Dynamic Client Registration otherwise; 'cimd' requires the metadata document; " +
+        "'dcr' always registers dynamically.",
+    }),
 }) {}
 
 export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")({
