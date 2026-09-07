@@ -1,6 +1,6 @@
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Integration } from "@opencode-ai/schema/integration"
-import { Provider } from "../provider.js"
+import { Provider } from "@opencode-ai/schema/provider"
 import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { ModelsDev } from "../models-dev.js"
@@ -36,23 +36,10 @@ export const ModelsDevPlugin = define({
         catalog.provider.update(provider.info.id, (draft) => {
           Object.assign(draft, copy(provider.info))
           draft.integrationID = Integration.ID.make(provider.info.id)
-          draft.package = nativePackage(provider.info.id, provider.info.package)
-          if (draft.package !== provider.info.package) draft.settings = nativeSettings(draft.settings)
         })
         for (const model of provider.models) {
           if (model.status === "deprecated") continue
-          catalog.model.update(provider.info.id, model.id, (draft) => {
-            Object.assign(draft, copy(model))
-            const source = model.package ?? provider.info.package
-            const selected = nativePackage(provider.info.id, source)
-            if (selected === source) return
-            if (model.package !== undefined) draft.package = selected
-            draft.settings = nativeSettings(draft.settings)
-            draft.variants = draft.variants.map((variant) => ({
-              ...variant,
-              settings: nativeSettings(variant.settings),
-            }))
-          })
+          catalog.model.update(provider.info.id, model.id, (draft) => Object.assign(draft, copy(model)))
         }
       }
     })
@@ -68,25 +55,6 @@ export const ModelsDevPlugin = define({
     )
   }),
 })
-
-function nativePackage(providerID: string, source: string) {
-  if (source !== Provider.aisdk("@ai-sdk/openai-compatible")) return source
-  const provider = providerID === "fireworks-ai" ? "fireworks" : providerID
-  if (!["baseten", "cerebras", "deepinfra", "deepseek", "fireworks", "groq", "togetherai"].includes(provider))
-    return source
-  return `@opencode-ai/ai/providers/${provider}`
-}
-
-// models.dev variants contain flat SDK options; native packages accept them under providerOptions.
-function nativeSettings(settings: Provider.Settings | undefined): Provider.Settings | undefined {
-  if (settings === undefined) return
-  const { apiKey, baseURL, ...options } = settings
-  return {
-    ...(apiKey === undefined ? {} : { apiKey }),
-    ...(baseURL === undefined ? {} : { baseURL }),
-    ...(Object.keys(options).length === 0 ? {} : { providerOptions: options }),
-  }
-}
 
 function environmentNames(provider: ModelsDev.Snapshot) {
   if (provider.info.id === Provider.ID.azure)
