@@ -155,11 +155,11 @@ export function Titlebar(props: {
         height:
           platform.platform === "web"
             ? bottom()
-              ? "calc(28px + max(8px, env(safe-area-inset-bottom, 0px)))"
+              ? "calc(28px + max(8px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))))"
               : "calc(28px + max(8px, env(safe-area-inset-top, 0px)))"
             : undefined,
         "padding-top": bottom() ? "0px" : "env(safe-area-inset-top, 0px)",
-        "padding-bottom": bottom() ? "env(safe-area-inset-bottom, 0px)" : "0px",
+        "padding-bottom": bottom() ? "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))" : "0px",
         "min-height": minHeight(),
         // Keep native macOS traffic lights clear even when the desktop window is narrow.
         "padding-left": macTrafficLights() ? `${macTrafficLightsBaseWidth / zoom()}px` : 0,
@@ -440,7 +440,7 @@ export function Titlebar(props: {
                 class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2 md:pe-3"
                 classList={{
                   "pt-[max(0px,calc(8px-env(safe-area-inset-top,0px)))]": !bottom() && !windows(),
-                  "pb-[max(0px,calc(8px-env(safe-area-inset-bottom,0px)))]": bottom(),
+                  "pb-[max(0px,calc(8px-var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))))]": bottom(),
                   "pl-4": macTrafficLights(),
                   // Center the 20px app icon over the sidebar's 16px icon column.
                   "ps-3.5": windows(),

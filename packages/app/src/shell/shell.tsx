@@ -47,7 +47,9 @@ export default function Layout(props: ParentProps) {
             : platform.platform === "desktop" && platform.os === "windows"
               ? "1px"
               : "8px",
-          "--shell-bottom-inset": bottomTitlebar() ? "8px" : "max(0px, calc(8px - env(safe-area-inset-bottom, 0px)))",
+          "--shell-bottom-inset": bottomTitlebar()
+            ? "8px"
+            : "max(0px, calc(8px - var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))))",
         }}
       >
         <Titlebar
@@ -67,7 +69,7 @@ export default function Layout(props: ParentProps) {
               class="relative flex h-full min-h-0 shrink-0 flex-col bg-v2-background-bg-deep pe-0.5 ps-2.5 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]"
               style={{
                 width: `${state.tabsWidth}px`,
-                "padding-bottom": "max(10px, env(safe-area-inset-bottom, 0px))",
+                "padding-bottom": "max(10px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))",
               }}
             >
               <ResizeHandle
@@ -85,8 +87,13 @@ export default function Layout(props: ParentProps) {
             class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-content"
             style={{
               "padding-top": bottomTitlebar() ? "env(safe-area-inset-top, 0px)" : "0px",
-              "padding-bottom": bottomTitlebar() || settings.active() ? "0px" : "env(safe-area-inset-bottom, 0px)",
-              "--settings-bottom-inset": bottomTitlebar() ? "40px" : "env(safe-area-inset-bottom, 0px)",
+              "padding-bottom":
+                bottomTitlebar() || settings.active()
+                  ? "0px"
+                  : "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))",
+              "--settings-bottom-inset": bottomTitlebar()
+                ? "40px"
+                : "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))",
               "--settings-top-inset": mobile() && !bottomTitlebar() ? "0px" : "var(--shell-top-inset, 8px)",
             }}
           >
