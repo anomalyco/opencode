@@ -3,7 +3,7 @@ import type { Agent } from "@opencode-ai/schema/agent"
 import type { Model } from "@opencode-ai/schema/model"
 import type { RelativePath } from "@opencode-ai/schema/schema"
 import type { Snapshot } from "@opencode-ai/schema/snapshot"
-import { Effect, Fiber, Iterable } from "effect"
+import { type DateTime, Effect, Fiber, Iterable } from "effect"
 import { isReadonlyArrayNonEmpty } from "effect/Array"
 import { Bus } from "../../bus.js"
 import { SessionEvent } from "../event.js"
@@ -20,6 +20,7 @@ type Input = {
   readonly model: Model.Ref
   readonly providerMetadataKey: string
   readonly snapshot?: Snapshot.ID
+  readonly started?: DateTime.Utc
   readonly assistantMessageID: SessionMessage.ID
 }
 
@@ -104,6 +105,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       model: input.model,
       assistantMessageID,
       snapshot: input.snapshot,
+      started: input.started,
     })
     return assistantMessageID
   })

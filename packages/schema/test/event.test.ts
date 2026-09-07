@@ -1,9 +1,25 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
+import { DateTime, Schema } from "effect"
 import { Event } from "../src/event.js"
 import { EventLog } from "../src/event-log.js"
+import { SessionEvent } from "../src/session-event.js"
 
 describe("public event schemas", () => {
+  test("step start accepts historical payloads and round-trips request timing", () => {
+    const decode = Schema.decodeUnknownSync(SessionEvent.Step.Started.data)
+    const encode = Schema.encodeSync(SessionEvent.Step.Started.data)
+    const data = {
+      sessionID: "ses_test",
+      assistantMessageID: "msg_test",
+      agent: "build",
+      model: { id: "model", providerID: "provider" },
+    }
+    expect(encode(decode(data))).toEqual(data)
+    expect(encode({ ...decode(data), started: undefined })).toEqual(data)
+    expect(encode({ ...decode(data), started: DateTime.makeUnsafe(0) })).toEqual({ ...data, started: 0 })
+    expect(decode({ ...data, started: 1_000 }).started).toEqual(DateTime.makeUnsafe(1_000))
+  })
+
   test("definition is pure", () => {
     const definitions = Event.inventory()
     Event.ephemeral({ type: "test.pure", schema: { value: Schema.String } })

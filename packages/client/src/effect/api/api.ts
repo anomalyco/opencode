@@ -691,6 +691,7 @@ export type SessionLogOutput =
             readonly agent: Agent.ID
             readonly model: Model.Ref
             readonly snapshot?: (string & Brand.Brand<"Snapshot.ID">) | undefined
+            readonly started?: DateTime.Utc | undefined
           }
         }
       | {
