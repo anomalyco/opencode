@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { analyzeCpu, analyzeTrace, parseHeap } from "../src/main/browser/analysis"
+import { analyzeCpu, analyzeTrace, parseHeap } from "../src/native/analysis"
 
 test("trace analysis reports observed durations without inventing Web Vitals", () => {
   const result = analyzeTrace({

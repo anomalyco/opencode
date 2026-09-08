@@ -33,7 +33,6 @@ import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./compos
 import { SessionIdentityHeader } from "./session-identity-header"
 import { SessionReviewToggle } from "./header/session-header-actions"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
-import { createSessionBrowser } from "./browser/model"
 import { useExtensionPanels } from "@/extensions/session"
 import { createSessionServices } from "@/extensions/workspace"
 
@@ -50,7 +49,6 @@ export function SessionScreen(props: { session: SessionModel }) {
     return info ? projectForSession(info, server.ctx.sync.data.project) : undefined
   })
   const isDesktop = session.isDesktop
-  const browser = createSessionBrowser(session)
   const extensions = useExtensionPanels({
     services: createSessionServices(session),
     active: session.tabs.activeTab,
@@ -391,12 +389,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                         setStore("sideReviewPresent", false)
                       }}
                     >
-                      <SessionDesktopReview
-                        review={review}
-                        browser={browser}
-                        extensions={extensions}
-                        present={store.sideReviewPresent}
-                      />
+                      <SessionDesktopReview review={review} extensions={extensions} present={store.sideReviewPresent} />
                     </div>
                   </Show>
                 </div>

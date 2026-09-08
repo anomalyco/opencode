@@ -1,0 +1,35 @@
+{
+  "name": "@opencode/plugin-browser-desktop",
+  "version": "0.0.0",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.tsx",
+    "./main": "./src/main.ts",
+    "./rpc": "./src/rpc.ts",
+    "./page": "./src/page.ts",
+    "./native/*": "./src/native/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@opencode/client": "workspace:*",
+    "@opencode/plugin": "workspace:*",
+    "@opencode/plugin-browser": "workspace:*",
+    "@opencode/schema": "workspace:*",
+    "@opencode/ui": "workspace:*",
+    "effect": "catalog:",
+    "solid-js": "catalog:",
+    "lighthouse": "13.4.1"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "electron": "42.10.1",
+    "devtools-protocol": "0.0.1687809",
+    "puppeteer-core": "25.9.0"
+  }
+}

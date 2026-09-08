@@ -64,7 +64,6 @@
         "@kobalte/core": "catalog:",
         "@opencode/client": "workspace:*",
         "@opencode/plugin": "workspace:*",
-        "@opencode/plugin-browser": "workspace:*",
         "@opencode/schema": "workspace:*",
         "@opencode/session-ui": "workspace:*",
         "@opencode/ui": "workspace:*",
@@ -429,6 +428,7 @@
         "@opencode/client": "workspace:*",
         "@opencode/plugin": "workspace:*",
         "@opencode/plugin-browser": "workspace:*",
+        "@opencode/plugin-browser-desktop": "workspace:*",
         "@opencode/schema": "workspace:*",
         "@opencode/ui": "workspace:*",
         "@sentry/solid": "catalog:",
@@ -632,6 +632,28 @@
         "@types/bun": "catalog:",
         "@typescript/native-preview": "catalog:",
         "typescript": "catalog:",
+      },
+    },
+    "packages/plugin-browser-desktop": {
+      "name": "@opencode/plugin-browser-desktop",
+      "version": "0.0.0",
+      "dependencies": {
+        "@opencode/client": "workspace:*",
+        "@opencode/plugin": "workspace:*",
+        "@opencode/plugin-browser": "workspace:*",
+        "@opencode/schema": "workspace:*",
+        "@opencode/ui": "workspace:*",
+        "effect": "catalog:",
+        "lighthouse": "13.4.1",
+        "solid-js": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "devtools-protocol": "0.0.1687809",
+        "electron": "42.10.1",
+        "puppeteer-core": "25.9.0",
       },
     },
     "packages/posts": {
@@ -2220,6 +2242,8 @@
     "@opencode/plugin": ["@opencode/plugin@workspace:packages/plugin"],
 
     "@opencode/plugin-browser": ["@opencode/plugin-browser@workspace:packages/plugin-browser"],
+
+    "@opencode/plugin-browser-desktop": ["@opencode/plugin-browser-desktop@workspace:packages/plugin-browser-desktop"],
 
     "@opencode/posts": ["@opencode/posts@workspace:packages/posts"],
 

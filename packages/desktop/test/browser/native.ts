@@ -6,9 +6,10 @@ import path from "node:path"
 import { app, BrowserWindow, nativeImage } from "electron"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { OpenCode } from "@opencode/client"
-import { Effect, Fiber, Schema, Stream } from "effect"
-import { createBrowserPane } from "../../src/main/browser-pane"
-import { bindIpcEvents, ipcEventStream } from "../../src/main/ipc-events"
+import { Schema } from "effect"
+import BrowserExtension from "@opencode/plugin-browser-desktop/main"
+import { BrowserDesktop } from "@opencode/plugin-browser-desktop/rpc"
+import { createMainExtensionHost } from "../../src/main/extensions/host"
 import { Smoke } from "./contract"
 import { verifyTargets } from "./targets"
 
@@ -126,7 +127,6 @@ async function main() {
   const location = { directory: process.env.SMOKE_SERVER_FILES! }
   const rpc = client.rpc(Smoke)
   const session = await client.session.create({ title: "Browser suite", location })
-  const pane = createBrowserPane()
   const win = new BrowserWindow({ show: false, width: 1100, height: 800, webPreferences: { sandbox: true } })
   const readyToShow = once(win, "ready-to-show")
   await win.loadURL("about:blank")
@@ -139,28 +139,40 @@ async function main() {
   const ipcErrors: string[] = []
   const replaced: string[] = []
   const inventories = new Map<string, Browser.State | null>()
-  const unbind = await Effect.runPromise(bindIpcEvents(win.webContents.id))
-  const events = Effect.runFork(
-    ipcEventStream(win.webContents.id).pipe(
-      Stream.runForEach((event) =>
-        Effect.sync(() => {
-          if (event._tag !== "BrowserPaneEvent") return
-          if (event.event.type === "state") {
-            if (event.event.error === "browser.pane.replaced") replaced.push(event.bindingID)
-            inventories.set(event.bindingID, event.event.state)
-            return
-          }
-          if (!inventories.get(event.bindingID)?.tabs.some((tab) => tab.id === event.event.tabID))
-            ipcErrors.push("Focus arrived before its tab inventory")
-          pane.layout(win, event.bindingID, {
-            tabID: event.event.tabID,
-            visible: true,
-            bounds: { x: 0, y: 0, width: 1000, height: 700 },
-          })
-        }),
+  const surfaces = new Map<string, Readonly<Record<string, string>>>()
+  const pane = createMainExtensionHost([BrowserExtension], (_win, payload) => {
+    const event = Schema.decodeUnknownSync(BrowserDesktop.Definition.events.changed.schema)(payload.data)
+    if (event.event.type === "state") {
+      if (event.event.error === "browser.pane.replaced") replaced.push(event.bindingID)
+      inventories.set(event.bindingID, event.event.state)
+      surfaces.set(event.bindingID, event.event.surfaces)
+      return
+    }
+    if (!inventories.get(event.bindingID)?.tabs.some((tab) => tab.id === event.event.tabID))
+      ipcErrors.push("Focus arrived before its tab inventory")
+    layout(event.bindingID, event.event.tabID)
+  })
+  pane.configure(win, [{ id: "fixture", url: process.env.SMOKE_URL!, password: process.env.SMOKE_PASSWORD }])
+  function layout(bindingID: string, tabID: Browser.TabID) {
+    Object.entries(surfaces.get(bindingID) ?? {}).forEach(([id, surfaceID]) =>
+      pane.surface(
+        win,
+        BrowserExtension.id,
+        surfaceID,
+        id === tabID ? { visible: true, bounds: { x: 0, y: 0, width: 1000, height: 700 } } : undefined,
       ),
-    ),
-  )
+    )
+  }
+  async function register(bindingID: string) {
+    const result = await pane.call(win, {
+      extensionID: BrowserExtension.id,
+      rpcID: BrowserDesktop.Definition.id,
+      method: "register",
+      requestID: crypto.randomUUID(),
+      input: { bindingID, sessionID: session.id, serverID: "fixture" },
+    })
+    assert.deepEqual(result, { ok: true, output: null })
+  }
   const visited = new Set<Browser.Method>()
   async function call<Name extends Browser.Method>(
     name: Name,
@@ -187,10 +199,7 @@ async function main() {
   }
   try {
     await verifyTargets(win, fixture)
-    await pane.register(win, "suite", {
-      sessionID: session.id,
-      endpoint: { url: process.env.SMOKE_URL!, password: process.env.SMOKE_PASSWORD },
-    })
+    await register("suite")
     const first = await call("tabs.open", { url: fixture })
     const second = await call("tabs.open", { url: `${fixture}/other`, focus: false })
     assert.equal((await call("tabs.list", {})).tabs.length, 2)
@@ -290,9 +299,9 @@ async function main() {
       await new Promise(resolve=>{const frame=document.querySelector('iframe'); frame.onload=()=>resolve(null); frame.src=${JSON.stringify(`http://localhost:${address.port}/frame`)};});
     })()`,
     })
-    pane.layout(win, "suite", { tabID, visible: true, bounds: { x: 0, y: 0, width: 1000, height: 700 } })
+    layout("suite", tabID)
     await call("tabs.focus", { tabID: second.id })
-    pane.layout(win, "suite", { tabID: second.id, visible: true, bounds: { x: 0, y: 0, width: 1000, height: 700 } })
+    layout("suite", second.id)
     const snap = await call("snapshot", { tabID, boxes: true })
     const ref = (text: string) => {
       const match = snap.content
@@ -546,18 +555,13 @@ async function main() {
       [],
     )
     assert.deepEqual(ipcErrors, [])
-    await pane.register(win, "replacement", {
-      sessionID: session.id,
-      endpoint: { url: process.env.SMOKE_URL!, password: process.env.SMOKE_PASSWORD },
-    })
+    await register("replacement")
     await until(async () => replaced.includes("suite"))
     console.log(
       `PASS ${visited.size} browser operations over physical authenticated HTTP, including file bytes in both directions`,
     )
   } finally {
     await pane.dispose()
-    await Effect.runPromise(Fiber.interrupt(events))
-    await Effect.runPromise(unbind)
     win.destroy()
     web.closeAllConnections()
     await new Promise<void>((resolve) => web.close(() => resolve()))

@@ -2,13 +2,13 @@ import { Browser } from "@opencode/plugin-browser/rpc"
 import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
-import { createCdp, abortError, waitFor } from "./browser/cdp"
-import { createBrowserFiles } from "./browser/files"
-import { createDiagnostics } from "./browser/diagnostics"
-import { createProfiling } from "./browser/profiling"
-import { createCornerImages } from "./native/corners"
-import type { BrowserNetwork } from "./browser/network"
-import { destinationOrigin, normalizeURL } from "./browser/policy"
+import { createCdp, abortError, waitFor } from "./native/cdp"
+import { createBrowserFiles } from "./native/files"
+import { createDiagnostics } from "./native/diagnostics"
+import { createProfiling } from "./native/profiling"
+import type { BrowserNetwork } from "./native/network"
+import { destinationOrigin, normalizeURL } from "./native/policy"
+import type { MainPlugin } from "@opencode/plugin/desktop/main"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 let nextRef = 0
@@ -39,6 +39,7 @@ export function createBrowserPage(
     popup: (options: Electron.BrowserWindowConstructorOptions) => WebContents
     initialize?: boolean
     popupOptions?: Electron.BrowserWindowConstructorOptions
+    surfaces: MainPlugin.Context["surfaces"]
   },
 ) {
   const view = new electron.WebContentsView({
@@ -231,15 +232,7 @@ export function createBrowserPage(
     dialog = null
     publish()
   })
-  view.setBounds({ x: 0, y: 0, width: 1000, height: 700 })
-  view.setVisible(false)
-  win.contentView.addChildView(view)
-  const corners = [new electron.ImageView(), new electron.ImageView()]
-  let cornerKey = ""
-  corners.forEach((corner) => {
-    corner.setVisible(false)
-    win.contentView.addChildView(corner)
-  })
+  const surface = options.surfaces.register(view)
   const ready = Promise.all([
     files.ready,
     ...(options.initialize === false ? [] : [contents.loadURL("about:blank")]),
@@ -256,36 +249,10 @@ export function createBrowserPage(
 
   return {
     view,
+    surfaceID: surface.id,
     contents,
     state,
     ready,
-    layout(bounds: Electron.Rectangle, background?: readonly [number, number, number, number], radius = 10) {
-      view.setBounds(bounds)
-      const size = Math.min(radius, Math.floor(bounds.width / 2), Math.floor(bounds.height / 2))
-      const scale = electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
-      const key = background && size > 0 ? `${background}:${size}:${scale}` : ""
-      if (key && key !== cornerKey && background) {
-        createCornerImages(background, size, scale).forEach((image, index) => corners[index].setImage(image))
-      }
-      cornerKey = key
-      corners.forEach((corner, index) => {
-        // A composited layer is required above WebContentsView. A zero-duration
-        // bounds update creates that layer without a visible animation.
-        corner.setBounds(
-          {
-            x: bounds.x + (index ? bounds.width - size : 0),
-            y: bounds.y + bounds.height - size,
-            width: size,
-            height: size,
-          },
-          { animate: { duration: 0 } },
-        )
-      })
-    },
-    setVisible(visible: boolean) {
-      view.setVisible(visible)
-      corners.forEach((corner) => corner.setVisible(visible && !!cornerKey))
-    },
     async execute(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
       await ready
       abortError(signal)
@@ -354,10 +321,7 @@ export function createBrowserPage(
       await profiling.dispose()
       cdp.dispose()
       refs.clear()
-      if (!win.isDestroyed()) {
-        corners.forEach((corner) => win.contentView.removeChildView(corner))
-        win.contentView.removeChildView(view)
-      }
+      surface.dispose()
       if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false })
       await files.dispose()
     },
@@ -671,7 +635,7 @@ export function createBrowserPage(
       case "heap.compare":
         return result({ tab: state(), ...(await profiling.analyze(action)) })
       case "lighthouse": {
-        const { audit } = await import("./browser/lighthouse")
+        const { audit } = await import("./native/lighthouse")
         const report = await audit(contents, files, cdp, captureSources)
         return result(
           { tab: state(), scores: report.scores, failures: report.failures },

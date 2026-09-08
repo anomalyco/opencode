@@ -1,9 +1,7 @@
-import type { BrowserPaneEvent } from "@opencode/app/desktop"
 import type { DesktopMenuAction } from "@opencode/app/desktop-menu"
 import type { DesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
 import type { UpdaterState } from "@opencode/app/updater"
 import type { WslServersPlatform } from "@opencode/app/wsl/types"
-import type { BrowserPaneRequest } from "../shared/ipc-rpc/browser"
 import type { DesktopExtension } from "@opencode/plugin/desktop/protocol"
 import type { ExtensionManager } from "@opencode/plugin/desktop/manager"
 import type {
@@ -29,11 +27,6 @@ export type ElectronAPI = {
   extensionManager: ExtensionManager.Transport
   awaitInitialization(): Promise<ServerReadyData>
   reconnectService(): Promise<ServerReadyData>
-  browserPane: {
-    request(request: BrowserPaneRequest): Promise<void>
-    send(request: BrowserPaneRequest): void
-    onEvent(callback: (value: { readonly bindingID: string; readonly event: BrowserPaneEvent }) => void): () => void
-  }
   wslServers: WslServersAPI
   updater: UpdaterAPI
   consumeInitialDeepLinks(): Promise<string[]>
