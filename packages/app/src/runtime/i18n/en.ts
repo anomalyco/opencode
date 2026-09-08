@@ -378,6 +378,11 @@ export const dict = {
   "server.connect.scan.invalid": "This is not an OpenCode pairing code. Scan the code shown by opencode pair.",
   "server.connect.camera": "Pairing camera",
   "server.connect.camera.starting": "Opening camera…",
+  "server.connect.mixedContent":
+    "This page uses HTTPS. Your browser may block connections to HTTP servers. Use an HTTPS server address; localhost and loopback addresses are exceptions.",
+  "server.connect.camera.insecure": "QR scanning requires opening this page over HTTPS or on localhost.",
+  "server.connect.camera.unavailable":
+    "No camera is available to this browser. Enter your connection details manually.",
   "server.connect.camera.error":
     "Could not open the camera. Allow camera access or enter your connection details manually.",
   "dialog.server.edit.title": "Edit server",

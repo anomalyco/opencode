@@ -16,6 +16,8 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { normalizeServerUrl, ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useCheckServerHealth } from "@/runtime/server/health"
+import { usePlatform } from "@/runtime/platform/platform"
+import { isMixedContent } from "./browser"
 import "@/settings/settings.css"
 
 type FormMode = "list" | "add" | "edit"
@@ -26,10 +28,14 @@ export const DialogServer: Component<{
 }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
+  const platform = usePlatform()
   const form = createFormController({
     onSelect: () => dialog.close(),
   })
   const [opened, setOpened] = createSignal(false)
+  const mixedContent = createMemo(
+    () => platform.platform === "web" && isMixedContent(location.href, form.state.value()),
+  )
 
   onMount(() => {
     if (props.mode === "add") form.start.add()
@@ -81,9 +87,15 @@ export const DialogServer: Component<{
               invalid={!!form.state.error()}
               disabled={form.state.busy()}
               autofocus
+              aria-describedby={mixedContent() ? "dialog-server-mixed-content" : undefined}
               onInput={(event) => form.change.value(event.currentTarget.value)}
               onKeyDown={keyDown}
             />
+            <Show when={mixedContent()}>
+              <p id="dialog-server-mixed-content" class="text-v2-state-fg-warning text-[13px] leading-5" role="status">
+                {language.t("server.connect.mixedContent")}
+              </p>
+            </Show>
             <Show when={form.state.error()}>
               <span class="settings-server-dialog-error">{form.state.error()}</span>
             </Show>

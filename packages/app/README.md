@@ -100,6 +100,12 @@ Scanning fills the form and immediately attempts to connect. Failed connections 
 to edit and retry with **Connect**. Credentials are checked before saving the server. Camera access requires
 HTTPS (or localhost) and browser permission. Saved offline servers continue to use the normal app UI.
 
+The connection forms warn when an HTTPS page targets a non-loopback HTTP server. HTTP servers on
+`localhost`, `*.localhost`, `127.0.0.0/8`, or `::1` are treated as trustworthy loopback targets. The warning
+does not block an attempt, since browser local-network permissions can allow some HTTP LAN connections.
+QR scanning is enabled only in a browser-reported secure context with camera support and an available
+video input; insecure pages and unavailable cameras show an explanation beside the disabled action.
+
 Run `bun run test:server-connect` to build in `none` mode and test onboarding, password authentication,
 persistence, and QR scanning through Chromium's virtual camera. To use an existing `none`-mode app build:
 

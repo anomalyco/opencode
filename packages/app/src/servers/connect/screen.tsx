@@ -1,4 +1,4 @@
-import { lazy, Show, Suspense } from "solid-js"
+import { createMemo, createResource, lazy, Show, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
@@ -9,6 +9,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { useCheckServerHealth } from "@/runtime/server/health"
 import { useServers } from "@/runtime/server/registry"
 import { serverAddress } from "./pairing"
+import { isMixedContent } from "./browser"
 import "./screen.css"
 
 const PairingScanner = lazy(() => import("./scanner").then((module) => ({ default: module.PairingScanner })))
@@ -18,7 +19,25 @@ export function ConnectServerScreen() {
   const platform = usePlatform()
   const servers = useServers()
   const check = useCheckServerHealth()
+  const cameraSupported =
+    platform.platform === "web" && window.isSecureContext && !!navigator.mediaDevices?.getUserMedia
+  const [camera, cameraActions] = createResource(
+    async () => {
+      if (!cameraSupported || !navigator.mediaDevices.enumerateDevices) return false
+      const denied = await navigator.permissions?.query({ name: "camera" }).then(
+        (permission) => permission.state === "denied",
+        () => false,
+      )
+      if (denied) return false
+      return navigator.mediaDevices.enumerateDevices().then(
+        (devices) => devices.some((device) => device.kind === "videoinput"),
+        () => false,
+      )
+    },
+    { initialValue: false },
+  )
   const [state, setState] = createStore({ url: "", password: "", urls: [] as string[], error: "", scanning: false })
+  const mixedContent = createMemo(() => platform.platform === "web" && isMixedContent(location.href, state.url))
   const request = useMutation(() => ({
     mutationFn: async () => {
       const url = serverAddress(state.url)
@@ -52,7 +71,10 @@ export function ConnectServerScreen() {
           fallback={
             <Suspense fallback={<p role="status">{language.t("server.connect.camera.starting")}</p>}>
               <PairingScanner
-                onCancel={() => setState("scanning", false)}
+                onCancel={() => {
+                  setState("scanning", false)
+                  void cameraActions.refetch()
+                }}
                 onScan={(pairing) => {
                   setState({
                     url: pairing.urls[0],
@@ -92,6 +114,7 @@ export function ConnectServerScreen() {
                 placeholder={language.t("dialog.server.add.placeholder")}
                 value={state.url}
                 disabled={request.isPending}
+                aria-describedby={mixedContent() ? "server-connect-mixed-content" : undefined}
                 onInput={(event) => setState({ url: event.currentTarget.value, error: "" })}
               />
               <datalist id="server-connect-addresses">
@@ -99,6 +122,11 @@ export function ConnectServerScreen() {
                   <option value={url} />
                 ))}
               </datalist>
+              <Show when={mixedContent()}>
+                <p id="server-connect-mixed-content" class="server-connect-warning" role="status">
+                  {language.t("server.connect.mixedContent")}
+                </p>
+              </Show>
             </div>
             <div class="server-connect-field">
               <label for="server-connect-password">{language.t("dialog.server.add.password")}</label>
@@ -126,11 +154,19 @@ export function ConnectServerScreen() {
             <Button
               variant="neutral"
               size="large"
-              disabled={request.isPending}
+              disabled={request.isPending || !camera.latest}
+              aria-describedby={!camera.latest && !camera.loading ? "server-connect-camera-unavailable" : undefined}
               onClick={() => setState("scanning", true)}
             >
               {language.t("server.connect.scan")}
             </Button>
+            <Show when={!camera.latest && !camera.loading}>
+              <p id="server-connect-camera-unavailable">
+                {language.t(
+                  window.isSecureContext ? "server.connect.camera.unavailable" : "server.connect.camera.insecure",
+                )}
+              </p>
+            </Show>
           </Show>
           <footer>
             <p>{language.t("server.connect.pair.description")}</p>

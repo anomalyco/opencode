@@ -55,15 +55,17 @@ test("a saved offline server does not trigger first-server onboarding", async ({
   await expect(page.getByRole("main", { name: "Connect to a server" })).toHaveCount(0)
 })
 
-test("camera failure allows returning to the manual form", async ({ page }) => {
+test("disables scanning when camera access is unavailable", async ({ page }) => {
+  await page.route("**/*", async (route) => {
+    if (route.request().resourceType() !== "document") return route.continue()
+    const response = await route.fetch()
+    await route.fulfill({ response, headers: { ...response.headers(), "Permissions-Policy": "camera=()" } })
+  })
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto("/")
-  await page.getByLabel("Server address").fill(server)
-  await page.getByRole("button", { name: "Scan QR code" }).click()
-  await expect(page.getByRole("alert")).toHaveText(
-    "Could not open the camera. Allow camera access or enter your connection details manually.",
-  )
-  await page.getByRole("button", { name: "Cancel", exact: true }).click()
-  await expect(page.getByLabel("Server address")).toHaveValue(server)
-  await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeEnabled()
+  await expect(page.getByRole("button", { name: "Scan QR code" })).toBeDisabled()
+  await expect(
+    page.getByText("No camera is available to this browser. Enter your connection details manually."),
+  ).toBeVisible()
+  await expect(page.getByLabel("Pairing camera")).toHaveCount(0)
 })
