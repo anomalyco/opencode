@@ -49,6 +49,7 @@
     "ws": "8.21.0"
   },
   "devDependencies": {
+    "@opencode-ai/theme": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/protocol": "workspace:*",
     "@tsconfig/bun": "catalog:",

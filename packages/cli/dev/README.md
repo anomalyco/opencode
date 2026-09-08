@@ -11,7 +11,7 @@ This uses the normal CLI and its real TUI through Vite + `solid-refresh`. For an
 - Component edits hot-update through the existing Solid refresh runtime.
 - Full reloads await TUI cleanup and reopen the original launch target (Home, `--session`, or `--continue`). They do not preserve a subsequently selected route or local UI state, and do not replay `--prompt`.
 - Correcting syntax errors retries a failed reload. The backend stays alive.
-- Refreshable components get local error boundaries. Render errors appear inline and retry on the next update, instead of resetting the root boundary and losing the active session and draft. State within remounted components can still reset, especially when several components share an edited file.
+- Refreshable components get local error boundaries. Render errors appear in a centered overlay and retry on the next update, instead of resetting the root boundary and losing the active session and draft. The overlay has a red title, normal error text, and no stack trace. State within remounted components can still reset, especially when several components share an edited file.
 - Launcher/config/dependency changes require restarting the development client.
 
 `vite.ts` registers a Bun runtime module that supplies the Vite runner for the CLI's existing static `@opencode-ai/tui` import. This registration runs only in the dev launcher; production handlers and their import graph are unchanged. `tui.ts` owns Vite and the TUI lifecycle. `entry.ts` loads the real application source through Vite. `host.js` keeps lifecycle ownership outside Vite's reloadable module cache. No production CLI handler, TUI component, or route changes are needed.

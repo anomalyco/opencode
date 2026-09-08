@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { createComponent, ErrorBoundary, onCleanup, type JSX } from "solid-js"
-import { jsx } from "@opentui/solid/jsx-runtime"
 import { $$component, type Registry } from "solid-refresh/dist/solid-refresh.mjs"
+import { ErrorOverlay } from "./error-overlay"
 
 export { $$context, $$decline, $$refresh, $$registry } from "solid-refresh/dist/solid-refresh.mjs"
 export { component as $$component }
@@ -19,7 +19,7 @@ function component<P extends Record<string, unknown>>(
         // Retry only this failed subtree. Resetting the app's boundary destroys its providers and route.
         import.meta.hot?.on("vite:afterUpdate", reset)
         onCleanup(() => import.meta.hot?.off("vite:afterUpdate", reset))
-        return jsx("text", { children: `${id}: ${String(error)}\nFix the component and save to retry.` })
+        return createComponent(ErrorOverlay, { component: id, error })
       },
       get children() {
         return createComponent(proxy, props)
