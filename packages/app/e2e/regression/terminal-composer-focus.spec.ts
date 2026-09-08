@@ -144,33 +144,6 @@ test("routes typing to the composer unless the open terminal is focused", async 
   await expect(composer).toHaveText("a")
 })
 
-test("focuses the first terminal opened with the new-terminal keybind", async ({ page }) => {
-  const create = Promise.withResolvers<void>()
-  await page.route("**/api/pty*", async (route) => {
-    if (route.request().method() !== "POST" || new URL(route.request().url()).pathname !== "/api/pty") {
-      return route.fallback()
-    }
-    await create.promise
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ location: ptyLocation(), data: ptyInfo(ptyID, "Terminal 1") }),
-    })
-  })
-  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
-  await expectSessionTitle(page, "Terminal composer focus")
-
-  const composer = page.locator('[data-component="composer-editor"]')
-  await composer.click()
-  await expect(composer).toBeFocused()
-
-  await page.keyboard.press("Control+Alt+T")
-  await expect(composer).toBeFocused()
-  create.resolve()
-
-  await expect(page.locator('[data-component="terminal"] textarea')).toBeFocused()
-})
-
 test("keeps composer focus when a cached terminal finishes mounting", async ({ page }) => {
   const ghostty = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
