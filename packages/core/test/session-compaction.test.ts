@@ -401,8 +401,16 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     expect(JSON.stringify(requests[0]?.messages)).toContain("Use Effect services and generators.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("User shell pwd completed: /project")
     expect(JSON.stringify(requests[0]?.messages)).not.toContain("display-only-output")
+    // The compaction message carries its own request usage so clients can show what compacting cost.
     expect(yield* store.context(sessionID)).toMatchObject([
-      { type: "compaction", reason: "manual", summary: "## Objective\n- manual summary", recent: "" },
+      {
+        type: "compaction",
+        reason: "manual",
+        summary: "## Objective\n- manual summary",
+        recent: "",
+        cost: 0.0000233,
+        tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 2 } },
+      },
     ])
     expect(yield* store.get(sessionID)).toMatchObject({
       cost: 0.0000233,

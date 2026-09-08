@@ -240,6 +240,8 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
       return yield* Effect.die("Missing native checkpoint")
     expect(last.summary).toBe("")
     expect(last.recent).toBe("")
+    // Provider compaction has no summary, so the request usage is the only visible cost of the operation.
+    expect(last.tokens).toMatchObject({ input: 20, output: 4 })
     return last.providerContext
   })
   return {

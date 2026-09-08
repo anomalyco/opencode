@@ -100,13 +100,24 @@ test.each(["started", "cancelled", "failed"])(
       expect(fixture.data.session.message.list(sessionID)).toMatchObject([{ type: "compaction", status: "running" }])
       const model = { providerID: "demo", id: "model" }
       const providerState = { responseId: "summary-response" }
+      const tokens = { input: 10, output: 4, reasoning: 0, cache: { read: 3, write: 0 } }
       fixture.emit({
         ...event,
         type: "session.compaction.ended",
-        data: { sessionID, reason: "manual", model, providerState, text: "Summary", recent: "Recent" },
+        data: {
+          sessionID,
+          reason: "manual",
+          model,
+          providerState,
+          text: "Summary",
+          recent: "Recent",
+          cost: 0.01,
+          tokens,
+        },
       })
+      // The live fold carries the request usage so the label matches a reloaded session.
       expect(fixture.data.session.message.list(sessionID)).toMatchObject([
-        { type: "compaction", status: "completed", summary: "Summary", model, providerState },
+        { type: "compaction", status: "completed", summary: "Summary", model, providerState, cost: 0.01, tokens },
       ])
     }
   },

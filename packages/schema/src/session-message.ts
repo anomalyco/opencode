@@ -235,7 +235,13 @@ export const Assistant = Schema.Struct({
   }),
 }).annotate({ identifier: "Session.Message.Assistant" })
 
-const CompactionBase = { type: Schema.tag("compaction"), ...Base }
+const CompactionBase = {
+  type: Schema.tag("compaction"),
+  ...Base,
+  /** Usage of the compaction request itself, not the size of the resulting context. */
+  cost: Money.USD.pipe(optional),
+  tokens: TokenUsage.Info.pipe(optional),
+}
 
 export interface CompactionRunning extends Schema.Schema.Type<typeof CompactionRunning> {}
 export const CompactionRunning = Schema.Struct({

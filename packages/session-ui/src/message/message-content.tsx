@@ -384,17 +384,32 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
     if (props.message.status !== "failed" || props.message.error.type === "aborted") return ""
     return props.error
   }
+  const compact = createMemo(
+    () => new Intl.NumberFormat(i18n.locale(), { notation: "compact", maximumFractionDigits: 1 }),
+  )
+  // Usage of the compaction request itself; the resulting context size only shows on the next assistant step.
+  const usage = () => {
+    const tokens = props.message.tokens
+    if (!tokens) return ""
+    const input = tokens.input + tokens.cache.read + tokens.cache.write
+    const output = tokens.output + tokens.reasoning
+    if (input + output <= 0) return ""
+    return i18n.t("ui.messagePart.compaction.usage", {
+      input: compact().format(input),
+      output: compact().format(output),
+    })
+  }
+  const label = () =>
+    i18n.t(
+      props.message.status === "completed" && props.message.providerContext
+        ? "ui.messagePart.providerCompaction"
+        : "ui.messagePart.compaction",
+    )
 
   return (
     <div data-component="session-compaction-message">
       <div class="py-2">
-        <TimelineSeparator
-          label={i18n.t(
-            props.message.status === "completed" && props.message.providerContext
-              ? "ui.messagePart.providerCompaction"
-              : "ui.messagePart.compaction",
-          )}
-        />
+        <TimelineSeparator label={usage() ? `${label()} · ${usage()}` : label()} />
       </div>
       <Show when={summary().trim()}>
         <div data-component="text-part" data-timeline-part-id={props.message.id}>

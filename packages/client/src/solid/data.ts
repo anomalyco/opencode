@@ -1083,8 +1083,11 @@ export function createData(config: CreateDataInput) {
               reason: event.data.reason,
               model: event.data.model,
               providerState: event.data.providerState,
+              providerContext: event.data.providerContext,
               summary: event.data.text,
               recent: event.data.recent,
+              cost: event.data.cost,
+              tokens: event.data.tokens,
             })
             return
           }
@@ -1095,8 +1098,11 @@ export function createData(config: CreateDataInput) {
             reason: event.data.reason,
             model: event.data.model,
             providerState: event.data.providerState,
+            providerContext: event.data.providerContext,
             summary: event.data.text,
             recent: event.data.recent,
+            cost: event.data.cost,
+            tokens: event.data.tokens,
             time: { created: event.created },
           })
         })
@@ -1116,6 +1122,8 @@ export function createData(config: CreateDataInput) {
               message: "Compaction failed before recording an error",
             },
             metadata: current?.type === "compaction" ? current.metadata : event.metadata,
+            cost: event.data.cost,
+            tokens: event.data.tokens,
             time: current?.type === "compaction" ? current.time : { created: event.created },
           }
           if (current?.type === "compaction") {

@@ -2098,6 +2098,15 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
     props.message.status === "failed" ? (cancelled() ? "" : props.message.error.message) : props.message.summary
   const content = createMemo(() => text().trim())
   const color = () => (status() === "failed" && !cancelled() ? theme.text.feedback.error.default : theme.text.subdued)
+  // Usage of the compaction request itself; the resulting context size only shows on the next assistant step.
+  const usage = () => {
+    const tokens = props.message.tokens
+    if (!tokens) return
+    const input = tokens.input + tokens.cache.read + tokens.cache.write
+    const output = tokens.output + tokens.reasoning
+    if (input + output <= 0) return
+    return `${Locale.number(input)} in · ${Locale.number(output)} out`
+  }
   return (
     <box>
       <box flexDirection="row" alignItems="center">
@@ -2120,6 +2129,9 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
           </text>
           <Show when={cancelled()}>
             <text fg={color()}>· cancelled</text>
+          </Show>
+          <Show when={usage()}>
+            <text fg={color()}>· {usage()}</text>
           </Show>
         </box>
         <box border={["top"]} borderColor={color()} flexGrow={1} />
@@ -3839,7 +3851,12 @@ function recordValue(value: unknown): Record<string, unknown> | undefined {
   return isRecord(value) ? value : undefined
 }
 
-function formatSessionTranscript(session: SessionInfo, messages: SessionMessageInfo[], thinking: boolean, tools = true) {
+function formatSessionTranscript(
+  session: SessionInfo,
+  messages: SessionMessageInfo[],
+  thinking: boolean,
+  tools = true,
+) {
   const body = messages.flatMap((message) => {
     if (message.type === "user") return [`## User\n\n${message.text}`]
     if (message.type === "shell")

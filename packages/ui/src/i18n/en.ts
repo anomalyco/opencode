@@ -105,6 +105,7 @@ const source = {
   "ui.messagePart.questions.dismissed": "Questions dismissed",
   "ui.messagePart.compaction": "Session compacted",
   "ui.messagePart.providerCompaction": "Session compacted by provider",
+  "ui.messagePart.compaction.usage": "{{input}} in · {{output}} out",
   "ui.messagePart.context.details": "Details",
   "ui.messagePart.context.read.one": "{{count}} read",
   "ui.messagePart.context.read.other": "{{count}} reads",

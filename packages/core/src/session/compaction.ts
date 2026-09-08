@@ -388,6 +388,8 @@ export const layer = Layer.effect(
       readonly reason: SessionMessage.Compaction["reason"]
       readonly error: SessionError.Error
       readonly inputID?: SessionMessage.ID
+      readonly cost?: SessionUsage.Recorded["cost"]
+      readonly tokens?: SessionUsage.Recorded["tokens"]
     }) {
       yield* bus.publish(SessionEvent.Compaction.Failed, input)
       return { status: "failed" as const, error: input.error }
@@ -402,13 +404,14 @@ export const layer = Layer.effect(
             inputID: input.inputID,
           })
     // Manual controls settle through the inbox; only automatic work needs a durable interruption record.
-    const interrupted = (input: ExecuteInput) =>
+    const interrupted = (input: ExecuteInput, usage?: SessionUsage.Recorded) =>
       input.reason === "auto"
         ? failed({
             sessionID: input.context.session.id,
             reason: input.reason,
             inputID: input.inputID,
             error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
+            ...usage,
           }).pipe(Effect.asVoid)
         : Effect.void
     const compactionRequest = (
@@ -504,11 +507,12 @@ export const layer = Layer.effect(
               )
             }),
           )
-          if (result.usage)
+          const usage = result.usage ? SessionUsage.record(result.usage, context.model.cost) : undefined
+          if (usage)
             yield* bus.publish(SessionEvent.UsageRecorded, {
               sessionID: context.session.id,
               source: "compaction" as const,
-              ...SessionUsage.record(result.usage, context.model.cost),
+              ...usage,
             })
           yield* bus.publish(SessionEvent.Compaction.Ended, {
             sessionID: context.session.id,
@@ -517,6 +521,7 @@ export const layer = Layer.effect(
             text: "",
             recent: "",
             providerContext: SessionProviderContext.encode(provenance, result.replacement),
+            ...usage,
           })
           return { status: "completed" as const }
         }),
@@ -644,7 +649,7 @@ export const layer = Layer.effect(
               failure = toSessionError(error)
             }),
           ),
-          Effect.onInterrupt(() => recordUsage.pipe(Effect.andThen(interrupted(input)))),
+          Effect.onInterrupt(() => recordUsage.pipe(Effect.andThen(interrupted(input, usage)))),
         )
         if (failure || hasSummarySection(chunks.join(""))) break
       }
@@ -662,6 +667,7 @@ export const layer = Layer.effect(
           reason: input.reason,
           error,
           inputID: input.inputID,
+          ...usage,
         })
       }
       yield* bus.publish(SessionEvent.Compaction.Ended, {
@@ -671,6 +677,7 @@ export const layer = Layer.effect(
         providerState,
         text: summary,
         recent: history.recent,
+        ...usage,
       })
       return { status: "completed" as const }
     })
