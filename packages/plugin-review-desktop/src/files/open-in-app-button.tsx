@@ -5,8 +5,8 @@ import { Spinner } from "@opencode/ui/spinner"
 import { Menu } from "@opencode/ui/menu"
 import { SplitButton, SplitButtonAction, SplitButtonMenuTrigger } from "@opencode/ui/split-button"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { useLanguage } from "@/runtime/i18n/language"
-import { type OpenApp, useOpenInApp } from "@/session/files/open-in-app"
+import { useLanguage } from "../environment"
+import { type OpenApp, useOpenInApp } from "./open-in-app"
 
 export function OpenInAppButton(props: { directory: () => string }) {
   const language = useLanguage()

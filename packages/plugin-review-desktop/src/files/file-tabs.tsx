@@ -11,14 +11,18 @@ import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
 import { Menu } from "@opencode/ui/menu"
 import { Tabs } from "@opencode/ui/tabs"
 import { ScrollView } from "@opencode/ui/scroll-view"
-import { showToast } from "@/shell/notifications/toast"
-import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/workspaces/files/model"
-import { useComments } from "@/composer/comments"
-import { useLanguage } from "@/runtime/i18n/language"
-import { useComposerState } from "@/composer/persistence"
-import { getSessionHandoff } from "@/session/handoff"
-import { useSessionLayout } from "@/session/session-layout"
-import { createSessionTabs } from "@/session/helpers"
+import { usePlugin } from "@opencode/plugin/desktop"
+import type { SessionView } from "@opencode/plugin/desktop/workspace"
+import {
+  selectionFromLines,
+  useFile,
+  useComments,
+  useLanguage,
+  useComposerState,
+  useEnvironment,
+  type FileSelection,
+  type SelectedLineRange,
+} from "../environment"
 
 type SessionFileViewProps = {
   tab: string
@@ -52,7 +56,7 @@ function FileCommentMenu(props: {
 
 type ScrollPos = { x: number; y: number }
 
-function createScrollSync(input: { tab: () => string; view: ReturnType<typeof useSessionLayout>["view"] }) {
+function createScrollSync(input: { tab: () => string; view: () => SessionView }) {
   let scroll: HTMLDivElement | undefined
   let scrollFrame: number | undefined
   let restoreFrame: number | undefined
@@ -182,12 +186,10 @@ export function SessionFileView(props: SessionFileViewProps) {
   const language = useLanguage()
   const prompt = useComposerState()
   const fileComponent = useFileComponent()
-  const { sessionKey, tabs, view } = useSessionLayout()
-  const activeFileTab = createSessionTabs({
-    tabs,
-    pathFromTab: file.pathFromTab,
-    normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
-  }).activeFileTab
+  const environment = useEnvironment()
+  const view = () => environment.services.view
+  const activeFileTab = view().tabs.active
+  const toast = usePlugin().ui.toast
 
   let find: FileSearchHandle | null = null
 
@@ -208,8 +210,7 @@ export function SessionFileView(props: SessionFileViewProps) {
   const selectedLines = createMemo<SelectedLineRange | null>(() => {
     const p = path()
     if (!p) return null
-    if (file.ready()) return (file.selectedLines(p) as SelectedLineRange | undefined) ?? null
-    return (getSessionHandoff(sessionKey())?.files[p] as SelectedLineRange | undefined) ?? null
+    return file.selectedLines(p) ?? null
   })
   const scrollSync = createScrollSync({
     tab: () => props.tab,
@@ -440,7 +441,7 @@ export function SessionFileView(props: SessionFileViewProps) {
           onLoad: scrollSync.queueRestore,
           onError: (args: { kind: "image" | "audio" | "svg" }) => {
             if (args.kind !== "svg") return
-            showToast({
+            toast.show({
               variant: "error",
               title: language.t("toast.file.loadFailed.title"),
             })

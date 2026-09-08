@@ -160,13 +160,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }
   }
 
-  const openFile = () => {
-    void openDialog(
-      () => import("@/shell/commands/dialog"),
-      (x) => dialog.show(() => <x.DialogCommandPalette onOpenFile={showAllFiles} />),
-    )
-  }
-
   const closeTab = () => {
     const tab = actions.session.tabs.closableTab()
     if (!tab) return
@@ -311,14 +304,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const fileCmds = () => {
     const tab = actions.session.tabs.closableTab()
     return [
-      fileCommand({
-        id: "file.open",
-        title: language.t("command.file.open"),
-        description: language.t("palette.search.placeholder"),
-        keybind: "mod+p",
-        slash: "open",
-        onSelect: openFile,
-      }),
       tab &&
         fileCommand({
           id: "file.close",

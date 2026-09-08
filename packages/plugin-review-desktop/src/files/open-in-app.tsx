@@ -1,14 +1,9 @@
 import { createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
-import { Persist, persisted } from "@/runtime/persistence/storage"
-import { showToast } from "@/shell/notifications/toast"
-import { useServer } from "@/runtime/server/current"
-import { Schema } from "effect"
-import { Persistence } from "@/runtime/persistence/schema"
-import { fileManagerApp } from "@/home/projects/file-manager"
-import { openInAppParentPath } from "@/session/files/open-in-app-path"
+import { useLanguage, usePlatform, useEnvironment } from "../environment"
+import { usePlugin } from "@opencode/plugin/desktop"
+import { fileManagerApp } from "@opencode/util/file-manager"
+import { openInAppParentPath } from "./open-in-app-path"
 
 export const OPEN_APPS = [
   "vscode",
@@ -28,11 +23,10 @@ export const OPEN_APPS = [
 ] as const
 
 export type OpenApp = (typeof OPEN_APPS)[number]
+export function openAppPreference(value: unknown): OpenApp {
+  return OPEN_APPS.find((app) => app === value) ?? "finder"
+}
 export type OpenAppOS = "macos" | "windows" | "linux" | "unknown"
-
-export const OpenAppPreferences = Persistence.struct({
-  app: Schema.Literals(OPEN_APPS),
-})
 
 const appExistence = new Map<string, Promise<boolean>>()
 
@@ -121,18 +115,17 @@ export function openAppsForOS(os: OpenAppOS) {
   return LINUX_OPEN_APPS
 }
 
-const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown) => {
-  showToast({
-    variant: "error",
-    title: language.t("common.requestFailed"),
-    description: err instanceof Error ? err.message : String(err),
-  })
-}
-
 export function useOpenInApp(input: { path: () => string }) {
   const platform = usePlatform()
-  const server = useServer()
+  const environment = useEnvironment()
+  const ctx = usePlugin()
   const language = useLanguage()
+  const showRequestError = (err: unknown) =>
+    ctx.ui.toast.show({
+      variant: "error",
+      title: language.t("common.requestFailed"),
+      message: err instanceof Error ? err.message : String(err),
+    })
 
   const os = createMemo(() => detectOpenAppOS(platform))
   const apps = createMemo(() => openAppsForOS(os()))
@@ -166,16 +159,18 @@ export function useOpenInApp(input: { path: () => string }) {
     ] as const
   })
 
-  const [prefs, setPrefs] = persisted(Persist.global("open.app"), OpenAppPreferences, { app: "finder" })
+  const [prefs, setPrefs] = ctx.storage.store("open-app", { initial: { app: "finder" as OpenApp } })
   const [menu, setMenu] = createStore({ open: false })
   const [openRequest, setOpenRequest] = createStore({
     app: undefined as OpenApp | undefined,
   })
 
-  const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal)
+  const canOpen = createMemo(
+    () => platform.platform === "desktop" && !!platform.openPath && environment.session.server.local,
+  )
   const current = createMemo(
     () =>
-      options().find((o) => o.id === prefs.app) ??
+      options().find((o) => o.id === openAppPreference(prefs.app)) ??
       options()[0] ??
       ({ id: "finder", label: fileManager().label, icon: fileManager().icon } as const),
   )
@@ -183,7 +178,9 @@ export function useOpenInApp(input: { path: () => string }) {
 
   const selectApp = (app: OpenApp | "finder") => {
     if (!options().some((item) => item.id === app)) return
-    setPrefs("app", app)
+    setPrefs((draft) => {
+      draft.app = app
+    })
   }
 
   const openPath = (app: OpenApp | "finder", target = input.path(), reveal = false) => {
@@ -198,11 +195,9 @@ export function useOpenInApp(input: { path: () => string }) {
       app === "finder" && reveal && platform.revealPath
         ? platform.revealPath(target).then((revealed) => (revealed ? undefined : open(openInAppParentPath(target))))
         : open(target, openWith)
-    request
-      .catch((err: unknown) => showRequestError(language, err))
-      .finally(() => {
-        setOpenRequest("app", undefined)
-      })
+    request.catch(showRequestError).finally(() => {
+      setOpenRequest("app", undefined)
+    })
   }
 
   const copyPath = (target = input.path()) => {
@@ -210,14 +205,13 @@ export function useOpenInApp(input: { path: () => string }) {
     navigator.clipboard
       .writeText(target)
       .then(() => {
-        showToast({
+        ctx.ui.toast.show({
           variant: "success",
-          icon: "circle-check",
           title: language.t("common.copied"),
-          description: target,
+          message: target,
         })
       })
-      .catch((err: unknown) => showRequestError(language, err))
+      .catch(showRequestError)
   }
 
   return {

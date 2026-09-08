@@ -64,6 +64,7 @@
         "@kobalte/core": "catalog:",
         "@opencode/client": "workspace:*",
         "@opencode/plugin": "workspace:*",
+        "@opencode/plugin-review-desktop": "workspace:*",
         "@opencode/schema": "workspace:*",
         "@opencode/session-ui": "workspace:*",
         "@opencode/ui": "workspace:*",
@@ -655,6 +656,26 @@
         "devtools-protocol": "0.0.1687809",
         "electron": "42.10.1",
         "puppeteer-core": "25.9.0",
+      },
+    },
+    "packages/plugin-review-desktop": {
+      "name": "@opencode/plugin-review-desktop",
+      "version": "0.0.0",
+      "dependencies": {
+        "@opencode/client": "workspace:*",
+        "@opencode/plugin": "workspace:*",
+        "@opencode/session-ui": "workspace:*",
+        "@opencode/ui": "workspace:*",
+        "@opencode/util": "workspace:*",
+        "@solid-primitives/event-listener": "catalog:",
+        "@solid-primitives/scheduled": "1.5.3",
+        "@tanstack/solid-query": "5.91.4",
+        "@tanstack/solid-virtual": "catalog:",
+        "solid-js": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
       },
     },
     "packages/posts": {
@@ -2245,6 +2266,8 @@
     "@opencode/plugin-browser": ["@opencode/plugin-browser@workspace:packages/plugin-browser"],
 
     "@opencode/plugin-browser-desktop": ["@opencode/plugin-browser-desktop@workspace:packages/plugin-browser-desktop"],
+
+    "@opencode/plugin-review-desktop": ["@opencode/plugin-review-desktop@workspace:packages/plugin-review-desktop"],
 
     "@opencode/posts": ["@opencode/posts@workspace:packages/posts"],
 

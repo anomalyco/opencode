@@ -4,17 +4,11 @@ import { createQuery } from "@tanstack/solid-query"
 import { Icon } from "@opencode/ui/icon"
 import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode/session-ui/v2/session-file-panel-v2"
 import { SessionReviewV2Sidebar } from "@opencode/session-ui/v2/session-review-v2"
-import FileTreeV2, { type Kind } from "@/session/files/file-tree-v2"
-import { useFile } from "@/workspaces/files/model"
-import { useLanguage } from "@/runtime/i18n/language"
-import { useWorkspaceLocation } from "@/workspaces/location"
-import { useServerSDK } from "@/runtime/server/client"
-import { displayName } from "@/shell/layout/helpers"
-import { useSessionLayout } from "@/session/session-layout"
-import { SessionFileView } from "@/session/files/file-tabs"
-import { applyFileListKeyDown, SessionFileList } from "@/session/files/list"
-import { pathKey } from "@/workspaces/path-key"
-import { useServer } from "@/runtime/server/current"
+import FileTreeV2, { type Kind } from "./file-tree-v2"
+import { useFile, useLanguage, useWorkspaceLocation, useServerSDK, useEnvironment } from "../environment"
+import { getFilename } from "@opencode/util/path"
+import { SessionFileView } from "./file-tabs"
+import { applyFileListKeyDown, SessionFileList } from "./list"
 
 const emptyFiles: string[] = []
 
@@ -40,9 +34,8 @@ export function SessionFileBrowserTab(props: {
   const file = useFile()
   const language = useLanguage()
   const sdk = useWorkspaceLocation()
-  const server = useServer()
+  const environment = useEnvironment()
   const serverSDK = useServerSDK()
-  const { workspaceKey } = useSessionLayout()
   const resultsID = `session-file-browser-results-${createUniqueId()}`
   const [store, setStore] = createStore({ filter: "", explicitHighlight: undefined as string | undefined })
   const filter = () => store.filter
@@ -53,8 +46,8 @@ export function SessionFileBrowserTab(props: {
   const search = createQuery(() => {
     const value = query()
     return {
-      queryKey: [serverSDK.scope, "session-open-file", workspaceKey(), value] as const,
-      enabled: serverSDK.connection.status() === "connected" && value.length > 0,
+      queryKey: [serverSDK.scope, "session-open-file", sdk().directory, value] as const,
+      enabled: environment.session.server.compatible && value.length > 0,
       queryFn: ({ signal }) => file.searchFiles(value, { limit: 200, signal }),
     }
   })
@@ -71,16 +64,7 @@ export function SessionFileBrowserTab(props: {
   })
 
   const loading = createMemo(() => query().length > 0 && search.isPending)
-  const project = createMemo(() => {
-    const directory = pathKey(sdk().directory)
-    return server.ctx.projects
-      .list()
-      .find(
-        (item) =>
-          pathKey(item.worktree) === directory || item.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
-      )
-  })
-  const title = createMemo(() => displayName(project() ?? { worktree: sdk().directory }))
+  const title = createMemo(() => environment.services.project?.name ?? getFilename(sdk().directory))
   const optionID = (path: string) => `${resultsID}-option-${files().indexOf(path)}`
 
   const onFilterKeyDown = (event: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
@@ -172,7 +156,7 @@ export function SessionFileBrowserTab(props: {
           <SessionFilePanelV2Empty>
             <div class="flex flex-col items-center gap-2 text-center text-text-weak">
               <Icon name="file-tree" size="large" class="mb-2" />
-              <div class="text-[13px] font-medium leading-[13px] text-text-strong">{language.t("command.file.open")}</div>
+              <div class="text-13-medium text-text-strong">{language.t("command.file.open")}</div>
               <div class="h-5 text-13-regular leading-5">{language.t("session.files.selectToOpen")}</div>
             </div>
           </SessionFilePanelV2Empty>

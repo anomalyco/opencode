@@ -1,5 +1,4 @@
-import { useFile } from "@/workspaces/files/model"
-import { encodeFilePath } from "@/workspaces/files/path"
+import { useFile } from "../environment"
 import { Collapsible } from "@opencode/ui/collapsible"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
@@ -17,12 +16,17 @@ import {
   type ParentProps,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import type { FileNode } from "@/runtime/server/types"
+import type { FileNode } from "@opencode/plugin/desktop/workspace"
 
 const MAX_DEPTH = 128
 
 export function pathToFileUrl(filepath: string): string {
-  return `file://${encodeFilePath(filepath)}`
+  const normalized = filepath.replaceAll("\\", "/")
+  const absolute = /^[A-Za-z]:/.test(normalized) ? `/${normalized}` : normalized
+  return `file://${absolute
+    .split("/")
+    .map((segment, index) => (index === 1 && /^[A-Za-z]:$/.test(segment) ? segment : encodeURIComponent(segment)))
+    .join("/")}`
 }
 
 export type Kind = "add" | "del" | "mix"

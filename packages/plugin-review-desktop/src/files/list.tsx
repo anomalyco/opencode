@@ -1,16 +1,16 @@
 import { FileIcon } from "@opencode/ui/file-icon"
+import { FileTreeItem } from "@opencode/ui/file-tree-item"
 import "@opencode/ui/file-tree.css"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
-import { kindChange, kindLabel, syncFileTreeV2Width, type Kind } from "@/session/files/file-tree-v2"
-import { normalizePath } from "@/session/review/review-diff-kinds"
+import { kindChange, kindLabel, syncFileTreeV2Width, type Kind } from "./file-tree-v2"
+import { normalizePath } from "../review/review-diff-kinds"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
-import { virtualScrollElement } from "@/session/files/virtual-scroll"
-import { useWorkspaceLocation } from "@/workspaces/location"
-import { useOpenInApp } from "@/session/files/open-in-app"
-import { OpenInAppContextMenuV2 } from "@/session/files/open-in-app-button"
-import { resolveOpenInAppPath } from "@/session/files/open-in-app-path"
-import { usePlatform } from "@/runtime/platform/platform"
+import { createVirtualScrollElement } from "./virtual-scroll"
+import { useWorkspaceLocation, usePlatform } from "../environment"
+import { useOpenInApp } from "./open-in-app"
+import { OpenInAppContextMenuV2 } from "./open-in-app-button"
+import { resolveOpenInAppPath } from "./open-in-app-path"
 
 // Drives the highlight/selection of the flat search-result list from the filter
 // input's keyboard events.
@@ -43,7 +43,7 @@ export function applyFileListKeyDown(
 // row data-slots on purpose so file-tree-v2.css styles both. data-highlighted has
 // no CSS of its own — it folds into data-selected below and only exists as the
 // scrollIntoView query hook.
-export function SessionFileList(props: {
+type FileListProps = {
   files: readonly string[]
   active?: string
   highlighted?: string
@@ -53,10 +53,16 @@ export function SessionFileList(props: {
   optionID?: (path: string) => string
   onFileClick: (path: string) => void
   onFileDoubleClick?: (path: string) => void
-}) {
+}
+
+export function SessionFileList(props: FileListProps) {
   const location = useWorkspaceLocation()
   const platform = usePlatform()
   const openIn = platform.platform === "desktop" ? useOpenInApp({ path: () => location().directory }) : undefined
+  return <FileListView {...props} directory={location().directory} openIn={openIn} />
+}
+
+export function FileListView(props: FileListProps & { directory?: string; openIn?: ReturnType<typeof useOpenInApp> }) {
   const active = () => normalizePath(props.active ?? "")
   const highlighted = () => normalizePath(props.highlighted ?? "")
   const normalized = createMemo(() => props.files.map(normalizePath))
@@ -66,7 +72,7 @@ export function SessionFileList(props: {
     get count() {
       return props.files.length
     },
-    getScrollElement: () => virtualScrollElement(root()),
+    getScrollElement: createVirtualScrollElement(root),
     initialRect: { width: 0, height: 600 },
     estimateSize: () => 28,
     gap: 2,
@@ -142,8 +148,11 @@ export function SessionFileList(props: {
                     transform: `translateY(${item().start}px)`,
                   }}
                 >
-                  <OpenInAppContextMenuV2 state={openIn} path={() => resolveOpenInAppPath(location().directory, path)}>
-                    <button
+                  <OpenInAppContextMenuV2
+                    state={props.openIn}
+                    path={() => resolveOpenInAppPath(props.directory ?? "", path)}
+                  >
+                    <FileTreeItem
                       type="button"
                       id={props.optionID?.(path)}
                       role={props.role ? "option" : undefined}
@@ -175,7 +184,7 @@ export function SessionFileList(props: {
                           </span>
                         )}
                       </Show>
-                    </button>
+                    </FileTreeItem>
                   </OpenInAppContextMenuV2>
                 </div>
               )}

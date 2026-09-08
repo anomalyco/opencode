@@ -1,0 +1,32 @@
+{
+  "name": "@opencode/plugin-review-desktop",
+  "version": "0.0.0",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.tsx",
+    "./review/panel": "./src/review/panel.tsx",
+    "./files/*": "./src/files/*.ts",
+    "./review/*": "./src/review/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@opencode/client": "workspace:*",
+    "@opencode/plugin": "workspace:*",
+    "@opencode/session-ui": "workspace:*",
+    "@opencode/ui": "workspace:*",
+    "@opencode/util": "workspace:*",
+    "@solid-primitives/event-listener": "catalog:",
+    "@solid-primitives/scheduled": "1.5.3",
+    "@tanstack/solid-query": "5.91.4",
+    "@tanstack/solid-virtual": "catalog:",
+    "solid-js": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

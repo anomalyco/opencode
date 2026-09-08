@@ -23,8 +23,9 @@ import { TerminalPanel } from "@/session/terminal/panel"
 import { useUsageExceededDialogs } from "./usage-exceeded-dialogs"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionScreenLayout } from "./screen-layout"
-import { createSessionReview } from "./review/model"
-import { SessionDesktopReview, SessionMobileReview, SessionMobileViewTabs } from "./review/view"
+import { createSessionSummary } from "./summary"
+import { SessionMobileViewTabs } from "./mobile-view-tabs"
+import { SessionSidePanel } from "./files/session-side-panel"
 import { SessionContextTab } from "./files/session-context-tab"
 import { createSessionTimelineInteraction } from "./timeline/interaction"
 import { createTimelineSearchController } from "./timeline/search-controller"
@@ -35,11 +36,7 @@ import { SessionReviewToggle } from "./header/session-header-actions"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { useExtensionPanels } from "@/extensions/session"
 import { createSessionServices } from "@/extensions/workspace"
-
-const SessionMobileFiles = lazy(async () => {
-  const { SessionMobileFiles } = await import("./files/session-mobile-files")
-  return { default: SessionMobileFiles }
-})
+import { ExtensionPanelContent } from "@/extensions/content"
 
 export function SessionScreen(props: { session: SessionModel }) {
   const session = props.session
@@ -75,6 +72,7 @@ export function SessionScreen(props: { session: SessionModel }) {
     sideTerminalPresent: false,
     mobileTerminalCached: false,
     mobileMoveDismissed: false,
+    mobileTab: "session",
   })
   const [elements, setElements] = createStore<{
     side?: HTMLDivElement
@@ -143,8 +141,14 @@ export function SessionScreen(props: { session: SessionModel }) {
     }
     return key
   })
-  const review = createSessionReview({ session, screen, deferRender: () => store.deferRender })
-  const mobileView = createMemo(() => (screen.terminal.open() ? "terminal" : review.mobile.tab()))
+  const summary = createSessionSummary(session)
+  const mobileView = createMemo(() => {
+    if (screen.terminal.open()) return "terminal"
+    if (store.mobileTab === "session" || store.mobileTab === "usage") return store.mobileTab
+    const selected = extensions.panels().find((panel) => panel.key === session.tabs.activeTab())
+    return selected?.props.group ?? selected?.key ?? store.mobileTab
+  })
+  const mobileItems = createMemo(() => Array.from(new Map(extensions.panels().map((panel) => [panel.props.group ?? panel.key, panel])).keys()).map((id) => ({ id, title: extensions.panels().find((panel) => (panel.props.group ?? panel.key) === id)!.props.title })))
   const conversationVisible = createMemo(() => isDesktop() || mobileView() === "session")
   createEffect(() => {
     if (!isDesktop() && screen.terminal.open()) setStore("mobileTerminalCached", true)
@@ -166,8 +170,9 @@ export function SessionScreen(props: { session: SessionModel }) {
     <Show when={session.identity.sessionKey()} keyed>
       {(_key) => (
         <SessionMobileViewTabs
+          items={mobileItems()}
           current={mobileView()}
-          onDetailsOpenChange={review.details.setOpen}
+          onDetailsOpenChange={summary.setOpen}
           details={
             !session.data.isChild() && detailsProject()
               ? (close) => (
@@ -185,14 +190,18 @@ export function SessionScreen(props: { session: SessionModel }) {
                         baseBranch={
                           session.shared.data.location.vcs.info({ directory: project().worktree })?.branch.current
                         }
-                        diffs={project().vcs ? review.details.diffs() : []}
+                        diffs={project().vcs ? summary.diffs() : []}
                         sessionID={session.identity.params.id ?? ""}
                         moveEligible={composer.workspaceMoveEligible()}
                         moveDismissed={store.mobileMoveDismissed}
                         onMoveDismiss={() => setStore("mobileMoveDismissed", true)}
                         onReview={() => {
                           close()
-                          review.mobile.setTab("changes")
+                          const panel = extensions.defaultPanel()
+                          if (panel) {
+                            session.layout.tabs().setActive(panel)
+                            setStore("mobileTab", panel)
+                          }
                           session.layout.view().terminal.close()
                         }}
                         backgroundTasks={composer.requests.background.tasks()}
@@ -207,7 +216,13 @@ export function SessionScreen(props: { session: SessionModel }) {
               session.layout.view().terminal.open()
               return
             }
-            review.mobile.setTab(view)
+            setStore("mobileTab", view)
+            const panel = extensions.panels().find((panel) => (panel.props.group ?? panel.key) === view)
+            if (panel) {
+              void session.layout.tabs().open(panel.key)
+              session.layout.tabs().setActive(panel.key)
+              session.layout.view().reviewPanel.open()
+            }
             session.layout.view().terminal.close()
           }}
         />
@@ -242,13 +257,8 @@ export function SessionScreen(props: { session: SessionModel }) {
           <Match when={!isDesktop() && mobileView() === "usage"}>
             <SessionContextTab />
           </Match>
-          <Match when={!isDesktop() && mobileView() === "files"}>
-            <Suspense>
-              <SessionMobileFiles />
-            </Suspense>
-          </Match>
-          <Match when={session.identity.params.id && review.mobile.changes()}>
-            <SessionMobileReview review={review} />
+          <Match when={!isDesktop() && mobileItems().some((item) => item.id === mobileView())}>
+            <ExtensionPanelContent panels={extensions.panels()} active={session.tabs.activeTab()} />
           </Match>
           <Match when={session.identity.params.id}>
             <Show when={isDesktop() && !messagesReady()}>
@@ -274,10 +284,14 @@ export function SessionScreen(props: { session: SessionModel }) {
                   pinned={timeline.view.pinned()}
                   centered={screen.centered()}
                   setContentRef={timeline.view.setContentRef}
-                  diffs={review.details.diffs}
-                  onReview={review.open}
+                  diffs={summary.diffs}
+                  onReview={() => {
+                    session.layout.view().reviewPanel.open()
+                    const panel = extensions.defaultPanel()
+                    if (panel) session.layout.tabs().setActive(panel)
+                  }}
                   workspaceMoveEligible={composer.workspaceMoveEligible()}
-                  onSummaryOpenChange={review.details.setOpen}
+                  onSummaryOpenChange={summary.setOpen}
                   anchor={timeline.view.anchor}
                   setRevealMessage={timeline.view.setRevealMessage}
                   setScrollToEnd={timeline.view.setScrollToEnd}
@@ -297,7 +311,7 @@ export function SessionScreen(props: { session: SessionModel }) {
 
   return (
     <>
-      <Show when={isDesktop()}>{extensions.declarations()}</Show>
+      {extensions.declarations()}
       <div class="flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
         <div ref={screen.panel.ref} class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
           {/* Keep the control outside panel animations; the terminal's 52px header includes a 1px divider. */}
@@ -389,7 +403,12 @@ export function SessionScreen(props: { session: SessionModel }) {
                         setStore("sideReviewPresent", false)
                       }}
                     >
-                      <SessionDesktopReview review={review} extensions={extensions} present={store.sideReviewPresent} />
+                      <SessionSidePanel
+                        size={screen.size}
+                        stacked={screen.side.layout().stacked}
+                        extensions={extensions}
+                        present={store.sideReviewPresent}
+                      />
                     </div>
                   </Show>
                 </div>
