@@ -66,6 +66,14 @@ export const run: Run = Effect.fn("Tui.vite")(function* (input: Parameters<Run>[
           ],
         },
         plugins: [
+          {
+            name: "tui-refresh-boundaries",
+            enforce: "pre",
+            load(id) {
+              if (id === "/@solid-refresh")
+                return `export * from ${JSON.stringify(path.join(import.meta.dirname, "refresh.ts"))}`
+            },
+          },
           solid({
             hot: false,
             dev: true,

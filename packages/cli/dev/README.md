@@ -11,9 +11,11 @@ This uses the normal CLI and its real TUI through Vite + `solid-refresh`. For an
 - Component edits hot-update through the existing Solid refresh runtime.
 - Full reloads await TUI cleanup and reopen the original launch target (Home, `--session`, or `--continue`). They do not preserve a subsequently selected route or local UI state, and do not replay `--prompt`.
 - Correcting syntax errors retries a failed reload. The backend stays alive.
-- After hot updates, Solid error boundaries reset so fixing a render error dismisses the error screen. Boundary recovery can reset local UI state, like using the error screen's Restart action.
+- Refreshable components get local error boundaries. Render errors appear inline and retry on the next update, instead of resetting the root boundary and losing the active session and draft. State within remounted components can still reset, especially when several components share an edited file.
 - Launcher/config/dependency changes require restarting the development client.
 
 `vite.ts` registers a Bun runtime module that supplies the Vite runner for the CLI's existing static `@opencode-ai/tui` import. This registration runs only in the dev launcher; production handlers and their import graph are unchanged. `tui.ts` owns Vite and the TUI lifecycle. `entry.ts` loads the real application source through Vite. `host.js` keeps lifecycle ownership outside Vite's reloadable module cache. No production CLI handler, TUI component, or route changes are needed.
+
+`refresh.ts` delegates module/component replacement to stock `solid-refresh`, wrapping each returned component proxy in Solid's standard ErrorBoundary. Only failed boundaries retry; the global reset is deliberately avoided. `refresh-runtime.d.ts` supplies types for the package's existing deep runtime export.
 
 Tested on Linux/Bun with full-app rendering, message/palette HMR, draft preservation, and native-terminal full reload/error recovery. External native-loaded plugins remain experimental across full reloads because their process-lifetime runtime mappings can retain an older Solid generation.
