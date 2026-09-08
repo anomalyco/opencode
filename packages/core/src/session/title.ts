@@ -1,13 +1,13 @@
 export * as SessionTitle from "./title.js"
 
 import { isDeepStrictEqual } from "node:util"
-import { LLMClient, LLMEvent, Message, SystemPart } from "@opencode-ai/ai"
-import type { Agent } from "@opencode-ai/schema/agent"
+import { LLMClient, LLMEvent, Message, SystemPart } from "@opencode/ai"
+import type { Agent } from "@opencode/schema/agent"
 import { Context, DateTime, Effect, Layer, Stream } from "effect"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { isExactRootFallback } from "@opencode-ai/util/session-title-fallback"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { isExactRootFallback } from "@opencode/util/session-title-fallback"
 import { llmClient } from "../effect/app-node-platform.js"
 import { SessionContext } from "./context.js"
 import { SessionEvent } from "./event.js"
@@ -64,6 +64,7 @@ export const layer = Layer.effect(
           : Effect.void,
       )
       const prepared = yield* context.prepare({
+        kind: "title",
         scope: { session: input.session, agentID: input.agent.id, model: input.model },
         transcript: {
           system: input.agent.system ? [SystemPart.make(input.agent.system)] : [],

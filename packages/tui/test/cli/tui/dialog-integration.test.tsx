@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { InputRenderable, TextareaRenderable } from "@opentui/core"
-import type { LocationRef } from "@opencode-ai/client"
+import type { LocationRef } from "@opencode/client"
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { onMount } from "solid-js"

@@ -1,4 +1,4 @@
-import { ProcessLock } from "@opencode-ai/core/util/process-lock"
+import { ProcessLock } from "@opencode/core/util/process-lock"
 import { Effect, Schema } from "effect"
 import fs from "node:fs/promises"
 

@@ -1,14 +1,14 @@
 export * as FileSystem from "./filesystem.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "./location.js"
 import { PositiveInt, RelativePath } from "./schema.js"
 import { FileSystemSearch } from "./filesystem/search.js"
-import { Entry, FileSystem, FindInput } from "@opencode-ai/schema/filesystem"
-export { Entry, Match, Submatch } from "@opencode-ai/schema/filesystem"
+import { Entry, FileSystem, FindInput } from "@opencode/schema/filesystem"
+export { Entry, Match, Submatch } from "@opencode/schema/filesystem"
 
 export const ReadInput = Schema.Struct({
   path: RelativePath,

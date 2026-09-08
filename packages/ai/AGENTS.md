@@ -81,7 +81,7 @@ export const route = Route.make({
 
 Route defaults are request-shaping defaults such as `headers`, `limits`, `generation`, `providerOptions`, and `http`. Endpoint host/query belongs on the route endpoint. Selected `LanguageModel` values carry only model id, provider id, and the configured route value. Model capability/catalog metadata lives outside this package; protocol support is enforced by request lowering and typed `AIError`s.
 
-The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider deployment is a 5-15 line `Route.make(...)` call instead of a 300-400 line route clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
+The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider owns a small `Route.make(...)` composition instead of a protocol clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
 
 When a provider supports multiple physical transports, selection remains execution policy below its semantic route. `OpenResponsesChannel.transport(...)` owns the provider-neutral Responses WebSocket concept: it prepares one final request, executes HTTP by default, strips WebSocket-disallowed fields, and passes a generic channel exchange to a per-call `WebSocketChannelExecutor` when supplied. Provider-specific Responses routes opt in with handshake and connection-age policy. `Route.streamPrepared` owns decoding and acknowledges channel completion only after successful full consumption.
 
@@ -115,15 +115,16 @@ Keep provider facades small and explicit:
 - Prefer `apiKey` as provider-specific sugar and `auth` as the explicit override; keep them mutually exclusive in provider option types with `ProviderAuthOption`.
 - Resolve `apiKey` → `Auth` with `AuthOptions.bearer(options, "<PROVIDER>_API_KEY")` (it honors an explicit `auth` override and falls back to `Auth.config(envVar)` so missing keys surface a typed `Authentication` error rather than a runtime crash).
 - Use separate top-level facades for products with different required setup, such as `CloudflareAIGateway` and `CloudflareWorkersAI`.
+- Give every named provider its own file and top-level export. Keep its endpoint, auth defaults, and route setup in that file. Compose shared protocols directly; do not nest named provider presets under generic compatible facades or keep their endpoints in a shared provider profile registry.
 
 `Provider.make(...)` remains available for simple static provider definitions, but new built-in providers should prefer plain configured facades unless a helper removes real duplication without adding runtime behavior.
 
 ### Provider Package Entrypoints
 
-Catalog-selected native providers use package-like export paths from `@opencode-ai/ai`. They are internal entrypoints in one npm package, not separately published provider packages. Every entrypoint implements `ProviderPackage.Definition` and exposes `model(modelID, settings)`, where settings are serializable provider configuration plus common `headers`, `body`, and `limits` overlays.
+Catalog-selected native providers use package-like export paths from `@opencode/ai`. They are internal entrypoints in one npm package, not separately published provider packages. Every entrypoint implements `ProviderPackage.Definition` and exposes `model(modelID, settings)`, where settings are serializable provider configuration plus common `headers`, `body`, and `limits` overlays.
 
 ```ts
-import { model } from "@opencode-ai/ai/providers/openai/responses"
+import { model } from "@opencode/ai/providers/openai/responses"
 
 const selected = model("gpt-5", {
   apiKey,

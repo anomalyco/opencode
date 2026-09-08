@@ -1,4 +1,4 @@
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode/util/path"
 import type { FileSelection } from "@/workspaces/files/model"
 import { encodeFilePath } from "@/workspaces/files/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt, SkillPart } from "@/composer/state"

@@ -1,5 +1,5 @@
 import { Effect, Option, Schema } from "effect"
-import { Tool } from "@opencode-ai/schema/tool"
+import { Tool } from "@opencode/schema/tool"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
@@ -465,7 +465,8 @@ function mapSafetySettings(value: unknown) {
 }
 
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
-  const hasTools = request.tools.length > 0
+  const flattened = ProviderShared.flattenToolRequest(request)
+  const hasTools = flattened.tools.length > 0
   const generation = request.generation
   const options = resolveOptions(request)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
@@ -483,7 +484,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
 
   return {
     cachedContent: options.cachedContent,
-    contents: yield* lowerMessages(request),
+    contents: yield* lowerMessages(flattened.request),
     safetySettings: options.safetySettings,
     serviceTier: options.serviceTier,
     systemInstruction:
@@ -491,7 +492,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     tools: hasTools
       ? [
           {
-            functionDeclarations: request.tools.map((tool) =>
+            functionDeclarations: flattened.tools.map((tool) =>
               lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
             ),
           },
@@ -638,6 +639,14 @@ const step = (state: ParserState, event: GeminiEvent) => {
       : state.usage,
   }
   const candidate = event.candidates?.[0]
+  if (candidate?.finishReason && mapFinishReason(candidate.finishReason, state.hasToolCalls) === "error")
+    return Effect.fail(
+      ProviderShared.eventError(
+        state.route,
+        `Gemini stopped with ${candidate.finishReason}`,
+        ProviderShared.encodeJson(event),
+      ),
+    )
   if (!candidate?.content)
     return Effect.succeed([
       { ...nextState, finishReason: candidate?.finishReason ?? nextState.finishReason },

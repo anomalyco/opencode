@@ -1,4 +1,4 @@
-import { onMount } from "solid-js"
+import { onCleanup, onMount } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { ComposerAttachment, ComposerPrompt } from "../types"
 
@@ -78,6 +78,7 @@ export type ComposerAttachmentConfig = {
   onError: (error: unknown) => void
   readClipboardImage?: () => Promise<File | null>
   getPathForFile?: (file: File) => string
+  onDragCancel?: (callback: () => void) => () => void
   store?: (file: File) => Promise<{ id: string; url: string }>
 }
 
@@ -90,6 +91,9 @@ export function createComposerAttachments(
     setDraggingType: (type: "image" | "@mention" | null) => void
   },
 ) {
+  const clearDrag = () => {
+    input.setDraggingType(null)
+  }
   const capture = () => {
     const prompt = input.capture()
     const editor = input.editor()
@@ -178,7 +182,7 @@ export function createComposerAttachments(
   const handleDrop = async (event: DragEvent) => {
     if (input.isDialogActive()) return
     event.preventDefault()
-    input.setDraggingType(null)
+    clearDrag()
     const plainText = event.dataTransfer?.getData("text/plain")
     if (plainText?.startsWith("file:")) {
       const path = plainText.slice("file:".length)
@@ -191,6 +195,8 @@ export function createComposerAttachments(
   }
 
   onMount(() => {
+    const cancel = input.onDragCancel?.(clearDrag)
+    if (cancel) onCleanup(cancel)
     makeEventListener(document, "dragover", (event) => {
       if (input.isDialogActive()) return
       event.preventDefault()
@@ -198,7 +204,10 @@ export function createComposerAttachments(
       else if (event.dataTransfer?.types.includes("text/plain")) input.setDraggingType("@mention")
     })
     makeEventListener(document, "dragleave", (event) => {
-      if (!input.isDialogActive() && !event.relatedTarget) input.setDraggingType(null)
+      if (!input.isDialogActive() && !event.relatedTarget) clearDrag()
+    })
+    makeEventListener(document, "keydown", (event) => {
+      if (event.key === "Escape") clearDrag()
     })
     makeEventListener(document, "drop", handleDrop)
   })

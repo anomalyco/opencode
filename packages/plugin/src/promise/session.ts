@@ -1,12 +1,12 @@
-import type { SessionApi } from "@opencode-ai/client/promise/api"
-import type { GenerationOptionsFields, Message, SystemPart } from "@opencode-ai/ai"
-import type { Agent } from "@opencode-ai/schema/agent"
-import type { Model } from "@opencode-ai/schema/model"
-import type { PromptInput } from "@opencode-ai/schema/prompt-input"
-import type { Session } from "@opencode-ai/schema/session"
-import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
-import type { SessionError } from "@opencode-ai/schema/session-error"
-import type { SessionMessage } from "@opencode-ai/schema/session-message"
+import type { SessionApi } from "@opencode/client/promise/api"
+import type { GenerationOptionsFields, Message, SystemPart } from "@opencode/ai"
+import type { Agent } from "@opencode/schema/agent"
+import type { Model } from "@opencode/schema/model"
+import type { PromptInput } from "@opencode/schema/prompt-input"
+import type { Session } from "@opencode/schema/session"
+import type { SessionInbox } from "@opencode/schema/session-inbox"
+import type { SessionError } from "@opencode/schema/session-error"
+import type { SessionMessage } from "@opencode/schema/session-message"
 import type { JsonSchema, Types } from "effect"
 import type { ModelHooks } from "./registration.js"
 
@@ -30,10 +30,17 @@ export interface SessionContext {
   providerOptions: Record<string, unknown>
 }
 
+/**
+ * Why a Session request is being made. Auxiliary requests share the Session's
+ * hook identity but need to be told apart from the agent loop.
+ */
+export type SessionRequestKind = "primary" | "compaction" | "title" | "generate"
+
 export interface SessionModelRequest {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
+  readonly kind: SessionRequestKind
   baseURL?: string
   headers: Record<string, string>
 }
@@ -42,6 +49,7 @@ export interface SessionHttpRequest {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
+  readonly kind: SessionRequestKind
   request: Request
 }
 
@@ -49,6 +57,7 @@ export interface SessionHttpResponse {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
+  readonly kind: SessionRequestKind
   readonly request: Request
   response: Response
 }

@@ -22,8 +22,8 @@ import type {
   ShellInfo,
   SkillInfo,
   VcsInfo,
-} from "@opencode-ai/client"
-import type { ResolvedTheme } from "@opencode-ai/theme/tui"
+} from "@opencode/client"
+import type { ResolvedTheme } from "@opencode/theme/tui"
 import type { CliRenderer, KeyEvent, MarkdownCodeBlockRenderer, Renderable } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 import type { Store } from "solid-js/store"
@@ -162,6 +162,21 @@ type PromptFooterInput = {
   readonly showDetails: boolean
 }
 
+export type PanelPresentation = "panel" | "fullscreen"
+
+/** Client-local state of the selected session panel. The host owns its layout and input scope. */
+export interface PanelInput {
+  /** Selected content name, set by ui.panel.open. Contributions decide whether to render it. */
+  readonly name: string
+  readonly sessionID: string
+  readonly width: number
+  readonly presentation: PanelPresentation
+  readonly focused: boolean
+  readonly focus: () => void
+  readonly close: () => void
+  readonly toggleFullscreen: () => void
+}
+
 /**
  * The host UI's slot tree. Every path is one slot: a named boundary a plugin
  * may render around, inside, or take over. Paths are absolute and
@@ -180,6 +195,7 @@ export interface SlotMap {
   readonly "prompt.footer.status": PromptFooterInput
   readonly "prompt.footer.file": PromptFooterInput
   readonly "session.composer.top": { readonly sessionID: string }
+  readonly "session.panel": PanelInput
   readonly "sidebar.content": { readonly sessionID: string }
   readonly "sidebar.footer": { readonly sessionID: string }
 }
@@ -337,6 +353,7 @@ export interface DialogSelectOption<Value> {
   readonly title: string
   readonly value: Value
   readonly description?: string
+  readonly footer?: string
   readonly category?: string
   readonly disabled?: boolean
 }
@@ -449,6 +466,14 @@ export interface UI {
     register(page: Page): () => void
     navigate(destination: Destination): void
     current(): Route
+  }
+  readonly panel: {
+    /** Opens the session.panel slot in the current session. */
+    open(name: string, options?: { readonly presentation?: PanelPresentation }): boolean
+    /** Closes this plugin's active panel. Other plugins' panels are unaffected. */
+    close(): void
+    /** This plugin's active panel, if any. Reactive when read in a Solid computation. */
+    current(): { readonly name: string; readonly sessionID: string } | undefined
   }
   readonly tabs: {
     /** Returns whether session tabs are enabled for this TUI. */

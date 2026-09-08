@@ -1,4 +1,4 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import { Accessor, createEffect, createMemo, createResource, createRoot, getOwner } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServers } from "./registry"
@@ -6,13 +6,16 @@ import { pathKey } from "@/workspaces/path-key"
 import { useServerHealth } from "@/runtime/server/health"
 import { createServerSdkContext } from "./client"
 import { createServerSyncContext } from "./sync"
-import { createData } from "@opencode-ai/client/solid"
+import { createData } from "@opencode/client/solid"
 import type { ServerScope } from "@/runtime/server/scope"
 import { createPermissionAutoApprover } from "@/session/requests/auto-approve"
 import { createServerNotificationState } from "@/shell/notifications/notification"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { createDesktopData } from "./data"
 import { ModelState } from "./persistence"
+import { useLanguage } from "@/runtime/i18n/language"
+import { showToast } from "@/shell/notifications/toast"
+import { formatServerError } from "./errors"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -127,6 +130,7 @@ function createServerController(
   scope: ServerScope,
   projects: ReturnType<typeof createServerProjects>,
 ) {
+  const language = useLanguage()
   const connKey = ServerConnection.key(conn)
   const sdk = createServerSdkContext(conn, scope)
   const source = createData({
@@ -137,6 +141,13 @@ function createServerController(
     },
     connection: sdk.connection,
     directory: "",
+    onError(error) {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: formatServerError(error, language.t),
+      })
+    },
   })
   const data = createDesktopData({
     data: source,

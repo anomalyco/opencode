@@ -6,6 +6,7 @@
 import type {
   AgentInfo,
   CommandInfo,
+  ConfigEntry,
   FormCancelInput,
   FormInfo,
   FormReplyInput,
@@ -37,9 +38,9 @@ import type {
   OpenCodeClient,
   WebSearchProvider,
 } from "../promise"
-import { Worktree } from "@opencode-ai/schema/worktree"
-import { SessionID } from "@opencode-ai/schema/session-id"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
+import { Worktree } from "@opencode/schema/worktree"
+import { SessionID } from "@opencode/schema/session-id"
+import { SessionMessage } from "@opencode/schema/session-message"
 import {
   isFormAlreadySettledError,
   isFormNotFoundError,
@@ -47,7 +48,7 @@ import {
   type SessionPromptInput,
 } from "../promise"
 import { createStore, produce, reconcile } from "solid-js/store"
-import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
+import type { SessionInbox } from "@opencode/schema/session-inbox"
 import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
@@ -66,10 +67,14 @@ export type CreateDataInput = {
   readonly connection?: {
     readonly status: () => "connected" | "connecting" | "reconnecting"
   }
+  /** Receives failed event-driven reads. Explicit reads still reject to their caller. */
+  readonly onError?: (error: unknown) => void
 }
 
 const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
 const messagePageLimit = 20
+// Trailing window for event bursts that each ask for the same refetch.
+export const settleMs = 150
 
 // Global MCP elicitations temporarily use "global" instead of a real session ID, so the
 // server cannot recover their Location when settling them. Preserve the event Location
@@ -82,6 +87,7 @@ type LocationData = {
   vcs?: VcsInfo
   agent?: AgentInfo[]
   command?: CommandInfo[]
+  config?: ConfigEntry[]
   integration?: IntegrationInfo[]
   mcpServer?: McpServer[]
   mcpResource?: McpResource[]
@@ -137,12 +143,18 @@ function formRequestOptions(sessionID: string, ref?: LocationRef) {
 }
 
 function createSync() {
-  type Pending = { promise: Promise<void>; invalidated: boolean }
+  // `started` is false while a reload waits for the load it replaces. Invalidations that land in
+  // that window are already covered, since the reload has not read anything yet.
+  type Pending = { promise: Promise<void>; invalidated: boolean; started: boolean }
   const state = new Map<string, true | Pending>()
   const start = (key: string, load: () => Promise<void>, wait?: Promise<void>) => {
-    const entry: Pending = { promise: Promise.resolve(), invalidated: false }
+    const entry: Pending = { promise: Promise.resolve(), invalidated: false, started: !wait }
     state.set(key, entry)
-    entry.promise = (wait ? wait.catch(() => undefined).then(load) : load())
+    const run = () => {
+      entry.started = true
+      return load()
+    }
+    entry.promise = (wait ? wait.catch(() => undefined).then(run) : run())
       .then(() => {
         if (state.get(key) === entry && !entry.invalidated) state.set(key, true)
       })
@@ -174,12 +186,12 @@ function createSync() {
       if (key) {
         const active = state.get(key)
         if (active === true) state.delete(key)
-        if (active !== undefined && active !== true) active.invalidated = true
+        if (active !== undefined && active !== true && active.started) active.invalidated = true
         return
       }
       state.forEach((active, current) => {
         if (active === true) state.delete(current)
-        if (active !== true) active.invalidated = true
+        if (active !== true && active.started) active.invalidated = true
       })
     },
   }
@@ -187,6 +199,31 @@ function createSync() {
 
 export function createData(config: CreateDataInput) {
   const api = config.api
+  let disposed = false
+  onCleanup(() => (disposed = true))
+
+  function refresh(load: () => Promise<unknown>) {
+    if (disposed || (config.connection && config.connection.status() !== "connected")) return
+    void load().catch((error) => {
+      if (disposed || (config.connection && config.connection.status() !== "connected")) return
+      if (config.onError) return config.onError(error)
+      console.error("Failed to refresh client data", error)
+    })
+  }
+
+  // Runs `load` once a burst of same-key events goes quiet, so N events cost one refetch.
+  const settling = new Map<string, ReturnType<typeof setTimeout>>()
+  onCleanup(() => settling.forEach((timer) => clearTimeout(timer)))
+  function settle(key: string, load: () => Promise<unknown>) {
+    clearTimeout(settling.get(key))
+    settling.set(
+      key,
+      setTimeout(() => {
+        settling.delete(key)
+        refresh(load)
+      }, settleMs),
+    )
+  }
 
   const [store, setStore] = createStore<Store>({
     session: {
@@ -554,31 +591,34 @@ export function createData(config: CreateDataInput) {
       case "server.connected": {
         const updates = new Map<string, DataSessionStatus | undefined>()
         activeUpdates = updates
-        void api()
-          .session.active()
-          .then((active) => {
-            if (activeUpdates !== updates) return
-            // Lifecycle events received during hydration supersede the snapshot.
-            const snapshot = new Map<string, DataSessionStatus>(Object.keys(active).map((id) => [id, "running"]))
-            updates.forEach((status, id) => {
-              if (status === undefined) return snapshot.delete(id)
-              snapshot.set(id, status)
+        refresh(() =>
+          api()
+            .session.active()
+            .then((active) => {
+              if (activeUpdates !== updates) return
+              // Lifecycle events received during hydration supersede the snapshot.
+              const snapshot = new Map<string, DataSessionStatus>(Object.keys(active).map((id) => [id, "running"]))
+              updates.forEach((status, id) => {
+                if (status === undefined) return snapshot.delete(id)
+                snapshot.set(id, status)
+              })
+              activeUpdates = undefined
+              setStore("session", "active", reconcile(Object.fromEntries(snapshot)))
             })
-            activeUpdates = undefined
-            setStore("session", "active", reconcile(Object.fromEntries(snapshot)))
-          })
-          .catch(() => {
-            if (activeUpdates === updates) activeUpdates = undefined
-          })
-        void api()
-          .location.get({ location: locationQuery(defaultLocation()) })
-          .then((location) => {
-            const key = locationKey(location)
-            setStore("location", key, { info: location })
-          })
-          .catch((error) => console.error("Failed to preload location", error))
-        void result.location.vcs.sync().catch((error) => console.error("Failed to preload VCS info", error))
-        void result.project.sync().catch((error) => console.error("Failed to preload projects", error))
+            .catch(() => {
+              if (activeUpdates === updates) activeUpdates = undefined
+            }),
+        )
+        refresh(() =>
+          api()
+            .location.get({ location: locationQuery(defaultLocation()) })
+            .then((location) => {
+              const key = locationKey(location)
+              setStore("location", key, { info: location })
+            }),
+        )
+        refresh(() => result.location.vcs.sync())
+        refresh(() => result.project.sync())
         return
       }
       case "project.updated":
@@ -587,7 +627,7 @@ export function createData(config: CreateDataInput) {
       case "session.created":
         sessionOutbox.delete(event.data.sessionID)
         result.session.invalidate(event.data.sessionID)
-        void result.session.sync(event.data.sessionID)
+        refresh(() => result.session.sync(event.data.sessionID))
         // Band-aid: a newly created session starts empty, so live events can be its source of truth.
         // Fetching pending inputs and projected messages separately lets promotion move an input between snapshots,
         // causing both requests to miss it and overwrite event-built state. Skip those racy initial reads until
@@ -628,25 +668,28 @@ export function createData(config: CreateDataInput) {
           model: event.data.model,
           time: { created: event.created },
         })
-        void api()
-          .session.message({ sessionID: event.data.sessionID, messageID: messageIDFromEvent(event.id) })
-          .then((item) => {
-            message.update(event.data.sessionID, (draft, index) => {
-              const position = index.get(item.id)
-              if (position === undefined) return message.append(draft, index, item)
-              draft[position] = item
-            })
-          })
-          .catch((error) => console.error("Failed to load projected model switch message", error))
+        refresh(() =>
+          api()
+            .session.message({ sessionID: event.data.sessionID, messageID: messageIDFromEvent(event.id) })
+            .then((item) => {
+              message.update(event.data.sessionID, (draft, index) => {
+                const position = index.get(item.id)
+                if (position === undefined) return message.append(draft, index, item)
+                draft[position] = item
+              })
+            }),
+        )
         return
       case "session.renamed": {
         // Preserve the live title when it races the session's initial read.
-        const family = sync.pending(`session.family:${event.data.sessionID}`)
-          ? result.session.sync(event.data.sessionID, { children: true })
-          : Promise.resolve()
-        void Promise.all([result.session.sync(event.data.sessionID), family]).then(() => {
-          if (store.session.info[event.data.sessionID])
-            setStore("session", "info", event.data.sessionID, "title", event.data.title)
+        refresh(() => {
+          const family = sync.pending(`session.family:${event.data.sessionID}`)
+            ? result.session.sync(event.data.sessionID, { children: true })
+            : Promise.resolve()
+          return Promise.all([result.session.sync(event.data.sessionID), family]).then(() => {
+            if (store.session.info[event.data.sessionID])
+              setStore("session", "info", event.data.sessionID, "title", event.data.title)
+          })
         })
         return
       }
@@ -680,7 +723,7 @@ export function createData(config: CreateDataInput) {
           if (!directory) {
             if (info.location.workspaceID) continue
             result.session.invalidate(sessionID)
-            void result.session.sync(sessionID)
+            refresh(() => result.session.sync(sessionID))
             continue
           }
           const adopted = Worktree.adopt(
@@ -791,7 +834,7 @@ export function createData(config: CreateDataInput) {
           })
         if (!sync.pending(`session.message:${event.data.sessionID}`)) return
         result.session.message.invalidate(event.data.sessionID)
-        void result.session.message.sync(event.data.sessionID)
+        refresh(() => result.session.message.sync(event.data.sessionID))
         return
       }
       case "session.step.started":
@@ -992,12 +1035,12 @@ export function createData(config: CreateDataInput) {
         // An event can overtake the first read; queue a revalidation when that read is still active.
         if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
         result.session.invalidate(event.data.sessionID)
-        void result.session.sync(event.data.sessionID)
+        refresh(() => result.session.sync(event.data.sessionID))
         return
       case "session.viewed":
         if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
         result.session.invalidate(event.data.sessionID)
-        void result.session.sync(event.data.sessionID)
+        refresh(() => result.session.sync(event.data.sessionID))
         return
       case "session.revert.staged":
         if (store.session.info[event.data.sessionID])
@@ -1105,7 +1148,7 @@ export function createData(config: CreateDataInput) {
         const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
         if (event.type === "credential.updated") {
           result.location.integration.invalidate(location)
-          void result.location.integration.sync(location)
+          refresh(() => result.location.integration.sync(location))
           return
         }
         setStore("location", key, (data) => ({
@@ -1123,7 +1166,7 @@ export function createData(config: CreateDataInput) {
         }))
         result.location.model.invalidate(location)
         result.location.provider.invalidate(location)
-        void Promise.all([result.location.model.sync(location), result.location.provider.sync(location)])
+        refresh(() => Promise.all([result.location.model.sync(location), result.location.provider.sync(location)]))
       })
       return
     }
@@ -1134,19 +1177,19 @@ export function createData(config: CreateDataInput) {
       case "catalog.updated":
         result.location.model.invalidate(location)
         result.location.provider.invalidate(location)
-        void Promise.all([result.location.model.sync(location), result.location.provider.sync(location)])
+        refresh(() => Promise.all([result.location.model.sync(location), result.location.provider.sync(location)]))
         break
       case "agent.updated":
         result.location.agent.invalidate(location)
-        void result.location.agent.sync(location)
+        refresh(() => result.location.agent.sync(location))
         break
       case "command.updated":
         result.location.command.invalidate(location)
-        void result.location.command.sync(location)
+        refresh(() => result.location.command.sync(location))
         break
       case "skill.updated":
         result.location.skill.invalidate(location)
-        void result.location.skill.sync(location)
+        refresh(() => result.location.skill.sync(location))
         break
       case "vcs.branch.updated":
         setStore("location", locationKey(location), (data) => ({
@@ -1181,31 +1224,39 @@ export function createData(config: CreateDataInput) {
         break
       case "reference.updated":
         result.location.reference.invalidate(location)
-        void result.location.reference.sync(location)
+        refresh(() => result.location.reference.sync(location))
         break
       case "integration.updated":
         result.location.integration.invalidate(location)
         result.location.model.invalidate(location)
         result.location.provider.invalidate(location)
-        void Promise.all([
-          result.location.integration.sync(location),
-          result.location.model.sync(location),
-          result.location.provider.sync(location),
-        ])
+        refresh(() =>
+          Promise.all([
+            result.location.integration.sync(location),
+            result.location.model.sync(location),
+            result.location.provider.sync(location),
+          ]),
+        )
         break
       case "config.updated":
+        result.location.config.invalidate(location)
+        if (result.location.config.list(location) !== undefined || sync.has(`location.config:${locationKey(location)}`))
+          refresh(() => result.location.config.sync(location))
+        refresh(() => result.location.websearch.refresh(location))
+        break
       case "websearch.updated":
-        void result.location.websearch.refresh(location)
+        refresh(() => result.location.websearch.refresh(location))
         break
       // Authenticating an MCP integration reconnects its server, which emits mcp.status.changed,
-      // so the mcp list syncs here rather than off integration.updated.
+      // so the mcp list syncs here rather than off integration.updated. The server emits one event
+      // per MCP server as each settles, so a location booting nine servers emitted nine refetches.
       case "mcp.status.changed":
         result.location.mcp.server.invalidate(location)
-        void result.location.mcp.server.sync(location)
+        settle(`mcp.status:${locationKey(location)}`, () => result.location.mcp.server.sync(location))
         break
       case "mcp.resources.changed":
         result.location.mcp.resource.invalidate(location)
-        void result.location.mcp.resource.sync(location)
+        refresh(() => result.location.mcp.resource.sync(location))
         break
     }
   }
@@ -1769,6 +1820,7 @@ export function createData(config: CreateDataInput) {
         result.location.vcs.invalidate(location)
         result.location.agent.invalidate(location)
         result.location.command.invalidate(location)
+        result.location.config.invalidate(location)
         result.location.integration.invalidate(location)
         result.location.mcp.server.invalidate(location)
         result.location.mcp.resource.invalidate(location)
@@ -1782,6 +1834,10 @@ export function createData(config: CreateDataInput) {
       vcs: { info: vcs.list, sync: vcs.sync, invalidate: vcs.invalidate },
       agent: locationResource("agent", (location) => api().agent.list({ location })),
       command: locationResource("command", (location) => api().command.list({ location })),
+      config: locationResource("config", async (location) => ({
+        location: { directory: location.directory, workspaceID: location.workspace },
+        data: await api().config.get({ location }),
+      })),
       integration: locationResource("integration", (location) => api().integration.list({ location })),
       mcp: {
         server: locationResource("mcpServer", (location) => api().mcp.list({ location })),

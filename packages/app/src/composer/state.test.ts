@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
-import { Skill } from "@opencode-ai/schema/skill"
+import { Skill } from "@opencode/schema/skill"
 import { Schema, Option } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import { createMemoryComposerState, DEFAULT_PROMPT } from "./state"

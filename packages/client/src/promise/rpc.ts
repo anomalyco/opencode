@@ -1,4 +1,4 @@
-import type { Rpc } from "@opencode-ai/schema/rpc"
+import type { Rpc } from "@opencode/schema/rpc"
 import type { make, RequestOptions } from "./generated/client.js"
 import { isRpcError, isRpcInternalError } from "./generated/types.js"
 import type { EventSubscribeOutput, LocationGetInput, RpcCallInput } from "./generated/types.js"

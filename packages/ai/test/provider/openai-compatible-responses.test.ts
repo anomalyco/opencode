@@ -171,6 +171,66 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("flattens tool namespaces", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model(
+        "example-model",
+      )
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          tools: [
+            {
+              type: "namespace",
+              name: "acme",
+              tools: [
+                {
+                  type: "namespace",
+                  name: "billing",
+                  tools: [ToolDefinition.make({ name: "lookup", description: "Lookup billing", inputSchema: {} })],
+                },
+                ToolDefinition.make({ name: "users", description: "Lookup users", inputSchema: {} }),
+              ],
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "function",
+          name: "acme_billing_lookup",
+          description: "Lookup billing",
+          parameters: {},
+          strict: false,
+        },
+        { type: "function", name: "acme_users", description: "Lookup users", parameters: {}, strict: false },
+      ])
+    }),
+  )
+
+  it.effect("flattens tool namespaces in history", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model(
+        "example-model",
+      )
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant({ type: "tool-call", id: "call_1", name: "lookup", namespace: "crm", input: {} }),
+            Message.tool({ id: "call_1", name: "lookup", namespace: "crm", result: "done", resultType: "text" }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { type: "function_call", call_id: "call_1", name: "crm_lookup", namespace: undefined, arguments: "{}" },
+        { type: "function_call_output", call_id: "call_1", output: "done" },
+      ])
+    }),
+  )
+
   it.effect("lowers canonical parallel tool control", () =>
     Effect.gen(function* () {
       const model = configure({

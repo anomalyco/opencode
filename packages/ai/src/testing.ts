@@ -1,10 +1,17 @@
 export * as TestLLM from "./testing.js"
 
-import { LLMClient } from "./route/client.js"
+import {
+  LLMClient,
+  type CompactionRequest,
+  type CheckpointRequest,
+  type EndpointCompactOptions,
+  type TriggerCompactOptions,
+} from "./route/client.js"
 import {
   LLMEvent,
   LLMResponse,
   CompactionResponse,
+  CompactionCheckpointResponse,
   type FinishReasonDetails,
   type AIError,
   type LLMRequest,
@@ -13,7 +20,11 @@ import {
 } from "./schema/index.js"
 import { Context, Deferred, Effect, Latch, Layer, Queue, Scope, Stream } from "effect"
 
-export type Response = readonly LLMEvent[] | Stream.Stream<LLMEvent, AIError> | CompactionResponse
+export type Response =
+  | readonly LLMEvent[]
+  | Stream.Stream<LLMEvent, AIError>
+  | CompactionResponse
+  | CompactionCheckpointResponse
 
 export type Gate = Readonly<{ started: Effect.Effect<void>; release: Effect.Effect<void> }>
 
@@ -132,21 +143,38 @@ const make = (options: LayerOptions) =>
       Stream.unwrap(
         take(request).pipe(
           Effect.map((response) => {
-            if (response instanceof CompactionResponse)
+            if (response instanceof CompactionResponse || response instanceof CompactionCheckpointResponse)
               return Stream.die("TestLLM generation requires an event response")
             return Stream.isStream(response) ? response : Stream.fromIterable(response)
           }),
         ),
       )
-    const test = Test.of({
-      compact: (request) =>
-        take(request).pipe(
-          Effect.flatMap((response) =>
-            response instanceof CompactionResponse
+    function compact(
+      request: CompactionRequest,
+      options?: EndpointCompactOptions,
+    ): Effect.Effect<CompactionResponse, AIError>
+    function compact(
+      request: CheckpointRequest,
+      options: TriggerCompactOptions,
+    ): Effect.Effect<CompactionCheckpointResponse, AIError>
+    function compact(
+      request: LLMRequest,
+      options?: EndpointCompactOptions | TriggerCompactOptions,
+    ): Effect.Effect<CompactionResponse | CompactionCheckpointResponse, AIError> {
+      return take(request).pipe(
+        Effect.flatMap((response): Effect.Effect<CompactionResponse | CompactionCheckpointResponse> => {
+          if (options?.mechanism === "trigger")
+            return response instanceof CompactionCheckpointResponse
               ? Effect.succeed(response)
-              : Effect.die("TestLLM compaction requires a CompactionResponse"),
-          ),
-        ),
+              : Effect.die("TestLLM trigger compaction requires a CompactionCheckpointResponse")
+          return response instanceof CompactionResponse
+            ? Effect.succeed(response)
+            : Effect.die("TestLLM compaction requires a CompactionResponse")
+        }),
+      )
+    }
+    const test = Test.of({
+      compact,
       stream,
       generate: (request) =>
         stream(request).pipe(

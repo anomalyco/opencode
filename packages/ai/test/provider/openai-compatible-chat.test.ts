@@ -4,7 +4,6 @@ import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, LLMRequest, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/index.js"
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
-import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
@@ -40,15 +39,6 @@ const usageChunk = (usage: object) => ({
   choices: [],
   usage,
 })
-
-const providerFamilies = [
-  ["baseten", OpenAICompatible.baseten, "https://inference.baseten.co/v1"],
-  ["cerebras", OpenAICompatible.cerebras, "https://api.cerebras.ai/v1"],
-  ["deepinfra", OpenAICompatible.deepinfra, "https://api.deepinfra.com/v1/openai"],
-  ["deepseek", OpenAICompatible.deepseek, "https://api.deepseek.com/v1"],
-  ["fireworks", OpenAICompatible.fireworks, "https://api.fireworks.ai/inference/v1"],
-  ["togetherai", OpenAICompatible.togetherai, "https://api.together.xyz/v1"],
-] as const
 
 describe("OpenAI-compatible Chat route", () => {
   it.effect("prepares generic Chat target", () =>
@@ -90,39 +80,6 @@ describe("OpenAI-compatible Chat route", () => {
       })
     }),
   )
-
-  test("provides model helpers for compatible provider families", () => {
-    expect(
-      providerFamilies.map(([provider, family]) => {
-        const model = family.configure({ apiKey: "test-key" }).model(`${provider}-model`)
-        return {
-          id: String(model.id),
-          provider: String(model.provider),
-          route: model.route.id,
-          baseURL: model.route.endpoint.baseURL,
-        }
-      }),
-    ).toEqual(
-      providerFamilies.map(([provider, _, baseURL]) => ({
-        id: `${provider}-model`,
-        provider,
-        route: "openai-compatible-chat",
-        baseURL,
-      })),
-    )
-
-    const custom = OpenAICompatible.deepseek
-      .configure({
-        apiKey: "test-key",
-        baseURL: "https://custom.deepseek.test/v1",
-      })
-      .model("deepseek-chat")
-    expect(custom).toMatchObject({
-      provider: "deepseek",
-      route: { id: "openai-compatible-chat" },
-    })
-    expect(custom.route.endpoint.baseURL).toBe("https://custom.deepseek.test/v1")
-  })
 
   it.effect("matches AI SDK compatible basic request body fixture", () =>
     Effect.gen(function* () {

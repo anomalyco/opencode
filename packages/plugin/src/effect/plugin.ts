@@ -1,5 +1,5 @@
-import type { ExperimentalApi, GenerateApi, PluginApi } from "@opencode-ai/client/effect/api"
-import type { Location } from "@opencode-ai/schema/location"
+import type { ExperimentalApi, GenerateApi, PluginApi } from "@opencode/client/effect/api"
+import type { Location } from "@opencode/schema/location"
 import type { Effect, Scope } from "effect"
 import type { PluginOptions } from "../options.js"
 import type { App } from "../app.js"
@@ -20,6 +20,7 @@ import type { StorageDomain } from "./storage.js"
 import type { ToolDomain } from "./tool.js"
 import type { VcsDomain } from "./vcs.js"
 import type { WebSearchDomain } from "./websearch.js"
+import type { WorktreeDomain } from "./worktree.js"
 
 export interface Context {
   readonly app: App
@@ -47,6 +48,7 @@ export interface Context {
   readonly tool: ToolDomain
   readonly vcs: VcsDomain
   readonly websearch: WebSearchDomain
+  readonly worktree: WorktreeDomain
 }
 
 export interface Plugin<R = Scope.Scope> {

@@ -8,9 +8,9 @@ import type {
   SessionMessageInfo,
   SessionMessageUser,
   SessionInboxInfo,
-} from "@opencode-ai/client/promise"
-import { Event } from "@opencode-ai/schema/event"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
+} from "@opencode/client/promise"
+import { Event } from "@opencode/schema/event"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { blockerStatus, pickBlockerView } from "./session-data"
 import { writeSessionOutput } from "./stream"
 import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"

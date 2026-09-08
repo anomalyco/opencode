@@ -1,5 +1,5 @@
-import type { KeymapCommand } from "@opencode-ai/plugin/tui/context"
-import type { OpenCodeClient } from "@opencode-ai/client"
+import type { KeymapCommand } from "@opencode/plugin/tui/context"
+import type { OpenCodeClient } from "@opencode/client"
 import path from "path"
 import { displaySlice, promptOffsetWidth } from "./display"
 import { parseSlashHead } from "./parse"

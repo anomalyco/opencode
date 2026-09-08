@@ -2,7 +2,7 @@ export * as Updater from "./index"
 
 import type { WebContents } from "electron"
 import { Context, Deferred, Effect, Exit, Fiber, Layer } from "effect"
-import type { UpdaterState } from "@opencode-ai/app/updater"
+import type { UpdaterState } from "@opencode/app/updater"
 import { UpdaterStateChanged } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 

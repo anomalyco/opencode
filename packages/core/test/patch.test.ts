@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Patch } from "@opencode-ai/util/patch"
+import { Patch } from "@opencode/util/patch"
 import { Result } from "effect"
 
 const parse = (input: string) => Result.getOrThrow(Patch.parse(input))

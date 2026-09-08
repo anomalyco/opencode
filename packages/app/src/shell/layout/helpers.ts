@@ -1,5 +1,5 @@
-import { getFilename } from "@opencode-ai/util/path"
-import type { SessionInfo } from "@opencode-ai/client/promise"
+import { getFilename } from "@opencode/util/path"
+import type { SessionInfo } from "@opencode/client/promise"
 import { pathKey } from "@/workspaces/path-key"
 import { isProjectDirectory } from "@/workspaces/paths"
 import type { ServerConnection } from "@/runtime/server/registry"

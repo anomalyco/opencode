@@ -1,9 +1,9 @@
 export * as SessionMove from "./move.js"
 
-import type { Session } from "@opencode-ai/schema/session"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Global } from "@opencode-ai/util/global"
+import type { Session } from "@opencode/schema/session"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
 import { Cause, Context, Effect, Layer, Schema } from "effect"
 import path from "path"
 import { Bus } from "../bus.js"

@@ -84,7 +84,7 @@ export function TerminalsTab(props: { sessionID: string; visibleTerminalID?: str
                       ? theme.background.action.primary.selected
                       : theme.background.action.primary.default
                 }
-                onMouseOver={() => setSelected(index())}
+                onMouseMove={() => setSelected(index())}
                 onMouseUp={() => {
                   setSelected(index())
                   select()

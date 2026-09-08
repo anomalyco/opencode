@@ -1,6 +1,6 @@
 import { createMemo, createResource, onMount, type Accessor } from "solid-js"
-import type { ColorScheme } from "@opencode-ai/ui/theme/context"
-import { useTheme } from "@opencode-ai/ui/theme/context"
+import type { ColorScheme } from "@opencode/ui/theme/context"
+import { useTheme } from "@opencode/ui/theme/context"
 import {
   monoDefault,
   monoFontFamily,
@@ -80,14 +80,6 @@ export function createAppearanceSettingsController() {
       setUI: (value: string) => settings.appearance.setUIFont(value),
       setCode: (value: string) => settings.appearance.setFont(value),
       setTerminal: (value: string) => settings.appearance.setTerminalFont(value),
-    },
-    tabs: {
-      current: settings.appearance.tabLayout,
-      select: settings.appearance.setTabLayout,
-    },
-    projectName: {
-      current: settings.appearance.showProjectName,
-      set: settings.appearance.setShowProjectName,
     },
   }
 }

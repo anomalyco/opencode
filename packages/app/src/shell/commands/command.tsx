@@ -1,5 +1,5 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { createSimpleContext } from "@opencode/ui/context"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { type Accessor, createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Schema } from "effect"
@@ -430,7 +430,9 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
         key: id,
         options,
       }
-      setStore("registrations", (arr) => addCommandRegistration(arr, entry))
+      // Register only committed owners. Updating the registry during a transition
+      // can restore its pending snapshot after the outgoing owner's cleanup.
+      onMount(() => setStore("registrations", (arr) => addCommandRegistration(arr, entry)))
       onCleanup(() => {
         setStore("registrations", (arr) => arr.filter((x) => x !== entry))
       })

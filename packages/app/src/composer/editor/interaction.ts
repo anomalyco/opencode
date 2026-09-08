@@ -1,6 +1,6 @@
 import { createEffect, type Accessor } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { useFilteredList } from "@opencode-ai/ui/hooks"
+import { useFilteredList } from "@opencode/ui/hooks"
 import { createComposerAttachments, type ComposerAttachmentConfig } from "../attachments/attachments"
 import { createComposerEditorActions, type ComposerStateStoreInput } from "./actions"
 import type {
@@ -145,7 +145,7 @@ export function createComposerEditor(input: {
       return
     }
     if (command.type === "mention.add") {
-      if (command.item.mention) draft.addMention(command.item.mention)
+      if (command.item.mention) draft.addMention(command.item.mention, command.range)
       return
     }
     if (command.type === "popover.filter") {

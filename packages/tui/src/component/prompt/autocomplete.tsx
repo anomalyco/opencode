@@ -20,8 +20,8 @@ import type { PromptInfo, PromptPartRef } from "../../prompt/history"
 import { useFrecency } from "../../prompt/frecency"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { displayCharAt, mentionTriggerIndex, slashTriggerIndex } from "../../prompt/display"
-import type { FileSystemEntry } from "@opencode-ai/client"
-import { Skill } from "@opencode-ai/schema/skill"
+import type { FileSystemEntry } from "@opencode/client"
+import { Skill } from "@opencode/schema/skill"
 import { stringWidth } from "../../util/string-width"
 import { parseFileLineRange, stripFileLineRange } from "../../prompt/parse"
 import { moveSelection, reconcileSelectionWindow, revealSelectionOffset } from "../../ui/select-controller"
@@ -87,7 +87,6 @@ export function Autocomplete(props: {
     index: 0,
     selected: 0,
     visible: false as AutocompleteRef["visible"],
-    input: "keyboard" as "keyboard" | "mouse",
   })
 
   const [positionTick, setPositionTick] = createSignal(0)
@@ -149,14 +148,6 @@ export function Autocomplete(props: {
   createEffect(() => {
     const next = filter()
     setSearch(next ? next : "")
-  })
-
-  // When the filter changes due to how TUI works, the mousemove might still be triggered
-  // via a synthetic event as the layout moves underneath the cursor. This is a workaround to make sure the input mode remains keyboard so
-  // that the mouseover event doesn't trigger when filtering.
-  createEffect(() => {
-    filter()
-    setStore("input", "keyboard")
   })
 
   function insertPart(
@@ -724,7 +715,6 @@ export function Autocomplete(props: {
         title: "Previous autocomplete item",
         group: "Autocomplete",
         run() {
-          setStore("input", "keyboard")
           move(-1)
         },
       },
@@ -733,7 +723,6 @@ export function Autocomplete(props: {
         title: "Next autocomplete item",
         group: "Autocomplete",
         run() {
-          setStore("input", "keyboard")
           move(1)
         },
       },
@@ -942,17 +931,8 @@ export function Autocomplete(props: {
                       : undefined
                 }
                 flexDirection="row"
-                onMouseMove={() => {
-                  setStore("input", "mouse")
-                }}
-                onMouseOver={() => {
-                  if (store.input !== "mouse") return
-                  moveTo(index)
-                }}
-                onMouseDown={() => {
-                  setStore("input", "mouse")
-                  moveTo(index)
-                }}
+                onMouseMove={() => moveTo(index)}
+                onMouseDown={() => moveTo(index)}
                 onMouseUp={() => select()}
               >
                 <text

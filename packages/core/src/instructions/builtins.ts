@@ -1,9 +1,9 @@
 export * as InstructionBuiltIns from "./builtins.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
-import type { Session } from "@opencode-ai/schema/session"
-import { Global } from "@opencode-ai/util/global"
+import type { Session } from "@opencode/schema/session"
+import { Global } from "@opencode/util/global"
 import { Location } from "../location.js"
 import { Instructions } from "./index.js"
 

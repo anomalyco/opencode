@@ -1,20 +1,20 @@
 import { chmod } from "node:fs/promises"
-import { Agent } from "@opencode-ai/core/agent"
-import { AISDK } from "@opencode-ai/core/aisdk"
+import { Agent } from "@opencode/core/agent"
+import { AISDK } from "@opencode/core/aisdk"
 import { describe, expect } from "bun:test"
 import { Effect, Schedule } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Credential } from "@opencode-ai/core/credential"
-import { Model } from "@opencode-ai/core/model"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
-import { AzurePlugin } from "@opencode-ai/core/plugin/provider/azure"
-import { Provider } from "@opencode-ai/core/provider"
-import { Integration } from "@opencode-ai/core/integration"
-import { Location } from "@opencode-ai/core/location"
-import { Session } from "@opencode-ai/core/session"
-import { AppProcess } from "@opencode-ai/util/process"
+import { Catalog } from "@opencode/core/catalog"
+import { Credential } from "@opencode/core/credential"
+import { Model } from "@opencode/core/model"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { AzurePlugin } from "@opencode/core/plugin/provider/azure"
+import { Provider } from "@opencode/core/provider"
+import { Integration } from "@opencode/core/integration"
+import { Location } from "@opencode/core/location"
+import { Session } from "@opencode/core/session"
+import { AppProcess } from "@opencode/util/process"
 import { fakeSelectorSdk } from "../fixture/selector"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -281,6 +281,7 @@ describe("AzurePlugin", () => {
             sessionID: Session.ID.make("ses_azure"),
             agent: Agent.ID.make("build"),
             model,
+            kind: "primary",
             request: new Request("https://test-resource.openai.azure.com/openai/v1/responses", {
               headers: { "api-key": "stored-token", "x-keep": "yes" },
             }),
@@ -295,6 +296,7 @@ describe("AzurePlugin", () => {
             sessionID: Session.ID.make("ses_foundry"),
             agent: Agent.ID.make("build"),
             model,
+            kind: "primary",
             request: new Request("https://test-resource.services.ai.azure.com/anthropic/v1/messages", {
               headers: { "x-api-key": "stored-token" },
             }),

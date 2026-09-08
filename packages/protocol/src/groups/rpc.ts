@@ -1,4 +1,4 @@
-import { optional } from "@opencode-ai/schema/schema"
+import { optional } from "@opencode/schema/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { RpcError, RpcInternalError } from "../errors.js"

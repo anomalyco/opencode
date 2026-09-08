@@ -1,21 +1,21 @@
-import { Message } from "@opencode-ai/ai"
-import { LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
-import { Agent } from "@opencode-ai/core/agent"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Credential } from "@opencode-ai/core/credential"
-import { Integration } from "@opencode-ai/core/integration"
-import { Location } from "@opencode-ai/core/location"
-import { Model } from "@opencode-ai/core/model"
-import { ModelResolver } from "@opencode-ai/core/model-resolver"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
-import { SnowflakeCortexPlugin } from "@opencode-ai/core/plugin/provider/snowflake-cortex"
-import { Provider } from "@opencode-ai/core/provider"
-import { Session } from "@opencode-ai/core/session"
-import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
-import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
-import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
+import { Message } from "@opencode/ai"
+import { LLMClient, RequestExecutor } from "@opencode/ai/route"
+import { Agent } from "@opencode/core/agent"
+import { Catalog } from "@opencode/core/catalog"
+import { Credential } from "@opencode/core/credential"
+import { Integration } from "@opencode/core/integration"
+import { Location } from "@opencode/core/location"
+import { Model } from "@opencode/core/model"
+import { ModelResolver } from "@opencode/core/model-resolver"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { SnowflakeCortexPlugin } from "@opencode/core/plugin/provider/snowflake-cortex"
+import { Provider } from "@opencode/core/provider"
+import { Session } from "@opencode/core/session"
+import { SessionModelRequest } from "@opencode/core/session/model-request"
+import { SessionModelTransport } from "@opencode/core/session/model-transport"
+import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { expect } from "bun:test"
 import { Effect, Layer, Schedule, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
@@ -77,6 +77,7 @@ const fixture = Effect.fn(function* () {
     const resolved = yield* ModelResolver.fromCatalogModel(model, credential)
     const service = yield* SessionModelRequest.Service
     const prepared = yield* service.prepare({
+      kind: "primary",
       scope: { session, agentID: scope.agent, model: SessionRunnerModel.resolved(resolved, model) },
       transcript: { system: [], messages: [Message.user("Hello")] },
     })

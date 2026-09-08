@@ -1,5 +1,5 @@
-import { Form } from "@opencode-ai/schema/form"
-import { Location } from "@opencode-ai/schema/location"
+import { Form } from "@opencode/schema/form"
+import { Location } from "@opencode/schema/location"
 import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {

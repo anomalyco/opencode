@@ -5,8 +5,8 @@ import {
   type Range,
   type VirtualItem,
 } from "@tanstack/solid-virtual"
-import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode-ai/ui/scroll-view"
-import { TimelineRow } from "@opencode-ai/session-ui/timeline/projection"
+import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode/ui/scroll-view"
+import { TimelineRow } from "@opencode/session-ui/timeline/projection"
 import { useLanguage } from "@/runtime/i18n/language"
 import {
   batch,
@@ -69,7 +69,7 @@ type Input = {
     row: TimelineRow.TimelineRow,
     disclosure: Readonly<Record<string, boolean | undefined>>,
   ) => boolean
-  setRevealMessage?: (fn: (id: string) => void) => void
+  setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
   setScrollToEnd?: (fn: () => void) => void
 }
 
@@ -271,8 +271,13 @@ export function createTimelineVirtualizer(input: Input) {
   const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => String(item.key)))
 
   createEffect(() => {
-    input.setRevealMessage?.((id) => {
-      const index = input.projection.messageRowIndex().get(id)
+    input.setRevealMessage?.((id, partID) => {
+      const partIndex = partID
+        ? rows().findIndex(
+            (row) => row._tag === "AssistantPart" && row.group.type === "part" && row.group.ref.partID === partID,
+          )
+        : -1
+      const index = partIndex >= 0 ? partIndex : input.projection.messageRowIndex().get(id)
       if (index === undefined) return
       virtualizer.scrollToIndex(index, { align: "center" })
     })

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { SessionMessageUser } from "@opencode-ai/client/promise"
+import type { SessionMessageUser } from "@opencode/client/promise"
 import { clearSessionMessageHandoff, getSessionMessageHandoff, setSessionMessageHandoff } from "./handoff"
 
 test("stores and clears a message handoff", () => {

@@ -1,23 +1,25 @@
-import { AISDK } from "@opencode-ai/core/aisdk"
-import { App } from "@opencode-ai/core/app"
-import { Agent } from "@opencode-ai/schema/agent"
-import { Session } from "@opencode-ai/schema/session"
+import { AISDK } from "@opencode/core/aisdk"
+import { App } from "@opencode/core/app"
+import { Agent } from "@opencode/schema/agent"
+import { Session } from "@opencode/core/session"
+import { Location } from "@opencode/core/location"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Model } from "@opencode-ai/core/model"
-import { ModelResolver } from "@opencode-ai/core/model-resolver"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
+import { Catalog } from "@opencode/core/catalog"
+import { Model } from "@opencode/core/model"
+import { ModelResolver } from "@opencode/core/model-resolver"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import {
   copilotBaseURL,
   copilotEntitlementError,
   copilotFetch,
   GithubCopilotPlugin,
-} from "@opencode-ai/core/plugin/provider/github-copilot"
-import { Provider } from "@opencode-ai/core/provider"
-import { Integration } from "@opencode-ai/core/integration"
+} from "@opencode/core/plugin/provider/github-copilot"
+import { Provider } from "@opencode/core/provider"
+import { Integration } from "@opencode/core/integration"
+import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { fakeSelectorSdk } from "../fixture/selector"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -34,6 +36,25 @@ function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value")
   return value
 }
+
+const sessions = Effect.fn(function* () {
+  const service = yield* Session.Service
+  const location = yield* Location.Service
+  const parent = yield* service.create({ location: { directory: location.directory } })
+  const child = yield* service.create({ parentID: parent.id })
+  return { parent: parent.id, child: child.id }
+})
+
+const modelRequest = Effect.fn(function* (sessionID: Session.ID, kind: SessionRequestKind, agent = "build") {
+  const hooks = yield* PluginHooks.Service
+  return yield* hooks.trigger("session", "model.request", {
+    sessionID,
+    agent: Agent.ID.make(agent),
+    model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.4") }),
+    kind,
+    headers: {},
+  })
+})
 
 describe("GithubCopilotPlugin", () => {
   test("prefers the account-specific Copilot API endpoint", () => {
@@ -135,6 +156,7 @@ describe("GithubCopilotPlugin", () => {
         sessionID: Session.ID.make("ses_test"),
         agent: Agent.ID.make("build"),
         model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("claude-sonnet-4.5") }),
+        kind: "primary",
         request: new Request("https://api.githubcopilot.com/v1/messages", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-api-key": "token" },
@@ -149,31 +171,100 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
-  it.effect("classifies title generation as a background interaction", () =>
+  it.effect("classifies main-loop steps as agent interactions", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      const hooks = yield* PluginHooks.Service
-      const event = yield* hooks.trigger("session", "http.request", {
-        sessionID: Session.ID.make("ses_title"),
-        agent: Agent.ID.make("title"),
-        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.4-nano") }),
-        request: new Request("https://api.githubcopilot.com/chat/completions"),
-      })
-      expect(event.request.headers.get("x-interaction-type")).toBe("conversation-background")
+      const event = yield* modelRequest((yield* sessions()).parent, "primary")
+      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent", "X-Interaction-Id": event.sessionID })
     }),
   )
 
-  it.effect("classifies compaction requests", () =>
+  it.effect("classifies child-session steps as subagent interactions", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* modelRequest((yield* sessions()).child, "primary")
+      expect(event.headers).toEqual({
+        "X-Interaction-Type": "conversation-subagent",
+        "X-Interaction-Id": event.sessionID,
+        "x-initiator": "agent",
+      })
+    }),
+  )
+
+  it.effect("classifies title generation as a background interaction", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* modelRequest((yield* sessions()).parent, "title")
+      expect(event.headers).toEqual({
+        "X-Interaction-Type": "conversation-background",
+        "X-Interaction-Id": event.sessionID,
+        "x-initiator": "agent",
+      })
+    }),
+  )
+
+  it.effect("classifies compaction requests by kind rather than agent", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* modelRequest((yield* sessions()).child, "compaction", "build")
+      expect(event.headers).toEqual({
+        "X-Interaction-Type": "conversation-compaction",
+        "X-Interaction-Id": event.sessionID,
+        "x-initiator": "agent",
+      })
+    }),
+  )
+
+  it.effect("does not classify by agent name", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* modelRequest((yield* sessions()).parent, "primary", "compaction")
+      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent", "X-Interaction-Id": event.sessionID })
+    }),
+  )
+
+  it.effect("ignores other providers' model requests", () =>
     Effect.gen(function* () {
       yield* addPlugin()
       const hooks = yield* PluginHooks.Service
-      const event = yield* hooks.trigger("session", "http.request", {
-        sessionID: Session.ID.make("ses_compaction"),
-        agent: Agent.ID.make("compaction"),
-        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.4") }),
-        request: new Request("https://api.githubcopilot.com/responses"),
+      const event = yield* hooks.trigger("session", "model.request", {
+        sessionID: (yield* sessions()).parent,
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ providerID: Provider.ID.make("openai"), id: Model.ID.make("gpt-5.4") }),
+        kind: "primary",
+        headers: {},
       })
-      expect(event.request.headers.get("x-interaction-type")).toBe("conversation-compaction")
+      expect(event.headers).toEqual({})
+    }),
+  )
+
+  it.live("keeps a declared agent initiator when the body looks user-initiated", () =>
+    Effect.gen(function* () {
+      const requests: Headers[] = []
+      const send = copilotFetch(
+        "token",
+        async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+          requests.push(new Headers(init?.headers))
+          return Response.json({ ok: true })
+        },
+        App.make({ name: "test", version: "1.2.3", channel: "beta" }),
+      )
+      yield* Effect.promise(() =>
+        send("https://api.githubcopilot.com/chat/completions", {
+          method: "POST",
+          headers: { "x-initiator": "agent" },
+          body: JSON.stringify({ messages: [{ role: "user", content: "summarize" }] }),
+        }),
+      )
+      expect(requests[0]?.get("x-initiator")).toBe("agent")
+    }),
+  )
+
+  it.effect("classifies session generation requests as agent interactions", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* modelRequest((yield* sessions()).parent, "generate")
+      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent", "X-Interaction-Id": event.sessionID })
     }),
   )
 

@@ -1,4 +1,4 @@
-import type { SessionMessageAssistantTool, SessionMessageUser } from "@opencode-ai/client/promise"
+import type { SessionMessageAssistantTool, SessionMessageUser } from "@opencode/client/promise"
 import { deduplicateVisibleImages } from "../prompt/attachment"
 import { toolDisplayContent } from "../util/tool-display"
 import type { StreamCommit } from "./types"

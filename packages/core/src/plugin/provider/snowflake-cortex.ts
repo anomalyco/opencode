@@ -1,5 +1,5 @@
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Form } from "@opencode-ai/schema/form"
+import { define } from "@opencode/plugin/effect/plugin"
+import { Form } from "@opencode/schema/form"
 import { Clock, Deferred, Effect, Option, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { App } from "../../app.js"
@@ -190,7 +190,7 @@ export const SnowflakeCortexPlugin = define({
       const item = catalog.provider.get(providerID)
       if (!item) return
       const settings = { ...item.provider.settings, ...configured }
-      item.provider.package = "@opencode-ai/ai/providers/openai-compatible"
+      item.provider.package = "@opencode/ai/providers/openai-compatible"
       item.provider.settings = {
         ...settings,
         provider: providerID,

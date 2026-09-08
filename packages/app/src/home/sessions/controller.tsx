@@ -1,7 +1,7 @@
-import type { SessionInfo } from "@opencode-ai/client/promise"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Button } from "@opencode-ai/ui/button"
-import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode-ai/ui/dialog"
+import type { SessionInfo } from "@opencode/client/promise"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { Button } from "@opencode/ui/button"
+import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
 import { skipToken, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { DateTime } from "luxon"
 import { type Accessor, createEffect, createMemo, type JSX, startTransition, untrack } from "solid-js"
@@ -27,7 +27,7 @@ import { sessionLabel, sessionTitle } from "@/session/title"
 import { showToast } from "@/shell/notifications/toast"
 import { archiveHomeSession } from "./archive"
 import type { HomeController } from "../model"
-import { buildHomeSessionRecords, type HomeSessionRecord } from "./records"
+import { buildHomeSessionRecords, homeProjectForSession, type HomeSessionRecord } from "./records"
 
 export type { HomeSessionRecord } from "./records"
 
@@ -270,14 +270,7 @@ export function createHomeSessionsController(home: HomeController) {
       },
       create: home.project.openNewSession,
       open: (session: SessionInfo, options?: OpenSessionOptions) => {
-        const directoryKey = pathKey(session.location.directory)
-        const project = home.project
-          .list()
-          .find(
-            (item) =>
-              pathKey(item.worktree) === directoryKey ||
-              item.sandboxes?.some((sandbox) => pathKey(sandbox) === directoryKey),
-          )
+        const project = homeProjectForSession(session, home.project.list())
         const conn = home.server.focused()
         if (!conn) return
         const connKey = ServerConnection.key(conn)

@@ -34,7 +34,7 @@ const observationFrame = (observation: ChannelObservation) => {
 
 const terminal = (observation: ChannelObservation) => observation.type !== "frame"
 
-// This deliberately models only sequential test traffic. Core owns production connection pooling and recovery.
+// This channel fixture supports sequential test traffic.
 const makeChannel = Effect.gen(function* () {
   const constructor = yield* Socket.WebSocketConstructor
   let connection: WebSocketConnection | undefined

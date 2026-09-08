@@ -1,6 +1,6 @@
 export * as CodeModeInstructions from "./instructions.js"
 
-import { searchSignature, toolExpression } from "@opencode-ai/codemode"
+import { searchSignature, toolExpression } from "@opencode/codemode"
 import { Effect, Schema } from "effect"
 import { Instructions } from "../instructions/index.js"
 import { CodeModeCatalog } from "./catalog.js"
@@ -12,7 +12,7 @@ ${hasMoreTools ? "The Code Mode catalog and `search` results are" : "This catalo
 
 ## Search
 
-Use \`search\` to discover exact paths and signatures for additional tools:
+Call \`search(...)\` to discover exact paths and signatures for additional tools:
 
 - ${searchSignature}` : ""}
 

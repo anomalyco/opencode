@@ -359,3 +359,24 @@ test("synchronous source creation failures reject subscribers without automatic 
   await expect(shared.subscribe()[Symbol.asyncIterator]().next()).rejects.toBe(failure)
   expect(attempts).toHaveLength(2)
 })
+
+test("source activity fans out to every subscriber that asked for it", async () => {
+  const events = source()
+  let activity: (() => void) | undefined
+  const shared = SharedEvents.make<Event>((signal, onActivity) => {
+    activity = onActivity
+    return events.connect(signal)
+  })
+  const counts = { first: 0, second: 0 }
+  const first = shared.subscribe({ onActivity: () => counts.first++ })[Symbol.asyncIterator]()
+  const second = shared.subscribe()[Symbol.asyncIterator]()
+  const reads = Promise.all([first.next(), second.next()])
+  activity!()
+  activity!()
+  events.connections[0].push({ type: "server.connected" })
+  await reads
+  expect(counts).toEqual({ first: 2, second: 0 })
+  await first.return!()
+  await second.return!()
+  await events.connections[0].closed
+})

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Schema, SchemaGetter } from "effect"
 import { createComputed, createRoot } from "solid-js"
 import type { Platform } from "@/runtime/platform/platform"
+import { flushPersisted } from "@/runtime/persistence/persist"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { TabStorage } from "@/shell/tabs/schema"
@@ -57,6 +58,7 @@ describe("schema-backed persistence", () => {
         expect(state.key).toBe("session-tab")
         setState("key", undefined)
         expect(state.key).toBeUndefined()
+        flushPersisted()
         expect(localStorage.getItem(key)).toBe("{}")
       } finally {
         dispose()
@@ -74,6 +76,7 @@ describe("schema-backed persistence", () => {
       expect(state).toEqual({ enabled: true, label: "saved" })
       expect(JSON.parse(localStorage.getItem(key)!)).toEqual({ enabled: true, label: "saved" })
       setState("enabled", false)
+      flushPersisted()
       expect(JSON.parse(localStorage.getItem(key)!)).toEqual({ enabled: false, label: "saved" })
       dispose()
     })
@@ -125,6 +128,7 @@ describe("schema-backed persistence", () => {
         label: "desktop",
       })
       root.state[1]("label", "changed")
+      flushPersisted()
       expect(JSON.parse(storage.values.get("opencode.global.dat:schema-desktop")!)).toEqual({
         enabled: true,
         label: "changed",

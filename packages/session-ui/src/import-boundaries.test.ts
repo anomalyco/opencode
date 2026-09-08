@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 
-const forbidden = /["']@opencode-ai\/(?:core|sdk|server)(?:\/[^"']*)?["']/
+const forbidden = /["']@opencode\/(?:core|sdk|server)(?:\/[^"']*)?["']/
 const oldSession = /(?:SessionV1|session-v1|legacy-message|legacy-message-values)/
 
 describe("Session UI package boundaries", () => {
@@ -13,9 +13,9 @@ describe("Session UI package boundaries", () => {
     const pkg = await Bun.file(new URL("../package.json", import.meta.url)).json()
     const dependencies = pkg.dependencies as Record<string, string>
 
-    expect(dependencies["@opencode-ai/core"]).toBeUndefined()
-    expect(dependencies["@opencode-ai/sdk"]).toBeUndefined()
-    expect(dependencies["@opencode-ai/server"]).toBeUndefined()
+    expect(dependencies["@opencode/core"]).toBeUndefined()
+    expect(dependencies["@opencode/sdk"]).toBeUndefined()
+    expect(dependencies["@opencode/server"]).toBeUndefined()
   })
 
   test("does not contain old Session message boundaries", async () => {
