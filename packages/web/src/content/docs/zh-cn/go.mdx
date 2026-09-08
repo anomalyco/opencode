@@ -83,15 +83,40 @@ OpenCode Go 的工作方式与 OpenCode 中的其他提供商一样。
 
 ## 可以在哪里使用？
 
-OpenCode Go 适用于 [OpenCode](https://opencode.ai) 以及其他会产生类似请求的主流编程 Agent。
+OpenCode Go 适用于 [OpenCode](https://opencode.ai) 以及其他会产生类似请求的编程 Agent。
 
 我们会监控流量，以识别影响其他用户体验的滥用行为。
 
-为避免你的账户被标记为异常，请确保你使用的工具：
+你的客户端应当：
 
-1\. 不产生滥用流量  
-2\. 明确标识自身（不要使用过于笼统的 user agent 标识）  
-3\. 包含 `x-opencode-session` 请求头，以便我们优化提示词缓存
+1. 发送典型的编程 Agent 流量。
+2. 使用自身专属的 user agent 标识（例如 `my-coding-agent/1.0`），而不是通用的 SDK 或 HTTP 库名称。
+3. 为每段对话在 `x-opencode-session` 请求头中发送稳定的会话 ID，以便我们优化路由和提示词缓存。
+
+### 已验证的客户端
+
+除 OpenCode 外，以下客户端已通过验证，能够正常使用 OpenCode Go。但我们无法保证它们未来仍能正常使用。
+
+| 客户端 | 会话支持 |
+| --- | --- |
+| **Hermes** | 包含 [PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864) 的构建版本会在主要和辅助 OpenCode 请求中发送该请求头。此修复在 v0.21.0 发布后才合并，因此 v0.21.0 本身并不包含该修复。 |
+| **Claude Code** | Go 能识别其原生会话请求头，无需额外封装来添加自定义请求头。 |
+| **Codex** | Go 能识别其原生会话请求头。某些版本和代理配置仍会遗漏该请求头；转发请求时请保留会话请求头。 |
+| **ZCode** | Go 能识别其原生会话请求头。我们[请求支持 `x-opencode-session` 的 issue](https://github.com/zai-org/feedback/issues/492) 仍处于开放状态，但已不再需要发送这一特定请求头。 |
+| **Pi** | 当前构建版本会为 OpenCode 发送会话信息。请更新旧版安装。 |
+| **jcode** | 请更新至 **v0.81.6 或更高版本**，其中包含[会话请求头修复](https://github.com/1jehuang/jcode/issues/1167)。 |
+| **Kilo Code CLI** | 包含 [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) 的构建版本恢复了 OpenCode 会话请求头。此修复仅适用于 CLI，不适用于 VS Code 扩展。参见 [issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723)。 |
+
+### 已知存在问题的客户端
+
+在我们调查的版本中，以下客户端缺少会话支持，或支持不完整。相关报告链接可用于跟踪修复进展和临时解决方案。
+
+| 客户端 | 状态与跟踪 |
+| --- | --- |
+| **DeepSeek Harness** | 某些模型调用路径会传递会话信息，但其他路径中缺失。我们能识别其原生请求头；剩余工作是在所有适配器中发送该请求头。参见[讨论 #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495)。 |
+| **GitHub Copilot Chat** | [VS Code issue #334186](https://github.com/microsoft/vscode/issues/334186) 已提出自动发送会话请求头的支持请求。 |
+| **Kimi Code** | [issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506) 已提出自动发送会话请求头的支持请求。 |
+| **MiMo Code** | [Issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) 已有拟议修复 [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327)，但尚未合并。 |
 
 ## 使用限制
 

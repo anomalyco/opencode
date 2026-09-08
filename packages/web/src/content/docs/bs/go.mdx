@@ -93,15 +93,44 @@ Lista modela se može mijenjati dok testiramo i dodajemo nove.
 
 ## Gdje ga mogu koristiti?
 
-OpenCode Go je osmišljen za korištenje s [OpenCode-om](https://opencode.ai) i drugim popularnim agentima za programiranje koji generišu slične vrste zahtjeva.
+OpenCode Go je osmišljen za [OpenCode](https://opencode.ai) i druge agente za programiranje
+koji šalju slične vrste zahtjeva. Saobraćaj se nadzire radi otkrivanja zloupotrebe koja
+drugim korisnicima narušava iskustvo.
 
-Saobraćaj se nadzire radi otkrivanja zloupotrebe koja narušava iskustvo drugih korisnika.
+Vaš klijent treba:
 
-Kako vaš račun ne bi bio označen, pobrinite se da alat koji koristite
+1. Slati tipičan saobraćaj agenta za programiranje.
+2. Identifikovati se vlastitim user agentom, kao što je `my-coding-agent/1.0`, a ne
+   generičkim nazivom SDK-a ili HTTP biblioteke.
+3. Slati stabilan ID sesije u zaglavlju `x-opencode-session` za svaki razgovor kako bismo mogli optimizovati usmjeravanje i
+   keširanje promptova.
 
-1\. ne generiše saobraćaj koji predstavlja zloupotrebu  
-2\. se ispravno identifikuje (bez generičkih User-Agent identifikatora)  
-3\. uključuje zaglavlje `x-opencode-session` kako bismo mogli optimizovati keširanje promptova
+### Provjereni klijenti
+
+Pored OpenCode-a, potvrđeno je da sljedeći klijenti ispravno rade
+s OpenCode Go. Ipak, ne garantiramo da će nastaviti raditi i u budućnosti.
+
+| Klijent           | Podrška za sesije                                                                                                                                                                                                                                        |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hermes**        | Buildovi koji sadrže [PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864) šalju zaglavlje u glavnim i pomoćnim OpenCode zahtjevima. Ispravka je spojena nakon verzije v0.21.0; samo to izdanje je ne sadrži.                            |
+| **Claude Code**   | Go prepoznaje njegovo izvorno zaglavlje sesije. Wrapper za prilagođeno zaglavlje nije potreban.                                                                                                                                                         |
+| **Codex**         | Go prepoznaje njegovo izvorno zaglavlje sesije. Neke verzije i proxy konfiguracije ga i dalje izostavljaju; sačuvajte zaglavlje sesije pri prosljeđivanju zahtjeva.                                                                                       |
+| **ZCode**         | Go prepoznaje njegovo izvorno zaglavlje sesije. Naš [zahtjev za `x-opencode-session`](https://github.com/zai-org/feedback/issues/492) i dalje je otvoren, ali slanje tog konkretnog zaglavlja više nije potrebno.                                           |
+| **Pi**            | Trenutni buildovi šalju informacije o sesiji za OpenCode. Ažurirajte starije instalacije.                                                                                                                                                               |
+| **jcode**         | Ažurirajte na **v0.81.6 ili noviju**, koja uključuje [ispravku zaglavlja sesije](https://github.com/1jehuang/jcode/issues/1167).                                                                                                                          |
+| **Kilo Code CLI** | Buildovi koji sadrže [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) vraćaju OpenCode zaglavlja sesije. Ova ispravka obuhvata CLI, ali ne i VS Code ekstenziju. Pogledajte [issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723). |
+
+### Poznati problematični klijenti
+
+Ovim klijentima nedostaje podrška za sesije ili je ona nepotpuna u verzijama koje smo
+istražili. Povezani izvještaji prate ispravke i zaobilazna rješenja.
+
+| Klijent                 | Status i praćenje                                                                                                                                                                                                                                           |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DeepSeek Harness**    | Informacije o sesiji stižu za neke putanje modela, ali nedostaju za druge. Prepoznajemo njegovo izvorno zaglavlje; preostaje da se ono šalje kroz sve adaptere. [Discussion #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495).          |
+| **GitHub Copilot Chat** | Automatska podrška za zaglavlje sesije zatražena je u [VS Code issue #334186](https://github.com/microsoft/vscode/issues/334186).                                                                                                                            |
+| **Kimi Code**           | Automatska podrška za zaglavlje sesije zatražena je u [issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506).                                                                                                                                   |
+| **MiMo Code**           | [Issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) ima predloženu ispravku u [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327), koji još nije spojen.                                                                             |
 
 ## Ograničenja upotrebe
 

@@ -93,15 +93,44 @@ La lista de modelos puede cambiar a medida que probamos y agregamos otros nuevos
 
 ## ¿Dónde puedo usarlo?
 
-OpenCode Go está diseñado para usarse con [OpenCode](https://opencode.ai) y otros agentes de programación populares que generan tipos de peticiones similares.
+OpenCode Go está diseñado para [OpenCode](https://opencode.ai) y otros agentes de programación
+que generan tipos de peticiones similares. El tráfico se supervisa para detectar abusos que
+perjudiquen la experiencia de otros usuarios.
 
-El tráfico se supervisa para detectar tráfico abusivo que perjudique la experiencia de otros usuarios.
+Tu cliente debe:
 
-Para evitar que tu cuenta sea marcada, asegúrate de que la herramienta que usas
+1. Enviar el tráfico habitual de un agente de programación
+2. Identificarse con su propio agente de usuario, como `my-coding-agent/1.0`, en lugar
+   del nombre genérico de un SDK o una biblioteca HTTP.
+3. Enviar un ID de sesión estable en `x-opencode-session` para cada conversación, de modo que podamos optimizar el enrutamiento y
+   el almacenamiento en caché de prompts.
 
-1\. no genere tráfico abusivo  
-2\. se identifique correctamente (sin agentes de usuario genéricos)  
-3\. incluya el encabezado `x-opencode-session` para que podamos optimizar el almacenamiento en caché de prompts
+### Clientes validados
+
+Además de OpenCode, se ha validado que los siguientes clientes funcionan correctamente
+con OpenCode Go. Sin embargo, no garantizamos que sigan funcionando en el futuro.
+
+| Cliente           | Compatibilidad con sesiones                                                                                                                                                                                                                                               |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hermes**        | Las compilaciones que incluyen el [PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864) envían el encabezado en las peticiones principales y auxiliares de OpenCode. La corrección se fusionó después de v0.21.0; esa versión por sí sola no la incluye.   |
+| **Claude Code**   | Go reconoce su encabezado de sesión nativo. No se necesita ningún wrapper para encabezados personalizados.                                                                                                                                                                |
+| **Codex**         | Go reconoce su encabezado de sesión nativo. Algunas versiones y configuraciones de proxy aún lo omiten; conserva el encabezado de sesión al reenviar peticiones.                                                                                                            |
+| **ZCode**         | Go reconoce su encabezado de sesión nativo. Nuestra [solicitud de `x-opencode-session`](https://github.com/zai-org/feedback/issues/492) sigue abierta, pero ya no es necesario enviar ese encabezado específico.                                                           |
+| **Pi**            | Las compilaciones actuales envían información de sesión para OpenCode. Actualiza las instalaciones antiguas.                                                                                                                                                              |
+| **jcode**         | Actualiza a la versión **v0.81.6 o posterior**, que incluye la [corrección del encabezado de sesión](https://github.com/1jehuang/jcode/issues/1167).                                                                                                                       |
+| **Kilo Code CLI** | Las compilaciones que incluyen el [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) restauran los encabezados de sesión de OpenCode. Esta corrección cubre la CLI, no la extensión de VS Code. Consulta el [issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723). |
+
+### Clientes con problemas conocidos
+
+Estos clientes tienen una compatibilidad con sesiones ausente o incompleta en las versiones que
+investigamos. Los informes enlazados permiten seguir las correcciones y las soluciones alternativas.
+
+| Cliente                 | Estado y seguimiento                                                                                                                                                                                                                                                             |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DeepSeek Harness**    | La información de sesión llega por algunas rutas de modelos, pero falta en otras. Reconocemos su encabezado nativo; aún es necesario enviarlo a través de todos los adaptadores. [Discusión #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495).      |
+| **GitHub Copilot Chat** | La compatibilidad automática con el encabezado de sesión se solicitó en el [issue #334186 de VS Code](https://github.com/microsoft/vscode/issues/334186).                                                                                                                        |
+| **Kimi Code**           | La compatibilidad automática con el encabezado de sesión se solicitó en el [issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506).                                                                                                                                |
+| **MiMo Code**           | El [issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) tiene una corrección propuesta en el [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327), que aún no se ha fusionado.                                                                            |
 
 ## Límites de uso
 

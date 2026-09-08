@@ -85,15 +85,44 @@ Die Liste der Modelle kann sich ändern, während wir neue testen und hinzufüge
 
 ## Wo kann ich es verwenden?
 
-OpenCode Go wurde für die Verwendung mit [OpenCode](https://opencode.ai) und anderen beliebten Coding-Agenten entwickelt, die ähnliche Arten von Anfragen erzeugen.
+OpenCode Go wurde für [OpenCode](https://opencode.ai) und andere Coding-Agenten entwickelt,
+die ähnliche Arten von Anfragen erzeugen. Der Datenverkehr wird auf Missbrauch überwacht,
+der das Nutzungserlebnis anderer beeinträchtigt.
 
-Der Datenverkehr wird auf missbräuchlichen Traffic überwacht, der das Nutzungserlebnis anderer beeinträchtigt.
+Dein Client sollte:
 
-Damit dein Konto nicht markiert wird, stelle sicher, dass das von dir verwendete Tool
+1. typischen Datenverkehr eines Coding-Agenten senden
+2. sich mit einem eigenen User-Agent wie `my-coding-agent/1.0` identifizieren und
+   nicht mit dem allgemeinen Namen eines SDKs oder einer HTTP-Bibliothek.
+3. für jede Unterhaltung eine stabile Sitzungs-ID in `x-opencode-session` senden, damit wir das Routing und
+   Prompt-Caching optimieren können.
 
-1\. keinen missbräuchlichen Traffic erzeugt  
-2\. sich ordnungsgemäß identifiziert (keine allgemeinen User-Agents)  
-3\. den Header `x-opencode-session` enthält, damit wir das Prompt-Caching optimieren können
+### Validierte Clients
+
+Neben OpenCode wurden die folgenden Clients für die ordnungsgemäße Verwendung mit
+OpenCode Go validiert. Wir garantieren jedoch nicht, dass sie auch in Zukunft funktionieren werden.
+
+| Client            | Sitzungsunterstützung                                                                                                                                                                                                                                                  |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hermes**        | Builds mit [PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864) senden den Header bei Haupt- und zusätzlichen OpenCode-Anfragen. Der Fix wurde nach v0.21.0 gemergt; diese Version allein enthält ihn nicht.                                           |
+| **Claude Code**   | Go erkennt seinen nativen Sitzungs-Header. Es ist kein Wrapper für benutzerdefinierte Header erforderlich.                                                                                                                                                             |
+| **Codex**         | Go erkennt seinen nativen Sitzungs-Header. Einige Versionen und Proxy-Konfigurationen lassen ihn weiterhin weg; stelle sicher, dass der Sitzungs-Header beim Weiterleiten von Anfragen erhalten bleibt.                                                                  |
+| **ZCode**         | Go erkennt seinen nativen Sitzungs-Header. Unsere [Anfrage für `x-opencode-session`](https://github.com/zai-org/feedback/issues/492) ist weiterhin offen, aber es ist nicht mehr erforderlich, genau diesen Header zu senden.                                             |
+| **Pi**            | Aktuelle Builds senden Sitzungsinformationen für OpenCode. Aktualisiere ältere Installationen.                                                                                                                                                                        |
+| **jcode**         | Aktualisiere auf **v0.81.6 oder neuer**. Diese Version enthält den [Fix für den Sitzungs-Header](https://github.com/1jehuang/jcode/issues/1167).                                                                                                                         |
+| **Kilo Code CLI** | Builds mit [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) stellen OpenCode-Sitzungs-Header wieder her. Dieser Fix gilt für die CLI, nicht für die VS-Code-Erweiterung. Siehe [Issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723).             |
+
+### Bekannte problematische Clients
+
+Bei diesen Clients fehlt in den von uns untersuchten Versionen die Sitzungsunterstützung
+oder sie ist unvollständig. Die verlinkten Berichte dokumentieren Fixes und Problemumgehungen.
+
+| Client                  | Status und Nachverfolgung                                                                                                                                                                                                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **DeepSeek Harness**    | Sitzungsinformationen werden bei einigen Modellpfaden übermittelt, fehlen aber bei anderen. Wir erkennen seinen nativen Header; dieser muss noch von allen Adaptern gesendet werden. [Diskussion #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495). |
+| **GitHub Copilot Chat** | Automatische Unterstützung für Sitzungs-Header wurde in [VS Code Issue #334186](https://github.com/microsoft/vscode/issues/334186) angefragt.                                                                                                                                |
+| **Kimi Code**           | Automatische Unterstützung für Sitzungs-Header wurde in [Issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506) angefragt.                                                                                                                                         |
+| **MiMo Code**           | Für [Issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) gibt es einen vorgeschlagenen Fix in [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327), der noch nicht gemergt wurde.                                                                        |
 
 ## Nutzungslimits
 

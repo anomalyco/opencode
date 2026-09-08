@@ -83,15 +83,40 @@ OpenCode Go 的運作方式與 OpenCode 中的任何其他供應商相同。
 
 ## 可以在哪裡使用？
 
-OpenCode Go 適用於 [OpenCode](https://opencode.ai) 以及其他會產生類似請求的主流程式設計 Agent。
+OpenCode Go 適用於 [OpenCode](https://opencode.ai) 以及其他會產生類似請求的程式設計 Agent。
 
 我們會監控流量，以識別影響其他使用者體驗的濫用行為。
 
-為避免您的帳戶被標記為異常，請確保您使用的工具：
+您的用戶端應：
 
-1\. 不產生濫用流量  
-2\. 明確標識自身（不要使用過於籠統的 user agent 識別資訊）  
-3\. 包含 `x-opencode-session` 請求標頭，以便我們最佳化提示詞快取
+1. 傳送典型的程式設計 Agent 流量。
+2. 使用自身專屬的 user agent 識別資訊（例如 `my-coding-agent/1.0`），而非通用的 SDK 或 HTTP 函式庫名稱。
+3. 為每段對話在 `x-opencode-session` 請求標頭中傳送穩定的工作階段 ID，以便我們最佳化路由和提示詞快取。
+
+### 已驗證的用戶端
+
+除了 OpenCode，以下用戶端已通過驗證，可正常使用 OpenCode Go。但我們不保證它們未來仍能正常使用。
+
+| 用戶端 | 工作階段支援 |
+| --- | --- |
+| **Hermes** | 包含 [PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864) 的建置版本會在主要和輔助 OpenCode 請求中傳送該標頭。此修正是在 v0.21.0 發布後才合併，因此 v0.21.0 本身並未包含此修正。 |
+| **Claude Code** | Go 可辨識其原生工作階段標頭，無須額外封裝來新增自訂標頭。 |
+| **Codex** | Go 可辨識其原生工作階段標頭。部分版本和代理伺服器設定仍會遺漏該標頭；轉送請求時請保留工作階段標頭。 |
+| **ZCode** | Go 可辨識其原生工作階段標頭。我們[請求支援 `x-opencode-session` 的 issue](https://github.com/zai-org/feedback/issues/492) 仍未關閉，但已不再需要傳送這個特定標頭。 |
+| **Pi** | 目前的建置版本會為 OpenCode 傳送工作階段資訊。請更新舊版安裝。 |
+| **jcode** | 請更新至 **v0.81.6 或更新版本**，其中包含[工作階段標頭修正](https://github.com/1jehuang/jcode/issues/1167)。 |
+| **Kilo Code CLI** | 包含 [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) 的建置版本恢復了 OpenCode 工作階段標頭。此修正僅適用於 CLI，不適用於 VS Code 擴充套件。請參閱 [issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723)。 |
+
+### 已知有問題的用戶端
+
+在我們調查的版本中，以下用戶端缺少工作階段支援，或支援不完整。相關回報連結可用來追蹤修正進度與暫時解決方式。
+
+| 用戶端 | 狀態與追蹤 |
+| --- | --- |
+| **DeepSeek Harness** | 部分模型呼叫路徑會傳遞工作階段資訊，但其他路徑中缺少這些資訊。我們可辨識其原生標頭；剩餘工作是在所有配接器中傳送該標頭。請參閱[討論 #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495)。 |
+| **GitHub Copilot Chat** | [VS Code issue #334186](https://github.com/microsoft/vscode/issues/334186) 已提出自動傳送工作階段標頭的支援請求。 |
+| **Kimi Code** | [issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506) 已提出自動傳送工作階段標頭的支援請求。 |
+| **MiMo Code** | [Issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) 已有修正提案 [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327)，但尚未合併。 |
 
 ## 使用限制
 

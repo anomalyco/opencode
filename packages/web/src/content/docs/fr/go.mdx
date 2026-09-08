@@ -83,15 +83,44 @@ La liste des modèles peut changer au fur et à mesure que nous en testons et en
 
 ## Où puis-je l'utiliser ?
 
-OpenCode Go est conçu pour être utilisé avec [OpenCode](https://opencode.ai) et d'autres agents de codage populaires qui génèrent des types de requêtes similaires.
+OpenCode Go est conçu pour [OpenCode](https://opencode.ai) et d'autres agents de codage
+qui produisent des types de requêtes similaires. Le trafic est surveillé afin de détecter les abus qui
+dégradent l'expérience des autres utilisateurs.
 
-Le trafic est surveillé afin de détecter tout trafic abusif qui dégrade l'expérience des autres utilisateurs.
+Votre client doit :
 
-Pour éviter que votre compte ne soit signalé, assurez-vous que l'outil que vous utilisez
+1. Envoyer le trafic habituel d'un agent de codage
+2. S'identifier avec son propre agent utilisateur, tel que `my-coding-agent/1.0`, plutôt
+   qu'avec le nom générique d'un SDK ou d'une bibliothèque HTTP.
+3. Envoyer un ID de session stable dans `x-opencode-session` pour chaque conversation afin que nous puissions optimiser le routage et
+   la mise en cache des prompts.
 
-1\. ne génère pas de trafic abusif  
-2\. s'identifie correctement (pas d'agents utilisateur génériques)  
-3\. inclut l'en-tête `x-opencode-session` afin que nous puissions optimiser la mise en cache des prompts
+### Clients validés
+
+Outre OpenCode, le bon fonctionnement des clients suivants avec OpenCode Go a été
+validé. Nous ne garantissons toutefois pas qu'ils continueront à fonctionner à l'avenir.
+
+| Client            | Prise en charge des sessions                                                                                                                                                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hermes**        | Les builds contenant la [PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864) envoient l'en-tête sur les requêtes OpenCode principales et auxiliaires. Le correctif a été fusionné après la v0.21.0 ; cette version seule ne l'inclut pas.                    |
+| **Claude Code**   | Go reconnaît son en-tête de session natif. Aucun wrapper d'en-tête personnalisé n'est nécessaire.                                                                                                                                                                               |
+| **Codex**         | Go reconnaît son en-tête de session natif. Certaines versions et configurations de proxy l'omettent encore ; conservez l'en-tête de session lors du transfert des requêtes.                                                                                                      |
+| **ZCode**         | Go reconnaît son en-tête de session natif. Notre [demande concernant `x-opencode-session`](https://github.com/zai-org/feedback/issues/492) reste ouverte, mais il n'est plus nécessaire d'envoyer spécifiquement cet en-tête.                                                     |
+| **Pi**            | Les builds actuels envoient les informations de session pour OpenCode. Mettez à jour les installations plus anciennes.                                                                                                                                                         |
+| **jcode**         | Passez à la version **v0.81.6 ou ultérieure**, qui inclut le [correctif de l'en-tête de session](https://github.com/1jehuang/jcode/issues/1167).                                                                                                                                |
+| **Kilo Code CLI** | Les builds contenant la [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) rétablissent les en-têtes de session OpenCode. Ce correctif concerne la CLI, pas l'extension VS Code. Consultez l'[issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723).       |
+
+### Clients connus pour poser problème
+
+Dans les versions que nous avons examinées, ces clients ne prennent pas en charge les sessions
+ou ne les prennent en charge que partiellement. Les rapports associés permettent de suivre les correctifs et les solutions de contournement.
+
+| Client                  | État et suivi                                                                                                                                                                                                                                                                       |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DeepSeek Harness**    | Les informations de session sont présentes pour certains chemins de modèles, mais absentes pour d'autres. Nous reconnaissons son en-tête natif ; il reste à l'envoyer depuis tous les adaptateurs. [Discussion #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495). |
+| **GitHub Copilot Chat** | La prise en charge automatique de l'en-tête de session fait l'objet de l'[issue VS Code #334186](https://github.com/microsoft/vscode/issues/334186).                                                                                                                               |
+| **Kimi Code**           | La prise en charge automatique de l'en-tête de session fait l'objet de l'[issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506).                                                                                                                                       |
+| **MiMo Code**           | L'[issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) dispose d'un correctif proposé dans la [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327), qui n'a pas encore été fusionnée.                                                                        |
 
 ## Limites d'utilisation
 

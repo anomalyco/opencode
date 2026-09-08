@@ -87,15 +87,44 @@ Lista modeli może ulec zmianie w miarę testowania i dodawania nowych.
 
 ## Gdzie można z tego korzystać?
 
-OpenCode Go jest przeznaczony do użytku z [OpenCode](https://opencode.ai) i innymi popularnymi agentami kodującymi, którzy generują podobne rodzaje żądań.
+OpenCode Go jest przeznaczony dla [OpenCode](https://opencode.ai) i innych agentów kodujących,
+którzy wysyłają podobne rodzaje żądań. Ruch jest monitorowany pod kątem nadużyć,
+które pogarszają komfort korzystania z usługi przez innych użytkowników.
 
-Ruch jest monitorowany pod kątem nadużyć, które pogarszają komfort korzystania z usługi przez innych użytkowników.
+Twój klient powinien:
 
-Aby Twoje konto nie zostało oznaczone, upewnij się, że używane przez Ciebie narzędzie
+1. Wysyłać ruch typowy dla agenta kodującego.
+2. Identyfikować się za pomocą własnego user agenta, na przykład `my-coding-agent/1.0`, zamiast
+   ogólnej nazwy SDK lub biblioteki HTTP.
+3. Wysyłać stabilny identyfikator sesji w nagłówku `x-opencode-session` dla każdej rozmowy, aby umożliwić optymalizację routingu i
+   buforowania promptów.
 
-1\. nie generuje ruchu stanowiącego nadużycie  
-2\. prawidłowo się identyfikuje (bez ogólnych identyfikatorów User-Agent)  
-3\. zawiera nagłówek `x-opencode-session`, abyśmy mogli zoptymalizować buforowanie promptów
+### Zweryfikowane klienty
+
+Poza OpenCode zweryfikowano, że poniżsi klienci działają prawidłowo
+z OpenCode Go. Nie gwarantujemy jednak, że będą nadal działać w przyszłości.
+
+| Klient            | Obsługa sesji                                                                                                                                                                                                                                             |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hermes**        | Kompilacje zawierające [PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864) wysyłają nagłówek w głównych i pomocniczych żądaniach OpenCode. Poprawkę scalono po wersji v0.21.0; samo to wydanie jej nie zawiera.                         |
+| **Claude Code**   | Go rozpoznaje jego natywny nagłówek sesji. Wrapper dodający niestandardowy nagłówek nie jest potrzebny.                                                                                                                                                   |
+| **Codex**         | Go rozpoznaje jego natywny nagłówek sesji. Niektóre wersje i konfiguracje proxy nadal go pomijają; podczas przekazywania żądań należy zachować nagłówek sesji.                                                                                             |
+| **ZCode**         | Go rozpoznaje jego natywny nagłówek sesji. Nasza [prośba o `x-opencode-session`](https://github.com/zai-org/feedback/issues/492) pozostaje otwarta, ale wysyłanie tego konkretnego nagłówka nie jest już konieczne.                                         |
+| **Pi**            | Aktualne kompilacje wysyłają informacje o sesji dla OpenCode. Zaktualizuj starsze instalacje.                                                                                                                                                             |
+| **jcode**         | Zaktualizuj do wersji **v0.81.6 lub nowszej**, która zawiera [poprawkę nagłówka sesji](https://github.com/1jehuang/jcode/issues/1167).                                                                                                                     |
+| **Kilo Code CLI** | Kompilacje zawierające [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) przywracają nagłówki sesji OpenCode. Ta poprawka obejmuje CLI, ale nie rozszerzenie VS Code. Zobacz [issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723). |
+
+### Klienty ze znanymi problemami
+
+W badanych przez nas wersjach tych klientów obsługa sesji jest niepełna lub jej brakuje.
+Raporty pod podanymi linkami służą do śledzenia poprawek i obejść.
+
+| Klient                  | Stan i śledzenie                                                                                                                                                                                                                                            |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DeepSeek Harness**    | Informacje o sesji docierają w niektórych ścieżkach modeli, ale brakuje ich w innych. Rozpoznajemy jego natywny nagłówek; pozostaje zapewnić jego wysyłanie przez wszystkie adaptery. [Discussion #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495). |
+| **GitHub Copilot Chat** | Prośbę o automatyczną obsługę nagłówka sesji zgłoszono w [VS Code issue #334186](https://github.com/microsoft/vscode/issues/334186).                                                                                                                           |
+| **Kimi Code**           | Prośbę o automatyczną obsługę nagłówka sesji zgłoszono w [issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506).                                                                                                                                  |
+| **MiMo Code**           | Dla [issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) zaproponowano poprawkę w [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327), który nie został jeszcze scalony.                                                              |
 
 ## Limity użycia
 

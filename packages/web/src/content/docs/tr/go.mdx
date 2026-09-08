@@ -83,15 +83,41 @@ Test edip yenilerini ekledikçe model listesi değişebilir.
 
 ## Nerede kullanabilirim?
 
-OpenCode Go, [OpenCode](https://opencode.ai) ve benzer türde istekler üreten diğer popüler kodlama aracılarıyla kullanılmak üzere tasarlanmıştır.
+OpenCode Go, [OpenCode](https://opencode.ai) ve benzer türde istekler üreten diğer kodlama aracıları için tasarlanmıştır.
+Trafik, diğer kullanıcıların deneyimini olumsuz etkileyen kötüye kullanımlara karşı izlenir.
 
-Trafik, diğer kullanıcıların deneyimini olumsuz etkileyen kötüye kullanım amaçlı trafiğe karşı izlenir.
+İstemciniz şunları yapmalıdır:
 
-Hesabınızın işaretlenmemesi için kullandığınız aracın
+1. Tipik kodlama aracısı trafiği göndermelidir.
+2. Genel bir SDK veya HTTP kitaplığı adı yerine `my-coding-agent/1.0` gibi kendine ait bir user agent ile kendini tanıtmalıdır.
+3. Yönlendirmeyi ve istem önbelleğe almayı optimize edebilmemiz için her konuşmada `x-opencode-session` içinde değişmeyen bir oturum kimliği göndermelidir.
 
-1\. kötüye kullanım amaçlı trafik oluşturmadığından  
-2\. kendisini doğru şekilde tanıttığından (genel kapsamlı kullanıcı aracıları kullanmadığından)  
-3\. istem önbelleğe almayı optimize edebilmemiz için `x-opencode-session` başlığını içerdiğinden emin olun
+### Doğrulanmış İstemciler
+
+OpenCode'un yanı sıra aşağıdaki istemcilerin OpenCode Go ile düzgün çalıştığı doğrulanmıştır.
+Ancak gelecekte de çalışmaya devam edeceklerini garanti etmiyoruz.
+
+| İstemci           | Oturum desteği                                                                                                                                                                                                                                                         |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hermes**        | [PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864) içeren derlemeler, ana ve yardımcı OpenCode isteklerinde başlığı gönderir. Düzeltme v0.21.0'dan sonra birleştirilmiştir; dolayısıyla v0.21.0 sürümü tek başına bu düzeltmeyi içermez.             |
+| **Claude Code**   | Go, Claude Code'un yerel oturum başlığını tanır. Özel başlık ekleyen bir sarmalayıcı gerekmez.                                                                                                                                                                         |
+| **Codex**         | Go, Codex'in yerel oturum başlığını tanır. Bazı sürümler ve proxy yapılandırmaları hâlâ bu başlığı göndermemektedir; istekleri iletirken oturum başlığını koruyun.                                                                                                      |
+| **ZCode**         | Go, ZCode'un yerel oturum başlığını tanır. [`x-opencode-session` talebimiz](https://github.com/zai-org/feedback/issues/492) hâlâ açıktır ancak artık özellikle bu başlığın gönderilmesi gerekli değildir.                                                              |
+| **Pi**            | Güncel derlemeler OpenCode için oturum bilgilerini gönderir. Eski kurulumları güncelleyin.                                                                                                                                                                              |
+| **jcode**         | [Oturum başlığı düzeltmesini](https://github.com/1jehuang/jcode/issues/1167) içeren **v0.81.6 veya sonraki bir sürüme** güncelleyin.                                                                                                                                  |
+| **Kilo Code CLI** | [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) içeren derlemeler OpenCode oturum başlıklarını geri getirir. Bu düzeltme CLI'ı kapsar, VS Code uzantısını kapsamaz. Bkz. [issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723).                 |
+
+### Sorunlu Olduğu Bilinen İstemciler
+
+Bu istemcilerin incelediğimiz sürümlerinde oturum desteği eksik veya tamamlanmamıştır.
+Bağlantı verilen bildirimlerden düzeltmeleri ve geçici çözümleri takip edebilirsiniz.
+
+| İstemci                 | Durum ve takip                                                                                                                                                                                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **DeepSeek Harness**    | Oturum bilgileri bazı model yollarında ulaşırken diğerlerinde eksiktir. Go, DeepSeek Harness'ın yerel başlığını tanır; yapılması gereken, bu başlığın tüm adaptörlerden gönderilmesidir. [Discussion #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495). |
+| **GitHub Copilot Chat** | Otomatik oturum başlığı desteği [VS Code issue #334186](https://github.com/microsoft/vscode/issues/334186) içinde talep edilmiştir.                                                                                                                                             |
+| **Kimi Code**           | Otomatik oturum başlığı desteği [issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506) içinde talep edilmiştir.                                                                                                                                                    |
+| **MiMo Code**           | [Issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) için [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327) içinde bir düzeltme önerilmiştir ancak henüz birleştirilmemiştir.                                                                       |
 
 ## Kullanım limitleri
 

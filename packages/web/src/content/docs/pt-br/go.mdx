@@ -93,15 +93,44 @@ A lista de modelos pode mudar conforme testamos e adicionamos novos.
 
 ## Onde posso usá-lo?
 
-O OpenCode Go foi projetado para ser usado com o [OpenCode](https://opencode.ai) e outros agentes de programação populares que geram tipos de requisições semelhantes.
+O OpenCode Go foi projetado para o [OpenCode](https://opencode.ai) e outros agentes de programação
+que produzem tipos semelhantes de requisições. O tráfego é monitorado para detectar abusos que
+prejudiquem a experiência de outros usuários.
 
-O tráfego é monitorado para detectar tráfego abusivo que prejudique a experiência de outros usuários.
+Seu cliente deve:
 
-Para evitar que sua conta seja sinalizada, verifique se a ferramenta que você está usando
+1. Enviar o tráfego típico de um agente de programação
+2. Identificar-se com seu próprio user agent, como `my-coding-agent/1.0`, em vez
+   do nome genérico de um SDK ou de uma biblioteca HTTP.
+3. Enviar um ID de sessão estável em `x-opencode-session` para cada conversa, para que possamos otimizar o roteamento e
+   o cache de prompts.
 
-1\. não gera tráfego abusivo  
-2\. se identifica corretamente (sem user agents genéricos)  
-3\. inclui o header `x-opencode-session` para que possamos otimizar o cache de prompts
+### Clientes validados
+
+Além do OpenCode, os clientes a seguir foram validados para funcionar corretamente
+com o OpenCode Go. No entanto, não garantimos que continuarão funcionando no futuro.
+
+| Cliente           | Suporte a sessões                                                                                                                                                                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Hermes**        | As builds que contêm o [PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864) enviam o header nas requisições principais e auxiliares do OpenCode. A correção foi incorporada após a v0.21.0; essa versão por si só não a inclui.                  |
+| **Claude Code**   | O Go reconhece seu header de sessão nativo. Não é necessário usar um wrapper para headers personalizados.                                                                                                                                                           |
+| **Codex**         | O Go reconhece seu header de sessão nativo. Algumas versões e configurações de proxy ainda o omitem; preserve o header de sessão ao encaminhar requisições.                                                                                                          |
+| **ZCode**         | O Go reconhece seu header de sessão nativo. Nossa [solicitação de `x-opencode-session`](https://github.com/zai-org/feedback/issues/492) continua aberta, mas não é mais necessário enviar especificamente esse header.                                             |
+| **Pi**            | As builds atuais enviam informações de sessão para o OpenCode. Atualize instalações mais antigas.                                                                                                                                                                  |
+| **jcode**         | Atualize para a versão **v0.81.6 ou posterior**, que inclui a [correção do header de sessão](https://github.com/1jehuang/jcode/issues/1167).                                                                                                                       |
+| **Kilo Code CLI** | As builds que contêm o [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) restauram os headers de sessão do OpenCode. Essa correção abrange a CLI, não a extensão do VS Code. Consulte a [issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723). |
+
+### Clientes com problemas conhecidos
+
+Esses clientes não têm suporte a sessões ou apresentam suporte incompleto nas versões que
+investigamos. Os relatórios vinculados acompanham correções e soluções alternativas.
+
+| Cliente                 | Status e acompanhamento                                                                                                                                                                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **DeepSeek Harness**    | As informações de sessão chegam por alguns caminhos de modelos, mas não por outros. Reconhecemos seu header nativo; ainda é necessário enviá-lo por todos os adaptadores. [Discussão #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495).        |
+| **GitHub Copilot Chat** | O suporte automático ao header de sessão foi solicitado na [issue #334186 do VS Code](https://github.com/microsoft/vscode/issues/334186).                                                                                                                                    |
+| **Kimi Code**           | O suporte automático ao header de sessão foi solicitado na [issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506).                                                                                                                                              |
+| **MiMo Code**           | A [issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) tem uma correção proposta no [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327), que ainda não foi incorporada.                                                                                |
 
 ## Limites de uso
 

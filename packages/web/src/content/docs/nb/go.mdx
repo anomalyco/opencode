@@ -93,15 +93,44 @@ Listen over modeller kan endres etter hvert som vi tester og legger til nye.
 
 ## Hvor kan jeg bruke det?
 
-OpenCode Go er utviklet for bruk med [OpenCode](https://opencode.ai) og andre populære kodeagenter som genererer lignende typer forespørsler.
+OpenCode Go er utviklet for [OpenCode](https://opencode.ai) og andre kodeagenter
+som sender lignende typer forespørsler. Trafikken overvåkes for misbruk som
+forringer opplevelsen for andre brukere.
 
-Trafikken overvåkes for misbruk som forringer opplevelsen for andre brukere.
+Klienten din skal:
 
-For å sikre at kontoen din ikke blir flagget, må du sørge for at verktøyet du bruker,
+1. Sende typisk trafikk fra en kodeagent.
+2. Identifisere seg med sin egen user agent, for eksempel `my-coding-agent/1.0`, i stedet
+   for et generisk navn på et SDK eller HTTP-bibliotek.
+3. Sende en stabil sesjons-ID i `x-opencode-session` for hver samtale, slik at vi kan optimalisere ruting og
+   promptbufring.
 
-1\. ikke genererer misbrukstrafikk  
-2\. identifiserer seg korrekt (ingen generiske User-Agent-identifikatorer)  
-3\. inkluderer `x-opencode-session`-headeren, slik at vi kan optimalisere promptbufring
+### Validerte klienter
+
+I tillegg til OpenCode er følgende klienter validert for å fungere riktig
+med OpenCode Go. Vi garanterer imidlertid ikke at de vil fortsette å fungere i fremtiden.
+
+| Klient            | Sesjonsstøtte                                                                                                                                                                                                                                             |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hermes**        | Bygg som inneholder [PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864), sender headeren i primære og sekundære OpenCode-forespørsler. Rettelsen ble slått sammen etter v0.21.0; den versjonen inneholder den ikke alene.                |
+| **Claude Code**   | Go gjenkjenner den innebygde sesjonsheaderen. En wrapper for en egendefinert header er ikke nødvendig.                                                                                                                                                    |
+| **Codex**         | Go gjenkjenner den innebygde sesjonsheaderen. Noen versjoner og proxyoppsett utelater den fortsatt; behold sesjonsheaderen når forespørsler videresendes.                                                                                                  |
+| **ZCode**         | Go gjenkjenner den innebygde sesjonsheaderen. Vår [forespørsel om `x-opencode-session`](https://github.com/zai-org/feedback/issues/492) er fortsatt åpen, men det er ikke lenger nødvendig å sende akkurat denne headeren.                                  |
+| **Pi**            | Gjeldende bygg sender sesjonsinformasjon for OpenCode. Oppdater eldre installasjoner.                                                                                                                                                                    |
+| **jcode**         | Oppdater til **v0.81.6 eller nyere**, som inneholder [rettelsen for sesjonsheaderen](https://github.com/1jehuang/jcode/issues/1167).                                                                                                                       |
+| **Kilo Code CLI** | Bygg som inneholder [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752), gjenoppretter OpenCode-sesjonsheadere. Denne rettelsen dekker CLI-en, ikke VS Code-utvidelsen. Se [issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723).   |
+
+### Kjente problematiske klienter
+
+Disse klientene mangler sesjonsstøtte eller har ufullstendig støtte i versjonene vi
+undersøkte. De lenkede rapportene følger rettelser og midlertidige løsninger.
+
+| Klient                  | Status og oppfølging                                                                                                                                                                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **DeepSeek Harness**    | Sesjonsinformasjon mottas på noen modellbaner, men mangler på andre. Vi gjenkjenner den innebygde headeren; det gjenstående arbeidet er å sende den gjennom alle adaptere. [Discussion #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495). |
+| **GitHub Copilot Chat** | Automatisk støtte for sesjonsheaderen er etterspurt i [VS Code issue #334186](https://github.com/microsoft/vscode/issues/334186).                                                                                                                              |
+| **Kimi Code**           | Automatisk støtte for sesjonsheaderen er etterspurt i [issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506).                                                                                                                                     |
+| **MiMo Code**           | [Issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) har en foreslått rettelse i [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327), som ennå ikke er slått sammen.                                                                   |
 
 ## Bruksgrenser
 
