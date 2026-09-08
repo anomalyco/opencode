@@ -110,7 +110,7 @@ export function TerminalPanel(
 
     const workspace = workspaceKey()
     if (!terminal.ready() || terminal.all().length !== 0 || store.autoCreated === workspace) return
-    terminal.new({ focus: true })
+    terminal.new()
     setStore("autoCreated", workspace)
   })
 
@@ -330,7 +330,7 @@ export function TerminalPanel(
                       <IconButton
                         icon={<Icon name="plus-small" size="large" />}
                         variant="ghost"
-                        onClick={() => terminal.new({ focus: true })}
+                        onClick={() => terminal.new()}
                         aria-label={language.t("command.terminal.new")}
                       />
                     </Tooltip>
