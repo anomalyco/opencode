@@ -1,10 +1,12 @@
-import { NodeSocket, NodeStdio } from "@effect/platform-node"
+import { NodeSocket } from "@effect/platform-node"
 import { Effect, Schema, Stdio, Stream } from "effect"
 
 const Response = Schema.fromJsonString(Schema.Struct({ value: Schema.NullOr(Schema.String) }))
 const Port = Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(65535))
 
-const askpass = Effect.gen(function* () {
+// OpenSSH invokes the executable directly, including on Windows. Run outside
+// normal CLI observability so neither prompts nor responses enter its logs.
+export const askpass = Effect.gen(function* () {
   const port = yield* Schema.decodeUnknownEffect(Port)(process.env.OPENCODE_SSH_ASKPASS_PORT)
   const stdio = yield* Stdio.Stdio
   const socket = yield* NodeSocket.makeNet({ host: "127.0.0.1", port })
@@ -20,7 +22,7 @@ const askpass = Effect.gen(function* () {
       write(
         JSON.stringify({
           token: process.env.OPENCODE_SSH_ASKPASS_TOKEN,
-          text: process.argv.slice(process.defaultApp ? 2 : 1).join(" "),
+          text: process.argv.slice(2).join(" "),
           confirm: process.env.SSH_ASKPASS_PROMPT === "confirm",
         }) + "\n",
       ),
@@ -36,5 +38,3 @@ const askpass = Effect.gen(function* () {
   Effect.timeout("5 minutes"),
   Effect.orElseSucceed(() => 1),
 )
-
-export const runAskpass = () => Effect.runPromise(askpass.pipe(Effect.provide(NodeStdio.layer)))

@@ -32,7 +32,8 @@ type Attempt = Connection & { fiber: Fiber.Fiber<void> }
 export const createSshController = Effect.fn("Ssh.controller")(function* (input: {
   version: string
   development?: boolean
-  askpass: readonly [string, ...string[]]
+  binary: string
+  command?: readonly string[]
   configs: readonly SshConfig[]
   save: (configs: readonly SshConfig[]) => Effect.Effect<void, SshFailure>
 }) {
@@ -78,16 +79,12 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
     const target = yield* Effect.try({ try: () => parseTarget(config.target), catch: SshFailure.from })
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "oc-ssh-" })
     const control = path.join(directory, "s")
-    // Packaged desktop needs no arguments. Development Electron also needs the app path.
-    // Native Windows OpenSSH accepts a command line; POSIX execlp requires a launcher.
     const helper =
-      input.askpass.length === 1
-        ? input.askpass[0]
-        : process.platform === "win32"
-          ? input.askpass.map((arg) => `"${arg}"`).join(" ")
-          : path.join(directory, "askpass")
-    if (input.askpass.length > 1 && process.platform !== "win32")
-      yield* fs.writeFileString(helper, `#!/bin/sh\nexec ${input.askpass.map(quote).join(" ")} "$@"\n`, {
+      input.command && input.command.length > 1 && process.platform !== "win32"
+        ? path.join(directory, "askpass")
+        : input.binary
+    if (helper !== input.binary)
+      yield* fs.writeFileString(helper, `#!/bin/sh\nexec ${input.command?.map(quote).join(" ")} "$@"\n`, {
         mode: 0o700,
       })
     if (process.platform !== "win32") {

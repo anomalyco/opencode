@@ -69,8 +69,6 @@ export const createAskpass = Effect.fn("Ssh.askpass")(function* (input: {
       SSH_ASKPASS: input.binary,
       SSH_ASKPASS_REQUIRE: "force",
       DISPLAY: process.env.DISPLAY || "opencode",
-      // Electron otherwise writes a leading CRLF when it attaches to a Windows console.
-      ELECTRON_NO_ATTACH_CONSOLE: "true",
       OPENCODE_SSH_ASKPASS_PORT: String(server.address.port),
       OPENCODE_SSH_ASKPASS_TOKEN: token,
     },
