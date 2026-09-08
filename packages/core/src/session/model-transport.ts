@@ -316,6 +316,11 @@ export const makeLayer = (connector: WebSocketConnector) =>
           Effect.onInterrupt(() => closeChannel(owner, channel)),
         )
         if (create.mode === "full") channel.checkpoint = undefined
+        yield* Effect.logDebug("session websocket sending", {
+          sessionTransport: "websocket",
+          phase: "send",
+          mode: create.mode,
+        })
         const active: Active = {
           queue: yield* Queue.bounded<string, AIError>(INBOUND_CAPACITY),
           delivery: "send-attempted",
