@@ -122,7 +122,7 @@ it.effect("ZAI Chat retains native thinking fields and scopes tool streaming to 
 
 it.effect("ZAI lowers effort using the selected native API without inventing thinking settings", () =>
   Effect.gen(function* () {
-    for (const effort of ["low", "high", "max", "none", "minimal", "medium", "xhigh", "future-effort"]) {
+    for (const effort of ["none", "minimal", "low", "medium", "high", "xhigh", "max", "future-effort"]) {
       const standard = yield* compileRequest(
         LLM.request({
           model: ZAI.configure({ apiKey: "fixture" }).chat("glm-5.3"),

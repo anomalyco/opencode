@@ -4,7 +4,7 @@ import type { LanguageModelCompatibility, LLMRequest } from "../schema/index.js"
 import { OpenAIChat } from "./openai-chat.js"
 import { ProviderShared } from "./shared.js"
 
-export type ReasoningEffort = "low" | "high" | "max" | "none" | "minimal" | "medium" | "xhigh" | (string & {})
+export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | (string & {})
 
 export type OptionsInput = {
   readonly reasoningEffort?: ReasoningEffort
