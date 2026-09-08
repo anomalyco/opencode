@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { WorkspaceOnboardingSchema, ProviderTipSchema } from "@/new-session/view"
+import { WorkspaceOnboardingSchema, ProviderTipSchema, WorkspaceTipSchema } from "@/new-session/view"
 import { ModelSelectionSchema } from "@/providers/models/selection"
 import { Persistence } from "@/runtime/persistence/schema"
 import { FileViewsSchema } from "@/workspaces/files/view-cache"
@@ -12,6 +12,7 @@ describe("persisted consumer schemas", () => {
   test("onboarding and provider tip retain defaults and validate stored values", () => {
     const onboarding = Schema.decodeUnknownSync(Persistence.withInitial(WorkspaceOnboardingSchema, { used: false }))
     const tip = Schema.decodeUnknownSync(Persistence.withInitial(ProviderTipSchema, { dismissedAt: 0 }))
+    const workspaceTip = Schema.decodeUnknownSync(Persistence.withInitial(WorkspaceTipSchema, { dismissedAt: 0 }))
     expect(onboarding({})).toEqual({ used: false })
     expect(onboarding({ used: "true" })).toEqual({ used: false })
     expect(onboarding({ used: true })).toEqual({ used: true })
@@ -19,6 +20,7 @@ describe("persisted consumer schemas", () => {
     expect(tip({ dismissedAt: "yesterday" })).toEqual({ dismissedAt: 0 })
     expect(tip({ dismissedAt: Infinity })).toEqual({ dismissedAt: 0 })
     expect(tip({ dismissedAt: 123 })).toEqual({ dismissedAt: 123 })
+    expect(workspaceTip({ dismissedAt: 123 })).toEqual({ dismissedAt: 123 })
   })
 
   test("collapse records recover malformed entries without losing valid siblings", () => {

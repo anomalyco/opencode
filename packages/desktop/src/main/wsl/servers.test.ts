@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { WslServerConfig } from "@opencode-ai/app/wsl/types"
+import type { WslServerConfig } from "@opencode/app/wsl/types"
 import { Effect } from "effect"
 import { wslCliInstallCommand } from "./runtime"
 import { createWslServersController } from "./servers"

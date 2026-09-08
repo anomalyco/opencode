@@ -1,16 +1,16 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, LLM, Message } from "@opencode-ai/ai"
+import { AIError, LLM, Message } from "@opencode/ai"
 import {
   LLMClient,
   RequestExecutor,
   WebSocketTransport,
   type ChannelObservation,
   type WebSocketChannelExchange,
-} from "@opencode-ai/ai/route"
-import { configure } from "@opencode-ai/ai/providers/openai"
-import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
-import { WebSocketConstructor } from "@opencode-ai/core/effect/websocket-constructor"
-import { Session } from "@opencode-ai/schema/session"
+} from "@opencode/ai/route"
+import { configure } from "@opencode/ai/providers/openai"
+import { SessionModelTransport } from "@opencode/core/session/model-transport"
+import { WebSocketConstructor } from "@opencode/core/effect/websocket-constructor"
+import { Session } from "@opencode/schema/session"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import { Headers } from "effect/unstable/http"
 import { Socket } from "effect/unstable/socket"
@@ -74,23 +74,34 @@ describe("SessionModelTransport local WebSocket server", () => {
           const index = requests.length
           const id = `msg_${index}`
           const text = index === 1 ? "Hello" : "Brief"
+          const reasoning = { type: "reasoning", id: `rs_${index}`, summary: [], encrypted_content: "stream-encrypted" }
+          const item = {
+            type: "message",
+            id,
+            status: "completed",
+            role: "assistant",
+            content: [{ type: "output_text", text, annotations: [], logprobs: [] }],
+          }
           socket.send(JSON.stringify({ type: "response.created", response: { id: `resp_${index}` } }))
+          socket.send(JSON.stringify({ type: "response.output_item.done", item: reasoning }))
           socket.send(JSON.stringify({ type: "response.output_item.added", item: { type: "message", id } }))
           socket.send(JSON.stringify({ type: "response.output_text.delta", item_id: id, delta: text }))
           socket.send(JSON.stringify({ type: "response.output_text.done", item_id: id, text }))
           socket.send(
             JSON.stringify({
               type: "response.output_item.done",
-              item: {
-                type: "message",
-                id,
-                status: "completed",
-                role: "assistant",
-                content: [{ type: "output_text", text }],
+              item,
+            }),
+          )
+          socket.send(
+            JSON.stringify({
+              type: "response.completed",
+              response: {
+                id: `resp_${index}`,
+                output: [{ ...reasoning, encrypted_content: "terminal-encrypted" }, item],
               },
             }),
           )
-          socket.send(JSON.stringify({ type: "response.completed", response: { id: `resp_${index}` } }))
         },
       },
       (server) =>
@@ -119,7 +130,7 @@ describe("SessionModelTransport local WebSocket server", () => {
               llm.generate(
                 LLM.request({
                   model,
-                  messages: [Message.user("First"), Message.assistant("Hello"), Message.user("Be brief")],
+                  messages: [Message.user("First"), first.message, Message.user("Be brief")],
                 }),
                 { webSocket: executor },
               ),

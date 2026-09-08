@@ -4,8 +4,8 @@ import { AISDK } from "./aisdk.js"
 import { Catalog } from "./catalog.js"
 import { Command } from "./command.js"
 import { Config } from "./config.js"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Node } from "@opencode-ai/util/effect/app-node"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Node } from "@opencode/util/effect/app-node"
 import { FileMutation } from "./file-mutation.js"
 import { Environment } from "./environment/index.js"
 import { Formatter } from "./formatter.js"
@@ -17,7 +17,7 @@ import { Image } from "./image.js"
 import { LocationWatcher } from "./filesystem/location-watcher.js"
 import { Integration } from "./integration.js"
 import { Location } from "./location.js"
-import { LocationMutation } from "./location-mutation.js"
+import { FileAccess } from "./file-access.js"
 import { ModelResolver } from "./model-resolver.js"
 import { Mcp } from "./mcp/index.js"
 import { Permission } from "./permission.js"
@@ -25,6 +25,7 @@ import { Plugin } from "./plugin.js"
 import { PluginHooks } from "./plugin/hooks.js"
 import { InstancePlugins } from "./plugin/instance.js"
 import { PluginSupervisor } from "./plugin/supervisor.js"
+import { WorktreeRefresh } from "./worktree/refresh.js"
 import { Worktree } from "./worktree.js"
 import { Pty } from "./pty.js"
 import { Shell } from "./shell.js"
@@ -71,7 +72,8 @@ const nodes = [
   PluginHooks.node,
   InstancePlugins.node,
   PluginSupervisor.node,
-  Worktree.refreshNode,
+  WorktreeRefresh.node,
+  Worktree.node,
   FileSystemSearch.node,
   FileSystem.node,
   ShellSelect.node,
@@ -80,7 +82,7 @@ const nodes = [
   Skill.node,
   InstructionBuiltIns.node,
   InstructionDiscovery.node,
-  LocationMutation.node,
+  FileAccess.node,
   FileMutation.node,
   Formatter.node,
   Mcp.node,

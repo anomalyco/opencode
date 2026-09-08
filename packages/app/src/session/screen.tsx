@@ -11,12 +11,11 @@ import {
   on,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { Icon } from "@opencode-ai/ui/icon"
+import { ResizeHandle } from "@opencode/ui/resize-handle"
 import { MessageTimeline, SessionSummaryPanel } from "@/session/timeline/message-timeline"
 import { useServer } from "@/runtime/server/current"
-import { useLanguage } from "@/runtime/i18n/language"
 import { projectForSession } from "@/shell/layout/helpers"
+import { ComposerDropzone } from "@/composer/dropzone"
 import type { SessionModel } from "@/session/model"
 import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
 import { SessionPanelFrame } from "@/session/session-frame"
@@ -28,10 +27,13 @@ import { createSessionReview } from "./review/model"
 import { SessionDesktopReview, SessionMobileReview, SessionMobileViewTabs } from "./review/view"
 import { SessionContextTab } from "./files/session-context-tab"
 import { createSessionTimelineInteraction } from "./timeline/interaction"
+import { createTimelineSearchController } from "./timeline/search-controller"
+import { TimelineSearchBar } from "./timeline/search-bar"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
 import { SessionIdentityHeader } from "./session-identity-header"
 import { SessionReviewToggle } from "./header/session-header-actions"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
+import { createSessionBrowser } from "./browser/model"
 
 const SessionMobileFiles = lazy(async () => {
   const { SessionMobileFiles } = await import("./files/session-mobile-files")
@@ -41,14 +43,20 @@ const SessionMobileFiles = lazy(async () => {
 export function SessionScreen(props: { session: SessionModel }) {
   const session = props.session
   const server = useServer()
-  const language = useLanguage()
   const detailsProject = createMemo(() => {
     const info = session.data.info()
     return info ? projectForSession(info, server.ctx.sync.data.project) : undefined
   })
   const isDesktop = session.isDesktop
+  const browser = createSessionBrowser(session)
   const screen = createSessionScreenLayout(session)
   const timeline = createSessionTimelineInteraction(session)
+  const timelineSearch = createTimelineSearchController({
+    sessionID: session.identity.sessionID,
+    scrollRef: timeline.scroller,
+    revealMessage: timeline.actions.revealMessage,
+    pauseAutoScroll: timeline.view.unpin,
+  })
   const messagesReady = timeline.ready
   const [store, setStore] = createStore({
     deferRender: false,
@@ -63,7 +71,6 @@ export function SessionScreen(props: { session: SessionModel }) {
   const [elements, setElements] = createStore<{
     side?: HTMLDivElement
     bottomTerminal?: HTMLDivElement
-    dropzone?: HTMLDivElement
   }>({})
   const sideVisible = createMemo(() => isDesktop() && screen.side.layout().visible)
   const sideTerminalVisible = createMemo(() => isDesktop() && screen.terminal.side() && screen.terminal.open())
@@ -140,19 +147,6 @@ export function SessionScreen(props: { session: SessionModel }) {
     timeline,
     visible: conversationVisible,
   })
-  const dropLabel = createMemo(() => {
-    const input = composer.drop.input()
-    if (!input?.image && !input?.pdf) return language.t("ui.promptInput.dropFiles")
-    if (!input.pdf) return language.t("ui.promptInput.dropFiles.image")
-    if (!input.image) return language.t("ui.promptInput.dropFiles.pdf")
-    return language.t("ui.promptInput.dropFiles.imagePdf")
-  })
-  const dropPresence = createAnimatedPresence(
-    () => (composer.drop.active() ? dropLabel() : undefined),
-    () => elements.dropzone ?? null,
-    session.layout.tabKey,
-  )
-
   useUsageExceededDialogs()
 
   const sessionErrorFallback = (error: unknown, reset: () => void) => {
@@ -215,63 +209,11 @@ export function SessionScreen(props: { session: SessionModel }) {
 
   const sessionPanelContent = () => (
     <>
-      <div
-        data-slot="session-dropzone-blur"
-        data-visible={composer.drop.active()}
-        class="pointer-events-none absolute inset-0 z-[79] rounded-[inherit] opacity-[0.001] backdrop-blur-[1.5px] transition-opacity duration-200 ease-[cubic-bezier(0.215,0.61,0.355,1)] will-change-[opacity,backdrop-filter] data-[visible=true]:opacity-100 motion-reduce:transition-none"
-        style={{
-          "-webkit-mask-image":
-            "linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%), linear-gradient(to bottom, transparent 0%, black 28%, black 72%, transparent 100%)",
-          "-webkit-mask-composite": "source-in",
-          "mask-image":
-            "linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%), linear-gradient(to bottom, transparent 0%, black 28%, black 72%, transparent 100%)",
-          "mask-composite": "intersect",
-        }}
+      <ComposerDropzone
+        active={composer.drop.active()}
+        input={composer.drop.input()}
+        identity={session.layout.tabKey}
       />
-      <Show when={dropPresence.present()}>
-        <div
-          ref={(element) => setElements("dropzone", element)}
-          data-component="session-dropzone"
-          data-visible={composer.drop.active()}
-          class="pointer-events-none absolute inset-0 z-[80] grid place-items-center overflow-hidden rounded-[inherit] bg-[color-mix(in_srgb,var(--v2-text-text-base)_var(--session-dropzone-wash),transparent)] opacity-100 transition-opacity duration-200 ease-[cubic-bezier(0.215,0.61,0.355,1)] data-[visible=false]:opacity-0 motion-reduce:transition-none"
-        >
-          <div class="absolute inset-0 bg-v2-background-bg-base/25" />
-          <div
-            class="absolute inset-y-0 left-1/2 w-full -translate-x-1/2 md:max-w-200 2xl:max-w-[1000px]"
-            style={{
-              "-webkit-mask-image": "linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%)",
-              "mask-image": "linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%)",
-            }}
-          >
-            <div
-              data-slot="session-dropzone-stripes"
-              class="absolute inset-0 opacity-60"
-              style={{
-                background:
-                  "repeating-linear-gradient(135deg, transparent 0px, transparent 12px, color-mix(in srgb, var(--v2-text-text-base) var(--session-dropzone-stripe), transparent) 12px, color-mix(in srgb, var(--v2-text-text-base) var(--session-dropzone-stripe), transparent) 24px)",
-                "-webkit-mask-image":
-                  "radial-gradient(ellipse 59% 40% at center, black 0%, rgba(0,0,0,0.72) 58%, transparent 100%)",
-                "mask-image":
-                  "radial-gradient(ellipse 59% 40% at center, black 0%, rgba(0,0,0,0.72) 58%, transparent 100%)",
-              }}
-            />
-          </div>
-          <div
-            data-slot="session-dropzone-content"
-            class="relative flex translate-y-0 flex-col items-center gap-5 opacity-100 transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.215,0.61,0.355,1)] data-[visible=false]:translate-y-1 data-[visible=false]:opacity-0 motion-reduce:transition-none"
-            data-visible={composer.drop.active()}
-          >
-            <div
-              data-slot="session-dropzone-upload"
-              class="flex size-10 items-center justify-center rounded-full bg-[var(--session-dropzone-card)] text-v2-icon-icon-muted shadow-[var(--v2-elevation-floating)]"
-              aria-hidden="true"
-            >
-              <Icon name="arrow-up" size="normal" class="text-v2-icon-icon-muted" />
-            </div>
-            <div class="text-[15px] font-[530] leading-6 text-v2-text-text-base">{dropPresence.value()}</div>
-          </div>
-        </div>
-      </Show>
       <Show when={!isDesktop() && !!session.identity.params.id}>{mobileTabs()}</Show>
       {/* Surface query errors without suspending session metadata while messages load. */}
       <Show when={timeline.resource.error}>
@@ -330,6 +272,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                   anchor={timeline.view.anchor}
                   setRevealMessage={timeline.view.setRevealMessage}
                   setScrollToEnd={timeline.view.setScrollToEnd}
+                  search={<TimelineSearchBar controller={timelineSearch} />}
                 />
               )}
             </Show>
@@ -436,7 +379,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                         setStore("sideReviewPresent", false)
                       }}
                     >
-                      <SessionDesktopReview review={review} present={store.sideReviewPresent} />
+                      <SessionDesktopReview review={review} browser={browser} present={store.sideReviewPresent} />
                     </div>
                   </Show>
                 </div>

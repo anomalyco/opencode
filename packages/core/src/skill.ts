@@ -1,11 +1,11 @@
 export * as Skill from "./skill.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import type { FSUtil } from "@opencode-ai/util/fs-util"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
+import type { FSUtil } from "@opencode/util/fs-util"
 import path from "path"
 import { Context, Effect, Layer, Types } from "effect"
-import type { Agent } from "@opencode-ai/schema/agent"
-import { Skill } from "@opencode-ai/schema/skill"
+import type { Agent } from "@opencode/schema/agent"
+import { Skill } from "@opencode/schema/skill"
 import { Bus } from "./bus.js"
 import { Permission } from "./permission.js"
 import { State } from "./state.js"
@@ -29,7 +29,7 @@ export type ID = Skill.ID
 export const Name = Skill.Name
 export type Name = Skill.Name
 
-export { Event } from "@opencode-ai/schema/skill"
+export { Event } from "@opencode/schema/skill"
 
 export const available = (skills: ReadonlyArray<Info>, agent: Agent.Info) =>
   skills.filter((skill) => Permission.evaluate("skill", skill.id, agent.permissions).effect !== "deny")

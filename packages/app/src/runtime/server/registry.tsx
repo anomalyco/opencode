@@ -1,4 +1,4 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import { batch, createMemo } from "solid-js"
 import { type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/runtime/persistence/storage"
@@ -194,7 +194,7 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
   name: "Server",
   gate: true,
   init: (props: {
-    defaultServer: ServerConnection.Key
+    defaultServer?: ServerConnection.Key
     canonicalLocalServer?: ServerConnection.Key
     servers?: Array<ServerConnection.Any>
   }) => {

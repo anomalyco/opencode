@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { LLM } from "@opencode-ai/schema/llm"
+import { LLM } from "@opencode/schema/llm"
 import { ContentBlockID, ToolCallID } from "./ids.js"
 import {
   Message,
@@ -94,6 +94,21 @@ export type UsageInput = Usage | ConstructorParameters<typeof Usage>[0]
 /** A replacement context window, not an assistant message to append to prior history. */
 export class CompactionResponse extends Schema.Class<CompactionResponse>("LLM.CompactionResponse")({
   replacement: Schema.Array(Message),
+  usage: Schema.optional(Usage),
+}) {}
+
+/** A checkpoint only; retained history and replacement-window construction belong to the caller. */
+export class CompactionCheckpointResponse extends Schema.Class<CompactionCheckpointResponse>(
+  "LLM.CompactionCheckpointResponse",
+)({
+  checkpoint: CompactionPart.pipe(
+    Schema.refine(
+      (part): part is CompactionPart & { readonly encrypted: string; readonly text?: never } =>
+        part.encrypted !== undefined && part.encrypted.length > 0,
+      { message: "A checkpoint response requires encrypted compaction content" },
+    ),
+  ),
+  responseID: Schema.String.check(Schema.isPattern(/\S/)),
   usage: Schema.optional(Usage),
 }) {}
 

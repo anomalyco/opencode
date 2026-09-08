@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import { currentSession } from "../utils/mock-server"
 
 const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
@@ -225,19 +225,90 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
   await page.mouse.down()
   await page.mouse.move(resized.x - 200, resized.y + resized.height / 2)
   await page.mouse.up()
-  await expect(sidebar).toHaveCSS("width", "130px")
+  await expect(sidebar).toHaveCSS("width", "140px")
 
   await tabB.click()
   await expect(page).toHaveURL(new RegExp(`${hrefB.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`))
   await expect(tabB).toBeVisible()
 })
 
+for (const count of [0, 26]) {
+  test(`vertical navigation labels and icons use the available width with ${count} tabs`, async ({
+    page,
+  }, testInfo) => {
+    await mockServer(page)
+    await page.addInitScript(
+      ({ server, directory, count }) => {
+        localStorage.setItem(
+          "settings.v3",
+          JSON.stringify({
+            appearance: { tabLayout: "vertical" },
+            keybinds: { "home.toggle": "alt+home", "tab.new": "ctrl+shift+n" },
+          }),
+        )
+        localStorage.setItem(
+          "opencode.window.browser.dat:tabs",
+          JSON.stringify(
+            Array.from({ length: count }, (_, index) => ({
+              type: "draft",
+              server,
+              directory,
+              draftID: `draft_navigation_${index}`,
+            })),
+          ),
+        )
+      },
+      { server, directory: sessionA.directory, count },
+    )
+    await page.goto("/")
+
+    const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+    await expect(sidebar).toHaveCSS("width", "260px")
+    await expect(sidebar.locator("[data-titlebar-tab-slot]")).toHaveCount(count)
+    for (const width of [260, 180, 140]) {
+      if (width !== 260) {
+        const handle = await sidebar.locator('[data-component="resize-handle"]').boundingBox()
+        const bounds = await sidebar.boundingBox()
+        if (!handle || !bounds) throw new Error("vertical tab sidebar has no bounding box")
+        await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
+        await page.mouse.down()
+        await page.mouse.move(handle.x + handle.width / 2 + width - bounds.width, handle.y + handle.height / 2)
+        await page.mouse.up()
+      }
+      await expect(sidebar).toHaveCSS("width", `${width}px`)
+      await testInfo.attach(`navigation-${count}-${width}`, {
+        body: await sidebar.screenshot(),
+        contentType: "image/png",
+      })
+      for (const name of ["Home", "New session"]) {
+        const button = sidebar.getByRole("button", { name, exact: true })
+        const label = button.getByText(name, { exact: true })
+        await expect(label).toBeVisible()
+        await expect
+          .poll(() => label.evaluate((element) => element.scrollWidth - element.clientWidth), { message: name })
+          .toBeLessThanOrEqual(1)
+        await expect(button.locator('[data-slot="icon-svg"]')).toHaveCSS("width", "16px")
+        await button.hover()
+        await expect(button.locator('span[aria-hidden="true"]')).toBeVisible()
+        await expect(button.locator('[data-slot="icon-svg"]')).toHaveCSS("width", "16px")
+        await expect
+          .poll(() => button.evaluate((element) => element.scrollWidth - element.clientWidth))
+          .toBeLessThanOrEqual(1)
+        await page.getByRole("main").hover()
+      }
+    }
+  })
+}
+
 for (const direction of ["ltr", "rtl"]) {
-  test(`vertical tabs keep Settings pinned while scrolling in ${direction}`, async ({ page }, testInfo) => {
+  test(`vertical tabs keep Status pinned without Settings in ${direction}`, async ({ page }, testInfo) => {
     await mockServer(page)
     await page.addInitScript(
       ({ server, sessionA, sessionB, directory }) => {
-        localStorage.setItem("settings.v3", JSON.stringify({ appearance: { tabLayout: "vertical" } }))
+        localStorage.setItem(
+          "settings.v3",
+          JSON.stringify({ appearance: { tabLayout: "vertical" }, general: { showStatus: true } }),
+        )
         localStorage.setItem(
           "opencode.window.browser.dat:tabs",
           JSON.stringify([
@@ -254,23 +325,27 @@ for (const direction of ["ltr", "rtl"]) {
       },
       { server, sessionA: sessionA.id, sessionB: sessionB.id, directory: sessionA.directory },
     )
-    await page.goto("/")
+    await page.goto(`/server/${base64Encode(server)}/session/${sessionA.id}`)
 
     const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
     const settings = sidebar.getByRole("button", { name: "Settings", exact: true })
+    const status = sidebar.getByRole("button", { name: "Status", exact: true })
     const scroll = sidebar.locator('[data-slot="vertical-tabs-scroll"]')
     const hrefB = `/server/${base64Encode(server)}/session/${sessionB.id}`
     const tabB = sidebar.locator(`[data-titlebar-tab-link][href="${hrefB}"]`)
     await expect(sidebar.locator("[data-titlebar-tab-slot]")).toHaveCount(26)
-    await expect(settings).toHaveText("Settings")
+    await expect(status).toHaveText("Status")
+    await expect(settings).toHaveCount(0)
+    await expect(status.locator('[data-slot="status-indicator"]')).toBeVisible()
     await page.evaluate((direction) => document.documentElement.setAttribute("dir", direction), direction)
 
     for (const width of [1280, 800]) {
       await page.setViewportSize({ width, height: 360 })
-      await expect(settings).toBeInViewport({ ratio: 1 })
       await expect(sidebar).toHaveCSS("padding-inline-start", "10px")
       await expect(sidebar).toHaveCSS("padding-bottom", "10px")
-      await expect(settings).toHaveCSS("margin-top", "8px")
+      await expect(sidebar.locator('[data-slot="vertical-tabs-footer"]')).toHaveCSS("margin-top", "8px")
+      await expect(status).toBeInViewport({ ratio: 1 })
+      await expect(status).toHaveCSS("height", "28px")
       await expect
         .poll(() =>
           sidebar.locator('[data-slot="vertical-tabs-footer"]').evaluate((element) => {
@@ -285,12 +360,12 @@ for (const direction of ["ltr", "rtl"]) {
       await expect(scroll).toHaveCSS("mask-image", /linear-gradient/)
       await scroll.evaluate((element) => element.scrollTo(0, 0))
       await expect(scroll).toHaveJSProperty("scrollTop", 0)
-      const pinned = await settings.boundingBox()
+      const pinnedStatus = await status.boundingBox()
       await scroll.hover()
       await page.mouse.wheel(0, 200)
       await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
-      await expect.poll(() => settings.boundingBox()).toEqual(pinned)
-      await testInfo.attach(`vertical-tabs-settings-${width}`, {
+      await expect.poll(() => status.boundingBox()).toEqual(pinnedStatus)
+      await testInfo.attach(`vertical-tabs-status-${width}`, {
         body: await sidebar.screenshot(),
         contentType: "image/png",
       })
@@ -304,17 +379,14 @@ for (const direction of ["ltr", "rtl"]) {
           return !!tab && !!viewport && tab.y + tab.height <= viewport.y + viewport.height - 16
         })
         .toBe(true)
-      await expect.poll(() => settings.boundingBox()).toEqual(pinned)
+      await expect.poll(() => status.boundingBox()).toEqual(pinnedStatus)
+      await expect(settings).toHaveCount(0)
     }
 
-    await settings.click()
-    await expect(page.getByTestId("settings-screen")).toBeVisible()
-    await expect(settings).toHaveAttribute("aria-pressed", "true")
-    await sidebar.getByRole("button", { name: "Home", exact: true }).click()
-    await expect(page.getByTestId("settings-screen")).toBeHidden()
-    await settings.focus()
-    await settings.press("Enter")
-    await expect(page.getByTestId("settings-screen")).toBeVisible()
+    await status.click()
+    await expect(status).toHaveAttribute("aria-expanded", "true")
+    await status.press("Escape")
+    await expect(status).toHaveAttribute("aria-expanded", "false")
   })
 }
 
@@ -359,9 +431,9 @@ for (const profile of [
       const hint = button.locator('span[aria-hidden="true"]')
       await expect(hint).toHaveText(row.shortcut)
       await expect(hint.getByText(row.shortcut, { exact: true })).toHaveCSS("direction", "ltr")
-      await expect(hint).toHaveCSS("opacity", "0")
+      await expect(hint).toBeHidden()
       await button.hover()
-      await expect(hint).toHaveCSS("opacity", "1")
+      await expect(hint).toBeVisible()
       await expect
         .poll(() =>
           hint.evaluate((element) => {
@@ -373,7 +445,7 @@ for (const profile of [
         )
         .toBeCloseTo(8, 1)
       await page.getByRole("main").hover()
-      await expect(hint).toHaveCSS("opacity", "0")
+      await expect(hint).toBeHidden()
     }
 
     const home = sidebar.locator('[data-action="vertical-tabs-home"]')
@@ -381,10 +453,10 @@ for (const profile of [
     await home.focus()
     await page.keyboard.press("Tab")
     await expect(newSession).toBeFocused()
-    await expect(newSession.locator('span[aria-hidden="true"]')).toHaveCSS("opacity", "1")
+    await expect(newSession.locator('span[aria-hidden="true"]')).toBeVisible()
     await page.keyboard.press("Shift+Tab")
     await expect(home).toBeFocused()
-    await expect(home.locator('span[aria-hidden="true"]')).toHaveCSS("opacity", "1")
+    await expect(home.locator('span[aria-hidden="true"]')).toBeVisible()
   })
 }
 
@@ -561,7 +633,12 @@ async function mockServer(page: Page) {
         url.pathname === "/api/project" ? [project] : { id: project.id, directory: sessionA.directory },
       )
     }
-    if (url.pathname === "/api/location") return json(route, { directory: sessionA.directory })
+    if (url.pathname === "/api/location")
+      return json(route, {
+        directory: sessionA.directory,
+        project: { id: sessionA.projectID, directory: sessionA.directory, canonical: sessionA.directory },
+      })
+    if (url.pathname === "/api/worktree") return json(route, [{ directory: sessionA.directory }])
     if (url.pathname === "/api/vcs")
       return json(route, {
         location: { directory: sessionA.directory },

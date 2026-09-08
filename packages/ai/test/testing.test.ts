@@ -3,6 +3,7 @@ import {
   AIError,
   CompactionPart,
   CompactionResponse,
+  CompactionCheckpointResponse,
   LanguageModel,
   LLM,
   LLMClient,
@@ -79,6 +80,31 @@ describe("TestLLM legacy client", () => {
 })
 
 describe("TestLLM first-class client", () => {
+  it.effect("returns scripted checkpoints only for trigger compaction", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      const request = LLM.request({ model: OpenAI.configure().responses("fixture"), prompt: "hello" })
+      const checkpoint = new CompactionCheckpointResponse({
+        checkpoint: { type: "compaction", provider: ProviderID.make("openai"), encrypted: "opaque" },
+        responseID: "resp_fixture",
+      })
+      const endpoint = new CompactionResponse({ replacement: [] })
+      yield* client.push(checkpoint, endpoint, checkpoint, checkpoint)
+      const operation = LLMClient.compact(request, { mechanism: "trigger" })
+      expect(yield* client.requests()).toEqual([])
+      expect(yield* operation).toBe(checkpoint)
+      expect(yield* client.compact(request, { mechanism: "trigger" }).pipe(Effect.catchDefect(Effect.succeed))).toBe(
+        "TestLLM trigger compaction requires a CompactionCheckpointResponse",
+      )
+      expect(yield* client.compact(request).pipe(Effect.catchDefect(Effect.succeed))).toBe(
+        "TestLLM compaction requires a CompactionResponse",
+      )
+      expect(yield* client.generate(request).pipe(Effect.catchDefect(Effect.succeed))).toBe(
+        "TestLLM generation requires an event response",
+      )
+    }),
+  )
+
   it.effect("rejects response fixtures for the wrong operation", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test

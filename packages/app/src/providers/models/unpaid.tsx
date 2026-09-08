@@ -1,10 +1,10 @@
-import { DialogBody, DialogHeader, DialogTitle, Dialog } from "@opencode-ai/ui/dialog"
-import { Badge } from "@opencode-ai/ui/badge"
-import { Icon } from "@opencode-ai/ui/icon"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useTheme } from "@opencode-ai/ui/theme"
+import { DialogBody, DialogHeader, DialogTitle, Dialog } from "@opencode/ui/dialog"
+import { Badge } from "@opencode/ui/badge"
+import { Icon } from "@opencode/ui/icon"
+import { ProviderIcon } from "@opencode/ui/provider-icon"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { useTheme } from "@opencode/ui/theme"
 import { createMemo, onCleanup, onMount, type Component, For, Show } from "solid-js"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
 import { useIntegrations } from "@/providers/catalog/integrations"
@@ -13,7 +13,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { ModelTooltip } from "./tooltip"
 
 type ModelState = ModelSelection
-const featuredProviders = ["opencode", "opencode-go", "openai", "anthropic", "google", "github-copilot"]
+const featuredProviders = ["opencode-go", "opencode", "openai", "anthropic", "google", "github-copilot"]
 const displayModelName = (name: string) => name.replace(/\s+(?:\(free\)|free)$/i, "")
 
 export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props) => {

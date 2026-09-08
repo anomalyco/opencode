@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from "@solidjs/router"
 import { createEffect, on } from "solid-js"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import { useLayout, type LayoutRoute } from "@/shell/state/layout"
 import { useCommand } from "@/shell/commands/command"
 

@@ -1,15 +1,15 @@
-import { Plugin } from "@opencode-ai/plugin/effect"
-import type { IntegrationMethod } from "@opencode-ai/plugin/effect/integration"
-import { Agent } from "@opencode-ai/core/agent"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Credential } from "@opencode-ai/core/credential"
-import { Integration } from "@opencode-ai/core/integration"
-import { Location } from "@opencode-ai/core/location"
-import { Model } from "@opencode-ai/core/model"
-import { Project } from "@opencode-ai/core/project"
-import { Provider } from "@opencode-ai/core/provider"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { WebSearch } from "@opencode-ai/core/websearch"
+import { Plugin } from "@opencode/plugin/effect"
+import type { IntegrationMethod } from "@opencode/plugin/effect/integration"
+import { Agent } from "@opencode/core/agent"
+import { Catalog } from "@opencode/core/catalog"
+import { Credential } from "@opencode/core/credential"
+import { Integration } from "@opencode/core/integration"
+import { Location } from "@opencode/core/location"
+import { Model } from "@opencode/core/model"
+import { Project } from "@opencode/core/project"
+import { Provider } from "@opencode/core/provider"
+import { AbsolutePath } from "@opencode/core/schema"
+import { WebSearch } from "@opencode/core/websearch"
 import { Effect, Stream } from "effect"
 
 type Overrides = Partial<Omit<Plugin.Context, "options" | "session">> & {
@@ -144,6 +144,14 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       diff: () => Effect.die("unused vcs.diff"),
       transform: () => Effect.die("unused vcs.transform"),
       reload: () => Effect.die("unused vcs.reload"),
+    },
+    worktree: overrides.worktree ?? {
+      list: () => Effect.die("unused worktree.list"),
+      create: () => Effect.die("unused worktree.create"),
+      remove: () => Effect.die("unused worktree.remove"),
+      refresh: () => Effect.die("unused worktree.refresh"),
+      transform: () => Effect.die("unused worktree.transform"),
+      reload: () => Effect.die("unused worktree.reload"),
     },
     websearch: overrides.websearch ?? {
       providers: () => Effect.die("unused websearch.providers"),

@@ -10,7 +10,7 @@ const channel = (() => {
 
 const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
 
-const appPlugin = (await import("@opencode-ai/app/vite")).default
+const appPlugin = (await import("@opencode/app/vite")).default
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
     ? (await import("@sentry/vite-plugin")).sentryVitePlugin({
@@ -78,7 +78,10 @@ const require = __cjs_mod__.createRequire(import.meta.url);
         input: { index: "src/preload/index.ts" },
         output: {
           format: "cjs",
-          entryFileNames: "[name].js",
+          // The package is "type": "module". Under --no-sandbox Electron loads the preload
+          // through Node's module loader, which treats a .js file as ESM and fails on
+          // require("electron"). The sandboxed path ignores the extension.
+          entryFileNames: "[name].cjs",
         },
       },
     },

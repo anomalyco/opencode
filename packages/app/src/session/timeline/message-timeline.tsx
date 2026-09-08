@@ -1,26 +1,26 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
-import type { SessionUserActions } from "@opencode-ai/session-ui/actions"
-import { Button } from "@opencode-ai/ui/button"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { InlineInput } from "@opencode-ai/ui/inline-input"
-import { Keybind } from "@opencode-ai/ui/keybind"
-import { Menu } from "@opencode-ai/ui/menu"
-import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
-import { ProjectAvatar } from "@opencode-ai/ui/project-avatar"
+import type { SessionUserActions } from "@opencode/session-ui/actions"
+import { Button } from "@opencode/ui/button"
+import { DiffChanges } from "@opencode/ui/diff-changes"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { InlineInput } from "@opencode/ui/inline-input"
+import { Keybind } from "@opencode/ui/keybind"
+import { Menu } from "@opencode/ui/menu"
+import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { ProjectAvatar } from "@opencode/ui/project-avatar"
 import type { Project } from "@/runtime/server/types"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode/util/path"
 import { Popover } from "@kobalte/core/popover"
 import { SessionContextUsage } from "@/session/timeline/session-context-usage"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useData, useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { Timeline, TimelineRow } from "@opencode-ai/session-ui/timeline/projection"
-import { createSessionTimelineRowRenderer } from "@opencode-ai/session-ui/timeline/row"
-import { getReadyMarkdown, preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
+import { Timeline, TimelineRow } from "@opencode/session-ui/timeline/projection"
+import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/row"
+import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import { createTimelineVirtualizer } from "./virtualizer"
 import { containsDirectory, isWorkspaceDirectory, workspaceDirectories } from "@/workspaces/paths"
@@ -58,7 +58,6 @@ export function BackgroundMoveHint(props: { keybind?: string[]; onMove?: () => v
       type="button"
       variant="ghost-faint"
       size="small"
-      icon="outline-arrow-to-corner-top-right"
       class="max-w-full"
       aria-label={language.t("session.background.moveInline", { keybind: keybind() })}
       onClick={() => props.onMove?.()}
@@ -185,7 +184,7 @@ function WorkspaceMoveAction(props: {
             : "flex h-[46px] w-full items-center gap-2 rounded-b-[6px] px-3 pe-9 pt-2.5 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted focus-visible:outline-none"
         }
       >
-        <Icon name="workspace-new" class="shrink-0 text-v2-icon-icon-muted" />
+        <Icon name="outline-worktree" class="shrink-0 text-v2-icon-icon-muted" />
         <span class="min-w-0 truncate">{language.t("workspace.move.title")}</span>
       </SessionWorkspaceMenu>
       <button
@@ -257,7 +256,10 @@ export function SessionSummaryPanel(props: {
           gutter={props.mobile ? 4 : -22}
           class={`${row} hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed`}
         >
-          <Icon name={props.local ? "monitor" : "workspace-isolated"} class="shrink-0 text-v2-icon-icon-muted" />
+          <Icon
+            name={props.local ? "monitor" : "outline-worktree"}
+            class={`shrink-0 ${props.local ? "text-v2-icon-icon-muted" : "text-v2-icon-icon-accent"}`}
+          />
           <span dir="auto" class="min-w-0 flex-1 truncate text-start">
             {location()}
           </span>
@@ -354,8 +356,9 @@ type MessageTimelineProps = {
   workspaceMoveEligible: boolean
   onSummaryOpenChange: (open: boolean) => void
   anchor: (id: string) => string
-  setRevealMessage?: (fn: (id: string) => void) => void
+  setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
   setScrollToEnd?: (fn: () => void) => void
+  search?: JSX.Element
 }
 
 export function MessageTimeline(props: MessageTimelineProps) {
@@ -790,6 +793,7 @@ function MessageTimelineView(
               <Show when={sessionID()} keyed>
                 {(id) => (
                   <div class="shrink-0 flex items-center gap-2">
+                    {props.search}
                     <SessionContextUsage placement="bottom" />
                     <Show when={!parentID() && project()}>
                       {(project) => (

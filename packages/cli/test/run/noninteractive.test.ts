@@ -4,7 +4,7 @@ import {
   type EventSubscribeOutput,
   type SessionMessageAssistantTool,
   type SessionMessageInfo,
-} from "@opencode-ai/client/promise"
+} from "@opencode/client/promise"
 import { runNonInteractivePrompt } from "../../src/run/noninteractive"
 
 type V2Event = EventSubscribeOutput

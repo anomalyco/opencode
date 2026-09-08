@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { SessionInfo } from "@opencode-ai/client/promise"
+import type { SessionInfo } from "@opencode/client/promise"
 import { createSessionMutations } from "./data"
 
 const session = { id: "ses_test" } as SessionInfo

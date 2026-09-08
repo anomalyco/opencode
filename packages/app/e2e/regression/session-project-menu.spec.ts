@@ -53,7 +53,7 @@ for (const direction of ["ltr", "rtl"] as const) {
       await expect(trigger).toBeEnabled()
       await expect(trigger.locator("use")).toHaveAttribute(
         "href",
-        `#opencode-v2-icon-${workspace ? "workspace-isolated" : "monitor"}`,
+        `#opencode-v2-icon-${workspace ? "outline-worktree" : "monitor"}`,
       )
       const background = await trigger.evaluate((element) => getComputedStyle(element).backgroundColor)
       await trigger.hover()
@@ -267,7 +267,7 @@ for (const state of ["closed", "unopened"] as const) {
         messages.resolve()
         await expect(header.getByRole("button", { name: "More options", exact: true })).toBeVisible()
       }
-      await expect(trigger.locator("use")).toHaveAttribute("href", "#opencode-v2-icon-workspace-isolated")
+      await expect(trigger.locator("use")).toHaveAttribute("href", "#opencode-v2-icon-outline-worktree")
       await trigger.click()
       await expect(menu.getByRole("menuitem", { name: fixture.project.name, exact: true })).toBeEnabled()
       await expect(menu.getByRole("menuitem", { name: directory, exact: true })).toBeDisabled()

@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { State } from "@opencode-ai/core/state"
+import { State } from "@opencode/core/state"
 import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect"
 import { it } from "./lib/effect"
 

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Flock } from "@opencode-ai/util/flock"
-import { Hash } from "@opencode-ai/util/hash"
+import { Flock } from "@opencode/util/flock"
+import { Hash } from "@opencode/util/hash"
 import { runLockWorker, spawnLockWorker, stopLockWorker, waitForFile } from "../fixture/lock-worker"
 import { tmpdir } from "../fixture/tmpdir"
 

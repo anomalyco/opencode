@@ -1,4 +1,4 @@
-import { OpenCode, type OpenCodeEvent } from "@opencode-ai/client"
+import { OpenCode, type OpenCodeEvent } from "@opencode/client"
 
 export const worktree = "/tmp/opencode"
 export const directory = `${worktree}/packages/tui`
@@ -112,12 +112,12 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
       })
     if (url.pathname === "/api/project/current") return json({ id: "proj_test", directory: worktree })
     if (url.pathname === "/api/project") return json([])
-    if (url.pathname === "/api/worktree/proj_test") {
+    if (url.pathname === "/api/worktree") {
       if (request.method === "GET") return json([{ directory: worktree }])
       if (request.method === "POST") return json({ directory: `${worktree}/created` })
       return new Response(null, { status: 204 })
     }
-    if (url.pathname === "/api/worktree/proj_test/refresh") return new Response(null, { status: 204 })
+    if (url.pathname === "/api/worktree/refresh") return new Response(null, { status: 204 })
     if (url.pathname === "/api/shell")
       return json({
         location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },

@@ -1,0 +1,119 @@
+[data-component="connect-server"] {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: auto;
+  padding: max(48px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
+    max(32px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  background: var(--v2-background-bg-base);
+  color: var(--v2-text-text-base);
+
+  .server-connect-content {
+    display: flex;
+    flex-direction: column;
+    width: min(100%, 360px);
+    margin: auto;
+    gap: 16px;
+  }
+
+  .server-connect-brand {
+    width: 160px;
+    margin-inline: auto;
+    margin-block-end: 16px;
+  }
+
+  header {
+    text-align: center;
+    margin-block-end: 16px;
+  }
+
+  h1 {
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 530;
+    margin-block-end: 8px;
+  }
+
+  p {
+    font-size: 13px;
+    line-height: var(--line-height-base);
+    color: var(--v2-text-text-muted);
+  }
+
+  form,
+  .server-connect-scanner {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .server-connect-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  label {
+    font-size: 13px;
+    line-height: var(--line-height-compact);
+    font-weight: 530;
+  }
+
+  [data-component="text-input-v2"] {
+    width: 100%;
+    height: 44px;
+  }
+
+  [data-slot="text-input-v2-input"] {
+    font-size: 16px;
+    line-height: 24px;
+  }
+
+  button {
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .server-connect-error {
+    color: var(--v2-state-fg-danger);
+  }
+
+  footer {
+    text-align: center;
+    margin-block-start: 16px;
+  }
+
+  code {
+    display: inline-block;
+    margin-block-start: 12px;
+    border: 1px solid var(--v2-border-border-base);
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    line-height: var(--line-height-base);
+    background: var(--v2-background-bg-layer-01);
+    user-select: all;
+  }
+
+  .server-connect-video {
+    position: relative;
+    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: 12px;
+    background: var(--v2-background-bg-deep);
+  }
+
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .server-connect-video [role="status"] {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+  }
+}

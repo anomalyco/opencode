@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Tool } from "@opencode-ai/schema/tool"
+import { Tool } from "@opencode/schema/tool"
 import {
   CacheHint,
   CachePolicy,

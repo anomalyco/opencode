@@ -1,4 +1,4 @@
-import { Service } from "@opencode-ai/client/service"
+import { Service } from "@opencode/client/service"
 import { chromium, expect, type Browser, type Page, type TestInfo } from "@playwright/test"
 import { spawn, spawnSync, type ChildProcess } from "node:child_process"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"

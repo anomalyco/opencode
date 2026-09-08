@@ -10,6 +10,15 @@ import { AbsolutePath } from "../src/schema.js"
 import { WebSearch } from "../src/websearch.js"
 
 describe("Config.Entry", () => {
+  test("accepts directory-only worktree config and omits it when absent", () => {
+    const decode = Schema.decodeUnknownSync(Config.Info)
+    const input = { worktree: { directory: "../worktrees" } }
+    expect(Schema.encodeSync(Config.Info)(decode(input))).toEqual(input)
+    expect(Schema.encodeSync(Config.Info)(new Config.Info({ worktree: undefined }))).not.toHaveProperty("worktree")
+    expect(() => decode({ worktree: {} })).toThrow()
+    expect(() => decode({ worktree: { directory: " " } })).toThrow()
+    expect(() => decode({ worktree: { directory: false } })).toThrow()
+  })
   test("round-trips canonical provider IDs without changing config keys", () => {
     const input = { providers: { "console-anthropic": { canonical: "anthropic" } } }
     const decoded = Schema.decodeUnknownSync(Config.Info)(input)

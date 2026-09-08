@@ -19,12 +19,11 @@ import { ApplicationLifecycle } from "./lifecycle"
 import { showCliInstaller } from "./native/install-cli"
 import { createMenu, sendMenuCommand } from "./native/menu"
 import { DesktopCli } from "./service/desktop-cli"
-import { DesktopStorage } from "./storage"
 import { Updater } from "./updater"
 import { getLastFocusedWindow } from "./windows"
 import { Wsl } from "./wsl/start"
 
-const services = Layer.mergeAll(DesktopFiles.layer, DesktopStorage.layer, Wsl.layer)
+const services = Layer.mergeAll(DesktopFiles.layer, Wsl.layer)
 const handlers = Layer.mergeAll(
   appHandlers,
   storageHandlers,
