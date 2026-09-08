@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.17.20",
-  "name": "@opencode-ai/ai",
+  "name": "@opencode/ai",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -21,7 +21,7 @@
   "devDependencies": {
     "@clack/prompts": "1.0.0-alpha.1",
     "@effect/platform-node": "catalog:",
-    "@opencode-ai/http-recorder": "workspace:*",
+    "@opencode/http-recorder": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:",
@@ -31,7 +31,7 @@
     "@aws-sdk/credential-providers": "3.1057.0",
     "@smithy/eventstream-codec": "4.2.14",
     "@smithy/util-utf8": "4.2.2",
-    "@opencode-ai/schema": "workspace:*",
+    "@opencode/schema": "workspace:*",
     "aws4fetch": "1.0.20",
     "effect": "catalog:",
     "google-auth-library": "10.5.0"

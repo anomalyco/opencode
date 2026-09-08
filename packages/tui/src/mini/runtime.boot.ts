@@ -4,7 +4,7 @@
 // needs before the first frame: TUI keymap config, model catalog, and session history for the prompt
 // history ring. All are async because they read config or hit the SDK, but
 // none block each other.
-import type { LocationRef } from "@opencode-ai/client/promise"
+import type { LocationRef } from "@opencode/client/promise"
 import { resolve } from "../config"
 import { loadRunProviders } from "./catalog.shared"
 import { resolveCurrentSession, sessionHistory } from "./session.shared"

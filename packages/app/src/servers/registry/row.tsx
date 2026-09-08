@@ -1,6 +1,6 @@
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Spinner } from "@opencode-ai/ui/spinner"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { Icon } from "@opencode/ui/icon"
+import { Spinner } from "@opencode/ui/spinner"
 import { useLanguage } from "@/runtime/i18n/language"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import {

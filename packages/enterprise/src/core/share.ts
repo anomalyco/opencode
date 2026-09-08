@@ -1,5 +1,5 @@
 import { Message, Model, Part, Session, SnapshotFileDiff } from "@opencode-ai/sdk/v2"
-import type { SessionInfo, SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
 import z from "zod"
 import { Storage } from "./storage"
 

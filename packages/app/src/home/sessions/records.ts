@@ -1,4 +1,4 @@
-import type { SessionInfo } from "@opencode-ai/client/promise"
+import type { SessionInfo } from "@opencode/client/promise"
 import type { LocalProject } from "@/shell/state/layout"
 import { compareSessionTime, displayName } from "@/shell/layout/helpers"
 import { pathKey } from "@/workspaces/path-key"

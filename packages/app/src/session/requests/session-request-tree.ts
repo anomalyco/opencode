@@ -1,4 +1,4 @@
-import type { FormInfo, PermissionRequest, SessionInfo } from "@opencode-ai/client/promise"
+import type { FormInfo, PermissionRequest, SessionInfo } from "@opencode/client/promise"
 
 function sessionTreeRequest<T>(
   session: SessionInfo[],

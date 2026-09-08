@@ -16,7 +16,7 @@ import {
 } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import type { SshConfig, SshHttp, SshItem, SshStart, SshState } from "@opencode-ai/app/ssh"
+import type { SshConfig, SshHttp, SshItem, SshStart, SshState } from "@opencode/app/ssh"
 import { createAskpass } from "./askpass"
 import { bootstrap } from "./bootstrap"
 import { parseTarget, quote, runSsh, sshArgs, sshExecutable, tunnelArgs, SshFailure } from "./command"

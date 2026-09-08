@@ -1,5 +1,5 @@
-import type { SshItem, SshPlatform, SshState } from "@opencode-ai/app/ssh"
-import { isSshConnecting, sshHostname, sshName } from "@opencode-ai/app/ssh"
+import type { SshItem, SshPlatform, SshState } from "@opencode/app/ssh"
+import { isSshConnecting, sshHostname, sshName } from "@opencode/app/ssh"
 import { createStore } from "solid-js/store"
 import { Effect, Schedule } from "effect"
 

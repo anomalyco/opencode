@@ -1,4 +1,4 @@
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { createMemo, Show, type ParentProps } from "solid-js"
 import { useCurrentRoute } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"

@@ -1,18 +1,18 @@
 import { describe, expect } from "bun:test"
-import { LanguageModel } from "@opencode-ai/ai"
-import { OpenAIChat } from "@opencode-ai/ai/protocols"
+import { LanguageModel } from "@opencode/ai"
+import { OpenAIChat } from "@opencode/ai/protocols"
 import { Effect, Fiber, Layer, Stream } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Integration } from "@opencode-ai/core/integration"
-import { Credential } from "@opencode-ai/core/credential"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
-import { Location } from "@opencode-ai/core/location"
-import { Model } from "@opencode-ai/core/model"
-import { ModelResolver } from "@opencode-ai/core/model-resolver"
-import { Provider } from "@opencode-ai/core/provider"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Catalog } from "@opencode/core/catalog"
+import { Integration } from "@opencode/core/integration"
+import { Credential } from "@opencode/core/credential"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { Location } from "@opencode/core/location"
+import { Model } from "@opencode/core/model"
+import { ModelResolver } from "@opencode/core/model-resolver"
+import { Provider } from "@opencode/core/provider"
+import { AbsolutePath } from "@opencode/core/schema"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
@@ -40,7 +40,7 @@ describe("Catalog", () => {
         const modelID = Model.ID.make("fixture-model")
         yield* catalog.transform((editor) =>
           editor.model.update(providerID, modelID, (model) => {
-            model.package = path === "aisdk" ? Provider.aisdk("@ai-sdk/fixture") : "@opencode-ai/ai/providers/openai"
+            model.package = path === "aisdk" ? Provider.aisdk("@ai-sdk/fixture") : "@opencode/ai/providers/openai"
             model.settings = {
               apiKey: path === "empty-key" ? "" : "fixture-key",
               baseURL: "https://fixture.example/v1",

@@ -1,7 +1,7 @@
 export * as FileRetention from "./file-retention.js"
 
 import { Duration, Effect, Option } from "effect"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { FSUtil } from "@opencode/util/fs-util"
 
 export const cleanup = Effect.fn("FileRetention.cleanup")(function* (
   fs: FSUtil.Interface,

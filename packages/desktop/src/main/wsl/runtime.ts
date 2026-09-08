@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process"
 import * as pty from "@lydell/node-pty"
-import type { WslDistroProbe, WslInstalledDistro, WslOnlineDistro, WslRuntimeCheck } from "@opencode-ai/app/wsl/types"
+import type { WslDistroProbe, WslInstalledDistro, WslOnlineDistro, WslRuntimeCheck } from "@opencode/app/wsl/types"
 import { Effect, FileSystem, Path } from "effect"
 import { nativeT } from "../native/translations"
 import { RemoteCli } from "../remote/cli"

@@ -1,5 +1,5 @@
-import { Global } from "@opencode-ai/util/global"
-import { AppProcess } from "@opencode-ai/util/process"
+import { Global } from "@opencode/util/global"
+import { AppProcess } from "@opencode/util/process"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../version"
 import { Context, Duration, Effect, FileSystem, Layer, Ref, Schedule } from "effect"
 import { ChildProcess } from "effect/unstable/process"
@@ -123,9 +123,8 @@ const make = Effect.gen(function* () {
     const response = yield* Effect.tryPromise({
       try: (signal) =>
         fetch(
-          `https://update.opencode.ai/api/${encodeURIComponent(channel)}/${encodeURIComponent(OPENCODE_ARTIFACT)}/npm`,
+          `https://opencode.ai/update/api/${encodeURIComponent(channel)}/${encodeURIComponent(OPENCODE_ARTIFACT)}/npm?current=${encodeURIComponent(OPENCODE_VERSION)}`,
           {
-            headers: { "User-Agent": `opencode/${OPENCODE_VERSION}` },
             signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
           },
         ),

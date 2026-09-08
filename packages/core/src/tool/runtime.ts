@@ -1,5 +1,5 @@
-import type { ToolDefinition } from "@opencode-ai/ai"
-import { Tool } from "@opencode-ai/schema/tool"
+import type { ToolDefinition } from "@opencode/ai"
+import { Tool } from "@opencode/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
 import { Cache, Effect, JsonSchema, Schema, SchemaIssue, SchemaRepresentation } from "effect"
 import { $ZodType, toJSONSchema } from "zod/v4/core"

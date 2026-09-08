@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/unstable/rpc"
-import { SshHttp, SshStart, SshState } from "@opencode-ai/app/ssh"
+import { SshHttp, SshStart, SshState } from "@opencode/app/ssh"
 
 export const SshRpcs = RpcGroup.make(
   Rpc.make("SshGetState", { success: SshState }),

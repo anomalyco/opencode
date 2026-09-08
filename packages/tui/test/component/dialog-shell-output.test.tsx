@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { ScrollBoxRenderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
-import type { ShellInfo } from "@opencode-ai/client"
+import type { ShellInfo } from "@opencode/client"
 import { expect, test } from "bun:test"
 import { createSignal, onMount } from "solid-js"
 import { ConfigProvider } from "../../src/config"

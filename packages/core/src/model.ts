@@ -1,4 +1,4 @@
-import { Model } from "@opencode-ai/schema/model"
+import { Model } from "@opencode/schema/model"
 import { Provider } from "./provider.js"
 import type { DeepMutable } from "./schema.js"
 

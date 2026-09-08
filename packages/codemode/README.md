@@ -1,4 +1,4 @@
-# @opencode-ai/codemode
+# @opencode/codemode
 
 This is our take on code mode: a lightweight, pure interpreter for a JavaScript-like language built around calling
 tools. It supports familiar JavaScript syntax with a few key differences and limitations. See the
@@ -26,7 +26,7 @@ Unsupported syntax returns an `UnsupportedSyntax` diagnostic with a source locat
 ## Quick Start
 
 ```ts
-import { CodeMode, Namespace, Tool } from "@opencode-ai/codemode"
+import { CodeMode, Namespace, Tool } from "@opencode/codemode"
 import { Effect, Schema } from "effect"
 
 const lookupOrder = Tool.make({

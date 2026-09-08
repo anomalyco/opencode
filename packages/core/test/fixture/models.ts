@@ -1,4 +1,4 @@
-import { ModelsDev } from "@opencode-ai/core/models-dev"
+import { ModelsDev } from "@opencode/core/models-dev"
 
 // Core is env-free, so the default ModelsDev node refreshes from models.dev
 // unless the graph says otherwise. Real-Location fixtures opt out here; the

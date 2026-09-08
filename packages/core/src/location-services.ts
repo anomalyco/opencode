@@ -1,5 +1,5 @@
 import { Duration, Effect, Exit, Layer, LayerMap, MutableHashMap, Option } from "effect"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Instance } from "./instance.js"
 import { Location } from "./location.js"
 import { LocationServiceMap } from "./location-service-map.js"

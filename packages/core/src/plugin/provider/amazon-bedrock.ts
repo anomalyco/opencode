@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
 
 // Ambient inputs the AWS default credential chain can turn into credentials
@@ -15,7 +15,7 @@ const CHAIN_ENV = [
 
 const isBedrock = (item: { readonly package: string }) => {
   const name = Provider.packageName(item.package)
-  return name.startsWith("@ai-sdk/amazon-bedrock") || name.startsWith("@opencode-ai/ai/providers/amazon-bedrock")
+  return name.startsWith("@ai-sdk/amazon-bedrock") || name.startsWith("@opencode/ai/providers/amazon-bedrock")
 }
 
 export const AmazonBedrockPlugin = define({

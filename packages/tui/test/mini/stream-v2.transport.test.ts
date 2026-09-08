@@ -11,7 +11,7 @@ import {
   type PermissionRequest,
   type SessionInboxInfo,
   type ToolContent,
-} from "@opencode-ai/client/promise"
+} from "@opencode/client/promise"
 import { createSessionTransport } from "../../src/mini/stream-v2.transport"
 import { runPromptQueue } from "../../src/mini/runtime.queue"
 import { entryBody } from "../../src/mini/entry.body"

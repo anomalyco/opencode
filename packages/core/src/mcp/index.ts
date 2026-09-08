@@ -1,13 +1,13 @@
 export * as Mcp from "./index.js"
 
-import { Mcp } from "@opencode-ai/schema/mcp"
-import { McpEvent } from "@opencode-ai/schema/mcp-event"
-import { ephemeral } from "@opencode-ai/schema/event"
-import type { Session } from "@opencode-ai/schema/session"
+import { Mcp } from "@opencode/schema/mcp"
+import { McpEvent } from "@opencode/schema/mcp-event"
+import { ephemeral } from "@opencode/schema/event"
+import type { Session } from "@opencode/schema/session"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
@@ -15,7 +15,7 @@ import { Form } from "../form.js"
 import { Integration } from "../integration.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { Location } from "../location.js"
-import { waitForAbort } from "@opencode-ai/util/process"
+import { waitForAbort } from "@opencode/util/process"
 import { State } from "../state.js"
 import type { McpClient } from "./client.js"
 
@@ -23,7 +23,7 @@ export const ServerName = Schema.String.pipe(Schema.brand("MCP.ServerName"))
 export const PromptsChanged = ephemeral({ type: "mcp.prompts.changed", schema: { server: Schema.String } })
 export type ServerName = typeof ServerName.Type
 
-// The status union is a public wire contract, so it lives in @opencode-ai/schema and is re-exported here.
+// The status union is a public wire contract, so it lives in @opencode/schema and is re-exported here.
 export const Status = Mcp.Status
 export type Status = Mcp.Status
 

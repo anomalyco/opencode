@@ -1,8 +1,8 @@
 import { EOL } from "node:os"
 import { Cause, Effect, Exit } from "effect"
-import { OpenCode, type PluginInfo } from "@opencode-ai/client"
-import { Service } from "@opencode-ai/client/effect/service"
-import { Npm } from "@opencode-ai/util/npm"
+import { OpenCode, type PluginInfo } from "@opencode/client"
+import { Service } from "@opencode/client/effect/service"
+import { Npm } from "@opencode/util/npm"
 import { Config } from "../../../config"
 import { ServiceConfig } from "../../../services/service-config"
 

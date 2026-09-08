@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { createSshConnections } from "./connections"
-import type { SshItem } from "@opencode-ai/app/ssh"
+import type { SshItem } from "@opencode/app/ssh"
 
 test("SSH progress stays reactive on the same connection until ready or stopped", () => {
   const connections = createSshConnections({ resolve: async () => null })

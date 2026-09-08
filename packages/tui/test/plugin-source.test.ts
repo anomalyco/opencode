@@ -2,12 +2,12 @@ import { expect, test } from "bun:test"
 import path from "node:path"
 import { mkdir, rename, symlink } from "node:fs/promises"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import { Host } from "@opencode-ai/plugin/host"
+import { Host } from "@opencode/plugin/host"
 import "../src/plugin/runtime-plugin-support.bun"
 import { createPluginSources } from "../src/plugin/source"
 import { createSourceWatcher } from "../src/plugin/watch"
 import { createSignal } from "solid-js"
-import { Plugin } from "@opencode-ai/plugin/tui"
+import { Plugin } from "@opencode/plugin/tui"
 import { tmpdir } from "./fixture/fixture"
 
 test("a fresh local plugin generation observes edited helper exports", async () => {
@@ -101,7 +101,7 @@ test("shared runtime and ordinary package identities survive plugin generations"
     await Bun.write(
       entry,
       `import { createSignal } from "solid-js"
-      import { Plugin } from "@opencode-ai/plugin/tui"
+      import { Plugin } from "@opencode/plugin/tui"
       import value from "example"
       export { createSignal, Plugin, value }; export const label = ${JSON.stringify(label)}`,
     )
@@ -324,7 +324,7 @@ test("each helper resolves packages from its own directory", async () => {
   const entry = new URL("tui.ts", sources.url)
   await Bun.write(
     entry,
-    'import { Plugin } from "@opencode-ai/plugin/tui"; import value from "./nested/helper"; export default { Plugin, value }',
+    'import { Plugin } from "@opencode/plugin/tui"; import value from "./nested/helper"; export default { Plugin, value }',
   )
   await Bun.write(new URL("nested/helper.ts", sources.url), 'import value from "example"; export default value')
   for (const directory of ["", "nested/"]) {

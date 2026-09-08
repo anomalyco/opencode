@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import {
   AIError,
+  CompactionPart,
+  CompactionCheckpointResponse,
   HttpContext,
   LLMEvent,
   LLMRequest,
@@ -13,80 +15,81 @@ import {
   InvalidRequestError,
   RateLimitError,
   UnknownProviderError,
-} from "@opencode-ai/ai"
-import { OpenAIChat } from "@opencode-ai/ai/protocols/openai-chat"
-import { AnthropicMessages, OpenAIResponses } from "@opencode-ai/ai/protocols"
-import { compileRequest } from "@opencode-ai/ai/route/client"
-import { TestLLM } from "@opencode-ai/ai/testing"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Database } from "@opencode-ai/core/database/database"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
-import { Event } from "@opencode-ai/schema/event"
-import { App } from "@opencode-ai/core/app"
-import { Permission } from "@opencode-ai/core/permission"
-import { EventTable } from "@opencode-ai/core/event/sql"
-import { Project } from "@opencode-ai/core/project"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { Form } from "@opencode-ai/core/form"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Session } from "@opencode-ai/core/session"
-import { Snapshot } from "@opencode-ai/core/snapshot"
-import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionCompaction } from "@opencode-ai/core/session/compaction"
-import { SessionInbox } from "@opencode-ai/core/session/inbox"
-import { SessionMessage } from "@opencode-ai/core/session/message"
-import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
-import { Money } from "@opencode-ai/schema/money"
-import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
-import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
-import { SessionRunner } from "@opencode-ai/core/session/runner/index"
-import { SessionRunnerLLM } from "@opencode-ai/core/session/runner/llm"
-import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
-import { SessionUsage } from "@opencode-ai/core/session/usage"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
-import { OptimizePlugin } from "@opencode-ai/core/plugin/optimize"
-import { QuestionTool } from "@opencode-ai/core/tool/plugin/question"
-import { Agent } from "@opencode-ai/core/agent"
-import { Config } from "@opencode-ai/core/config"
-import { Document, Info } from "@opencode-ai/schema/config"
-import { ConfigCompaction } from "@opencode-ai/schema/config/compaction"
-import { Tool } from "@opencode-ai/core/tool"
-import type { Info as ToolInfo } from "@opencode-ai/schema/tool"
+} from "@opencode/ai"
+import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
+import { AnthropicMessages, OpenAIResponses } from "@opencode/ai/protocols"
+import { compileRequest } from "@opencode/ai/route/client"
+import { TestLLM } from "@opencode/ai/testing"
+import { Catalog } from "@opencode/core/catalog"
+import { Database } from "@opencode/core/database/database"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNodePlatform } from "@opencode/core/effect/app-node-platform"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { Event } from "@opencode/schema/event"
+import { App } from "@opencode/core/app"
+import { Permission } from "@opencode/core/permission"
+import { EventTable } from "@opencode/core/event/sql"
+import { Project } from "@opencode/core/project"
+import { ProjectTable } from "@opencode/core/project/sql"
+import { Form } from "@opencode/core/form"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Session } from "@opencode/core/session"
+import { Snapshot } from "@opencode/core/snapshot"
+import { SessionEvent } from "@opencode/core/session/event"
+import { SessionCompaction } from "@opencode/core/session/compaction"
+import { SessionInbox } from "@opencode/core/session/inbox"
+import { SessionMessage } from "@opencode/core/session/message"
+import { SessionModelTransport } from "@opencode/core/session/model-transport"
+import { SessionProviderContext } from "@opencode/core/session/provider-context"
+import { Money } from "@opencode/schema/money"
+import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionRunCoordinator } from "@opencode/core/session/run-coordinator"
+import { SessionRunner } from "@opencode/core/session/runner/index"
+import { SessionRunnerLLM } from "@opencode/core/session/runner/llm"
+import { SessionRunnerModel } from "@opencode/core/session/runner/model"
+import { SessionUsage } from "@opencode/core/session/usage"
+import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { OptimizePlugin } from "@opencode/core/plugin/optimize"
+import { QuestionTool } from "@opencode/core/tool/plugin/question"
+import { Agent } from "@opencode/core/agent"
+import { Config } from "@opencode/core/config"
+import { Document, Info } from "@opencode/schema/config"
+import { ConfigCompaction } from "@opencode/schema/config/compaction"
+import { Tool } from "@opencode/core/tool"
+import type { Info as ToolInfo } from "@opencode/schema/tool"
 import {
   InstructionStateTable,
   SessionInboxTable,
   SessionMessageTable,
   SessionTable,
-} from "@opencode-ai/core/session/sql"
-import { InstructionEntry } from "@opencode-ai/core/session/instruction-entry"
-import { SessionStore } from "@opencode-ai/core/session/store"
-import { Instructions } from "@opencode-ai/core/instructions/index"
-import { InstructionBuiltIns } from "@opencode-ai/core/instructions/builtins"
-import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
-import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
-import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
-import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
-import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
-import { ID, Model } from "@opencode-ai/core/model"
-import { Location } from "@opencode-ai/core/location"
-import { Provider } from "@opencode-ai/core/provider"
+} from "@opencode/core/session/sql"
+import { InstructionEntry } from "@opencode/core/session/instruction-entry"
+import { SessionStore } from "@opencode/core/session/store"
+import { Instructions } from "@opencode/core/instructions/index"
+import { InstructionBuiltIns } from "@opencode/core/instructions/builtins"
+import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
+import { SkillInstructions } from "@opencode/core/skill/instructions"
+import { ReferenceInstructions } from "@opencode/core/reference/instructions"
+import { McpInstructions } from "@opencode/core/mcp/instructions"
+import { SessionSystemPrompt } from "@opencode/core/session/system-prompt"
+import { ID, Model } from "@opencode/core/model"
+import { Location } from "@opencode/core/location"
+import { Provider } from "@opencode/core/provider"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 import { promptLocationNode } from "./fixture/prompt-location"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, catalogHost, host } from "./plugin/host"
-import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
+import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
 
 const emptyCodeMode = `\n\n${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}`
 type ToolBarrier = {
@@ -192,7 +195,7 @@ test("does not apply an ineligible tier without base pricing", () => {
   ).toBe(Money.USD.zero)
 })
 
-const makeRunnerState = () => {
+const makeRunnerState = (compaction?: SessionRunnerModel.Resolved["compaction"]) => {
   let toolBarrier: ToolBarrier | undefined
   const releaseTools = (barrier: ToolBarrier) =>
     Effect.sync(() => {
@@ -200,6 +203,7 @@ const makeRunnerState = () => {
     }).pipe(Effect.andThen(Deferred.succeed(barrier.release, undefined)), Effect.asVoid)
   return {
     currentModel: model,
+    compaction,
     modelResolveHook: Effect.void,
     systemBaseline: "Initial context",
     systemRemoved: false,
@@ -319,6 +323,7 @@ const layer = Layer.unwrap(
               cost: [],
               limit: modelLimits.get(String(selected.id)) ?? defaultModelLimit,
               variant: session.model?.variant,
+              compaction: state.compaction,
             })
           }),
         ),
@@ -1434,6 +1439,92 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(s.requests[2])[0]).toContain("<summary>\n## Objective\n- Entry summary\n</summary>")
     expect(yield* s.inbox).toEqual([])
   })
+
+  scenario(
+    "restores installed native context with auto disabled and preserves it across fork and revert",
+    function* (s) {
+      const compaction = yield* SessionCompaction.Service
+      yield* compaction.transform((editor) => editor.configure({ auto: false }))
+      yield* s.runPrompt("Original request")
+      s.systemBaseline = "Checkpoint instructions"
+      yield* s.runPrompt("Before checkpoint")
+      const target = SessionProviderContext.provenance({
+        model: s.currentModel,
+        ref: Model.Ref.make({
+          id: Model.ID.make(s.currentModel.id),
+          providerID: Provider.ID.make(s.currentModel.provider),
+        }),
+      })
+      if (!target) throw new Error("Expected concrete fixture endpoint")
+      const replacement = [
+        Message.assistant(CompactionPart.make({ provider: s.currentModel.provider, encrypted: "checkpoint" })),
+      ]
+      const providerContext = SessionProviderContext.encode(target, replacement)
+      yield* s.bus.publish(SessionEvent.Compaction.Ended, {
+        sessionID,
+        reason: "manual",
+        text: "",
+        recent: "",
+        providerContext,
+      })
+      const checkpoint = (yield* s.messages).find((message) => message.type === "compaction")
+      if (!checkpoint) throw new Error("Expected checkpoint")
+
+      s.systemBaseline = "Newest instructions"
+      const after = yield* s.runPrompt("After checkpoint")
+      const continued = s.requests.at(-1)
+      if (!continued) throw new Error("Expected continuation request")
+      expect(continued.messages[0]).toEqual(replacement[0])
+      expect(continued.system.map((part) => part.text)).toContain("Checkpoint instructions")
+      expect(systemTexts(continued)).toEqual(["Newest instructions"])
+
+      const forked = yield* s.session.fork({ sessionID, boundary: { type: "before", messageID: after.id } })
+      yield* s.session.prompt({ sessionID: forked.id, text: "Fork prompt", resume: false })
+      yield* s.session.resume(forked.id)
+      expect(s.requests.at(-1)?.messages[0]).toEqual(replacement[0])
+      expect(s.requests.at(-1)?.system.map((part) => part.text)).toContain("Newest instructions")
+      expect(s.requests.at(-1)?.messages.filter((message) => message.role === "system")).toEqual([
+        Message.system("Newest instructions"),
+      ])
+      expect(
+        (yield* s.session.messages({ sessionID: forked.id })).find((message) => message.type === "compaction"),
+      ).toMatchObject({ providerContext })
+
+      const original = s.currentModel
+      s.currentModel = LanguageModel.update(original, { id: "different-deployment" })
+      yield* s.session.prompt({ sessionID: forked.id, text: "Switched fork", resume: false })
+      yield* s.session.resume(forked.id)
+      expect(s.requests.at(-1)?.messages[0]?.content).toEqual([Message.text("Original request")])
+      expect(s.requests.at(-1)?.messages.filter((message) => message.role === "system")).toEqual([
+        Message.system("Newest instructions"),
+      ])
+      s.currentModel = original
+
+      yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: checkpoint.id })
+      yield* s.runPrompt("After revert")
+      expect(
+        s.requests
+          .at(-1)
+          ?.messages.flatMap((message) => message.content)
+          .some((part) => part.type === "compaction"),
+      ).toBe(false)
+      expect(s.requests.at(-1)?.messages[0]?.content).toEqual([Message.text("Original request")])
+      expect(
+        (yield* s.session.messages({ sessionID: forked.id })).find((message) => message.type === "compaction"),
+      ).toMatchObject({ providerContext })
+
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "model.request", (event) =>
+        Effect.sync(() => {
+          event.baseURL = "https://another-deployment.example/v1"
+        }),
+      )
+      const before = s.requests.length
+      yield* s.session.prompt({ sessionID: forked.id, text: "Changed route", resume: false })
+      expect(yield* s.session.resume(forked.id).pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
+      expect(s.requests).toHaveLength(before)
+    },
+  )
 
   scenario("seeds a fork with the parent's newest instruction values", function* (s) {
     yield* s.runPrompt("First")
@@ -2676,6 +2767,88 @@ describe("SessionRunnerLLM", () => {
       summary: "## Objective\n- Preserve the updated task",
       recent: `[User]: ${"Newest exact request ".repeat(180)}`,
     })
+  })
+
+  scenario("automatically persists native windows, retains earlier users, and waits for fresh usage", function* (s) {
+    s.currentModel = LanguageModel.make({ id: "native", provider: "openai", route: OpenAIResponses.route })
+    s.compaction = { mode: "provider", threshold: 10_000 }
+    const agents = yield* Agent.Service
+    yield* agents.transform((editor) =>
+      editor.update(Agent.defaultID, (agent) => {
+        agent.steps = 2
+      }),
+    )
+    yield* s.llm.push(TestLLM.textWithUsage("Earlier answer", "before-native", 10_000))
+    yield* s.runPrompt("First real request")
+    const checkpoint = (encrypted: string) =>
+      CompactionCheckpointResponse.make({
+        responseID: `resp_${encrypted}`,
+        checkpoint: { type: "compaction", provider: s.currentModel.provider, encrypted },
+      })
+    yield* s.llm.push(
+      checkpoint("first"),
+      TestLLM.tool("echo-native", "echo", { text: "continue" }),
+      TestLLM.text("No usage yet", "no-usage"),
+    )
+    yield* s.runPrompt("Second real request")
+    expect(s.requests).toHaveLength(4)
+    expect(s.requests[2].toolChoice).not.toEqual({ type: "none" })
+    expect(s.executions).toEqual(["continue"])
+    expect(JSON.stringify(s.requests[2].messages)).toContain("first")
+    const installed = (yield* s.messages).filter((message) => message.type === "compaction")
+    expect(installed).toMatchObject([{ status: "completed", reason: "auto", providerContext: { version: 1 } }])
+    // New input without a post-checkpoint usage anchor must not retrigger compaction.
+    yield* s.llm.push(TestLLM.textWithUsage("Measured", "measured", 10_000))
+    yield* s.runPrompt("Third real request")
+    expect(s.requests).toHaveLength(5)
+    yield* s.llm.push(checkpoint("second"), TestLLM.textWithUsage("Continued", "continued", 10_000))
+    yield* s.runPrompt("Fourth real request")
+    expect(s.requests).toHaveLength(7)
+    expect(userTexts(s.requests[6])).toEqual([
+      "First real request",
+      "Second real request",
+      "Third real request",
+      "Fourth real request",
+    ])
+    expect(JSON.stringify(s.requests[6].messages)).not.toContain('"encrypted":"first"')
+    const compaction = yield* SessionCompaction.Service
+    yield* compaction.transform((editor) => editor.configure({ auto: false }))
+    yield* replaySessionProjection(sessionID)
+    yield* s.llm.push(TestLLM.text("Disabled auto still replays", "disabled"))
+    yield* s.runPrompt("Fifth real request")
+    expect(s.requests).toHaveLength(8)
+    expect(JSON.stringify(s.requests[7].messages)).toContain('"encrypted":"second"')
+  })
+
+  scenario("recovers an overflowing native window locally from original durable history", function* (s) {
+    s.currentModel = LanguageModel.make({ id: "native", provider: "openai", route: OpenAIResponses.route })
+    s.compaction = { mode: "provider", threshold: 10_000 }
+    yield* s.llm.push(TestLLM.textWithUsage("Earlier answer", "before-native", 10_000))
+    yield* s.runPrompt("Original durable request")
+    yield* s.llm.push(
+      CompactionCheckpointResponse.make({
+        responseID: "resp_native",
+        checkpoint: { type: "compaction", provider: s.currentModel.provider, encrypted: "native-window" },
+      }),
+      TestLLM.text("After native", "after-native"),
+    )
+    yield* s.runPrompt("Before native checkpoint")
+    s.requests.length = 0
+    yield* s.llm.push(
+      [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+      TestLLM.text("## Objective\n- Recovered original history", "local-recovery"),
+      TestLLM.text("Recovered", "recovered"),
+    )
+    yield* s.runPrompt("Overflow request")
+    expect(s.requests).toHaveLength(3)
+    expect(JSON.stringify(s.requests[0].messages)).toContain("native-window")
+    expect(JSON.stringify(s.requests[1].messages)).not.toContain("native-window")
+    expect(userTexts(s.requests[1])).toContain("Original durable request")
+    expect(userTexts(s.requests[1]).at(-1)).toBe(SessionCompaction.buildPrompt(false))
+    expect(yield* s.context).toMatchObject([
+      { type: "compaction", summary: "## Objective\n- Recovered original history" },
+      { type: "assistant" },
+    ])
   })
 
   scenario("does not compact immediately when the advertised output limit fills the context", function* (s) {

@@ -1,4 +1,4 @@
-import type { PanelPresentation } from "@opencode-ai/plugin/tui/context"
+import type { PanelPresentation } from "@opencode/plugin/tui/context"
 import { batch, createContext, createMemo, createSignal, useContext, type ParentProps } from "solid-js"
 
 export type PanelTarget = {

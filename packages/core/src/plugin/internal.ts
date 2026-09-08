@@ -1,9 +1,9 @@
 export * as PluginInternal from "./internal.js"
 
-import type { Plugin } from "@opencode-ai/plugin/effect/plugin"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
-import { AppProcess } from "@opencode-ai/util/process"
+import type { Plugin } from "@opencode/plugin/effect/plugin"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { httpClient } from "@opencode/util/effect/app-node-platform"
+import { AppProcess } from "@opencode/util/process"
 import { Context, Effect, Scope } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { Agent } from "../agent.js"
@@ -31,23 +31,23 @@ import { ConfigWorktreePlugin } from "../config/plugin/worktree.js"
 import { Worktree } from "../worktree.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
+import { FileAccess } from "../file-access.js"
 import { FileMutation } from "../file-mutation.js"
 import { Formatter } from "../formatter.js"
 import { Form } from "../form.js"
 import { FileSystem } from "../filesystem.js"
 import { LocationWatcherPolicy } from "../filesystem/location-watcher-policy.js"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Global } from "@opencode-ai/util/global"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
 import { Image } from "../image.js"
 import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Integration } from "../integration.js"
 import { Job } from "../job.js"
 import { KV } from "../kv.js"
 import { Location } from "../location.js"
-import { LocationMutation } from "../location-mutation.js"
 import { ModelsDev } from "../models-dev.js"
 import { Mcp } from "../mcp/index.js"
-import { Npm } from "@opencode-ai/util/npm"
+import { Npm } from "@opencode/util/npm"
 import { Permission } from "../permission.js"
 import { Reference } from "../reference.js"
 import { WebSearch } from "../websearch.js"
@@ -79,6 +79,7 @@ import { WebSearchTool } from "../tool/plugin/websearch.js"
 import { WellKnown } from "../wellknown.js"
 import { WriteTool } from "../tool/plugin/write.js"
 import { AgentPlugin } from "./agent.js"
+import BrowserPlugin from "@opencode/plugin-browser"
 import { CommandPlugin } from "./command.js"
 import { PlanPlugin } from "./plan.js"
 import { ModelsDevPlugin } from "./models-dev.js"
@@ -102,6 +103,7 @@ const services = [
   Credential.Service,
   Bus.Service,
   Environment.Service,
+  FileAccess.Service,
   FileMutation.Service,
   Formatter.Service,
   LocationWatcherPolicy.Service,
@@ -115,7 +117,6 @@ const services = [
   Job.Service,
   KV.Service,
   Location.Service,
-  LocationMutation.Service,
   ModelsDev.Service,
   Mcp.Service,
   Npm.Service,
@@ -151,6 +152,7 @@ export const requirements = LayerNode.group([
   Credential.node,
   Bus.node,
   Environment.node,
+  FileAccess.node,
   FileMutation.node,
   Formatter.node,
   LocationWatcherPolicy.node,
@@ -164,7 +166,6 @@ export const requirements = LayerNode.group([
   Job.node,
   KV.node,
   Location.node,
-  LocationMutation.node,
   ModelsDev.node,
   Mcp.node,
   Npm.node,
@@ -192,6 +193,7 @@ export const requirements = LayerNode.group([
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
 const pre = [
+  BrowserPlugin,
   ConfigMcpPlugin.Plugin,
   McpCodeModeExclusionPlugin.Plugin,
   WellKnownPlugin.Plugin,

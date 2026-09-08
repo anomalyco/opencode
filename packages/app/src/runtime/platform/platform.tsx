@@ -1,4 +1,4 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
 import type { DesktopMenuAction } from "@/shell/commands/desktop-menu"
@@ -7,6 +7,7 @@ import type { WslServersPlatform } from "@/servers/wsl/types"
 import type { SshPlatform } from "@/servers/ssh/types"
 import type { UpdaterPlatform } from "@/shell/updates/types"
 import type { DraftStore } from "@/runtime/persistence/drafts"
+import type { BrowserPanePlatform } from "./browser-pane"
 
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
@@ -120,6 +121,9 @@ type PlatformBase = {
 
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
+
+  /** Native browser pane hosted by the platform (desktop only). */
+  browserPane?: BrowserPanePlatform
 }
 
 export type Platform = PlatformBase &

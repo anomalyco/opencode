@@ -1,5 +1,5 @@
 import { Effect, Option, Schema } from "effect"
-import type { Content } from "@opencode-ai/schema/tool"
+import type { Content } from "@opencode/schema/tool"
 import { HttpTransport } from "../route/transport/index.js"
 import { Protocol } from "../route/protocol.js"
 import {

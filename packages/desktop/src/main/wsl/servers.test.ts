@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { WslServerConfig } from "@opencode-ai/app/wsl/types"
+import type { WslServerConfig } from "@opencode/app/wsl/types"
 import { Effect, FileSystem, Path } from "effect"
 import { NodeServices } from "@effect/platform-node"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"

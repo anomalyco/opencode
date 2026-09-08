@@ -1,4 +1,4 @@
-import type { SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { SessionMessageInfo } from "@opencode/client/promise"
 import { expect, test } from "@playwright/test"
 import { fixture } from "../performance/timeline/session-timeline-stress.fixture"
 import { stressSessionHref } from "../performance/timeline/timeline-test-helpers"

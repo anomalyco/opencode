@@ -1,7 +1,7 @@
 export * as WarmingPlugin from "./warming.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import type { Session } from "@opencode-ai/schema/session"
+import { define } from "@opencode/plugin/effect/plugin"
+import type { Session } from "@opencode/schema/session"
 import { Clock, Duration, Effect, Scope } from "effect"
 import { Config } from "../config.js"
 

@@ -4,7 +4,7 @@ import { expectSessionTitle } from "../../utils/waits"
 import { fixture, pageMessages } from "./session-timeline-stress.fixture"
 import { installStressSessionTabs, installTimelineSettings, stressSessionHref } from "./timeline-test-helpers"
 import { waitForStableTimeline } from "./session-tab-switch-probe"
-import type { CatalogUpdated } from "@opencode-ai/client/promise"
+import type { CatalogUpdated } from "@opencode/client/promise"
 
 benchmark("measures retained renderer memory with a large model catalog", async ({ page, report }) => {
   benchmark.setTimeout(120_000)

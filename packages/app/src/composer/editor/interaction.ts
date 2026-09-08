@@ -1,6 +1,6 @@
 import { createEffect, type Accessor } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { useFilteredList } from "@opencode-ai/ui/hooks"
+import { useFilteredList } from "@opencode/ui/hooks"
 import { createComposerAttachments, type ComposerAttachmentConfig } from "../attachments/attachments"
 import { createComposerEditorActions, type ComposerStateStoreInput } from "./actions"
 import type {

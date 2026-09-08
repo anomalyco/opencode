@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "muse-spark-1.3",
+    "tags": [
+      "prefix:meta-chat",
+      "provider:meta",
+      "protocol:openai-chat",
+      "text",
+      "reasoning",
+      "usage",
+      "effort:default"
+    ],
+    "name": "meta-chat/streams-text-with-default-reasoning",
+    "recordedAt": "2026-09-07T16:55:12.540Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.meta.ai/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"muse-spark-1.3\",\"messages\":[{\"role\":\"user\",\"content\":\"What is 173 multiplied by 219? Reply with only the final integer.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_completion_tokens\":1024}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\":\"chatcmpl-01a07ccb-8ae3-72b3-b321-b5163dda0714\",\"choices\":[{\"delta\":{\"content\":\"37887\",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"created\":1788800109,\"model\":\"muse-spark-1.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-01a07ccb-8ae3-72b3-b321-b5163dda0714\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1788800109,\"model\":\"muse-spark-1.3\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":363,\"prompt_tokens\":23,\"total_tokens\":386,\"completion_tokens_details\":{\"reasoning_tokens\":351},\"prompt_tokens_details\":{\"cached_tokens\":0}}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

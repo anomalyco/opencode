@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
+import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
 import { createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import {

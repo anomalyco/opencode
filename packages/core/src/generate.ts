@@ -1,8 +1,8 @@
 export * as Generate from "./generate.js"
 
-import { LLM, LLMClient, AIError } from "@opencode-ai/ai"
+import { LLM, LLMClient, AIError } from "@opencode/ai"
 import { Context, Effect, Layer, Schema } from "effect"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { llmClient } from "./effect/app-node-platform.js"
 import { ModelResolver } from "./model-resolver.js"
 import { Model } from "./model.js"
@@ -42,6 +42,7 @@ export const layer = Layer.effect(
             "SessionRunnerModel.VariantUnavailableError",
             "SessionRunnerModel.UnsupportedPackageError",
             "SessionRunnerModel.UnresolvedProviderVariablesError",
+            "SessionRunnerModel.UnsupportedCompactionError",
           ],
           (error) => {
             const mapped: Error = input.model

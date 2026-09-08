@@ -1,6 +1,6 @@
 import { pathKey } from "@/workspaces/path-key"
 import type { WorkspaceDefaultDestination, WorkspaceLastUsed } from "@/settings/model"
-import type { SessionInfo, WorktreeDirectory } from "@opencode-ai/client/promise"
+import type { SessionInfo, WorktreeDirectory } from "@opencode/client/promise"
 
 type WorkspaceProject = {
   worktree: string

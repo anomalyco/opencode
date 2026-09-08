@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionMessageInfo } from "@opencode-ai/client"
+import type { SessionMessageInfo } from "@opencode/client"
 import { lastAssistantWithUsage, sessionFamily } from "../../src/util/session"
 
 const assistant = (id: string, input: number): SessionMessageInfo => ({

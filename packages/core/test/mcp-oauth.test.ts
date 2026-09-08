@@ -1,9 +1,9 @@
 import { afterAll, describe, expect, test } from "bun:test"
 import { auth, refreshAuthorization } from "@modelcontextprotocol/sdk/client/auth.js"
-import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
-import { Credential } from "@opencode-ai/schema/credential"
-import { Integration } from "@opencode-ai/core/integration"
-import { McpOAuth } from "@opencode-ai/core/mcp/oauth"
+import { ConfigMCP } from "@opencode/schema/config/mcp"
+import { Credential } from "@opencode/schema/credential"
+import { Integration } from "@opencode/core/integration"
+import { McpOAuth } from "@opencode/core/mcp/oauth"
 import { Effect } from "effect"
 
 const authServer = Bun.serve({ port: 0, fetch: () => new Response(null, { status: 404 }) })
@@ -163,5 +163,90 @@ describe("MCP OAuth", () => {
 
   test("rejects an invalid redirect URL", async () => {
     await expect(authorize("not a URL")).rejects.toThrow(TypeError)
+  })
+
+  describe("client registration", () => {
+    // Serves authorization server metadata with the given capabilities and records DCR + token requests.
+    const authorizationServer = (metadata: Record<string, unknown>) => {
+      const registrations: unknown[] = []
+      const tokenRequests: URLSearchParams[] = []
+      const server = Bun.serve({
+        port: 0,
+        async fetch(request) {
+          const url = new URL(request.url)
+          if (url.pathname === "/.well-known/oauth-authorization-server")
+            return Response.json({
+              issuer: url.origin,
+              authorization_endpoint: `${url.origin}/authorize`,
+              token_endpoint: `${url.origin}/token`,
+              registration_endpoint: `${url.origin}/register`,
+              response_types_supported: ["code"],
+              ...metadata,
+            })
+          if (request.method === "POST" && url.pathname === "/register") {
+            registrations.push(await request.json())
+            return Response.json({ client_id: "registered", redirect_uris: [] })
+          }
+          if (request.method === "POST" && url.pathname === "/token") {
+            tokenRequests.push(new URLSearchParams(await request.text()))
+            return Response.json({ access_token: "access", token_type: "Bearer" })
+          }
+          return new Response(null, { status: 404 })
+        },
+      })
+      return { server, registrations, tokenRequests }
+    }
+
+    const start = (server: ReturnType<typeof Bun.serve>, oauth?: ConfigMCP.OAuth) =>
+      Effect.gen(function* () {
+        const authorization = yield* McpOAuth.authorize({
+          name: "test",
+          config: new ConfigMCP.Remote({ type: "remote", url: server.url.href, ...(oauth ? { oauth } : {}) }),
+          methodID: Integration.MethodID.make("oauth"),
+        })
+        return { authorization, url: new URL(authorization.url) }
+      })
+
+    const cimd = { client_id_metadata_document_supported: true, token_endpoint_auth_methods_supported: ["none"] }
+
+    test("uses the client metadata document when the server supports public CIMD clients", async () => {
+      const { server, registrations, tokenRequests } = authorizationServer(cimd)
+      const credential = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const { authorization, url } = yield* start(server)
+            expect(url.searchParams.get("client_id")).toBe(McpOAuth.CLIENT_METADATA_URL)
+            const redirect = new URL(url.searchParams.get("redirect_uri")!)
+            redirect.searchParams.set("code", "accepted")
+            redirect.searchParams.set("state", url.searchParams.get("state")!)
+            yield* Effect.promise(() => fetch(redirect))
+            return yield* authorization.callback
+          }),
+        ),
+      ).finally(() => server.stop(true))
+
+      expect(registrations).toHaveLength(0)
+      expect(tokenRequests[0]?.get("client_id")).toBe(McpOAuth.CLIENT_METADATA_URL)
+      expect(McpOAuth.clientFromCredential(credential)).toEqual({ client_id: McpOAuth.CLIENT_METADATA_URL })
+    })
+
+    test("registers dynamically when the server does not accept public clients", async () => {
+      const { server, registrations } = authorizationServer({
+        client_id_metadata_document_supported: true,
+        token_endpoint_auth_methods_supported: ["client_secret_post"],
+      })
+      const { url } = await Effect.runPromise(Effect.scoped(start(server))).finally(() => server.stop(true))
+      expect(url.searchParams.get("client_id")).toBe("registered")
+      expect(registrations).toHaveLength(1)
+    })
+
+    test("registers dynamically when a custom redirect_uri is configured", async () => {
+      const { server, registrations } = authorizationServer(cimd)
+      const { url } = await Effect.runPromise(
+        Effect.scoped(start(server, { redirect_uri: "http://127.0.0.1:0/custom" })),
+      ).finally(() => server.stop(true))
+      expect(url.searchParams.get("client_id")).toBe("registered")
+      expect(registrations).toHaveLength(1)
+    })
   })
 })

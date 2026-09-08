@@ -1,4 +1,4 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createEffect, onCleanup } from "solid-js"
 import { usePlatform } from "@/runtime/platform/platform"
