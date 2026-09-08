@@ -1,8 +1,8 @@
 [data-component="accordion-v2"] {
-  --accordion-v2-fg: var(--text-text-base);
-  --accordion-v2-icon: var(--icon-icon-base);
-  --accordion-v2-border: var(--border-border-strong);
-  --accordion-v2-bg: var(--background-bg-base);
+  --accordion-v2-fg: var(--v2-text-text-base);
+  --accordion-v2-icon: var(--v2-icon-icon-base);
+  --accordion-v2-border: var(--v2-border-border-strong);
+  --accordion-v2-bg: var(--v2-background-bg-base);
 
   box-sizing: border-box;
   display: flex;

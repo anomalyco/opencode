@@ -1,0 +1,28 @@
+{
+  "mcp": {
+    "safe": {
+      "type": "local",
+      "command": ["safe-mcp"],
+      "enabled": true,
+      "timeout": 3000
+    },
+    "unsafe": {
+      "type": "local",
+      "command": ["unsafe-mcp"],
+      "enabled": true
+    },
+    "partial": {
+      "type": "local",
+      "command": ["partial-mcp"],
+      "enabled": true
+    },
+    "startup": {
+      "type": "local",
+      "command": ["startup-mcp"],
+      "enabled": true
+    }
+  },
+  "experimental": {
+    "mcp_timeout": 8000
+  }
+}

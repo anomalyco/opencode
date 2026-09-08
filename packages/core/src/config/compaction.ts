@@ -4,7 +4,6 @@ import { Schema } from "effect"
 import { NonNegativeInt } from "../schema"
 
 export class Keep extends Schema.Class<Keep>("ConfigV2.Compaction.Keep")({
-  turns: NonNegativeInt.pipe(Schema.optional),
   tokens: NonNegativeInt.pipe(Schema.optional),
 }) {}
 

@@ -1,6 +1,9 @@
 {
   "name": "OpenCode",
   "short_name": "OpenCode",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
@@ -15,7 +18,7 @@
       "purpose": "maskable"
     }
   ],
-  "theme_color": "#ffffff",
-  "background_color": "#ffffff",
+  "theme_color": "#080808",
+  "background_color": "#080808",
   "display": "standalone"
 }

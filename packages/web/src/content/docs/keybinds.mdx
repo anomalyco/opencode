@@ -34,6 +34,7 @@ OpenCode has a list of keybinds that you can customize through `tui.json`.
 
     "session_export": "<leader>x",
     "session_copy": "none",
+    "session_move": "none",
     "session_new": "<leader>n",
     "session_list": "<leader>l",
     "session_timeline": "<leader>g",

@@ -88,21 +88,25 @@ function spawnWorker(msg: Msg) {
   })
 }
 
-function stopWorker(proc: ReturnType<typeof spawnWorker>) {
-  if (proc.exitCode !== null || proc.signalCode !== null) return Promise.resolve()
+async function stopWorker(proc: ReturnType<typeof spawnWorker>) {
+  if (proc.exitCode !== null || proc.signalCode !== null) return
+
+  const closed = new Promise<void>((resolve) => proc.once("close", () => resolve()))
 
   if (process.platform !== "win32" || !proc.pid) {
     proc.kill()
-    return Promise.resolve()
+    await closed
+    return
   }
 
-  return new Promise<void>((resolve) => {
+  await new Promise<void>((resolve) => {
     const killProc = spawn("taskkill", ["/pid", String(proc.pid), "/T", "/F"])
     killProc.on("close", () => {
       proc.kill()
       resolve()
     })
   })
+  await closed
 }
 
 async function readJson<T>(p: string): Promise<T> {
@@ -175,7 +179,6 @@ describe("util.flock", () => {
       expect(seen.every((x) => x === key)).toBe(true)
     } finally {
       await stopWorker(proc).catch(() => undefined)
-      await new Promise((resolve) => proc.on("close", resolve))
     }
   }, 15_000)
 
@@ -195,7 +198,6 @@ describe("util.flock", () => {
 
     await wait(ready, 5_000)
     await stopWorker(proc)
-    await new Promise((resolve) => proc.on("close", resolve))
 
     let hit = false
     await Flock.withLock(

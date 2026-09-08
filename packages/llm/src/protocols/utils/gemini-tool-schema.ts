@@ -1,4 +1,4 @@
-import { ProviderShared } from "../shared"
+import { isRecord } from "../../utils/record"
 
 // Gemini accepts a JSON Schema-like dialect for tool parameters, but rejects a
 // handful of common JSON Schema shapes. Keep this projection isolated so the
@@ -19,8 +19,6 @@ const SCHEMA_INTENT_KEYS = [
   "then",
   "else",
 ]
-
-const isRecord = ProviderShared.isRecord
 
 const hasCombiner = (schema: unknown) =>
   isRecord(schema) && (Array.isArray(schema.anyOf) || Array.isArray(schema.oneOf) || Array.isArray(schema.allOf))

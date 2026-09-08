@@ -1,0 +1,103 @@
+[data-component="desktop-promo"] {
+  --promo-background: hsl(0, 20%, 99%);
+  --promo-background-weak: hsl(0, 8%, 97%);
+  --promo-text: hsl(0, 1%, 39%);
+  --promo-text-strong: hsl(0, 5%, 12%);
+  --promo-border: hsla(0, 100%, 3%, 0.12);
+
+  position: fixed;
+  z-index: 20;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  width: min(28rem, calc(100vw - 2rem));
+  padding: 4px;
+  overflow: hidden;
+  color: var(--promo-text);
+  border: 1px solid var(--promo-border);
+  border-radius: 8px;
+  background: var(--promo-background);
+  box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 15%);
+  font-family: var(--font-mono);
+
+  @media (prefers-color-scheme: dark) {
+    --promo-background: hsl(0, 9%, 7%);
+    --promo-background-weak: hsl(0, 6%, 10%);
+    --promo-text: hsl(0, 4%, 71%);
+    --promo-text-strong: hsl(0, 15%, 94%);
+    --promo-border: hsl(0, 4%, 23%);
+  }
+
+  @media (max-width: 40rem) {
+    right: 1rem;
+    bottom: 1rem;
+  }
+
+  [data-slot="desktop-promo-link"] {
+    display: block;
+    color: var(--promo-text);
+    text-decoration: none;
+  }
+
+  [data-slot="desktop-promo-link"]:focus-visible {
+    outline: 2px solid var(--promo-text-strong);
+    outline-offset: -3px;
+  }
+
+  video {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: 4px;
+    background: var(--promo-background-weak);
+  }
+
+  [data-slot="desktop-promo-copy"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 1rem;
+    font-size: 0.875rem;
+    line-height: 1.4;
+  }
+
+  [data-slot="desktop-promo-copy"] strong {
+    color: var(--promo-text-strong);
+    font-weight: 500;
+  }
+
+  [data-slot="desktop-promo-close"] {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    place-items: center;
+    cursor: pointer;
+    color: white;
+    border: none;
+    border-radius: 0.25rem;
+    background: rgb(0 0 0 / 70%);
+    opacity: 0;
+    transition:
+      opacity 150ms ease,
+      background 150ms ease;
+  }
+
+  &:hover [data-slot="desktop-promo-close"],
+  [data-slot="desktop-promo-close"]:focus-visible {
+    opacity: 1;
+  }
+
+  [data-slot="desktop-promo-close"]:hover {
+    background: rgb(0 0 0 / 90%);
+  }
+
+  @media (hover: none) {
+    [data-slot="desktop-promo-close"] {
+      opacity: 1;
+    }
+  }
+}

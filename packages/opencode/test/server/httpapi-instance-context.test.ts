@@ -11,7 +11,6 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { InstanceRef, WorkspaceRef } from "../../src/effect/instance-ref"
-import { InstanceLayer } from "../../src/project/instance-layer"
 import { Project } from "../../src/project/project"
 import { Session } from "../../src/session/session"
 import { disposeMiddleware, markInstanceForDisposal } from "../../src/server/routes/instance/httpapi/lifecycle"
@@ -45,16 +44,7 @@ const testStateLayer = Layer.effectDiscard(
 
 const workspaceLayer = workspaceLayerWithRuntimeFlags({ experimentalWorkspaces: true })
 
-const it = testEffect(
-  Layer.mergeAll(
-    testStateLayer,
-    NodeHttpServer.layerTest,
-    NodeServices.layer,
-    InstanceLayer.layer,
-    Project.defaultLayer,
-    workspaceLayer,
-  ),
-)
+const it = testEffect(Layer.mergeAll(testStateLayer, NodeHttpServer.layerTest, NodeServices.layer, workspaceLayer))
 
 const instanceContextTestLayer = Layer.mergeAll(
   instanceContextLayer,
@@ -168,6 +158,21 @@ describe("HttpApi instance context middleware", () => {
         projectID: project.project.id,
         workspaceID: null,
       })
+    }),
+  )
+
+  it.live("persists the routed project while loading instance context", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.Service
+      yield* serveProbe()
+
+      const response = yield* HttpClient.get(`/probe?directory=${encodeURIComponent(dir)}`)
+
+      expect(response.status).toBe(200)
+      const saved = (yield* project.list()).find((item) => item.worktree === dir)
+      expect(saved).toBeDefined()
+      expect(saved?.id).not.toBe("global")
     }),
   )
 
@@ -333,7 +338,7 @@ describe("HttpApi instance context middleware", () => {
         directory: workspaceDir,
       })
       yield* serveDisposeProbe()
-      const disposed = yield* waitDisposedEvent.pipe(Effect.forkScoped)
+      const disposed = yield* waitDisposedEvent.pipe(Effect.forkScoped({ startImmediately: true }))
 
       const response = yield* HttpClientRequest.post(`/dispose-probe?workspace=${workspace.id}`).pipe(
         HttpClient.execute,

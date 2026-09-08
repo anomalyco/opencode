@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer, Option } from "effect"
 import { sql } from "drizzle-orm"
 
@@ -13,9 +14,10 @@ const truncate = Layer.effectDiscard(
     yield* db.run(sql`DELETE FROM account_state`)
     yield* db.run(sql`DELETE FROM account`)
   }),
-).pipe(Layer.provide(Database.defaultLayer))
+)
+const truncateNode = LayerNode.make({ name: "truncate-account", layer: truncate, deps: [Database.node] })
 
-const it = testEffect(Layer.merge(AccountRepo.defaultLayer, truncate))
+const it = testEffect(LayerNode.compile(LayerNode.group([AccountRepo.node, truncateNode])))
 
 it.live("list returns empty when no accounts exist", () =>
   Effect.gen(function* () {

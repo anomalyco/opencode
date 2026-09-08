@@ -1,5 +1,4 @@
 import { Effect, ScopedCache, Scope } from "effect"
-import * as EffectLogger from "@opencode-ai/core/effect/logger"
 import type { InstanceContext } from "@/project/instance-context"
 import { InstanceRef, WorkspaceRef } from "./instance-ref"
 import { registerDisposer } from "./instance-registry"
@@ -36,9 +35,7 @@ export const make = <A, E = never, R = never>(
         }),
     })
 
-    const off = registerDisposer((directory) =>
-      Effect.runPromise(ScopedCache.invalidate(cache, directory).pipe(Effect.provide(EffectLogger.layer))),
-    )
+    const off = registerDisposer((directory) => Effect.runPromise(ScopedCache.invalidate(cache, directory)))
     yield* Effect.addFinalizer(() => Effect.sync(off))
 
     return {

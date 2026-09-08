@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import type { Event, Message, OpencodeClient, Part, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
 import { Effect, ManagedRuntime } from "effect"
 import { ACPEvent } from "@/acp/event"
@@ -30,7 +31,7 @@ const pollUntil = async (
 }
 
 function makeSessionService() {
-  return ManagedRuntime.make(ACPSession.defaultLayer).runSync(
+  return ManagedRuntime.make(LayerNode.compile(ACPSession.node)).runSync(
     ACPSession.Service.use((service) => Effect.succeed(service)),
   )
 }
@@ -251,6 +252,11 @@ function completedTool(
   callID: string,
   output = "done",
   attachments: Extract<ToolPart["state"], { status: "completed" }>["attachments"] = [],
+  options: {
+    readonly tool?: string
+    readonly input?: Record<string, unknown>
+    readonly metadata?: Record<string, unknown>
+  } = {},
 ) {
   return {
     id: `part_${callID}`,
@@ -258,13 +264,13 @@ function completedTool(
     messageID: `msg_${callID}`,
     type: "tool",
     callID,
-    tool: "bash",
+    tool: options.tool ?? "bash",
     state: {
       status: "completed",
-      input: { cmd: "printf done" },
+      input: options.input ?? { cmd: "printf done" },
       output,
       title: "bash",
-      metadata: { exit: 0 },
+      metadata: options.metadata ?? { exit: 0 },
       time: { start: Date.now() - 1, end: Date.now() },
       ...(attachments.length ? { attachments } : {}),
     },
@@ -512,7 +518,7 @@ describe("acp event routing", () => {
     expect(harness.updates).toHaveLength(0)
   })
 
-  it("emits synthetic pending before the first running tool update", async () => {
+  it("exposes the shell command on the synthetic pending tool call", async () => {
     const harness = createHarness()
     await Effect.runPromise(harness.session.create({ id: "ses_tool", cwd: "/workspace" }))
 
@@ -522,8 +528,47 @@ describe("acp event routing", () => {
       "tool_call",
       "tool_call_update",
     ])
-    expect(harness.updates[0]?.update).toMatchObject({ status: "pending", toolCallId: "call_1" })
+    expect(harness.updates[0]?.update).toMatchObject({
+      status: "pending",
+      toolCallId: "call_1",
+      title: "printf hello",
+      kind: "execute",
+      locations: [{ path: "/workspace" }],
+      rawInput: { cmd: "printf hello", cwd: "/workspace" },
+    })
     expect(harness.updates[1]?.update).toMatchObject({ status: "in_progress", toolCallId: "call_1" })
+  })
+
+  it("includes available input in the synthetic pending tool call", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_pending_input", cwd: "/workspace" }))
+
+    await harness.subscription.handle(
+      toolUpdated({
+        id: "part_call_read",
+        sessionID: "ses_pending_input",
+        messageID: "msg_call_read",
+        type: "tool",
+        callID: "call_read",
+        tool: "read",
+        state: {
+          status: "running",
+          input: { filePath: "/workspace/file.ts" },
+          title: "Read file.ts",
+          time: { start: Date.now() },
+        },
+      } satisfies ToolPart),
+    )
+
+    expect(harness.updates[0]?.update).toMatchObject({
+      sessionUpdate: "tool_call",
+      toolCallId: "call_read",
+      status: "pending",
+      title: "Read file.ts",
+      kind: "read",
+      rawInput: { filePath: "/workspace/file.ts" },
+      locations: [{ path: "/workspace/file.ts" }],
+    })
   })
 
   it("does not emit duplicate synthetic pending after a replayed running tool", async () => {
@@ -602,6 +647,55 @@ describe("acp event routing", () => {
       status: "completed",
       content: [{ type: "content", content: { type: "text", text: "finished" } }],
       rawOutput: { output: "finished", metadata: { exit: 0 } },
+    })
+  })
+
+  it("emits clean read display content and preserves rawOutput", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_read", cwd: "/workspace" }))
+    const output = [
+      "<path>/workspace/file.ts</path>",
+      "<type>file</type>",
+      "<content>",
+      "1: import { value } from './value'",
+      "2: export { value }",
+      "",
+      "(End of file - total 2 lines)",
+      "</content>",
+    ].join("\n")
+    const metadata = {
+      display: {
+        type: "file",
+        path: "/workspace/file.ts",
+        text: "import { value } from './value'\nexport { value }",
+        lineStart: 1,
+        lineEnd: 2,
+        totalLines: 2,
+        truncated: false,
+      },
+    }
+
+    await harness.subscription.handle(
+      toolUpdated(
+        completedTool("ses_read", "call_read", output, [], {
+          tool: "read",
+          input: { filePath: "/workspace/file.ts" },
+          metadata,
+        }),
+      ),
+    )
+
+    expect(harness.updates.at(-1)?.update).toMatchObject({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "call_read",
+      status: "completed",
+      content: [
+        {
+          type: "content",
+          content: { type: "text", text: "import { value } from './value'\nexport { value }" },
+        },
+      ],
+      rawOutput: { output, metadata },
     })
   })
 

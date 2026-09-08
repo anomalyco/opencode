@@ -1,5 +1,4 @@
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
-import * as Log from "@opencode-ai/core/util/log"
 import type {
   Event,
   EventMessagePartDelta,
@@ -12,6 +11,7 @@ import type {
 import { Effect } from "effect"
 import { ACPSession } from "./session"
 import { ACPPermission } from "./permission"
+import { partsToContentChunks, type ReplayPart } from "./content"
 import {
   duplicateRunningToolUpdate,
   errorToolUpdate,
@@ -20,8 +20,6 @@ import {
   shellOutputSnapshot,
   completedToolUpdate,
 } from "./tool"
-
-const log = Log.create({ service: "acp-event" })
 
 type Connection = Pick<AgentSideConnection, "sessionUpdate"> &
   Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
@@ -42,7 +40,10 @@ export class Subscription {
   private readonly abort = new AbortController()
   private readonly shellSnapshots = new Map<string, string>()
   private readonly toolStarts = new Set<string>()
+  private readonly connectionWaiters = new Set<() => void>()
+  private readonly idleWaiters = new Map<string, Set<ReturnType<typeof signal>>>()
   private readonly permission: ACPPermission.Handler
+  private connected = false
   private started = false
 
   constructor(
@@ -58,18 +59,42 @@ export class Subscription {
   start() {
     if (this.started) return
     this.started = true
-    this.run().catch((error: unknown) => {
+    this.run().catch(() => {
       if (this.abort.signal.aborted) return
-      log.error("event subscription failed", { error })
     })
   }
 
   stop() {
     this.abort.abort()
+    this.disconnected()
+    for (const resolve of this.connectionWaiters) resolve()
+    this.connectionWaiters.clear()
+  }
+
+  async runUntilIdle<A>(sessionId: string, request: () => Promise<A>) {
+    await this.waitUntilConnected()
+    const waiter = signal()
+    const waiters = this.idleWaiters.get(sessionId) ?? new Set()
+    waiters.add(waiter)
+    this.idleWaiters.set(sessionId, waiters)
+
+    try {
+      // Idle is queued after the turn's events, and this subscription awaits each update in order.
+      void waiter.promise.catch(() => {})
+      const response = await request()
+      await waiter.promise
+      return response
+    } finally {
+      waiters.delete(waiter)
+      if (waiters.size === 0) this.idleWaiters.delete(sessionId)
+    }
   }
 
   async handle(event: Event) {
     switch (event.type) {
+      case "session.status":
+        if (event.properties.status.type === "idle") this.idle(event.properties.sessionID)
+        return
       case "permission.asked":
         this.permission.handle(event)
         return
@@ -83,29 +108,84 @@ export class Subscription {
   async replayMessage(message: SessionMessageResponse) {
     if (message.info.role !== "assistant" && message.info.role !== "user") return
 
+    const cwd = message.info.role === "assistant" ? message.info.path?.cwd : undefined
     for (const part of message.parts) {
       await this.recordFetchedPart(message.info.sessionID, message, part)
       if (part.type === "tool") {
-        await this.handleToolPart(message.info.sessionID, part)
+        await this.handleToolPart(message.info.sessionID, part, cwd ?? process.cwd())
+        continue
       }
+      await this.replayContentPart(message, part)
+    }
+  }
+
+  private async replayContentPart(message: SessionMessageResponse, part: Part) {
+    if (part.type !== "text" && part.type !== "file" && part.type !== "reasoning") return
+
+    const sessionUpdate =
+      part.type === "reasoning"
+        ? "agent_thought_chunk"
+        : message.info.role === "user"
+          ? "user_message_chunk"
+          : "agent_message_chunk"
+
+    for (const chunk of partsToContentChunks([part as ReplayPart])) {
+      await this.input.connection.sessionUpdate({
+        sessionId: message.info.sessionID,
+        update: {
+          sessionUpdate,
+          messageId: message.info.id,
+          ...chunk,
+        },
+      })
     }
   }
 
   private async run() {
     while (!this.abort.signal.aborted) {
-      const events = (await this.input.sdk.global.event({
-        signal: this.abort.signal,
-      })) as GlobalEventStream
-
-      for await (const event of events.stream) {
-        if (this.abort.signal.aborted) return
-        if (!event.payload) continue
-        await this.handle(event.payload).catch((error: unknown) => {
-          log.error("failed to handle event", { error, type: event.payload?.type })
-        })
-      }
+      await this.consume().catch(() => {})
+      this.disconnected()
       if (!this.abort.signal.aborted) await new Promise((resolve) => setTimeout(resolve, 1000))
     }
+  }
+
+  private async consume() {
+    const events = (await this.input.sdk.global.event({
+      signal: this.abort.signal,
+    })) as GlobalEventStream
+    this.connected = true
+    for (const resolve of this.connectionWaiters) resolve()
+    this.connectionWaiters.clear()
+
+    for await (const event of events.stream) {
+      if (this.abort.signal.aborted) return
+      if (!event.payload) continue
+      await this.handle(event.payload).catch(() => {})
+    }
+  }
+
+  private async waitUntilConnected() {
+    while (!this.connected) {
+      if (this.abort.signal.aborted) throw new Error("ACP event subscription stopped")
+      await new Promise<void>((resolve) => this.connectionWaiters.add(resolve))
+    }
+  }
+
+  private disconnected() {
+    if (!this.connected) return
+    this.connected = false
+    const error = new Error("ACP event stream disconnected")
+    for (const waiters of this.idleWaiters.values()) {
+      for (const waiter of waiters) waiter.reject(error)
+    }
+    this.idleWaiters.clear()
+  }
+
+  private idle(sessionId: string) {
+    const waiters = this.idleWaiters.get(sessionId)
+    if (!waiters) return
+    this.idleWaiters.delete(sessionId)
+    for (const waiter of waiters) waiter.resolve()
   }
 
   private async handlePartUpdated(event: EventMessagePartUpdated) {
@@ -127,7 +207,7 @@ export class Subscription {
       }),
     )
     if (part.type === "tool") {
-      await this.handleToolPart(session.id, part)
+      await this.handleToolPart(session.id, part, session.cwd)
     }
   }
 
@@ -189,10 +269,7 @@ export class Subscription {
         { throwOnError: true },
       )
       .then((response) => response.data)
-      .catch((error: unknown) => {
-        log.error("unexpected error when fetching message for delta metadata", { error, messageId, partId })
-        return undefined
-      })
+      .catch(() => undefined)
     if (!message) return
 
     const part = message.parts.find((item) => item.id === partId)
@@ -215,8 +292,8 @@ export class Subscription {
     )
   }
 
-  private async handleToolPart(sessionId: string, part: ToolPart) {
-    await this.toolStart(sessionId, part)
+  private async handleToolPart(sessionId: string, part: ToolPart, cwd: string) {
+    await this.toolStart(sessionId, part, cwd)
 
     switch (part.state.status) {
       case "pending":
@@ -224,7 +301,7 @@ export class Subscription {
         return
 
       case "running":
-        await this.runningTool(sessionId, part)
+        await this.runningTool(sessionId, part, cwd)
         return
 
       case "completed":
@@ -237,6 +314,7 @@ export class Subscription {
               toolCallId: part.callID,
               toolName: part.tool,
               state: part.state,
+              cwd,
             }),
           },
         })
@@ -252,6 +330,7 @@ export class Subscription {
               toolCallId: part.callID,
               toolName: part.tool,
               state: part.state,
+              cwd,
             }),
           },
         })
@@ -259,7 +338,7 @@ export class Subscription {
     }
   }
 
-  private async runningTool(sessionId: string, part: ToolPart) {
+  private async runningTool(sessionId: string, part: ToolPart, cwd: string) {
     if (part.state.status !== "running") return
 
     const output = part.tool === "bash" ? shellOutputSnapshot(part.state) : undefined
@@ -273,6 +352,7 @@ export class Subscription {
               toolCallId: part.callID,
               toolName: part.tool,
               state: part.state,
+              cwd,
             }),
           },
         })
@@ -290,12 +370,13 @@ export class Subscription {
           toolName: part.tool,
           state: part.state,
           output,
+          cwd,
         }),
       },
     })
   }
 
-  private async toolStart(sessionId: string, part: ToolPart) {
+  private async toolStart(sessionId: string, part: ToolPart, cwd: string) {
     if (this.toolStarts.has(part.callID)) return
     this.toolStarts.add(part.callID)
     await this.input.connection.sessionUpdate({
@@ -305,6 +386,8 @@ export class Subscription {
         ...pendingToolCall({
           toolCallId: part.callID,
           toolName: part.tool,
+          state: part.state,
+          cwd,
         }),
       },
     })
@@ -313,6 +396,25 @@ export class Subscription {
   private clearTool(toolCallId: string) {
     this.toolStarts.delete(toolCallId)
     this.shellSnapshots.delete(toolCallId)
+  }
+}
+
+function signal() {
+  const state: {
+    resolve: () => void
+    reject: (reason?: unknown) => void
+  } = {
+    resolve: () => {},
+    reject: () => {},
+  }
+  const promise = new Promise<void>((resolve, reject) => {
+    state.resolve = resolve
+    state.reject = reject
+  })
+  return {
+    promise,
+    resolve: () => state.resolve(),
+    reject: (reason?: unknown) => state.reject(reason),
   }
 }
 

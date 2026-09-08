@@ -6,7 +6,7 @@ import DESCRIPTION from "./lsp.txt"
 import { InstanceState } from "@/effect/instance-state"
 import { pathToFileURL } from "url"
 import { assertExternalDirectoryEffect } from "./external-directory"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 
 const operations = [
   "goToDefinition",
@@ -38,7 +38,7 @@ export const LspTool = Tool.define(
   "lsp",
   Effect.gen(function* () {
     const lsp = yield* LSP.Service
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     return {
       description: DESCRIPTION,
       parameters: Parameters,

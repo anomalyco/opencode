@@ -1,4 +1,7 @@
 import { Schema } from "effect"
+import { ProviderMetadata } from "@opencode-ai/schema/llm"
+
+export { ProviderMetadata }
 
 /** Stable string identifier for a protocol implementation. */
 export const ProtocolID = Schema.String
@@ -30,7 +33,7 @@ export type ReasoningEffort = Schema.Schema.Type<typeof ReasoningEffort>
 export const TextVerbosity = Schema.Literals(["low", "medium", "high"])
 export type TextVerbosity = Schema.Schema.Type<typeof TextVerbosity>
 
-export const MessageRole = Schema.Literals(["user", "assistant", "tool"])
+export const MessageRole = Schema.Literals(["system", "user", "assistant", "tool"])
 export type MessageRole = Schema.Schema.Type<typeof MessageRole>
 
 export const FinishReason = Schema.Literals(["stop", "length", "tool-calls", "content-filter", "error", "unknown"])
@@ -38,6 +41,3 @@ export type FinishReason = Schema.Schema.Type<typeof FinishReason>
 
 export const JsonSchema = Schema.Record(Schema.String, Schema.Unknown)
 export type JsonSchema = Schema.Schema.Type<typeof JsonSchema>
-
-export const ProviderMetadata = Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown))
-export type ProviderMetadata = Schema.Schema.Type<typeof ProviderMetadata>

@@ -1,0 +1,14 @@
+{
+  "acme": {
+    "id": "acme",
+    "name": "Acme",
+    "env": ["ACME_API_KEY"],
+    "models": {}
+  },
+  "local": {
+    "id": "local",
+    "name": "Local",
+    "env": [],
+    "models": {}
+  }
+}

@@ -154,6 +154,13 @@
           "additionalProperties": {
             "$ref": "#/definitions/ColorValue"
           }
+        },
+        "v2Overrides": {
+          "type": "object",
+          "description": "Optional direct overrides for any v2 CSS variable (without -- prefix)",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     }

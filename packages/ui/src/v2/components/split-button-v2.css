@@ -1,0 +1,99 @@
+[data-component="split-button-v2"] {
+  display: inline-flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  height: 28px;
+  border-radius: 6px;
+  background-color: transparent;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+[data-component="split-button-v2"]:is(:hover, :has([data-component="split-button-v2-menu-trigger"][data-expanded])) {
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-muted);
+}
+
+[data-component="split-button-v2-action"],
+[data-component="split-button-v2-menu-trigger"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--v2-icon-icon-base);
+  cursor: default;
+  outline: none;
+}
+
+[data-component="split-button-v2-action"] {
+  width: 28px;
+  flex-shrink: 0;
+}
+
+[data-component="split-button-v2-action"]:hover:not(:disabled) {
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-component="split-button-v2-action"]:is(:active, [data-pressed]):not(:disabled) {
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="split-button-v2-action"]:is(:focus-visible, [data-focus]) {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
+  z-index: 1;
+}
+
+[data-component="split-button-v2-action"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+[data-component="split-button-v2-menu-trigger"] {
+  width: 20px;
+  flex-shrink: 0;
+}
+
+[data-component="split-button-v2-menu-trigger"]:is(:hover, [data-expanded]):not(:disabled) {
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-component="split-button-v2-menu-trigger"]:is(:active, [data-pressed]):not(:disabled) {
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="split-button-v2-menu-trigger"]:is(:focus-visible, [data-focus]) {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
+  z-index: 1;
+}
+
+[data-component="split-button-v2-menu-trigger"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+[data-component="split-button-v2-action"] [data-component="app-icon"] {
+  width: 16px;
+  height: 16px;
+}
+
+[data-component="menu-v2-content"].open-in-app-v2-menu [data-component="app-icon"] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+[data-component="menu-v2-content"].open-in-app-v2-menu [data-component="icon"] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+[data-component="menu-v2-content"].open-in-app-v2-menu [data-component="icon"] [data-slot="icon-svg"] {
+  width: 16px;
+  height: 16px;
+}

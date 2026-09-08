@@ -1,123 +1,25 @@
 export * as ProviderV2 from "./provider"
 
-import { withStatics } from "./schema"
-import { Schema } from "effect"
+import { Types } from "effect"
+import { Provider } from "@opencode-ai/schema/provider"
 
-export const ID = Schema.String.pipe(
-  Schema.brand("ProviderV2.ID"),
-  withStatics((schema) => ({
-    // Well-known providers
-    opencode: schema.make("opencode"),
-    anthropic: schema.make("anthropic"),
-    openai: schema.make("openai"),
-    google: schema.make("google"),
-    googleVertex: schema.make("google-vertex"),
-    githubCopilot: schema.make("github-copilot"),
-    amazonBedrock: schema.make("amazon-bedrock"),
-    azure: schema.make("azure"),
-    openrouter: schema.make("openrouter"),
-    mistral: schema.make("mistral"),
-    gitlab: schema.make("gitlab"),
-  })),
-)
+export const ID = Provider.ID
 export type ID = typeof ID.Type
 
-export const ModelID = Schema.String.pipe(Schema.brand("ModelID"))
-export type ModelID = typeof ModelID.Type
+export const AISDK = Provider.AISDK
 
-const OpenAIResponses = Schema.Struct({
-  type: Schema.Literal("openai/responses"),
-  url: Schema.String,
-  websocket: Schema.optional(Schema.Boolean),
-})
+export const Native = Provider.Native
 
-const OpenAICompletions = Schema.Struct({
-  type: Schema.Literal("openai/completions"),
-  url: Schema.String,
-  reasoning: Schema.Union([
-    Schema.Struct({
-      type: Schema.Literal("reasoning_content"),
-    }),
-    Schema.Struct({
-      type: Schema.Literal("reasoning_details"),
-    }),
-  ]).pipe(Schema.optional),
-})
-export type OpenAICompletions = typeof OpenAICompletions.Type
+export const Api = Provider.Api
+export type Api = Provider.Api
+export type MutableApi<T extends Api = Api> = T extends Api
+  ? Omit<Types.DeepMutable<T>, "settings"> & (undefined extends T["settings"] ? { settings?: any } : { settings: any })
+  : never
 
-const AISDK = Schema.Struct({
-  type: Schema.Literal("aisdk"),
-  package: Schema.String,
-  url: Schema.String.pipe(Schema.optional),
-})
+export const Request = Provider.Request
+export type Request = Provider.Request
 
-const AnthropicMessages = Schema.Struct({
-  type: Schema.Literal("anthropic/messages"),
-  url: Schema.String,
-})
+export const Info = Provider.Info
+export type Info = Provider.Info
 
-const UnknownEndpoint = Schema.Struct({
-  type: Schema.Literal("unknown"),
-})
-
-export const Endpoint = Schema.Union([
-  UnknownEndpoint,
-  OpenAIResponses,
-  OpenAICompletions,
-  AnthropicMessages,
-  AISDK,
-]).pipe(Schema.toTaggedUnion("type"))
-export type Endpoint = typeof Endpoint.Type
-
-export const Options = Schema.Struct({
-  headers: Schema.Record(Schema.String, Schema.String),
-  body: Schema.Record(Schema.String, Schema.Any),
-  aisdk: Schema.Struct({
-    provider: Schema.Record(Schema.String, Schema.Any),
-    request: Schema.Record(Schema.String, Schema.Any),
-  }),
-})
-export type Options = typeof Options.Type
-
-export class Info extends Schema.Class<Info>("ProviderV2.Info")({
-  id: ID,
-  name: Schema.String,
-  enabled: Schema.Union([
-    Schema.Literal(false),
-    Schema.Struct({
-      via: Schema.Literal("env"),
-      name: Schema.String,
-    }),
-    Schema.Struct({
-      via: Schema.Literal("account"),
-      service: Schema.String,
-    }),
-    Schema.Struct({
-      via: Schema.Literal("custom"),
-      data: Schema.Record(Schema.String, Schema.Any),
-    }),
-  ]),
-  env: Schema.String.pipe(Schema.Array),
-  endpoint: Endpoint,
-  options: Options,
-}) {
-  static empty(providerID: ID): Info {
-    return {
-      id: providerID,
-      name: providerID,
-      enabled: false,
-      env: [],
-      endpoint: {
-        type: "unknown",
-      },
-      options: {
-        headers: {},
-        body: {},
-        aisdk: {
-          provider: {},
-          request: {},
-        },
-      },
-    }
-  }
-}
+export type MutableInfo = Omit<Types.DeepMutable<Info>, "api"> & { api: MutableApi }

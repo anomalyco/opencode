@@ -19,10 +19,18 @@ export namespace ZenData {
     cacheWrite1h: z.number().optional(),
   })
 
+  // Long-context tier. The flip threshold defaults to 200_000 for backward
+  // compatibility with existing ZEN_MODELS secrets.
+  const ModelCostTierSchema = ModelCostSchema.extend({
+    threshold: z.number().default(200_000),
+  })
+
   const ModelSchema = z.object({
     name: z.string(),
     cost: ModelCostSchema,
-    cost200K: ModelCostSchema.optional(),
+    costMultiplier: z.number().default(1),
+    cost200K: ModelCostTierSchema.optional(),
+    costPeak: ModelCostSchema.optional(),
     allowAnonymous: z.boolean().optional(),
     byokProvider: z.enum(["openai", "anthropic", "google"]).optional(),
     stickyProvider: z.enum(["strict", "prefer"]).optional(),
@@ -37,6 +45,8 @@ export namespace ZenData {
         priority: z.number().optional(),
         tpmLimit: z.number().optional(),
         tpsGoal: z.number().optional(),
+        budgetPriority: z.number().optional(),
+        budgetContribution: z.number().optional(),
         weight: z.number().optional(),
         disabled: z.boolean().optional(),
         storeModel: z.string().optional(),
@@ -50,10 +60,10 @@ export namespace ZenData {
     api: z.string(),
     apiKey: z.union([z.string(), z.record(z.string(), z.string())]),
     format: FormatSchema.optional(),
-    headerMappings: z.record(z.string(), z.string()).optional(),
+    headerModifier: z.record(z.string(), z.any()).optional(),
     payloadModifier: z.record(z.string(), z.any()).optional(),
-    payloadMappings: z.record(z.string(), z.string()).optional(),
     adjustCacheUsage: z.boolean().optional(),
+    budget: z.number().optional(),
   })
 
   const ModelsSchema = z.object({

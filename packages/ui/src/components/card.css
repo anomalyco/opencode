@@ -19,14 +19,14 @@
   font-weight: var(--font-weight-regular);
   line-height: var(--line-height-large);
   letter-spacing: var(--letter-spacing-normal);
-  color: var(--text-strong);
+  color: var(--v2-text-text-base);
 
   --card-gap: 8px;
   --card-icon: 16px;
   --card-indent: 0px;
   --card-line-pad: 8px;
 
-  --card-accent: var(--icon-active);
+  --card-accent: var(--v2-icon-icon-base);
 
   &:has([data-slot="card-title"]) {
     gap: 8px;
@@ -48,7 +48,7 @@
   }
 
   :where([data-card="title"], [data-slot="card-title"]) {
-    color: var(--text-strong);
+    color: var(--v2-text-text-base);
     font-weight: var(--font-weight-medium);
   }
 
@@ -72,7 +72,7 @@
   }
 
   :where([data-slot="card-title-icon"][data-placeholder]) [data-component="icon"] {
-    color: var(--text-weak);
+    color: var(--v2-text-text-faint);
   }
 
   :where([data-slot="card-title-icon"])
@@ -82,7 +82,7 @@
   }
 
   :where([data-card="description"], [data-slot="card-description"]) {
-    color: var(--text-base);
+    color: var(--v2-text-text-muted);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     word-break: break-word;
@@ -90,5 +90,26 @@
 
   :where([data-card="actions"], [data-slot="card-actions"]) {
     padding-left: var(--card-indent);
+  }
+}
+
+body:not([data-new-layout]) [data-component="card"] {
+  color: var(--text-strong);
+  --card-accent: var(--icon-active);
+
+  :where([data-card="title"], [data-slot="card-title"]) {
+    color: var(--text-strong);
+  }
+
+  :where([data-slot="card-title-icon"][data-placeholder]) [data-component="icon"] {
+    color: var(--text-weak);
+  }
+
+  :where([data-card="description"], [data-slot="card-description"]) {
+    color: var(--text-base);
+  }
+
+  &[data-variant="error"] {
+    --card-accent: var(--icon-critical-base) !important;
   }
 }

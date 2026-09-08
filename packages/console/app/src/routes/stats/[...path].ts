@@ -1,8 +1,8 @@
-import { statsProxy } from "~/lib/stats-proxy"
+import { statsRedirect } from "~/lib/stats-proxy"
 
-export const GET = statsProxy
-export const POST = statsProxy
-export const PUT = statsProxy
-export const DELETE = statsProxy
-export const OPTIONS = statsProxy
-export const PATCH = statsProxy
+export const GET = statsRedirect
+export const POST = statsRedirect
+export const PUT = statsRedirect
+export const DELETE = statsRedirect
+export const OPTIONS = statsRedirect
+export const PATCH = statsRedirect

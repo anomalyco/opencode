@@ -1,6 +1,8 @@
 import { describe, expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { Effect, Layer } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { Agent } from "../../src/agent/agent"
 import { Truncate } from "@/tool/truncate"
 import { WebFetchTool } from "../../src/tool/webfetch"
@@ -8,7 +10,11 @@ import { SessionID, MessageID } from "../../src/session/schema"
 import { Tool } from "@/tool/tool"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(FetchHttpClient.layer, Truncate.defaultLayer, Agent.defaultLayer))
+const it = testEffect(
+  LayerNode.compile(LayerNode.group([httpClient, Truncate.node, Agent.node]), [
+    [httpClient, FetchHttpClient.layer as Layer.Layer<HttpClient.HttpClient>],
+  ]),
+)
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),

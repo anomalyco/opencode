@@ -10,12 +10,12 @@ class TestConfig extends ConfigService.Service<TestConfig>()("@test/ConfigServic
 }) {}
 
 const fromConfig = (input: Record<string, unknown>) =>
-  TestConfig.defaultLayer.pipe(Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(input))))
+  TestConfig.layer.pipe(Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(input))))
 
 const readConfig = TestConfig.useSync((config) => config)
 
 describe("ConfigService", () => {
-  it.effect("defaultLayer parses values from the active ConfigProvider", () =>
+  it.effect("layer parses values from the active ConfigProvider", () =>
     Effect.gen(function* () {
       const config = yield* readConfig.pipe(
         Effect.provide(
@@ -33,7 +33,7 @@ describe("ConfigService", () => {
     }),
   )
 
-  it.effect("defaultLayer applies Effect Config defaults", () =>
+  it.effect("layer applies Effect Config defaults", () =>
     Effect.gen(function* () {
       const config = yield* readConfig.pipe(Effect.provide(fromConfig({ NAME: "kit" })))
 
@@ -47,7 +47,7 @@ describe("ConfigService", () => {
     Effect.gen(function* () {
       const config = yield* readConfig.pipe(
         Effect.provide(
-          TestConfig.layer({
+          TestConfig.configLayer({
             name: "direct",
             token: Option.some("parsed"),
             port: 9000,

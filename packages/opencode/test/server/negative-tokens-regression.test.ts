@@ -6,6 +6,7 @@
 // strict `NonNegativeInt` schema then made every load of the message list
 // fail to encode, killing Desktop boot for every user with such a row.
 import { describe, expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { eq } from "drizzle-orm"
 
@@ -18,9 +19,10 @@ import { resetDatabase } from "../fixture/db"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
-const it = testEffect(Layer.mergeAll(Session.defaultLayer, Database.defaultLayer, httpApiLayer))
+const it = testEffect(Layer.mergeAll(LayerNode.compile(LayerNode.group([Session.node, Database.node])), httpApiLayer))
 
 function seedNegativeTokenSession() {
   return Effect.gen(function* () {
@@ -31,7 +33,7 @@ function seedNegativeTokenSession() {
       role: "user",
       sessionID: info.id,
       agent: "build",
-      model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test") },
+      model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") },
       time: { created: Date.now() },
     })
     const partID = PartID.ascending()

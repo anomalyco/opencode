@@ -25,3 +25,9 @@
 [data-component="tag"][data-high-contrast] {
   border-color: var(--v2-border-border-strong);
 }
+
+[data-component="tag"][data-variant="accent"] {
+  border: 0;
+  background: var(--v2-background-bg-accent);
+  color: var(--v2-text-text-contrast);
+}

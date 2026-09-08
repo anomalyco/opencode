@@ -9,13 +9,14 @@ import {
   type PluginSource,
 } from "./shared"
 import { ConfigPlugin } from "@/config/plugin"
+import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 
 export namespace PluginLoader {
   // A normalized plugin declaration derived from config before any filesystem or npm work happens.
   export type Plan = {
     spec: string
-    options: ConfigPlugin.Options | undefined
+    options: ConfigPluginV1.Options | undefined
     deprecated: boolean
   }
 
@@ -73,7 +74,7 @@ export namespace PluginLoader {
   }
 
   // Normalize a config item into the loader's internal representation.
-  function plan(item: ConfigPlugin.Spec): Plan {
+  function plan(item: ConfigPluginV1.Spec): Plan {
     const spec = ConfigPlugin.pluginSpecifier(item)
     return { spec, options: ConfigPlugin.pluginOptions(item), deprecated: isDeprecatedPlugin(spec) }
   }

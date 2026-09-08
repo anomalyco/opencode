@@ -7,7 +7,7 @@
  *
  * For each edit the plugin finds `anchor` in the file, then locates the
  * next `prop: <anything>;` after it and replaces the value portion.
- * `file` is a basename resolved relative to packages/ui/src/components/.
+ * `file` is a basename resolved against the UI component packages.
  */
 import type { Plugin } from "vite"
 import type { IncomingMessage, ServerResponse } from "node:http"
@@ -16,7 +16,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const root = path.resolve(here, "../../ui/src/components")
+const roots = [path.resolve(here, "../../session-ui/src/components"), path.resolve(here, "../../ui/src/components")]
 
 const ENDPOINT = "/__playground/apply-css"
 
@@ -97,8 +97,8 @@ export function playgroundCss(): Plugin {
           const grouped = new Map<string, Edit[]>()
           for (const edit of payload.edits) {
             if (!edit.file || !edit.anchor || !edit.prop || edit.value === undefined) continue
-            const abs = path.resolve(root, edit.file)
-            if (!abs.startsWith(root)) continue
+            const abs = roots.map((root) => path.resolve(root, edit.file)).find((file) => fs.existsSync(file))
+            if (!abs || !roots.some((root) => abs.startsWith(root))) continue
             const key = abs
             if (!grouped.has(key)) grouped.set(key, [])
             grouped.get(key)!.push(edit)

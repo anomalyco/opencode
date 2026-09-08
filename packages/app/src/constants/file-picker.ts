@@ -83,7 +83,7 @@ export const ACCEPTED_FILE_EXTENSIONS = Array.from(
   ),
 ).sort()
 
-export function filePickerFilters(ext?: string[]) {
+export function filePickerFilters(name: string, ext?: string[]) {
   if (!ext || ext.length === 0) return undefined
-  return [{ name: "Files", extensions: ext }]
+  return [{ name, extensions: ext }]
 }

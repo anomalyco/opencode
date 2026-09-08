@@ -1,1 +1,0 @@
-ALTER TABLE `project` ADD `commands` text;

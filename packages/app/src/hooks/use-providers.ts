@@ -2,7 +2,8 @@ import { useServerSync } from "@/context/server-sync"
 import { decode64 } from "@/utils/base64"
 import { useParams } from "@solidjs/router"
 import { Iterable, pipe } from "effect"
-import { createMemo } from "solid-js"
+import { createEffect, createMemo, type Accessor } from "solid-js"
+import { selectProviderCatalog } from "./provider-catalog"
 
 export const popularProviders = [
   "opencode",
@@ -16,20 +17,31 @@ export const popularProviders = [
 ]
 const popularProviderSet = new Set(popularProviders)
 
-export function useProviders() {
+export function useProviders(directory: Accessor<string | undefined>) {
   const serverSync = useServerSync()
   const params = useParams()
-  const dir = createMemo(() => decode64(params.dir) ?? "")
+  const dir = () => (directory ? directory() : decode64(params.dir))
   const providers = () => {
-    if (dir()) {
-      const [projectStore] = serverSync.child(dir())
-      if (projectStore.provider_ready) return projectStore.provider
-    }
-    return serverSync.data.provider
+    const value = dir()
+    const projectStore = value ? serverSync().child(value)[0] : undefined
+    if (value)
+      return selectProviderCatalog({
+        explicit: true,
+        directory: value,
+        catalog: projectStore && { ready: projectStore.provider_ready, providers: projectStore.provider },
+      })
+    return selectProviderCatalog({
+      explicit: false,
+      directory: value,
+      catalog: projectStore && { ready: projectStore.provider_ready, providers: projectStore.provider },
+      global: serverSync().data.provider,
+    })
   }
+
   return {
     all: () => providers().all,
     default: () => providers().default,
+    defaultModel: () => providers().defaultModel,
     popular: () =>
       pipe(
         providers().all,
@@ -48,7 +60,7 @@ export function useProviders() {
     },
     paid: () => {
       const connected = new Set(providers().connected)
-      return [
+      const paid = [
         ...Iterable.filter(
           providers().all,
           ([id]) =>
@@ -56,6 +68,7 @@ export function useProviders() {
             (id !== "opencode" || Object.values(providers().all.get(id)?.models ?? {}).some((m) => m.cost?.input)),
         ),
       ]
+      return paid
     },
   }
 }

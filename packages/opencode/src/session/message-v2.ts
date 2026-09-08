@@ -1,6 +1,5 @@
-import { EventV2 } from "@opencode-ai/core/event"
-import { SessionID, MessageID, PartID } from "./schema"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionID, MessageID } from "./schema"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import {
   APIError,
@@ -12,16 +11,15 @@ import {
   Info,
   OutputLengthError,
   Part,
-  StructuredOutputError,
   SubtaskPart,
   User,
   WithParts,
-  type ToolPart,
-} from "@opencode-ai/core/session/legacy"
+} from "@opencode-ai/core/v1/session"
 
 import { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Database } from "@opencode-ai/core/database/database"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { NotFoundError } from "@/storage/storage"
 import { and } from "drizzle-orm"
 import { desc } from "drizzle-orm"
@@ -37,7 +35,6 @@ import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { Effect, Schema } from "effect"
-import * as EffectLogger from "@opencode-ai/core/effect/logger"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -72,20 +69,11 @@ function summarizeToolOutput(part: { tool: string; state: { input?: Record<strin
 }
 
 export const Event = {
-  Updated: SessionLegacy.Event.MessageUpdated,
-  Removed: SessionLegacy.Event.MessageRemoved,
-  PartUpdated: SessionLegacy.Event.PartUpdated,
-  PartDelta: EventV2.define({
-    type: "message.part.delta",
-    schema: {
-      sessionID: SessionID,
-      messageID: MessageID,
-      partID: PartID,
-      field: Schema.String,
-      delta: Schema.String,
-    },
-  }),
-  PartRemoved: SessionLegacy.Event.PartRemoved,
+  Updated: SessionV1.Event.MessageUpdated,
+  Removed: SessionV1.Event.MessageRemoved,
+  PartUpdated: SessionV1.Event.PartUpdated,
+  PartDelta: SessionV1.Event.PartDelta,
+  PartRemoved: SessionV1.Event.PartRemoved,
 }
 
 const Cursor = Schema.Struct({
@@ -175,6 +163,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   const supportsMediaInToolResult = (attachment: { mime: string }) => {
     if (model.api.npm === "@ai-sdk/anthropic") return true
     if (model.api.npm === "@ai-sdk/openai") return true
+    if (model.api.npm === "@ai-sdk/amazon-bedrock/mantle") return true
     if (model.api.npm === "@ai-sdk/amazon-bedrock") return attachment.mime.startsWith("image/")
     if (model.api.npm === "@ai-sdk/xai") return attachment.mime.startsWith("image/")
     if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
@@ -446,7 +435,7 @@ export function toModelMessages(
   model: Provider.Model,
   options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
 ): Promise<ModelMessage[]> {
-  return Effect.runPromise(toModelMessagesEffect(input, model, options).pipe(Effect.provide(EffectLogger.layer)))
+  return Effect.runPromise(toModelMessagesEffect(input, model, options))
 }
 
 export const page = Effect.fn("MessageV2.page")(function* (input: {
@@ -604,27 +593,30 @@ export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: Ses
 
 // filterCompacted reorders messages for model consumption
 // ([compaction-user, summary, ...retained tail..., continue-user]), so array
-// position is not chronological. Derive each binding by max id (MessageID
-// is monotonic via MessageID.ascending) so a pre-compaction overflowing tail
-// assistant doesn't get mistaken for the most recent turn. tasks are
-// compaction/subtask parts attached to user messages newer than the latest
-// finished assistant — i.e. unprocessed work.
+// position is not chronological. IDs are only a deterministic tie-breaker
+// because imported messages do not necessarily have monotonic IDs.
 export function latest(msgs: WithParts[]) {
   let user: User | undefined
   let assistant: Assistant | undefined
   let finished: Assistant | undefined
   for (const msg of msgs) {
     const info = msg.info
-    if (info.role === "user" && (!user || info.id > user.id)) user = info
-    if (info.role === "assistant" && (!assistant || info.id > assistant.id)) assistant = info
-    if (info.role === "assistant" && info.finish && (!finished || info.id > finished.id)) finished = info
+    if (info.role === "user" && isAfter(info, user)) user = info
+    if (info.role === "assistant" && isAfter(info, assistant)) assistant = info
+    if (info.role === "assistant" && info.finish && isAfter(info, finished)) finished = info
   }
   const tasks = msgs.flatMap((m) =>
-    finished && m.info.id <= finished.id
+    finished && !isAfter(m.info, finished)
       ? []
       : m.parts.filter((p): p is CompactionPart | SubtaskPart => p.type === "compaction" || p.type === "subtask"),
   )
   return { user, assistant, finished, tasks }
+}
+
+function isAfter(info: Info, other?: Info) {
+  if (!other) return true
+  if (info.time.created !== other.time.created) return info.time.created > other.time.created
+  return info.id > other.id
 }
 
 export function fromError(
@@ -758,3 +750,4 @@ export function fromError(
 }
 
 export * as MessageV2 from "./message-v2"
+export const node = LayerNode.group([Database.node])

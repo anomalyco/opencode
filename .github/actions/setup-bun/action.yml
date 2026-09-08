@@ -8,6 +8,13 @@ inputs:
 runs:
   using: "composite"
   steps:
+    # node-gyp@latest (invoked via bunx for native install scripts) requires Node >=22;
+    # some runner images ship an older system Node on PATH
+    - name: Setup Node
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      with:
+        node-version: "24"
+
     - name: Get baseline download URL
       id: bun-url
       shell: bash

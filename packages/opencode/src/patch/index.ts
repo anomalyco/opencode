@@ -1,10 +1,7 @@
 import { Effect, Schema } from "effect"
 import * as path from "path"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import * as Log from "@opencode-ai/core/util/log"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Bom from "../util/bom"
-
-const log = Log.create({ service: "patch" })
 
 export const PatchSchema = Schema.Struct({
   patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
@@ -519,7 +516,7 @@ export const applyHunksToFiles = Effect.fn("Patch.applyHunksToFiles")(function* 
     return yield* Effect.fail(new Error("No files were modified."))
   }
 
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
 
   const added: string[] = []
   const modified: string[] = []
@@ -530,14 +527,14 @@ export const applyHunksToFiles = Effect.fn("Patch.applyHunksToFiles")(function* 
       case "add": {
         yield* fs.writeWithDirs(hunk.path, hunk.contents)
         added.push(hunk.path)
-        log.info(`Added file: ${hunk.path}`)
+        yield* Effect.logInfo(`Added file: ${hunk.path}`)
         break
       }
 
       case "delete": {
         yield* fs.remove(hunk.path)
         deleted.push(hunk.path)
-        log.info(`Deleted file: ${hunk.path}`)
+        yield* Effect.logInfo(`Deleted file: ${hunk.path}`)
         break
       }
 
@@ -549,11 +546,11 @@ export const applyHunksToFiles = Effect.fn("Patch.applyHunksToFiles")(function* 
           yield* fs.writeWithDirs(hunk.move_path, Bom.join(fileUpdate.content, fileUpdate.bom))
           yield* fs.remove(hunk.path)
           modified.push(hunk.move_path)
-          log.info(`Moved file: ${hunk.path} -> ${hunk.move_path}`)
+          yield* Effect.logInfo(`Moved file: ${hunk.path} -> ${hunk.move_path}`)
         } else {
           yield* fs.writeWithDirs(hunk.path, Bom.join(fileUpdate.content, fileUpdate.bom))
           modified.push(hunk.path)
-          log.info(`Updated file: ${hunk.path}`)
+          yield* Effect.logInfo(`Updated file: ${hunk.path}`)
         }
         break
       }
@@ -574,7 +571,7 @@ type MaybeApplyPatchVerifiedResult =
   | { type: MaybeApplyPatchVerified.CorrectnessError; error: Error }
   | { type: MaybeApplyPatchVerified.NotApplyPatch }
 
-// Effectful verified-parse: needs AppFileSystem.Service to read existing files
+// Effectful verified-parse: needs FSUtil.Service to read existing files
 export const maybeParseApplyPatchVerified = Effect.fn("Patch.maybeParseApplyPatchVerified")(function* (
   argv: string[],
   cwd: string,
@@ -596,7 +593,7 @@ export const maybeParseApplyPatchVerified = Effect.fn("Patch.maybeParseApplyPatc
 
   switch (result.type) {
     case MaybeApplyPatch.Body: {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const args = result.args
       const effectiveCwd = args.workdir ? path.resolve(cwd, args.workdir) : cwd
       const changes = new Map<string, ApplyPatchFileChange>()

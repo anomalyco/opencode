@@ -14,7 +14,7 @@ Small follow-ups that do not fit neatly into the main facade, route, tool, or sc
 
 - [ ] `config/paths.ts` - split pure helpers from effectful helpers.
       Keep `fileInDirectory(...)` as a plain function.
-- [ ] `config/paths.ts` - add a `ConfigPaths.Service` for the effectful operations so callers do not inherit `AppFileSystem.Service` directly.
+- [ ] `config/paths.ts` - add a `ConfigPaths.Service` for the effectful operations so callers do not inherit `FSUtil.Service` directly.
       Initial service surface should cover:
   - `projectFiles(...)`
   - `directories(...)`

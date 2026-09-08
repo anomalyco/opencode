@@ -110,7 +110,7 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
       if (operation.requestBody) {
         // The legacy OpenAPI surface never marked request bodies as required.
         // Keep that SDK surface stable while the HttpApi spec is tightened.
-        delete operation.requestBody.required
+        if (!isV2Api) delete operation.requestBody.required
         const body = operation.requestBody.content?.["application/json"]
         if (body?.schema) body.schema = stripOptionalNull(structuredClone(body.schema))
         if (path === "/experimental/workspace" && method === "post") {
@@ -152,7 +152,7 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
         normalizeLegacyErrorResponses(operation)
       }
       normalizeLegacyOperation(operation, path, method)
-      if ((path === "/event" || path === "/global/event") && method === "get") {
+      if ((path === "/event" || path === "/global/event" || path === "/api/event") && method === "get") {
         // HttpApi has no first-class SSE response schema, and these handlers are
         // raw/streaming routes. Document the actual wire protocol explicitly.
         operation.responses!["200"] = {
@@ -162,7 +162,9 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
               schema:
                 path === "/event"
                   ? { $ref: "#/components/schemas/Event" }
-                  : { $ref: "#/components/schemas/GlobalEvent" },
+                  : path === "/global/event"
+                    ? { $ref: "#/components/schemas/GlobalEvent" }
+                    : { $ref: "#/components/schemas/V2Event" },
             },
           },
         }

@@ -1,9 +1,10 @@
 import { describe, expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Deferred, Effect, Fiber, Layer } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { registerDisposer } from "../../src/effect/instance-registry"
-import { InstanceBootstrap } from "../../src/project/bootstrap-service"
+import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceStore } from "../../src/project/instance-store"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -15,7 +16,9 @@ const noopBootstrap = Layer.succeed(
 )
 
 const it = testEffect(
-  Layer.mergeAll(InstanceStore.defaultLayer, CrossSpawnSpawner.defaultLayer).pipe(Layer.provide(noopBootstrap)),
+  LayerNode.compile(LayerNode.group([InstanceStore.node, CrossSpawnSpawner.node]), [
+    [InstanceStore.bootstrapNode, noopBootstrap],
+  ]),
 )
 
 const setBootstrap = (run: Effect.Effect<void>) =>

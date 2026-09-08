@@ -1,10 +1,12 @@
 import { describe, expect } from "bun:test"
 import path from "path"
 import * as fs from "fs/promises"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Cause, Effect, Exit, Layer, Schema } from "effect"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { LSP } from "@/lsp/lsp"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Format } from "../../src/format"
 import { Agent } from "../../src/agent/agent"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
@@ -14,13 +16,8 @@ import { SessionID, MessageID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
-  Layer.mergeAll(
-    LSP.defaultLayer,
-    AppFileSystem.defaultLayer,
-    Format.defaultLayer,
-    EventV2Bridge.defaultLayer,
-    Truncate.defaultLayer,
-    Agent.defaultLayer,
+  LayerNode.compile(
+    LayerNode.group([LSP.node, FSUtil.node, Format.node, EventV2Bridge.node, Truncate.node, Agent.node]),
   ),
 )
 
@@ -109,6 +106,25 @@ describe("tool.apply_patch freeform", () => {
       const { ctx } = makeCtx()
       yield* expectFailure(execute({ patchText: "*** Begin Patch\n*** End Patch" }, ctx), "patch rejected: empty patch")
     }),
+  )
+
+  it.instance(
+    "produces JSON-encodable permission metadata",
+    () =>
+      Effect.gen(function* () {
+        const { ctx, calls } = makeCtx()
+        yield* execute({ patchText: "*** Begin Patch\n*** Add File: new.txt\n+created\n*** End Patch" }, ctx)
+
+        expect(() => {
+          const request = Schema.encodeUnknownSync(PermissionV1.Request)({
+            id: PermissionV1.ID.ascending(),
+            sessionID: baseCtx.sessionID,
+            ...calls[0],
+          })
+          Schema.encodeUnknownSync(Schema.Json)(request)
+        }).not.toThrow()
+      }),
+    { git: true },
   )
 
   it.instance(

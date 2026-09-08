@@ -493,6 +493,14 @@ export class Reply {
     return this
   }
 
+  contentFilter() {
+    this.#finish = "content_filter"
+    this.#hang = false
+    this.#error = undefined
+    this.#reset = false
+    return this
+  }
+
   toolCalls() {
     this.#finish = "tool_calls"
     this.#hang = false

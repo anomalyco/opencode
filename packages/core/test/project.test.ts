@@ -2,14 +2,15 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(ProjectV2.defaultLayer)
+const it = testEffect(AppNodeBuilder.build(ProjectV2.node))
 
 function remoteID(remote: string) {
   return ProjectV2.ID.make(Hash.fast(`git-remote:${remote}`))

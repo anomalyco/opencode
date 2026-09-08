@@ -1,40 +1,24 @@
 export * as ConfigCommand from "./command"
 
 import path from "path"
-import * as Log from "@opencode-ai/core/util/log"
 import { Cause, Exit, Schema } from "effect"
 import { Glob } from "@opencode-ai/core/util/glob"
+import { ConfigCommandV1 } from "@opencode-ai/core/v1/config/command"
 import { configEntryNameFromPath } from "./entry-name"
-import { InvalidError } from "./error"
+import { InvalidError } from "@opencode-ai/core/v1/config/error"
 import * as ConfigMarkdown from "./markdown"
-import { ConfigModelID } from "./model-id"
 
-const log = Log.create({ service: "config" })
-
-export const Info = Schema.Struct({
-  template: Schema.String,
-  description: Schema.optional(Schema.String),
-  agent: Schema.optional(Schema.String),
-  model: Schema.optional(ConfigModelID),
-  subtask: Schema.optional(Schema.Boolean),
-})
-
-export type Info = Schema.Schema.Type<typeof Info>
-
-const decodeInfo = Schema.decodeUnknownExit(Info)
+const decodeInfo = Schema.decodeUnknownExit(ConfigCommandV1.Info)
 
 export async function load(dir: string) {
-  const result: Record<string, Info> = {}
+  const result: Record<string, ConfigCommandV1.Info> = {}
   for (const item of await Glob.scan("{command,commands}/**/*.md", {
     cwd: dir,
     absolute: true,
     dot: true,
     symlink: true,
   })) {
-    const md = await ConfigMarkdown.parse(item).catch((err) => {
-      log.error("failed to load command", { command: item, err })
-      return undefined
-    })
+    const md = await ConfigMarkdown.parse(item).catch(() => undefined)
     if (!md) continue
 
     const name = configEntryNameFromPath(path.relative(dir, item), ["command/", "commands/"])

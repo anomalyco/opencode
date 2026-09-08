@@ -362,6 +362,119 @@ export namespace Referral {
     })
   }
 
+  export async function create(input: { inviterWorkspaceID: string; inviteeWorkspaceID: string }) {
+    return Database.transaction(async (tx) => {
+      if (input.inviterWorkspaceID === input.inviteeWorkspaceID) throw new Error("Self-referral workspace mismatch")
+
+      const inviterWorkspace = await tx
+        .select({ id: WorkspaceTable.id })
+        .from(WorkspaceTable)
+        .where(and(eq(WorkspaceTable.id, input.inviterWorkspaceID), isNull(WorkspaceTable.timeDeleted)))
+        .then((rows) => rows[0])
+      if (!inviterWorkspace) throw new Error(`Inviter workspace not found: ${input.inviterWorkspaceID}`)
+
+      const inviteeWorkspace = await tx
+        .select({ id: WorkspaceTable.id })
+        .from(WorkspaceTable)
+        .where(and(eq(WorkspaceTable.id, input.inviteeWorkspaceID), isNull(WorkspaceTable.timeDeleted)))
+        .then((rows) => rows[0])
+      if (!inviteeWorkspace) throw new Error(`Invitee workspace not found: ${input.inviteeWorkspaceID}`)
+
+      const invitee = await tx
+        .select({ accountID: UserTable.accountID, userID: UserTable.id, liteID: LiteTable.id })
+        .from(UserTable)
+        .innerJoin(
+          LiteTable,
+          and(
+            eq(LiteTable.workspaceID, UserTable.workspaceID),
+            eq(LiteTable.userID, UserTable.id),
+            isNull(LiteTable.timeDeleted),
+          ),
+        )
+        .where(
+          and(
+            eq(UserTable.workspaceID, input.inviteeWorkspaceID),
+            eq(UserTable.role, "admin"),
+            isNull(UserTable.timeDeleted),
+          ),
+        )
+        .then((rows) => rows[0])
+      if (!invitee?.accountID) throw new Error(`Invitee Lite workspace owner not found: ${input.inviteeWorkspaceID}`)
+
+      const inviterUser = await tx
+        .select({ id: UserTable.id })
+        .from(UserTable)
+        .where(
+          and(
+            eq(UserTable.workspaceID, input.inviterWorkspaceID),
+            eq(UserTable.accountID, invitee.accountID),
+            isNull(UserTable.timeDeleted),
+          ),
+        )
+        .then((rows) => rows[0])
+      if (inviterUser) throw new Error(`Self-referral is not allowed: ${invitee.accountID}`)
+
+      const existingReferral = await tx
+        .select({ id: ReferralTable.id, workspaceID: ReferralTable.workspaceID })
+        .from(ReferralTable)
+        .where(and(eq(ReferralTable.inviteeAccountID, invitee.accountID), isNull(ReferralTable.timeDeleted)))
+        .then((rows) => rows[0])
+      if (existingReferral && existingReferral.workspaceID !== input.inviterWorkspaceID) {
+        throw new Error(`Referral already belongs to ${existingReferral.workspaceID}: ${existingReferral.id}`)
+      }
+
+      const referralID = existingReferral?.id ?? Identifier.create("referral")
+      if (!existingReferral) {
+        await tx.insert(ReferralTable).ignore().values({
+          workspaceID: input.inviterWorkspaceID,
+          id: referralID,
+          inviteeAccountID: invitee.accountID,
+        })
+
+        const referral = await tx
+          .select({ id: ReferralTable.id })
+          .from(ReferralTable)
+          .where(and(eq(ReferralTable.inviteeAccountID, invitee.accountID), isNull(ReferralTable.timeDeleted)))
+          .then((rows) => rows[0])
+        if (!referral) throw new Error(`Referral not created: ${invitee.accountID}`)
+        if (referral.id !== referralID) throw new Error(`Referral already redeemed: ${referral.id}`)
+      }
+
+      const rewardInsert = await tx
+        .insert(ReferralRewardTable)
+        .ignore()
+        .values([
+          { workspaceID: input.inviterWorkspaceID, referralID, amount: REWARD_AMOUNT },
+          { workspaceID: input.inviteeWorkspaceID, referralID, amount: REWARD_AMOUNT },
+        ])
+
+      const rewards = await tx
+        .select({ workspaceID: ReferralRewardTable.workspaceID, amount: ReferralRewardTable.amount })
+        .from(ReferralRewardTable)
+        .where(
+          and(
+            eq(ReferralRewardTable.referralID, referralID),
+            inArray(ReferralRewardTable.workspaceID, [input.inviterWorkspaceID, input.inviteeWorkspaceID]),
+            isNull(ReferralRewardTable.timeDeleted),
+          ),
+        )
+      if (rewards.length !== 2) throw new Error(`Referral rewards not created: ${referralID}`)
+      if (rewards.some((reward) => reward.amount !== REWARD_AMOUNT)) {
+        throw new Error(`Referral reward amount mismatch: ${referralID}`)
+      }
+
+      return {
+        referralID,
+        createdReferral: !existingReferral,
+        createdRewards: rewardInsert.rowsAffected,
+        inviteeAccountID: invitee.accountID,
+        inviteeUserID: invitee.userID,
+        liteID: invitee.liteID,
+        rewardWorkspaces: rewards.map((reward) => reward.workspaceID),
+      }
+    })
+  }
+
   export async function completeFromLiteSubscription(input: { workspaceID: string; userID: string }) {
     return Database.transaction(async (tx) => {
       const invitee = await tx

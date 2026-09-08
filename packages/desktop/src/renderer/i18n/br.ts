@@ -24,4 +24,7 @@ export const dict = {
   "desktop.cli.installed.message": "CLI instalada em {{path}}\n\nReinicie seu terminal para usar o comando 'opencode'.",
   "desktop.cli.failed.title": "Falha na instalação",
   "desktop.cli.failed.message": "Falha ao instalar a CLI: {{error}}",
+
+  "desktop.error.dev.rootNotFound":
+    "Elemento raiz não encontrado. Você esqueceu de adicioná-lo ao seu index.html? Ou talvez o atributo id foi escrito incorretamente?",
 }

@@ -72,7 +72,7 @@ P6  OA
 - `PROC` AppProcess migration — prefer `AppProcess.Service` over raw
   process wrappers.
   Shrinks: direct spawn callsites and legacy process helpers.
-- `FS` AppFileSystem migration — prefer `AppFileSystem.Service` over raw
+- `FS` FSUtil migration — prefer `FSUtil.Service` over raw
   filesystem APIs.
   Shrinks: direct `fs` / `Bun.file` service callsites where inappropriate.
 - `RT` Runtime/facade cleanup — remove service-local `makeRuntime`
@@ -172,7 +172,7 @@ Recently completed:
 - [x] Built-in websearch provider selection uses the same runtime flags as
       tool visibility.
 - [x] Removed global default-plugin disabling from test preload.
-- [x] `RF-1` Scout reads routed through runtime flags (#27318).
+- [x] `RF-1` Reference reads routed through runtime flags (#27318).
 - [x] `RF-2` Plan-mode prompt read routed through runtime flags (#27320).
 - [x] `RF-3` Event-system reads routed through runtime flags (#27323).
 - [x] `RF-4` Workspaces reads routed through runtime flags for session
@@ -229,7 +229,7 @@ Current rules:
 
 ## Lower Priority Tracks
 
-- `PROC` / `FS` — continue AppProcess and AppFileSystem migrations as
+- `PROC` / `FS` — continue AppProcess and FSUtil migrations as
   focused PRs when touching relevant files.
 - `RT` — remove service-local runtime facades only when they are not an
   intentional boundary.

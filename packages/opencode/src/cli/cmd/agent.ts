@@ -2,13 +2,10 @@ import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { Global } from "@opencode-ai/core/global"
-import { Agent } from "../../agent/agent"
-import { Provider } from "@/provider/provider"
 import path from "path"
 import fs from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
 import matter from "gray-matter"
-import { InstanceRef } from "@/effect/instance-ref"
 import { EOL } from "os"
 import type { Argv } from "yargs"
 import { Effect } from "effect"
@@ -62,6 +59,9 @@ const AgentCreateCommand = effectCmd({
         describe: "model to use in the format of provider/model",
       }),
   handler: Effect.fn("Cli.agent.create")(function* (args) {
+    const { InstanceRef } = yield* Effect.promise(() => import("@/effect/instance-ref"))
+    const { Agent } = yield* Effect.promise(() => import("../../agent/agent"))
+    const { Provider } = yield* Effect.promise(() => import("@/provider/provider"))
     const maybeCtx = yield* InstanceRef
     if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
     const ctx = maybeCtx
@@ -235,6 +235,7 @@ const AgentListCommand = effectCmd({
   command: "list",
   describe: "list all available agents",
   handler: Effect.fn("Cli.agent.list")(function* () {
+    const { Agent } = yield* Effect.promise(() => import("../../agent/agent"))
     const agents = yield* Agent.Service.use((svc) => svc.list())
     const sortedAgents = agents.sort((a, b) => {
       if (a.native !== b.native) {

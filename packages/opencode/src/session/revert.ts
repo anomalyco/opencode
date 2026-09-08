@@ -1,16 +1,14 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer, Context, Schema } from "effect"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Snapshot } from "../snapshot"
 import { Storage } from "@/storage/storage"
-import { Log } from "@opencode-ai/core/util/log"
 import { Session } from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID, PartID } from "./schema"
 import { SessionRunState } from "./run-state"
 import { SessionSummary } from "./summary"
-
-const log = Log.create({ service: "session.revert" })
 
 export const RevertInput = Schema.Struct({
   sessionID: SessionID,
@@ -27,7 +25,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRevert") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const sessions = yield* Session.Service
@@ -40,7 +38,7 @@ export const layer = Layer.effect(
     const revert = Effect.fn("SessionRevert.revert")(function* (input: RevertInput) {
       yield* state.assertNotBusy(input.sessionID)
       const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
-      let lastUser: SessionLegacy.User | undefined
+      let lastUser: SessionV1.User | undefined
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
 
       let rev: Session.Info["revert"]
@@ -73,7 +71,8 @@ export const layer = Layer.effect(
       if (session.revert?.snapshot) yield* snap.restore(session.revert.snapshot)
       yield* snap.revert(patches)
       if (rev.snapshot) rev.diff = yield* snap.diff(rev.snapshot)
-      const range = all.filter((msg) => msg.info.id >= rev.messageID)
+      const index = all.findIndex((msg) => msg.info.id === rev.messageID)
+      const range = index < 0 ? [] : all.slice(index)
       const diffs = yield* summary.computeDiff({ messages: range })
       yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore)
       yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
@@ -90,7 +89,7 @@ export const layer = Layer.effect(
     })
 
     const unrevert = Effect.fn("SessionRevert.unrevert")(function* (input: { sessionID: SessionID }) {
-      log.info("unreverting", input)
+      yield* Effect.logInfo("unreverting", { sessionID: input.sessionID })
       yield* state.assertNotBusy(input.sessionID)
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       if (!session.revert) return session
@@ -104,20 +103,9 @@ export const layer = Layer.effect(
       const sessionID = session.id
       const msgs = yield* sessions.messages({ sessionID }).pipe(Effect.orDie)
       const messageID = session.revert.messageID
-      const remove = [] as SessionLegacy.WithParts[]
-      let target: SessionLegacy.WithParts | undefined
-      for (const msg of msgs) {
-        if (msg.info.id < messageID) continue
-        if (msg.info.id > messageID) {
-          remove.push(msg)
-          continue
-        }
-        if (session.revert.partID) {
-          target = msg
-          continue
-        }
-        remove.push(msg)
-      }
+      const index = msgs.findIndex((msg) => msg.info.id === messageID)
+      const target = index < 0 ? undefined : msgs[index]
+      const remove = index < 0 ? [] : msgs.slice(index + (session.revert.partID ? 1 : 0))
       for (const msg of remove) {
         yield* sessions.removeMessage({ sessionID, messageID: msg.info.id })
       }
@@ -139,15 +127,10 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = Layer.suspend(() =>
-  layer.pipe(
-    Layer.provide(SessionRunState.defaultLayer),
-    Layer.provide(Session.defaultLayer),
-    Layer.provide(Snapshot.defaultLayer),
-    Layer.provide(Storage.defaultLayer),
-    Layer.provide(EventV2Bridge.defaultLayer),
-    Layer.provide(SessionSummary.defaultLayer),
-  ),
-)
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [Session.node, Snapshot.node, Storage.node, EventV2Bridge.node, SessionSummary.node, SessionRunState.node],
+})
 
 export * as SessionRevert from "./revert"

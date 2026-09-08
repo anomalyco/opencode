@@ -1,7 +1,5 @@
 import { EOL } from "os"
 import { Effect } from "effect"
-import { Provider } from "@/provider/provider"
-
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { effectCmd, fail } from "../effect-cmd"
 import { UI } from "../ui"
@@ -26,6 +24,7 @@ export const ModelsCommand = effectCmd({
         type: "boolean",
       }),
   handler: Effect.fn("Cli.models")(function* (args) {
+    const { Provider } = yield* Effect.promise(() => import("@/provider/provider"))
     if (args.refresh) {
       yield* ModelsDev.Service.use((s) => s.refresh(true))
       UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Models cache refreshed" + UI.Style.TEXT_NORMAL)

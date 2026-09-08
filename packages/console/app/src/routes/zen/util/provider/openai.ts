@@ -4,6 +4,7 @@ type Usage = {
   input_tokens?: number
   input_tokens_details?: {
     cached_tokens?: number
+    cache_write_tokens?: number
   }
   output_tokens?: number
   output_tokens_details?: {
@@ -20,7 +21,6 @@ export const openaiHelper: ProviderHelper = ({ workspaceID }) => ({
   },
   modifyBody: (body: Record<string, any>) => body,
   createBinaryStreamDecoder: () => undefined,
-  streamSeparator: "\n\n",
   createUsageParser: () => {
     let usage: Usage
 
@@ -49,12 +49,16 @@ export const openaiHelper: ProviderHelper = ({ workspaceID }) => ({
     const outputTokens = usage.output_tokens ?? 0
     const reasoningTokens = usage.output_tokens_details?.reasoning_tokens ?? undefined
     const cacheReadTokens = usage.input_tokens_details?.cached_tokens ?? undefined
+    const cacheWriteTokens = usage.input_tokens_details?.cache_write_tokens ?? undefined
     return {
-      inputTokens: inputTokens - (cacheReadTokens ?? 0),
+      // OpenAI's input_tokens includes both cached_tokens and cache_write_tokens;
+      // each is billed separately at its own rate. Clamp to zero so a provider
+      // reporting overlapping detail fields cannot drive input cost negative.
+      inputTokens: Math.max(0, inputTokens - (cacheReadTokens ?? 0) - (cacheWriteTokens ?? 0)),
       outputTokens,
       reasoningTokens,
       cacheReadTokens,
-      cacheWrite5mTokens: undefined,
+      cacheWrite5mTokens: cacheWriteTokens,
       cacheWrite1hTokens: undefined,
     }
   },

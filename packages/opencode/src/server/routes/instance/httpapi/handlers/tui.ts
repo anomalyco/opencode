@@ -1,5 +1,5 @@
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { TuiEvent } from "@/cli/cmd/tui/event"
+import { TuiEvent } from "@/server/tui-event"
 import { Session } from "@/session/session"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"

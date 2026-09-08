@@ -14,7 +14,7 @@
     opacity: 1;
   }
 
-  &[data-direction="horizontal"] {
+  &:where([data-direction="horizontal"]) {
     inset-block: 0;
     inset-inline-end: 0;
     width: 8px;
@@ -33,9 +33,21 @@
       inset-inline-start: 50%;
       transform: translateX(-50%);
     }
+
+    &:dir(rtl) {
+      transform: translateX(-50%);
+
+      &[data-edge="start"] {
+        transform: translateX(50%);
+      }
+
+      &::after {
+        transform: translateX(50%);
+      }
+    }
   }
 
-  &[data-direction="vertical"] {
+  &:where([data-direction="vertical"]) {
     inset-inline: 0;
     inset-block-start: 0;
     height: 8px;

@@ -44,16 +44,29 @@ export class DrizzleClient extends Context.Service<DrizzleClient, Drizzle>()("@o
   )
 }
 
-export class DatabaseError extends Schema.TaggedErrorClass<DatabaseError>()("DatabaseError", {
-  cause: Schema.Defect,
-}) {}
+export class DatabaseError extends Error {
+  readonly _tag = "DatabaseError"
+
+  constructor(input: { cause: unknown }) {
+    super("Database operation failed", { cause: input.cause })
+    this.name = "DatabaseError"
+  }
+
+  static make(input: { cause: unknown }) {
+    return new DatabaseError(input)
+  }
+}
 
 export const catchDbError = Effect.mapError((cause) => DatabaseError.make({ cause }))
 
-export class MigrationError extends Schema.TaggedErrorClass<MigrationError>()("MigrationError", {
-  message: Schema.String,
-  cause: Schema.optional(Schema.Defect),
-}) {}
+export class MigrationError extends Error {
+  readonly _tag = "MigrationError"
+
+  constructor(input: { message: string; cause?: unknown }) {
+    super(input.message, { cause: input.cause })
+    this.name = "MigrationError"
+  }
+}
 
 export const migrate = Effect.fn("Database.migrate")(function* () {
   const settings = yield* DatabaseConfig
@@ -68,9 +81,11 @@ export const migrate = Effect.fn("Database.migrate")(function* () {
     catch: (cause) => new MigrationError({ message: "Failed to apply database migrations", cause }),
   })
   if (result)
-    return yield* new MigrationError({
-      message: `Failed to initialize database migrations: ${result.exitCode}`,
-    })
+    return yield* Effect.fail(
+      new MigrationError({
+        message: `Failed to initialize database migrations: ${result.exitCode}`,
+      }),
+    )
   yield* Effect.logInfo("database migrations complete").pipe(
     Effect.annotateLogs({ migrationsDir: settings.migrationsDir }),
   )

@@ -134,15 +134,62 @@ export namespace ModelLimits {
     input instanceof ModelLimits ? input : new ModelLimits(input ?? {})
 }
 
+export class ModelDefaults extends Schema.Class<ModelDefaults>("LLM.ModelDefaults")({
+  limits: Schema.optional(ModelLimits),
+  generation: Schema.optional(GenerationOptions),
+  providerOptions: Schema.optional(ProviderOptions),
+  http: Schema.optional(HttpOptions),
+}) {}
+
+export namespace ModelDefaults {
+  export type Input =
+    | ModelDefaults
+    | {
+        readonly limits?: ModelLimits.Input
+        readonly generation?: GenerationOptions.Input
+        readonly providerOptions?: ProviderOptions
+        readonly http?: HttpOptions.Input
+      }
+
+  /** Normalize selected-model request defaults without applying precedence. */
+  export const make = (input: Input) => {
+    if (input instanceof ModelDefaults) return input
+    return new ModelDefaults({
+      limits: input.limits === undefined ? undefined : ModelLimits.make(input.limits),
+      generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
+      providerOptions: input.providerOptions,
+      http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+    })
+  }
+}
+
+export const ModelToolSchemaCompatibility = Schema.Literals(["gemini", "moonshot"])
+export type ModelToolSchemaCompatibility = Schema.Schema.Type<typeof ModelToolSchemaCompatibility>
+
+export class ModelCompatibility extends Schema.Class<ModelCompatibility>("LLM.ModelCompatibility")({
+  toolSchema: Schema.optional(ModelToolSchemaCompatibility),
+}) {}
+
+export namespace ModelCompatibility {
+  export type Input = ModelCompatibility | ConstructorParameters<typeof ModelCompatibility>[0]
+
+  /** Normalize model/upstream compatibility metadata without projecting requests. */
+  export const make = (input: Input) => (input instanceof ModelCompatibility ? input : new ModelCompatibility(input))
+}
+
 export class Model {
   readonly id: ModelID
   readonly provider: ProviderID
   readonly route: AnyRoute
+  readonly defaults?: ModelDefaults
+  readonly compatibility?: ModelCompatibility
 
   constructor(input: Model.ConstructorInput) {
     this.id = input.id
     this.provider = input.provider
     this.route = input.route
+    this.defaults = input.defaults
+    this.compatibility = input.compatibility
   }
 
   static make(input: Model.Input) {
@@ -150,6 +197,8 @@ export class Model {
       id: ModelID.make(input.id),
       provider: ProviderID.make(input.provider),
       route: input.route,
+      defaults: input.defaults === undefined ? undefined : ModelDefaults.make(input.defaults),
+      compatibility: input.compatibility === undefined ? undefined : ModelCompatibility.make(input.compatibility),
     })
   }
 
@@ -158,6 +207,8 @@ export class Model {
       id: model.id,
       provider: model.provider,
       route: model.route,
+      defaults: model.defaults,
+      compatibility: model.compatibility,
     }
   }
 
@@ -175,11 +226,15 @@ export namespace Model {
     readonly id: ModelID
     readonly provider: ProviderID
     readonly route: AnyRoute
+    readonly defaults?: ModelDefaults
+    readonly compatibility?: ModelCompatibility
   }
 
-  export type Input = Omit<ConstructorInput, "id" | "provider"> & {
+  export type Input = Omit<ConstructorInput, "id" | "provider" | "defaults" | "compatibility"> & {
     readonly id: string | ModelID
     readonly provider: string | ProviderID
+    readonly defaults?: ModelDefaults.Input
+    readonly compatibility?: ModelCompatibility.Input
   }
 }
 

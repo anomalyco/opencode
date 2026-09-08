@@ -175,8 +175,9 @@ const drizzleLayer = Layer.effect(
   }),
 )
 
-export const layer = (config: Config) =>
-  Layer.merge(
-    nativeLayer(config),
-    Layer.merge(sqliteLayer(config), drizzleLayer).pipe(Layer.provide(nativeLayer(config))),
-  ).pipe(Layer.provide(Reactivity.layer))
+export const layer = (config: Config) => {
+  const native = nativeLayer(config)
+  return Layer.merge(native, Layer.merge(sqliteLayer(config), drizzleLayer).pipe(Layer.provide(native))).pipe(
+    Layer.provide(Reactivity.layer),
+  )
+}
