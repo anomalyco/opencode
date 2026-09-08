@@ -251,10 +251,11 @@ describe("AISDKNative", () => {
       },
     })
 
-    expect(
-      map("@ai-sdk/amazon-bedrock", { reasoningConfig: { maxReasoningEffort: "high" } }, "openai.gpt-oss-120b-1:0")
-        ?.body,
-    ).toEqual({ additionalModelRequestFields: { reasoning_effort: "high" } })
+    for (const modelID of ["openai.gpt-oss-120b-1:0", "global.openai.gpt-5.6-sol", "us.openai.gpt-5.6-sol"]) {
+      expect(
+        map("@ai-sdk/amazon-bedrock", { reasoningConfig: { maxReasoningEffort: "high" } }, modelID)?.body,
+      ).toEqual({ additionalModelRequestFields: { reasoning_effort: "high" } })
+    }
   })
 
   test("maps Bedrock Mantle models to their supported native APIs", () => {

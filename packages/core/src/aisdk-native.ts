@@ -209,7 +209,7 @@ function mapBedrockRequest(input: MapInput): Pick<Mapping, "headers" | "body"> {
   const additional = isRecord(settings.additionalModelRequestFields) ? settings.additionalModelRequestFields : {}
   const reasoning = isRecord(settings.reasoningConfig) ? settings.reasoningConfig : undefined
   const anthropic = input.modelID.includes("anthropic")
-  const openai = input.modelID.startsWith("openai.")
+  const openai = input.modelID.includes("openai.")
   const effort = typeof reasoning?.maxReasoningEffort === "string" ? reasoning.maxReasoningEffort : undefined
   const type = typeof reasoning?.type === "string" ? reasoning.type : undefined
   const budget = typeof reasoning?.budgetTokens === "number" ? reasoning.budgetTokens : undefined
