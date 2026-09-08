@@ -29,6 +29,95 @@ await Effect.runPromise(program.pipe(Effect.provide(llmLayer)))
 
 Run `LLMClient.stream(request)` instead of `generate` when you want incremental `LLMEvent`s. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses, Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
+## Alibaba Cloud Model Studio
+
+`Alibaba` provides standard Model Studio inference. Configure a region explicitly, then select
+Chat Completions (`.model` or `.chat`), Anthropic-compatible Messages (`.messages`), or OpenAI-compatible
+Responses (`.responses`). These routes use HTTP/SSE.
+
+```ts
+import { LLM } from "@opencode/ai"
+import { Alibaba } from "@opencode/ai/providers"
+
+const alibaba = Alibaba.configure({
+  region: "ap-southeast-1", // Singapore
+  apiKey: process.env.DASHSCOPE_API_KEY,
+  // workspaceID: "llm-your-workspace", // use a workspace-dedicated endpoint
+})
+
+const request = LLM.request({
+  model: alibaba.model("qwen3.8-max"),
+  prompt: "Explain this design.",
+  providerOptions: { reasoningEffort: "medium" },
+})
+
+const search = LLM.request({
+  model: alibaba.responses("qwen3.8-max"),
+  prompt: "Find and summarize the official Model Studio documentation.",
+  tools: [Alibaba.webSearch(), Alibaba.webExtractor()],
+})
+```
+
+### Regions and credentials
+
+| Region              | `region`         | Shared host when `workspaceID` is omitted |
+| ------------------- | ---------------- | ----------------------------------------- |
+| Singapore           | `ap-southeast-1` | `dashscope-intl.aliyuncs.com`             |
+| China (Beijing)     | `cn-beijing`     | `dashscope.aliyuncs.com`                  |
+| China (Hong Kong)   | `cn-hongkong`    | `cn-hongkong.dashscope.aliyuncs.com`      |
+| US (Virginia)       | `us-east-1`      | `dashscope-us.aliyuncs.com`               |
+| Germany (Frankfurt) | `eu-central-1`   | Supply `workspaceID` or `baseURL`         |
+| Japan (Tokyo)       | `ap-northeast-1` | Supply `workspaceID` or `baseURL`         |
+
+With `workspaceID`, the host is `{workspaceID}.{region}.maas.aliyuncs.com`.
+Alibaba recommends workspace-dedicated hosts for production. A complete `baseURL` overrides
+regional URL construction and may be supplied without `region`. It includes the selected API's
+version prefix: `/compatible-mode/v1` for Chat and Responses, `/apps/anthropic/v1` for Messages.
+The route appends `/chat/completions`, `/responses`, or `/messages`, respectively.
+
+Keys and model availability are region-specific. Credentials resolve from explicit `apiKey`, then
+`DASHSCOPE_API_KEY`, then `ALIBABA_API_KEY`; an explicit `auth` overrides bearer authentication.
+There is no automatic regional fallback. Use the key belonging to the selected region/workspace.
+
+The access region and inference deployment scope are separate concepts. For example, Virginia's
+`-us` model IDs request US-only inference; other regions may select scope through their workspace.
+Model IDs are passed through unchanged. See Alibaba's [regional documentation](https://www.alibabacloud.com/help/en/model-studio/regions)
+and [base URL table](https://www.alibabacloud.com/help/en/model-studio/base-url). Those pages currently
+disagree about Virginia's shared-host availability; its entry above follows the base URL table.
+Use the API host shown in your console when configuring a dedicated endpoint.
+
+### Native options
+
+- **Chat:** `reasoningEffort` → `reasoning_effort`, `enableThinking` → `enable_thinking`,
+  `thinkingBudget` → `thinking_budget`, and `preserveThinking` → `preserve_thinking`.
+  Replay complete `response.message` values to retain `reasoning_content` separately from answer text.
+  Qwen 3.8 defaults to preserving thinking; older models have different defaults.
+  Additional options include `toolStream`, `parallelToolCalls`, `repetitionPenalty`, `responseFormat`,
+  `enableSearch`, and native `searchOptions`. `generation.topK` lowers to `top_k`.
+  `clearThinking` is a hosted GLM control, and `thinking.type` is available for hosted MiniMax models.
+- **Messages:** `effort` → `output_config.effort`. `thinking.type` accepts enabled/disabled with an
+  optional `budgetTokens` (or native `budget_tokens`). `outputConfig.format` accepts a JSON schema.
+  Model Studio's empty thinking signatures are accepted; supplied signatures are replayed unchanged.
+  When it reports `end_turn` after a completed tool call, the normalized finish is `tool-calls`;
+  the raw reason remains `end_turn`.
+- **Responses:** `reasoningEffort` → `reasoning.effort`, plus `enableThinking`, `store`,
+  `previousResponseId`, and `conversation`. Omitted `store` retains the API's default (`true`);
+  set it to `false` for client-managed history. `previousResponseId` requires a stored response.
+  Hosted tools are `Alibaba.webSearch()`, `Alibaba.webExtractor()`, and `Alibaba.codeInterpreter()`.
+  Web extraction is used together with web search. Hosted calls/results carry `providerExecuted: true`.
+
+Omitted options preserve provider defaults. Effort values stay in ascending order
+(`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`) and accept future strings.
+Alibaba owns the model-specific mappings: Qwen 3.8's native levels are `none`, `low`, `medium`,
+and `xhigh`; aliases and defaults are not rewritten locally. Thinking budgets and effort should
+not be combined on Qwen 3.8 Chat, where the API rejects that combination.
+
+Package entrypoints are `@opencode/ai/providers/alibaba`, `alibaba/chat`, `alibaba/messages`,
+and `alibaba/responses`. Singapore recordings cover Qwen 3.8 reasoning efforts, tool loops and
+follow-ups on all three APIs, Qwen 3.7 thinking toggles/budgets, image input, named tool choice,
+structured output, stored Responses continuation, and hosted search/extraction/code execution.
+Regional URL construction is unit-tested for all six regions.
+
 ## Z.AI
 
 `ZAI` uses the standard API. Chat Completions is the default language-model API;
