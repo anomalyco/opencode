@@ -87,6 +87,13 @@ function formatRunError(error: unknown) {
   return FormatError(error) ?? FormatUnknownError(error)
 }
 
+// Retry reasons that will not clear on their own within a run. The session retry
+// schedule honors the provider's retry-after for these, which for an exhausted
+// quota is measured in days, so a non-interactive run reports and stops instead
+// of sleeping through it. Every other retryable failure is transient and keeps
+// its existing wait-and-retry behavior.
+const NON_TRANSIENT_RETRY_REASONS = new Set(["free_tier_limit", "account_rate_limit"])
+
 async function tool(part: ToolPart) {
   try {
     const { toolInlineInfo } = await import("./run/tool")
@@ -788,6 +795,28 @@ export const RunCommand = effectCmd({
               error = error ? error + EOL + err : err
               if (emit("error", { error: props.error })) continue
               UI.error(err)
+            }
+
+            // Retries are invisible here otherwise: the session stays busy, no
+            // session.error is published, and idle only arrives once the retry
+            // schedule finishes. A transient retry (429/5xx, short retry-after)
+            // is worth waiting out, but quota exhaustion carries a retry-after
+            // measured in days, which an unattended run must not sleep through.
+            if (event.type === "session.status" && event.properties.sessionID === sessionID) {
+              const status = event.properties.status
+              if (status.type === "retry") {
+                if (!emit("retry", { attempt: status.attempt, message: status.message, next: status.next })) {
+                  UI.error(`${status.message} (attempt ${status.attempt})`)
+                }
+                if (NON_TRANSIENT_RETRY_REASONS.has(status.action?.reason ?? "")) {
+                  error = error ? error + EOL + status.message : status.message
+                  // The schedule is already sleeping on the provider's retry-after.
+                  // Abort so that pending wait cannot hold the process open after
+                  // this loop stops reading events.
+                  await client.session.abort({ sessionID }).catch(() => {})
+                  break
+                }
+              }
             }
 
             if (
