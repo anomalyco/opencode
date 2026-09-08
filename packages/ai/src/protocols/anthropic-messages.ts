@@ -330,6 +330,7 @@ const AnthropicThinking = Schema.Union([
     type: Schema.tag("disabled"),
   }),
 ])
+type AnthropicThinking = typeof AnthropicThinking.Type
 
 // SDK OutputConfig:2684 {effort?: "low"|"medium"|"high"|"xhigh"|"max"|null, format?: JSONOutputFormat:2399}
 const AnthropicJsonOutputFormat = Schema.Struct({
@@ -1040,8 +1041,9 @@ const resolveOptions = Effect.fn("AnthropicMessages.resolveOptions")(function* (
           ...(outputConfigEffort === undefined ? {} : { effort: outputConfigEffort }),
           ...(outputConfigFormat === undefined ? {} : { format: outputConfigFormat }),
         }
+  const thinking = yield* resolveThinking(input?.thinking)
   return {
-    thinking: yield* resolveThinking(input?.thinking, request),
+    thinking: applyThinkingBindingDefault(request.model, thinking),
     effort: outputConfigEffort,
     output_config,
     service_tier,
@@ -1052,26 +1054,36 @@ const resolveOptions = Effect.fn("AnthropicMessages.resolveOptions")(function* (
   }
 })
 
-const supportsThinkingBlockBinding = (request: LLMRequest) => {
-  if (request.model.compatibility?.supportsThinkingBlockBinding !== undefined)
-    return request.model.compatibility.supportsThinkingBlockBinding
+const supportsThinkingBlockBinding = (model: LLMRequest["model"]) => {
+  const override = model.compatibility?.supportsThinkingBlockBinding
+  if (override !== undefined) return override
   // Accept namespaced IDs, dotted versions, and dated snapshots without treating a date as a minor version.
-  const version = /(?:^|[./])claude-[a-z]+-(\d+)(?:[.-](\d{1,2}))?(?:$|[-:])/i.exec(request.model.id)
-  return version !== null && (Number(version[1]) > 5 || (Number(version[1]) === 5 && Number(version[2] ?? 0) >= 1))
+  const version = /(?:^|[./])claude-[a-z]+-(?<major>\d+)(?:[.-](?<minor>\d{1,2}))?(?:$|[-:])/i.exec(model.id)?.groups
+  if (!version) return false
+  const major = Number(version.major)
+  const minor = Number(version.minor ?? 0)
+  return major > 5 || (major === 5 && minor >= 1)
 }
 
-const resolveThinking = Effect.fn("AnthropicMessages.resolveThinking")(function* (input: unknown, request: LLMRequest) {
-  const supported = supportsThinkingBlockBinding(request)
-  if (!ProviderShared.isRecord(input))
-    return supported
-      ? { type: "adaptive" as const, block_binding: { prefix_mismatch_behavior: "drop_block" } }
-      : undefined
+const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: AnthropicThinking | undefined) => {
+  if (thinking?.type === "disabled") return thinking
+  if (!supportsThinkingBlockBinding(model)) return thinking
+  return {
+    ...(thinking ?? { type: "adaptive" as const }),
+    block_binding: {
+      prefix_mismatch_behavior: "drop_block",
+      ...thinking?.block_binding,
+    },
+  }
+}
+
+const resolveThinking = Effect.fn("AnthropicMessages.resolveThinking")(function* (input: unknown) {
+  if (!ProviderShared.isRecord(input)) return undefined
   if (input.type === "disabled") return { type: "disabled" as const }
   if (input.type !== "adaptive" && input.type !== "enabled") return undefined
-  const binding = yield* ProviderShared.validateWith(
+  const block_binding = yield* ProviderShared.validateWith(
     Schema.decodeUnknownEffect(Schema.UndefinedOr(AnthropicThinkingBlockBinding)),
   )(input.block_binding)
-  const block_binding = supported ? { prefix_mismatch_behavior: "drop_block", ...binding } : binding
   const display =
     input.display === "summarized" || input.display === "omitted"
       ? (input.display as "summarized" | "omitted")
@@ -1674,20 +1686,14 @@ export const transport = <
   return {
     ...http,
     prepare: (input: Parameters<typeof http.prepare>[0]) => {
-      const compaction =
-        input.body.context_management?.edits.length ||
-        input.body.messages.some((message) => message.content.some((block) => block.type === "compaction"))
-      const binding = input.body.thinking?.type !== "disabled" && input.body.thinking?.block_binding !== undefined
-      if (!compaction && !binding) return http.prepare(input)
+      const requiredBetas = requiredBetaHeaders(input.body)
+      if (requiredBetas.length === 0) return http.prepare(input)
       const headers = Headers.fromInput(input.request.http?.headers)
-      const betas = new Set(
-        (headers["anthropic-beta"] ?? "")
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean),
-      )
-      if (compaction) betas.add("compact-2026-01-12")
-      if (binding) betas.add("thinking-binding-controls-2026-08-01")
+      const existingBetas = (headers["anthropic-beta"] ?? "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+      const betas = new Set([...existingBetas, ...requiredBetas])
       return http.prepare({
         ...input,
         request: LLMRequest.update(input.request, {
@@ -1699,6 +1705,20 @@ export const transport = <
       })
     },
   }
+}
+
+function requiredBetaHeaders(body: Pick<AnthropicMessagesBody, "messages" | "context_management" | "thinking">) {
+  const betas: string[] = []
+  const requestsCompaction = (body.context_management?.edits.length ?? 0) > 0
+  const replaysCompaction = body.messages.some((message) =>
+    message.content.some((block) => block.type === "compaction"),
+  )
+  if (requestsCompaction || replaysCompaction) betas.push("compact-2026-01-12")
+
+  const thinking = body.thinking
+  if (thinking && thinking.type !== "disabled" && thinking.block_binding)
+    betas.push("thinking-binding-controls-2026-08-01")
+  return betas
 }
 
 export const route = Route.make({

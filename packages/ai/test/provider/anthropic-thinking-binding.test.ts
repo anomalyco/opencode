@@ -32,3 +32,24 @@ for (const [id, enabled] of [
     }),
   )
 }
+
+it.effect("preserves explicit thinking settings and combines required beta headers", () =>
+  Effect.gen(function* () {
+    for (const thinking of [
+      { type: "disabled" },
+      { type: "adaptive", block_binding: { prefix_mismatch_behavior: "error" } },
+    ] as const) {
+      const request = LLM.request({
+        model: AnthropicMessages.route.model({ id: "claude-fable-5-1" }),
+        prompt: "Hello",
+        providerOptions: { thinking, contextManagement: { edits: [{ type: "compact_20260112" }] } },
+      })
+      const compiled = yield* compileRequest(request)
+      const prepared = yield* AnthropicMessages.route.prepareTransport(compiled.body, request)
+      expect(compiled.body.thinking).toEqual(thinking)
+      expect(prepared.request.headers["anthropic-beta"]).toBe(
+        thinking.type === "disabled" ? "compact-2026-01-12" : "compact-2026-01-12,thinking-binding-controls-2026-08-01",
+      )
+    }
+  }),
+)
