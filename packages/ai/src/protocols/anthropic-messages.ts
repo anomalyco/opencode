@@ -50,15 +50,24 @@ const SSE_EVENTS = new Set([
 ])
 export const framing = Framing.sseEvents(SSE_EVENTS)
 
+export type ThinkingBlockBinding = {
+  readonly prefix_mismatch_behavior?: "error" | "drop_block" | (string & {})
+}
+
 export type ThinkingInput =
   | {
       readonly type: "adaptive"
       readonly display?: "summarized" | "omitted"
+      readonly block_binding?: ThinkingBlockBinding
     }
   | {
       readonly type: "disabled"
     }
-  | ({ readonly type: "enabled"; readonly display?: "summarized" | "omitted" } & (
+  | ({
+      readonly type: "enabled"
+      readonly display?: "summarized" | "omitted"
+      readonly block_binding?: ThinkingBlockBinding
+    } & (
       | { readonly budgetTokens: number; readonly budget_tokens?: number }
       | { readonly budgetTokens?: number; readonly budget_tokens: number }
     ))
@@ -301,20 +310,27 @@ const AnthropicToolChoice = Schema.Union([
   }),
 ])
 
+const AnthropicThinkingBlockBinding = Schema.Struct({
+  prefix_mismatch_behavior: Schema.optional(Schema.String),
+})
+
 const AnthropicThinking = Schema.Union([
   Schema.Struct({
     type: Schema.tag("enabled"),
     budget_tokens: Schema.Number,
     display: Schema.optional(Schema.Literals(["summarized", "omitted"])),
+    block_binding: Schema.optional(AnthropicThinkingBlockBinding),
   }),
   Schema.Struct({
     type: Schema.tag("adaptive"),
     display: Schema.optional(Schema.Literals(["summarized", "omitted"])),
+    block_binding: Schema.optional(AnthropicThinkingBlockBinding),
   }),
   Schema.Struct({
     type: Schema.tag("disabled"),
   }),
 ])
+type AnthropicThinking = typeof AnthropicThinking.Type
 
 // SDK OutputConfig:2684 {effort?: "low"|"medium"|"high"|"xhigh"|"max"|null, format?: JSONOutputFormat:2399}
 const AnthropicJsonOutputFormat = Schema.Struct({
@@ -1025,8 +1041,9 @@ const resolveOptions = Effect.fn("AnthropicMessages.resolveOptions")(function* (
           ...(outputConfigEffort === undefined ? {} : { effort: outputConfigEffort }),
           ...(outputConfigFormat === undefined ? {} : { format: outputConfigFormat }),
         }
+  const thinking = yield* resolveThinking(input?.thinking)
   return {
-    thinking: yield* resolveThinking(input?.thinking),
+    thinking: applyThinkingBindingDefault(request.model, thinking),
     effort: outputConfigEffort,
     output_config,
     service_tier,
@@ -1037,15 +1054,41 @@ const resolveOptions = Effect.fn("AnthropicMessages.resolveOptions")(function* (
   }
 })
 
+const supportsThinkingBlockBinding = (model: LLMRequest["model"]) => {
+  const override = model.compatibility?.supportsThinkingBlockBinding
+  if (override !== undefined) return override
+  // Accept gateway namespaces and Vertex suffixes without treating a snapshot date as a minor version.
+  const version = /(?:^|[./])claude-[a-z]+-(?<major>\d+)(?:[.-](?<minor>\d{1,2}))?(?:$|[-:@])/i.exec(model.id)?.groups
+  if (!version) return false
+  const major = Number(version.major)
+  const minor = Number(version.minor ?? 0)
+  return major > 5 || (major === 5 && minor >= 1)
+}
+
+const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: AnthropicThinking | undefined) => {
+  if (thinking?.type === "disabled") return thinking
+  if (!supportsThinkingBlockBinding(model)) return thinking
+  return {
+    ...(thinking ?? { type: "adaptive" as const }),
+    block_binding: {
+      prefix_mismatch_behavior: "drop_block",
+      ...thinking?.block_binding,
+    },
+  }
+}
+
 const resolveThinking = Effect.fn("AnthropicMessages.resolveThinking")(function* (input: unknown) {
   if (!ProviderShared.isRecord(input)) return undefined
+  if (input.type === "disabled") return { type: "disabled" as const }
+  if (input.type !== "adaptive" && input.type !== "enabled") return undefined
+  const block_binding = yield* ProviderShared.validateWith(
+    Schema.decodeUnknownEffect(Schema.UndefinedOr(AnthropicThinkingBlockBinding)),
+  )(input.block_binding)
   const display =
     input.display === "summarized" || input.display === "omitted"
       ? (input.display as "summarized" | "omitted")
       : undefined
-  if (input.type === "adaptive") return { type: "adaptive" as const, ...(display === undefined ? {} : { display }) }
-  if (input.type === "disabled") return { type: "disabled" as const }
-  if (input.type !== "enabled") return undefined
+  if (input.type === "adaptive") return { type: "adaptive" as const, display, block_binding }
   const budget =
     typeof input.budgetTokens === "number"
       ? input.budgetTokens
@@ -1054,7 +1097,7 @@ const resolveThinking = Effect.fn("AnthropicMessages.resolveThinking")(function*
         : undefined
   if (budget === undefined)
     return yield* ProviderShared.invalidRequest("Anthropic thinking provider option requires budgetTokens")
-  return { type: "enabled" as const, budget_tokens: budget, ...(display === undefined ? {} : { display }) }
+  return { type: "enabled" as const, budget_tokens: budget, display, block_binding }
 })
 
 const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (request: LLMRequest) {
@@ -1636,24 +1679,21 @@ export const protocol = Protocol.make({
   },
 })
 
-export const transport = <Body extends Pick<AnthropicMessagesBody, "messages" | "context_management">>() => {
+export const transport = <
+  Body extends Pick<AnthropicMessagesBody, "messages" | "context_management" | "thinking">,
+>() => {
   const http = HttpTransport.httpJson<Body, string>({ framing })
   return {
     ...http,
     prepare: (input: Parameters<typeof http.prepare>[0]) => {
-      if (
-        !input.body.context_management?.edits.length &&
-        !input.body.messages.some((message) => message.content.some((block) => block.type === "compaction"))
-      )
-        return http.prepare(input)
+      const requiredBetas = requiredBetaHeaders(input.body)
+      if (requiredBetas.length === 0) return http.prepare(input)
       const headers = Headers.fromInput(input.request.http?.headers)
-      const betas = new Set(
-        (headers["anthropic-beta"] ?? "")
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean),
-      )
-      betas.add("compact-2026-01-12")
+      const existingBetas = (headers["anthropic-beta"] ?? "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+      const betas = new Set([...existingBetas, ...requiredBetas])
       return http.prepare({
         ...input,
         request: LLMRequest.update(input.request, {
@@ -1665,6 +1705,20 @@ export const transport = <Body extends Pick<AnthropicMessagesBody, "messages" | 
       })
     },
   }
+}
+
+function requiredBetaHeaders(body: Pick<AnthropicMessagesBody, "messages" | "context_management" | "thinking">) {
+  const betas: string[] = []
+  const requestsCompaction = (body.context_management?.edits.length ?? 0) > 0
+  const replaysCompaction = body.messages.some((message) =>
+    message.content.some((block) => block.type === "compaction"),
+  )
+  if (requestsCompaction || replaysCompaction) betas.push("compact-2026-01-12")
+
+  const thinking = body.thinking
+  if (thinking && thinking.type !== "disabled" && thinking.block_binding)
+    betas.push("thinking-binding-controls-2026-08-01")
+  return betas
 }
 
 export const route = Route.make({

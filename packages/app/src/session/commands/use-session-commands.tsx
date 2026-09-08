@@ -194,7 +194,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const openTerminal = () => {
     actions.session.layout.view().terminal.open()
-    if (terminal.all().length > 0) terminal.new({ focus: true })
+    if (terminal.all().length > 0) terminal.new()
     if (terminal.all().length === 0) terminal.requestFocus()
   }
 

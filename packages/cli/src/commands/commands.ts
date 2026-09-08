@@ -431,7 +431,24 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         }),
       ],
     }),
-    Spec.make("pair", { description: "Show server pairing information" }),
+    Spec.make("pair", {
+      description: "Show server pairing information",
+      params: {
+        url: Flag.string("url").pipe(
+          Flag.withDescription("Advertise an external HTTP(S) server URL in the pairing QR code"),
+          Flag.mapTryCatch(
+            (value) => {
+              const url = new URL(value)
+              if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash)
+                throw new Error("Invalid pairing URL")
+              return url.href.replace(/\/+$/, "")
+            },
+            () => "Expected an HTTP(S) server URL without credentials, query parameters, or a fragment",
+          ),
+          Flag.optional,
+        ),
+      },
+    }),
     Spec.make("serve", {
       description: "Start the v2 API and web server",
       params: {

@@ -88,6 +88,7 @@
     "fuzzysort": "catalog:",
     "ghostty-web": "github:anomalyco/ghostty-web#83c0a07b8628b748aed073b232cb4b52a6ca11c1",
     "luxon": "catalog:",
+    "qr-scanner": "1.4.2",
     "remeda": "catalog:",
     "solid-js": "catalog:",
     "solid-presence": "0.2.0",

@@ -99,7 +99,7 @@ export function AppBaseProviders(
 
 export function AppInterface(props: {
   children?: JSX.Element
-  defaultServer: ServerConnection.Key
+  defaultServer?: ServerConnection.Key
   canonicalLocalServer?: ServerConnection.Key
   servers?: Array<ServerConnection.Any>
   router?: Component<BaseRouterProps>

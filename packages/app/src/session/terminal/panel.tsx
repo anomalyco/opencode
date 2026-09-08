@@ -330,7 +330,7 @@ export function TerminalPanel(
                       <IconButton
                         icon={<Icon name="plus-small" size="large" />}
                         variant="ghost"
-                        onClick={() => terminal.new({ focus: true })}
+                        onClick={() => terminal.new()}
                         aria-label={language.t("command.terminal.new")}
                       />
                     </Tooltip>

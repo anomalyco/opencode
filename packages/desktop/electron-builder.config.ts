@@ -174,7 +174,7 @@ function getConfig() {
         protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
         publish: {
           provider: "generic",
-          url: "https://opencode.ai/update/api/beta/desktop/github/",
+          url: "https://opencode.ai/update/api/beta/desktop/opencode/",
           channel: "latest",
         },
         deb: { fpm: [metainfoFpm(appId)] },
@@ -189,7 +189,7 @@ function getConfig() {
         protocols: { name: "OpenCode", schemes: ["opencode"] },
         publish: {
           provider: "generic",
-          url: "https://opencode.ai/update/api/latest/desktop/github/",
+          url: "https://opencode.ai/update/api/latest/desktop/opencode/",
           channel: "latest",
         },
         deb: { fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
