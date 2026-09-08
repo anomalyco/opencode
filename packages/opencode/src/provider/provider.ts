@@ -1055,6 +1055,7 @@ const ProviderCost = Schema.Struct({
   input: Schema.Finite,
   output: Schema.Finite,
   cache: ProviderCacheCost,
+  currency: optional(Schema.String),
   tiers: optional(Schema.Array(ProviderCostTier)),
   experimentalOver200K: optional(
     Schema.Struct({

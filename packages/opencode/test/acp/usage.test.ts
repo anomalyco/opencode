@@ -43,7 +43,7 @@ const assistantWithoutProvider = (): UsageService.SessionMessage => ({
   },
 })
 
-const model = (providerID: ProviderV2.ID, modelID: ModelV2.ID, context: number): Provider.Model => ({
+const model = (providerID: ProviderV2.ID, modelID: ModelV2.ID, context: number, currency?: string): Provider.Model => ({
   id: modelID,
   providerID,
   api: {
@@ -66,6 +66,7 @@ const model = (providerID: ProviderV2.ID, modelID: ModelV2.ID, context: number):
     input: 0,
     output: 0,
     cache: { read: 0, write: 0 },
+    ...(currency ? { currency } : {}),
   },
   limit: {
     context,
@@ -77,7 +78,7 @@ const model = (providerID: ProviderV2.ID, modelID: ModelV2.ID, context: number):
   release_date: "2026-01-01",
 })
 
-const providers = (context = 128_000): Record<ProviderV2.ID, Provider.Info> => {
+const providers = (context = 128_000, currency?: string): Record<ProviderV2.ID, Provider.Info> => {
   const providerID = ProviderV2.ID.make("anthropic")
   const modelID = ModelV2.ID.make("claude-sonnet")
   return {
@@ -88,7 +89,7 @@ const providers = (context = 128_000): Record<ProviderV2.ID, Provider.Info> => {
       env: [],
       options: {},
       models: {
-        [modelID]: model(providerID, modelID, context),
+        [modelID]: model(providerID, modelID, context, currency),
       },
     },
   }
@@ -97,6 +98,7 @@ const providers = (context = 128_000): Record<ProviderV2.ID, Provider.Info> => {
 const fakeLayer = (input: {
   readonly messages?: Effect.Effect<readonly UsageService.SessionMessage[], unknown>
   readonly providers?: (directory: string) => Effect.Effect<Record<ProviderV2.ID, Provider.Info>, unknown>
+  readonly display?: (directory: string) => Effect.Effect<Parameters<typeof UsageService.displayCost>[2], unknown>
 }) =>
   LayerNode.compile(UsageService.node, [
     [
@@ -114,6 +116,15 @@ const fakeLayer = (input: {
         UsageService.ContextLimitLoader,
         UsageService.ContextLimitLoader.of({
           providers: input.providers ?? (() => Effect.succeed(providers())),
+        }),
+      ),
+    ],
+    [
+      UsageService.configLoaderNode,
+      Layer.succeed(
+        UsageService.ConfigLoader,
+        UsageService.ConfigLoader.of({
+          display: input.display ?? (() => Effect.succeed(undefined)),
         }),
       ),
     ],
@@ -174,6 +185,31 @@ describe("acp usage", () => {
 
   test("calculates total session cost from assistant messages", () => {
     expect(UsageService.totalSessionCost([assistant({ cost: 1.25 }), user(), assistant({ cost: 2.5 })])).toBe(3.75)
+  })
+
+  test("displayCost keeps the source currency when no display currency is configured", () => {
+    expect(UsageService.displayCost(1.5, "EUR", undefined)).toEqual({ amount: 1.5, currency: "EUR" })
+    expect(UsageService.displayCost(1.5, "EUR", {})).toEqual({ amount: 1.5, currency: "EUR" })
+  })
+
+  test("displayCost converts to the configured display currency", () => {
+    const result = UsageService.displayCost(1.5, "USD", { currency: "CNY" })
+    expect(result.currency).toBe("CNY")
+    expect(result.amount).toBeCloseTo(1.5 * 7.15, 10)
+  })
+
+  test("displayCost prefers user-provided rates", () => {
+    const result = UsageService.displayCost(1.5, "USD", { currency: "CNY", exchangeRates: { CNY: 7.2 } })
+    expect(result).toEqual({ amount: 10.8, currency: "CNY" })
+  })
+
+  test("displayCost never relabels when conversion is impossible", () => {
+    expect(UsageService.displayCost(1.5, "USD", { currency: "XYZ" })).toEqual({ amount: 1.5, currency: "USD" })
+    expect(UsageService.displayCost(1.5, "XYZ", { currency: "CNY" })).toEqual({ amount: 1.5, currency: "XYZ" })
+    expect(UsageService.displayCost(1.5, "USD", { currency: "CNY", exchangeRates: { CNY: 0 } })).toEqual({
+      amount: 1.5,
+      currency: "USD",
+    })
   })
 
   it.effect("loads context limits from providers and caches by directory/provider/model", () => {
@@ -311,6 +347,79 @@ describe("acp usage", () => {
       Effect.provide(
         fakeLayer({
           messages: Effect.succeed([assistant({ cost: 1, providerID: "missing" })]),
+        }),
+      ),
+    )
+  })
+
+  it.effect("reports the provider currency when no display currency is configured", () => {
+    const updates: SessionNotification[] = []
+    return Effect.gen(function* () {
+      const usage = yield* UsageService.Service
+      yield* usage.sendUpdate({
+        connection: connection(updates),
+        sessionID: "ses_1",
+        directory: "/workspace",
+      })
+
+      expect(updates[0]?.update).toMatchObject({
+        cost: { amount: 1, currency: "EUR" },
+      })
+    }).pipe(
+      Effect.provide(
+        fakeLayer({
+          messages: Effect.succeed([assistant({ cost: 1 })]),
+          providers: () => Effect.succeed(providers(128_000, "EUR")),
+        }),
+      ),
+    )
+  })
+
+  it.effect("converts usage cost to the configured display currency", () => {
+    const updates: SessionNotification[] = []
+    return Effect.gen(function* () {
+      const usage = yield* UsageService.Service
+      yield* usage.sendUpdate({
+        connection: connection(updates),
+        sessionID: "ses_1",
+        directory: "/workspace",
+      })
+
+      const update = updates[0]?.update
+      expect(update).toMatchObject({ sessionUpdate: "usage_update" })
+      if (update?.sessionUpdate !== "usage_update") return
+      if (!update.cost) return
+      expect(update.cost.currency).toBe("CNY")
+      expect(update.cost.amount).toBeCloseTo(1.5 * 7.2, 10)
+    }).pipe(
+      Effect.provide(
+        fakeLayer({
+          messages: Effect.succeed([assistant({ cost: 1.5 })]),
+          display: () => Effect.succeed({ currency: "CNY", exchangeRates: { CNY: 7.2 } }),
+        }),
+      ),
+    )
+  })
+
+  it.effect("keeps the provider currency when the display currency has no rate", () => {
+    const updates: SessionNotification[] = []
+    return Effect.gen(function* () {
+      const usage = yield* UsageService.Service
+      yield* usage.sendUpdate({
+        connection: connection(updates),
+        sessionID: "ses_1",
+        directory: "/workspace",
+      })
+
+      expect(updates[0]?.update).toMatchObject({
+        cost: { amount: 1.5, currency: "EUR" },
+      })
+    }).pipe(
+      Effect.provide(
+        fakeLayer({
+          messages: Effect.succeed([assistant({ cost: 1.5 })]),
+          providers: () => Effect.succeed(providers(128_000, "EUR")),
+          display: () => Effect.succeed({ currency: "XYZ" }),
         }),
       ),
     )
