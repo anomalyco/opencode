@@ -11,3 +11,4 @@ Usage notes:
   - Format options: "markdown" (default), "text", or "html"
   - This tool is read-only and does not modify any files
   - Results may be summarized if the content is very large
+  - If the response status is not 200, the output starts with an "[HTTP <status> ...]" notice; the body may be a throttle or interstitial page rather than the requested content
