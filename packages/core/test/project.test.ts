@@ -39,7 +39,7 @@ async function rootCommit(dir: string) {
 }
 
 describe("ProjectV2.resolve", () => {
-  it.live("returns global for non-git directory", () =>
+  it.live("derives a stable directory-based id for non-git directory", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
         Effect.promise(() => tmpdir()),
@@ -48,10 +48,43 @@ describe("ProjectV2.resolve", () => {
       const project = yield* ProjectV2.Service
 
       const result = yield* project.resolve(abs(tmp.path))
+      const again = yield* project.resolve(abs(tmp.path))
 
-      expect(result.id).toBe(ProjectV2.ID.make("global"))
-      expect(path.resolve(result.directory)).toBe(path.parse(tmp.path).root)
+      expect(result.id).not.toBe(ProjectV2.ID.global)
+      expect(result.id).toBe(again.id)
+      expect(result.directory).toBe(yield* real(tmp.path))
       expect(result.previous).toBeUndefined()
+      expect(result.vcs).toBeUndefined()
+    }),
+  )
+
+  it.live("gives unrelated non-git directories distinct ids", () =>
+    Effect.gen(function* () {
+      const a = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const b = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const project = yield* ProjectV2.Service
+
+      const resultA = yield* project.resolve(abs(a.path))
+      const resultB = yield* project.resolve(abs(b.path))
+
+      expect(resultA.id).not.toBe(resultB.id)
+      expect(resultA.directory).not.toBe(resultB.directory)
+    }),
+  )
+
+  it.live("still returns global for the literal filesystem root", () =>
+    Effect.gen(function* () {
+      const project = yield* ProjectV2.Service
+
+      const result = yield* project.resolve(abs(path.parse(process.cwd()).root))
+
+      expect(result.id).toBe(ProjectV2.ID.global)
       expect(result.vcs).toBeUndefined()
     }),
   )

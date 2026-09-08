@@ -109,7 +109,16 @@ const layer = Layer.effect(
 
     const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
       const repo = yield* git.repo.discover(input)
-      if (!repo) return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
+      if (!repo) {
+        const resolved = yield* fs.resolve(input)
+        const root = path.parse(resolved).root
+        // Reserve ID.global for the literal filesystem root (or explicit no-project
+        // cases upstream). Every other directory gets a stable identity derived from
+        // its own path, so unrelated non-git directories never collapse into one
+        // shared "global" project/session bucket just because git discovery failed.
+        if (resolved === root) return { id: ID.global, directory: AbsolutePath.make(root), vcs: undefined }
+        return { id: ID.make(Hash.fast(`directory:${resolved}`)), directory: AbsolutePath.make(resolved), vcs: undefined }
+      }
 
       const previous = yield* cached(repo.commonDirectory)
       const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
