@@ -1,7 +1,9 @@
-import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
-import type { DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
-import type { UpdaterState } from "@opencode-ai/app/updater"
-import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
+import type { BrowserPaneEvent } from "@opencode/app/desktop"
+import type { DesktopMenuAction } from "@opencode/app/desktop-menu"
+import type { DesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
+import type { UpdaterState } from "@opencode/app/updater"
+import type { WslServersPlatform } from "@opencode/app/wsl/types"
+import type { BrowserPaneRequest } from "../shared/ipc-rpc/browser"
 import type {
   ClipboardImage,
   DirectoryPickerOptions,
@@ -23,6 +25,11 @@ export type UpdaterAPI = {
 export type ElectronAPI = {
   awaitInitialization(): Promise<ServerReadyData>
   reconnectService(): Promise<ServerReadyData>
+  browserPane: {
+    request(request: BrowserPaneRequest): Promise<void>
+    send(request: BrowserPaneRequest): void
+    onEvent(callback: (value: { readonly bindingID: string; readonly event: BrowserPaneEvent }) => void): () => void
+  }
   wslServers: WslServersAPI
   updater: UpdaterAPI
   consumeInitialDeepLinks(): Promise<string[]>
@@ -39,7 +46,7 @@ export type ElectronAPI = {
     cb: (name: string, insert: Record<string, string>, remove: string[], revision: number) => void,
   ): () => void
   draftGet(key: string): Promise<string | null>
-  draftSet(key: string, value: string): Promise<void>
+  draftSet(key: string, value: string, strict: boolean): Promise<string[]>
   draftDelete(key: string): Promise<void>
   draftBlobPut(data: ArrayBuffer): Promise<string>
   draftBlobGet(id: string): Promise<ArrayBuffer | null>

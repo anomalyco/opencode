@@ -1,4 +1,4 @@
-import type { SessionMessageInfo, SessionMessageUser } from "@opencode-ai/client/promise"
+import type { SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
 
 export function normalizeSessionTab(tab: string, normalizeFileTab: (tab: string) => string) {
   if (!tab.startsWith("file://")) return tab

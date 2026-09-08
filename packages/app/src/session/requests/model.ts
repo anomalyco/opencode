@@ -1,6 +1,6 @@
 import { createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { FormInfo, PermissionRequest } from "@opencode-ai/client/promise"
+import type { FormInfo, PermissionRequest } from "@opencode/client/promise"
 import { useParams } from "@solidjs/router"
 import { showToast } from "@/shell/notifications/toast"
 import { useServerSDK } from "@/runtime/server/client"

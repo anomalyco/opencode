@@ -1,23 +1,23 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type ComponentProps, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useData } from "../context"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useI18n } from "@opencode-ai/ui/context/i18n"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { useI18n } from "@opencode/ui/context/i18n"
 import { Markdown } from "../components/markdown"
-import { ImagePreview } from "@opencode-ai/ui/image-preview"
-import { getFilename } from "@opencode-ai/util/path"
+import { ImagePreview } from "@opencode/ui/image-preview"
+import { getFilename } from "@opencode/util/path"
 import { AttachmentCard } from "./attachment-card"
 import { CommentCard } from "./comment-card"
 import { TimelineSeparator } from "../components/timeline-separator"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Button } from "@opencode-ai/ui/button"
-import { TextReveal } from "@opencode-ai/ui/text-reveal"
-import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Icon } from "@opencode/ui/icon"
+import { Button } from "@opencode/ui/button"
+import { TextReveal } from "@opencode/ui/text-reveal"
+import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { BasicTool } from "../components/basic-tool"
 import { reasoningHeading } from "../timeline/projection"
-import { Card } from "@opencode-ai/ui/card"
+import { Card } from "@opencode/ui/card"
 import type {
   PromptAgentAttachment,
   PromptFileAttachment,
@@ -25,7 +25,7 @@ import type {
   SessionMessageAssistantReasoning,
   SessionMessageCompaction,
   SessionMessageUser,
-} from "@opencode-ai/client/promise"
+} from "@opencode/client/promise"
 import type { SessionUserActions, SessionUserComment } from "../actions"
 import { typeLabel } from "../components/message-file"
 
@@ -388,7 +388,13 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
   return (
     <div data-component="session-compaction-message">
       <div class="py-2">
-        <TimelineSeparator label={i18n.t("ui.messagePart.compaction")} />
+        <TimelineSeparator
+          label={i18n.t(
+            props.message.status === "completed" && props.message.providerContext
+              ? "ui.messagePart.providerCompaction"
+              : "ui.messagePart.compaction",
+          )}
+        />
       </div>
       <Show when={summary().trim()}>
         <div data-component="text-part" data-timeline-part-id={props.message.id}>

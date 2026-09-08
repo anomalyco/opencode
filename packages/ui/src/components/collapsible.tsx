@@ -1,6 +1,6 @@
 import { Collapsible as Kobalte, CollapsibleRootProps } from "@kobalte/core/collapsible"
 import { ComponentProps, ParentProps, splitProps } from "solid-js"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@opencode/ui/icon"
 
 export interface CollapsibleProps extends ParentProps<CollapsibleRootProps> {
   class?: string

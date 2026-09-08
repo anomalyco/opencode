@@ -5,7 +5,7 @@ import {
   desktopMenuVisible,
   type DesktopMenuEntry,
   type DesktopMenuRole,
-} from "@opencode-ai/app/desktop-menu"
+} from "@opencode/app/desktop-menu"
 import { MenuCommandTriggered } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 

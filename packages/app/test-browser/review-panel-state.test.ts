@@ -27,7 +27,7 @@ const platform: Platform = {
 }
 
 beforeAll(async () => {
-  mock.module("@opencode-ai/session-ui/v2/session-review-v2", () => ({
+  mock.module("@opencode/session-ui/v2/session-review-v2", () => ({
     SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT: 240,
     SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN: 200,
     SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX: 480,

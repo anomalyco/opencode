@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import { currentSession } from "../utils/mock-server"
 import { installSseTransport } from "../utils/sse-transport"
 

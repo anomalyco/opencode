@@ -1,7 +1,7 @@
 import path from "path"
 import { Effect, Logger } from "effect"
 import { AppNodeBuilder } from "../src/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Database } from "../src/database/database"
 import { Bus } from "../src/bus"
 import { SdkPlugins } from "../src/plugin/sdk"

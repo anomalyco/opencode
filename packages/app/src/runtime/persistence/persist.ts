@@ -32,6 +32,8 @@ export function persistStore<T extends object>(input: {
   deserialize: (raw: string) => T
   sync?: PersistenceSyncAPI
   delay?: number
+  /** Replaces `storage.setItem` for stores whose storage can take the value itself. */
+  write?: (value: T, serialized: string) => void
 }) {
   const delay = input.delay ?? persistSaveDelay
   let dirty = false
@@ -57,6 +59,7 @@ export function persistStore<T extends object>(input: {
     }
     last = next
     input.sync?.[1](input.name, next)
+    if (input.write) return input.write(input.store, next)
     void input.storage.setItem(input.name, next)
   }
 

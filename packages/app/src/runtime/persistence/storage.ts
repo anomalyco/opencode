@@ -1,6 +1,6 @@
 import { Platform, usePlatform } from "@/runtime/platform/platform"
 import { messageSync, type AsyncStorage, type SyncStorage } from "@solid-primitives/storage"
-import { checksum } from "@opencode-ai/util/encode"
+import { checksum } from "@opencode/util/encode"
 import { createResource, onCleanup, type Accessor } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Option, Schema } from "effect"
@@ -484,6 +484,7 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
   const initialized = Persistence.withInitial(schema, initial)
   const json = Schema.fromJsonString(initialized)
   const decode = Schema.decodeUnknownOption(json)
+  const encode = Schema.encodeSync(initialized)
   const serialize = Schema.encodeSync(json)
   const normalize = (raw: string) => {
     const value = decode(raw)
@@ -492,10 +493,12 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
   const store = createStore<S["Type"]>(Schema.decodeUnknownSync(Schema.toType(initialized))(initial))
   const isDesktop = platform.platform === "desktop" && !!platform.storage
   const draft = config.draft ? platform.draftStore : undefined
+  const prefix = `${config.storage ?? "default"}:`
+  // The newest serialized draft, replayed into storage if a slow load finishes after an edit.
+  let draftLatest: string | undefined
 
   const currentStorage = (() => {
     if (draft) {
-      const prefix = `${config.storage ?? "default"}:`
       return {
         getItem: (key: string) => draft.getItem(prefix + key),
         setItem: (key: string, value: string) => draft.setItem(prefix + key, value),
@@ -557,7 +560,6 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
     ]
       .filter((source): source is { storage: SyncStorage | AsyncStorage; key?: string } => !!source?.storage)
       .map((source) => ({ ...source, storage: toAsyncStorage(source.storage) }))
-    let draftLatest: string | undefined
 
     const api: AsyncStorage = {
       getItem: async (key) => {
@@ -602,6 +604,17 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
     serialize,
     deserialize: Schema.decodeUnknownSync(json),
     sync: channel ? messageSync(channel) : undefined,
+    // Drafts take the encoded document itself so large text is externalized without the store
+    // re-parsing the serialized form on every save.
+    write: draft
+      ? (value, serialized) => {
+          draftLatest = serialized
+          // A failed chunk upload is retried by the next save; see drafts.ts.
+          void draft
+            .setDocument(prefix + config.key, encode(value))
+            .catch((error: unknown) => console.error(`[persistence] draft write failed for ${config.key}`, error))
+        }
+      : undefined,
   })
   const state = store[0]
   const setState = persist.setStore

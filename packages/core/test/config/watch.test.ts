@@ -1,8 +1,8 @@
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import type { ConfigDiscovery } from "@opencode-ai/core/config/discovery"
-import { ConfigWatch } from "@opencode-ai/core/config/watch"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import type { ConfigDiscovery } from "@opencode/core/config/discovery"
+import { ConfigWatch } from "@opencode/core/config/watch"
+import { AbsolutePath } from "@opencode/core/schema"
 
 const project = path.resolve("watch-plan-project")
 const root = AbsolutePath.make(path.join(project, ".opencode"))

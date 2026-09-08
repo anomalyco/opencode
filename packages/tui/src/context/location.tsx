@@ -1,4 +1,4 @@
-import type { LocationGetOutput, LocationRef } from "@opencode-ai/client"
+import type { LocationGetOutput, LocationRef } from "@opencode/client"
 import { createContext, createMemo, createSignal, onCleanup, useContext, type ParentProps } from "solid-js"
 import { useClient } from "./client"
 import { useData } from "./data"

@@ -1,4 +1,4 @@
-import type { FileDiffInfo } from "@opencode-ai/client/promise"
+import type { FileDiffInfo } from "@opencode/client/promise"
 import type { Kind } from "@/session/files/file-tree-v2"
 import { normalizeFileTreeV2Path } from "@/session/files/file-tree-v2-model"
 

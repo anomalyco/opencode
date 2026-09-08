@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createStore } from "solid-js/store"
-import { Skill } from "@opencode-ai/schema/skill"
+import { Skill } from "@opencode/schema/skill"
 import type { ComposerPersistedState } from "../types"
 import { createComposerEditorActions } from "./actions"
 

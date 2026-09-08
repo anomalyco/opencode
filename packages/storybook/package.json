@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/storybook",
+  "name": "@opencode/storybook",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,10 +8,10 @@
     "build": "storybook build"
   },
   "devDependencies": {
-    "@opencode-ai/client": "workspace:*",
+    "@opencode/client": "workspace:*",
     "@tailwindcss/vite": "catalog:",
-    "@opencode-ai/session-ui": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@opencode/session-ui": "workspace:*",
+    "@opencode/ui": "workspace:*",
     "@playwright/test": "catalog:",
     "@solidjs/meta": "catalog:",
     "@storybook/addon-a11y": "10.4.4",

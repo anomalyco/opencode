@@ -14,4 +14,8 @@ export const migrations = [
       "CREATE TABLE `state` (\n\t`name` text NOT NULL,\n\t`key` text NOT NULL,\n\t`value` text NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tCONSTRAINT `state_pk` PRIMARY KEY(`name`, `key`)\n);",
     ],
   },
+  {
+    id: "20260907031611_blob-touched",
+    statements: ["ALTER TABLE `blob` ADD `touched_at` integer DEFAULT 0 NOT NULL;"],
+  },
 ]

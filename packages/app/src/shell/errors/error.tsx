@@ -1,12 +1,12 @@
-import { TextField } from "@opencode-ai/ui/text-field"
+import { TextField } from "@opencode/ui/text-field"
 import type { captureException } from "@sentry/solid"
-import { Logo } from "@opencode-ai/ui/logo"
-import { Button } from "@opencode-ai/ui/button"
+import { Logo } from "@opencode/ui/logo"
+import { Button } from "@opencode/ui/button"
 import { Component, createSignal, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@opencode/ui/icon"
 import { errorDescriptionKey, errorStatus } from "./description"
 
 export type InitError = {

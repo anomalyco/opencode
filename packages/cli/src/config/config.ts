@@ -1,7 +1,7 @@
 export * as Config from "./config"
 
-import { Global } from "@opencode-ai/util/global"
-import { Flock } from "@opencode-ai/util/flock"
+import { Global } from "@opencode/util/global"
+import { Flock } from "@opencode/util/flock"
 import { Context, Effect, FileSystem, Layer, Option, Schema } from "effect"
 import { produce, type Draft } from "immer"
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser"

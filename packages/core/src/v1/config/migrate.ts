@@ -1,7 +1,7 @@
 export * as ConfigMigrateV1 from "./migrate.js"
 
-import { Info } from "@opencode-ai/schema/config"
-import { ConfigAgent } from "@opencode-ai/schema/config/agent"
+import { Info } from "@opencode/schema/config"
+import { ConfigAgent } from "@opencode/schema/config/agent"
 import { Schema } from "effect"
 import { ConfigV1 } from "./config.js"
 import { ConfigAgentV1 } from "./agent.js"

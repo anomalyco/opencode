@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode-ai/plugin/tui"
+import { Plugin } from "@opencode/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { batch, createSignal, For } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"

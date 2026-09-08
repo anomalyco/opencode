@@ -413,6 +413,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               model: event.data.model,
               providerState: event.data.providerState,
               summary: event.data.text,
+              providerContext: event.data.providerContext,
               recent: event.data.recent,
             })
             return
@@ -427,6 +428,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               model: event.data.model,
               providerState: event.data.providerState,
               summary: event.data.text,
+              providerContext: event.data.providerContext,
               recent: event.data.recent,
               time: { created },
             }),

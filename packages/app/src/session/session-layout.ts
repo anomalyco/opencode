@@ -4,7 +4,7 @@ import { useLayout } from "@/shell/state/layout"
 import { SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServerSDK } from "@/runtime/server/client"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import { ServerConnection } from "@/runtime/server/registry"
 import { findSessionTab, tabKey, useTabs } from "@/shell/tabs/tabs"
 

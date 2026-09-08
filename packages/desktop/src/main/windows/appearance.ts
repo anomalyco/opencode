@@ -1,5 +1,5 @@
-import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
-import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
+import { resolveThemeVariant } from "@opencode/ui/theme/resolve"
+import type { DesktopTheme } from "@opencode/ui/theme/types"
 import oc2ThemeJson from "../../../../ui/src/theme/themes/oc-2.json"
 import { app, BrowserWindow, nativeImage, nativeTheme } from "electron"
 import type { Path } from "effect"

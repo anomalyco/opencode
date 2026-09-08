@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "kimi-k2.6",
+    "tags": ["prefix:moonshot-chat", "provider:moonshot", "protocol:moonshot-chat", "text", "usage", "thinking-off"],
+    "name": "moonshot-chat/kimi-k2-6-streams-text-with-disabled-thinking",
+    "recordedAt": "2026-09-07T20:35:09.335Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.moonshot.ai/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"kimi-k2.6\",\"messages\":[{\"role\":\"user\",\"content\":\"What is 173 multiplied by 219? Reply with only the final integer.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":4096,\"thinking\":{\"type\":\"disabled\"}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\":\"chatcmpl-6a9f1ffd7d28eaca53fe9b4c\",\"object\":\"chat.completion.chunk\",\"created\":1788813309,\"model\":\"kimi-k2.6\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_45f9e909\"}\n\ndata: {\"id\":\"chatcmpl-6a9f1ffd7d28eaca53fe9b4c\",\"object\":\"chat.completion.chunk\",\"created\":1788813309,\"model\":\"kimi-k2.6\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_45f9e909\"}\n\ndata: {\"id\":\"chatcmpl-6a9f1ffd7d28eaca53fe9b4c\",\"object\":\"chat.completion.chunk\",\"created\":1788813309,\"model\":\"kimi-k2.6\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"378\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_45f9e909\"}\n\ndata: {\"id\":\"chatcmpl-6a9f1ffd7d28eaca53fe9b4c\",\"object\":\"chat.completion.chunk\",\"created\":1788813309,\"model\":\"kimi-k2.6\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"87\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_45f9e909\"}\n\ndata: {\"id\":\"chatcmpl-6a9f1ffd7d28eaca53fe9b4c\",\"object\":\"chat.completion.chunk\",\"created\":1788813309,\"model\":\"kimi-k2.6\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\",\"usage\":{\"prompt_tokens\":23,\"completion_tokens\":5,\"total_tokens\":28,\"completion_tokens_details\":{\"reasoning_tokens\":1}}}],\"system_fingerprint\":\"fpv0_45f9e909\"}\n\ndata: {\"id\":\"chatcmpl-6a9f1ffd7d28eaca53fe9b4c\",\"object\":\"chat.completion.chunk\",\"created\":1788813309,\"model\":\"kimi-k2.6\",\"choices\":[],\"usage\":{\"prompt_tokens\":23,\"completion_tokens\":5,\"total_tokens\":28,\"completion_tokens_details\":{\"reasoning_tokens\":1}}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

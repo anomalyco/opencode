@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { createSignal } from "solid-js"
 import { RGBA } from "@opentui/core"
-import { DEFAULT_THEME, resolveTheme, selectTheme, type ContextName } from "@opencode-ai/theme/tui"
+import { DEFAULT_THEME, resolveTheme, selectTheme, type ContextName } from "@opencode/theme/tui"
 import { createComponentTheme, createComponentThemeView } from "../../../src/theme/component"
 
 test("provides reactive properties, states, contexts, and color operations", () => {

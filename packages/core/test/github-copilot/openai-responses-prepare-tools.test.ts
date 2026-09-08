@@ -4,7 +4,7 @@ import type {
   LanguageModelV3FunctionTool,
   LanguageModelV3ProviderTool,
 } from "@ai-sdk/provider"
-import { prepareResponsesTools } from "@opencode-ai/core/github-copilot/responses/openai-responses-prepare-tools"
+import { prepareResponsesTools } from "@opencode/core/github-copilot/responses/openai-responses-prepare-tools"
 
 function prepare(strict: boolean | undefined, strictJsonSchema: boolean) {
   const tool: LanguageModelV3FunctionTool = {

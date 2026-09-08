@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { Flock } from "@opencode-ai/util/flock"
-import { Global } from "@opencode-ai/util/global"
+import { Flock } from "@opencode/util/flock"
+import { Global } from "@opencode/util/global"
 import { Effect, FileSystem, Option, Schema } from "effect"
 import { expect, test } from "bun:test"
 import { parse } from "jsonc-parser"

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { OpenCodeEvent } from "@opencode-ai/client/promise"
-import { base64Encode } from "@opencode-ai/util/encode"
+import type { OpenCodeEvent } from "@opencode/client/promise"
+import { base64Encode } from "@opencode/util/encode"
 import { currentSession, mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible } from "../utils/waits"
 

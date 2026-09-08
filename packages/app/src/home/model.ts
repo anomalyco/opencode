@@ -4,7 +4,7 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
 import { toggleHomeProjectSelection } from "@/shell/layout/helpers"
 import { createEffect, createMemo, startTransition } from "solid-js"
-import type { SessionInfo } from "@opencode-ai/client/promise"
+import type { SessionInfo } from "@opencode/client/promise"
 
 export function createHomeController() {
   const layout = useLayout()

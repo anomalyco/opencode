@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { QueryClient } from "@tanstack/solid-query"
-import type { WorktreeDirectory } from "@opencode-ai/client/promise"
+import type { WorktreeDirectory } from "@opencode/client/promise"
 import { createWorktreeInventory, withWorktreeInventory, worktreeInventoryKey } from "./inventory"
 import { ServerScope } from "@/runtime/server/scope"
 import { normalizeProjectInfo, updateProjectInfo } from "@/runtime/server/global-sync/utils"

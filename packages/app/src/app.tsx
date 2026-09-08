@@ -1,8 +1,8 @@
 import "@/index.css"
-import { DialogProvider } from "@opencode-ai/ui/context/dialog"
-import { FileComponentProvider } from "@opencode-ai/ui/context/file"
-import { Font } from "@opencode-ai/ui/font"
-import { ThemeProvider } from "@opencode-ai/ui/theme/context"
+import { DialogProvider } from "@opencode/ui/context/dialog"
+import { FileComponentProvider } from "@opencode/ui/context/file"
+import { Font } from "@opencode/ui/font"
+import { ThemeProvider } from "@opencode/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
@@ -95,7 +95,7 @@ export function AppBaseProviders(
 
 export function AppInterface(props: {
   children?: JSX.Element
-  defaultServer: ServerConnection.Key
+  defaultServer?: ServerConnection.Key
   canonicalLocalServer?: ServerConnection.Key
   servers?: Array<ServerConnection.Any>
   router?: Component<BaseRouterProps>

@@ -1,10 +1,10 @@
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { Menu } from "@opencode-ai/ui/menu"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { Icon } from "@opencode-ai/ui/icon"
-import { getFilename } from "@opencode-ai/util/path"
+import { Menu } from "@opencode/ui/menu"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { Icon } from "@opencode/ui/icon"
+import { getFilename } from "@opencode/util/path"
 import { useLanguage } from "@/runtime/i18n/language"
 import { sameDirectory } from "@/workspaces/paths"
 
@@ -177,7 +177,7 @@ export function PromptWorkspaceSelector(props: {
                     </span>
                   </Menu.SubTrigger>
                   <Menu.Portal>
-                    <Menu.SubContent class="max-h-[calc(100dvh-16px)] w-[200px] overflow-y-auto">
+                    <Menu.SubContent class="max-h-[224px] w-[200px] overflow-y-auto">
                       <Show when={props.workspaces.length >= 10}>
                         <div class="flex h-7 items-center gap-2 rounded-sm ps-3 pe-2 text-v2-icon-icon-muted">
                           <Icon name="magnifying-glass" size="small" class="shrink-0" />

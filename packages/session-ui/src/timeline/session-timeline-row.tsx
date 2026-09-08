@@ -3,9 +3,9 @@ import type {
   SessionMessageInfo,
   SessionMessageUser,
   SessionStatus,
-} from "@opencode-ai/client/promise"
-import { useI18n } from "@opencode-ai/ui/context/i18n"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+} from "@opencode/client/promise"
+import { useI18n } from "@opencode/ui/context/i18n"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { For, Show, createMemo, type Accessor, type JSX } from "solid-js"
 import type { SessionUserActions, SessionUserComment } from "../actions"
 import { useData } from "../context"

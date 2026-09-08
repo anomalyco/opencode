@@ -1,4 +1,4 @@
-import type { OpenCodeEvent } from "@opencode-ai/client"
+import type { OpenCodeEvent } from "@opencode/client"
 import { useClient } from "./client"
 
 type EventMetadata = {

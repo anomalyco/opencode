@@ -40,7 +40,7 @@ describe("prompt persistence", () => {
     async (raw) => {
       const store = createDraftStore({
         get: async () => raw,
-        set: async () => undefined,
+        set: async () => [],
         remove: async () => undefined,
         putBlob: async () => "unused",
         getBlob: async () => null,
@@ -68,7 +68,10 @@ describe("prompt persistence", () => {
     const blobs = new Map<string, Blob>()
     const store = createDraftStore({
       get: async (key) => documents.get(key) ?? null,
-      set: async (key, value) => void documents.set(key, value),
+      set: async (key, value) => {
+        documents.set(key, value)
+        return []
+      },
       remove: async (key) => void documents.delete(key),
       putBlob: async (blob) => {
         blobs.set("composer-image", blob)
@@ -170,7 +173,10 @@ describe("prompt persistence", () => {
     const documents = new Map<string, string>()
     const store = createDraftStore({
       get: async (key) => documents.get(key) ?? null,
-      set: async (key, value) => void documents.set(key, value),
+      set: async (key, value) => {
+        documents.set(key, value)
+        return []
+      },
       remove: async (key) => void documents.delete(key),
       putBlob: async () => "blob",
       getBlob: async () => null,
@@ -201,7 +207,10 @@ describe("prompt persistence", () => {
     const documents = new Map<string, string>()
     const store = createDraftStore({
       get: async (key) => documents.get(key) ?? null,
-      set: async (key, value) => void documents.set(key, value),
+      set: async (key, value) => {
+        documents.set(key, value)
+        return []
+      },
       remove: async (key) => void documents.delete(key),
       putBlob: async () => "blob",
       getBlob: async () => null,
@@ -233,7 +242,10 @@ test("moves image data URLs into blobs and hydrates object URLs", async () => {
   const blobs = new Map<string, Blob>()
   const store = createDraftStore({
     get: async (key) => documents.get(key) ?? null,
-    set: async (key, value) => void documents.set(key, value),
+    set: async (key, value) => {
+      documents.set(key, value)
+      return []
+    },
     remove: async (key) => void documents.delete(key),
     putBlob: async (blob) => {
       const id = String(blob.size)
@@ -255,7 +267,10 @@ test("does not let delayed blob migration overwrite a newer draft", async () => 
   const migration = Promise.withResolvers<void>()
   const store = createDraftStore({
     get: async () => null,
-    set: async (key, value) => void documents.set(key, value),
+    set: async (key, value) => {
+      documents.set(key, value)
+      return []
+    },
     remove: async () => undefined,
     putBlob: async () => {
       await migration.promise

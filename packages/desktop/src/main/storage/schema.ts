@@ -6,10 +6,12 @@ export const document = sqliteTable("document", {
   value: text().notNull(),
 })
 
-// Images referenced from documents by content hash.
+// Images and text chunks referenced from documents by content hash. `touched_at` is the last time
+// a blob was uploaded or a written document referenced it; collection leaves recent blobs alone.
 export const blobs = sqliteTable("blob", {
   id: text().primaryKey(),
   data: blob({ mode: "buffer" }).notNull(),
+  touched_at: integer().notNull().default(0),
 })
 
 // Everything the renderer persists through `platform.storage(name)`. `name` is the storage

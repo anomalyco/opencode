@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/latex",
+  "name": "@opencode/latex",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "workspace:*",
+    "@opencode/plugin": "workspace:*",
     "@opentui/core": "catalog:",
     "string-width": "catalog:"
   },

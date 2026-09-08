@@ -24,13 +24,13 @@ jobs:
       - uses: ./.github/actions/setup-bun
 
       - name: Build
-        working-directory: packages/www
+        working-directory: services/www
         run: bun run build
         env:
           CLOUDFLARE_ENV: ${{ github.ref_name == 'v2' && 'production' || 'dev' }}
 
       - name: Deploy
-        working-directory: packages/www
+        working-directory: services/www
         run: bun run deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

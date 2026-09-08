@@ -8,7 +8,7 @@ The Effect plugin API grants plugins two in-process capabilities:
 ## Defining A Plugin
 
 ```ts
-import { Plugin } from "@opencode-ai/plugin/effect"
+import { Plugin } from "@opencode/plugin/effect"
 import { Effect } from "effect"
 
 export default Plugin.define({
