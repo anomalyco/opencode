@@ -101,7 +101,8 @@ export const SnowflakeCortexPlugin = define({
           label: "Login with Snowflake (External Browser)",
           form: [...accountForm, { type: "string", key: "role", title: "Snowflake role (optional)" }],
         },
-        refresh,
+        // An environment-token override must work even when the saved OAuth login has expired.
+        refresh: (value) => (envToken() ? Effect.succeed(value) : refresh(value)),
         label: (value) => normalizeAccount(value.metadata?.account),
         authorize: (answer) =>
           Effect.gen(function* () {

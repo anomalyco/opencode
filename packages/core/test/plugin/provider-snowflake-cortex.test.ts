@@ -15,7 +15,6 @@ import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
-import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { expect } from "bun:test"
 import { Effect, Layer, Schedule, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
@@ -67,18 +66,17 @@ const fixture = Effect.fn(function* () {
     model: Model.Ref.make({ providerID, id: modelID }),
   }
   const send = Effect.gen(function* () {
-    const connection = yield* integrations.connection.active(integrationID)
-    const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
     const model = yield* Effect.gen(function* () {
       const model = yield* catalog.model.get(providerID, modelID)
       if (!model || String(model.settings?.baseURL).includes("${")) return yield* Effect.fail("Catalog pending")
       return model
     }).pipe(Effect.retry({ times: 100, schedule: Schedule.spaced("1 millis") }))
-    const resolved = yield* ModelResolver.fromCatalogModel(model, credential)
+    const resolver = yield* ModelResolver.Service
+    const resolved = yield* resolver.resolveModel(model)
     const service = yield* SessionModelRequest.Service
     const prepared = yield* service.prepare({
       kind: "primary",
-      scope: { session, agentID: scope.agent, model: SessionRunnerModel.resolved(resolved, model) },
+      scope: { session, agentID: scope.agent, model: resolved },
       transcript: { system: [], messages: [Message.user("Hello")] },
     })
     return yield* LLMClient.stream(prepared.request, prepared.options).pipe(
@@ -86,8 +84,8 @@ const fixture = Effect.fn(function* () {
       Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer), Layer.fresh)),
       Effect.provideService(HttpClient.HttpClient, http),
     )
-  }).pipe(Effect.provide(SessionModelRequest.layer))
-  return { requests, replies, integrations, hooks, scope, send }
+  }).pipe(Effect.provide(SessionModelRequest.layer), Effect.provide(ModelResolver.layer))
+  return { requests, replies, catalog, integrations, hooks, scope, send }
 })
 
 const status = Effect.fn(function* (attemptID: Integration.AttemptID) {
@@ -212,6 +210,100 @@ it.live("rejects a mismatched callback state before token exchange", () =>
       expect((yield* Effect.promise(() => fetch(callback))).status).toBe(400)
       expect(yield* status(attempt.attemptID)).toMatchObject({ status: "failed", message: "Invalid OAuth state" })
       expect(test.requests).toHaveLength(0)
+    }),
+  ),
+)
+
+it.live("uses environment tokens rather than the account identifier and bypasses expired stored OAuth", () =>
+  withEnv(
+    { ...env, SNOWFLAKE_ACCOUNT: `${endpoint}/`, SNOWFLAKE_CORTEX_TOKEN: "env-token", SNOWFLAKE_CORTEX_PAT: "env-pat" },
+    () =>
+      Effect.gen(function* () {
+        const test = yield* fixture()
+        expect(yield* test.integrations.connection.active(integrationID)).toEqual({
+          type: "env",
+          name: "SNOWFLAKE_CORTEX_TOKEN",
+        })
+        expect((yield* test.catalog.provider.get(providerID))?.package).toBe("@opencode/ai/providers/openai-compatible")
+        expect(yield* test.hooks.has("aisdk", "sdk", providerID)).toBe(false)
+
+        test.replies.push(Response.json({ message: "Conversation complete" }, { status: 400 }))
+        expect((yield* test.send).find((event) => event.type === "finish")?.reason.normalized).toBe("stop")
+        expect(test.requests[0].url).toBe(`${endpoint}/api/v2/cortex/v1/chat/completions`)
+        expect(test.requests[0].headers.get("authorization")).toBe("Bearer env-token")
+
+        const credentials = yield* Credential.Service
+        yield* credentials.create({
+          integrationID,
+          value: Credential.OAuth.make({
+            type: "oauth",
+            methodID,
+            access: "expired",
+            refresh: "revoked-refresh",
+            expires: 1,
+            metadata: { account: "other-account" },
+          }),
+        })
+        test.replies.push(Response.json({ message: "Conversation complete" }, { status: 400 }))
+        expect((yield* test.send).find((event) => event.type === "finish")?.reason.normalized).toBe("stop")
+        expect(test.requests).toHaveLength(2)
+        expect(test.requests[1].url).toBe(`${endpoint}/api/v2/cortex/v1/chat/completions`)
+        expect(test.requests[1].headers.get("authorization")).toBe("Bearer env-token")
+      }),
+  ),
+)
+
+it.live("requires a token separately from the account and supports environment PATs", () =>
+  withEnv({ ...env, SNOWFLAKE_ACCOUNT: "myorg-myaccount" }, () =>
+    Effect.gen(function* () {
+      const test = yield* fixture()
+      expect(yield* test.integrations.connection.active(integrationID)).toBeUndefined()
+      yield* withEnv({ SNOWFLAKE_CORTEX_PAT: "env-pat" }, () =>
+        Effect.gen(function* () {
+          test.replies.push(Response.json({ message: "Conversation complete" }, { status: 400 }))
+          expect((yield* test.send).find((event) => event.type === "finish")?.reason.normalized).toBe("stop")
+          expect(test.requests[0].headers.get("authorization")).toBe("Bearer env-pat")
+          test.replies.push(Response.json({ message: "Invalid model" }, { status: 400 }))
+          expect((yield* test.send.pipe(Effect.exit))._tag).toBe("Failure")
+        }),
+      )
+    }),
+  ),
+)
+
+it.live("refreshes expired OAuth during native model resolution and persists rotated credentials", () =>
+  withEnv(env, () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const saved = yield* credentials.create({
+        integrationID,
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID,
+          access: "expired",
+          refresh: "refresh",
+          expires: 1,
+          metadata: { account: "myorg-myaccount" },
+        }),
+      })
+      const test = yield* fixture()
+      test.replies.push(
+        Response.json({ access_token: "renewed", refresh_token: "rotated-refresh", expires_in: 3600 }),
+        Response.json({ message: "Conversation complete" }, { status: 400 }),
+      )
+      expect((yield* test.send).find((event) => event.type === "finish")?.reason.normalized).toBe("stop")
+      expect(test.requests[0].url).toBe(`${endpoint}/oauth/token-request`)
+      expect(Object.fromEntries(new URLSearchParams(yield* Effect.promise(() => test.requests[0].text())))).toEqual({
+        grant_type: "refresh_token",
+        refresh_token: "refresh",
+        client_id: "LOCAL_APPLICATION",
+      })
+      expect(test.requests[1].headers.get("authorization")).toBe("Bearer renewed")
+      expect((yield* credentials.get(saved.id))?.value).toMatchObject({
+        access: "renewed",
+        refresh: "rotated-refresh",
+        metadata: { account: "myorg-myaccount" },
+      })
     }),
   ),
 )
