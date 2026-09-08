@@ -1,4 +1,5 @@
 import type { Effect } from "effect"
+import type { DiagnosticKind } from "../codemode.js"
 import type { SafeObject } from "../tool-runtime.js"
 import type { Values } from "../values.js"
 
@@ -157,18 +158,6 @@ export class GeneratorReturn {
 export class ErrorConstructorReference {
   constructor(readonly name: string) {}
 }
-
-export type DiagnosticKind =
-  | "ParseError"
-  | "UnsupportedSyntax"
-  | "UnknownTool"
-  | "InvalidToolInput"
-  | "InvalidToolOutput"
-  | "InvalidDataValue"
-  | "ToolCallLimitExceeded"
-  | "TimeoutExceeded"
-  | "ToolFailure"
-  | "ExecutionFailure"
 
 export const OptionalShortCircuit: unique symbol = Symbol("codemode.optional-short-circuit")
 

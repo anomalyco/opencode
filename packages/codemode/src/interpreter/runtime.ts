@@ -50,6 +50,7 @@ import {
   invokeGlobalMethod,
   invokeGroupBy,
   invokeIntrinsic,
+  toPrimitive,
 } from "./methods.js"
 import { preserveConsumerError, type SyncIteratorRunner } from "./iterator.js"
 import {
@@ -1474,7 +1475,7 @@ export class Interpreter<R> {
     if (args.length === 1) {
       const arg = args[0]
       if (arg instanceof Values.Date) return Effect.succeed(new Values.Date(arg.time))
-      return Effect.map(this.toDatePrimitive(arg, node), (value) =>
+      return Effect.map(toPrimitive(this.runner, arg, "number", node), (value) =>
         typeof value === "string"
           ? new Values.Date(Date.parse(value))
           : new Values.Date(new Date(coerceToNumber(value)).getTime()),
@@ -1482,24 +1483,6 @@ export class Interpreter<R> {
     }
     const parts = args.map((arg) => coerceToNumber(arg))
     return Effect.succeed(new Values.Date(new Date(...(parts as [number, number])).getTime()))
-  }
-
-  private toDatePrimitive(value: unknown, node: AstNode): Effect.Effect<unknown, unknown, R> {
-    if (value === null || (typeof value !== "object" && typeof value !== "function")) return Effect.succeed(value)
-    const object = value as Record<string, unknown>
-    const self = this
-    return Effect.gen(function* () {
-      if (Object.hasOwn(object, "valueOf") && typeofValue(object.valueOf) === "function") {
-        const result = yield* self.runner.invokeCallable(object.valueOf, [], node)
-        if (result === null || (typeof result !== "object" && typeof result !== "function")) return result
-      }
-      if (!Object.hasOwn(object, "toString")) return coerceToString(value)
-      if (typeofValue(object.toString) === "function") {
-        const result = yield* self.runner.invokeCallable(object.toString, [], node)
-        if (result === null || (typeof result !== "object" && typeof result !== "function")) return result
-      }
-      throw new InterpreterRuntimeError("Cannot convert object to primitive value.", node).as("TypeError")
-    })
   }
 
   private constructRegExp(args: Array<unknown>, node: AstNode): Values.RegExp {

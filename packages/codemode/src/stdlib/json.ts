@@ -132,11 +132,4 @@ const toJSONValue = (value: unknown): unknown => {
 }
 
 const isPlainObject = (value: unknown): value is SafeObject =>
-  value !== null &&
-  typeof value === "object" &&
-  !(value instanceof Values.Date) &&
-  !(value instanceof Values.RegExp) &&
-  !(value instanceof Values.Map) &&
-  !(value instanceof Values.Set) &&
-  !(value instanceof Values.URL) &&
-  !(value instanceof Values.URLSearchParams)
+  value !== null && typeof value === "object" && !Values.isValue(value)

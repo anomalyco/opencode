@@ -1,3 +1,7 @@
+import { type AstNode, CoercionFunction, InterpreterRuntimeError } from "../interpreter/model.js"
+import { copyIn, type SafeObject } from "../tool-runtime.js"
+import { Values } from "../values.js"
+
 export const errorConstructors = new Set([
   "Error",
   "TypeError",
@@ -101,6 +105,3 @@ export const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node
   if (ref.name === "parseFloat") return parseFloat(coerceToString(value))
   return coerceToString(value)
 }
-import { type AstNode, CoercionFunction, InterpreterRuntimeError } from "../interpreter/model.js"
-import { copyIn, type SafeObject } from "../tool-runtime.js"
-import { Values } from "../values.js"

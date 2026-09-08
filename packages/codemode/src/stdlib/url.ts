@@ -1,3 +1,7 @@
+import { type AstNode, InterpreterRuntimeError, UriFunction } from "../interpreter/model.js"
+import { Values } from "../values.js"
+import { boundedData, coerceToString } from "./value.js"
+
 export const urlProperties = new Set([
   "href",
   "origin",
@@ -85,6 +89,3 @@ export const invokeURLMethod = (value: Values.URL, name: string, node: AstNode):
   if (name === "toString" || name === "toJSON") return value.url.href
   throw new InterpreterRuntimeError(`URL method '${name}' is not available.`, node)
 }
-import { type AstNode, InterpreterRuntimeError, UriFunction } from "../interpreter/model.js"
-import { Values } from "../values.js"
-import { boundedData, coerceToString } from "./value.js"

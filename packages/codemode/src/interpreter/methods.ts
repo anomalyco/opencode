@@ -15,7 +15,7 @@ import {
   UriFunction,
 } from "./model.js"
 import { containsOpaqueReference, isRuntimeReference, rejectCircularInsertion, typeofValue } from "./references.js"
-import { isBlockedMember, type SafeObject } from "../tool-runtime.js"
+import { compareText, isBlockedMember, type SafeObject } from "../tool-runtime.js"
 import { Values } from "../values.js"
 import { dateSetterArgumentCount, invokeDateMethod, invokeDateStatic } from "../stdlib/date.js"
 import { invokeMathMethod } from "../stdlib/math.js"
@@ -122,35 +122,43 @@ export const invokeIntrinsic = <R>(
   throw new InterpreterRuntimeError(`Method '${ref.name}' is not available.`, node)
 }
 
-const coerceNumericArgument = <R>(
+/**
+ * ToPrimitive: tries an object's own `valueOf`/`toString` in hint order and returns the first
+ * primitive result. Runtime values behave like their JS counterparts (Date yields its time under a
+ * number hint; the rest yield their string form). An inherited `toString` yields the default
+ * string form, so plain objects become "[object Object]" and arrays join.
+ */
+export const toPrimitive = <R>(
   runner: CallbackRunner<R>,
   value: unknown,
+  hint: "number" | "string",
   node: AstNode,
-): Effect.Effect<number, unknown, R> => {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || Values.isValue(value)) {
-    return Effect.succeed(coerceToNumber(value))
+): Effect.Effect<unknown, unknown, R> => {
+  if (value === null || typeof value !== "object") return Effect.succeed(value)
+  if (Values.isValue(value)) {
+    return Effect.succeed(value instanceof Values.Date && hint === "number" ? value.time : coerceToString(value))
   }
   const object = value as Record<string, unknown>
+  const order = hint === "number" ? ["valueOf", "toString"] : ["toString", "valueOf"]
   return Effect.gen(function* () {
-    if (Object.hasOwn(object, "valueOf") && typeofValue(object.valueOf) === "function") {
-      const result = yield* runner.invokeCallable(object.valueOf, [], node)
-      if (result === null || (typeof result !== "object" && typeof result !== "function")) {
-        return coerceToNumber(result)
-      }
-    }
-    if (!Object.hasOwn(object, "toString")) return coerceToNumber(value)
-    if (typeofValue(object.toString) === "function") {
-      const result = yield* runner.invokeCallable(object.toString, [], node)
-      if (result === null || (typeof result !== "object" && typeof result !== "function")) {
-        return coerceToNumber(result)
-      }
+    for (const method of order) {
+      if (method === "toString" && !Object.hasOwn(object, "toString")) return coerceToString(value)
+      if (!Object.hasOwn(object, method) || typeofValue(object[method]) !== "function") continue
+      const result = yield* runner.invokeCallable(object[method], [], node)
+      if (result === null || (typeof result !== "object" && typeof result !== "function")) return result
     }
     throw new InterpreterRuntimeError("Cannot convert object to primitive value.", node).as("TypeError")
   })
 }
 
+const coerceNumericArgument = <R>(
+  runner: CallbackRunner<R>,
+  value: unknown,
+  node: AstNode,
+): Effect.Effect<number, unknown, R> => Effect.map(toPrimitive(runner, value, "number", node), coerceToNumber)
+
+// console is intercepted by the interpreter before reaching here.
 export const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unknown>, node: AstNode): unknown => {
-  if (ref.namespace === "console") throw new InterpreterRuntimeError(`console.${ref.name} is not available.`, node)
   if (ref.namespace === "Object") return invokeObjectMethod(ref.name, args, node)
   if (ref.namespace === "Math") return invokeMathMethod(ref.name, args, node)
   if (ref.namespace === "Array") return invokeArrayStatic(ref.name, args, node)
@@ -159,9 +167,6 @@ export const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unkno
   if (ref.namespace === "URL") return invokeURLStatic(ref.name, args, node)
   if (ref.namespace === "Date") return invokeDateStatic(ref.name, args, node)
   if (ref.namespace === "RegExp") return invokeRegExpStatic(ref.name, args, node)
-  if (ref.namespace === "Map" || ref.namespace === "Set" || ref.namespace === "URLSearchParams") {
-    throw new InterpreterRuntimeError(`${ref.namespace}.${ref.name} is not available.`, node)
-  }
   throw new InterpreterRuntimeError(`${ref.namespace}.${ref.name} is not available.`, node)
 }
 
@@ -479,30 +484,11 @@ const coerceGroupByPropertyKey = <R>(
   value: unknown,
   node: AstNode,
 ): Effect.Effect<string, unknown, R> => {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || Values.isValue(value)) {
-    return Effect.succeed(coerceToString(value))
-  }
   if (value instanceof Values.Promise) return Effect.succeed("[object Promise]")
-  if (isRuntimeReference(value)) {
+  if (!Values.isValue(value) && isRuntimeReference(value)) {
     throw new InterpreterRuntimeError("Object.groupBy callback must return a data value.", node, "InvalidDataValue")
   }
-  const object = value as Record<string, unknown>
-  if (!Object.hasOwn(object, "toString")) return Effect.succeed(coerceToString(value))
-  return Effect.gen(function* () {
-    if (typeofValue(object.toString) === "function") {
-      const result = yield* runner.invokeCallable(object.toString, [], node)
-      if (result === null || (typeof result !== "object" && typeof result !== "function")) {
-        return coerceToString(result)
-      }
-    }
-    if (Object.hasOwn(object, "valueOf") && typeofValue(object.valueOf) === "function") {
-      const result = yield* runner.invokeCallable(object.valueOf, [], node)
-      if (result === null || (typeof result !== "object" && typeof result !== "function")) {
-        return coerceToString(result)
-      }
-    }
-    throw new InterpreterRuntimeError("Cannot convert object to primitive value.", node).as("TypeError")
-  })
+  return Effect.map(toPrimitive(runner, value, "string", node), coerceToString)
 }
 
 const invokeStringReplacer = <R>(
@@ -1124,11 +1110,7 @@ const sortArray = <R>(
 ): Effect.Effect<Array<unknown>, unknown, R> => {
   if (comparator === undefined) {
     return Effect.sync(() =>
-      [...target].sort((a, b) => {
-        const left = coerceToString(a)
-        const right = coerceToString(b)
-        return left < right ? -1 : left > right ? 1 : 0
-      }),
+      [...target].sort((a, b) => compareText(coerceToString(a), coerceToString(b))),
     )
   }
   const apply = applyCollectionCallback(runner, comparator, name, node)

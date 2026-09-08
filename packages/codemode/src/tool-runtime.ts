@@ -1,4 +1,5 @@
 import { Cause, Effect, Exit, Formatter, Schema } from "effect"
+import type { DiagnosticKind } from "./codemode.js"
 import { toolError } from "./tool-error.js"
 import {
   decodeInput as decodeToolInput,
@@ -14,7 +15,7 @@ import { isTool, type Tool } from "./tool.js"
 import type { Tools } from "./tools.js"
 import { Values } from "./values.js"
 
-const compareText = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0)
+export const compareText = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0)
 
 export type Services<T> = ServicesOf<T, []>
 
@@ -97,12 +98,10 @@ const MAX_VALUE_DEPTH = 32
 
 export class ToolRuntimeError extends Error {
   constructor(
-    readonly kind:
-      | "UnknownTool"
-      | "InvalidToolInput"
-      | "InvalidToolOutput"
-      | "InvalidDataValue"
-      | "ToolCallLimitExceeded",
+    readonly kind: Extract<
+      DiagnosticKind,
+      "UnknownTool" | "InvalidToolInput" | "InvalidToolOutput" | "InvalidDataValue" | "ToolCallLimitExceeded"
+    >,
     message: string,
     readonly suggestions: ReadonlyArray<string> = [],
   ) {
@@ -151,16 +150,7 @@ const copyBounded = (
   }
 
   if (preserveCodeModeValues) {
-    if (
-      value instanceof Values.Date ||
-      value instanceof Values.RegExp ||
-      value instanceof Values.Map ||
-      value instanceof Values.Set ||
-      value instanceof Values.URL ||
-      value instanceof Values.URLSearchParams
-    ) {
-      return value
-    }
+    if (Values.isValue(value)) return value
     if (value instanceof Date) return new Values.Date(value.getTime())
     if (value instanceof RegExp) return new Values.RegExp(value.source, value.flags)
     if (value instanceof Map) {
@@ -187,11 +177,9 @@ const copyBounded = (
   }
   if (value instanceof Values.URL) return value.url.href
   if (value instanceof URL) return value.href
+  // Remaining runtime values and their host counterparts serialize as empty objects, like JSON.stringify.
   if (
-    value instanceof Values.RegExp ||
-    value instanceof Values.Map ||
-    value instanceof Values.Set ||
-    value instanceof Values.URLSearchParams ||
+    Values.isValue(value) ||
     value instanceof RegExp ||
     value instanceof Map ||
     value instanceof Set ||
