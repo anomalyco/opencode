@@ -43,11 +43,13 @@ const models = [
   { name: "Qwen3.6 Plus", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiniMax M3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiniMax M2.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Muse Spark 1.3 Contributor", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
   { name: "Muse Spark 1.2 Contributor", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
   { name: "DeepSeek V4 Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "DeepSeek V4 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy4 preview", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Omen Alpha", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
 ] as const
 
 export default function Home() {
@@ -332,6 +334,13 @@ export default function Home() {
                       .
                     </p>
                     <p>
+                      <strong>Muse Spark 1.3 Contributor:</strong> {i18n.t("go.faq.a5.museRetention")}{" "}
+                      <a href="https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier">
+                        {i18n.t("go.faq.a5.learnMore")}
+                      </a>
+                      .
+                    </p>
+                    <p>
                       <strong>Muse Spark 1.2 Contributor:</strong> {i18n.t("go.faq.a5.museRetention")}{" "}
                       <a href="https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier">
                         {i18n.t("go.faq.a5.learnMore")}
@@ -352,6 +361,15 @@ export default function Home() {
               </li>
               <li>
                 <Faq question={i18n.t("go.faq.q8")}>{i18n.t("go.faq.a8")}</Faq>
+              </li>
+              <li>
+                <Faq question={i18n.t("go.faq.q10")}>
+                  <For each={i18n.t("go.faq.a10").split(/(\{\{contact\}\})/g)}>
+                    {(part) =>
+                      part === "{{contact}}" ? <a href="mailto:help@anoma.ly">{i18n.t("common.contactUs")}</a> : part
+                    }
+                  </For>
+                </Faq>
               </li>
             </ul>
           </section>
