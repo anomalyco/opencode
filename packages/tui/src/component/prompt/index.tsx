@@ -39,6 +39,7 @@ import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
+import { Tps } from "../../util/tps"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
 import { createColors, createFrames } from "../../ui/spinner"
@@ -279,6 +280,55 @@ export function Prompt(props: PromptProps) {
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
       cost: cost > 0 ? money.format(cost) : undefined,
     }
+  })
+
+  const [turnStart, setTurnStart] = createSignal(0)
+  const [tick, setTick] = createSignal(0)
+
+  createEffect(() => {
+    if (status().type !== "idle") {
+      if (turnStart() === 0) setTurnStart(Date.now())
+      return
+    }
+    if (turnStart() !== 0) setTurnStart(0)
+  })
+
+  createEffect(() => {
+    if (status().type === "idle") return
+    const timer = setInterval(() => setTick((value) => value + 1), 500)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  const streamedChars = createMemo(() => {
+    if (!props.sessionID) return 0
+    const messages = sync.data.message[props.sessionID] ?? []
+    const current = messages.findLast((item) => item.role === "assistant")
+    if (!current) return 0
+    const parts = sync.data.part[current.id] ?? []
+    return parts.reduce((sum, part) => {
+      if (part.type === "text" && !part.synthetic) return sum + part.text.length
+      if (part.type === "reasoning") return sum + part.text.length
+      return sum
+    }, 0)
+  })
+
+  // Live estimate while streaming (exact counts only land at step-finish),
+  // exact per-response average once the turn completes.
+  const speed = createMemo(() => {
+    if (status().type !== "idle") {
+      tick()
+      const start = turnStart()
+      if (!start) return undefined
+      const elapsed = Date.now() - start
+      if (elapsed < 500) return undefined
+      return Tps.formatTps(Tps.calcTps(Tps.estimateOutputTokens(streamedChars()), elapsed))
+    }
+    const messages = props.sessionID ? (sync.data.message[props.sessionID] ?? []) : []
+    const last = messages.findLast(
+      (item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0,
+    )
+    if (!last?.time.completed) return undefined
+    return Tps.formatTps(Tps.calcTps(last.tokens.output, last.time.completed - last.time.created))
   })
 
   const [store, setStore] = createStore<{
@@ -1590,6 +1640,13 @@ export function Prompt(props: PromptProps) {
                     {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
                   </span>
                 </text>
+                <Show when={speed()}>
+                  {(value) => (
+                    <text fg={theme.textMuted} wrapMode="none">
+                      · {value()}
+                    </text>
+                  )}
+                </Show>
               </box>
             </Match>
             <Match when={workspace.notice()}>
@@ -1665,7 +1722,7 @@ export function Prompt(props: PromptProps) {
                     <Match when={usage()}>
                       {(item) => (
                         <text fg={theme.textMuted} wrapMode="none">
-                          {[item().context, item().cost].filter(Boolean).join(" · ")}
+                          {[item().context, item().cost, speed()].filter(Boolean).join(" · ")}
                         </text>
                       )}
                     </Match>
