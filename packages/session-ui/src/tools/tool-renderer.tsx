@@ -516,22 +516,21 @@ export function CurrentContextToolGroup(props: {
   )
   const names = createMemo(() =>
     [
-      ...props.parts.reduce((counts, part) => {
-        if (part.type !== "tool" && part.type !== "shell") return counts
-        const name =
-          part.type !== "tool"
-            ? i18n.t("ui.tool.shell")
-            : part.name === "skill"
-              ? i18n.t("ui.tool.skill")
-              : part.name === "subagent"
-                ? i18n.t("ui.tool.agent.default")
-                : getToolInfo(part.name, currentToolInput(part), currentToolMetadata(part)).title
-        counts.set(name, (counts.get(name) ?? 0) + 1)
-        return counts
-      }, new Map<string, number>()),
-    ]
-      .map(([name, count]) => `${count} ${name}`)
-      .join(", "),
+      ...new Set(
+        props.parts.flatMap((part) => {
+          if (part.type !== "tool" && part.type !== "shell") return []
+          return [
+            part.type !== "tool"
+              ? i18n.t("ui.tool.shell")
+              : part.name === "skill"
+                ? i18n.t("ui.tool.skill")
+                : part.name === "subagent"
+                  ? i18n.t("ui.tool.agent.default")
+                  : getToolInfo(part.name, currentToolInput(part), currentToolMetadata(part)).title,
+          ]
+        }),
+      ),
+    ].join(", "),
   )
   const label = createMemo(() => {
     const thoughts = props.parts.filter((part) => part.type === "reasoning").length
@@ -540,7 +539,8 @@ export function CurrentContextToolGroup(props: {
       return { text: title, title, before: "", after: "" }
     }
     const title = names() || i18n.plural("ui.messagePart.context.thought", thoughts)
-    const text = i18n.t("ui.messagePart.tools.used", { tools: title })
+    const count = props.parts.filter((part) => part.type === "tool" || part.type === "shell").length || thoughts
+    const text = i18n.plural("ui.messagePart.tools.used", count, { tools: title })
     const index = text.indexOf(title)
     return { text, title, before: text.slice(0, index).trim(), after: text.slice(index + title.length).trim() }
   })

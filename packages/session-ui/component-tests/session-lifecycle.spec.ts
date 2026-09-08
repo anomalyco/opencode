@@ -18,8 +18,8 @@ for (const tool of ["shell", "execute", "subagent"]) {
         if (action) await timeline.getByRole("button", { name: action, exact: true }).click()
         await expect(group).toHaveAttribute("data-timeline-part-ids", "tool_context_lifecycle,tool_shell_lifecycle")
         await expect(
-          group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-        ).toHaveText(/^2 /)
+          group.locator('[data-component="context-tool-group-trigger"] [data-slot="context-tool-group-prefix"]'),
+        ).toHaveText("2 used")
         await expect(timeline.locator('[data-timeline-row="AssistantPart"]')).toHaveCount(1)
         await expect(trigger).toHaveAttribute("aria-expanded", String(open))
         expect(await original!.evaluate((node) => node.isConnected)).toBe(true)
@@ -35,7 +35,7 @@ for (const expanded of [false, true]) {
     const timeline = await mount("current-session-terminal-work--terminal-commands", { args: { expanded } })
     const trigger = expanded
       ? timeline.locator('[data-timeline-part-id="tool_shell_lifecycle"] [data-slot="collapsible-trigger"]')
-      : timeline.getByRole("button", { name: "Used 1 Shell", exact: true })
+      : timeline.getByRole("button", { name: "1 used Shell", exact: true })
     await expect(trigger).toHaveAttribute("aria-expanded", String(expanded))
     await trigger.click()
     await expect(trigger).toHaveAttribute("aria-expanded", String(!expanded))
@@ -83,7 +83,7 @@ story("transitions a streaming shell from writing through command execution", as
   await expect(subtitle).toHaveText("printf ready")
   await expect(tool).not.toContainText("Writing command…")
   await timeline.getByRole("button", { name: "Complete command" }).click()
-  const summary = timeline.getByRole("button", { name: "Used 1 Shell", exact: true })
+  const summary = timeline.getByRole("button", { name: "1 used Shell", exact: true })
   await expect(summary).toHaveAttribute("aria-expanded", "false")
   await summary.click()
   await expect(subtitle).toHaveText("printf ready")
@@ -130,7 +130,7 @@ for (const open of [false, true]) {
       await expect(thought).not.toContainText("Inspecting stability")
       await expect(thought).toHaveAttribute("aria-expanded", String(open))
       await timeline.getByRole("button", { name: "Finish session" }).click()
-      const used = group.getByRole("button", { name: "Used 1 Shell", exact: true })
+      const used = group.getByRole("button", { name: "1 used Shell", exact: true })
       await expect(used).toHaveAttribute("aria-expanded", "false")
       await used.click()
       await expect(used).toHaveAttribute("aria-expanded", "true")
@@ -141,7 +141,7 @@ for (const open of [false, true]) {
       )
       await expect(
         group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-      ).toHaveText("1 Shell")
+      ).toHaveText("Shell")
       await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
       await expect(used).toHaveAttribute("aria-expanded", "true")
       if (!open) await thought.click()
@@ -187,10 +187,10 @@ for (const locale of ["de", "ar"] as const) {
     await timeline.getByRole("button", { name: "Complete read" }).click()
     await timeline.getByRole("button", { name: "Complete glob" }).click()
     const group = timeline.locator('[data-timeline-part-ids="tool_context_read,tool_context_glob"]')
-    await expect(group.getByRole("button")).toHaveAccessibleName(/^Used 2 /)
+    await expect(group.getByRole("button")).toHaveAccessibleName(/^2 used /)
     await expect(
       group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-    ).toHaveText(/^2 /)
+    ).toHaveText(locale === "de" ? "Lesen, Glob" : "\u0642\u0631\u0627\u0621\u0629, Glob")
     await expect(page.locator("html")).toHaveAttribute("lang", locale)
   })
 }

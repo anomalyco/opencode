@@ -51,7 +51,7 @@ test("shows parent lineage while the child timeline loads", async ({ page }) => 
 
   await page.goto(sessionHref(parentID))
   await expectSessionTitle(page, parentTitle)
-  await page.getByRole("button", { name: "Used 1 Agent", exact: true }).click()
+  await page.getByRole("button", { name: "1 used Agent", exact: true }).click()
   await page.locator(`a[href="${sessionHref(childID)}"]`).click()
   await Promise.all([requested.promise, expect(page).toHaveURL(sessionHref(childID))])
   await Promise.all([
@@ -76,7 +76,7 @@ test("keeps the parent visible while the child session resolves", async ({ page 
   await page.goto(sessionHref(parentID))
   await expectSessionTitle(page, parentTitle)
 
-  await page.getByRole("button", { name: "Used 1 Agent", exact: true }).click()
+  await page.getByRole("button", { name: "1 used Agent", exact: true }).click()
   await page.locator(`a[href="${sessionHref(childID)}"]`).click()
   await requested.promise
   await Promise.all([expect(page).toHaveURL(sessionHref(parentID)), expectSessionTitle(page, parentTitle)]).finally(
@@ -194,7 +194,7 @@ async function setup(page: Page, events?: () => OpenCodeEvent[]) {
 async function openChildFromParent(page: Page) {
   await page.goto(sessionHref(parentID))
   await expectSessionTitle(page, parentTitle)
-  await page.getByRole("button", { name: "Used 1 Agent", exact: true }).click()
+  await page.getByRole("button", { name: "1 used Agent", exact: true }).click()
 
   const card = page.locator(`a[href="${sessionHref(childID)}"]`)
   await expect(card).toBeVisible()

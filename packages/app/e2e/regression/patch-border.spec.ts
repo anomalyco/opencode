@@ -39,7 +39,7 @@ for (const width of [1400, 390]) {
       reducedMotion: true,
       viewport: { width, height: 900 },
     })
-    await page.getByRole("button", { name: "Used 1 Patch", exact: true }).click()
+    await page.getByRole("button", { name: "1 used Patch", exact: true }).click()
     const patch = page.locator('[data-component="apply-patch-tool"]')
     const trigger = patch.getByRole("button", { name: /patch-border.ts/ })
     await expect(trigger).toHaveAttribute("aria-expanded", "false")
