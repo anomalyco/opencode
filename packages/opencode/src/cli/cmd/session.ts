@@ -147,7 +147,7 @@ const sessionTableColumns: SessionTableColumn[] = [
     truncate: Locale.truncate,
   },
   {
-    header: "WorkDir",
+    header: "Work Dir",
     minWidth: 30,
     value: (session) => session.directory,
     truncate: Locale.truncateMiddle,
@@ -162,18 +162,52 @@ const sessionTableColumns: SessionTableColumn[] = [
 
 export function formatSessionTable(sessions: Session.Info[]): string {
   const widths = sessionTableColumns.map((column) => {
-    const contentWidth = Math.max(...sessions.map((session) => column.value(session).length))
-    return Math.max(column.minWidth, column.header.length, contentWidth)
+    const contentWidth = Math.max(...sessions.map((session) => displayWidth(column.value(session))))
+    return Math.max(column.minWidth, displayWidth(column.header), contentWidth)
   })
 
-  const formatRow = (cells: string[]) => cells.map((cell, index) => cell.padEnd(widths[index])).join("  ")
+  const formatRow = (cells: string[]) => cells.map((cell, index) => padEndDisplay(cell, widths[index])).join("  ")
 
   const header = formatRow(sessionTableColumns.map((column) => column.header))
   const rows = sessions.map((session) =>
     formatRow(sessionTableColumns.map((column, index) => column.truncate(column.value(session), widths[index]))),
   )
 
-  return [header, "─".repeat(header.length), ...rows].join(EOL)
+  return [header, "─".repeat(displayWidth(header)), ...rows].join(EOL)
+}
+
+function displayWidth(value: string): number {
+  let width = 0
+  for (const char of value) {
+    const code = char.charCodeAt(0)
+    // CJK, full-width punctuation, and emoji render two columns wide in terminals.
+    if (
+      code >= 0x1100 &&
+      (code <= 0x115f || // Hangul Jamo
+        code === 0x2329 ||
+        code === 0x232a ||
+        (0x2e80 <= code && code <= 0xa4cf && code !== 0x303f) || // CJK radicals & symbols
+        (0xac00 <= code && code <= 0xd7a3) || // Hangul syllables
+        (0xf900 <= code && code <= 0xfaff) || // CJK compatibility ideographs
+        (0xfe10 <= code && code <= 0xfe19) || // vertical forms
+        (0xfe30 <= code && code <= 0xfe6f) || // CJK compatibility forms
+        (0xff00 <= code && code <= 0xff60) || // full-width forms
+        (0xffe0 <= code && code <= 0xffe6) || // full-width signs
+        (0x1f300 <= code && code <= 0x1f64f) || // emoji
+        (0x1f900 <= code && code <= 0x1f9ff) || // supplemental symbols
+        (0x20000 <= code && code <= 0x2fffd) || // CJK ext
+        (0x30000 <= code && code <= 0x3fffd))
+    ) {
+      width += 2
+    } else {
+      width += 1
+    }
+  }
+  return width
+}
+
+function padEndDisplay(value: string, width: number): string {
+  return value + " ".repeat(Math.max(0, width - displayWidth(value)))
 }
 
 export function formatSessionJSON(sessions: Session.Info[]): string {
