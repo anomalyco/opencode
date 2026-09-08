@@ -32,6 +32,9 @@ const methodID = Integration.MethodID.make("browser")
 const modelID = Model.ID.make("claude-sonnet-4-6")
 const env = { SNOWFLAKE_ACCOUNT: undefined, SNOWFLAKE_CORTEX_TOKEN: undefined, SNOWFLAKE_CORTEX_PAT: undefined }
 const endpoint = "https://myorg-myaccount.snowflakecomputing.com"
+const polling = { times: 100, schedule: Schedule.spaced("1 millis") }
+const expiredOAuth = (account: string, refresh = "refresh") =>
+  Credential.OAuth.make({ type: "oauth", methodID, access: "expired", refresh, expires: 1, metadata: { account } })
 
 const fixture = Effect.fn(function* () {
   const requests: Request[] = []
@@ -70,7 +73,7 @@ const fixture = Effect.fn(function* () {
       const model = yield* catalog.model.get(providerID, modelID)
       if (!model || String(model.settings?.baseURL).includes("${")) return yield* Effect.fail("Catalog pending")
       return model
-    }).pipe(Effect.retry({ times: 100, schedule: Schedule.spaced("1 millis") }))
+    }).pipe(Effect.retry(polling))
     const resolver = yield* ModelResolver.Service
     const resolved = yield* resolver.resolveModel(model)
     const service = yield* SessionModelRequest.Service
@@ -85,18 +88,15 @@ const fixture = Effect.fn(function* () {
       Effect.provideService(HttpClient.HttpClient, http),
     )
   }).pipe(Effect.provide(SessionModelRequest.layer), Effect.provide(ModelResolver.layer))
-  return { requests, replies, catalog, integrations, hooks, scope, send }
-})
-
-const status = Effect.fn(function* (attemptID: Integration.AttemptID) {
-  const integrations = yield* Integration.Service
-  return yield* integrations.oauth.status({ integrationID, attemptID }).pipe(
-    Effect.filterOrFail(
-      (status) => status.status !== "pending",
-      () => "OAuth pending",
-    ),
-    Effect.retry({ times: 100, schedule: Schedule.spaced("1 millis") }),
-  )
+  const stop = Effect.gen(function* () {
+    replies.push(Response.json({ message: "Conversation complete", error: {} }, { status: 400 }))
+    expect((yield* send).find((event) => event.type === "finish")?.reason.normalized).toBe("stop")
+  })
+  const status = (attemptID: Integration.AttemptID) =>
+    integrations.oauth
+      .status({ integrationID, attemptID })
+      .pipe(Effect.repeat({ ...polling, until: (status) => status.status !== "pending" }))
+  return { requests, replies, catalog, integrations, hooks, scope, send, stop, status }
 })
 
 it.live("browser OAuth supplies the native endpoint/token and refreshes a rejected token once", () =>
@@ -116,7 +116,7 @@ it.live("browser OAuth supplies the native endpoint/token and refreshes a reject
       callback.searchParams.set("code", "auth-code")
       test.replies.push(Response.json({ access_token: "access", refresh_token: "refresh", expires_in: 3600 }))
       yield* Effect.promise(() => fetch(callback))
-      expect((yield* status(attempt.attemptID)).status).toBe("complete")
+      expect((yield* test.status(attempt.attemptID)).status).toBe("complete")
       const exchange = test.requests[0]
       expect(exchange.url).toBe(`${endpoint}/oauth/token-request`)
       expect(exchange.headers.get("authorization")).toBe(
@@ -148,8 +148,7 @@ it.live("browser OAuth supplies the native endpoint/token and refreshes a reject
       expect((yield* test.hooks.trigger("session", "retry", retry)).decision).toEqual({ retry: true, delay: 0 })
       const refresh = new URLSearchParams(yield* Effect.promise(() => test.requests[2].text()))
       expect(Object.fromEntries(refresh)).toMatchObject({ grant_type: "refresh_token", refresh_token: "refresh" })
-      test.replies.push(Response.json({ message: "Conversation complete", error: {} }, { status: 400 }))
-      expect((yield* test.send).find((event) => event.type === "finish")?.reason.normalized).toBe("stop")
+      yield* test.stop
       expect(test.requests[3].headers.get("authorization")).toBe("Bearer renewed")
       expect(
         (yield* test.hooks.trigger("session", "retry", { ...retry, attempt: 3, decision: { retry: false } })).decision
@@ -208,7 +207,7 @@ it.live("rejects a mismatched callback state before token exchange", () =>
       callback.searchParams.set("state", "wrong")
       callback.searchParams.set("code", "forged")
       expect((yield* Effect.promise(() => fetch(callback))).status).toBe(400)
-      expect(yield* status(attempt.attemptID)).toMatchObject({ status: "failed", message: "Invalid OAuth state" })
+      expect(yield* test.status(attempt.attemptID)).toMatchObject({ status: "failed", message: "Invalid OAuth state" })
       expect(test.requests).toHaveLength(0)
     }),
   ),
@@ -224,28 +223,21 @@ it.live("uses environment tokens rather than the account identifier and bypasses
           type: "env",
           name: "SNOWFLAKE_CORTEX_TOKEN",
         })
-        expect((yield* test.catalog.provider.get(providerID))?.package).toBe("@opencode/ai/providers/openai-compatible")
+        expect((yield* test.catalog.provider.get(providerID))?.package).toBe(
+          Provider.aisdk("@ai-sdk/openai-compatible"),
+        )
         expect(yield* test.hooks.has("aisdk", "sdk", providerID)).toBe(false)
 
-        test.replies.push(Response.json({ message: "Conversation complete" }, { status: 400 }))
-        expect((yield* test.send).find((event) => event.type === "finish")?.reason.normalized).toBe("stop")
+        yield* test.stop
         expect(test.requests[0].url).toBe(`${endpoint}/api/v2/cortex/v1/chat/completions`)
         expect(test.requests[0].headers.get("authorization")).toBe("Bearer env-token")
 
         const credentials = yield* Credential.Service
         yield* credentials.create({
           integrationID,
-          value: Credential.OAuth.make({
-            type: "oauth",
-            methodID,
-            access: "expired",
-            refresh: "revoked-refresh",
-            expires: 1,
-            metadata: { account: "other-account" },
-          }),
+          value: expiredOAuth("other-account", "revoked-refresh"),
         })
-        test.replies.push(Response.json({ message: "Conversation complete" }, { status: 400 }))
-        expect((yield* test.send).find((event) => event.type === "finish")?.reason.normalized).toBe("stop")
+        yield* test.stop
         expect(test.requests).toHaveLength(2)
         expect(test.requests[1].url).toBe(`${endpoint}/api/v2/cortex/v1/chat/completions`)
         expect(test.requests[1].headers.get("authorization")).toBe("Bearer env-token")
@@ -260,8 +252,7 @@ it.live("requires a token separately from the account and supports environment P
       expect(yield* test.integrations.connection.active(integrationID)).toBeUndefined()
       yield* withEnv({ SNOWFLAKE_CORTEX_PAT: "env-pat" }, () =>
         Effect.gen(function* () {
-          test.replies.push(Response.json({ message: "Conversation complete" }, { status: 400 }))
-          expect((yield* test.send).find((event) => event.type === "finish")?.reason.normalized).toBe("stop")
+          yield* test.stop
           expect(test.requests[0].headers.get("authorization")).toBe("Bearer env-pat")
           test.replies.push(Response.json({ message: "Invalid model" }, { status: 400 }))
           expect((yield* test.send.pipe(Effect.exit))._tag).toBe("Failure")
@@ -277,21 +268,11 @@ it.live("refreshes expired OAuth during native model resolution and persists rot
       const credentials = yield* Credential.Service
       const saved = yield* credentials.create({
         integrationID,
-        value: Credential.OAuth.make({
-          type: "oauth",
-          methodID,
-          access: "expired",
-          refresh: "refresh",
-          expires: 1,
-          metadata: { account: "myorg-myaccount" },
-        }),
+        value: expiredOAuth("myorg-myaccount"),
       })
       const test = yield* fixture()
-      test.replies.push(
-        Response.json({ access_token: "renewed", refresh_token: "rotated-refresh", expires_in: 3600 }),
-        Response.json({ message: "Conversation complete" }, { status: 400 }),
-      )
-      expect((yield* test.send).find((event) => event.type === "finish")?.reason.normalized).toBe("stop")
+      test.replies.push(Response.json({ access_token: "renewed", refresh_token: "rotated-refresh", expires_in: 3600 }))
+      yield* test.stop
       expect(test.requests[0].url).toBe(`${endpoint}/oauth/token-request`)
       expect(Object.fromEntries(new URLSearchParams(yield* Effect.promise(() => test.requests[0].text())))).toEqual({
         grant_type: "refresh_token",

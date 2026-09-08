@@ -47,7 +47,7 @@ export const SnowflakeCortexPlugin = define({
       const connection = yield* integrations.connection.active(integrationID)
       return connection?.type === "credential" ? yield* credentials.get(connection.id) : undefined
     })
-    const token = Effect.fn(function* (account: string, form: Record<string, string>, current?: string) {
+    const token = Effect.fn(function* (account: string, form: Record<string, string>) {
       if (!account) return yield* Effect.fail(new Error("Snowflake account is required"))
       const response = yield* http.execute(
         HttpClientRequest.post(`${issuer(account)}/oauth/token-request`).pipe(
@@ -65,7 +65,7 @@ export const SnowflakeCortexPlugin = define({
           new Error(`Snowflake token request failed (${response.status}): ${yield* response.text}`),
         )
       const tokens = yield* HttpClientResponse.schemaBodyJson(Token)(response)
-      const refresh = tokens.refresh_token || current
+      const refresh = tokens.refresh_token || form.refresh_token
       if (!refresh) return yield* Effect.fail(new Error("Snowflake token response did not include refresh_token"))
       return Credential.OAuth.make({
         type: "oauth",
@@ -77,11 +77,7 @@ export const SnowflakeCortexPlugin = define({
       })
     })
     const refresh = (value: Credential.OAuth) =>
-      token(
-        normalizeAccount(value.metadata?.account),
-        { grant_type: "refresh_token", refresh_token: value.refresh },
-        value.refresh,
-      )
+      token(normalizeAccount(value.metadata?.account), { grant_type: "refresh_token", refresh_token: value.refresh })
 
     yield* ctx.integration.transform((editor) => {
       editor.method.update({
@@ -161,16 +157,14 @@ export const SnowflakeCortexPlugin = define({
                 code_challenge_method: "S256",
               }).toString()}`,
               instructions: "Complete Snowflake sign-in in your browser.",
-              callback: Deferred.await(code).pipe(
-                Effect.flatMap((code) =>
-                  token(account, {
-                    grant_type: "authorization_code",
-                    code,
-                    redirect_uri: redirect,
-                    code_verifier: verifier,
-                  }),
-                ),
-              ),
+              callback: Effect.gen(function* () {
+                return yield* token(account, {
+                  grant_type: "authorization_code",
+                  code: yield* Deferred.await(code),
+                  redirect_uri: redirect,
+                  code_verifier: verifier,
+                })
+              }),
             }
           }),
       })
@@ -191,15 +185,12 @@ export const SnowflakeCortexPlugin = define({
       const item = catalog.provider.get(providerID)
       if (!item) return
       const settings = { ...item.provider.settings, ...configured }
-      item.provider.package = "@opencode/ai/providers/openai-compatible"
       item.provider.settings = {
         ...settings,
-        provider: providerID,
         baseURL: endpoint(settings.baseURL, account.value),
         ...(typeof settings.token === "string" ? { apiKey: settings.token } : {}),
       }
       for (const model of item.models.values()) {
-        model.package = item.provider.package
         model.compatibility = { maxTokensField: "max_completion_tokens", ...model.compatibility }
         if (model.settings?.baseURL !== undefined)
           model.settings.baseURL = endpoint(model.settings.baseURL, account.value)
