@@ -17,6 +17,7 @@ export const sshHandlers = SshRpcs.toLayer(
       SshResolve: ({ id }) => ssh.resolve(id),
       SshRespond: ({ id, prompt, value }, context) => ssh.respond(id, prompt, value, sender(handoff, context).id),
       SshDisconnect: ({ id }) => ssh.disconnect(id),
+      SshCancel: ({ id }, context) => ssh.cancel(id, sender(handoff, context).id),
       SshForget: ({ id }) => ssh.forget(id).pipe(Effect.orDie),
       SshOpenConfig: () => ssh.openConfig().pipe(Effect.orDie),
     })

@@ -11,6 +11,13 @@ export const dict = {
   "ssh.connect": "Connect",
   "ssh.connectTo": "Connect to {{host}}",
   "ssh.authenticate": "SSH authentication",
+  "ssh.action.authenticate": "Authenticate",
+  "ssh.session.disconnected": "SSH connection inactive",
+  "ssh.session.connecting": "Connecting to SSH server",
+  "ssh.session.reconnectDescription":
+    "Reconnect to view this session and continue working. Your remote session is preserved.",
+  "ssh.session.reconnect": "Reconnect",
+  "ssh.authenticationRequired": "Authentication required for {{host}}",
   "ssh.trust": "Trust and connect",
   "ssh.continue": "Continue",
   "ssh.retry": "Retry",

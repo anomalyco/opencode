@@ -4,6 +4,10 @@ import "./icon.css"
 
 // Consumers center the SVG viewport, so each icon must center its artwork within its viewBox.
 const icons = {
+  lock: {
+    viewBox: "0 0 16 16",
+    body: `<rect x="3.5" y="7" width="9" height="7" rx="1" stroke="currentColor"/><path d="M5 7V5a3 3 0 0 1 6 0v2M8 10v1" stroke="currentColor" stroke-linecap="round"/>`,
+  },
   flask: {
     viewBox: "0 0 16 16",
     body: `<path d="M5.5 2H10.5M6 2V6L2.5 12C2 13 2.5 14 3.5 14H12.5C13.5 14 14 13 13.5 12L10 6V2M4.25 9H11.75" stroke="currentColor" stroke-linecap="square" stroke-linejoin="round"/>`,

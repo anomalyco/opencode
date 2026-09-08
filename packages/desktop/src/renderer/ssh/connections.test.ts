@@ -18,6 +18,7 @@ test("SSH progress stays reactive on the same connection until ready or stopped"
     const next = connections({ servers: [{ config, saved: true, stage, detail: "" }] })[0]
     expect(next).toBe(first)
     expect(next?.connecting).toBe(false)
+    expect(next?.authenticationRequired).toBe(stage === "authentication")
   }
 })
 

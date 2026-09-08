@@ -23,6 +23,7 @@ import { parseTarget, quote, runSsh, sshArgs, sshExecutable, tunnelArgs, SshFail
 
 type Connection = {
   owner?: number
+  before?: SshItem
   ready: Deferred.Deferred<SshHttp | null>
   respond?: (id: string, value: string) => Effect.Effect<void>
 }
@@ -186,7 +187,11 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
     if (lifecycle.closed || !/^[a-zA-Z0-9-]{1,80}$/.test(id)) return
     const previous = attempts.get(id)
     const config = { id, target: request.target.trim(), name: request.name.trim() }
-    const connection: Connection = { owner, ready: yield* Deferred.make<SshHttp | null>() }
+    const connection: Connection = {
+      owner,
+      before: items.get(id),
+      ready: yield* Deferred.make<SshHttp | null>(),
+    }
     const admitted = yield* Deferred.make<void>()
     const fiber = yield* Effect.gen(function* () {
       yield* Deferred.await(admitted)
@@ -252,6 +257,25 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
     })
     if (attempt) yield* Fiber.interrupt(attempt.fiber)
   })
+  const cancel = Effect.fn("Ssh.cancel")(function* (id: string, owner: number) {
+    const attempt = attempts.get(id)
+    if (!attempt || attempt.owner !== owner) return
+    paused.add(id)
+    // Restore before interrupting: askpass cleanup must not transition the
+    // cancelled attempt back to connecting or expose an expired prompt.
+    const before = attempt.before
+    yield* update(id, {
+      ...before,
+      stage:
+        before?.stage === "authentication" || before?.stage === "failed" || before?.stage === "incompatible"
+          ? before.stage
+          : "disconnected",
+      prompt: undefined,
+      error: before?.error,
+      detail: before?.detail ?? "",
+    })
+    yield* Fiber.interrupt(attempt.fiber)
+  })
   const close = Effect.gen(function* () {
     if (lifecycle.closed) return
     lifecycle.closed = true
@@ -277,6 +301,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
       if (attempt?.owner === owner && attempt.respond) yield* attempt.respond(prompt, value)
     }),
     disconnect,
+    cancel,
     forget: Effect.fn("Ssh.forget")(function* (id: string) {
       yield* disconnect(id)
       items.delete(id)
@@ -287,7 +312,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
     detach: Effect.fn("Ssh.detach")(function* (owner: number) {
       yield* Effect.forEach(
         [...attempts].filter(([id, attempt]) => attempt.owner === owner && items.get(id)?.stage !== "ready"),
-        ([id]) => disconnect(id),
+        ([id]) => cancel(id, owner),
         { concurrency: "unbounded", discard: true },
       )
     }),

@@ -8,13 +8,3 @@
   overflow: auto;
   user-select: text;
 }
-.ssh-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 16px;
-  font-size: 12px;
-  line-height: var(--line-height-compact);
-  flex-shrink: 0;
-}

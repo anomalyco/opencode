@@ -7,6 +7,55 @@ import { createSshController } from "./controller"
 import { quote } from "./command"
 
 const it = testEffect(Layer.merge(NodeServices.layer, FetchHttpClient.layer))
+// The askpass ProxyCommand fixture is a POSIX shell executable.
+const posix = process.platform === "win32" ? it.live.skip : it.live
+
+posix(
+  "cancelling an authentication attempt restores the previous state and permits another attempt",
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const configFile = path.join(yield* fs.makeTempDirectoryScoped({ prefix: "ssh-cancel-test-" }), "config")
+    yield* fs.writeFileString(configFile, "")
+    const proxy = path.join(path.dirname(configFile), "proxy")
+    yield* fs.writeFileString(proxy, '#!/bin/sh\n"$SSH_ASKPASS" "Password:" >/dev/null\nexec sleep 30\n', {
+      mode: 0o755,
+    })
+    const config = {
+      id: "fixture",
+      name: "Fixture",
+      target: `ssh -F ${quote(configFile)} -o ${quote(`ProxyCommand=${quote(proxy)}`)} fixture`,
+    }
+    const controller = yield* createSshController({
+      configs: [config],
+      binary: process.execPath,
+      command: [process.execPath, "run", path.resolve("../cli/src/index.ts")],
+      version: "2.0.0",
+      save: () => Effect.die("must not save"),
+    })
+    yield* controller.start({ ...config, background: true })
+    expect(yield* controller.resolve(config.id)).toBeNull()
+    expect((yield* controller.state()).servers[0]?.stage).toBe("authentication")
+    for (const owner of [1, 2]) {
+      const prompted = yield* controller.changes(owner).pipe(
+        Stream.filter((state) => !!state.servers[0]?.prompt),
+        Stream.runHead,
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      yield* controller.start(config, owner)
+      yield* Fiber.join(prompted)
+      yield* controller.cancel(config.id, owner + 10)
+      expect((yield* controller.state(owner)).servers[0]?.prompt).toBeDefined()
+      yield* controller.cancel(config.id, owner)
+      const item = (yield* controller.state(owner)).servers[0]
+      expect(item?.stage).toBe("authentication")
+      expect(item?.prompt).toBeUndefined()
+      expect(item?.error).toBeUndefined()
+      expect(item?.config).toEqual(config)
+      expect(yield* controller.resolve(config.id)).toBeNull()
+    }
+  }).pipe(Effect.timeout("20 seconds")),
+)
 
 it.live(
   "saved hosts do not connect until requested and forgetting never starts SSH",

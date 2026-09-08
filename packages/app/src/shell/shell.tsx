@@ -8,7 +8,7 @@ import { ToastRegion } from "@/shell/notifications/toast"
 import { TitlebarRightProvider } from "@/shell/titlebar/right-slot"
 import { useSettingsSurface } from "@/settings/surface"
 import { useSettings } from "@/settings/model"
-import { SshBanner } from "@/servers/ssh/banner"
+import { SshAuthentication } from "@/servers/ssh/authentication"
 
 const DebugBar = lazy(() => import("@/shell/debug/debug-bar").then((module) => ({ default: module.DebugBar })))
 
@@ -98,10 +98,9 @@ export default function Layout(props: ParentProps) {
               "--settings-top-inset": mobile() && !bottomTitlebar() ? "0px" : "var(--shell-top-inset, 8px)",
             }}
           >
-            <div class="flex size-full min-h-0 min-w-0 flex-col">
-              <SshBanner />
+            <SshAuthentication>
               <Suspense>{props.children}</Suspense>
-            </div>
+            </SshAuthentication>
           </main>
         </div>
         <Show when={import.meta.env.DEV && state.debugTools}>

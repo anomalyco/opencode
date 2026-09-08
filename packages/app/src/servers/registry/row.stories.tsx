@@ -2,7 +2,17 @@ import { For } from "solid-js"
 import { ServerHealthIndicator } from "./row"
 import type { ServerHealth } from "@/runtime/server/health"
 
-const states: { label: string; connecting?: boolean; health?: ServerHealth }[] = [
+const states: { label: string; connecting?: boolean; authenticationRequired?: boolean; health?: ServerHealth }[] = [
+  {
+    label: "Authentication required (overrides failed health)",
+    authenticationRequired: true,
+    health: { healthy: false },
+  },
+  {
+    label: "Authentication required (overrides pending health)",
+    authenticationRequired: true,
+    health: { healthy: false, checking: true },
+  },
   { label: "Connecting (previous health check failed)", connecting: true, health: { healthy: false } },
   { label: "Tunnel ready, checking its new endpoint", health: { healthy: false, checking: true } },
   { label: "Connected", health: { healthy: true } },
@@ -19,7 +29,11 @@ export const States = {
         {(state) => (
           <div class="flex items-center gap-2">
             <div class="flex size-4 shrink-0 items-center justify-center">
-              <ServerHealthIndicator health={state.health} connecting={state.connecting} />
+              <ServerHealthIndicator
+                health={state.health}
+                connecting={state.connecting}
+                authenticationRequired={state.authenticationRequired}
+              />
             </div>
             <span>{state.label}</span>
           </div>

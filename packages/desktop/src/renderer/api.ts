@@ -40,6 +40,7 @@ export const api: ElectronAPI = {
     resolve: (id) => invoke("SshResolve", { id }),
     respond: (id, prompt, value) => invoke("SshRespond", { id, prompt, value }),
     disconnect: (id) => invoke("SshDisconnect", { id }),
+    cancel: (id) => invoke("SshCancel", { id }),
     forget: (id) => invoke("SshForget", { id }),
     openConfig: () => invoke("SshOpenConfig"),
   },

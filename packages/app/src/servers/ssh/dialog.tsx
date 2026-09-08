@@ -40,7 +40,13 @@ export function useOpenSshProject() {
   }
 }
 
-export function DialogSsh(props: { config?: SshConfig; connect?: boolean; openProject?: boolean }) {
+export function DialogSsh(props: {
+  config?: SshConfig
+  connect?: boolean
+  promptOnly?: boolean
+  openProject?: boolean
+  onConnected?: () => void
+}) {
   const dialog = useDialog()
   const language = useLanguage()
   const platform = usePlatform()
@@ -53,8 +59,8 @@ export function DialogSsh(props: { config?: SshConfig; connect?: boolean; openPr
   const [state, setState] = createStore({
     target: props.config?.target ?? "",
     name: props.config?.name ?? "",
-    started: false,
-    prompted: false,
+    started: !!props.promptOnly,
+    prompted: !!props.promptOnly,
     response: "",
     answered: "",
     submitting: false,
@@ -113,6 +119,7 @@ export function DialogSsh(props: { config?: SshConfig; connect?: boolean; openPr
     setState("complete", true)
     dialog.close()
     if (openProject) queueMicrotask(() => openProject(id))
+    if (props.onConnected) queueMicrotask(props.onConnected)
   })
   onMount(() => {
     if (props.connect) start()
@@ -125,7 +132,7 @@ export function DialogSsh(props: { config?: SshConfig; connect?: boolean; openPr
       Effect.gen(function* () {
         if (task) yield* Fiber.interrupt(task)
         if (!cancel || !api) return
-        yield* Effect.tryPromise(() => api.disconnect(id))
+        yield* Effect.tryPromise(() => api.cancel(id))
         if (forget) yield* Effect.tryPromise(() => api.forget(id))
       }).pipe(Effect.ignore),
     )
@@ -148,7 +155,7 @@ export function DialogSsh(props: { config?: SshConfig; connect?: boolean; openPr
       <Divider />
       <DialogBody class="flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-2">
         <div class="flex w-full min-w-0 flex-col gap-6">
-          <Show when={!state.prompted || (!!error() && !prompt())}>
+          <Show when={!props.promptOnly && (!state.prompted || (!!error() && !prompt()))}>
             <div class="flex w-full min-w-0 flex-col gap-2">
               <label class="settings-server-dialog-label" for="ssh-target">
                 {language.t("ssh.target")}

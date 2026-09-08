@@ -6,8 +6,10 @@ import { testEffect } from "../../../../core/test/lib/effect"
 import { binaryPath, discoverScript, startScript, parseRegistration } from "./bootstrap"
 
 const it = testEffect(NodeServices.layer)
+// Bootstrap runs on the POSIX SSH host; these fixtures execute its shell locally.
+const posix = process.platform === "win32" ? it.live.skip : it.live
 
-it.live(
+posix(
   "starts a staged CLI, rediscovers it, and restarts only for an explicit update",
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
@@ -51,7 +53,7 @@ esac
   }),
 )
 
-it.live(
+posix(
   "finds an existing service through the released CLI",
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem

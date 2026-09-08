@@ -36,8 +36,14 @@ function connection(item: SshItem, api: Pick<SshPlatform, "resolve">, label: str
     server: {
       type: "ssh" as const,
       id: item.config.id,
+      get stage() {
+        return state.current.stage
+      },
       get connecting() {
         return isSshConnecting(state.current.stage)
+      },
+      get authenticationRequired() {
+        return state.current.stage === "authentication"
       },
       get label() {
         return state.label

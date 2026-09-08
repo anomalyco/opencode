@@ -1,14 +1,37 @@
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { onCleanup, onMount } from "solid-js"
+import { onCleanup, onMount, Show } from "solid-js"
 import { PlatformProvider } from "@/runtime/platform/platform"
-import { SshServersProvider } from "./context"
+import { SshServersProvider, useSshServers } from "./context"
+import { useSshAuthenticate } from "./authenticate"
+import { HomeProjectsView } from "@/home/projects/view"
+import { ServerConnection } from "@/runtime/server/registry"
+import { useLanguage } from "@/runtime/i18n/language"
 import { DialogSsh } from "./dialog"
 import type { SshItem, SshPlatform, SshState } from "./types"
+import { SshConnectionPanel } from "./connection-panel"
+import { useSshReconnect } from "./reconnect"
 
-function Fixture(props: { initial?: "connecting" | "password" | "confirmation" | "failure"; responseDelay?: number }) {
-  const state: { item?: SshItem; step: number; timer?: ReturnType<typeof setTimeout> } = { step: 0 }
+function Fixture(props: {
+  session?: boolean
+  keyOnly?: boolean
+  connectionDelay?: number
+  initial?: "connecting" | "password" | "confirmation" | "failure" | "required"
+  responseDelay?: number
+}) {
+  const state: { item?: SshItem; before?: SshItem; step: number; timer?: ReturnType<typeof setTimeout> } = {
+    step: 0,
+    item:
+      props.initial === "required"
+        ? {
+            config: { id: "story", target: "ssh linuxbook", name: "" },
+            stage: props.session ? "disconnected" : "authentication",
+            saved: true,
+            detail: "",
+          }
+        : undefined,
+  }
   onCleanup(() => clearTimeout(state.timer))
   const listeners = new Set<(state: SshState) => void>()
   const snapshot = (): SshState => ({ servers: state.item ? [state.item] : [] })
@@ -37,15 +60,24 @@ function Fixture(props: { initial?: "connecting" | "password" | "confirmation" |
     hosts: async () => ["devbox", "staging", "build-host"],
     start: async (input) => {
       clearTimeout(state.timer)
-      state.step = props.initial === "password" ? 1 : 0
+      state.before = state.item
+      state.step = props.initial === "password" || props.initial === "required" ? 1 : 0
       state.item = {
         config: input,
-        saved: false,
+        saved: props.initial === "required",
         stage: "connecting",
         detail: "",
         destination: "brendon@dev.example.com:22",
       }
       if (props.initial === "connecting") return
+      if (props.connectionDelay) {
+        update({ stage: "connecting" })
+        state.timer = setTimeout(
+          () => update(props.keyOnly ? { stage: "ready" } : { stage: "authentication", prompt: prompts[state.step] }),
+          props.connectionDelay,
+        )
+        return
+      }
       update(
         props.initial === "failure"
           ? {
@@ -74,6 +106,10 @@ function Fixture(props: { initial?: "connecting" | "password" | "confirmation" |
       clearTimeout(state.timer)
       update({ stage: "disconnected", prompt: undefined })
     },
+    cancel: async () => {
+      clearTimeout(state.timer)
+      update({ ...state.before, stage: state.before?.stage ?? "disconnected", prompt: undefined })
+    },
     forget: async () => {
       state.item = undefined
       listeners.forEach((listener) => listener(snapshot()))
@@ -94,10 +130,106 @@ function Fixture(props: { initial?: "connecting" | "password" | "confirmation" |
     >
       <QueryClientProvider client={new QueryClient()}>
         <SshServersProvider>
-          <Open initial={props.initial} />
+          {props.session ? (
+            <AuthenticationSession />
+          ) : props.initial === "required" ? (
+            <AuthenticationHome />
+          ) : (
+            <Open initial={props.initial} />
+          )}
         </SshServersProvider>
       </QueryClientProvider>
     </PlatformProvider>
+  )
+}
+
+function AuthenticationSession() {
+  const ssh = useSshServers()
+  const reconnect = useSshReconnect()
+  return (
+    <div style={{ height: "70vh" }}>
+      <Show when={ssh.data?.servers[0]}>
+        {(item) => (
+          <Show when={item().stage !== "ready"} fallback={<div>Session connected</div>}>
+            <SshConnectionPanel
+              item={item()}
+              pending={reconnect.pending(item().config.id)}
+              onReconnect={() => reconnect.start(item().config)}
+            />
+          </Show>
+        )}
+      </Show>
+    </div>
+  )
+}
+
+function AuthenticationHome() {
+  const language = useLanguage()
+  const ssh = useSshServers()
+  const authenticate = useSshAuthenticate()
+  const server: ServerConnection.Ssh = {
+    type: "ssh",
+    id: "story",
+    host: "linuxbook",
+    displayName: "linuxbook",
+    label: "SSH",
+    http: { url: "http://127.0.0.1:0" },
+    get authenticationRequired() {
+      return ssh.data?.servers[0]?.stage === "authentication"
+    },
+    get connecting() {
+      return ssh.data?.servers[0]?.stage === "connecting"
+    },
+  }
+  const projects = [{ worktree: "/home/user/project", expanded: true }]
+  return (
+    <div style={{ width: "min(100%, 340px)" }}>
+      <HomeProjectsView
+        dropdown
+        language={language}
+        servers={[server]}
+        projects={projects}
+        recentlyClosed={[]}
+        selection={{ server: ServerConnection.key(server) }}
+        homedir="/home/user"
+        serverHealth={() => ({ healthy: ssh.data?.servers[0]?.stage === "ready" })}
+        projectsForServer={() => projects}
+        collapsed={() => false}
+        canDefaultServer={false}
+        defaultServerKey={null}
+        canRevealProject={() => false}
+        unseenCount={() => 0}
+        onWheel={() => {}}
+        onChooseProject={(server) => {
+          authenticate(server)
+        }}
+        onFocusServer={(server) => {
+          authenticate(server)
+        }}
+        onAuthenticateServer={(server) => {
+          authenticate(server)
+        }}
+        onToggleCollapsed={() => {}}
+        onEditServer={() => {}}
+        onSetDefaultServer={() => {}}
+        canRemoveServer={() => false}
+        onRemoveServer={() => {}}
+        canHideServer={() => false}
+        onHideServer={() => {}}
+        onMoveProject={() => {}}
+        onSelectProject={() => {}}
+        onAddProjects={() => {}}
+        onOpenProjectNewSession={() => {}}
+        canImportSession={false}
+        onImportSession={() => {}}
+        onEditProject={() => {}}
+        onRevealProject={() => {}}
+        onClearNotifications={() => {}}
+        onCloseProject={() => {}}
+        onOpenSettings={() => {}}
+        onOpenHelp={() => {}}
+      />
+    </div>
   )
 }
 
@@ -115,6 +247,9 @@ function Open(props: { initial?: string }) {
 }
 
 export default { title: "App/Dialogs/SSH", id: "app-dialog-ssh" }
+export const AuthenticationRequired = { render: () => <Fixture initial="required" /> }
+export const InactiveSession = { render: () => <Fixture initial="required" session connectionDelay={3000} /> }
+export const KeyReconnect = { render: () => <Fixture initial="required" session keyOnly connectionDelay={3000} /> }
 export const Host = { render: () => <Fixture /> }
 export const Connecting = { render: () => <Fixture initial="connecting" /> }
 export const Password = { render: () => <Fixture initial="password" /> }

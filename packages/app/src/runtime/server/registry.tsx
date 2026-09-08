@@ -5,6 +5,7 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { pathKey } from "@/workspaces/path-key"
 import { ServerScope } from "@/runtime/server/scope"
 import { ServerHttp, ServerHttpBase, ServerKey, serverState } from "./persistence"
+import type { SshItem } from "@/servers/ssh/types"
 
 type ServerState = ReturnType<typeof serverState>["current"]["Type"]
 // The store retains more history than is displayed. Consumers filter recently closed entries
@@ -160,7 +161,9 @@ export namespace ServerConnection {
   // Remote server desktop can SSH into
   export type Ssh = {
     type: "ssh"
+    stage?: SshItem["stage"]
     connecting?: boolean
+    authenticationRequired?: boolean
     id?: string
     host: string
     // SSH client exposes an HTTP server for the app to use as a proxy

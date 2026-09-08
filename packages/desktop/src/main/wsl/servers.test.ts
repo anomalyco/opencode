@@ -12,8 +12,10 @@ type ControllerOptions = Parameters<typeof createWslServersController>[0]
 let persistedServers: WslServerConfig[] = []
 
 const it = testEffect(NodeServices.layer)
+// Execute the Linux-side installer fixture locally rather than requiring a WSL distro.
+const posix = process.platform === "win32" ? it.live.skip : it.live
 
-it.live(
+posix(
   "installs a local build through the managed installer, including shell PATH setup",
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem

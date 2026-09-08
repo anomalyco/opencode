@@ -11,6 +11,7 @@ export const SshRpcs = RpcGroup.make(
   Rpc.make("SshResolve", { payload: { id: Schema.String }, success: Schema.NullOr(SshHttp) }),
   Rpc.make("SshRespond", { payload: { id: Schema.String, prompt: Schema.String, value: Schema.String } }),
   Rpc.make("SshDisconnect", { payload: { id: Schema.String } }),
+  Rpc.make("SshCancel", { payload: { id: Schema.String } }),
   Rpc.make("SshForget", { payload: { id: Schema.String } }),
   Rpc.make("SshOpenConfig"),
 )

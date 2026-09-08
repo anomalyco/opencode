@@ -161,8 +161,27 @@ export function createServerHealth(
     }
     // Snapshot transport fields synchronously so a newly established SSH tunnel
     // invalidates both the old result and any probe still using the old endpoint.
-    const list = servers().map((conn) => ({ key: ServerConnection.key(conn), type: conn.type, http: conn.http }))
+    const list = servers().map((conn) => ({
+      key: ServerConnection.key(conn),
+      type: conn.type,
+      http: conn.http,
+      stage: conn.type === "ssh" ? conn.stage : undefined,
+    }))
     for (const conn of list) {
+      if (conn.stage && conn.stage !== "ready") {
+        endpoints.delete(conn.key)
+        setStatus(
+          conn.key,
+          reconcile(
+            conn.stage === "failed"
+              ? { healthy: false }
+              : conn.stage === "incompatible"
+                ? { healthy: false, incompatible: true }
+                : undefined,
+          ),
+        )
+        continue
+      }
       const endpoint = cacheKey(conn.http)
       if (conn.type === "ssh" && endpoints.get(conn.key) !== endpoint) {
         setStatus(conn.key, reconcile({ healthy: false, checking: true }))
@@ -175,9 +194,18 @@ export function createServerHealth(
     let dead = false
 
     const refresh = async () => {
-      const results: Record<string, ServerHealth> = {}
+      const results: Record<string, ServerHealth | undefined> = {}
       await Promise.all(
         list.map(async (conn) => {
+          if (conn.stage && conn.stage !== "ready") {
+            results[conn.key] =
+              conn.stage === "failed"
+                ? { healthy: false }
+                : conn.stage === "incompatible"
+                  ? { healthy: false, incompatible: true }
+                  : undefined
+            return
+          }
           const result = await check(conn.http)
           results[conn.key] = result
           if (!dead) setStatus(conn.key, reconcile(result))

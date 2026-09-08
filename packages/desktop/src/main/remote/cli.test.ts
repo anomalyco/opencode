@@ -7,6 +7,8 @@ import { testEffect } from "../../../../core/test/lib/effect"
 import { RemoteCli } from "./cli"
 
 const it = testEffect(NodeServices.layer)
+// These scripts execute on the POSIX remote host, not the Windows desktop.
+const posix = process.platform === "win32" ? it.live.skip : it.live
 
 it.live(
   "resolves the beta channel and rejects unavailable or invalid metadata",
@@ -32,7 +34,7 @@ it.live(
   }),
 )
 
-it.live(
+posix(
   "discovers the managed CLI by default and uses PATH only when requested",
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
@@ -69,7 +71,7 @@ test("pins platform-specific artifacts and rejects unsafe inputs", () => {
   expect(() => RemoteCli.archiveUrl("linux-x64;whoami", "2.0.0")).toThrow()
 })
 
-it.live(
+posix(
   "downloads or uploads the same archive into managed and version-specific locations",
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem

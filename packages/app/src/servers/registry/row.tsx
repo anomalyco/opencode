@@ -104,35 +104,52 @@ export function ServerRow(props: ServerRowProps) {
   )
 }
 
-export function ServerHealthIndicator(props: { health?: ServerHealth; connecting?: boolean }) {
+export function ServerHealthIndicator(props: {
+  health?: ServerHealth
+  connecting?: boolean
+  authenticationRequired?: boolean
+}) {
   const language = useLanguage()
   return (
     <Show
-      when={props.connecting || props.health?.checking}
+      when={props.authenticationRequired}
       fallback={
         <Show
-          when={props.health?.incompatible}
+          when={props.connecting || props.health?.checking}
           fallback={
-            <div
-              classList={{
-                "size-1.5 rounded-full shrink-0 my-[3.5px]": true,
-                "bg-icon-success-base": props.health?.healthy === true,
-                "bg-icon-critical-base": props.health?.healthy === false,
-                "bg-border-weak-base": props.health === undefined,
-              }}
-            />
+            <Show
+              when={props.health?.incompatible}
+              fallback={
+                <div
+                  classList={{
+                    "size-1.5 rounded-full shrink-0 my-[3.5px]": true,
+                    "bg-icon-success-base": props.health?.healthy === true,
+                    "bg-icon-critical-base": props.health?.healthy === false,
+                    "bg-border-weak-base": props.health === undefined,
+                  }}
+                />
+              }
+            >
+              <Icon name="warning" size="small" class="shrink-0 text-icon-warning-base" />
+            </Show>
           }
         >
-          <Icon name="warning" size="small" class="shrink-0 text-icon-warning-base" />
+          <span
+            role="status"
+            aria-label={language.t("ssh.stage.connecting")}
+            class="inline-flex h-3.5 w-1.5 shrink-0 items-center justify-center text-v2-icon-icon-muted"
+          >
+            <Spinner class="size-3 shrink-0" />
+          </span>
         </Show>
       }
     >
       <span
         role="status"
-        aria-label={language.t("ssh.stage.connecting")}
+        aria-label={language.t("ssh.stage.authentication")}
         class="inline-flex h-3.5 w-1.5 shrink-0 items-center justify-center text-v2-icon-icon-muted"
       >
-        <Spinner class="size-3 shrink-0" />
+        <Icon name="lock" size="small" class="shrink-0" />
       </span>
     </Show>
   )

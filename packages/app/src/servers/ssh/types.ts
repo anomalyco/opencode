@@ -65,6 +65,7 @@ export type SshPlatform = {
   resolve(id: string): Promise<SshHttp | null>
   respond(id: string, prompt: string, value: string): Promise<void>
   disconnect(id: string): Promise<void>
+  cancel(id: string): Promise<void>
   forget(id: string): Promise<void>
   openConfig(): Promise<void>
 }
