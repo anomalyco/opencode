@@ -1,10 +1,10 @@
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js"
-import type { SessionStatus } from "@opencode-ai/client/promise"
-import { useI18n } from "@opencode-ai/ui/context/i18n"
-import { Card } from "@opencode-ai/ui/card"
-import { Icon } from "@opencode-ai/ui/icon"
-import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import type { SessionStatus } from "@opencode/client/promise"
+import { useI18n } from "@opencode/ui/context/i18n"
+import { Card } from "@opencode/ui/card"
+import { Icon } from "@opencode/ui/icon"
+import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { SessionErrorMessage } from "./session-error"
 
 export function SessionRetry(props: { status: SessionStatus; show?: boolean }) {

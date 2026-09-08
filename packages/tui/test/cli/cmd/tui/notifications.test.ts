@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import Notifications from "../../../../src/feature-plugins/system/notifications"
-import type { OpenCodeEvent, PermissionAsked } from "@opencode-ai/client"
-import type { AttentionNotifyOptions, Context, Route, ToastOptions } from "@opencode-ai/plugin/tui/context"
+import type { OpenCodeEvent, PermissionAsked } from "@opencode/client"
+import type { AttentionNotifyOptions, Context, Route, ToastOptions } from "@opencode/plugin/tui/context"
 
 type Session = { id: string; title: string; parentID?: string }
 

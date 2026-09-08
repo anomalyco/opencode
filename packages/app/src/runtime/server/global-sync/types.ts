@@ -1,6 +1,6 @@
 import type { Agent, Config, LspStatus, Path, ProviderListResponse, VcsInfo } from "@/runtime/server/types"
-import type { ReferenceInfo } from "@opencode-ai/client/promise"
-import type { CommandInfo, McpResource, McpServer } from "@opencode-ai/client/promise"
+import type { ReferenceInfo } from "@opencode/client/promise"
+import type { CommandInfo, McpResource, McpServer } from "@opencode/client/promise"
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 import { IconState, ProjectState, VcsState } from "../persistence"

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Context, Deferred, Duration, Effect, Fiber, Layer, LayerMap, Option } from "effect"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { testEffect } from "../../lib/effect"
 
 class Value extends Context.Service<Value, { readonly value: string }>()("test/LayerNodeValue") {}

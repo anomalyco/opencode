@@ -1,6 +1,6 @@
 import { For } from "solid-js"
 import { IconButton } from "./icon-button"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@opencode/ui/icon"
 
 const docs = `### Overview
 Square icon-only button with three visual variants and three sizes.

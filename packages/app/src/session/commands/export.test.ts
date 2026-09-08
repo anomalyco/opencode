@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionInfo, SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
 import type { ServerApi } from "@/runtime/server/api"
 import type { Platform } from "@/runtime/platform/platform"
 import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "./export"

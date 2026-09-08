@@ -1,5 +1,5 @@
 import { bundledLanguagesInfo } from "shiki"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode/util/path"
 
 // language metadata only; grammars stay behind shiki's lazy imports
 const LANGUAGE_NAMES = new Map<string, string>(

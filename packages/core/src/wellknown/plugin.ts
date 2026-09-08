@@ -1,6 +1,6 @@
 export * as WellKnownPlugin from "./plugin.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { WellKnown } from "../wellknown.js"

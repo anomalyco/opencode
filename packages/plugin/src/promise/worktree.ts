@@ -1,4 +1,4 @@
-import type { WorktreeApi } from "@opencode-ai/client/promise/api"
+import type { WorktreeApi } from "@opencode/client/promise/api"
 import type { WorktreeCreateInput, WorktreeEntry, WorktreeRemoveInput, WorktreeResult } from "../worktree.js"
 import type { Transform } from "./registration.js"
 

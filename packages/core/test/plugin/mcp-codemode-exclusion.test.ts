@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
-import { McpCodeModeExclusionPlugin } from "@opencode-ai/core/plugin/mcp-codemode-exclusion"
-import type { Mcp } from "@opencode-ai/schema/mcp"
+import { McpCodeModeExclusionPlugin } from "@opencode/core/plugin/mcp-codemode-exclusion"
+import type { Mcp } from "@opencode/schema/mcp"
 import { Effect, type Types } from "effect"
 import { it } from "../lib/effect"
 import { host } from "./host"

@@ -8,7 +8,7 @@ const core = resolve(import.meta.dir, "../../core")
 const server = resolve(import.meta.dir, "../../server")
 
 test("bundles the Promise and Effect clients with the in-memory host", async () => {
-  const bundles = await Promise.all([bundleInputs("@opencode-ai/sdk"), bundleInputs("@opencode-ai/sdk/effect")])
+  const bundles = await Promise.all([bundleInputs("@opencode/sdk"), bundleInputs("@opencode/sdk/effect")])
 
   for (const inputs of bundles) {
     expect(within(inputs, client).length).toBeGreaterThan(0)

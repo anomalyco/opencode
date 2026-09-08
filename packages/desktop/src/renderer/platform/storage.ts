@@ -4,7 +4,7 @@ import {
   flushPersisted,
   type NamespaceStorage,
   type Platform,
-} from "@opencode-ai/app/desktop"
+} from "@opencode/app/desktop"
 import type { ElectronAPI } from "../api-types"
 import { onBeforeDispose } from "../ipc-client"
 

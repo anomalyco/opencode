@@ -1,7 +1,7 @@
-import { OpenCode, type MigrationV1StatusOutput } from "@opencode-ai/client/promise"
-import { useLanguage } from "@opencode-ai/app/desktop"
-import { Loader } from "@opencode-ai/ui/loader"
-import { showToast, toaster, Toast } from "@opencode-ai/ui/toast"
+import { OpenCode, type MigrationV1StatusOutput } from "@opencode/client/promise"
+import { useLanguage } from "@opencode/app/desktop"
+import { Loader } from "@opencode/ui/loader"
+import { showToast, toaster, Toast } from "@opencode/ui/toast"
 import { createRoot, createSignal, onCleanup, onMount } from "solid-js"
 import type { ServerReadyData } from "../shared/ipc-contract"
 

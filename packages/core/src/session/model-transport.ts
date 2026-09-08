@@ -9,12 +9,12 @@ import {
   type WebSocketChannelExecutor,
   type WebSocketConnection,
   type WebSocketConnector,
-} from "@opencode-ai/ai/route"
-import { AIError, AIErrorReason, TransportError, type TransportOperation } from "@opencode-ai/ai"
-import { Hash } from "@opencode-ai/util/hash"
+} from "@opencode/ai/route"
+import { AIError, AIErrorReason, TransportError, type TransportOperation } from "@opencode/ai"
+import { Hash } from "@opencode/util/hash"
 import { Cause, Clock, Context, Effect, Fiber, Layer, Metric, Queue, Scope, Semaphore, Stream } from "effect"
 import { Socket } from "effect/unstable/socket"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { SessionSchema } from "./schema.js"
 import { webSocketConstructor } from "../effect/app-node-platform.js"
 

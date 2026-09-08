@@ -1,4 +1,4 @@
-import type { SessionMessageAssistant, SessionMessageAssistantTool } from "@opencode-ai/client/promise"
+import type { SessionMessageAssistant, SessionMessageAssistantTool } from "@opencode/client/promise"
 import { Option, Schema } from "effect"
 
 const decodeInput = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))

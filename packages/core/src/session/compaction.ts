@@ -10,13 +10,13 @@ import {
   LLMRequest,
   Message,
   type ContentPart,
-} from "@opencode-ai/ai"
-import { Agent } from "@opencode-ai/schema/agent"
-import { SessionError } from "@opencode-ai/schema/session-error"
+} from "@opencode/ai"
+import { Agent } from "@opencode/schema/agent"
+import { SessionError } from "@opencode/schema/session-error"
 import { Context, Effect, Layer, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { llmClient } from "../effect/app-node-platform.js"
 import { SessionEvent } from "./event.js"
 import type { SessionContext } from "./context.js"

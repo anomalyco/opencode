@@ -1,14 +1,14 @@
-import { Form } from "@opencode-ai/core/form"
-import { Instance } from "@opencode-ai/core/instance/service"
-import { LocationServiceMap } from "@opencode-ai/core/location-services"
-import { Session } from "@opencode-ai/core/session"
+import { Form } from "@opencode/core/form"
+import { Instance } from "@opencode/core/instance/service"
+import { LocationServiceMap } from "@opencode/core/location-services"
+import { Session } from "@opencode/core/session"
 import {
   ConflictError,
   FormAlreadySettledError,
   FormInvalidAnswerError,
   FormNotFoundError,
   InvalidRequestError,
-} from "@opencode-ai/protocol/errors"
+} from "@opencode/protocol/errors"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"

@@ -1,5 +1,5 @@
-import { Plugin } from "@opencode-ai/plugin/tui"
-import type { AttentionSoundName } from "@opencode-ai/plugin/tui/context"
+import { Plugin } from "@opencode/plugin/tui"
+import type { AttentionSoundName } from "@opencode/plugin/tui/context"
 
 function notify(
   context: Plugin.Context,

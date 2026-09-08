@@ -1,6 +1,6 @@
 export * as IntegrationConnection from "./connection.js"
 
-import { Connection } from "@opencode-ai/schema/connection"
+import { Connection } from "@opencode/schema/connection"
 
 export const CredentialInfo = Connection.CredentialInfo
 export type CredentialInfo = Connection.CredentialInfo

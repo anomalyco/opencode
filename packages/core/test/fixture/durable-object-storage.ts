@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite"
-import type { DurableObjectStorage } from "@opencode-ai/core/database/sqlite.workerd"
+import type { DurableObjectStorage } from "@opencode/core/database/sqlite.workerd"
 
 // Emulates the Durable Object storage API over bun:sqlite so the workerd
 // adapter and the workerd server profile can be verified without workerd or

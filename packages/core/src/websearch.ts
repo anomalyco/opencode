@@ -1,11 +1,11 @@
 export * as WebSearch from "./websearch.js"
 
-import { WebSearch } from "@opencode-ai/schema/websearch"
-import type { Session } from "@opencode-ai/schema/session"
-import { SessionEvent } from "@opencode-ai/schema/session-event"
+import { WebSearch } from "@opencode/schema/websearch"
+import type { Session } from "@opencode/schema/session"
+import { SessionEvent } from "@opencode/schema/session-event"
 import { Clock, Context, Effect, Layer, Option, Schema, Stream } from "effect"
 import { HttpClientError } from "effect/unstable/http"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Bus } from "./bus.js"
 import { KV } from "./kv.js"
 import { State } from "./state.js"
@@ -16,7 +16,7 @@ export type ID = WebSearch.ID
 export const Provider = WebSearch.Provider
 export type Provider = WebSearch.Provider
 
-export { Event } from "@opencode-ai/schema/websearch"
+export { Event } from "@opencode/schema/websearch"
 
 export const Input = WebSearch.Input
 export type Input = WebSearch.Input

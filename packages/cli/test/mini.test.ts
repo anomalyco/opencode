@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ClientError, OpenCode } from "@opencode-ai/client/promise"
+import { ClientError, OpenCode } from "@opencode/client/promise"
 import { OPENCODE_VERSION } from "../src/version"
 import path from "node:path"
 import { createMiniConnection, mergeInput as mergeInteractiveInput, resolveMiniTarget } from "../src/mini"

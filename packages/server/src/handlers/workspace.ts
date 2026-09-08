@@ -1,5 +1,5 @@
-import { Workspace } from "@opencode-ai/core/workspace"
-import { ConflictError, ProviderNotFoundError, UnknownError } from "@opencode-ai/protocol/errors"
+import { Workspace } from "@opencode/core/workspace"
+import { ConflictError, ProviderNotFoundError, UnknownError } from "@opencode/protocol/errors"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"

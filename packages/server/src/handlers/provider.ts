@@ -1,5 +1,5 @@
-import { Catalog } from "@opencode-ai/core/catalog"
-import { ProviderNotFoundError } from "@opencode-ai/protocol/errors"
+import { Catalog } from "@opencode/core/catalog"
+import { ProviderNotFoundError } from "@opencode/protocol/errors"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"

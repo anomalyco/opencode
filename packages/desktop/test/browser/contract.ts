@@ -1,5 +1,5 @@
-import { Rpc } from "@opencode-ai/schema/rpc"
-import { Session } from "@opencode-ai/schema/session"
+import { Rpc } from "@opencode/schema/rpc"
+import { Session } from "@opencode/schema/session"
 import { Schema } from "effect"
 
 export const Smoke = Rpc.define({

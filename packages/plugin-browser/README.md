@@ -1,6 +1,6 @@
 # Browser plugin
 
-`@opencode-ai/plugin-browser` exposes the desktop browser through Code Mode.
+`@opencode/plugin-browser` exposes the desktop browser through Code Mode.
 The server owns tools, invocation scope, and permissions; the desktop owns tabs,
 CDP, captured traffic, evaluations, and capture files. Core only registers the
 plugin. Neither endpoint imports the other's implementation.
@@ -28,7 +28,7 @@ Screenshots require a focused, visible tab; call `browser.tabs.focus` first.
 - Audits: `lighthouse` (accessibility, SEO, best practices).
 
 The source of truth for inputs, descriptions, and outputs is
-`Browser.Operations` in `@opencode-ai/plugin-browser/rpc`.
+`Browser.Operations` in `@opencode/plugin-browser/rpc`.
 
 The plugin entrypoint only composes its two owners: `connection.ts` manages
 desktop attachments and pending RPC requests; `tools.ts` runs the tool workflow.
@@ -43,7 +43,7 @@ Native browser coverage lives with the desktop implementation
 
 ## RPC
 
-The plugin-owned contract is `@opencode-ai/plugin-browser/rpc`. This entrypoint
+The plugin-owned contract is `@opencode/plugin-browser/rpc`. This entrypoint
 contains only schemas and descriptions; it does not load the server plugin or
 filesystem code. The desktop subscribes
 to control events before starting `attach` with `version: 4`. The attachment call

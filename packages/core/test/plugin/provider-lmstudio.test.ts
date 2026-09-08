@@ -1,14 +1,14 @@
-import { Bus } from "@opencode-ai/core/bus"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Config } from "@opencode-ai/core/config"
-import { Integration } from "@opencode-ai/core/integration"
-import { Model } from "@opencode-ai/core/model"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { LMStudioPlugin, make } from "@opencode-ai/core/plugin/provider/lmstudio"
-import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
-import { Provider } from "@opencode-ai/core/provider"
-import { Document, Event, Info } from "@opencode-ai/schema/config"
+import { Bus } from "@opencode/core/bus"
+import { Catalog } from "@opencode/core/catalog"
+import { Config } from "@opencode/core/config"
+import { Integration } from "@opencode/core/integration"
+import { Model } from "@opencode/core/model"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { LMStudioPlugin, make } from "@opencode/core/plugin/provider/lmstudio"
+import { ProviderPlugins } from "@opencode/core/plugin/provider"
+import { Provider } from "@opencode/core/provider"
+import { Document, Event, Info } from "@opencode/schema/config"
 import { describe, expect, test } from "bun:test"
 import { Duration, Effect, Layer, Schema } from "effect"
 import { testEffect } from "../lib/effect"
@@ -101,7 +101,7 @@ describe("LMStudioPlugin", () => {
             id: providerID,
             name: "LM Studio",
             activation: "enabled",
-            package: "@opencode-ai/ai/providers/openai-compatible",
+            package: "@opencode/ai/providers/openai-compatible",
             settings: { baseURL: `${server.url.origin}/v1`, provider: "lmstudio", apiKey: "" },
           })
           expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(providerID)

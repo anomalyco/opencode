@@ -1,7 +1,7 @@
 export * as Config from "."
 
 import { createBindingLookup } from "@opentui/keymap/extras"
-import { Vcs } from "@opencode-ai/schema/vcs"
+import { Vcs } from "@opencode/schema/vcs"
 import { Schema } from "effect"
 import { createContext, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, ImageInput, LanguageModel, LLM, LLMClient, Provider } from "@opencode-ai/ai"
-import { Route, Protocol, WebSocketTransport } from "@opencode-ai/ai/route"
-import { Provider as ProviderSubpath } from "@opencode-ai/ai/provider"
+import { AIError, ImageInput, LanguageModel, LLM, LLMClient, Provider } from "@opencode/ai"
+import { Route, Protocol, WebSocketTransport } from "@opencode/ai/route"
+import { Provider as ProviderSubpath } from "@opencode/ai/provider"
 import {
   Baseten,
   CloudflareAIGateway,
@@ -12,7 +12,7 @@ import {
   OpenAICompatible,
   OpenRouter,
   XAI,
-} from "@opencode-ai/ai/providers"
+} from "@opencode/ai/providers"
 import {
   OpenAIChat,
   OpenAICompatibleChat,
@@ -20,9 +20,9 @@ import {
   OpenAIResponses,
   OpenResponses,
   OpenResponsesChannel,
-} from "@opencode-ai/ai/protocols"
-import * as AnthropicMessages from "@opencode-ai/ai/protocols/anthropic-messages"
-import { TestLLM } from "@opencode-ai/ai/testing"
+} from "@opencode/ai/protocols"
+import * as AnthropicMessages from "@opencode/ai/protocols/anthropic-messages"
+import { TestLLM } from "@opencode/ai/testing"
 
 describe("public exports", () => {
   test("root exposes app-facing runtime APIs", () => {
@@ -46,7 +46,7 @@ describe("public exports", () => {
   })
 
   test("provider barrels expose user-facing facades", async () => {
-    const { OpenAICompatibleResponses } = await import("@opencode-ai/ai/providers")
+    const { OpenAICompatibleResponses } = await import("@opencode/ai/providers")
 
     expect(OpenAI.model).toBeFunction()
     expect(OpenAI.provider.responses).toBe(OpenAI.responses)

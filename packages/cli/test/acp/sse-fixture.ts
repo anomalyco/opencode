@@ -1,4 +1,4 @@
-import { OpenCode, type OpenCodeEvent, type SessionMessageInfo } from "@opencode-ai/client/promise"
+import { OpenCode, type OpenCodeEvent, type SessionMessageInfo } from "@opencode/client/promise"
 
 type DurableEvent = Extract<OpenCodeEvent, { durable: unknown }>
 type EphemeralEvent = Exclude<OpenCodeEvent, DurableEvent>

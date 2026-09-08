@@ -29,7 +29,7 @@ describe("dotted tool names", () => {
     const catalog = runtime.catalog()
     expect(catalog).toHaveLength(1)
     expect(catalog[0]?.path).toBe("api.issues.list")
-    expect(catalog[0]?.signature).toStartWith("tools.api.issues.list(input:")
+    expect(catalog[0]?.signature).toStartWith("tools.api.issues.list(")
   })
 
   test("the advertised dotted path is executable", async () => {
@@ -138,9 +138,15 @@ describe("tool input diagnostics", () => {
   })
 
   test("a wrong argument count keeps the existing error without a stale-signature hint", async () => {
-    const diagnostic = await failure(runtime, `return await tools.notes.echo()`)
+    const diagnostic = await failure(runtime, `return await tools.notes.echo({}, {})`)
     expect(diagnostic.kind).toBe("InvalidToolInput")
     expect(diagnostic.suggestions).toBeUndefined()
+  })
+
+  test("an empty-input tool advertises () and runs with zero arguments", async () => {
+    const empty = CodeMode.make({ tools: { ping: echo("Ping", "pong") } })
+    expect(empty.catalog()[0]?.signature).toBe("tools.ping(): Promise<string>")
+    expect(await value(empty, `return await tools.ping()`)).toBe("pong")
   })
 })
 

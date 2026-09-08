@@ -1,5 +1,5 @@
-import type { Data } from "@opencode-ai/client/solid"
-import type { SessionMessageUser } from "@opencode-ai/client/promise"
+import type { Data } from "@opencode/client/solid"
+import type { SessionMessageUser } from "@opencode/client/promise"
 import type { Accessor } from "solid-js"
 import type { ModelSelection } from "@/providers/models/selection"
 import type { ServerSDK } from "@/runtime/server/client"

@@ -10,7 +10,7 @@ const channel = (() => {
 
 const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
 
-const appPlugin = (await import("@opencode-ai/app/vite")).default
+const appPlugin = (await import("@opencode/app/vite")).default
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
     ? (await import("@sentry/vite-plugin")).sentryVitePlugin({

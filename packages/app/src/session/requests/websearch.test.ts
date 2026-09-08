@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { FormAnswer, FormCreated, FormReplyInput, OpenCodeEvent } from "@opencode-ai/client/promise"
+import type { FormAnswer, FormCreated, FormReplyInput, OpenCodeEvent } from "@opencode/client/promise"
 import { replyWebSearch } from "./websearch"
 
 const consent: FormCreated["data"]["form"] = {

@@ -35,7 +35,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const cli = yield* desktopCli.resolve
   const version = mode === "initial" ? cli.version : undefined
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
-  const client = yield* Effect.promise(() => import("@opencode-ai/client/service"))
+  const client = yield* Effect.promise(() => import("@opencode/client/service"))
   const service = yield* Effect.tryPromise(() =>
     client.Service.ensure({
       file:

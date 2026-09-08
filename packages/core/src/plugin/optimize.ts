@@ -1,8 +1,8 @@
 export * as OptimizePlugin from "./optimize.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
-import { Model } from "@opencode-ai/schema/model"
+import { define } from "@opencode/plugin/effect/plugin"
+import type { SessionHooks } from "@opencode/plugin/effect/session"
+import { Model } from "@opencode/schema/model"
 import { Effect } from "effect"
 import { SessionSystemPrompt } from "../session/system-prompt.js"
 

@@ -1,4 +1,4 @@
-import type { Browser } from "@opencode-ai/plugin-browser/rpc"
+import type { Browser } from "@opencode/plugin-browser/rpc"
 
 export function protocolError(method: string, error: unknown) {
   const detail = message(error)

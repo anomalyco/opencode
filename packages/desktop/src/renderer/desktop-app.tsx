@@ -15,8 +15,8 @@ import {
   useWslServers,
   type LayoutRoute,
   type UpdaterPlatform,
-} from "@opencode-ai/app/desktop"
-import { useTheme } from "@opencode-ai/ui/theme/context"
+} from "@opencode/app/desktop"
+import { useTheme } from "@opencode/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createResource, lazy, Show, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
