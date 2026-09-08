@@ -3,10 +3,11 @@ import { writeFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { encode } from "uqr"
+import { mockOpenCodeServer } from "../utils/mock-server"
 
 const video = path.join(tmpdir(), `opencode-pairing-${process.pid}.y4m`)
 const pairing = {
-  urls: ["http://192.168.1.20:4096", "http://[fd00::1]:4096"],
+  urls: ["http://127.0.0.1:4096", "http://[fd00::1]:4096"],
   username: "opencode",
   password: "qr-test-password",
 }
@@ -47,12 +48,48 @@ test.beforeAll(async () => {
 
 test.afterAll(() => rm(video, { force: true }))
 
-test("scans opencode pair into the address and password fields", async ({ page }) => {
+test("automatically attempts pairing and keeps the scanned details after a failed connection", async ({ page }) => {
+  await page.route(`${pairing.urls[0]}/api/health`, (route) => route.fulfill({ status: 401, json: {} }))
   await page.goto("/")
+  const attempt = page.waitForRequest(`${pairing.urls[0]}/api/health`)
   await page.getByRole("button", { name: "Scan QR code" }).click()
+  expect((await attempt).headers().authorization).toBe(
+    `Basic ${Buffer.from(`opencode:${pairing.password}`).toString("base64")}`,
+  )
+  await expect(page.getByRole("alert")).toHaveText(
+    "Could not connect. Check the server address and password, then try again.",
+  )
   await expect(page.getByLabel("Server address")).toHaveValue(pairing.urls[0])
   await expect(page.getByLabel("Password", { exact: true })).toHaveValue(pairing.password)
   await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute("type", "password")
   await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeEnabled()
   await expect(page.getByLabel("Pairing camera")).toHaveCount(0)
+  expect(await page.evaluate(() => localStorage.getItem("opencode.global.dat:server"))).toBeNull()
+})
+
+test("connects and opens the app after scanning without pressing Connect", async ({ page }) => {
+  await mockOpenCodeServer(page, {
+    provider: { all: [], default: {}, connected: [] },
+    directory: "/fixture",
+    project: { id: "fixture", worktree: "/fixture", time: { created: 1 } },
+    sessions: [],
+    pageMessages: () => ({ items: [] }),
+  })
+  await page.route(`${pairing.urls[0]}/api/health`, (route) =>
+    route.fulfill({
+      status:
+        route.request().headers().authorization ===
+        `Basic ${Buffer.from(`opencode:${pairing.password}`).toString("base64")}`
+          ? 200
+          : 401,
+      json: { healthy: true, version: "2.0.0" },
+    }),
+  )
+  await page.goto("/")
+  await page.getByRole("button", { name: "Scan QR code" }).click()
+  await expect(page.getByRole("button", { name: "Tabs", exact: true })).toBeVisible()
+  await expect(page.getByRole("main", { name: "Connect to a server" })).toHaveCount(0)
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("opencode.global.dat:server")))
+    .toContain(pairing.password)
 })

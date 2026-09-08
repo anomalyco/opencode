@@ -96,7 +96,8 @@ from storage. Desktop provides the local server it discovers or starts through n
 
 With no configured servers, the app shows a full-screen connection form. Enter a server address and password,
 or choose **Scan QR code** to open the camera and read the JSON pairing code from `opencode pair`.
-Scanning fills the form; **Connect** checks the credentials before saving the server. Camera access requires
+Scanning fills the form and immediately attempts to connect. Failed connections leave the details available
+to edit and retry with **Connect**. Credentials are checked before saving the server. Camera access requires
 HTTPS (or localhost) and browser permission. Saved offline servers continue to use the normal app UI.
 
 Run `bun run test:server-connect` to build in `none` mode and test onboarding, password authentication,

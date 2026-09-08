@@ -53,7 +53,7 @@ export function ConnectServerScreen() {
             <Suspense fallback={<p role="status">{language.t("server.connect.camera.starting")}</p>}>
               <PairingScanner
                 onCancel={() => setState("scanning", false)}
-                onScan={(pairing) =>
+                onScan={(pairing) => {
                   setState({
                     url: pairing.urls[0],
                     urls: pairing.urls,
@@ -61,7 +61,8 @@ export function ConnectServerScreen() {
                     error: "",
                     scanning: false,
                   })
-                }
+                  request.mutate()
+                }}
               />
             </Suspense>
           }
