@@ -1395,6 +1395,114 @@ it.instance(
   10_000,
 )
 
+it.instance("cancel resumes a prompt queued mid-run", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    const gate = yield* Deferred.make<void>()
+    yield* llm.hold("first", deferredAsPromise(gate))
+    yield* llm.text("second")
+
+    const a = yield* prompt
+      .prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        parts: [{ type: "text", text: "first" }],
+      })
+      .pipe(Effect.forkChild)
+
+    yield* llm.wait(1)
+    yield* waitForBusy(chat.id)
+
+    const id = MessageID.ascending()
+    const b = yield* prompt
+      .prompt({
+        sessionID: chat.id,
+        messageID: id,
+        agent: "build",
+        model: ref,
+        parts: [{ type: "text", text: "second" }],
+      })
+      .pipe(Effect.forkChild)
+
+    yield* pollWithTimeout(
+      sessions
+        .messages({ sessionID: chat.id })
+        .pipe(
+          Effect.map((msgs) => (msgs.some((msg) => msg.info.role === "user" && msg.info.id === id) ? true : undefined)),
+        ),
+      "timed out waiting for queued prompt to save",
+    )
+
+    yield* prompt.cancel(chat.id)
+    yield* Deferred.succeed(gate, void 0)
+
+    const [exitA, exitB] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
+    expect(Exit.isSuccess(exitA)).toBe(true)
+    expect(Exit.isSuccess(exitB)).toBe(true)
+
+    // the queued prompt is answered without being re-sent
+    yield* llm.wait(2)
+    const msg = yield* pollWithTimeout(
+      sessions.messages({ sessionID: chat.id }).pipe(
+        Effect.map((msgs) =>
+          msgs.findLast(
+            (msg) =>
+              msg.info.role === "assistant" &&
+              msg.info.parentID === id &&
+              msg.parts.some((part) => part.type === "text" && part.text === "second"),
+          ),
+        ),
+      ),
+      "timed out waiting for queued prompt reply",
+    )
+    if (msg.info.role !== "assistant") throw new Error("expected assistant reply")
+    expect(msg.info.finish).toBe("stop")
+  }),
+  10_000,
+)
+
+it.instance("cancel without queued input does not restart the loop", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    yield* llm.hang
+    const a = yield* prompt
+      .prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        parts: [{ type: "text", text: "only question" }],
+      })
+      .pipe(Effect.forkChild)
+
+    yield* llm.wait(1)
+    yield* waitForBusy(chat.id)
+
+    yield* prompt.cancel(chat.id)
+    const exit = yield* Fiber.await(a)
+    expect(Exit.isSuccess(exit)).toBe(true)
+
+    // Negative assertion: nothing to wait on when the loop correctly stays
+    // stopped, so give a wrongly-resumed loop a window to fire its request.
+    yield* Effect.sleep("500 millis")
+    expect(yield* llm.calls).toBe(1)
+    const last = yield* sessions
+      .messages({ sessionID: chat.id })
+      .pipe(Effect.map((msgs) => msgs.findLast((msg) => msg.info.role === "assistant")))
+    if (last?.info.role !== "assistant") throw new Error("expected aborted turn")
+    expect(last.info.finish).toBeUndefined()
+  }),
+  10_000,
+)
+
 // Queue semantics
 
 noLLMServer.instance("concurrent loop callers get same result", () =>

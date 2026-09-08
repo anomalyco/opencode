@@ -152,6 +152,28 @@ const layer = Layer.effect(
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
       yield* Effect.logInfo("cancel", { "session.id": sessionID })
       yield* state.cancel(sessionID)
+      // Prompts submitted mid-run persist their user message and join the run,
+      // so interrupting strands them in history unanswered. Restart the loop
+      // when the latest user message never got an assistant reply. Unlike the
+      // loop's own exit check, the interrupted turn's aborted assistant
+      // message counts as handled, so a plain abort does not re-run its turn.
+      const history = yield* sessions.messages({ sessionID }).pipe(Effect.option)
+      if (Option.isNone(history)) return
+      const lastUser = history.value.findLast((msg) => msg.info.role === "user")
+      if (!lastUser) return
+      // Synthetic-only messages (e.g. workspace move reminders) expect no reply
+      if (!lastUser.parts.some((part) => part.type !== "text" || !part.synthetic)) return
+      if (history.value.some((msg) => msg.info.role === "assistant" && msg.info.parentID === lastUser.info.id))
+        return
+      yield* loop({ sessionID }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("queued prompt resume failed", {
+            "session.id": sessionID,
+            cause: Cause.pretty(cause),
+          }),
+        ),
+        Effect.forkIn(scope),
+      )
     })
 
     const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
