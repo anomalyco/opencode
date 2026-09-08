@@ -1,6 +1,6 @@
 import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect"
 import type { Diagnostic } from "../codemode.js"
-import type { SafeObject } from "../tool-runtime.js"
+import type { SafeObject } from "../data.js"
 import {
   type AstNode,
   CodeModeFunction,

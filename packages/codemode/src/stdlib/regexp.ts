@@ -1,5 +1,5 @@
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
-import { isBlockedMember, type SafeObject } from "../tool-runtime.js"
+import { isBlockedMember, type SafeObject } from "../data.js"
 import { Values } from "../values.js"
 import { coerceToNumber, coerceToString } from "./value.js"
 

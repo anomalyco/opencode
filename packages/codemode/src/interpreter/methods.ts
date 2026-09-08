@@ -15,7 +15,8 @@ import {
   UriFunction,
 } from "./model.js"
 import { containsOpaqueReference, isRuntimeReference, rejectCircularInsertion, typeofValue } from "./references.js"
-import { compareText, isBlockedMember, type SafeObject } from "../tool-runtime.js"
+import { isBlockedMember, type SafeObject, toProgram } from "../data.js"
+import { compareText } from "../tool-runtime.js"
 import { Values } from "../values.js"
 import { dateSetterArgumentCount, invokeDateMethod, invokeDateStatic } from "../stdlib/date.js"
 import { invokeMathMethod } from "../stdlib/math.js"
@@ -24,7 +25,7 @@ import { invokeObjectMethod } from "../stdlib/object.js"
 import { invokeRegExpMethod, invokeRegExpStatic, matchToValue, toHostRegex } from "../stdlib/regexp.js"
 import { invokeStringStatic } from "../stdlib/string.js"
 import { invokeURLMethod, invokeURLStatic, uriArgument } from "../stdlib/url.js"
-import { boundedData, coerceToNumber, coerceToString, errorBrandName } from "../stdlib/value.js"
+import { coerceToNumber, coerceToString, errorBrandName } from "../stdlib/value.js"
 import { preserveConsumerError, type SyncIteratorRunner } from "./iterator.js"
 
 export type CallbackRunner<R> = {
@@ -292,7 +293,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
       const matched = value.match(pattern)
       if (matched === null) return null
       // Preserve the own `index` and `groups` properties on non-global matches.
-      if (pattern.global) return boundedData(matched, "String.match result")
+      if (pattern.global) return toProgram(matched, "String.match result")
       return matchToValue(matched)
     }
     case "matchAll": {
@@ -347,7 +348,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
     default:
       throw new InterpreterRuntimeError(`String method '${name}' is not available.`, node)
   }
-  return boundedData(result, `String.${name} result`)
+  return toProgram(result, `String.${name} result`)
 }
 
 export const arrayStatics = new Set(["isArray", "of", "from"])
@@ -540,19 +541,19 @@ const invokeStringReplacer = <R>(
     let end = 0
     for (const match of matches) {
       const replacement = yield* apply(match.args)
-      // Error values are branded plain objects; boundedData would strip the brand before coercion.
+      // Error values are branded plain objects; toProgram would strip the brand before coercion.
       output.push(
         value.slice(end, match.offset),
         replacement instanceof Values.Promise
           ? "[object Promise]"
           : errorBrandName(replacement)
             ? coerceToString(replacement)
-            : coerceToString(boundedData(replacement, `String.${name} replacer result`)),
+            : coerceToString(toProgram(replacement, `String.${name} replacer result`)),
       )
       end = match.offset + match.match.length
     }
     output.push(value.slice(end))
-    return boundedData(output.join(""), `String.${name} result`)
+    return toProgram(output.join(""), `String.${name} result`)
   })
 }
 
@@ -876,7 +877,7 @@ const invokeArrayMethod = <R>(
       if (args.length > 1 || (args.length === 1 && typeof args[0] !== "string")) {
         throw new InterpreterRuntimeError("Array.join expects zero arguments or one string separator.", node)
       }
-      const input = boundedData(target, "Array.join input") as Array<unknown>
+      const input = toProgram(target, "Array.join input") as Array<unknown>
       return Effect.succeed(
         input.map((item) => coerceToString(item ?? "")).join(args.length === 0 ? "," : (args[0] as string)),
       )

@@ -1,6 +1,7 @@
 import { type AstNode, InterpreterRuntimeError, UriFunction } from "../interpreter/model.js"
 import { Values } from "../values.js"
-import { boundedData, coerceToString } from "./value.js"
+import { toProgram } from "../data.js"
+import { coerceToString } from "./value.js"
 
 export const urlProperties = new Set([
   "href",
@@ -46,7 +47,7 @@ export const urlSearchParamsMethods = new Set([
   "toString",
 ])
 
-export const uriArgument = (value: unknown, label: string): string => coerceToString(boundedData(value, label))
+export const uriArgument = (value: unknown, label: string): string => coerceToString(toProgram(value, label))
 
 export const invokeUriFunction = (ref: UriFunction, args: Array<unknown>, node: AstNode): string => {
   const value = uriArgument(args[0], `${ref.name} input`)

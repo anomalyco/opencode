@@ -1,6 +1,6 @@
 import type { Effect } from "effect"
 import type { DiagnosticKind } from "../codemode.js"
-import type { SafeObject } from "../tool-runtime.js"
+import type { SafeObject } from "../data.js"
 import type { Values } from "../values.js"
 
 export type SourcePosition = {

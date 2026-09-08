@@ -1,5 +1,6 @@
 import { Cause, Deferred, Effect, Exit } from "effect"
-import { isBlockedMember, ToolReference, ToolRuntimeError, type SafeObject } from "../tool-runtime.js"
+import { isBlockedMember, ToolRuntimeError, type SafeObject, toProgram } from "../data.js"
+import { ToolReference } from "../tool-runtime.js"
 import {
   type AstNode,
   AsyncIteratorSymbol,
@@ -90,7 +91,6 @@ import {
   urlArgument,
 } from "../stdlib/url.js"
 import {
-  boundedData,
   coerceToNumber,
   coerceToString,
   compoundOperators,
@@ -1342,7 +1342,7 @@ export class Interpreter<R> {
             this.constructRegExp([regex.pattern, typeof regex.flags === "string" ? regex.flags : ""], node),
           )
         }
-        return Effect.sync(() => boundedData(node.value, "Literal"))
+        return Effect.sync(() => toProgram(node.value, "Literal"))
       }
       case "Identifier":
         return Effect.sync(() => this.scopes.get(getString(node, "name"), node))
@@ -1614,7 +1614,7 @@ export class Interpreter<R> {
         ).as("TypeError")
       }
       if (Values.isValue(init)) return new Values.URLSearchParams(new URLSearchParams())
-      const data = boundedData(init, "new URLSearchParams input")
+      const data = toProgram(init, "new URLSearchParams input")
       if (data === null || typeof data !== "object") {
         throw new InterpreterRuntimeError(
           "new URLSearchParams(...) expects a query string, data object, iterable pairs, or URLSearchParams.",
@@ -1659,7 +1659,7 @@ export class Interpreter<R> {
       const lhs = yield* self.evaluateExpression(getNode(node, "left"))
       const rhs = yield* self.evaluateExpression(getNode(node, "right"))
       if (operator === "instanceof") return instanceofValue(lhs, rhs, node)
-      return boundedData(self.applyBinaryOperator(operator, lhs, rhs, node), "Binary expression result")
+      return toProgram(self.applyBinaryOperator(operator, lhs, rhs, node), "Binary expression result")
     })
   }
 
@@ -1776,7 +1776,7 @@ export class Interpreter<R> {
         default:
           throw new InterpreterRuntimeError(`Unsupported unary operator '${operator}'.`, node)
       }
-      return boundedData(result, "Unary expression result")
+      return toProgram(result, "Unary expression result")
     })
   }
 
@@ -1798,7 +1798,7 @@ export class Interpreter<R> {
         if (operator !== "=") {
           const current = self.scopes.get(name, left)
           const rightValue = yield* self.evaluateExpression(getNode(node, "right"))
-          const next = boundedData(
+          const next = toProgram(
             self.applyCompoundAssignment(operator, current, rightValue, node),
             "Assignment result",
           )
@@ -1811,7 +1811,7 @@ export class Interpreter<R> {
         return yield* self.modifyMember(left, (current) =>
           Effect.map(self.evaluateExpression(getNode(node, "right")), (rightValue) => {
             if (operator === "=") return { write: true, next: rightValue, result: rightValue }
-            const next = boundedData(
+            const next = toProgram(
               self.applyCompoundAssignment(operator, current, rightValue, node),
               "Assignment result",
             )
@@ -1961,13 +1961,13 @@ export class Interpreter<R> {
         if (callable.namespace === "Array" && callable.name === "of") {
           return invokeGlobalMethod(callable, args, node)
         }
-        return boundedData(invokeGlobalMethod(callable, args, node), `${callable.namespace}.${callable.name} result`)
+        return toProgram(invokeGlobalMethod(callable, args, node), `${callable.namespace}.${callable.name} result`)
       }
       if (callable instanceof JsonMethodReference) {
         return yield* invokeJsonMethod(self.runner, callable.name, args, node)
       }
       if (callable instanceof CoercionFunction) {
-        return boundedData(invokeCoercion(callable, args, node), `${callable.name} result`)
+        return toProgram(invokeCoercion(callable, args, node), `${callable.name} result`)
       }
       if (callable instanceof UriFunction) {
         return invokeUriFunction(callable, args, node)
@@ -2014,7 +2014,7 @@ export class Interpreter<R> {
 
   private invokeObjectMethodOnTools(name: string, ref: ToolReference, node: AstNode): unknown {
     if (name === "keys") {
-      return boundedData(this.enumerableKeys(ref)!, "Object.keys result")
+      return toProgram(this.enumerableKeys(ref)!, "Object.keys result")
     }
     throw new InterpreterRuntimeError(
       `Object.${name}(...) cannot read tool references: they are not plain data. Use Object.keys(tools) for names, or search({ query }) for signatures.`,
@@ -2445,7 +2445,7 @@ export class Interpreter<R> {
 
         if (index < expressions.length) {
           const raw = yield* self.evaluateExpression(asNode(expressions[index], "expressions"))
-          output += coerceToString(boundedData(raw, "Template interpolation"))
+          output += coerceToString(toProgram(raw, "Template interpolation"))
         }
       }
 

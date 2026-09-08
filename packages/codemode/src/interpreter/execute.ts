@@ -3,20 +3,21 @@ import { Cause, Effect, Scope } from "effect"
 // #transpile: conditional import — full typescript on node/bun, an identity
 // pass-through on workerd (the compiler is ~11 MiB and can't init there).
 import { transpile } from "#transpile"
-import type { DataValue, Diagnostic, ExecuteOptions, ResolvedExecutionLimits, Result } from "../codemode.js"
-import { copyIn, copyOut, ToolRuntime, type Services } from "../tool-runtime.js"
-import type { Tools } from "../tools.js"
+import type { DataValue, Diagnostic, ResolvedExecutionLimits, Result } from "../codemode.js"
+import { toData } from "../data.js"
+import { ToolRuntime } from "../tool-runtime.js"
 import { normalizeError } from "./errors.js"
 import { InterpreterRuntimeError, isRecord, type ProgramNode } from "./model.js"
 import { PromiseRuntime } from "./promises.js"
 import { Interpreter } from "./runtime.js"
 
-export const executeWithLimits = <const Provided extends Record<string, unknown>>(
-  options: ExecuteOptions<Provided>,
+export const executeProgram = <R>(
+  code: string,
+  prepared: ToolRuntime.Prepared<R>,
   limits: ResolvedExecutionLimits,
-  searchIndex: ToolRuntime.DiscoveryPlan["searchIndex"],
-): Effect.Effect<Result, never, Services<Provided>> => {
-  if (options.code.trim().length === 0) {
+  hooks: ToolRuntime.ToolCallHooks<R>,
+): Effect.Effect<Result, never, R> => {
+  if (code.trim().length === 0) {
     return Effect.succeed({
       ok: false,
       error: { kind: "ParseError", message: "Code cannot be empty." },
@@ -26,35 +27,21 @@ export const executeWithLimits = <const Provided extends Record<string, unknown>
 
   // Allocate execution state inside suspension so reused Effects never share it.
   return Effect.suspend(() => {
-    const tools = ToolRuntime.make(
-      (options.tools ?? {}) as Tools<Services<Provided>>,
-      limits.maxToolCalls,
-      searchIndex,
-      {
-        onToolCallStart: options.onToolCallStart,
-        onToolCallEnd: options.onToolCallEnd,
-      },
-    )
+    const tools = ToolRuntime.make(prepared, limits.maxToolCalls, hooks)
     const logs: Array<string> = []
     const logged = () => (logs.length > 0 ? { logs: [...logs] } : {})
     // Set only after copy-out so timeouts cannot report invalid values as completed.
-    let returned: { value: DataValue; promises: PromiseRuntime<Services<Provided>> } | undefined
+    let returned: { value: DataValue; promises: PromiseRuntime<R> } | undefined
 
     const base = Effect.acquireUseRelease(
       Scope.make("parallel"),
       (scope) =>
         Effect.gen(function* () {
-          const program = parseProgram(options.code)
-          const promises = new PromiseRuntime<Services<Provided>>(scope)
-          const interpreter = new Interpreter<Services<Provided>>(
-            tools.execute,
-            tools.search,
-            tools.keys,
-            promises,
-            logs,
-          )
+          const program = parseProgram(code)
+          const promises = new PromiseRuntime<R>(scope)
+          const interpreter = new Interpreter<R>(tools.execute, tools.search, tools.keys, promises, logs)
           const value = yield* interpreter.run(program)
-          const result = copyOut(copyIn(value, "Execution result"), "nullify") as DataValue
+          const result = toData(value, "Execution result", "result") as DataValue
           returned = { value: result, promises }
           const warnings = yield* promises.interrupt()
           return {

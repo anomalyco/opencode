@@ -1,9 +1,10 @@
 import { Effect } from "effect"
 import { type AstNode, AsyncIteratorSymbol, InterpreterRuntimeError, IteratorSymbol } from "../interpreter/model.js"
 import { containsOpaqueReference, rejectCircularInsertion } from "../interpreter/references.js"
-import { isBlockedMember } from "../tool-runtime.js"
+import { isBlockedMember } from "../data.js"
 import { Values } from "../values.js"
-import { boundedData, coerceToString } from "./value.js"
+import { toProgram } from "../data.js"
+import { coerceToString } from "./value.js"
 import { preserveConsumerError, type SyncIteratorRunner } from "../interpreter/iterator.js"
 
 export const objectMethodsPreservingIdentity = new Set(["assign", "values", "entries", "fromEntries"])
@@ -115,8 +116,8 @@ export const invokeObjectFromEntries = <R>(
             )
           }
           const entry = step.value as Record<string, unknown>
-          boundedData(entry[0], "Object.fromEntries key")
-          boundedData(entry[1], "Object.fromEntries value")
+          toProgram(entry[0], "Object.fromEntries key")
+          toProgram(entry[1], "Object.fromEntries value")
           const key = coerceToString(entry[0])
           if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
           out[key] = entry[1]

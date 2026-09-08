@@ -1,5 +1,6 @@
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
-import { boundedData, coerceToString } from "./value.js"
+import { toProgram } from "../data.js"
+import { coerceToString } from "./value.js"
 
 export const numberMethods = new Set(["toFixed", "toPrecision", "toExponential", "toString", "valueOf"])
 
@@ -50,7 +51,7 @@ export const invokeNumberMethod = (value: number, name: string, args: Array<unkn
     default:
       throw new InterpreterRuntimeError(`Number method '${name}' is not available.`, node)
   }
-  return boundedData(result, `Number.${name} result`)
+  return toProgram(result, `Number.${name} result`)
 }
 
 export const invokeNumberStatic = (name: string, args: Array<unknown>, node: AstNode): unknown => {

@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { Diagnostic } from "../codemode.js"
 import { ToolError } from "../tool-error.js"
-import { copyOut, ToolRuntimeError, type SafeObject } from "../tool-runtime.js"
+import { type SafeObject, toData, ToolRuntimeError } from "../data.js"
 import { type AstNode, formatLocation, InterpreterRuntimeError, ProgramThrow, sourceLocation } from "./model.js"
 import { containsRuntimeReference } from "./references.js"
 import { type SyncIteratorRunner } from "./iterator.js"
@@ -45,7 +45,7 @@ export const normalizeError = (error: unknown): Diagnostic => {
       message = (value as { message: string }).message
     } else {
       try {
-        message = JSON.stringify(copyOut(value, "json")) ?? String(value)
+        message = JSON.stringify(toData(value, "Thrown value")) ?? String(value)
       } catch {
         message = String(value)
       }

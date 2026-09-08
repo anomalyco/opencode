@@ -1,5 +1,5 @@
 import { type AstNode, CoercionFunction, InterpreterRuntimeError } from "../interpreter/model.js"
-import { copyIn, type SafeObject } from "../tool-runtime.js"
+import { type SafeObject, toProgram } from "../data.js"
 import { Values } from "../values.js"
 
 export const errorConstructors = new Set([
@@ -32,8 +32,6 @@ export const errorBrandName = (value: unknown): string | undefined =>
   value !== null && typeof value === "object"
     ? ((value as Record<PropertyKey, unknown>)[ErrorBrand] as string | undefined)
     : undefined
-
-export const boundedData = (value: unknown, label: string): unknown => copyIn(value, label, true)
 
 export const coerceToString = (value: unknown): string => {
   if (value === null) return "null"
@@ -79,7 +77,7 @@ export const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node
     if (ref.name === "String") return ""
   }
   const raw = args[0]
-  // Error values are plain SafeObjects; the boundedData path below would strip their brand.
+  // Error values are plain SafeObjects; the toProgram path below would strip their brand.
   if (ref.name === "String" && errorBrandName(raw) !== undefined) return coerceToString(raw)
   if (Values.isValue(raw)) {
     if (ref.name === "Boolean") return true
@@ -90,7 +88,7 @@ export const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node
     if (ref.name === "parseInt") return parseInt(coerceToString(raw))
     return parseFloat(coerceToString(raw))
   }
-  const value = boundedData(raw, `${ref.name} input`)
+  const value = toProgram(raw, `${ref.name} input`)
   if (ref.name === "Number") return coerceToNumber(value)
   if (ref.name === "Boolean") return Boolean(value)
   if (ref.name === "isFinite") return Number.isFinite(coerceToNumber(value))

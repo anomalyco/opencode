@@ -1,7 +1,7 @@
+import { toData, toProgram } from "../data.js"
 import { containsOpaqueReference, containsRuntimeReference, isRuntimeReference } from "../interpreter/references.js"
-import { copyIn, copyOut } from "../tool-runtime.js"
 import { Values } from "../values.js"
-import { boundedData, coerceToString } from "./value.js"
+import { coerceToString } from "./value.js"
 
 export const consoleMethods = new Set(["log", "info", "debug", "warn", "error", "dir", "table"])
 
@@ -66,7 +66,7 @@ const formatConsoleValue = (value: unknown, seen: Set<object>, depth: number): s
 const formatConsoleTable = (value: unknown, columnsArgument: unknown): string => {
   if (value === undefined) return "undefined"
   if (containsOpaqueReference(value)) return "[opaque reference]"
-  const data = boundedData(value, "console.table argument")
+  const data = toProgram(value, "console.table argument")
   const columns = consoleTableColumns(columnsArgument)
   const rows = consoleTableRows(data, columns)
   const keys = columns ?? Array.from(new Set(rows.flatMap((row) => Object.keys(row.values))))
@@ -80,7 +80,7 @@ const formatConsoleTable = (value: unknown, columnsArgument: unknown): string =>
 const consoleTableColumns = (value: unknown): ReadonlyArray<string> | undefined => {
   if (value === undefined) return undefined
   if (containsRuntimeReference(value)) return undefined
-  const columns = copyOut(copyIn(value, "console.table columns"), "nullify")
+  const columns = toData(value, "console.table columns", "result")
   return Array.isArray(columns) ? columns.map((column) => String(column)) : undefined
 }
 
