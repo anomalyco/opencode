@@ -595,6 +595,66 @@ describe("OpencodePlugin", () => {
     ),
   )
 
+  it.live("closes a rejected hosted search response without waiting for its body", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state = { cancelled: false }
+        const server = Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            const url = new URL(request.url)
+            if (url.pathname === "/api/v2/config") {
+              return Response.json({
+                providers: {},
+                websearch: {
+                  providerID: "opencode",
+                  name: "OpenCode",
+                  url: `${url.origin}/api/websearch`,
+                },
+              })
+            }
+            return new Response(
+              new ReadableStream({
+                start(controller) {
+                  controller.enqueue(new TextEncoder().encode("temporarily unavailable"))
+                },
+                cancel() {
+                  state.cancelled = true
+                },
+              }),
+              { status: 503 },
+            )
+          },
+        })
+        return { server, state }
+      }),
+      ({ server, state }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const websearch = yield* WebSearch.Service
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({
+              type: "key",
+              key: "secret",
+              metadata: { server: server.url.origin, orgID: "org_test" },
+            }),
+          })
+          yield* addPlugin()
+
+          const error = yield* websearch.query({ query: "rejected search" }).pipe(Effect.flip)
+          expect(error._tag).toBe("WebSearch.Request")
+          yield* eventually(
+            Effect.sync(() => state.cancelled),
+            (cancelled) => cancelled,
+          )
+          // Callers can retain errors, so response cleanup must not depend on garbage collection.
+          expect(error).toBeInstanceOf(WebSearch.RequestError)
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
   it.live("preserves native Console OpenAI variant bodies in inference requests", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {

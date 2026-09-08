@@ -242,11 +242,12 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
                 providerID: descriptor.providerID,
               }),
             )
-            const response = yield* HttpClient.filterStatusOk(http)
+            const response = yield* HttpClient.withScope(HttpClient.filterStatusOk(http))
               .execute(request)
               .pipe(
                 Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
                 Effect.flatMap(HttpClientResponse.schemaBodyJson(WebSearch.Response)),
+                Effect.scoped,
                 Effect.timeoutOrElse({
                   duration: Duration.seconds(25),
                   orElse: () => Effect.fail(new Error("OpenCode web search request timed out")),
