@@ -1,6 +1,6 @@
 import type { Effect } from "effect"
 import type { SafeObject } from "../tool-runtime.js"
-import type { CodeModePromise, CodeModeRegExp, CodeModeURL } from "../values.js"
+import type { Values } from "../values.js"
 
 export type SourcePosition = {
   line: number
@@ -36,7 +36,7 @@ export type StatementResult =
   | { kind: "continue"; label?: string }
 
 export type MemberReference = {
-  target: SafeObject | Array<unknown> | CodeModeRegExp | CodeModeURL
+  target: SafeObject | Array<unknown> | Values.RegExp | Values.URL
   key: PropertyKey
 }
 
@@ -99,7 +99,7 @@ export type PromiseInstanceMethodName = "then" | "catch" | "finally"
 
 export class PromiseInstanceMethodReference {
   constructor(
-    readonly promise: CodeModePromise,
+    readonly promise: Values.Promise,
     readonly name: PromiseInstanceMethodName,
   ) {}
 }

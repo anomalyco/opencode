@@ -12,15 +12,7 @@ import {
 import { isNamespace, type Namespace } from "./namespace.js"
 import { isTool, type Tool } from "./tool.js"
 import type { Tools } from "./tools.js"
-import {
-  CodeModeDate,
-  CodeModeMap,
-  CodeModePromise,
-  CodeModeRegExp,
-  CodeModeSet,
-  CodeModeURL,
-  CodeModeURLSearchParams,
-} from "./values.js"
+import { Values } from "./values.js"
 
 const compareText = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0)
 
@@ -151,7 +143,7 @@ const copyBounded = (
     throw new ToolRuntimeError("InvalidDataValue", `${label} must contain data only.`)
   }
 
-  if (value instanceof CodeModePromise) {
+  if (value instanceof Values.Promise) {
     throw new ToolRuntimeError(
       "InvalidDataValue",
       `${label} contains an un-awaited Promise; await tool calls (e.g. \`const result = await tools.ns.tool(...)\`) before using their results.`,
@@ -160,46 +152,46 @@ const copyBounded = (
 
   if (preserveCodeModeValues) {
     if (
-      value instanceof CodeModeDate ||
-      value instanceof CodeModeRegExp ||
-      value instanceof CodeModeMap ||
-      value instanceof CodeModeSet ||
-      value instanceof CodeModeURL ||
-      value instanceof CodeModeURLSearchParams
+      value instanceof Values.Date ||
+      value instanceof Values.RegExp ||
+      value instanceof Values.Map ||
+      value instanceof Values.Set ||
+      value instanceof Values.URL ||
+      value instanceof Values.URLSearchParams
     ) {
       return value
     }
-    if (value instanceof Date) return new CodeModeDate(value.getTime())
-    if (value instanceof RegExp) return new CodeModeRegExp(value.source, value.flags)
+    if (value instanceof Date) return new Values.Date(value.getTime())
+    if (value instanceof RegExp) return new Values.RegExp(value.source, value.flags)
     if (value instanceof Map) {
-      const wrapped = new CodeModeMap()
+      const wrapped = new Values.Map()
       for (const [key, item] of value.entries()) {
         wrapped.map.set(copyBounded(key, label, depth + 1, seen, true), copyBounded(item, label, depth + 1, seen, true))
       }
       return wrapped
     }
     if (value instanceof Set) {
-      const wrapped = new CodeModeSet()
+      const wrapped = new Values.Set()
       for (const item of value.values()) wrapped.set.add(copyBounded(item, label, depth + 1, seen, true))
       return wrapped
     }
-    if (value instanceof URL) return new CodeModeURL(new URL(value.href))
-    if (value instanceof URLSearchParams) return new CodeModeURLSearchParams(new URLSearchParams(value))
+    if (value instanceof URL) return new Values.URL(new URL(value.href))
+    if (value instanceof URLSearchParams) return new Values.URLSearchParams(new URLSearchParams(value))
   }
 
-  if (value instanceof CodeModeDate) {
+  if (value instanceof Values.Date) {
     return Number.isFinite(value.time) ? new Date(value.time).toISOString() : null
   }
   if (value instanceof Date) {
     return Number.isFinite(value.getTime()) ? value.toISOString() : null
   }
-  if (value instanceof CodeModeURL) return value.url.href
+  if (value instanceof Values.URL) return value.url.href
   if (value instanceof URL) return value.href
   if (
-    value instanceof CodeModeRegExp ||
-    value instanceof CodeModeMap ||
-    value instanceof CodeModeSet ||
-    value instanceof CodeModeURLSearchParams ||
+    value instanceof Values.RegExp ||
+    value instanceof Values.Map ||
+    value instanceof Values.Set ||
+    value instanceof Values.URLSearchParams ||
     value instanceof RegExp ||
     value instanceof Map ||
     value instanceof Set ||

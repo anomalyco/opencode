@@ -1,15 +1,6 @@
 import { containsOpaqueReference, containsRuntimeReference, isRuntimeReference } from "../interpreter/references.js"
 import { copyIn, copyOut } from "../tool-runtime.js"
-import {
-  isCodeModeValue,
-  CodeModeDate,
-  CodeModeMap,
-  CodeModePromise,
-  CodeModeRegExp,
-  CodeModeSet,
-  CodeModeURL,
-  CodeModeURLSearchParams,
-} from "../values.js"
+import { Values } from "../values.js"
 import { boundedData, coerceToString } from "./value.js"
 
 export const consoleMethods = new Set(["log", "info", "debug", "warn", "error", "dir", "table"])
@@ -34,14 +25,14 @@ const formatConsoleValue = (value: unknown, seen: Set<object>, depth: number): s
   if (typeof value === "string") return JSON.stringify(value)
   if (typeof value === "number" || typeof value === "boolean") return String(value)
   if (typeof value !== "object") return String(value)
-  if (value instanceof CodeModePromise) return "[Promise (await it to get its value)]"
-  if (value instanceof CodeModeDate) return coerceToString(value)
-  if (value instanceof CodeModeRegExp) return coerceToString(value)
-  if (value instanceof CodeModeURL) return coerceToString(value)
-  if (value instanceof CodeModeURLSearchParams) return coerceToString(value)
+  if (value instanceof Values.Promise) return "[Promise (await it to get its value)]"
+  if (value instanceof Values.Date) return coerceToString(value)
+  if (value instanceof Values.RegExp) return coerceToString(value)
+  if (value instanceof Values.URL) return coerceToString(value)
+  if (value instanceof Values.URLSearchParams) return coerceToString(value)
   if (depth > MAX_CONSOLE_DEPTH) return "..."
   if (seen.has(value)) return "[Circular]"
-  if (value instanceof CodeModeMap) {
+  if (value instanceof Values.Map) {
     seen.add(value)
     try {
       const entries = Array.from(value.map.entries(), ([key, item]): Array<unknown> => [key, item])
@@ -50,7 +41,7 @@ const formatConsoleValue = (value: unknown, seen: Set<object>, depth: number): s
       seen.delete(value)
     }
   }
-  if (value instanceof CodeModeSet) {
+  if (value instanceof Values.Set) {
     seen.add(value)
     try {
       return `Set(${value.set.size}) ${formatConsoleValue(Array.from(value.set.values()), seen, depth + 1)}`
@@ -100,14 +91,14 @@ const consoleTableRows = (
   if (Array.isArray(data)) {
     return data.map((item, index) => ({ index: String(index), values: consoleTableValues(item, columns) }))
   }
-  if (data !== null && typeof data === "object" && !isCodeModeValue(data)) {
+  if (data !== null && typeof data === "object" && !Values.isValue(data)) {
     return Object.entries(data).map(([index, item]) => ({ index, values: consoleTableValues(item, columns) }))
   }
   return [{ index: "0", values: { Value: data } }]
 }
 
 const consoleTableValues = (value: unknown, columns: ReadonlyArray<string> | undefined): Record<string, unknown> => {
-  if (value !== null && typeof value === "object" && !Array.isArray(value) && !isCodeModeValue(value)) {
+  if (value !== null && typeof value === "object" && !Array.isArray(value) && !Values.isValue(value)) {
     const source = value as Record<string, unknown>
     if (columns !== undefined) return Object.fromEntries(columns.map((column) => [column, source[column]]))
     return Object.fromEntries(Object.entries(source))

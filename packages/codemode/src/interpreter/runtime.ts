@@ -98,16 +98,7 @@ import {
   invokeCoercion,
   valueConstructors,
 } from "../stdlib/value.js"
-import {
-  isCodeModeValue,
-  CodeModeDate,
-  CodeModeMap,
-  CodeModePromise,
-  CodeModeRegExp,
-  CodeModeSet,
-  CodeModeURL,
-  CodeModeURLSearchParams,
-} from "../values.js"
+import { Values } from "../values.js"
 
 const globalStaticMembers: Partial<Record<GlobalNamespaceName, Set<string>>> = {
   Object: objectStatics,
@@ -153,24 +144,24 @@ const instanceofValue = (lhs: unknown, rhs: unknown, node: AstNode): boolean => 
   if (rhs instanceof GlobalNamespace) {
     switch (rhs.name) {
       case "Date":
-        return lhs instanceof CodeModeDate
+        return lhs instanceof Values.Date
       case "RegExp":
-        return lhs instanceof CodeModeRegExp
+        return lhs instanceof Values.RegExp
       case "Map":
-        return lhs instanceof CodeModeMap
+        return lhs instanceof Values.Map
       case "Set":
-        return lhs instanceof CodeModeSet
+        return lhs instanceof Values.Set
       case "URL":
-        return lhs instanceof CodeModeURL
+        return lhs instanceof Values.URL
       case "URLSearchParams":
-        return lhs instanceof CodeModeURLSearchParams
+        return lhs instanceof Values.URLSearchParams
       case "Array":
         return Array.isArray(lhs)
       case "Object":
         return lhs !== null && (typeof lhs === "object" || typeofValue(lhs) === "function")
     }
   }
-  if (rhs instanceof PromiseNamespace) return lhs instanceof CodeModePromise
+  if (rhs instanceof PromiseNamespace) return lhs instanceof Values.Promise
   if (rhs instanceof CoercionFunction && (rhs.name === "Number" || rhs.name === "String" || rhs.name === "Boolean")) {
     return false
   }
@@ -371,16 +362,16 @@ export class Interpreter<R> {
   private createToolCallPromise(
     path: ReadonlyArray<string>,
     args: Array<unknown>,
-  ): Effect.Effect<CodeModePromise, never, R> {
+  ): Effect.Effect<Values.Promise, never, R> {
     return this.createPromise(Effect.suspend(() => this.executeTool(path, args)))
   }
 
-  private createPromise(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<CodeModePromise, never, R> {
+  private createPromise(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<Values.Promise, never, R> {
     return this.promises.create(effect)
   }
 
   // Fiber exits make settlement idempotent; yielding prevents inline continuation.
-  private settlePromise(promise: CodeModePromise): Effect.Effect<unknown, unknown, never> {
+  private settlePromise(promise: Values.Promise): Effect.Effect<unknown, unknown, never> {
     const promises = this.promises
     return Effect.suspend(() => {
       promises.markObserved(promise)
@@ -812,11 +803,11 @@ export class Interpreter<R> {
       ? value[Symbol.iterator]()
       : typeof value === "string"
         ? value[Symbol.iterator]()
-        : value instanceof CodeModeMap
+        : value instanceof Values.Map
           ? value.map.entries()
-          : value instanceof CodeModeSet
+          : value instanceof Values.Set
             ? value.set.values()
-            : value instanceof CodeModeURLSearchParams
+            : value instanceof Values.URLSearchParams
               ? value.params.entries()
               : undefined
     if (iterator !== undefined) {
@@ -1478,19 +1469,19 @@ export class Interpreter<R> {
     )
   }
 
-  private constructDate(args: Array<unknown>, node: AstNode): Effect.Effect<CodeModeDate, unknown, R> {
-    if (args.length === 0) return Effect.succeed(new CodeModeDate(Date.now()))
+  private constructDate(args: Array<unknown>, node: AstNode): Effect.Effect<Values.Date, unknown, R> {
+    if (args.length === 0) return Effect.succeed(new Values.Date(Date.now()))
     if (args.length === 1) {
       const arg = args[0]
-      if (arg instanceof CodeModeDate) return Effect.succeed(new CodeModeDate(arg.time))
+      if (arg instanceof Values.Date) return Effect.succeed(new Values.Date(arg.time))
       return Effect.map(this.toDatePrimitive(arg, node), (value) =>
         typeof value === "string"
-          ? new CodeModeDate(Date.parse(value))
-          : new CodeModeDate(new Date(coerceToNumber(value)).getTime()),
+          ? new Values.Date(Date.parse(value))
+          : new Values.Date(new Date(coerceToNumber(value)).getTime()),
       )
     }
     const parts = args.map((arg) => coerceToNumber(arg))
-    return Effect.succeed(new CodeModeDate(new Date(...(parts as [number, number])).getTime()))
+    return Effect.succeed(new Values.Date(new Date(...(parts as [number, number])).getTime()))
   }
 
   private toDatePrimitive(value: unknown, node: AstNode): Effect.Effect<unknown, unknown, R> {
@@ -1511,10 +1502,10 @@ export class Interpreter<R> {
     })
   }
 
-  private constructRegExp(args: Array<unknown>, node: AstNode): CodeModeRegExp {
+  private constructRegExp(args: Array<unknown>, node: AstNode): Values.RegExp {
     const first = args[0]
     const pattern =
-      first instanceof CodeModeRegExp ? first.regex.source : first === undefined ? "" : coerceToString(first)
+      first instanceof Values.RegExp ? first.regex.source : first === undefined ? "" : coerceToString(first)
     const flagsArg = args[1]
     if (flagsArg !== undefined && typeof flagsArg !== "string") {
       throw new InterpreterRuntimeError(
@@ -1522,9 +1513,9 @@ export class Interpreter<R> {
         node,
       ).as("SyntaxError")
     }
-    const flags = flagsArg ?? (first instanceof CodeModeRegExp ? first.regex.flags : "")
+    const flags = flagsArg ?? (first instanceof Values.RegExp ? first.regex.flags : "")
     try {
-      return new CodeModeRegExp(pattern, flags)
+      return new Values.RegExp(pattern, flags)
     } catch (error) {
       const reason = regexFailureReason(error)
       throw new InterpreterRuntimeError(
@@ -1536,8 +1527,8 @@ export class Interpreter<R> {
     }
   }
 
-  private constructMap(init: unknown, node: AstNode): Effect.Effect<CodeModeMap, unknown, R> {
-    const target = new CodeModeMap()
+  private constructMap(init: unknown, node: AstNode): Effect.Effect<Values.Map, unknown, R> {
+    const target = new Values.Map()
     if (init === undefined || init === null) return Effect.succeed(target)
     const self = this
     return Effect.gen(function* () {
@@ -1566,8 +1557,8 @@ export class Interpreter<R> {
     })
   }
 
-  private constructSet(init: unknown, node: AstNode): Effect.Effect<CodeModeSet, unknown, R> {
-    const target = new CodeModeSet()
+  private constructSet(init: unknown, node: AstNode): Effect.Effect<Values.Set, unknown, R> {
+    const target = new Values.Set()
     if (init === undefined || init === null) return Effect.succeed(target)
     const self = this
     return Effect.gen(function* () {
@@ -1585,7 +1576,7 @@ export class Interpreter<R> {
     })
   }
 
-  private constructURL(args: Array<unknown>, node: AstNode): CodeModeURL {
+  private constructURL(args: Array<unknown>, node: AstNode): Values.URL {
     if (args.length === 0) {
       throw new InterpreterRuntimeError("new URL(...) requires a URL string and an optional base URL.", node).as(
         "TypeError",
@@ -1594,7 +1585,7 @@ export class Interpreter<R> {
     const input = urlArgument(args[0], "new URL input")
     const base = args[1] === undefined ? undefined : urlArgument(args[1], "new URL base")
     try {
-      return new CodeModeURL(new URL(input, base))
+      return new Values.URL(new URL(input, base))
     } catch {
       throw new InterpreterRuntimeError(
         `new URL(...) received an invalid URL${base === undefined ? "" : " or base URL"}.`,
@@ -1603,14 +1594,14 @@ export class Interpreter<R> {
     }
   }
 
-  private constructURLSearchParams(init: unknown, node: AstNode): Effect.Effect<CodeModeURLSearchParams, unknown, R> {
-    if (init === undefined) return Effect.succeed(new CodeModeURLSearchParams(new URLSearchParams()))
-    if (init instanceof CodeModeURLSearchParams) {
-      return Effect.succeed(new CodeModeURLSearchParams(new URLSearchParams(init.params)))
+  private constructURLSearchParams(init: unknown, node: AstNode): Effect.Effect<Values.URLSearchParams, unknown, R> {
+    if (init === undefined) return Effect.succeed(new Values.URLSearchParams(new URLSearchParams()))
+    if (init instanceof Values.URLSearchParams) {
+      return Effect.succeed(new Values.URLSearchParams(new URLSearchParams(init.params)))
     }
-    if (typeof init === "string") return Effect.succeed(new CodeModeURLSearchParams(new URLSearchParams(init)))
+    if (typeof init === "string") return Effect.succeed(new Values.URLSearchParams(new URLSearchParams(init)))
     if (init === null || typeof init === "number" || typeof init === "boolean") {
-      return Effect.succeed(new CodeModeURLSearchParams(new URLSearchParams(coerceToString(init))))
+      return Effect.succeed(new Values.URLSearchParams(new URLSearchParams(coerceToString(init))))
     }
     const self = this
     return Effect.gen(function* () {
@@ -1626,7 +1617,7 @@ export class Interpreter<R> {
                 node,
               ).as("TypeError")
             }
-            return new CodeModeURLSearchParams(
+            return new Values.URLSearchParams(
               new URLSearchParams(entries.map((entry): [string, string] => [entry[0] ?? "", entry[1] ?? ""])),
             )
           }
@@ -1639,7 +1630,7 @@ export class Interpreter<R> {
           node,
         ).as("TypeError")
       }
-      if (isCodeModeValue(init)) return new CodeModeURLSearchParams(new URLSearchParams())
+      if (Values.isValue(init)) return new Values.URLSearchParams(new URLSearchParams())
       const data = boundedData(init, "new URLSearchParams input")
       if (data === null || typeof data !== "object") {
         throw new InterpreterRuntimeError(
@@ -1647,7 +1638,7 @@ export class Interpreter<R> {
           node,
         ).as("TypeError")
       }
-      return new CodeModeURLSearchParams(
+      return new Values.URLSearchParams(
         new URLSearchParams(
           Object.fromEntries(Object.entries(data).map(([key, value]) => [key, coerceToString(value)])),
         ),
@@ -1698,7 +1689,7 @@ export class Interpreter<R> {
     // Null-prototype data needs explicit primitive coercion; identity and `in` retain raw objects.
     // Dates use their default string hint for addition and loose equality, and epoch time elsewhere.
     const coerceOperand = (operand: unknown): unknown => {
-      if (operand instanceof CodeModeDate) {
+      if (operand instanceof Values.Date) {
         return operator === "+" || operator === "==" || operator === "!=" ? coerceToString(operand) : operand.time
       }
       return operand !== null && typeof operand === "object" ? coerceToString(operand) : operand
@@ -1783,7 +1774,7 @@ export class Interpreter<R> {
         throw new InterpreterRuntimeError("Unary operators require data values.", node, "InvalidDataValue")
       }
       const operand =
-        value instanceof CodeModeDate
+        value instanceof Values.Date
           ? value.time
           : value !== null && typeof value === "object"
             ? coerceToString(value)
@@ -2110,7 +2101,7 @@ export class Interpreter<R> {
     if (fn.generator) return Effect.succeed(this.createGenerator(invocation, run, fn.async))
     if (!fn.async) return run
     // The initial yield assigns the promise before the body can self-resolve.
-    const box: { promise?: CodeModePromise } = {}
+    const box: { promise?: Values.Promise } = {}
     return Effect.map(
       this.createPromise(Effect.flatMap(run, (value) => resolvePromiseValue(invocation.runner, value, fn.body, box))),
       (promise) => {
@@ -2281,9 +2272,9 @@ export class Interpreter<R> {
       if (
         Array.isArray(value) ||
         typeof value === "string" ||
-        value instanceof CodeModeMap ||
-        value instanceof CodeModeSet ||
-        value instanceof CodeModeURLSearchParams
+        value instanceof Values.Map ||
+        value instanceof Values.Set ||
+        value instanceof Values.URLSearchParams
       ) {
         const cursor = yield* self.syncIterator(value, node)
         if (!cursor) throw new InterpreterRuntimeError("Built-in iterator is unavailable.", node)
@@ -2374,7 +2365,7 @@ export class Interpreter<R> {
 
         if (property.type === "SpreadElement") {
           const spread = yield* self.evaluateExpression(getNode(property, "argument"))
-          if (spread === null || spread === undefined || isCodeModeValue(spread)) continue
+          if (spread === null || spread === undefined || Values.isValue(spread)) continue
           if (typeof spread !== "object" || Array.isArray(spread) || isRuntimeReference(spread)) {
             throw new InterpreterRuntimeError("Object spread requires a data object.", property, "InvalidDataValue")
           }
@@ -2598,11 +2589,11 @@ export class Interpreter<R> {
         return new ComputedValue(undefined)
       }
 
-      if (objectValue instanceof CodeModeDate) {
+      if (objectValue instanceof Values.Date) {
         if (typeof key === "string" && dateMethods.has(key)) return new IntrinsicReference(objectValue, key)
         return new ComputedValue(undefined)
       }
-      if (objectValue instanceof CodeModeRegExp) {
+      if (objectValue instanceof Values.RegExp) {
         if (key === "lastIndex") return { target: objectValue, key }
         if (typeof key === "string" && regexpProperties.has(key)) {
           return new ComputedValue((objectValue.regex as unknown as Record<string, unknown>)[key])
@@ -2610,17 +2601,17 @@ export class Interpreter<R> {
         if (typeof key === "string" && regexpMethods.has(key)) return new IntrinsicReference(objectValue, key)
         return new ComputedValue(undefined)
       }
-      if (objectValue instanceof CodeModeMap) {
+      if (objectValue instanceof Values.Map) {
         if (key === "size") return new ComputedValue(objectValue.map.size)
         if (typeof key === "string" && mapMethods.has(key)) return new IntrinsicReference(objectValue, key)
         return new ComputedValue(undefined)
       }
-      if (objectValue instanceof CodeModeSet) {
+      if (objectValue instanceof Values.Set) {
         if (key === "size") return new ComputedValue(objectValue.set.size)
         if (typeof key === "string" && setMethods.has(key)) return new IntrinsicReference(objectValue, key)
         return new ComputedValue(undefined)
       }
-      if (objectValue instanceof CodeModeURL) {
+      if (objectValue instanceof Values.URL) {
         if (key === "searchParams") {
           return new ComputedValue(objectValue.searchParams)
         }
@@ -2628,7 +2619,7 @@ export class Interpreter<R> {
         if (typeof key === "string" && urlProperties.has(key)) return { target: objectValue, key }
         return new ComputedValue(undefined)
       }
-      if (objectValue instanceof CodeModeURLSearchParams) {
+      if (objectValue instanceof Values.URLSearchParams) {
         if (key === "size") return new ComputedValue(objectValue.params.size)
         if (typeof key === "string" && urlSearchParamsMethods.has(key)) {
           return new IntrinsicReference(objectValue, key)
@@ -2637,7 +2628,7 @@ export class Interpreter<R> {
       }
 
       // Reject unknown promise properties so a missing await cannot hide.
-      if (objectValue instanceof CodeModePromise) {
+      if (objectValue instanceof Values.Promise) {
         if (key === "then" || key === "catch" || key === "finally") {
           return new PromiseInstanceMethodReference(objectValue, key)
         }
@@ -2703,8 +2694,8 @@ export class Interpreter<R> {
         if (typeof reference.key === "string") return new IntrinsicReference(reference.target, reference.key)
         return Reflect.get(reference.target, reference.key)
       }
-      if (reference.target instanceof CodeModeRegExp) return reference.target.lastIndex
-      if (reference.target instanceof CodeModeURL) {
+      if (reference.target instanceof Values.RegExp) return reference.target.lastIndex
+      if (reference.target instanceof Values.URL) {
         return Reflect.get(reference.target.url, reference.key)
       }
       return Reflect.get(reference.target, reference.key)
@@ -2726,11 +2717,11 @@ export class Interpreter<R> {
         reference instanceof ComputedValue ||
         reference === undefined ||
         isOpaqueMemberReference(reference) ||
-        reference.target instanceof CodeModeURL
+        reference.target instanceof Values.URL
       ) {
         throw new InterpreterRuntimeError("Only data fields may be deleted.", target, "InvalidDataValue")
       }
-      if (reference.target instanceof CodeModeRegExp) {
+      if (reference.target instanceof Values.RegExp) {
         return Reflect.deleteProperty(reference.target.regex, reference.key)
       }
       return Reflect.deleteProperty(reference.target, reference.key)
@@ -2767,10 +2758,10 @@ export class Interpreter<R> {
   }
 
   private readReferenceValue(reference: MemberReference, key: PropertyKey): unknown {
-    if (reference.target instanceof CodeModeURL) {
+    if (reference.target instanceof Values.URL) {
       return Reflect.get(reference.target.url, key)
     }
-    if (reference.target instanceof CodeModeRegExp) return reference.target.lastIndex
+    if (reference.target instanceof Values.RegExp) return reference.target.lastIndex
     return Reflect.get(reference.target, key)
   }
 
@@ -2788,7 +2779,7 @@ export class Interpreter<R> {
       target[key] = next
       return
     }
-    if (reference.target instanceof CodeModeURL) {
+    if (reference.target instanceof Values.URL) {
       const property = key as string
       if (!urlWritableProperties.has(property)) {
         throw new InterpreterRuntimeError(`URL.${property} is read-only.`, node).as("TypeError")
@@ -2802,7 +2793,7 @@ export class Interpreter<R> {
         throw new InterpreterRuntimeError(`URL.${property} received an invalid value.`, node).as("TypeError")
       }
     }
-    if (reference.target instanceof CodeModeRegExp) {
+    if (reference.target instanceof Values.RegExp) {
       reference.target.lastIndex = next
       return
     }

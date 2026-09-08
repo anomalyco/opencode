@@ -4,14 +4,7 @@ import { applyCollectionCallback } from "../interpreter/methods.js"
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
 import { typeofValue } from "../interpreter/references.js"
 import { copyIn, copyOut, type SafeObject } from "../tool-runtime.js"
-import {
-  CodeModeDate,
-  CodeModeMap,
-  CodeModeRegExp,
-  CodeModeSet,
-  CodeModeURL,
-  CodeModeURLSearchParams,
-} from "../values.js"
+import { Values } from "../values.js"
 
 export const jsonStatics = new Set(["parse", "stringify"])
 export type JsonMethodName = "parse" | "stringify"
@@ -131,19 +124,19 @@ const stringify = <R>(
 }
 
 const toJSONValue = (value: unknown): unknown => {
-  if (value instanceof CodeModeDate) {
+  if (value instanceof Values.Date) {
     return Number.isFinite(value.time) ? new Date(value.time).toISOString() : null
   }
-  if (value instanceof CodeModeURL) return value.url.href
+  if (value instanceof Values.URL) return value.url.href
   return value
 }
 
 const isPlainObject = (value: unknown): value is SafeObject =>
   value !== null &&
   typeof value === "object" &&
-  !(value instanceof CodeModeDate) &&
-  !(value instanceof CodeModeRegExp) &&
-  !(value instanceof CodeModeMap) &&
-  !(value instanceof CodeModeSet) &&
-  !(value instanceof CodeModeURL) &&
-  !(value instanceof CodeModeURLSearchParams)
+  !(value instanceof Values.Date) &&
+  !(value instanceof Values.RegExp) &&
+  !(value instanceof Values.Map) &&
+  !(value instanceof Values.Set) &&
+  !(value instanceof Values.URL) &&
+  !(value instanceof Values.URLSearchParams)

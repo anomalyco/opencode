@@ -21,7 +21,7 @@ import {
   UriFunction,
 } from "./model.js"
 import { ToolReference } from "../tool-runtime.js"
-import { isCodeModeValue, CodeModePromise } from "../values.js"
+import { Values } from "../values.js"
 
 export const isRuntimeReference = (value: unknown): boolean =>
   value instanceof CodeModeFunction ||
@@ -35,14 +35,14 @@ export const isRuntimeReference = (value: unknown): boolean =>
   value instanceof PromiseNamespace ||
   value instanceof PromiseMethodReference ||
   value instanceof PromiseInstanceMethodReference ||
-  value instanceof CodeModePromise ||
+  value instanceof Values.Promise ||
   value instanceof CoercionFunction ||
   value instanceof UriFunction ||
   value instanceof SearchFunction ||
   value instanceof PromiseCapabilityFunction ||
   value instanceof ErrorConstructorReference ||
   value instanceof SymbolNamespace ||
-  isCodeModeValue(value)
+  Values.isValue(value)
 
 function* childValues(value: object): Generator {
   for (const key of Reflect.ownKeys(value)) {
@@ -81,7 +81,7 @@ export const containsOpaqueReference = (value: unknown): boolean => {
       continue
     }
     const current = next.value
-    if (isCodeModeValue(current)) continue
+    if (Values.isValue(current)) continue
     if (isRuntimeReference(current)) return true
     if (current === null || typeof current !== "object" || seen.has(current)) continue
     seen.add(current)

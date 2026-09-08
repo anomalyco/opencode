@@ -34,13 +34,13 @@ export const boundedData = (value: unknown, label: string): unknown => copyIn(va
 export const coerceToString = (value: unknown): string => {
   if (value === null) return "null"
   if (value === undefined) return "undefined"
-  if (value instanceof CodeModeDate)
+  if (value instanceof Values.Date)
     return Number.isFinite(value.time) ? new Date(value.time).toISOString() : "Invalid Date"
-  if (value instanceof CodeModeRegExp) return `/${value.regex.source}/${value.regex.flags}`
-  if (value instanceof CodeModeMap) return "[object Map]"
-  if (value instanceof CodeModeSet) return "[object Set]"
-  if (value instanceof CodeModeURL) return value.url.href
-  if (value instanceof CodeModeURLSearchParams) return value.params.toString()
+  if (value instanceof Values.RegExp) return `/${value.regex.source}/${value.regex.flags}`
+  if (value instanceof Values.Map) return "[object Map]"
+  if (value instanceof Values.Set) return "[object Set]"
+  if (value instanceof Values.URL) return value.url.href
+  if (value instanceof Values.URLSearchParams) return value.params.toString()
   if (errorBrandName(value) !== undefined) {
     // Match Error.prototype.toString: "name: message", or just one when the other is empty.
     const error = value as { name?: unknown; message?: unknown }
@@ -59,8 +59,8 @@ export const coerceToString = (value: unknown): string => {
 }
 
 export const coerceToNumber = (value: unknown): number => {
-  if (value instanceof CodeModeDate) return value.time
-  if (isCodeModeValue(value)) return Number.NaN
+  if (value instanceof Values.Date) return value.time
+  if (Values.isValue(value)) return Number.NaN
   // Arrays coerce through our own string coercion: host Number(array) joins with host
   // ToPrimitive, which throws on the null-prototype objects the interpreter produces.
   if (Array.isArray(value)) return Number(coerceToString(value))
@@ -77,7 +77,7 @@ export const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node
   const raw = args[0]
   // Error values are plain SafeObjects; the boundedData path below would strip their brand.
   if (ref.name === "String" && errorBrandName(raw) !== undefined) return coerceToString(raw)
-  if (isCodeModeValue(raw)) {
+  if (Values.isValue(raw)) {
     if (ref.name === "Boolean") return true
     if (ref.name === "Number") return coerceToNumber(raw)
     if (ref.name === "String") return coerceToString(raw)
@@ -103,12 +103,4 @@ export const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node
 }
 import { type AstNode, CoercionFunction, InterpreterRuntimeError } from "../interpreter/model.js"
 import { copyIn, type SafeObject } from "../tool-runtime.js"
-import {
-  isCodeModeValue,
-  CodeModeDate,
-  CodeModeMap,
-  CodeModeRegExp,
-  CodeModeSet,
-  CodeModeURL,
-  CodeModeURLSearchParams,
-} from "../values.js"
+import { Values } from "../values.js"
