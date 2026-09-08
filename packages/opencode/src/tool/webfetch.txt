@@ -1,7 +1,7 @@
 - Fetches content from a specified URL
 - Takes a URL and optional format as input
 - Fetches the URL content, converts to requested format (markdown by default)
-- Returns the content in the specified format
+- Returns the content in the specified format, preceded by a plain-text status notice if the response status is not 200
 - Use this tool when you need to retrieve and analyze web content
 
 Usage notes:
@@ -11,4 +11,4 @@ Usage notes:
   - Format options: "markdown" (default), "text", or "html"
   - This tool is read-only and does not modify any files
   - Results may be summarized if the content is very large
-  - If the response status is not 200, the output starts with an "[HTTP <status> ...]" notice; the body may be a throttle or interstitial page rather than the requested content
+  - If the response status is not 200, a plain-text "[HTTP <status> ...]" line precedes the body regardless of the requested format; the body may be a throttle or interstitial page rather than the requested content
