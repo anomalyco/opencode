@@ -213,7 +213,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
       if (!descriptor || !connection) return
       editor.add({
         id: descriptor.providerID,
-        name: "OpenCode",
+        name: "OpenCode Web Search",
         execute: (input) =>
           Effect.gen(function* () {
             const active = yield* ctx.integration.connection.active("opencode")

@@ -432,13 +432,13 @@ describe("OpencodePlugin", () => {
           yield* drain
           expect(state.requests).toBe(2)
           expect(rebuilds).toEqual({ catalog: initial.catalog + 1, websearch: initial.websearch + 1 })
-          expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode" })
+          expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" })
 
           yield* TestClock.adjust("10 minutes")
           yield* drain
           expect(state.requests).toBe(3)
           expect(rebuilds).toEqual({ catalog: initial.catalog + 1, websearch: initial.websearch + 1 })
-          expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode" })
+          expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" })
 
           state.advertised = false
           yield* TestClock.adjust("10 minutes")
@@ -526,9 +526,12 @@ describe("OpencodePlugin", () => {
           })
 
           yield* addPlugin()
-          expect(yield* websearch.providers()).toContainEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode" })
-          expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode" })
-          expect(yield* websearch.query({ query: "effect code search" })).toEqual(
+          expect(yield* websearch.providers()).toContainEqual({
+            id: WebSearch.ID.make("opencode"),
+            name: "OpenCode Web Search",
+          })
+          expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" })
+          expect(yield* websearch.query({ query: "effect web search" })).toEqual(
             new WebSearch.Response({
               providerID: WebSearch.ID.make("opencode"),
               results: [
@@ -553,7 +556,7 @@ describe("OpencodePlugin", () => {
               path: "/api/websearch",
               authorization: "Bearer secret",
               orgID: "org_test",
-              body: { query: "effect code search", providerID: "opencode" },
+              body: { query: "effect web search", providerID: "opencode" },
             },
           ])
 
@@ -657,7 +660,10 @@ describe("OpencodePlugin", () => {
             ),
           )
 
-          expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("managed-search"), name: "OpenCode" })
+          expect(yield* websearch.default()).toEqual({
+            id: WebSearch.ID.make("managed-search"),
+            name: "OpenCode Web Search",
+          })
           expect(yield* websearch.query({ query: "default Console" })).toEqual(
             new WebSearch.Response({ providerID: WebSearch.ID.make("managed-search"), results: [] }),
           )
