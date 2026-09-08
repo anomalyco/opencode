@@ -125,7 +125,11 @@ function expectUsage(response: LLMResponse) {
   expect(response.events.filter(LLMEvent.is.finish)).toHaveLength(1)
 }
 
-function expectReasoning(api: string, body: Readonly<Record<string, unknown>>, response: LLMResponse) {
+function expectReasoning(
+  api: "chat" | "messages" | "responses",
+  body: Readonly<Record<string, unknown>>,
+  response: LLMResponse,
+) {
   if (api === "chat") {
     expect(body.messages).toEqual(
       expect.arrayContaining([expect.objectContaining({ role: "assistant", reasoning_content: response.reasoning })]),

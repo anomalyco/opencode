@@ -39,7 +39,7 @@ export type Settings<Options = ChatOptionsInput> = Location &
     readonly providerOptions?: Options
   }
 
-const sharedHosts = new Map<string, string>([
+const hosts = new Map<string, string>([
   ["ap-southeast-1", "dashscope-intl.aliyuncs.com"],
   ["cn-beijing", "dashscope.aliyuncs.com"],
   ["cn-hongkong", "cn-hongkong.dashscope.aliyuncs.com"],
@@ -74,64 +74,55 @@ const responsesRoute = Route.make({
 export const routes = [chatRoute, messagesRoute, responsesRoute]
 
 export const configure = (input: Config) => {
-  const { apiKey: _apiKey, auth: _auth, region: _region, workspaceID: _workspaceID, baseURL, ...rest } = input
-  const host = baseURL === undefined ? requireHost(input) : undefined
-  const defaults = { ...rest, auth: AuthOptions.bearer(input, ["DASHSCOPE_API_KEY", "ALIBABA_API_KEY"]) }
-  const compatible = { ...defaults, endpoint: { baseURL: baseURL ?? `https://${host}/compatible-mode/v1` } }
-  const chat = (modelID: string | ModelID) =>
-    chatRoute.with(compatible).model<ChatOptionsInput>({ id: modelID, compatibility: AlibabaChat.compatibility })
-  const messages = (modelID: string | ModelID) =>
+  const { apiKey: _key, auth: _auth, region, workspaceID, baseURL, ...rest } = input
+  const host =
+    region === undefined
+      ? undefined
+      : workspaceID === undefined
+        ? hosts.get(region)
+        : `${workspaceID}.${region}.maas.aliyuncs.com`
+  if (baseURL === undefined) {
+    if (region === undefined) throw new Error("Alibaba requires region or baseURL")
+    if (host === undefined) throw new Error(`Alibaba region ${region} requires workspaceID or baseURL`)
+  }
+  const opts = { ...rest, auth: AuthOptions.bearer(input, ["DASHSCOPE_API_KEY", "ALIBABA_API_KEY"]) }
+  const common = { ...opts, endpoint: { baseURL: baseURL ?? `https://${host}/compatible-mode/v1` } }
+  const chat = (id: string | ModelID) =>
+    chatRoute.with(common).model<ChatOptionsInput>({ id, compatibility: AlibabaChat.compatibility })
+  const messages = (id: string | ModelID) =>
     messagesRoute
       .with({
-        ...defaults,
+        ...opts,
         endpoint: { baseURL: baseURL ?? `https://${host}/apps/anthropic/v1` },
       })
-      .model<MessagesOptionsInput>({ id: modelID, compatibility: { requireSignature: false } })
-  const responses = (modelID: string | ModelID) =>
-    responsesRoute.with(compatible).model<ResponsesOptionsInput>({ id: modelID })
+      .model<MessagesOptionsInput>({ id, compatibility: { requireSignature: false } })
+  const responses = (id: string | ModelID) => responsesRoute.with(common).model<ResponsesOptionsInput>({ id })
   return { id, model: chat, chat, messages, responses, configure }
-}
-
-function requireHost(input: Location) {
-  if (input.region === undefined) throw new Error("Alibaba requires region or baseURL")
-  if (input.workspaceID !== undefined) return `${input.workspaceID}.${input.region}.maas.aliyuncs.com`
-  const host = sharedHosts.get(input.region)
-  if (host === undefined) throw new Error(`Alibaba region ${input.region} requires workspaceID or baseURL`)
-  return host
 }
 
 export const provider = { id, configure }
 
-export const model: ProviderPackage.Definition<Settings, ChatOptionsInput>["model"] = (modelID, settings) =>
-  fromSettings(settings).chat(modelID)
+export const model: ProviderPackage.Definition<Settings, ChatOptionsInput>["model"] = (id, input) =>
+  fromSettings(input).chat(id)
 export const messagesModel: ProviderPackage.Definition<
   Settings<MessagesOptionsInput>,
   MessagesOptionsInput
->["model"] = (modelID, settings) => fromSettings(settings).messages(modelID)
+>["model"] = (id, input) => fromSettings(input).messages(id)
 export const responsesModel: ProviderPackage.Definition<
   Settings<ResponsesOptionsInput>,
   ResponsesOptionsInput
->["model"] = (modelID, settings) => fromSettings(settings).responses(modelID)
+>["model"] = (id, input) => fromSettings(input).responses(id)
 
-function fromSettings(settings: Settings<ChatOptionsInput | MessagesOptionsInput | ResponsesOptionsInput>) {
-  const common = {
-    apiKey: settings.apiKey,
-    workspaceID: settings.workspaceID,
-    headers: settings.headers,
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    providerOptions: settings.providerOptions,
-  }
-  if (settings.baseURL !== undefined)
-    return configure({ ...common, baseURL: settings.baseURL, region: settings.region })
-  if (settings.region !== undefined) return configure({ ...common, region: settings.region })
-  throw new Error("Alibaba requires region or baseURL")
+function fromSettings(input: Settings<ChatOptionsInput | MessagesOptionsInput | ResponsesOptionsInput>) {
+  const { body, ...rest } = input
+  return configure({ ...rest, http: body === undefined ? undefined : { body } })
 }
 
 export const webSearch = () => hostedTool("web_search", "Search the web with Alibaba's hosted search tool.")
 export const webExtractor = () => hostedTool("web_extractor", "Extract web page content with Alibaba's hosted tool.")
 export const codeInterpreter = () => hostedTool("code_interpreter", "Execute code with Alibaba's hosted interpreter.")
 
-function hostedTool(type: string, description: string) {
+function hostedTool(type: "web_search" | "web_extractor" | "code_interpreter", description: string) {
   return ToolDefinition.make({
     name: type,
     description,

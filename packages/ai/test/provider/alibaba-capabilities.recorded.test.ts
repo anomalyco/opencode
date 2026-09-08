@@ -7,15 +7,17 @@ import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
 
 const alibaba = Alibaba.configure({ region: "ap-southeast-1", apiKey: process.env.ALIBABA_API_KEY ?? "fixture" })
-
-for (const api of ["chat", "messages", "responses"] as const) {
-  const recorded = recordedTests({
+const record = (api: "chat" | "messages" | "responses") =>
+  recordedTests({
     prefix: `alibaba-${api}`,
     provider: "alibaba",
     protocol: `alibaba-${api}`,
     requires: ["ALIBABA_API_KEY"],
     tags: ["region:ap-southeast-1"],
   })
+
+for (const api of ["chat", "messages", "responses"] as const) {
+  const recorded = record(api)
   describe(`Alibaba ${api} capabilities`, () => {
     for (const enabled of [false, true]) {
       recorded.effect.with(
@@ -108,14 +110,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
   })
 }
 
-const chat = recordedTests({
-  prefix: "alibaba-chat",
-  provider: "alibaba",
-  protocol: "alibaba-chat",
-  requires: ["ALIBABA_API_KEY"],
-  tags: ["region:ap-southeast-1"],
-})
-chat.effect.with(
+record("chat").effect.with(
   "Qwen 3.8 Max returns a JSON object",
   { tags: ["structured-output"] },
   () =>
@@ -134,14 +129,7 @@ chat.effect.with(
   120_000,
 )
 
-const messages = recordedTests({
-  prefix: "alibaba-messages",
-  provider: "alibaba",
-  protocol: "alibaba-messages",
-  requires: ["ALIBABA_API_KEY"],
-  tags: ["region:ap-southeast-1"],
-})
-messages.effect.with(
+record("messages").effect.with(
   "Qwen 3.8 Max follows a JSON schema",
   { tags: ["structured-output"] },
   () =>
@@ -173,13 +161,7 @@ messages.effect.with(
   120_000,
 )
 
-const responses = recordedTests({
-  prefix: "alibaba-responses",
-  provider: "alibaba",
-  protocol: "alibaba-responses",
-  requires: ["ALIBABA_API_KEY"],
-  tags: ["region:ap-southeast-1"],
-})
+const responses = record("responses")
 responses.effect.with(
   "Qwen 3.8 Max continues a stored response",
   { tags: ["continuation", "storage"] },
@@ -193,14 +175,14 @@ responses.effect.with(
           generation: { maxTokens: 1024 },
         }),
       )
-      const responseId = first.events.find(LLMEvent.is.finish)?.providerMetadata?.alibaba?.responseId
-      expect(responseId).toBeString()
-      if (typeof responseId !== "string") throw new Error("Missing Alibaba response ID")
+      const id = first.events.find(LLMEvent.is.finish)?.providerMetadata?.alibaba?.responseId
+      expect(id).toBeString()
+      if (typeof id !== "string") throw new Error("Missing Alibaba response ID")
       const second = yield* LLMClient.generate(
         LLM.request({
           model: alibaba.responses("qwen3.8-max"),
           prompt: "What word did I ask you to remember? Reply with only the word.",
-          providerOptions: { previousResponseId: responseId, store: true, reasoningEffort: "none" },
+          providerOptions: { previousResponseId: id, store: true, reasoningEffort: "none" },
           generation: { maxTokens: 1024 },
         }),
       )

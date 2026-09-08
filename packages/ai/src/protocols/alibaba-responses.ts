@@ -1,6 +1,5 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
-import { LLMRequest } from "../schema/index.js"
 import type { AlibabaChat } from "./alibaba-chat.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, ProviderShared } from "./shared.js"
@@ -47,53 +46,57 @@ const adapter = {
   restoreHostedToolItem: (item: unknown) => (Schema.is(WebExtractorItem)(item) ? item : undefined),
 } satisfies OpenResponses.ProviderAdapter
 
-const fromRequest = Effect.fn("AlibabaResponses.fromRequest")(function* (request: LLMRequest) {
-  const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(request.providerOptions ?? {})
-  const projected = ProviderShared.flattenToolRequest(request)
-  const choice = request.toolChoice ? yield* OpenResponses.lowerToolChoice(adapter.name, request.toolChoice) : undefined
-  return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Body))({
-    ...(yield* OpenResponses.lowerConversation(projected.request, adapter)),
-    ...OpenResponses.lowerGeneration(request),
-    enable_thinking: options.enableThinking,
-    previous_response_id: options.previousResponseId,
-    conversation: options.conversation,
-    tools:
-      projected.tools.length === 0
-        ? undefined
-        : yield* Effect.forEach(projected.tools, (tool) =>
-            Effect.gen(function* () {
-              if (tool.native !== undefined)
-                return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(NativeTool))(tool.native.alibaba)
-              return yield* OpenResponses.lowerTool(
-                adapter.name,
-                tool,
-                ToolSchemaProjection.modelCompatibility(tool.inputSchema, request.model.compatibility?.toolSchema),
-              )
-            }),
-          ),
-    // Model Studio expresses named selection through allowed_tools.
-    tool_choice:
-      typeof choice === "object"
-        ? { type: "allowed_tools" as const, mode: "required" as const, tools: [choice] }
-        : choice,
-  })
-})
-
-const hostedTools = {
+const tools = {
   web_search_call: { name: "web_search", input: (item) => item.action ?? {} },
   code_interpreter_call: { name: "code_interpreter", input: (item) => ({ code: item.code }) },
 } satisfies ResponsesHostedTools.Definitions
 
 export const protocol = Protocol.make({
   id: adapter.id,
-  body: { schema: Body, from: fromRequest },
+  body: {
+    schema: Body,
+    from: Effect.fn("AlibabaResponses.fromRequest")(function* (req) {
+      const opts = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(req.providerOptions ?? {})
+      const flat = ProviderShared.flattenToolRequest(req)
+      const choice = req.toolChoice ? yield* OpenResponses.lowerToolChoice(adapter.name, req.toolChoice) : undefined
+      return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Body))({
+        ...(yield* OpenResponses.lowerConversation(flat.request, adapter)),
+        ...OpenResponses.lowerGeneration(req),
+        enable_thinking: opts.enableThinking,
+        previous_response_id: opts.previousResponseId,
+        conversation: opts.conversation,
+        tools:
+          flat.tools.length === 0
+            ? undefined
+            : yield* Effect.forEach(flat.tools, (tool) =>
+                Effect.gen(function* () {
+                  if (tool.native !== undefined)
+                    return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(NativeTool))(
+                      tool.native.alibaba,
+                    )
+                  return yield* OpenResponses.lowerTool(
+                    adapter.name,
+                    tool,
+                    ToolSchemaProjection.modelCompatibility(tool.inputSchema, req.model.compatibility?.toolSchema),
+                  )
+                }),
+              ),
+        // Model Studio expresses named selection through allowed_tools.
+        tool_choice:
+          typeof choice === "object"
+            ? { type: "allowed_tools" as const, mode: "required" as const, tools: [choice] }
+            : choice,
+      })
+    }),
+  },
   stream: {
     event: OpenResponses.protocol.stream.event,
-    initial: (request) => OpenResponses.initial(request, adapter),
+    initial: (req) => OpenResponses.initial(req, adapter),
     step: (state, input) =>
       Effect.gen(function* () {
         const event = OpenResponses.normalize(state, input)
-        if (event.type === "response.output_item.done" && event.item?.type === "web_extractor_call") {
+        if (event.type !== "response.output_item.done" || !event.item) return yield* OpenResponses.step(state, event)
+        if (event.item.type === "web_extractor_call") {
           const item = yield* Schema.decodeUnknownEffect(WebExtractorItem)(event.item).pipe(
             Effect.mapError((cause) =>
               ProviderShared.eventError(
@@ -108,12 +111,8 @@ export const protocol = Protocol.make({
             web_extractor_call: { name: "web_extractor", input: () => ({ urls: item.urls, goal: item.goal }) },
           })
         }
-        if (
-          event.type === "response.output_item.done" &&
-          event.item &&
-          ResponsesHostedTools.isItem(event.item, hostedTools)
-        )
-          return yield* ResponsesHostedTools.onDone(state, event.item, hostedTools)
+        if (ResponsesHostedTools.isItem(event.item, tools))
+          return yield* ResponsesHostedTools.onDone(state, event.item, tools)
         return yield* OpenResponses.step(state, event)
       }),
     terminal: OpenResponses.terminal,
