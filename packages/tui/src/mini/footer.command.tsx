@@ -45,6 +45,7 @@ type CommandEntry =
   | (PanelEntry & { action: "variant.list" })
   | (PanelEntry & { action: "settings" })
   | (PanelEntry & { action: "slash"; name: string })
+  | (PanelEntry & { action: "clear" })
   | (PanelEntry & { action: "exit" })
 
 type ModelEntry = PanelEntry & {
@@ -411,7 +412,9 @@ export function RunCommandMenuBody(props: {
   onSettings: () => void
   onCommand: (name: string) => void
   onNew: () => void
+  onClear?: () => void
   onExit: () => void
+  clearShortcut?: string
   mono?: boolean
 }) {
   const skills = createMemo(() => (props.commands() ?? []).filter((item) => item.source === "skill"))
@@ -525,6 +528,13 @@ export function RunCommandMenuBody(props: {
       ...prompt,
       ...agent,
       {
+        action: "clear",
+        category: "System",
+        display: "Clear screen",
+        footer: props.clearShortcut,
+        keywords: "clear screen cls redraw",
+      },
+      {
         action: "settings",
         category: "System",
         display: "Settings",
@@ -582,6 +592,11 @@ export function RunCommandMenuBody(props: {
 
     if (item.action === "settings") {
       props.onSettings()
+      return
+    }
+
+    if (item.action === "clear") {
+      props.onClear?.()
       return
     }
 

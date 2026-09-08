@@ -46,6 +46,7 @@ export const Definitions = {
   leader: keybind(LeaderDefault, "Leader key for keybind combinations"),
 
   "app.exit": keybind("ctrl+c,ctrl+d,<leader>q", "Exit the application"),
+  "app.clear": keybind("ctrl+l", "Clear the screen in mini"),
   "app.debug": keybind("none", "Toggle debug panel"),
   "app.console": keybind("none", "Toggle console"),
   "app.scrap": keybind("none", "Open scrap screen"),
