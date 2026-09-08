@@ -1,0 +1,163 @@
+import { createRequire } from "node:module"
+import path from "node:path"
+import { Effect, Exit, Fiber, type FileSystem } from "effect"
+import type { TuiInput } from "@opencode-ai/tui"
+import type { Global } from "@opencode-ai/util/global"
+import { createRunnableDevEnvironment, createServer, isRunnableDevEnvironment } from "vite"
+import solid from "vite-plugin-solid"
+import refresh from "solid-refresh/babel"
+
+type Run = (input: TuiInput) => Effect.Effect<void, unknown, Global.Service | FileSystem.FileSystem>
+const require = createRequire(import.meta.url)
+export const host: {
+  active?: Fiber.Fiber<void, unknown>
+  mount?: (app: Run) => Promise<void>
+  stop?: () => Promise<void>
+  reset?: () => void
+} = {}
+
+export const run: Run = Effect.fn("Tui.vite")(function* (input: Parameters<Run>[0]) {
+  const fork = Effect.runForkWith(yield* Effect.context<Effect.Services<ReturnType<Run>>>())
+  const finished = Promise.withResolvers<Exit.Exit<void, unknown>>()
+  let initial = true
+  host.stop = async () => {
+    const fiber = host.active
+    host.active = undefined
+    if (fiber) await Effect.runPromise(Fiber.interrupt(fiber))
+  }
+  host.mount = async (app) => {
+    await host.stop?.()
+    const fiber = fork(
+      app(
+        initial
+          ? input
+          : {
+              ...input,
+              args: { ...input.args, prompt: undefined },
+              terminalHandoff: undefined,
+            },
+      ),
+    )
+    initial = false
+    host.active = fiber
+    fiber.addObserver((exit) => {
+      if (host.active !== fiber) return
+      host.active = undefined
+      finished.resolve(exit)
+    })
+  }
+
+  const server = yield* Effect.acquireRelease(
+    Effect.tryPromise(() =>
+      createServer({
+        root: path.resolve(import.meta.dirname, "../../tui"),
+        configFile: false,
+        appType: "custom",
+        clearScreen: false,
+        logLevel: "error",
+        server: { middlewareMode: true, ws: false },
+        resolve: {
+          alias: [
+            { find: /^solid-js(?:\/dist\/solid.js)?$/, replacement: require.resolve("solid-js/dist/dev.js") },
+            {
+              find: /^solid-js\/store(?:\/dist\/store.js)?$/,
+              replacement: require.resolve("solid-js/store/dist/dev.js"),
+            },
+          ],
+        },
+        plugins: [
+          solid({
+            hot: false,
+            dev: true,
+            solid: { generate: "universal", moduleName: "@opentui/solid" },
+            // Enable the existing refresh plugin in Vite's non-browser environment.
+            babel: { plugins: [[refresh, { bundler: "vite" }]] },
+          }),
+          {
+            name: "tui-recovery",
+            hotUpdate() {
+              if (this.environment.name !== "native" || host.active) return
+              this.environment.moduleGraph.invalidateAll()
+              this.environment.hot.send({ type: "full-reload" })
+              return []
+            },
+          },
+        ],
+        environments: {
+          native: {
+            consumer: "server",
+            resolve: {
+              conditions: ["bun", "development", "module"],
+              externalConditions: ["bun", "node"],
+              noExternal: [
+                "solid-js",
+                "solid-refresh",
+                "@opentui/solid",
+                "@opentui/keymap",
+                "opentui-spinner",
+                /^@solid-primitives\//,
+                "@opencode-ai/plugin",
+                "@opencode-ai/client",
+                "@opencode-ai/latex",
+                "@opencode-ai/merman",
+              ],
+              // Exact subpaths are needed for workspace TypeScript exports.
+              external: [
+                "@opentui/core",
+                "@opentui/core/testing",
+                "effect",
+                "@opencode-ai/cli/vite-host",
+                "@opencode-ai/client",
+                "@opencode-ai/client/effect/service",
+                "@opencode-ai/client/promise",
+                "@opencode-ai/core/util/slug",
+                "@opencode-ai/schema",
+                "@opencode-ai/schema/event",
+                "@opencode-ai/schema/project",
+                "@opencode-ai/schema/session-id",
+                "@opencode-ai/schema/session-inbox",
+                "@opencode-ai/schema/session-message",
+                "@opencode-ai/schema/skill",
+                "@opencode-ai/schema/token-usage",
+                "@opencode-ai/schema/vcs",
+                "@opencode-ai/schema/worktree",
+                "@opencode-ai/simulation/frontend",
+                "@opencode-ai/simulation/protocol",
+                "@opencode-ai/theme/tui",
+                "@opencode-ai/theme/tui/v1",
+                "@opencode-ai/util/activity-calendar",
+                "@opencode-ai/util/flock",
+                "@opencode-ai/util/global",
+                "@opencode-ai/util/hash",
+                "@opencode-ai/util/session-title-fallback",
+              ],
+            },
+            optimizeDeps: { noDiscovery: true, include: [] },
+            dev: {
+              createEnvironment: (name, config) =>
+                createRunnableDevEnvironment(name, config, {
+                  runnerOptions: {
+                    sourcemapInterceptor: false,
+                    hmr: { logger: { debug() {}, error: (error) => console.error(error) } },
+                  },
+                }),
+            },
+          },
+        },
+      }),
+    ),
+    (server) =>
+      Effect.promise(async () => {
+        await host.stop?.()
+        await server.close()
+      }),
+  )
+  const environment = server.environments.native
+  if (!isRunnableDevEnvironment(environment)) return yield* Effect.die(new Error("Expected a runnable environment"))
+  host.reset = () => environment.runner.clearCache()
+  yield* Effect.promise(() =>
+    environment.runner.import(path.join(import.meta.dirname, "entry.ts")).catch(console.error),
+  )
+  const exit = yield* Effect.promise(() => finished.promise)
+  if (Exit.isFailure(exit)) return yield* Effect.failCause(exit.cause)
+}, Effect.scoped)
