@@ -1153,7 +1153,7 @@ export function Session(props: {
 
           const content =
             options.format === "markdown"
-              ? formatSessionTranscript(sessionData, messages(), options.thinking)
+              ? formatSessionTranscript(sessionData, messages(), options.thinking, options.tools)
               : JSON.stringify(
                   await client.api.session.export({ sessionID: sessionData.id, sanitize: options.sanitize }),
                   null,
@@ -3839,7 +3839,7 @@ function recordValue(value: unknown): Record<string, unknown> | undefined {
   return isRecord(value) ? value : undefined
 }
 
-function formatSessionTranscript(session: SessionInfo, messages: SessionMessageInfo[], thinking: boolean) {
+function formatSessionTranscript(session: SessionInfo, messages: SessionMessageInfo[], thinking: boolean, tools = true) {
   const body = messages.flatMap((message) => {
     if (message.type === "user") return [`## User\n\n${message.text}`]
     if (message.type === "shell")
@@ -3848,6 +3848,7 @@ function formatSessionTranscript(session: SessionInfo, messages: SessionMessageI
     const content = message.content.flatMap((item) => {
       if (item.type === "text") return [item.text]
       if (item.type === "reasoning") return thinking ? [`_Thinking:_\n\n${item.text}`] : []
+      if (!tools) return []
       const input = typeof item.state.input === "string" ? item.state.input : JSON.stringify(item.state.input, null, 2)
       const output =
         item.state.status === "error"
@@ -3859,6 +3860,7 @@ function formatSessionTranscript(session: SessionInfo, messages: SessionMessageI
                 .join("\n")
       return [`**Tool: ${item.name}**\n\n**Input:**\n\`\`\`json\n${input}\n\`\`\`\n\n${output}`]
     })
+    if (content.length === 0) return []
     return [`## Assistant\n\n${content.join("\n\n")}`]
   })
   return `# ${withTimestampedFallback(session)}\n\n**Session ID:** ${session.id}\n**Created:** ${new Date(session.time.created).toLocaleString()}\n**Updated:** ${new Date(session.time.updated).toLocaleString()}\n\n---\n\n${body.join("\n\n---\n\n")}\n`
