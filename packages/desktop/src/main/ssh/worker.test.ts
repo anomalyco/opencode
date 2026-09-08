@@ -40,6 +40,7 @@ test.skipIf(headless).each([
         env: {
           ...process.env,
           ELECTRON_RUN_AS_NODE: undefined,
+          ELECTRON_NO_ATTACH_CONSOLE: "true",
           OPENCODE_SSH_ASKPASS_PORT: String(address.port),
           OPENCODE_SSH_ASKPASS_TOKEN: "fixture",
           SSH_ASKPASS_PROMPT: "confirm",
