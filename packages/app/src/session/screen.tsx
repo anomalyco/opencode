@@ -26,7 +26,6 @@ import { createSessionScreenLayout } from "./screen-layout"
 import { createSessionSummary } from "./summary"
 import { SessionMobileViewTabs } from "./mobile-view-tabs"
 import { SessionSidePanel } from "./files/session-side-panel"
-import { SessionContextTab } from "./files/session-context-tab"
 import { createSessionTimelineInteraction } from "./timeline/interaction"
 import { createTimelineSearchController } from "./timeline/search-controller"
 import { TimelineSearchBar } from "./timeline/search-bar"
@@ -144,11 +143,16 @@ export function SessionScreen(props: { session: SessionModel }) {
   const summary = createSessionSummary(session)
   const mobileView = createMemo(() => {
     if (screen.terminal.open()) return "terminal"
-    if (store.mobileTab === "session" || store.mobileTab === "usage") return store.mobileTab
+    if (store.mobileTab === "session") return store.mobileTab
     const selected = extensions.panels().find((panel) => panel.key === session.tabs.activeTab())
     return selected?.props.group ?? selected?.key ?? store.mobileTab
   })
-  const mobileItems = createMemo(() => Array.from(new Map(extensions.panels().map((panel) => [panel.props.group ?? panel.key, panel])).keys()).map((id) => ({ id, title: extensions.panels().find((panel) => (panel.props.group ?? panel.key) === id)!.props.title })))
+  const mobileItems = createMemo(() =>
+    Array.from(new Set(extensions.panels().map((panel) => panel.props.group ?? panel.key))).map((id) => {
+      const panel = extensions.panels().find((panel) => (panel.props.group ?? panel.key) === id)!
+      return { id, title: panel.props.title, menu: panel.props.initial === "closed" && !panel.props.group }
+    }),
+  )
   const conversationVisible = createMemo(() => isDesktop() || mobileView() === "session")
   createEffect(() => {
     if (!isDesktop() && screen.terminal.open()) setStore("mobileTerminalCached", true)
@@ -253,9 +257,6 @@ export function SessionScreen(props: { session: SessionModel }) {
         <Switch>
           <Match when={!isDesktop() && mobileView() === "terminal"}>
             <></>
-          </Match>
-          <Match when={!isDesktop() && mobileView() === "usage"}>
-            <SessionContextTab />
           </Match>
           <Match when={!isDesktop() && mobileItems().some((item) => item.id === mobileView())}>
             <ExtensionPanelContent panels={extensions.panels()} active={session.tabs.activeTab()} />

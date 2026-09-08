@@ -22,7 +22,6 @@ import { createSessionTabs, type Sizing } from "@/session/helpers"
 import { useFile } from "@/workspaces/files/model"
 import type { SessionExtensions } from "@/extensions/session"
 import { ExtensionPanelContent } from "@/extensions/content"
-import { SessionContextTab } from "./session-context-tab"
 
 export function SessionSidePanel(props: {
   extensions: SessionExtensions
@@ -106,20 +105,6 @@ export function SessionSidePanel(props: {
                     <div class="session-review-v2-sidebar-toggle-slot h-full shrink-0 sticky start-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
                       {extensions.toolbar()}
                     </div>
-                    <Show when={state.contextOpen()}>
-                      <Tabs.Trigger
-                        value="context"
-                        onMiddleClick={() => session.tabs().close("context")}
-                        closeButton={
-                          <Tabs.CloseButton
-                            onClick={() => session.tabs().close("context")}
-                            aria-label={language.t("common.closeTab")}
-                          />
-                        }
-                      >
-                        {language.t("session.tab.context")}
-                      </Tabs.Trigger>
-                    </Show>
                     <For each={panelTabs()}>
                       {(key) => (
                         <Show when={extensions.panels().find((panel) => panel.key === key)}>
@@ -177,11 +162,6 @@ export function SessionSidePanel(props: {
                     </Show>
                   </div>
                 </div>
-                <Show when={state.activeTab() === "context"}>
-                  <Tabs.Content value="context" class="h-full min-h-0 overflow-hidden">
-                    <SessionContextTab />
-                  </Tabs.Content>
-                </Show>
                 <ExtensionPanelContent panels={extensions.panels()} active={state.activeTab()} />
               </Tabs>
             </DragDropProvider>

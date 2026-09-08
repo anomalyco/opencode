@@ -3,6 +3,7 @@
 @import "@opencode/ui/styles/tokens";
 @import "tw-animate-css";
 @source "../../plugin-review-desktop/src";
+@source "../../plugin-context-desktop/src";
 
 @font-face {
   font-family: "JetBrainsMono Nerd Font Mono";
