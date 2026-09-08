@@ -7,7 +7,7 @@
     </picture>
   </a>
 </p>
-<p align="center">Den open source AI-kodeagent.</p>
+<p align="center">Agen coding AI open source.</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
@@ -44,37 +44,37 @@
 
 ---
 
-### Installation
+### Instalasi
 
 ```bash
 # YOLO
 curl -fsSL https://opencode.ai/install | bash
 
-# Pakkehåndteringer
-npm i -g opencode-ai@latest        # eller bun/pnpm/yarn
+# Manajer paket
+npm i -g opencode-ai@latest        # atau bun/pnpm/yarn
 scoop install opencode             # Windows
 choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS og Linux (anbefalet, altid up to date)
-brew install opencode              # macOS og Linux (officiel brew formula, opdateres sjældnere)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # alle OS
-nix run nixpkgs#opencode           # eller github:anomalyco/opencode for nyeste dev-branch
+brew install anomalyco/tap/opencode # macOS dan Linux (disarankan, selalu diperbarui)
+brew install opencode              # macOS dan Linux (formula brew resmi, jarang diperbarui)
+sudo pacman -S opencode            # Arch Linux (Stabil)
+paru -S opencode-bin               # Arch Linux (Terbaru dari AUR)
+mise use -g opencode               # OS apa pun
+nix run nixpkgs#opencode           # atau github:anomalyco/opencode untuk branch dev terbaru
 ```
 
 > [!TIP]
-> Fjern versioner ældre end 0.1.x før installation.
+> Hapus versi yang lebih lama dari 0.1.x sebelum melakukan instalasi.
 
-### Desktop-app (BETA)
+### Aplikasi Desktop (BETA)
 
-OpenCode findes også som desktop-app. Download direkte fra [releases-siden](https://github.com/anomalyco/opencode/releases) eller [opencode.ai/download](https://opencode.ai/download).
+OpenCode juga tersedia sebagai aplikasi desktop. Unduh langsung dari [halaman rilis](https://github.com/anomalyco/opencode/releases) atau [opencode.ai/download](https://opencode.ai/download).
 
-| Platform              | Download                           |
+| Platform              | Unduh                              |
 | --------------------- | ---------------------------------- |
 | macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
 | macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
 | Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm`, eller AppImage     |
+| Linux                 | `.deb`, `.rpm`, atau `.AppImage`   |
 
 ```bash
 # macOS (Homebrew)
@@ -83,48 +83,48 @@ brew install --cask opencode-desktop
 scoop bucket add extras; scoop install extras/opencode-desktop
 ```
 
-#### Installationsmappe
+#### Direktori Instalasi
 
-Installationsscriptet bruger følgende prioriteringsrækkefølge for installationsstien:
+Skrip instalasi mengikuti urutan prioritas berikut untuk jalur instalasi:
 
-1. `$OPENCODE_INSTALL_DIR` - Tilpasset installationsmappe
-2. `$XDG_BIN_DIR` - Sti der følger XDG Base Directory Specification
-3. `$HOME/bin` - Standard bruger-bin-mappe (hvis den findes eller kan oprettes)
-4. `$HOME/.opencode/bin` - Standard fallback
+1. `$OPENCODE_INSTALL_DIR` - Direktori instalasi kustom
+2. `$XDG_BIN_DIR` - Jalur yang mematuhi XDG Base Directory Specification
+3. `$HOME/bin` - Direktori binari pengguna standar (jika ada atau dapat dibuat)
+4. `$HOME/.opencode/bin` - Opsi default
 
 ```bash
-# Eksempler
+# Contoh
 OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 
-### Agents
+### Agen
 
-OpenCode har to indbyggede agents, som du kan skifte mellem med `Tab`-tasten.
+OpenCode menyertakan dua agen bawaan yang dapat Anda alihkan menggunakan tombol `Tab`.
 
-- **build** - Standard, agent med fuld adgang til udviklingsarbejde
-- **plan** - Skrivebeskyttet agent til analyse og kodeudforskning
-  - Afviser filredigering som standard
-  - Spørger om tilladelse før bash-kommandoer
-  - Ideel til at udforske ukendte kodebaser eller planlægge ændringer
+- **build** - Agen default dengan akses penuh untuk pekerjaan pengembangan
+- **plan** - Agen read-only untuk analisis dan eksplorasi kode
+  - Menolak pengeditan file secara default
+  - Meminta izin sebelum menjalankan perintah bash
+  - Ideal untuk mengeksplorasi basis kode yang tidak dikenal atau merencanakan perubahan
 
-Derudover findes der en **general**-subagent til komplekse søgninger og flertrinsopgaver.
-Den bruges internt og kan kaldes via `@general` i beskeder.
+Termasuk juga subagen **general** untuk pencarian kompleks dan tugas multi-langkah.
+Ini digunakan secara internal dan dapat dipanggil menggunakan `@general` dalam pesan.
 
-Læs mere om [agents](https://opencode.ai/docs/agents).
+Pelajari lebih lanjut tentang [agen](https://opencode.ai/docs/agents).
 
-### Dokumentation
+### Dokumentasi
 
-For mere info om konfiguration af OpenCode, [**se vores docs**](https://opencode.ai/docs).
+Untuk informasi lebih lanjut tentang cara mengonfigurasi OpenCode, [**kunjungi dokumentasi kami**](https://opencode.ai/docs).
 
-### Bidrag
+### Berkontribusi
 
-Hvis du vil bidrage til OpenCode, så læs vores [contributing docs](./CONTRIBUTING.md) før du sender en pull request.
+Jika Anda tertarik untuk berkontribusi pada OpenCode, silakan baca [dokumentasi kontribusi](./CONTRIBUTING.md) kami sebelum mengirimkan pull request.
 
-### Bygget på OpenCode
+### Membangun dengan OpenCode
 
-Hvis du arbejder på et projekt der er relateret til OpenCode og bruger "opencode" som en del af navnet; f.eks. "opencode-dashboard" eller "opencode-mobile", så tilføj en note i din README, der tydeliggør at projektet ikke er bygget af OpenCode-teamet og ikke er tilknyttet os på nogen måde.
+Jika Anda mengerjakan proyek yang terkait dengan OpenCode dan menggunakan "opencode" sebagai bagian dari namanya, misalnya "opencode-dashboard" atau "opencode-mobile", harap tambahkan catatan ke README Anda untuk mengklarifikasi bahwa proyek tersebut tidak dibangun oleh tim OpenCode dan tidak berafiliasi dengan kami dengan cara apa pun.
 
 ---
 
-**Bliv en del af vores community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Bergabung dengan komunitas kami** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
