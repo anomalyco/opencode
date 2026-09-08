@@ -30,9 +30,6 @@ const Handlers = Runtime.handlers(Commands, {
     config: () => import("./commands/handlers/debug/config"),
     paths: () => import("./commands/handlers/debug/paths"),
   },
-  console: {
-    login: () => import("./commands/handlers/console/login"),
-  },
   mcp: {
     list: () => import("./commands/handlers/mcp/list"),
     add: () => import("./commands/handlers/mcp/add"),

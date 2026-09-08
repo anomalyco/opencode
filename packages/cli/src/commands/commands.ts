@@ -98,17 +98,6 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         Spec.make("paths", { description: "Show global paths (data, config, cache, state)" }),
       ],
     }),
-    Spec.make("console", {
-      description: "Manage OpenCode Console access",
-      commands: [
-        Spec.make("login", {
-          description: "Log in to OpenCode Console",
-          params: {
-            url: Argument.string("url").pipe(Argument.withDescription("Console server URL"), Argument.optional),
-          },
-        }),
-      ],
-    }),
     Spec.make("auth", {
       description: "manage AI providers and credentials",
       commands: [
