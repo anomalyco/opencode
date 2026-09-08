@@ -1,6 +1,7 @@
+import { normalizeBasePath } from "../server/base-path"
+export { normalizeBasePath } from "../server/base-path"
 import type { Argv, InferredOptionTypes } from "yargs"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
-import type { Config } from "@/config/config"
 import { Effect } from "effect"
 
 const options = {
@@ -30,20 +31,16 @@ const options = {
     describe: "additional domains to allow for CORS",
     default: [] as string[],
   },
+  "base-path-stripped": {
+    type: "boolean" as const,
+    describe: "reverse proxy strips the base path before forwarding requests",
+    default: false,
+  },
   "base-path": {
     type: "string" as const,
     describe: "base URL path prefix for reverse proxy (e.g., /opencode)",
     default: "",
   },
-}
-
-export function normalizeBasePath(input: string | undefined): string {
-  if (!input) return ""
-  let p = input.trim()
-  if (!p || p === "/") return ""
-  if (!p.startsWith("/")) p = "/" + p
-  p = p.replace(/\/+$/, "")
-  return p
 }
 
 export type NetworkOptions = InferredOptionTypes<typeof options>
@@ -89,10 +86,14 @@ export function resolveNetworkOptionsNoConfig(args: NetworkOptions, config?: Con
   const configCors = config?.server?.cors ?? []
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
-  const basePathExplicitlySet = process.argv.some((a) => a === "--base-path" || a.startsWith("--base-path="))
+  const basePathExplicitlySet = hasArg("--base-path")
   const basePath = normalizeBasePath(
     basePathExplicitlySet ? args["base-path"] : (config?.server?.basePath ?? args["base-path"]),
   )
 
-  return { hostname, port, mdns, mdnsDomain, cors, basePath }
+  const basePathStripped = hasBooleanArg("--base-path-stripped")
+    ? args["base-path-stripped"]
+    : (config?.server?.basePathStripped ?? args["base-path-stripped"])
+
+  return { hostname, port, mdns, mdnsDomain, cors, basePath, basePathStripped }
 }

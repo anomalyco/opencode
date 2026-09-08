@@ -15,6 +15,9 @@ export const Server = Schema.Struct({
   cors: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
     description: "Additional domains to allow for CORS",
   }),
+  basePathStripped: Schema.optional(Schema.Boolean).annotate({
+    description: "Reverse proxy strips basePath before forwarding requests",
+  }),
   basePath: Schema.optional(Schema.String).annotate({
     description: "Base path prefix for hosting behind a reverse proxy (e.g., '/opencode')",
   }),

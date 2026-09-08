@@ -59,12 +59,14 @@ export function embeddedUI(disableEmbeddedWebUi: boolean) {
 }
 
 export function injectBasePath(html: string, basePath: string): string {
-  if (!basePath) return html
   const safe = JSON.stringify(basePath).replace(/</g, "\\u003c")
+  const href = (basePath + "/").replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;")
   const script = `<script>window.__OPENCODE_BASE_PATH__=${safe}</script>`
-  html = html.replace("<head>", `<head>\n${script}`)
-  html = html.replace(/((?:href|src)=["'])\/(?!\/)/g, `$1${basePath}/`)
-  return html
+  // Vite emits relative entrypoints; the base must also work on a deep-link reload.
+  const body = html
+    .replace(/<base\b[^>]*>/gi, "")
+    .replace(/((?:href|src)=["'])\/(?!\/)/g, (_, attribute: string) => `${attribute}${href}`)
+  return body.replace(/<head\b[^>]*>/i, (head) => `${head}\n<base href="${href}">\n${script}`)
 }
 
 function notFound() {
@@ -75,8 +77,7 @@ function embeddedUIResponse(file: string, body: Uint8Array, basePath = "") {
   const mime = FSUtil.mimeType(file)
   const headers = new Headers({ "content-type": mime })
   if (mime.startsWith("text/html")) {
-    let html = new TextDecoder().decode(body)
-    if (basePath) html = injectBasePath(html, basePath)
+    const html = injectBasePath(new TextDecoder().decode(body), basePath)
     headers.set("content-security-policy", cspForHtml(html))
     return HttpServerResponse.text(html, { headers })
   }
@@ -118,8 +119,7 @@ export function serveUIEffect(
     const headers = proxyResponseHeaders(response.headers)
 
     if (response.headers["content-type"]?.includes("text/html")) {
-      let body = yield* response.text
-      if (bp) body = injectBasePath(body, bp)
+      const body = injectBasePath(yield* response.text, bp)
       headers.set("Content-Security-Policy", cspForHtml(body))
       return HttpServerResponse.text(body, { status: response.status, headers })
     }

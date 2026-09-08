@@ -45,8 +45,8 @@ describe("normalizeBasePath", () => {
 describe("injectBasePath", () => {
   const minimalHtml = `<html><head><title>Test</title></head><body></body></html>`
 
-  test("returns html unchanged when basePath is empty", () => {
-    expect(injectBasePath(minimalHtml, "")).toBe(minimalHtml)
+  test("sets the document base for deep links on an unprefixed server", () => {
+    expect(injectBasePath(minimalHtml, "")).toContain('<base href="/">')
   })
 
   test("injects global script into head", () => {
@@ -109,4 +109,18 @@ describe("cspForHtml with injected base path", () => {
     expect(csp).toContain(`'sha256-${existingHash}'`)
     expect(csp).toContain(`'sha256-${injectedHash}'`)
   })
+})
+
+test.each(["//example.com/path", "/a/../b", "/prefix?query", "/prefix#hash", "/test\\path", '/test"bad', "/test path"])(
+  "rejects an invalid base path %j",
+  (value) => expect(() => normalizeBasePath(value)).toThrow(),
+)
+
+test("replaces an existing base and safely handles replacement metacharacters", () => {
+  const html =
+    '<HTML><HEAD data-test="yes"><base href="/old/"><script src="./assets/app.js"></script><link href="/icon.png"></HEAD></HTML>'
+  const result = injectBasePath(html, "/apps/$&")
+  expect(result).toContain('<base href="/apps/$&amp;/">')
+  expect(result).not.toContain("/old/")
+  expect(result).toContain('href="/apps/$&amp;/icon.png"')
 })

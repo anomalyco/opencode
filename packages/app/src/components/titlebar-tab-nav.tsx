@@ -1,3 +1,4 @@
+import { A } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, onCleanup, Show, type Ref } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -201,7 +202,7 @@ export function TabNavItem(props: {
       }}
     >
       <MenuV2.Context.Trigger
-        as="a"
+        as={A}
         disabled={editing() || props.dragging}
         aria-haspopup="menu"
         aria-expanded={menu.open}
@@ -381,7 +382,7 @@ export function DraftTabItem(props: {
         closeTab(event)
       }}
     >
-      <a
+      <A
         data-slot="tab-link"
         data-titlebar-tab-link
         href={props.href}
@@ -414,7 +415,7 @@ export function DraftTabItem(props: {
         >
           {props.title}
         </span>
-      </a>
+      </A>
       <div data-slot="tab-close">
         <IconButtonV2
           size="small"

@@ -1,3 +1,4 @@
+import { appPath } from "@/utils/base-path"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { useLocation } from "@solidjs/router"
@@ -167,7 +168,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const platform = usePlatform()
     const location = useLocation()
     const route = createMemo(() => {
-      const value = currentRoute(location.pathname, location.search)
+      const value = currentRoute(appPath(location.pathname), location.search)
       if (value.type === "home") return value
       if (value.server) return value
       if (value.type === "draft") {

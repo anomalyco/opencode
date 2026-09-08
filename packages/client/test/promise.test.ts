@@ -171,7 +171,6 @@ test("session methods use the public HTTP contract", async () => {
   })
 })
 
-
 test("preserves base path in request URLs", async () => {
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000/opencode",

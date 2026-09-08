@@ -5,8 +5,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
-import type { Duplex } from "node:stream"
+import { basePathServer, normalizeBasePath } from "./base-path"
 import { MDNS } from "./mdns"
 import { HttpApiApp } from "./routes/instance/httpapi/server"
 import { disposeMiddleware } from "./routes/instance/httpapi/lifecycle"
@@ -37,6 +36,7 @@ type ListenOptions = CorsOptions & {
   mdns?: boolean
   mdnsDomain?: string
   basePath?: string
+  basePathStripped?: boolean
 }
 type ListenerState = {
   scope: Scope.Scope
@@ -44,8 +44,7 @@ type ListenerState = {
   http: ListenerServer
   websockets: WebSocketTracker.Interface
 }
-type EffectListener = Omit<Listener, "stop" | "basePath"> & {
-  basePath: string
+type EffectListener = Omit<Listener, "stop"> & {
   stop: (close?: boolean) => Effect.Effect<void>
 }
 
@@ -75,7 +74,7 @@ export async function openapi() {
 export let url: URL | undefined
 
 export async function listen(opts: ListenOptions): Promise<Listener> {
-  const listener = await Effect.runPromise(listenEffect(opts))
+  const listener = await Effect.runPromise(listenEffect({ ...opts, basePath: normalizeBasePath(opts.basePath) }))
   return {
     hostname: listener.hostname,
     port: listener.port,
@@ -111,7 +110,7 @@ function listenerLayer(opts: ListenOptions, port: number) {
     disableListenLog: true,
   }).pipe(
     Layer.provideMerge(AppNodeBuilder.build(WebSocketTracker.node)),
-    Layer.provideMerge(serverLayer({ port, hostname: opts.hostname, basePath: opts.basePath })),
+    Layer.provideMerge(serverLayer({ ...opts, port })),
     // Install a fresh `ConfigProvider` per listener so `Config.string(...)`
     // reads reflect the current `process.env`. Effect's default
     // `ConfigProvider` snapshots `process.env` on first read and caches the
@@ -204,38 +203,8 @@ function forceClose(state: ListenerState) {
   return Effect.all([state.http.closeAll, state.websockets.closeAll], { concurrency: "unbounded", discard: true })
 }
 
-function serverLayer(opts: { port: number; hostname: string; basePath?: string }) {
-  const server = createServer()
-  const bp = opts.basePath ?? ""
-
-  if (bp) {
-    const originalEmit = server.emit.bind(server)
-    server.emit = ((event: string, ...args: unknown[]) => {
-      if (event === "request" || event === "upgrade") {
-        const req = args[0] as IncomingMessage
-        const [pathname, query] = (req.url ?? "").split("?", 2)
-        if (pathname === bp && event === "request") {
-          const res = args[1] as ServerResponse
-          res.writeHead(301, { Location: bp + "/" + (query ? "?" + query : "") })
-          res.end()
-          return true
-        } else if (req.url && req.url.startsWith(bp + "/")) {
-          req.url = req.url.slice(bp.length) || "/"
-        } else {
-          if (event === "request") {
-            const res = args[1] as ServerResponse
-            res.writeHead(404, { "Content-Type": "text/plain" })
-            res.end("Not Found")
-          } else {
-            const socket = args[1] as Duplex
-            socket.destroy()
-          }
-          return true
-        }
-      }
-      return originalEmit(event, ...args)
-    }) as typeof server.emit
-  }
+function serverLayer(opts: ListenOptions) {
+  const server = basePathServer(opts)
 
   const serverRef = { closeStarted: false, forceStop: false }
   const close = server.close.bind(server)

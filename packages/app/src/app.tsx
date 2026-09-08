@@ -1,3 +1,4 @@
+import { appBasePath } from "./utils/base-path"
 import "@/index.css"
 import * as Sentry from "@sentry/solid"
 import { I18nProvider } from "@opencode-ai/ui/context"
@@ -601,12 +602,7 @@ export function AppInterface(props: {
                     </PermissionProvider>
                   </TabsProvider>
                 )}
-                base={(() => {
-                  const bp = window.__OPENCODE_BASE_PATH__?.replace(/\/$/, "")
-                  if (bp) return bp
-                  const baseUri = new URL(document.baseURI).pathname.replace(/\/+$/, "")
-                  return baseUri && baseUri !== "/" ? baseUri : undefined
-                })()}
+                base={appBasePath() || undefined}
               >
                 <Routes serverScoped={props.serverScoped} />
               </Dynamic>
