@@ -13,7 +13,7 @@ export function SortableTab(props: {
   tab: string
   index: number
   temporary?: boolean
-  onTabClose: (tab: string) => void
+  onTabClose?: (tab: string) => void
   onTabDoubleClick?: (tab: string) => void
   /** Replaces the file visual for non-file tabs such as the browser. */
   children?: JSX.Element
@@ -46,27 +46,29 @@ export function SortableTab(props: {
           value={props.tab}
           id={props.id}
           aria-controls={props.ariaControls}
-          onMiddleClick={() => props.onTabClose(props.tab)}
+          onMiddleClick={props.onTabClose ? () => props.onTabClose?.(props.tab) : undefined}
           onDblClick={() => props.onTabDoubleClick?.(props.tab)}
           closeButton={
-            <Tooltip
-              value={
-                <>
-                  {language.t("common.closeTab")}
-                  <Show when={closeTabKeybind().length > 0}>
-                    <Keybind keys={closeTabKeybind()} variant="neutral" />
-                  </Show>
-                </>
-              }
-              placement="bottom"
-              gutter={10}
-            >
-              <Tabs.CloseButton
-                class="h-5 w-5"
-                onClick={() => props.onTabClose(props.tab)}
-                aria-label={language.t("common.closeTab")}
-              />
-            </Tooltip>
+            <Show when={props.onTabClose}>
+              <Tooltip
+                value={
+                  <>
+                    {language.t("common.closeTab")}
+                    <Show when={closeTabKeybind().length > 0}>
+                      <Keybind keys={closeTabKeybind()} variant="neutral" />
+                    </Show>
+                  </>
+                }
+                placement="bottom"
+                gutter={10}
+              >
+                <Tabs.CloseButton
+                  class="h-5 w-5"
+                  onClick={() => props.onTabClose?.(props.tab)}
+                  aria-label={language.t("common.closeTab")}
+                />
+              </Tooltip>
+            </Show>
           }
           hideCloseButton
         >

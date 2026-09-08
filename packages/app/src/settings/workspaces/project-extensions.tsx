@@ -147,8 +147,8 @@ export const ProjectSettingsExtensions: Component = () => {
   return (
     <div class="project-settings-extensions">
       <div class="project-settings-page-header">
-        <h2>{language.t("settings.tab.extensions")}</h2>
-        <span>{language.t("project.settings.extensions.description")}</span>
+        <h2>{language.t("settings.tab.tools")}</h2>
+        <span>{language.t("project.settings.tools.description")}</span>
       </div>
 
       <Tabs variant="pill" defaultValue="mcps" class="project-settings-extension-tabs">

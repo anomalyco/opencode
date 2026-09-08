@@ -1,0 +1,71 @@
+.desktop-extension-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+.desktop-extension-install {
+  gap: 14px;
+}
+.desktop-extension-drop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: var(--v2-background-bg-layer-01);
+  color: var(--v2-text-text-muted);
+  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
+  transition: 120ms ease-out;
+}
+.desktop-extension-drop[data-dragging="true"] {
+  background: var(--v2-overlay-simple-overlay-hover);
+  color: var(--v2-text-text-base);
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
+}
+.desktop-extension-drop > div {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+.desktop-extension-drop strong {
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+  font-weight: 590;
+}
+.desktop-extension-drop span,
+.desktop-extension-empty {
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+.desktop-extension-url {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.desktop-extension-url [data-component="text-input-v2"] {
+  min-width: 0;
+  flex: 1;
+}
+.desktop-extension-method-label {
+  color: var(--v2-text-text-faint);
+  font-size: 11px;
+  font-weight: 500;
+}
+.desktop-extension-error {
+  color: var(--v2-state-fg-danger);
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+.desktop-extension-title {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.desktop-extension-empty {
+  padding: 20px;
+}

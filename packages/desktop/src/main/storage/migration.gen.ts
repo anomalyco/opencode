@@ -18,4 +18,11 @@ export const migrations = [
     id: "20260907031611_blob-touched",
     statements: ["ALTER TABLE `blob` ADD `touched_at` integer DEFAULT 0 NOT NULL;"],
   },
+  {
+    id: "20260908211404_desktop-extensions",
+    statements: [
+      "CREATE TABLE `desktop_extension_file` (\n\t`extension_id` text NOT NULL,\n\t`path` text NOT NULL,\n\t`data` blob NOT NULL,\n\tCONSTRAINT `desktop_extension_file_pk` PRIMARY KEY(`extension_id`, `path`)\n);",
+      "CREATE TABLE `desktop_extension` (\n\t`id` text PRIMARY KEY,\n\t`manifest` text NOT NULL,\n\t`revision` text NOT NULL,\n\t`generation` integer NOT NULL,\n\t`enabled` integer NOT NULL\n);",
+    ],
+  },
 ]

@@ -14,7 +14,14 @@ const tables = (db: ReturnType<typeof drizzle>) =>
 describe("database", () => {
   test("bootstraps every table on a fresh database and is idempotent", () => {
     const database = openDatabase(":memory:")
-    expect(tables(database.db)).toEqual(["blob", "document", "migration", "state"])
+    expect(tables(database.db)).toEqual([
+      "blob",
+      "desktop_extension",
+      "desktop_extension_file",
+      "document",
+      "migration",
+      "state",
+    ])
     expect(migrate(database.db)).toEqual([])
     database.close()
   })
@@ -26,7 +33,14 @@ describe("database", () => {
     )
     const db = drizzle({ client: native })
     expect(migrate(db)).toEqual(migrations.map((migration) => migration.id))
-    expect(tables(db)).toEqual(["blob", "document", "migration", "state"])
+    expect(tables(db)).toEqual([
+      "blob",
+      "desktop_extension",
+      "desktop_extension_file",
+      "document",
+      "migration",
+      "state",
+    ])
     expect(db.all<{ value: string }>(sql`SELECT value FROM document`)).toEqual([{ value: "v" }])
     expect(migrate(db)).toEqual([])
   })

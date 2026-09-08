@@ -55,7 +55,7 @@ for (const viewport of [
         "Worktrees",
         "Providers",
         "Models",
-        "Extensions",
+        "Tools",
         "Experimental",
         "About",
       ]) {

@@ -1,4 +1,4 @@
-// Pure resolution of the slot tree: the mounted slot paths plus plugin claims
+// Shared resolution of the slot tree: the mounted slot paths plus plugin claims
 // in, per-path placement buckets plus diagnostics out. No solid, no I/O —
 // every policy rule (replacement takeover, hierarchy-beats-timeline,
 // last-enabled-wins, missing-target degradation) is testable as a data

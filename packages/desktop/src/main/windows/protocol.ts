@@ -5,6 +5,8 @@ import { Effect, Path } from "effect"
 import { scoped } from "../native/logging"
 import { DesktopPaths } from "../paths"
 import { documentPolicyHeader, jsCallStacksDocumentPolicy } from "./headers"
+import { DesktopStorage } from "../storage"
+import { extensionAssetResponse } from "../extensions/assets"
 
 const rendererProtocol = "oc"
 const rendererHost = "renderer"
@@ -16,6 +18,7 @@ protocol.registerSchemesAsPrivileged([
       secure: true,
       standard: true,
       supportFetchAPI: true,
+      corsEnabled: true,
       stream: true,
     },
   },
@@ -24,11 +27,26 @@ protocol.registerSchemesAsPrivileged([
 export const registerRendererProtocol = Effect.fn("Window.registerRendererProtocol")(function* () {
   const path = yield* Path.Path
   const paths = yield* DesktopPaths.resolve
+  const storage = yield* DesktopStorage.Service
   const runFork = Effect.runForkWith(yield* Effect.context<never>())
   if (protocol.isProtocolHandled(rendererProtocol)) return
 
   protocol.handle(rendererProtocol, async (request) => {
     const url = new URL(request.url)
+    if (url.host === "extensions") {
+      const [id, revision, ...parts] = url.pathname.slice(1).split("/").map(decodeURIComponent)
+      if (!id || !revision) return new Response(null, { status: 404 })
+      const response = extensionAssetResponse(storage.db, {
+        id,
+        revision,
+        path: parts.join("/"),
+        range: request.headers.get("range"),
+        head: request.method === "HEAD",
+      })
+      const origin = request.headers.get("origin")
+      if (origin && isRendererUrl(origin)) response.headers.set("Access-Control-Allow-Origin", origin)
+      return response
+    }
     if (url.host !== rendererHost) {
       runFork(scoped("protocol", Effect.logWarning("rejected host", { url: request.url })))
       return new Response("Not found", { status: 404 })

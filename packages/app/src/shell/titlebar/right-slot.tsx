@@ -1,6 +1,7 @@
 import { createContext, onCleanup, onMount, Show, useContext, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
+import { ExtensionSlot } from "@/extensions/slot"
 
 type Registration = {
   active: () => boolean
@@ -45,7 +46,9 @@ export function TitlebarRightMount(props: { vertical?: boolean }) {
       ref={slot.setMount}
       id="opencode-titlebar-right"
       class={props.vertical ? "flex w-full shrink-0 flex-col" : "flex shrink-0 items-center justify-end gap-0"}
-    />
+    >
+      <ExtensionSlot path="titlebar.actions" />
+    </div>
   )
 }
 

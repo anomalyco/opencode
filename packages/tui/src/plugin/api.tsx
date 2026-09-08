@@ -1,7 +1,7 @@
 import { PluginContextProvider } from "@opencode/plugin/tui"
 import type { JSX } from "solid-js"
 import type { Context, Dialog, Page, SlotClaim, SlotMap, SlotPath, Toast } from "@opencode/plugin/tui/context"
-import type { Placement, PlacementKind } from "./structure"
+import type { Placement, PlacementKind } from "@opencode/plugin/slots"
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { useClient } from "../context/client"

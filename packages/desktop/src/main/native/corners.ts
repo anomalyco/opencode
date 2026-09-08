@@ -1,6 +1,6 @@
 import { nativeImage } from "electron"
 
-// Native browser surfaces ignore a parent View's clip path. Cover only the
+// Native surfaces ignore a parent View's clip path. Cover only the
 // pixels outside the bottom arcs; never resize or style the page itself.
 export function createCornerImages(color: readonly [number, number, number, number], radius: number, scale: number) {
   const size = Math.max(1, Math.round(radius * scale))

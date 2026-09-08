@@ -52,7 +52,7 @@ export type HomeProjectSelection = typeof layoutSchema.Type.home.selection
 
 export type ReviewDiffStyle = typeof layoutSchema.Type.review.diffStyle
 export type ReviewChangeMode = NonNullable<(typeof layoutSchema.Type.sessionView)[string]["reviewMode"]>
-export type ReviewPanelSource = "context-button" | "other"
+export type ReviewPanelSource = string
 export type TabPanes = {
   terminalOpened: Accessor<boolean>
   setTerminalOpened(opened: boolean): void

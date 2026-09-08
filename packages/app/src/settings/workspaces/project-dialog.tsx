@@ -67,7 +67,7 @@ function ProjectSettingsDialog(props: { project: LocalProject; server: ServerCon
             </Tabs.Trigger>
             <Tabs.Trigger value="extensions">
               <Icon name="extensions" size="small" />
-              {language.t("settings.tab.extensions")}
+              {language.t("settings.tab.tools")}
             </Tabs.Trigger>
           </div>
         </Tabs.List>

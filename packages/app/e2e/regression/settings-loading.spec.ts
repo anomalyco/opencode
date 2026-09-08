@@ -169,7 +169,7 @@ test("worktree deletion sends the project location separately from the target", 
   await expect(settings.getByText("11 worktrees", { exact: true })).toBeVisible()
 })
 
-test("extensions opens without waiting for MCPs", async ({ page }) => {
+test("tools opens without waiting for MCPs", async ({ page }) => {
   const mcps = Promise.withResolvers<void>()
   await page.route("**/api/mcp", async (route) => {
     await mcps.promise
@@ -179,9 +179,9 @@ test("extensions opens without waiting for MCPs", async ({ page }) => {
   })
   const settings = page.getByTestId("settings-screen")
   const requested = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/mcp")
-  await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
+  await settings.getByRole("tab", { name: "Tools", exact: true }).click()
   await requested
-  await expect(settings.getByRole("heading", { name: "Extensions", exact: true })).toBeVisible()
+  await expect(settings.getByRole("heading", { name: "Tools", exact: true })).toBeVisible()
   await expect(settings.getByRole("button", { name: "Back to app" })).toBeVisible()
   mcps.resolve()
   await settings.getByRole("tab", { name: "MCPs", exact: true }).click()

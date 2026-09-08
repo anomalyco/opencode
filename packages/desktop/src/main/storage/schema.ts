@@ -27,3 +27,21 @@ export const state = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.name, table.key] })],
 )
+
+export const extensions = sqliteTable("desktop_extension", {
+  id: text().primaryKey(),
+  manifest: text().notNull(),
+  revision: text().notNull(),
+  generation: integer().notNull(),
+  enabled: integer({ mode: "boolean" }).notNull(),
+})
+
+export const extensionFiles = sqliteTable(
+  "desktop_extension_file",
+  {
+    extension_id: text().notNull(),
+    path: text().notNull(),
+    data: blob({ mode: "buffer" }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.extension_id, table.path] })],
+)

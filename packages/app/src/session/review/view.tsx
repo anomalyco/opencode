@@ -14,6 +14,7 @@ import { ReviewPanel } from "./panel"
 import { SessionReviewTab } from "./review-tab"
 import type { ChangeMode, SessionReviewModel } from "./model"
 import type { createSessionBrowser } from "../browser/model"
+import type { SessionExtensions } from "@/extensions/session"
 
 const StatusDrawer = lazy(async () => {
   const { StatusDrawer } = await import("@/shell/status/status-drawer")
@@ -148,11 +149,13 @@ export function SessionMobileReview(props: { review: SessionReviewModel }) {
 export function SessionDesktopReview(props: {
   review: SessionReviewModel
   browser: ReturnType<typeof createSessionBrowser>
+  extensions: SessionExtensions
   present?: boolean
 }) {
   return (
     <Suspense>
       <SessionSidePanel
+        extensions={props.extensions}
         canReview={props.review.canReview()}
         diffs={props.review.diffs()}
         diffsReady={props.review.ready()}

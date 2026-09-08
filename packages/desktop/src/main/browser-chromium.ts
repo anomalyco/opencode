@@ -6,7 +6,7 @@ import { createCdp, abortError, waitFor } from "./browser/cdp"
 import { createBrowserFiles } from "./browser/files"
 import { createDiagnostics } from "./browser/diagnostics"
 import { createProfiling } from "./browser/profiling"
-import { createCornerImages } from "./browser/corners"
+import { createCornerImages } from "./native/corners"
 import type { BrowserNetwork } from "./browser/network"
 import { destinationOrigin, normalizeURL } from "./browser/policy"
 

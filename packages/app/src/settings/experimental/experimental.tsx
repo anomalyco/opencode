@@ -7,6 +7,7 @@ import { SettingsList } from "@/settings/list"
 import { useSettings } from "@/settings/model"
 import { SettingsRow } from "@/settings/row"
 import "@/settings/settings.css"
+import { ExtensionSlot } from "@/extensions/slot"
 
 const tabLayoutOptions: ("horizontal" | "vertical")[] = ["horizontal", "vertical"]
 
@@ -31,6 +32,7 @@ export const SettingsExperimental: Component = () => {
       <div class="settings-tab-body">
         <div class="settings-section">
           <SettingsList>
+            <ExtensionSlot path="settings.experimental" />
             <Show when={platform.browserPane}>
               <SettingsRow
                 title={language.t("settings.general.row.browserPane.title")}

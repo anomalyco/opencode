@@ -15,7 +15,9 @@ import { SettingsModels } from "./models/models"
 import { SettingsServers } from "./servers/servers"
 import { SettingsWorkspaces } from "./workspaces/workspaces"
 import { SettingsProjects } from "./workspaces/projects"
-import { SettingsExtensions } from "./providers/extensions"
+import { SettingsTools } from "./providers/tools"
+import { SettingsExtensions } from "./extensions/extensions"
+import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsAbout } from "./about/about"
 import { SettingsServerScope } from "./server-scope"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -41,14 +43,21 @@ const sections = [
   [
     { value: "providers", icon: "providers", label: "settings.providers.title" },
     { value: "models", icon: "models", label: "settings.models.title" },
-    { value: "extensions", icon: "extensions", label: "settings.tab.extensions" },
+    { value: "tools", icon: "extensions", label: "settings.tab.tools" },
   ],
-  [{ value: "experimental", icon: "flask", label: "settings.tab.experimental" }],
+  [
+    { value: "extensions", icon: "extensions", label: "settings.tab.extensions" },
+    { value: "experimental", icon: "flask", label: "settings.tab.experimental" },
+  ],
   [{ value: "about", icon: "info", label: "settings.tab.about" }],
 ] as const
 
 export const SettingsScreen: Component = () => {
   const language = useLanguage()
+  const platform = usePlatform()
+  const visibleSections = createMemo(() =>
+    sections.map((group) => group.filter((section) => section.value !== "extensions" || !!platform.extensionManager)),
+  )
   const dialog = useDialog()
   const surface = useSettingsSurface()
   const layout = useLayout()
@@ -56,6 +65,9 @@ export const SettingsScreen: Component = () => {
   const tabs = useTabs()
   const global = useGlobal()
   const [state, setState] = createStore({ worktreeFilterReset: 0 })
+  createEffect(() => {
+    if (!platform.extensionManager && surface.tab() === "extensions") surface.open("tools")
+  })
   let root: HTMLDivElement | undefined
 
   onMount(() => {
@@ -128,8 +140,9 @@ export const SettingsScreen: Component = () => {
             <Menu.Trigger as={Button} size="normal" variant="outline" class="settings-mobile-menu-trigger">
               <span>
                 {language.t(
-                  sections.flat().find((section) => section.value === surface.tab())?.label ??
-                    "settings.tab.preferences",
+                  visibleSections()
+                    .flat()
+                    .find((section) => section.value === surface.tab())?.label ?? "settings.tab.preferences",
                 )}
               </span>
               <Icon name="chevron-down" size="small" />
@@ -140,7 +153,7 @@ export const SettingsScreen: Component = () => {
                   value={surface.tab()}
                   onChange={(value) => void startTransition(() => surface.open(value))}
                 >
-                  <For each={sections}>
+                  <For each={visibleSections()}>
                     {(group, index) => (
                       <>
                         <Show when={index() > 0}>
@@ -176,9 +189,9 @@ export const SettingsScreen: Component = () => {
               <span>{language.t("settings.backToApp")}</span>
             </button>
             <div class="flex flex-col gap-4 w-full">
-              <For each={sections}>
+              <For each={visibleSections()}>
                 {(group) => (
-                  <div class="flex flex-col gap-1 w-full">
+                  <div data-slot="settings-nav-group" class="flex flex-col gap-1 w-full">
                     <For each={group}>
                       {(section) => (
                         <Tabs.Trigger
@@ -214,6 +227,11 @@ export const SettingsScreen: Component = () => {
         <Tabs.Content value="experimental" class="settings-panel">
           <SettingsExperimental />
         </Tabs.Content>
+        <Show when={platform.extensionManager}>
+          <Tabs.Content value="extensions" class="settings-panel">
+            <SettingsExtensions />
+          </Tabs.Content>
+        </Show>
         <Tabs.Content value="servers" class="settings-panel">
           <SettingsServers />
         </Tabs.Content>
@@ -222,10 +240,7 @@ export const SettingsScreen: Component = () => {
         </Tabs.Content>
         <SettingsServerScope directory={directory()}>
           <Tabs.Content value="workspaces" class="settings-panel">
-            <SettingsWorkspaces
-              activeDirectory={directory()}
-              resetProjectFilter={() => state.worktreeFilterReset}
-            />
+            <SettingsWorkspaces activeDirectory={directory()} resetProjectFilter={() => state.worktreeFilterReset} />
           </Tabs.Content>
           <Tabs.Content value="providers" class="settings-panel">
             <SettingsProviders directory={directory()} onBack={showProviders} />
@@ -233,8 +248,8 @@ export const SettingsScreen: Component = () => {
           <Tabs.Content value="models" class="settings-panel">
             <SettingsModels />
           </Tabs.Content>
-          <Tabs.Content value="extensions" class="settings-panel">
-            <SettingsExtensions />
+          <Tabs.Content value="tools" class="settings-panel">
+            <SettingsTools />
           </Tabs.Content>
         </SettingsServerScope>
         <Tabs.Content value="about" class="settings-panel settings-about">

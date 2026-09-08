@@ -15,7 +15,7 @@ import {
 import { isShallowEqual } from "remeda"
 import type { SlotMap, SlotPath } from "@opencode/plugin/tui/context"
 import type { SlotRender } from "./api"
-import { contains, emptySlotted, type Claim } from "./structure"
+import { contains, emptySlotted, type Claim } from "@opencode/plugin/slots"
 import { useRoute } from "../context/route"
 import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"

@@ -19,6 +19,7 @@ import { useSessionLayout } from "./session-layout"
 import { createSessionOwnership } from "./session-ownership"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useServer } from "@/runtime/server/current"
+import { useOptionalDesktopExtensions } from "@/extensions/provider"
 
 const emptyMessages: SessionMessageInfo[] = []
 const emptyUserMessages: SessionMessageUser[] = []
@@ -30,6 +31,7 @@ export function useSessionModel() {
   const server = useServer()
   const shellTabs = useTabs()
   const attachments = useBrowserAttachments()
+  const extensions = useOptionalDesktopExtensions()
   const layout = useSessionLayout()
   const location = useWorkspaceLocation()
   const isDesktop = createMediaQuery("(min-width: 768px)")
@@ -83,6 +85,20 @@ export function useSessionModel() {
     normalizeTab,
     review: isDesktop,
     hasReview: canReview,
+    extensions: () =>
+      extensions?.state.panels
+        .filter((panel) => panel.session.sessionID === sessionID() && panel.session.server.id === server.key)
+        .map((panel) => panel.key) ?? [],
+    defaultPanel: () =>
+      extensions?.state.panels.find(
+        (panel) =>
+          panel.session.sessionID === sessionID() && panel.session.server.id === server.key && panel.props.default,
+      )?.key,
+    canClose: (key) =>
+      extensions?.state.panels.find(
+        (panel) =>
+          panel.session.sessionID === sessionID() && panel.session.server.id === server.key && panel.key === key,
+      )?.props.closable !== false,
     fileBrowser: () => isDesktop() && !!sessionID(),
     // Same flag the side panel uses, so keyboard tab commands see the browser tab the panel shows.
     browser: () => {

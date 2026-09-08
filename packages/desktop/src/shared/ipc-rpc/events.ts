@@ -3,6 +3,17 @@ import { Rpc, RpcGroup } from "effect/unstable/rpc"
 import { BrowserPaneEventSchema, BrowserPaneRpc } from "./browser"
 import { UpdaterStateSchema } from "./updater"
 import { WslServersEventSchema } from "./wsl"
+import { DesktopExtension } from "@opencode/plugin/desktop/protocol"
+import { ExtensionRpc } from "./extensions"
+import { ExtensionManager } from "@opencode/plugin/desktop/manager"
+
+export class ExtensionsChanged extends Schema.TaggedClass<ExtensionsChanged>()("ExtensionsChanged", {
+  entries: Schema.Array(ExtensionManager.Installed),
+}) {}
+
+export class ExtensionEvent extends Schema.TaggedClass<ExtensionEvent>()("ExtensionEvent", {
+  event: DesktopExtension.Event,
+}) {}
 
 export class BrowserPaneEvent extends Schema.TaggedClass<BrowserPaneEvent>()("BrowserPaneEvent", {
   bindingID: Schema.String,
@@ -46,6 +57,8 @@ export class StorageChanged extends Schema.TaggedClass<StorageChanged>()("Storag
 }) {}
 
 export const DesktopEvent = Schema.Union([
+  ExtensionsChanged,
+  ExtensionEvent,
   BrowserPaneEvent,
   DeepLinksOpened,
   MenuCommandTriggered,
@@ -59,4 +72,4 @@ export const DesktopEvent = Schema.Union([
 export type DesktopEvent = Schema.Schema.Type<typeof DesktopEvent>
 
 export const DesktopEvents = Rpc.make("DesktopEvents", { success: DesktopEvent, stream: true })
-export const EventRpcs = RpcGroup.make(DesktopEvents, BrowserPaneRpc)
+export const EventRpcs = RpcGroup.make(DesktopEvents, BrowserPaneRpc, ExtensionRpc)

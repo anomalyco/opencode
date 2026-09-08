@@ -20,7 +20,7 @@ interface PluginRowItem {
   name: string
 }
 
-export const SettingsExtensions: Component = () => {
+export const SettingsTools: Component = () => {
   const language = useLanguage()
   const serverSdk = useServerSDK()
   const data = useData()
@@ -60,8 +60,8 @@ export const SettingsExtensions: Component = () => {
       <div class="settings-tab-header">
         <div class="settings-tab-header-row">
           <div class="flex flex-col gap-1">
-            <h2 class="settings-tab-title">{language.t("settings.tab.extensions")}</h2>
-            <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.extensions.description")}</span>
+            <h2 class="settings-tab-title">{language.t("settings.tab.tools")}</h2>
+            <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.tools.description")}</span>
           </div>
           <InlineServerSelect />
         </div>

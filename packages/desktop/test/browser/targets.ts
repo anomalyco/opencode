@@ -3,7 +3,7 @@ import type { BrowserWindow } from "electron"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { Schema } from "effect"
 import { createBrowserPage } from "../../src/main/browser-chromium"
-import { createCornerImages } from "../../src/main/browser/corners"
+import { createCornerImages } from "../../src/main/native/corners"
 
 export async function verifyTargets(win: BrowserWindow, url: string) {
   const children = win.contentView.children.length

@@ -38,6 +38,7 @@
     "@lydell/node-pty": "catalog:",
     "@opencode/app": "workspace:*",
     "@opencode/client": "workspace:*",
+    "@opencode/plugin": "workspace:*",
     "@opencode/schema": "workspace:*",
     "@opencode/plugin-browser": "workspace:*",
     "@opencode/ui": "workspace:*",

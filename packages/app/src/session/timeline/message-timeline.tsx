@@ -335,6 +335,7 @@ export function SessionSummaryPanel(props: {
 }
 
 type MessageTimelineProps = {
+  headerActions?: JSX.Element
   hideHeader?: boolean
   session: TimelineSessionSource
   background: SessionBackground
@@ -795,6 +796,7 @@ function MessageTimelineView(
                   <div class="shrink-0 flex items-center gap-2">
                     {props.search}
                     <SessionContextUsage placement="bottom" />
+                    {props.headerActions}
                     <Show when={!parentID() && project()}>
                       {(project) => (
                         <Popover open={summaryOpen()} placement="bottom-end" gutter={6} onOpenChange={setSummary}>

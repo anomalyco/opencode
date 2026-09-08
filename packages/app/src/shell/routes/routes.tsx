@@ -5,6 +5,8 @@ import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { BrowserAttachmentsProvider } from "@/session/browser/attachments"
+import { DesktopExtensionsProvider } from "@/extensions/provider"
+import { ExtensionSlot } from "@/extensions/slot"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import { LayoutProvider } from "@/shell/state/layout"
 import { SettingsSurfaceProvider } from "@/settings/surface"
@@ -80,7 +82,11 @@ function AppLayout(props: ParentProps) {
       <LayoutProvider>
         <SettingsSurfaceProvider>
           <BrowserAttachmentsProvider>
-            <Shell>{props.children}</Shell>
+            <DesktopExtensionsProvider>
+              <ExtensionSlot path="app">
+                <Shell>{props.children}</Shell>
+              </ExtensionSlot>
+            </DesktopExtensionsProvider>
           </BrowserAttachmentsProvider>
         </SettingsSurfaceProvider>
       </LayoutProvider>
