@@ -33,7 +33,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
 import { parseGitHubRemote } from "@/util/repository"
 import { Effect } from "effect"
-import { extractResponseText, formatPromptTooLargeError } from "./github.shared"
+import { DEFAULT_AGENT_USERNAME, extractResponseText, formatPromptTooLargeError, resolveAgentUsername } from "./github.shared"
 
 type GitHubAuthor = {
   login: string
@@ -140,7 +140,6 @@ type IssueQueryResponse = {
   }
 }
 
-const AGENT_USERNAME = "opencode-agent[bot]"
 const AGENT_REACTION = "eyes"
 const WORKFLOW_FILE = ".github/workflows/opencode.yml"
 
@@ -438,6 +437,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
     let shareId: string | undefined
     let exitCode = 0
     let githubClientReady = false
+    let agentUsername = DEFAULT_AGENT_USERNAME
     type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
     const triggerCommentId = isCommentEvent
       ? (payload as IssueCommentEvent | PullRequestReviewCommentEvent).comment.id
@@ -487,6 +487,15 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         headers: { authorization: `token ${appToken}` },
       })
       githubClientReady = true
+      agentUsername = await resolveAgentUsername(async () => {
+        try {
+          const { data } = await octoRest.rest.users.getAuthenticated()
+          if (data.login) return data.login
+        } catch {}
+        const viewer = await octoGraph<{ viewer: { login: string } }>(`query { viewer { login } }`)
+        return viewer.viewer?.login
+      })
+      console.log("Acting as", agentUsername)
 
       const { userPrompt, promptFiles } = await getUserPrompt()
       if (!useGithubToken) {
@@ -1036,8 +1045,8 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
       const newCredentials = Buffer.from(`x-access-token:${appToken}`, "utf8").toString("base64")
 
       await gitRun(["config", "--local", config, `AUTHORIZATION: basic ${newCredentials}`])
-      await gitRun(["config", "--global", "user.name", AGENT_USERNAME])
-      await gitRun(["config", "--global", "user.email", `${AGENT_USERNAME}@users.noreply.github.com`])
+      await gitRun(["config", "--global", "user.name", agentUsername])
+      await gitRun(["config", "--global", "user.email", `${agentUsername}@users.noreply.github.com`])
     }
 
     async function restoreGitConfig() {
@@ -1223,7 +1232,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
             content: AGENT_REACTION,
           })
 
-          const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)
+          const eyesReaction = reactions.data.find((r) => r.user?.login === agentUsername)
           if (!eyesReaction) return
 
           return await octoRest.rest.reactions.deleteForPullRequestComment({
@@ -1241,7 +1250,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
           content: AGENT_REACTION,
         })
 
-        const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)
+        const eyesReaction = reactions.data.find((r) => r.user?.login === agentUsername)
         if (!eyesReaction) return
 
         return await octoRest.rest.reactions.deleteForIssueComment({
@@ -1259,7 +1268,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         content: AGENT_REACTION,
       })
 
-      const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)
+      const eyesReaction = reactions.data.find((r) => r.user?.login === agentUsername)
       if (!eyesReaction) return
 
       await octoRest.rest.reactions.deleteForIssue({

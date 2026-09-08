@@ -109,6 +109,8 @@ Or you can set it up manually.
 
   `id-token: write` is not required in this mode because OIDC exchange is skipped. To use a [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) or another GitHub App token, store it as a secret and pass that secret as `GITHUB_TOKEN` instead.
 
+  Eyes reactions and git commits use the token owner (`github-actions[bot]`, your GitHub App bot, or the PAT user), not `opencode-agent[bot]`.
+
 ---
 
 ## Supported Events
