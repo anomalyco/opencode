@@ -965,7 +965,7 @@ test.each([false, true])("settings change preferences and preview the work spinn
 
     app.mockInput.pressKey("ARROW_RIGHT")
     await app.renderOnce()
-    expect(settings()).toEqual(applyMiniSettingChange(resolveMiniSettings(), { key: "verbosity", value: "verbose" }))
+    expect(settings()).toEqual(applyMiniSettingChange(resolveMiniSettings(), { key: "verbosity", value: "everything" }))
 
     app.mockInput.pressKey("ARROW_LEFT")
     await app.renderOnce()
@@ -989,9 +989,9 @@ test.each([false, true])("settings change preferences and preview the work spinn
 
     expect(settings()).toEqual({
       ...resolveMiniSettings(),
-      thinking: "show",
+      thinking: "hide",
     })
-    expect(app.captureCharFrame()).toContain("custom")
+    expect(app.captureCharFrame()).toContain("Custom")
 
     app.mockInput.pressKey("ARROW_DOWN")
     app.mockInput.pressKey("ARROW_DOWN")
@@ -1001,7 +1001,7 @@ test.each([false, true])("settings change preferences and preview the work spinn
 
     expect(settings()).toEqual({
       ...resolveMiniSettings(),
-      thinking: "show",
+      thinking: "hide",
       turn_summary: "hide",
     })
 

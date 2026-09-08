@@ -411,7 +411,7 @@ export type MiniSettings = {
   mono: boolean
 }
 
-export type MiniVerbosity = "quiet" | "default" | "verbose"
+export type MiniVerbosity = "quiet" | "default" | "everything"
 
 export type MiniSettingChange =
   | {

@@ -27,7 +27,7 @@ import type {
   RunInput,
   RunProvider,
 } from "./types"
-import { matchMiniVerbosity, verbosityChange } from "./verbosity"
+import { matchMiniVerbosity, verbosityChange, verbosityLabel } from "./verbosity"
 
 type PanelEntry = RunFooterMenuItem & {
   category: string
@@ -717,9 +717,9 @@ export function RunSettingsBody(props: {
     {
       category: "Transcript",
       display: "Verbosity",
-      footer: saving() === "verbosity" ? "saving" : matchMiniVerbosity(props.settings()),
+      footer: saving() === "verbosity" ? "saving" : verbosityLabel(matchMiniVerbosity(props.settings())),
       footerTone: saving() === "verbosity" ? "running" : "selection",
-      keywords: `verbosity quiet default verbose custom noise ${matchMiniVerbosity(props.settings())}`,
+      keywords: `verbosity quiet default everything custom noise ${verbosityLabel(matchMiniVerbosity(props.settings()))}`,
       key: "verbosity",
     },
     {

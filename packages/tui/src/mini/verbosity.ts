@@ -1,8 +1,8 @@
 import type { MiniSettingChange, MiniSettings, MiniVerbosity } from "./types"
 
-const levels: readonly MiniVerbosity[] = ["quiet", "default", "verbose"]
+const levels: readonly MiniVerbosity[] = ["quiet", "default", "everything"]
 
-const knobs = ["thinking", "tools", "shell_output", "turn_summary", "footer", "splash"] as const
+const knobs = ["thinking", "tools", "shell_output", "turn_summary", "footer"] as const
 
 type VerbosityKnobs = Pick<MiniSettings, (typeof knobs)[number]>
 
@@ -13,28 +13,36 @@ const presets = {
     shell_output: "hide",
     turn_summary: "hide",
     footer: "hide",
-    splash: "hide",
   },
   default: {
-    thinking: "hide",
-    tools: "show",
+    thinking: "show",
+    tools: "hide",
     shell_output: "hide",
     turn_summary: "show",
     footer: "show",
-    splash: "show",
   },
-  verbose: {
+  everything: {
     thinking: "show",
     tools: "show",
     shell_output: "show",
     turn_summary: "show",
     footer: "show",
-    splash: "show",
   },
 } as const satisfies Record<MiniVerbosity, VerbosityKnobs>
 
+const labels = {
+  quiet: "Quiet",
+  default: "Default",
+  everything: "Everything",
+  custom: "Custom",
+} as const
+
 export function verbosityPreset(level: MiniVerbosity): VerbosityKnobs {
   return { ...presets[level] }
+}
+
+export function verbosityLabel(level: MiniVerbosity | "custom") {
+  return labels[level]
 }
 
 export function matchMiniVerbosity(settings: MiniSettings): MiniVerbosity | "custom" {
