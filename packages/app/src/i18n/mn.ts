@@ -115,6 +115,7 @@ export const dict = {
   "theme.scheme.light": "Гэрэл",
   "theme.scheme.dark": "Харанхуй",
   "command.sidebar.toggle": "Хажуугийн самбарыг сэлгэх",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Нээлттэй төсөл",
   "command.project.previous": "Өмнөх төсөл",
   "command.project.next": "Дараагийн төсөл",

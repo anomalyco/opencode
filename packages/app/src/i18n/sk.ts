@@ -113,6 +113,7 @@ export const dict = {
   "theme.scheme.light": "Svetlý",
   "theme.scheme.dark": "Tmavý",
   "command.sidebar.toggle": "Prepnúť bočný panel",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Otvoriť projekt",
   "command.project.previous": "Predchádzajúci projekt",
   "command.project.next": "Nasledujúci projekt",

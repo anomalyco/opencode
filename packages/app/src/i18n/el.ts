@@ -114,6 +114,7 @@ export const dict = {
   "theme.scheme.light": "Φωτεινό",
   "theme.scheme.dark": "Σκούρο",
   "command.sidebar.toggle": "Εναλλαγή πλαϊνής γραμμής",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Άνοιγμα έργου",
   "command.project.previous": "Προηγούμενο έργο",
   "command.project.next": "Επόμενο έργο",

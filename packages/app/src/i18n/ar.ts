@@ -119,6 +119,7 @@ export const dict = {
   "theme.scheme.light": "فاتح",
   "theme.scheme.dark": "داكن",
   "command.sidebar.toggle": "تبديل الشريط الجانبي",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "فتح مشروع",
   "command.project.previous": "المشروع السابق",
   "command.project.next": "المشروع التالي",

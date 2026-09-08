@@ -114,6 +114,7 @@ export const dict = {
   "theme.scheme.light": "نور",
   "theme.scheme.dark": "تاریک",
   "command.sidebar.toggle": "نوار کناری را تغییر دهید",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "پروژه را باز کنید",
   "command.project.previous": "پروژه قبلی",
   "command.project.next": "پروژه بعدی",

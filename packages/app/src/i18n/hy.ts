@@ -115,6 +115,7 @@ export const dict = {
   "theme.scheme.light": "Բաց",
   "theme.scheme.dark": "Մուգ",
   "command.sidebar.toggle": "Փոխարկել կողագոտին",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Բացել նախագիծ",
   "command.project.previous": "Նախորդ նախագիծ",
   "command.project.next": "Հաջորդ նախագիծ",

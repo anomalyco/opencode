@@ -117,6 +117,7 @@ export const dict = {
   "theme.scheme.light": "Svijetlo",
   "theme.scheme.dark": "Tamno",
   "command.sidebar.toggle": "Uključi/isključi bočnu traku",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Otvori projekt",
   "command.project.previous": "Prethodni projekt",
   "command.project.next": "Sljedeći projekt",

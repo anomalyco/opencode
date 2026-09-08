@@ -905,6 +905,13 @@ export default function LegacyLayout(props: ParentProps) {
         onSelect: () => layout.sidebar.toggle(),
       },
       {
+        id: "direction.toggle",
+        title: language.t("command.direction.toggle"),
+        category: language.t("command.category.view"),
+        keybind: "mod+shift+d",
+        onSelect: () => language.setDirection(language.direction() === "rtl" ? "ltr" : "rtl"),
+      },
+      {
         id: "project.open",
         title: language.t("command.project.open"),
         category: language.t("command.category.project"),

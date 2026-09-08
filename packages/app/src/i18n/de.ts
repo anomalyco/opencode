@@ -24,6 +24,7 @@ export const dict = {
   "theme.scheme.light": "Hell",
   "theme.scheme.dark": "Dunkel",
   "command.sidebar.toggle": "Seitenleiste umschalten",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Projekt öffnen",
   "command.project.previous": "Vorheriges Projekt",
   "command.project.next": "Nächstes Projekt",

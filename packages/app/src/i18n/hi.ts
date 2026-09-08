@@ -120,6 +120,7 @@ export const dict = {
   "theme.scheme.light": "हल्की",
   "theme.scheme.dark": "गहरी",
   "command.sidebar.toggle": "साइडबार टॉगल करें",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "प्रोजेक्ट खोलें",
   "command.project.previous": "पिछला प्रोजेक्ट",
   "command.project.next": "अगला प्रोजेक्ट",

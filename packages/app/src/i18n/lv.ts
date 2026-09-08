@@ -113,6 +113,7 @@ export const dict = {
   "theme.scheme.light": "Gaišs",
   "theme.scheme.dark": "Tumšs",
   "command.sidebar.toggle": "Pārslēgt sānjoslu",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Atvērt projektu",
   "command.project.previous": "Iepriekšējais projekts",
   "command.project.next": "Nākamais projekts",

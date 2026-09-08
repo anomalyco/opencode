@@ -22,6 +22,7 @@ export const dict = {
   "theme.scheme.dark": "Mørk",
 
   "command.sidebar.toggle": "Skift sidebjælke",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Åbn projekt",
   "command.project.previous": "Forrige projekt",
   "command.project.next": "Næste projekt",

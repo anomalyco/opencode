@@ -9,6 +9,7 @@ import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
 import {
   createDesktopNativeBundle,
   detectDesktopNativeLocale,
+  systemPrefersRtl,
   DESKTOP_NATIVE_ENGLISH,
   DESKTOP_NATIVE_LABELS,
   DESKTOP_NATIVE_LOCALES,
@@ -24,6 +25,13 @@ const RTL_LOCALES: ReadonlySet<Locale> = new Set(["ar", "ur", "pa", "fa", "dv"])
 
 function localeDirection(locale: Locale): Direction {
   return RTL_LOCALES.has(locale) ? "rtl" : "ltr"
+}
+
+function systemLanguages(): readonly string[] {
+  if (typeof navigator !== "object") return []
+  if (navigator.languages?.length) return navigator.languages
+  if (typeof navigator.language === "string") return [navigator.language]
+  return []
 }
 
 type RawDictionary = typeof en & typeof uiEn
@@ -179,6 +187,12 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const intl = createMemo(() => INTL[locale()])
     const [layout, setLayout] = createStore({ direction: undefined as Direction | undefined })
     const direction = createMemo(() => layout.direction ?? localeDirection(locale()))
+    // Native window chrome (caption buttons) follows the OS language, never the UI
+    // language or conversation content. Only the header consumes this.
+    // In Electron `navigator.languages` reflects the OS language.
+    const systemDirection = createMemo<Direction>(() =>
+      systemPrefersRtl(systemLanguages()) ? "rtl" : "ltr",
+    )
     const layoutLocale = createMemo(() => {
       if (!layout.direction) return intl()
       // Kobalte derives menu direction from locale rather than accepting a direction override.
@@ -226,6 +240,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       locale,
       intl,
       direction,
+      systemDirection,
       layoutLocale,
       locales: LOCALES,
       label,
