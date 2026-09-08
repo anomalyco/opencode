@@ -3,6 +3,7 @@ import { host } from "@opencode/cli/vite-host"
 import { configureErrorOverlay } from "./refresh"
 
 if (import.meta.hot) {
+  import.meta.hot.on("vite:afterUpdate", () => queueMicrotask(() => host.settle?.()))
   import.meta.hot.on("vite:beforeFullReload", async () => {
     await host.stop?.()
     host.reset?.()

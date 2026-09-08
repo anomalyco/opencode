@@ -1,2 +1,2 @@
-// A JS package entry lets Vite externalize the native lifecycle owner.
-export { host } from "./tui.ts"
+// External to Vite's module cache: keep lifecycle and route state across reloads.
+export const host = {}

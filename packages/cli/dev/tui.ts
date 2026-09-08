@@ -1,25 +1,22 @@
 import { createRequire } from "node:module"
 import path from "node:path"
-import { Effect, Exit, Fiber, type FileSystem } from "effect"
-import type { TuiInput } from "@opencode/tui"
-import type { Global } from "@opencode/util/global"
+import { Effect, Exit, Fiber } from "effect"
 import { createRunnableDevEnvironment, createServer, isRunnableDevEnvironment } from "vite"
 import solid from "vite-plugin-solid"
 import refresh from "solid-refresh/babel"
+import { host, type Run } from "./host.js"
 
-type Run = (input: TuiInput) => Effect.Effect<void, unknown, Global.Service | FileSystem.FileSystem>
 const require = createRequire(import.meta.url)
-export const host: {
-  active?: Fiber.Fiber<void, unknown>
-  mount?: (app: Run) => Promise<void>
-  stop?: () => Promise<void>
-  reset?: () => void
-} = {}
 
 export const run: Run = Effect.fn("Tui.vite")(function* (input: Parameters<Run>[0]) {
   const fork = Effect.runForkWith(yield* Effect.context<Effect.Services<ReturnType<Run>>>())
   const finished = Promise.withResolvers<Exit.Exit<void, unknown>>()
   let initial = true
+  let recoverable = false
+  host.route = undefined
+  host.settle = () => {
+    recoverable = false
+  }
   host.stop = async () => {
     const fiber = host.active
     host.active = undefined
@@ -28,15 +25,13 @@ export const run: Run = Effect.fn("Tui.vite")(function* (input: Parameters<Run>[
   host.mount = async (app) => {
     await host.stop?.()
     const fiber = fork(
-      app(
-        initial
-          ? input
-          : {
-              ...input,
-              args: { ...input.args, prompt: undefined },
-              terminalHandoff: undefined,
-            },
-      ),
+      app({
+        ...input,
+        args: initial
+          ? input.args
+          : { ...input.args, prompt: undefined, sessionID: undefined, continue: false, fork: false },
+        terminalHandoff: initial ? input.terminalHandoff : undefined,
+      }),
     )
     initial = false
     host.active = fiber
@@ -69,6 +64,13 @@ export const run: Run = Effect.fn("Tui.vite")(function* (input: Parameters<Run>[
           {
             name: "tui-refresh-boundaries",
             enforce: "pre",
+            async resolveId(source, importer) {
+              if (importer === path.join(import.meta.dirname, "route.tsx")) return
+              if (!source.endsWith("/route") && !source.endsWith("/route.tsx")) return
+              const resolved = await this.resolve(source, importer, { skipSelf: true })
+              if (resolved?.id === path.resolve(import.meta.dirname, "../../tui/src/context/route.tsx"))
+                return path.join(import.meta.dirname, "route.tsx")
+            },
             load(id) {
               if (id === "/@solid-refresh")
                 return `export * from ${JSON.stringify(path.join(import.meta.dirname, "refresh.ts"))}`
@@ -84,7 +86,9 @@ export const run: Run = Effect.fn("Tui.vite")(function* (input: Parameters<Run>[
           {
             name: "tui-recovery",
             hotUpdate() {
-              if (this.environment.name !== "native" || host.active) return
+              if (this.environment.name !== "native") return
+              recoverable = Boolean(host.active)
+              if (host.active) return
               this.environment.moduleGraph.invalidateAll()
               this.environment.hot.send({ type: "full-reload" })
               return []
@@ -162,7 +166,20 @@ export const run: Run = Effect.fn("Tui.vite")(function* (input: Parameters<Run>[
   )
   const environment = server.environments.native
   if (!isRunnableDevEnvironment(environment)) return yield* Effect.die(new Error("Expected a runnable environment"))
-  host.reset = () => environment.runner.clearCache()
+  host.reset = () => {
+    recoverable = false
+    environment.runner.clearCache()
+  }
+  host.recover = () => {
+    if (!recoverable) return false
+    recoverable = false
+    queueMicrotask(() => {
+      input.log?.("warn", "TUI hot update failed; reloading", {})
+      environment.moduleGraph.invalidateAll()
+      environment.hot.send({ type: "full-reload" })
+    })
+    return true
+  }
   yield* Effect.promise(() =>
     environment.runner.import(path.join(import.meta.dirname, "entry.ts")).catch(console.error),
   )
