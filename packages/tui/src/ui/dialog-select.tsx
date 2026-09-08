@@ -2,7 +2,7 @@ import { CliRenderEvents, InputRenderable, RGBA, ScrollBoxRenderable, TextAttrib
 import { Keymap, type KeymapCommand } from "../context/keymap"
 import { useTheme, useThemes } from "../context/theme"
 import { entries, filter, flatMap, groupBy, pipe } from "remeda"
-import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
@@ -80,7 +80,6 @@ export interface DialogSelectOption<T = any> {
   category?: string
   categoryView?: JSX.Element
   disabled?: boolean
-  alwaysVisible?: boolean
   bg?: RGBA
   fg?: RGBA
   gutter?: (color: RGBA) => JSX.Element
@@ -146,13 +145,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           if (currentIndex >= 0) {
             setStore("selected", currentIndex)
             selection = flat()[currentIndex]
+            scrollAfterLayout(true, current)
           }
         }
       },
     ),
   )
 
-  let input: InputRenderable
+  let input: InputRenderable | undefined
 
   const actions = createMemo(() => props.actions ?? [])
   const shownActions = createMemo(() => actions().filter((item) => !item.hidden))
@@ -203,7 +203,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       })
       .map((x) => x.obj)
 
-    return [...result.filter((option) => !option.alwaysVisible), ...options.filter((option) => option.alwaysVisible)]
+    return result
   })
 
   createEffect(() => {
@@ -497,7 +497,22 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             ]
           : []),
         ...(props.bindings ?? []),
-        ...(props.onCancel ? [{ bind: "escape", title: "Back", group: "Dialog", run: props.onCancel }] : []),
+        ...(props.onCancel
+          ? [
+              {
+                bind: "escape",
+                title: "Back",
+                group: "Dialog",
+                run: () => {
+                  if (renderer.getSelection()) {
+                    renderer.clearSelection()
+                    return
+                  }
+                  props.onCancel?.()
+                },
+              },
+            ]
+          : []),
         ...(props.sectionNavigation
           ? [
               {
@@ -530,7 +545,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       return selected()
     },
     setFilter(value) {
-      input.value = value
+      if (input) {
+        input.value = value
+        return
+      }
+      if (value === store.filter) return
       batch(() => {
         setStore("filter", value)
         props.onFilter?.(value)
@@ -541,7 +560,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       if (index >= 0) moveTo(index, true)
     },
   }
-  props.ref?.(ref)
+  onMount(() => props.ref?.(ref))
 
   const left = createMemo(() => visibleActions().filter((item) => item.side !== "right"))
   const right = createMemo(() => visibleActions().filter((item) => item.side === "right"))
@@ -651,8 +670,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                 input.traits = { status: "FILTER" }
                 setTimeout(() => {
                   if (!input) return
-                  if (input.isDestroyed) return
-                  input.focus()
+                  if (r.isDestroyed) return
+                  r.focus()
                 }, 1)
               }}
               placeholder={props.placeholder ?? "Search"}

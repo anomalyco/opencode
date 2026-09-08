@@ -6,7 +6,11 @@ import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { createSignal, onCleanup, onMount } from "solid-js"
 import { dialogWidth } from "../../../src/ui/dialog"
-import { dialogSelectContentWidth, type DialogSelectOption } from "../../../src/ui/dialog-select"
+import {
+  dialogSelectContentWidth,
+  type DialogSelectOption,
+  type DialogSelectProps,
+} from "../../../src/ui/dialog-select"
 import { truncateFilePath } from "../../../src/ui/file-path"
 import { stringWidth } from "../../../src/util/string-width"
 import { emptyThemeSource, tmpdir } from "../../fixture/fixture"
@@ -87,7 +91,7 @@ async function mountSelect<T>(
   initial: DialogSelectOption<T>[],
   current?: T,
   focusCurrent?: boolean,
-  select?: { flat?: boolean },
+  select?: Pick<DialogSelectProps<T>, "flat" | "ref" | "onFilter" | "renderFilter" | "onCancel" | "focusTarget">,
 ) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
@@ -128,7 +132,7 @@ async function mountSelect<T>(
             options={options()}
             current={value()}
             focusCurrent={focusCurrent}
-            flat={select?.flat}
+            {...select}
             onMove={(option) => moved.push(option.value)}
             onSelect={(option) => selected.push(option.value)}
           />
@@ -157,9 +161,82 @@ async function mountSelect<T>(
   const app = await testRender(() => <Harness />, { width: 80, height: 24, kittyKeyboard: true })
   app.renderer.start()
   await app.waitForFrame((frame) => frame.includes("Mutable options"))
-  await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
+  if (select?.renderFilter !== false)
+    await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
   return { app, moved, replaceOptions, replaceCurrent, selected }
 }
+
+test.each([true, false])("filter refs are ready when published with renderFilter=%s", async (renderFilter) => {
+  await using tmp = await tmpdir()
+  const queries: string[] = []
+  const select = await mountSelect(
+    tmp.path,
+    [
+      { title: "Alpha", value: "alpha" },
+      { title: "Beta", value: "beta" },
+    ],
+    undefined,
+    undefined,
+    {
+      renderFilter,
+      ref: (ref) => ref.setFilter("beta"),
+      onFilter: (query) => queries.push(query),
+    },
+  )
+  try {
+    expect(queries).toEqual(["beta"])
+    if (!renderFilter) return
+    expect(select.app.renderer.currentFocusedEditor?.plainText).toBe("beta")
+    expect(select.app.captureCharFrame()).not.toContain("Alpha")
+    select.app.mockInput.pressEnter()
+    await select.app.waitFor(() => select.selected.length === 1)
+    expect(select.selected).toEqual(["beta"])
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
+test("Escape clears text selection before invoking a custom back action", async () => {
+  await using tmp = await tmpdir()
+  let cancelled = 0
+  const select = await mountSelect(tmp.path, [{ title: "Alpha", value: "alpha" }], undefined, undefined, {
+    onCancel: () => cancelled++,
+  })
+  try {
+    const frame = select.app.captureCharFrame().split("\n")
+    const row = frame.findIndex((line) => line.includes("Alpha"))
+    const column = frame[row]!.indexOf("Alpha") + 1
+    await select.app.mockMouse.click(column, row)
+    await select.app.mockMouse.click(column, row)
+    await select.app.waitFor(() => select.app.renderer.getSelection()?.getSelectedText() === "Alpha")
+    select.app.mockInput.pressEscape()
+    await select.app.waitFor(() => !select.app.renderer.getSelection())
+    expect(cancelled).toBe(0)
+    select.app.mockInput.pressEscape()
+    await select.app.waitFor(() => cancelled === 1)
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
+test("reveals a focus target that arrives below the viewport", async () => {
+  await using tmp = await tmpdir()
+  const select = await mountSelect(tmp.path, [{ title: "Root", value: "root" }], undefined, true, {
+    focusTarget: "checkout-29",
+  })
+  try {
+    select.replaceOptions([
+      { title: "Root", value: "root" },
+      ...Array.from({ length: 30 }, (_, index) => ({ title: `Checkout ${index}`, value: `checkout-${index}` })),
+    ])
+    await select.app.waitForFrame((frame) => frame.includes("Checkout 29"))
+    select.app.mockInput.pressEnter()
+    await select.app.waitFor(() => select.selected.length === 1)
+    expect(select.selected).toEqual(["checkout-29"])
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
 
 test("budgets option content for constrained and full-width large dialogs", () => {
   expect(dialogSelectContentWidth(Math.min(dialogWidth("large"), 62 - 2)) - 7).toBe(41)

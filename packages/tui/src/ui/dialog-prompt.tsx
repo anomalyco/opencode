@@ -5,6 +5,7 @@ import { useDialog, type DialogSize } from "./dialog"
 import { Show, createEffect, createSignal, onMount, type JSX } from "solid-js"
 import { Spinner } from "../component/spinner"
 import { useConfig } from "../config"
+import { useRenderer } from "@opentui/solid"
 
 export type DialogPromptProps = {
   title: string
@@ -20,6 +21,7 @@ export type DialogPromptProps = {
 
 export function DialogPrompt(props: DialogPromptProps) {
   const dialog = useDialog()
+  const renderer = useRenderer()
   const theme = useTheme("elevated")
   const shortcuts = Keymap.useShortcuts()
   const config = useConfig().data
@@ -57,6 +59,10 @@ export function DialogPrompt(props: DialogPromptProps) {
         title: "Back",
         group: "Dialog",
         run: () => {
+          if (renderer.getSelection()) {
+            renderer.clearSelection()
+            return
+          }
           if (!props.busy) props.onCancel?.()
         },
       },

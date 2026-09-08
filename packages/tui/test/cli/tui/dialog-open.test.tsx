@@ -284,7 +284,7 @@ test("loads Git worktrees only when drilling into a project or its associated di
 
     fixture.app.mockInput.pressArrow("right")
     const worktrees = await fixture.app.waitForFrame(
-      (frame) => frame.includes("other-branch") && frame.includes("+ New worktree"),
+      (frame) => frame.includes("other-branch") && frame.includes("ctrl+n"),
     )
     expect(requests).toBe(1)
     expect(worktrees).toContain("Worktrees")
@@ -297,7 +297,7 @@ test("loads Git worktrees only when drilling into a project or its associated di
     await fixture.app.mockInput.typeText("current-branch")
     await fixture.app.waitForFrame((frame) => frame.includes("current-branch") && !frame.includes("OpenCode"))
     fixture.app.mockInput.pressArrow("right")
-    await fixture.app.waitForFrame((frame) => frame.includes("other-branch") && frame.includes("+ New worktree"))
+    await fixture.app.waitForFrame((frame) => frame.includes("other-branch") && frame.includes("ctrl+n"))
     expect(requests).toBe(2)
     fixture.app.mockInput.pressEscape()
     const restored = await fixture.app.waitForFrame(
@@ -306,7 +306,7 @@ test("loads Git worktrees only when drilling into a project or its associated di
     expect(restored).toContain("current-branch")
     expect(restored).not.toContain("OpenCode")
     fixture.app.mockInput.pressArrow("right")
-    await fixture.app.waitForFrame((frame) => frame.includes("other-branch") && frame.includes("+ New worktree"))
+    await fixture.app.waitForFrame((frame) => frame.includes("other-branch") && frame.includes("ctrl+n"))
 
     await fixture.app.mockInput.typeText("other-branch")
     fixture.app.mockInput.pressEnter()
@@ -364,6 +364,84 @@ test("does not show or trigger worktree navigation for non-Git and global direct
   }
 })
 
+test("keeps session directory targets distinct across workspaces", async () => {
+  const directory = "/tmp/opencode/archive"
+  const fixture = await renderOpen((url) => {
+    if (url.pathname === "/api/project") return json([])
+    if (url.pathname !== "/api/session") return undefined
+    return json({
+      data: ["ws_first", "ws_second"].map((workspaceID, index) => ({
+        id: `ses_${workspaceID}`,
+        projectID: "proj_archive",
+        title: `Archived session ${index}`,
+        location: { directory, workspaceID },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 1, updated: 2 - index },
+      })),
+      cursor: {},
+    })
+  })
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Archived session"))
+    await fixture.app.mockInput.typeText("archive")
+    const frame = await fixture.app.waitForFrame((frame) => frame.includes(directory))
+    expect(frame.split("\n").filter((line) => line.includes(directory))).toHaveLength(2)
+    fixture.app.mockInput.pressArrow("down")
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.route.data.type === "home")
+    expect(fixture.route.data).toEqual({ type: "home", location: { directory, workspaceID: "ws_second" } })
+    expect(fixture.location.ref).toEqual({ directory, workspaceID: "ws_second" })
+  } finally {
+    await fixture.dispose()
+  }
+})
+
+test("does not show the previous project's worktrees while loading another project", async () => {
+  const pending = Promise.withResolvers<Response>()
+  const fixture = await renderOpen((url) => {
+    if (url.pathname === "/api/project")
+      return json(
+        ["Alpha", "Beta"].map((name) => ({
+          id: `proj_${name}`,
+          canonical: `/tmp/opencode/${name}`,
+          name,
+          vcs: "git",
+          sandboxes: [],
+          time: { created: 1, updated: 2 },
+        })),
+      )
+    if (url.pathname !== "/api/worktree") return undefined
+    if (url.searchParams.get("location[directory]") === "/tmp/opencode/Alpha")
+      return json([{ directory: "/tmp/opencode/alpha-checkout", strategy: "git" }])
+    return pending.promise
+  })
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Alpha") && frame.includes("Beta"))
+    await fixture.app.mockInput.typeText("Alpha")
+    fixture.app.mockInput.pressArrow("right")
+    await fixture.app.waitForFrame((frame) => frame.includes("alpha-checkout"))
+    fixture.app.mockInput.pressEscape()
+    fixture.app.mockInput.pressKey("c", { ctrl: true })
+    await fixture.app.mockInput.typeText("Beta")
+    fixture.app.mockInput.pressArrow("right")
+    const loading = await fixture.app.waitForFrame(
+      (frame) => frame.includes("Beta / Worktrees") && frame.includes("Loading worktrees"),
+    )
+    expect(loading).not.toContain("alpha-checkout")
+    pending.resolve(json([{ directory: "/tmp/opencode/beta-checkout", strategy: "git" }]))
+    const loaded = await fixture.app.waitForFrame((frame) => frame.includes("beta-checkout"))
+    expect(loaded).not.toContain("alpha-checkout")
+    fixture.app.mockInput.pressArrow("down")
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.route.data.type === "home")
+    expect(fixture.location.ref?.directory).toBe("/tmp/opencode/beta-checkout")
+  } finally {
+    pending.resolve(json([]))
+    await fixture.dispose()
+  }
+})
+
 test.each(["", "search-ui"])("creates a worktree named '%s' and opens it in the current workspace", async (name) => {
   const projectID = "proj_git_create"
   const root = path.resolve("/tmp/opencode/project")
@@ -401,19 +479,31 @@ test.each(["", "search-ui"])("creates a worktree named '%s' and opens it in the 
   try {
     await fixture.app.waitForFrame((frame) => frame.includes("OpenCode") && frame.includes("→"))
     fixture.app.mockInput.pressArrow("right")
-    await fixture.app.waitForFrame((frame) => frame.includes("+ New worktree"))
+    const worktrees = await fixture.app.waitForFrame((frame) => frame.includes("ctrl+n"))
+    expect(worktrees).not.toContain("Actions")
+    expect(worktrees).not.toContain("+ New worktree")
     await fixture.app.mockInput.typeText("unmatched-search")
     const filtered = await fixture.app.waitForFrame((frame) => frame.includes("unmatched-search"))
-    expect(filtered).toContain("+ New worktree")
+    expect(filtered).toContain("ctrl+n")
+    expect(filtered).toContain("No matching worktrees")
     fixture.app.mockInput.pressKey("n", { ctrl: true })
     await fixture.app.waitForFrame((frame) => frame.includes("Worktree name (optional)"))
+    const prompt = fixture.app.captureCharFrame().split("\n")
+    const row = prompt.findIndex((line) => line.includes("Leave blank"))
+    const column = prompt[row]!.indexOf("Leave") + 1
+    await fixture.app.mockMouse.click(column, row)
+    await fixture.app.mockMouse.click(column, row)
+    await fixture.app.waitFor(() => fixture.app.renderer.getSelection()?.getSelectedText() === "Leave")
+    fixture.app.mockInput.pressEscape()
+    await fixture.app.waitFor(() => !fixture.app.renderer.getSelection())
+    expect(fixture.app.captureCharFrame()).toContain("Worktree name (optional)")
     fixture.app.mockInput.pressEscape()
     const restored = await fixture.app.waitForFrame(
-      (frame) => frame.includes("unmatched-search") && frame.includes("+ New worktree"),
+      (frame) => frame.includes("unmatched-search") && frame.includes("ctrl+n"),
     )
     expect(restored).toContain("unmatched-search")
     expect(payload).toBeUndefined()
-    fixture.app.mockInput.pressEnter()
+    fixture.app.mockInput.pressKey("n", { ctrl: true })
     await fixture.app.waitForFrame((frame) => frame.includes("Worktree name (optional)"))
     if (name) await fixture.app.mockInput.typeText(name)
     fixture.app.mockInput.pressEnter()
