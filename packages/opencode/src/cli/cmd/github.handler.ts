@@ -33,7 +33,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
 import { parseGitHubRemote } from "@/util/repository"
 import { Effect } from "effect"
-import { DEFAULT_AGENT_USERNAME, extractResponseText, formatPromptTooLargeError, resolveAgentUsername } from "./github.shared"
+import { extractResponseText, formatPromptTooLargeError } from "./github.shared"
 
 type GitHubAuthor = {
   login: string
@@ -140,6 +140,7 @@ type IssueQueryResponse = {
   }
 }
 
+const AGENT_USERNAME = "opencode-agent[bot]"
 const AGENT_REACTION = "eyes"
 const WORKFLOW_FILE = ".github/workflows/opencode.yml"
 
@@ -437,7 +438,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
     let shareId: string | undefined
     let exitCode = 0
     let githubClientReady = false
-    let agentUsername = DEFAULT_AGENT_USERNAME
+    let agentUsername = AGENT_USERNAME
     type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
     const triggerCommentId = isCommentEvent
       ? (payload as IssueCommentEvent | PullRequestReviewCommentEvent).comment.id
@@ -487,14 +488,16 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         headers: { authorization: `token ${appToken}` },
       })
       githubClientReady = true
-      agentUsername = await resolveAgentUsername(async () => {
+      try {
+        const { data } = await octoRest.rest.users.getAuthenticated()
+        if (data.login) agentUsername = data.login
+      } catch {}
+      if (agentUsername === AGENT_USERNAME) {
         try {
-          const { data } = await octoRest.rest.users.getAuthenticated()
-          if (data.login) return data.login
+          const viewer = await octoGraph<{ viewer: { login: string } }>(`query { viewer { login } }`)
+          if (viewer.viewer?.login) agentUsername = viewer.viewer.login
         } catch {}
-        const viewer = await octoGraph<{ viewer: { login: string } }>(`query { viewer { login } }`)
-        return viewer.viewer?.login
-      })
+      }
       console.log("Acting as", agentUsername)
 
       const { userPrompt, promptFiles } = await getUserPrompt()

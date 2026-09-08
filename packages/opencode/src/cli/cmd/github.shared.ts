@@ -21,16 +21,6 @@ export function extractResponseText(parts: SessionV1.Part[]): string | null {
  * Formats a PROMPT_TOO_LARGE error message with details about files in the prompt.
  * Content is base64 encoded, so we calculate original size by multiplying by 0.75.
  */
-export const DEFAULT_AGENT_USERNAME = "opencode-agent[bot]"
-
-export async function resolveAgentUsername(getLogin: () => Promise<string | undefined>): Promise<string> {
-  try {
-    const login = await getLogin()
-    if (login) return login
-  } catch {}
-  return DEFAULT_AGENT_USERNAME
-}
-
 export function formatPromptTooLargeError(files: { filename: string; content: string }[]): string {
   const fileDetails =
     files.length > 0

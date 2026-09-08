@@ -1,11 +1,6 @@
 import { test, expect, describe } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import {
-  DEFAULT_AGENT_USERNAME,
-  extractResponseText,
-  formatPromptTooLargeError,
-  resolveAgentUsername,
-} from "../../src/cli/cmd/github"
+import { extractResponseText, formatPromptTooLargeError } from "../../src/cli/cmd/github"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
@@ -200,23 +195,5 @@ describe("formatPromptTooLargeError", () => {
     expect(result).toInclude("img1.png (3 KB)")
     expect(result).toInclude("img2.jpg (6 KB)")
     expect(result).toInclude("img3.gif (9 KB)")
-  })
-})
-
-describe("resolveAgentUsername", () => {
-  test("uses the authenticated login", async () => {
-    await expect(resolveAgentUsername(async () => "spartans-bot[bot]")).resolves.toBe("spartans-bot[bot]")
-  })
-
-  test("falls back when lookup fails", async () => {
-    await expect(
-      resolveAgentUsername(async () => {
-        throw new Error("denied")
-      }),
-    ).resolves.toBe(DEFAULT_AGENT_USERNAME)
-  })
-
-  test("falls back when login is missing", async () => {
-    await expect(resolveAgentUsername(async () => undefined)).resolves.toBe(DEFAULT_AGENT_USERNAME)
   })
 })
