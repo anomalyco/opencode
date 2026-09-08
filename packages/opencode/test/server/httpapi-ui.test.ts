@@ -27,6 +27,7 @@ const testStateLayer = Layer.effectDiscard(
       OPENCODE_SERVER_USERNAME: Flag.OPENCODE_SERVER_USERNAME,
       envPassword: process.env.OPENCODE_SERVER_PASSWORD,
       envUsername: process.env.OPENCODE_SERVER_USERNAME,
+      envWebUiTitle: process.env.OPENCODE_WEB_UI_TITLE,
     }
 
     yield* Effect.addFinalizer(() =>
@@ -35,6 +36,7 @@ const testStateLayer = Layer.effectDiscard(
         Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
         restoreEnv("OPENCODE_SERVER_PASSWORD", original.envPassword)
         restoreEnv("OPENCODE_SERVER_USERNAME", original.envUsername)
+        restoreEnv("OPENCODE_WEB_UI_TITLE", original.envWebUiTitle)
       }),
     )
   }),
@@ -353,6 +355,77 @@ describe("HttpApi UI fallback", () => {
       expect(csp).toContain(`'sha256-${createHash("sha256").update(script).digest("base64")}'`)
       expect(csp).toContain("img-src 'self' data: https: blob:")
       expect(csp).toContain("connect-src * data: blob:")
+    }),
+  )
+
+  it.live("overrides the embedded UI title from OPENCODE_WEB_UI_TITLE", () =>
+    Effect.gen(function* () {
+      const script = 'document.documentElement.dataset.theme = "dark"'
+      process.env.OPENCODE_WEB_UI_TITLE = "prod <frontend> & co"
+
+      const fs = yield* FSUtil.Service
+      const response = yield* serveEmbeddedUIEffect(
+        "/",
+        {
+          ...fs,
+          readFile: (path) => {
+            return path === "/$bunfs/root/index.html"
+              ? Effect.succeed(
+                  new TextEncoder().encode(
+                    `<html><head><title>OpenCode</title><script id="oc-theme-preload-script">${script}</script></head></html>`,
+                  ),
+                )
+              : Effect.die(`unexpected embedded UI path: ${path}`)
+          },
+        },
+        { "index.html": "/$bunfs/root/index.html" },
+      ).pipe(Effect.map(HttpServerResponse.toWeb))
+
+      const body = yield* responseText(response)
+      expect(body).toContain("<title>prod &lt;frontend&gt; &amp; co</title>")
+      expect(body).not.toContain("<title>OpenCode</title>")
+      const csp = response.headers.get("content-security-policy") ?? ""
+      expect(csp).toContain(`'sha256-${createHash("sha256").update(script).digest("base64")}'`)
+    }),
+  )
+
+  it.live("overrides the proxied UI title from OPENCODE_WEB_UI_TITLE", () =>
+    Effect.gen(function* () {
+      process.env.OPENCODE_WEB_UI_TITLE = "staging"
+
+      const response = yield* uiApp({
+        disableEmbeddedWebUi: true,
+        client: httpClient(
+          new Response("<html><head><title>OpenCode</title></head></html>", {
+            headers: { "content-type": "text/html" },
+          }),
+        ),
+      }).request("/")
+
+      expect(response.status).toBe(200)
+      expect(yield* responseText(response)).toBe("<html><head><title>staging</title></head></html>")
+    }),
+  )
+
+  it.live("keeps the embedded UI title when OPENCODE_WEB_UI_TITLE is blank", () =>
+    Effect.gen(function* () {
+      process.env.OPENCODE_WEB_UI_TITLE = "   "
+
+      const fs = yield* FSUtil.Service
+      const response = yield* serveEmbeddedUIEffect(
+        "/",
+        {
+          ...fs,
+          readFile: (path) => {
+            return path === "/$bunfs/root/index.html"
+              ? Effect.succeed(new TextEncoder().encode("<html><head><title>OpenCode</title></head></html>"))
+              : Effect.die(`unexpected embedded UI path: ${path}`)
+          },
+        },
+        { "index.html": "/$bunfs/root/index.html" },
+      ).pipe(Effect.map(HttpServerResponse.toWeb))
+
+      expect(yield* responseText(response)).toBe("<html><head><title>OpenCode</title></head></html>")
     }),
   )
 
