@@ -23,6 +23,7 @@ const openFileReference = "open-file"
 
 export const ReviewDesktop = Plugin.define({
   id: "opencode.review",
+  name: "session.tab.review",
   setup(ctx) {
     const [models, setModels] = createStore<Record<string, SessionReviewModel | undefined>>({})
     ctx.commands.register(() => {
