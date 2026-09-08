@@ -76,5 +76,7 @@ export function resolveNetworkOptionsNoConfig(args: NetworkOptions, config?: Con
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
 
-  return { hostname, port, mdns, mdnsDomain, cors }
+  const openBrowser = config?.server?.openBrowser ?? true
+
+  return { hostname, port, mdns, mdnsDomain, cors, openBrowser }
 }

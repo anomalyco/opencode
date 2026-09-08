@@ -12,6 +12,9 @@ export const Server = Schema.Struct({
   mdnsDomain: Schema.optional(Schema.String).annotate({
     description: "Custom domain name for mDNS service (default: opencode.local)",
   }),
+  openBrowser: Schema.optional(Schema.Boolean).annotate({
+    description: "Open the web interface in a browser automatically when running `opencode web` (default: true)",
+  }),
   cors: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
     description: "Additional domains to allow for CORS",
   }),

@@ -1651,6 +1651,7 @@ export type ServerConfig = {
   hostname?: string
   mdns?: boolean
   mdnsDomain?: string
+  openBrowser?: boolean
   cors?: Array<string>
 }
 

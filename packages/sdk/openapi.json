@@ -20551,6 +20551,9 @@
           "mdnsDomain": {
             "type": "string"
           },
+          "openBrowser": {
+            "type": "boolean"
+          },
           "cors": {
             "type": "array",
             "items": {

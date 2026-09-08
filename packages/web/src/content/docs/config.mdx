@@ -309,6 +309,7 @@ You can configure server settings for the `opencode serve` and `opencode web` co
     "hostname": "0.0.0.0",
     "mdns": true,
     "mdnsDomain": "myproject.local",
+    "openBrowser": false,
     "cors": ["http://localhost:5173"]
   }
 }
@@ -320,6 +321,7 @@ Available options:
 - `hostname` - Hostname to listen on. When `mdns` is enabled and no hostname is set, defaults to `0.0.0.0`.
 - `mdns` - Enable mDNS service discovery. This allows other devices on the network to discover your OpenCode server.
 - `mdnsDomain` - Custom domain name for mDNS service. Defaults to `opencode.local`. Useful for running multiple instances on the same network.
+- `openBrowser` - Automatically open the web interface in a browser when running `opencode web`. Defaults to `true`. Set to `false` to only print the URL (useful in containers, WSL, or background services).
 - `cors` - Additional origins to allow for CORS when using the HTTP server from a browser-based client. Values must be full origins (scheme + host + optional port), eg `https://app.example.com`.
 
 [Learn more about the server here](/docs/server).
