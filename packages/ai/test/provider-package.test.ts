@@ -45,6 +45,12 @@ describe("provider package entrypoints", () => {
       import("@opencode/ai/providers/moonshot/chat"),
       import("@opencode/ai/providers/moonshot/messages"),
       import("@opencode/ai/providers/moonshot/responses"),
+      import("@opencode/ai/providers/zai"),
+      import("@opencode/ai/providers/zai/chat"),
+      import("@opencode/ai/providers/zai-coding-plan"),
+      import("@opencode/ai/providers/zai-coding-plan/chat"),
+      import("@opencode/ai/providers/zai-coding-plan/messages"),
+      import("@opencode/ai/providers/zai-coding-plan/responses"),
     ])
 
     for (const module of modules) expect(module.model).toBeFunction()
@@ -98,6 +104,41 @@ describe("provider package entrypoints", () => {
     modules.forEach((module, index) => {
       const selected = module.model("MiniMax-M3", settings)
       expect(selected.provider).toBe("minimax")
+      expect(selected.route.id).toBe(routes[index])
+      expect(selected.route.endpoint.baseURL).toBe(settings.baseURL)
+      expect(selected.route.defaults.headers).toEqual(settings.headers)
+      expect(selected.route.defaults.http?.body).toEqual(settings.body)
+    })
+  })
+
+  test("maps ZAI and Coding Plan entrypoints onto distinct provider-owned routes", async () => {
+    const modules = await Promise.all([
+      import("@opencode/ai/providers/zai"),
+      import("@opencode/ai/providers/zai/chat"),
+      import("@opencode/ai/providers/zai-coding-plan"),
+      import("@opencode/ai/providers/zai-coding-plan/chat"),
+      import("@opencode/ai/providers/zai-coding-plan/messages"),
+      import("@opencode/ai/providers/zai-coding-plan/responses"),
+    ])
+    expect(modules[0].model).toBe(modules[1].model)
+    expect(modules[2].model).toBe(modules[3].model)
+    const routes = [
+      "zai-chat",
+      "zai-chat",
+      "zai-coding-chat",
+      "zai-coding-chat",
+      "zai-coding-messages",
+      "zai-coding-responses",
+    ]
+    const settings = {
+      apiKey: "fixture",
+      baseURL: "https://gateway.example/custom",
+      headers: { "x-test": "fixture" },
+      body: { extension: true },
+    }
+    modules.forEach((module, index) => {
+      const selected = module.model("glm-5.3", settings)
+      expect(selected.provider).toBe(index < 2 ? "zai" : "zai-coding-plan")
       expect(selected.route.id).toBe(routes[index])
       expect(selected.route.endpoint.baseURL).toBe(settings.baseURL)
       expect(selected.route.defaults.headers).toEqual(settings.headers)
