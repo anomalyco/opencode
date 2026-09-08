@@ -1,8 +1,6 @@
 import { createMemo, createEffect, on, onCleanup, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
-import { useData } from "@/runtime/server/current"
 import { checksum } from "@opencode/util/encode"
-import { same } from "@/runtime/persistence/equality"
 import { Icon } from "@opencode/ui/icon"
 import { Button } from "@opencode/ui/button"
 import { Accordion } from "@opencode/ui/accordion"
@@ -11,14 +9,10 @@ import { File } from "@opencode/session-ui/file"
 import { Markdown } from "@opencode/session-ui/markdown"
 import { ScrollView } from "@opencode/ui/scroll-view"
 import type { SessionMessageInfo } from "@opencode/client/promise"
-import { showToast } from "@/shell/notifications/toast"
-import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
-import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
-import { useProviders } from "@/providers/catalog/providers"
-import { useWorkspaceLocation } from "@/workspaces/location"
-import { useServerSDK } from "@/runtime/server/client"
-import { useSessionLayout } from "@/session/session-layout"
+import { usePlugin, type SessionContext } from "@opencode/plugin/desktop"
+import type { SessionView } from "@opencode/plugin/desktop/workspace"
+import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "./export"
+import { contextUsage } from "./usage"
 import { createSessionContextFormatter } from "./session-context-format"
 
 function Stat(props: { label: string; value: JSX.Element }) {
@@ -82,26 +76,14 @@ function RawMessage(props: {
 
 const emptyMessages: SessionMessageInfo[] = []
 
-export function SessionContextTab() {
-  const data = useData()
-  const language = useLanguage()
-  const platform = usePlatform()
-  const sdk = useWorkspaceLocation()
-  const serverSDK = useServerSDK()
-  const providers = useProviders(() => sdk().directory)
-  const { params, view } = useSessionLayout()
-
-  const info = createMemo(() => (params.id ? data.session.get(params.id) : undefined))
-
-  const messages = createMemo(
-    () => {
-      const id = params.id
-      if (!id) return emptyMessages
-      return data.session.message.list(id)
-    },
-    emptyMessages,
-    { equals: same },
-  )
+export function SessionContextTab(props: { session: SessionContext; view: SessionView }) {
+  const plugin = usePlugin()
+  const data = props.session.server.data
+  const language = plugin.i18n
+  const platform = plugin.platform
+  const view = () => props.view
+  const info = createMemo(() => data.session.get(props.session.sessionID))
+  const messages = createMemo(() => data.session.message.list(props.session.sessionID))
 
   const usd = createMemo(
     () =>
@@ -111,28 +93,13 @@ export function SessionContextTab() {
       }),
   )
 
-  const ctx = createMemo(() => {
-    const message = messages().findLast((item) => item.type === "assistant" && !!item.tokens)
-    if (message?.type !== "assistant" || !message.tokens) return
-    const provider = providers.all().get(message.model.providerID)
-    const model = provider?.models[message.model.id]
-    const total =
-      message.tokens.input +
-      message.tokens.output +
-      message.tokens.reasoning +
-      message.tokens.cache.read +
-      message.tokens.cache.write
-    return {
-      message,
-      tokens: message.tokens,
-      providerLabel: provider?.name ?? message.model.providerID,
-      modelLabel: model?.name ?? message.model.id,
-      limit: model?.limit.context,
-      input: message.tokens.input,
-      total,
-      usage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
-    }
-  })
+  const ctx = createMemo(() =>
+    contextUsage(
+      messages(),
+      data.location.model.list(props.session.location) ?? [],
+      data.location.provider.list(props.session.location) ?? [],
+    ),
+  )
   const formatter = createMemo(() => createSessionContextFormatter(language.intl()))
 
   const cost = createMemo(() => {
@@ -171,7 +138,7 @@ export function SessionContextTab() {
   })
 
   const stats = [
-    { label: "context.stats.session", value: () => info()?.title ?? params.id ?? "—" },
+    { label: "context.stats.session", value: () => info()?.title ?? props.session.sessionID },
     { label: "context.stats.messages", value: () => counts().all.toLocaleString(language.intl()) },
     { label: "context.stats.provider", value: providerLabel },
     { label: "context.stats.model", value: modelLabel },
@@ -193,26 +160,24 @@ export function SessionContextTab() {
   ] satisfies { label: string; value: () => JSX.Element }[]
 
   const exportSession = async () => {
-    const sessionID = params.id
-    if (!sessionID) return
+    const sessionID = props.session.sessionID
     try {
       const data = await fetchSessionExport({
         sessionID,
-        api: serverSDK.api,
+        api: props.session.server.client,
       })
       const filename = sessionExportFilename(data.info)
       if (!(await saveSessionExport(filename, data, platform))) return
-      showToast({
+      plugin.ui.toast.show({
         variant: "success",
-        icon: "circle-check",
         title: language.t("toast.session.export.success.title"),
-        description: language.t("toast.session.export.success.description", { filename }),
+        message: language.t("toast.session.export.success.description", { filename }),
       })
     } catch (err) {
-      showToast({
+      plugin.ui.toast.show({
         variant: "error",
         title: language.t("toast.session.export.failed.title"),
-        description: err instanceof Error ? err.message : language.t("toast.session.export.failed.description"),
+        message: err instanceof Error ? err.message : language.t("toast.session.export.failed.description"),
       })
     }
   }

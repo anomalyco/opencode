@@ -17,7 +17,7 @@ const MobilePanelDrawer = lazy(async () => {
 
 export function SessionMobileViewTabs(props: {
   current: string
-  items: readonly { id: string; title: string }[]
+  items: readonly { id: string; title: string; menu?: boolean }[]
   onSelect(value: string): void
   details?: (close: () => void) => JSX.Element
   onDetailsOpenChange?: (open: boolean) => void
@@ -33,7 +33,7 @@ export function SessionMobileViewTabs(props: {
           <Tabs.Trigger value="session" onClick={() => props.onSelect("session")}>
             {language.t("session.tab.session")}
           </Tabs.Trigger>
-          <For each={props.items}>
+          <For each={props.items.filter((item) => !item.menu)}>
             {(item) => (
               <Tabs.Trigger value={item.id} onClick={() => props.onSelect(item.id)}>
                 {item.title}
@@ -55,7 +55,9 @@ export function SessionMobileViewTabs(props: {
         />
         <Menu.Portal>
           <Menu.Content>
-            <Menu.Item onSelect={() => props.onSelect("usage")}>{language.t("session.tab.usage")}</Menu.Item>
+            <For each={props.items.filter((item) => item.menu)}>
+              {(item) => <Menu.Item onSelect={() => props.onSelect(item.id)}>{item.title}</Menu.Item>}
+            </For>
             <Show when={props.details}>
               <Menu.Item onSelect={() => setStore("details", true)}>{language.t("session.summary.title")}</Menu.Item>
             </Show>

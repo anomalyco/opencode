@@ -64,6 +64,7 @@
         "@kobalte/core": "catalog:",
         "@opencode/client": "workspace:*",
         "@opencode/plugin": "workspace:*",
+        "@opencode/plugin-context-desktop": "workspace:*",
         "@opencode/plugin-review-desktop": "workspace:*",
         "@opencode/schema": "workspace:*",
         "@opencode/session-ui": "workspace:*",
@@ -656,6 +657,24 @@
         "devtools-protocol": "0.0.1687809",
         "electron": "42.10.1",
         "puppeteer-core": "25.9.0",
+      },
+    },
+    "packages/plugin-context-desktop": {
+      "name": "@opencode/plugin-context-desktop",
+      "version": "0.0.0",
+      "dependencies": {
+        "@opencode/client": "workspace:*",
+        "@opencode/plugin": "workspace:*",
+        "@opencode/session-ui": "workspace:*",
+        "@opencode/ui": "workspace:*",
+        "@opencode/util": "workspace:*",
+        "luxon": "catalog:",
+        "solid-js": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/luxon": "catalog:",
+        "@typescript/native-preview": "catalog:",
       },
     },
     "packages/plugin-review-desktop": {
@@ -2266,6 +2285,8 @@
     "@opencode/plugin-browser": ["@opencode/plugin-browser@workspace:packages/plugin-browser"],
 
     "@opencode/plugin-browser-desktop": ["@opencode/plugin-browser-desktop@workspace:packages/plugin-browser-desktop"],
+
+    "@opencode/plugin-context-desktop": ["@opencode/plugin-context-desktop@workspace:packages/plugin-context-desktop"],
 
     "@opencode/plugin-review-desktop": ["@opencode/plugin-review-desktop@workspace:packages/plugin-review-desktop"],
 

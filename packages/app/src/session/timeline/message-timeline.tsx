@@ -14,7 +14,6 @@ import { ProjectAvatar } from "@opencode/ui/project-avatar"
 import type { Project } from "@/runtime/server/types"
 import { getFilename } from "@opencode/util/path"
 import { Popover } from "@kobalte/core/popover"
-import { SessionContextUsage } from "@/session/timeline/session-context-usage"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useData, useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -795,7 +794,6 @@ function MessageTimelineView(
                 {(id) => (
                   <div class="shrink-0 flex items-center gap-2">
                     {props.search}
-                    <SessionContextUsage placement="bottom" />
                     {props.headerActions}
                     <Show when={!parentID() && project()}>
                       {(project) => (
