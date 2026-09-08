@@ -2,16 +2,19 @@ import assert from "node:assert/strict"
 import type { BrowserWindow } from "electron"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { Schema } from "effect"
-import { createBrowserPage } from "../../src/main/browser-chromium"
+import { createBrowserPage } from "@opencode/plugin-browser-desktop/page"
 import { createCornerImages } from "../../src/main/native/corners"
+import { createSurfaces } from "../../src/main/extensions/surfaces"
 
 export async function verifyTargets(win: BrowserWindow, url: string) {
   const children = win.contentView.children.length
+  const surfaces = createSurfaces(win)
   const tabID = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
   const page = createBrowserPage(win, {
     id: tabID,
     partition: `target-test-${crypto.randomUUID()}`,
     network: null,
+    surfaces: { register: (view) => surfaces.register("test", view) },
     publish() {},
     fail() {
       throw new Error("Target test page failed")
@@ -46,8 +49,7 @@ export async function verifyTargets(win: BrowserWindow, url: string) {
       { x: 30, y: 40, width: 500, height: 300 },
       { x: 50, y: 60, width: 600, height: 400 },
     ]) {
-      page.layout(bounds, [255, 255, 255, 255], 10)
-      page.setVisible(true)
+      surfaces.layout("test", page.surfaceID, { visible: true, bounds, background: [255, 255, 255, 255], radius: 10 })
       await page.contents.executeJavaScript(
         "new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(null))))",
       )
@@ -57,7 +59,7 @@ export async function verifyTargets(win: BrowserWindow, url: string) {
         height: bounds.height,
       })
       assert.equal(win.contentView.children.length, children + 3)
-      page.setVisible(false)
+      surfaces.layout("test", page.surfaceID)
       assert(win.contentView.children.slice(children).every((view) => !view.getVisible()))
     }
     await execute({ type: "navigate", tabID, url })
@@ -119,6 +121,7 @@ export async function verifyTargets(win: BrowserWindow, url: string) {
     assert(retained.resources.includes(url + "/"))
   } finally {
     await page.dispose()
+    surfaces.dispose()
     assert.equal(win.contentView.children.length, children)
   }
 

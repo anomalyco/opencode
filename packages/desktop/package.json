@@ -41,6 +41,7 @@
     "@opencode/plugin": "workspace:*",
     "@opencode/schema": "workspace:*",
     "@opencode/plugin-browser": "workspace:*",
+    "@opencode/plugin-browser-desktop": "workspace:*",
     "@opencode/ui": "workspace:*",
     "@sentry/solid": "catalog:",
     "@sentry/vite-plugin": "catalog:",

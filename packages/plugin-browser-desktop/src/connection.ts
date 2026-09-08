@@ -1,18 +1,12 @@
-import type { BrowserPaneCommand, BrowserPaneLayout, BrowserPaneTarget } from "@opencode/app/desktop"
-import { NodeHttpClient } from "@effect/platform-node"
+import type { MainPlugin } from "@opencode/plugin/desktop/main"
 import { Browser } from "@opencode/plugin-browser/rpc"
-import { OpenCode } from "@opencode/client/effect"
 import { SessionID } from "@opencode/schema/session-id"
 import type { BrowserWindow } from "electron"
-import { Deferred, Effect, ManagedRuntime, Queue, Schedule, Schema, Stream } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { BrowserPaneEvent } from "../shared/ipc-rpc/events"
-import { createBrowserPage, type BrowserPage } from "./browser-chromium"
-import { browserFailure } from "./browser/errors"
-import { createBrowserNetwork, type BrowserNetwork } from "./browser/network"
-import { destinationOrigin } from "./browser/policy"
-import { emitIpcEvent } from "./ipc-events"
-import { SidecarCredentials } from "./service/sidecar-credentials"
+import { Deferred, Effect, Layer, ManagedRuntime, Queue, Schedule, Schema, Stream } from "effect"
+import { createBrowserPage, type BrowserPage } from "./page"
+import { browserFailure } from "./native/errors"
+import { createBrowserNetwork, type BrowserNetwork } from "./native/network"
+import { BrowserDesktop } from "./rpc"
 
 type Entry = {
   bindingID: string
@@ -20,7 +14,7 @@ type Entry = {
   abort: AbortController
   registered: PromiseWithResolvers<void>
   requests: Map<string, { abort: AbortController; tabID?: Browser.TabID }>
-  report?: (event: BrowserPaneEvent["event"]) => void
+  report?: (event: BrowserDesktop.Event) => void
   cleanup?: () => void
   pages: Map<Browser.TabID, BrowserPage>
   focusedTabID: Browser.TabID | null
@@ -29,15 +23,16 @@ type Entry = {
   network?: BrowserNetwork
 }
 
-export function createBrowserPane() {
+export function createBrowserPane(ctx: MainPlugin.Context) {
   const entries = new Map<string, Entry>()
   // Keep long-lived RPC requests off Chromium's shared HTTP connection pool.
-  const runtime = ManagedRuntime.make(NodeHttpClient.layerNodeHttp)
+  const runtime = ManagedRuntime.make(Layer.empty)
   let disposed = false
   return {
-    async register(win: BrowserWindow, bindingID: string, target: BrowserPaneTarget) {
-      if (disposed || !destinationOrigin(target.endpoint.url)) throw new Error("browser.pane.registration.invalid")
-      if (target.endpoint.username && !target.endpoint.password) throw new Error("browser.pane.endpoint.invalid")
+    async register(bindingID: string, target: { sessionID: string; serverID: string }, signal?: AbortSignal) {
+      signal?.throwIfAborted()
+      const win = ctx.window
+      if (disposed) throw new Error("browser.pane.registration.invalid")
       if (entries.has(bindingID)) throw new Error("browser.pane.owner.invalid")
       if (win.isDestroyed() || win.webContents.isDestroyed()) throw new Error("browser.pane.owner.unavailable")
       const sessionID = SessionID.make(target.sessionID)
@@ -68,20 +63,7 @@ export function createBrowserPane() {
       void runtime
         .runPromise(
           Effect.gen(function* () {
-            const http = yield* HttpClient.HttpClient
-            // The renderer never holds the managed sidecar's password; Node requests bypass
-            // the webRequest header injection, so resolve the credential here in main.
-            const authorization = target.endpoint.password
-              ? `Basic ${Buffer.from(`${target.endpoint.username ?? "opencode"}:${target.endpoint.password}`).toString("base64")}`
-              : SidecarCredentials.authorization(SidecarCredentials.get(), target.endpoint.url)
-            const client = yield* OpenCode.make({ baseUrl: target.endpoint.url }).pipe(
-              Effect.provideService(
-                HttpClient.HttpClient,
-                authorization
-                  ? HttpClient.mapRequest(http, HttpClientRequest.setHeader("authorization", authorization))
-                  : http,
-              ),
-            )
+            const client = yield* Effect.promise(() => ctx.client(target.serverID))
             const session = yield* client.session.get({ sessionID })
             const options = {
               location: { directory: session.location.directory, workspace: session.location.workspaceID },
@@ -112,7 +94,7 @@ export function createBrowserPane() {
             // attachment ends; the results queued behind it then never name a tab the server lacks.
             // "unavailable" means the server already dropped this attachment, which attach reports.
             entry.report = (event) => {
-              const local = Effect.sync(() => publish(entry, event))
+              const local = Effect.promise(() => publish(entry, event))
               if (event.type !== "state") return send(local)
               send(
                 rpc.state({ ...attachment, state: event.state ?? { tabs: [], focusedTabID: null } }, options).pipe(
@@ -214,32 +196,20 @@ export function createBrowserPane() {
         )
         .catch(stop)
       const timeout = setTimeout(stop, 15_000)
-      await entry.registered.promise.finally(() => clearTimeout(timeout))
+      signal?.addEventListener("abort", stop, { once: true })
+      await entry.registered.promise.finally(() => {
+        clearTimeout(timeout)
+        signal?.removeEventListener("abort", stop)
+      })
       if (entries.get(bindingID) !== entry) throw new Error("browser.pane.registration.closed")
       publishState(entry)
     },
-    layout(win: BrowserWindow, bindingID: string, value?: BrowserPaneLayout) {
-      const entry = owned(win, bindingID)
-      if (!value) return entry.pages.forEach((page) => page.setVisible(false))
-      const page = entry.pages.get(value.tabID)
-      if (!page) return
-      const bounds = value.bounds
-      if (!value.visible || !bounds || bounds.width <= 0 || bounds.height <= 0) {
-        page.setVisible(false)
-        return
-      }
-      entry.pages.forEach((other) => {
-        if (other !== page) other.setVisible(false)
-      })
-      page.layout(bounds, value.background, value.radius)
-      page.setVisible(true)
+    async command(bindingID: string, command: Browser.Action, signal = ctx.lifecycle.signal) {
+      const entry = owned(bindingID)
+      await execute(entry, { action: command, files: [] }, signal)
     },
-    async command(win: BrowserWindow, bindingID: string, command: BrowserPaneCommand) {
-      const entry = owned(win, bindingID)
-      await execute(entry, { action: command, files: [] }, new AbortController().signal)
-    },
-    async close(win: BrowserWindow, bindingID: string) {
-      close(owned(win, bindingID))
+    async close(bindingID: string) {
+      close(owned(bindingID))
     },
     async dispose() {
       disposed = true
@@ -248,15 +218,15 @@ export function createBrowserPane() {
     },
   }
 
-  function owned(win: BrowserWindow, bindingID: string) {
+  function owned(bindingID: string) {
     const entry = entries.get(bindingID)
-    if (!entry || entry.win !== win) throw new Error("browser.pane.unavailable")
+    if (!entry || entry.win !== ctx.window) throw new Error("browser.pane.unavailable")
     return entry
   }
 
-  function publish(entry: Entry, event: BrowserPaneEvent["event"]) {
+  async function publish(entry: Entry, event: BrowserDesktop.Event) {
     if (!entries.has(entry.bindingID) || entry.win.isDestroyed() || entry.win.webContents.isDestroyed()) return
-    emitIpcEvent(entry.win.webContents, new BrowserPaneEvent({ bindingID: entry.bindingID, event }))
+    await ctx.emit(BrowserDesktop.Definition, "changed", { bindingID: entry.bindingID, event })
   }
 
   function close(entry: Entry, reason = "browser.pane.registration.closed") {
@@ -296,6 +266,7 @@ export function createBrowserPane() {
     const event = {
       type: "state" as const,
       state: { tabs: Array.from(entry.pages.values(), (page) => page.state()), focusedTabID: entry.focusedTabID },
+      surfaces: Object.fromEntries(Array.from(entry.pages.values(), (page) => [page.state().id, page.surfaceID])),
       ...(error === undefined ? {} : { error }),
     }
     const next = JSON.stringify(event)
@@ -304,9 +275,9 @@ export function createBrowserPane() {
     report(entry, event)
   }
 
-  function report(entry: Entry, event: BrowserPaneEvent["event"]) {
+  function report(entry: Entry, event: BrowserDesktop.Event) {
     if (entry.report) return entry.report(event)
-    publish(entry, event)
+    void publish(entry, event).catch(console.error)
   }
 
   function create(entry: Entry, initialize = true, popupOptions?: Electron.BrowserWindowConstructorOptions) {
@@ -317,6 +288,7 @@ export function createBrowserPane() {
     }
     const page = createBrowserPage(entry.win, {
       id,
+      surfaces: ctx.surfaces,
       partition: entry.partition,
       network: entry.network,
       initialize,

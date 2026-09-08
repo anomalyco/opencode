@@ -2,15 +2,10 @@ import { batch, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { same } from "@/runtime/persistence/equality"
-import { isSessionBrowserTab, SESSION_OPEN_FILE_TAB } from "@/shell/state/session-tabs"
+import { SESSION_OPEN_FILE_TAB } from "@/shell/state/session-tabs"
 import { isExtensionTab } from "@/extensions/keys"
 
-export {
-  SESSION_BROWSER_TAB,
-  SESSION_OPEN_FILE_TAB,
-  sessionBrowserTab,
-  isSessionBrowserTab,
-} from "@/shell/state/session-tabs"
+export { SESSION_OPEN_FILE_TAB } from "@/shell/state/session-tabs"
 
 const emptyTabs: string[] = []
 
@@ -26,7 +21,6 @@ type TabsInput = {
   review?: Accessor<boolean>
   hasReview?: Accessor<boolean>
   fileBrowser?: Accessor<boolean>
-  browser?: Accessor<boolean>
   extensions?: Accessor<readonly string[]>
   defaultPanel?: Accessor<string | undefined>
   canClose?: (key: string) => boolean
@@ -40,7 +34,6 @@ export const createSessionTabs = (input: TabsInput) => {
   const review = input.review ?? (() => false)
   const hasReview = input.hasReview ?? (() => false)
   const fileBrowser = input.fileBrowser ?? (() => false)
-  const browser = input.browser ?? (() => false)
   const contextOpen = createMemo(() => input.tabs().active() === "context" || input.tabs().all().includes("context"))
   const openFileOpen = createMemo(
     () =>
@@ -57,7 +50,7 @@ export const createSessionTabs = (input: TabsInput) => {
           if (input.extensions?.().includes(tab)) return [tab]
           if (tab === "context" || tab === "review") return []
           if (isExtensionTab(tab)) return input.extensions?.().includes(tab) ? [tab] : []
-          if (isSessionBrowserTab(tab)) return browser() ? [tab] : []
+          if (tab !== SESSION_OPEN_FILE_TAB && !input.pathFromTab(tab)) return []
           if (tab === SESSION_OPEN_FILE_TAB && !fileBrowser()) return []
           const value = input.pathFromTab(tab) ? input.normalizeTab(tab) : tab
           if (seen.has(value)) return []
@@ -76,7 +69,6 @@ export const createSessionTabs = (input: TabsInput) => {
     if (active === "context") return active
     if (active && input.extensions?.().includes(active)) return active
     if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
-    if (active && isSessionBrowserTab(active) && browser()) return active
     if (active === "review" && review()) return active
     if (active && input.pathFromTab(active)) return input.normalizeTab(active)
 
@@ -98,7 +90,6 @@ export const createSessionTabs = (input: TabsInput) => {
     if (active && input.extensions?.().includes(active)) return input.canClose?.(active) === false ? undefined : active
     if (active === "context") return active
     if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
-    if (active && isSessionBrowserTab(active) && browser()) return active
     if (!openedTabs().includes(active)) return
     return active
   })

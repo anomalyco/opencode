@@ -22,8 +22,6 @@ import { SessionContextUsage } from "@/session/timeline/session-context-usage"
 
 const reviewTabID = "session-side-panel-review-tab"
 const reviewTabPanelID = "session-side-panel-review-tabpanel"
-const browserTabID = "session-side-panel-browser-tab"
-const browserTabPanelID = "session-side-panel-browser-tabpanel"
 const fileBrowserTabPanelID = "session-side-panel-file-browser-tabpanel"
 import { SessionContextTab } from "@/session/files/session-context-tab"
 import { SortableTab } from "@/session/files/tab"
@@ -37,8 +35,6 @@ import { useSettings } from "@/settings/model"
 import { createFileTabListSync } from "@/session/files/file-tab-scroll"
 import {
   SESSION_OPEN_FILE_TAB,
-  isSessionBrowserTab,
-  sessionBrowserTab,
   createOpenSessionFileTab,
   createSessionTabs,
   shouldShowFileTree,
@@ -47,8 +43,6 @@ import {
 import { setSessionHandoff } from "@/session/handoff"
 import { useSessionLayout } from "@/session/session-layout"
 import { SessionFileBrowserTab, type SessionFileBrowserState } from "@/session/files/session-file-browser-tab"
-import { SessionBrowserPane } from "@/session/browser/pane"
-import type { createSessionBrowser } from "@/session/browser/model"
 import type { SessionExtensions } from "@/extensions/session"
 import { isExtensionTab } from "@/extensions/keys"
 import { ExtensionPanelContent } from "@/extensions/content"
@@ -77,7 +71,6 @@ export function SessionSidePanel(props: {
   reviewPresent?: boolean
   size: Sizing
   stacked?: boolean
-  browser: ReturnType<typeof createSessionBrowser>
 }) {
   const layout = useLayout()
   const settings = useSettings()
@@ -179,7 +172,6 @@ export function SessionSidePanel(props: {
     review: reviewTab,
     hasReview: () => props.canReview,
     fileBrowser: () => true,
-    browser: props.browser.attached,
     extensions: extensions.keys,
     defaultPanel: extensions.defaultPanel,
     canClose: extensions.canClose,
@@ -238,7 +230,6 @@ export function SessionSidePanel(props: {
       active !== "review" &&
       active !== "context" &&
       active !== "empty" &&
-      !isSessionBrowserTab(active) &&
       !extensions.keys().includes(active)
     )
   })
@@ -401,26 +392,6 @@ export function SessionSidePanel(props: {
                                     )}
                                   </Show>
                                 </Match>
-                                <Match when={isSessionBrowserTab(tab)}>
-                                  <Show when={props.browser.tabs().find((item) => sessionBrowserTab(item.id) === tab)}>
-                                    {(item) => (
-                                      <SortableTab
-                                        tab={tab}
-                                        index={tabs().all().indexOf(tab)}
-                                        onTabClose={() => props.browser.close(item().id)}
-                                        id={`${browserTabID}-${item().id}`}
-                                        ariaControls={activeTab() === tab ? browserTabPanelID : undefined}
-                                      >
-                                        <div class="flex items-center gap-1.5">
-                                          <Icon name="window-cursor" size="small" />
-                                          <span class="max-w-40 truncate">
-                                            {item().title || language.t("session.tab.browser")}
-                                          </span>
-                                        </div>
-                                      </SortableTab>
-                                    )}
-                                  </Show>
-                                </Match>
                                 <Match when={tab === SESSION_OPEN_FILE_TAB}>
                                   <Tabs.Trigger
                                     value={SESSION_OPEN_FILE_TAB}
@@ -472,7 +443,7 @@ export function SessionSidePanel(props: {
                           <div class="h-full shrink-0 sticky end-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
                             {/* With only files to add, the plus stays a one-click "Open file" button. */}
                             <Show
-                              when={props.browser.available() || extensions.hasActions()}
+                              when={extensions.hasActions()}
                               fallback={
                                 <Tooltip
                                   value={
@@ -527,14 +498,6 @@ export function SessionSidePanel(props: {
                                           <span>{language.t("command.file.open")}</span>
                                         </div>
                                       </Menu.Item>
-                                      <Show when={props.browser.available()}>
-                                        <Menu.Item onSelect={props.browser.open}>
-                                          <div class="flex items-center gap-2">
-                                            <Icon name="window-cursor" size="small" />
-                                            <span>{language.t("session.tab.browser")}</span>
-                                          </div>
-                                        </Menu.Item>
-                                      </Show>
                                       {extensions.actions()}
                                     </Menu.Content>
                                   </Menu.Portal>
@@ -592,30 +555,6 @@ export function SessionSidePanel(props: {
                       </Show>
 
                       <ExtensionPanelContent panels={extensions.panels()} active={activeTab()} />
-
-                      <Show when={props.browser.opened()}>
-                        <div
-                          id={browserTabPanelID}
-                          role="tabpanel"
-                          aria-labelledby={
-                            props.browser.active() ? `${browserTabID}-${props.browser.active()?.id}` : undefined
-                          }
-                          data-slot="tabs-content"
-                          class="h-full min-h-0 overflow-hidden"
-                          classList={{ hidden: !isSessionBrowserTab(activeTab()) }}
-                          inert={!isSessionBrowserTab(activeTab()) || undefined}
-                        >
-                          <Show when={props.browser.registration()} keyed>
-                            {(registration) => (
-                              <SessionBrowserPane
-                                registration={registration}
-                                browser={props.browser}
-                                visible={isSessionBrowserTab(activeTab())}
-                              />
-                            )}
-                          </Show>
-                        </div>
-                      </Show>
 
                       <Show when={fileBrowserMounted()}>
                         <div

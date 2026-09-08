@@ -4,7 +4,6 @@ import { Home } from "@/home/route"
 import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
-import { BrowserAttachmentsProvider } from "@/session/browser/attachments"
 import { DesktopExtensionsProvider } from "@/extensions/provider"
 import { ExtensionSlot } from "@/extensions/slot"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
@@ -81,13 +80,11 @@ function AppLayout(props: ParentProps) {
     <Show when={servers.list.length > 0} fallback={<ConnectServerScreen />}>
       <LayoutProvider>
         <SettingsSurfaceProvider>
-          <BrowserAttachmentsProvider>
-            <DesktopExtensionsProvider>
-              <ExtensionSlot path="app">
-                <Shell>{props.children}</Shell>
-              </ExtensionSlot>
-            </DesktopExtensionsProvider>
-          </BrowserAttachmentsProvider>
+          <DesktopExtensionsProvider>
+            <ExtensionSlot path="app">
+              <Shell>{props.children}</Shell>
+            </ExtensionSlot>
+          </DesktopExtensionsProvider>
         </SettingsSurfaceProvider>
       </LayoutProvider>
     </Show>

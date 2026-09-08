@@ -2,8 +2,6 @@ import { describe, expect, test } from "bun:test"
 import { createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
-  SESSION_BROWSER_TAB,
-  sessionBrowserTab,
   SESSION_OPEN_FILE_TAB,
   createOpenReviewFile,
   createOpenSessionFileTab,
@@ -12,6 +10,7 @@ import {
   getTabReorderIndex,
   shouldShowFileTree,
 } from "./helpers"
+import { extensionTabKey } from "@/extensions/keys"
 
 describe("shouldShowFileTree", () => {
   test("does not reserve space for a disabled file tree", () => {
@@ -236,35 +235,36 @@ describe("createSessionTabs", () => {
     })
   })
 
-  test("exposes one browser tab without treating it as a file tab", () => {
+  test("exposes one extension panel without treating it as a file tab", () => {
     createRoot((dispose) => {
-      const tabs = createMemo(() => ({ active: () => SESSION_BROWSER_TAB, all: () => [SESSION_BROWSER_TAB] }))
+      const panel = extensionTabKey("example", "panel")
+      const tabs = createMemo(() => ({ active: () => panel, all: () => [panel] }))
       const result = createSessionTabs({
         tabs,
         pathFromTab: () => undefined,
         normalizeTab: (tab) => tab,
-        browser: () => true,
+        extensions: () => [panel],
       })
 
-      expect(result.panelTabs()).toEqual([SESSION_BROWSER_TAB])
+      expect(result.panelTabs()).toEqual([panel])
       expect(result.openedTabs()).toEqual([])
-      expect(result.activeTab()).toBe(SESSION_BROWSER_TAB)
+      expect(result.activeTab()).toBe(panel)
       expect(result.activeFileTab()).toBeUndefined()
-      expect(result.closableTab()).toBe(SESSION_BROWSER_TAB)
+      expect(result.closableTab()).toBe(panel)
       dispose()
     })
   })
 
-  test("keeps browser tabs in layout order beside file tabs, and drops them when the browser is detached", () => {
-    const first = sessionBrowserTab("first")
-    const second = sessionBrowserTab("second")
+  test("keeps extension panels in layout order beside files and drops unavailable contributions", () => {
+    const first = extensionTabKey("example", "first")
+    const second = extensionTabKey("example", "second")
     const input = {
       tabs: () => ({ active: () => second, all: () => [first, "file://src/a.ts", second] }),
       pathFromTab: (tab: string) => (tab.startsWith("file://") ? tab.slice(7) : undefined),
       normalizeTab: (tab: string) => tab,
     }
     createRoot((dispose) => {
-      const result = createSessionTabs({ ...input, browser: () => true })
+      const result = createSessionTabs({ ...input, extensions: () => [first, second] })
       expect(result.panelTabs()).toEqual([first, "file://src/a.ts", second])
       expect(result.openedTabs()).toEqual(["file://src/a.ts"])
       expect(result.activeTab()).toBe(second)
@@ -273,7 +273,7 @@ describe("createSessionTabs", () => {
       dispose()
     })
     createRoot((dispose) => {
-      const result = createSessionTabs({ ...input, browser: () => false })
+      const result = createSessionTabs({ ...input, extensions: () => [] })
       expect(result.panelTabs()).toEqual(["file://src/a.ts"])
       expect(result.activeTab()).toBe("file://src/a.ts")
       expect(result.closableTab()).toBe("file://src/a.ts")

@@ -41,6 +41,10 @@ Run `bun test` and `bun typecheck` from this package for its contract checks.
 Native browser coverage lives with the desktop implementation
 (`packages/desktop/test/browser-native.test.ts`), not in this package.
 
+The exploratory Desktop companion is `@opencode/plugin-browser-desktop`. It
+uses this package's public RPC/proxy exports and the generic Desktop extension
+host; the server plugin does not load its renderer or Electron implementation.
+
 ## RPC
 
 The plugin-owned contract is `@opencode/plugin-browser/rpc`. This entrypoint
