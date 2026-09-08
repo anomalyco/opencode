@@ -1,8 +1,8 @@
 import { Clock, Effect, Schema, Semaphore, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Form } from "@opencode-ai/schema/form"
-import { AppProcess } from "@opencode-ai/util/process"
+import { define } from "@opencode/plugin/effect/plugin"
+import { Form } from "@opencode/schema/form"
+import { AppProcess } from "@opencode/util/process"
 import { App } from "../../app.js"
 import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
@@ -80,13 +80,13 @@ export const AzurePlugin = define({
         ])
       })
 
-    yield* ctx.integration.transform((draft) => {
-      draft.method.update({
+    yield* ctx.integration.transform((editor) => {
+      editor.method.update({
         integrationID: Provider.ID.azure,
         method: { type: "key", label: "API key", form: form() },
       })
       if (!available) return
-      draft.method.update({
+      editor.method.update({
         integrationID: Provider.ID.azure,
         method: {
           id: methodID,

@@ -135,6 +135,7 @@ export const dict = {
   "command.language.cycle": "စက်ဝိုင်းဘာသာစကား",
   "command.language.set": "ဘာသာစကားကို အသုံးပြုပါ- {{language}}",
   "command.session.new": "စက်ရှင်အသစ်",
+  "command.session.import": "စက်ရှင် တင်သွင်းရန်",
   "command.file.open": "ဖိုင်ကိုဖွင့်ပါ။",
   "command.tab.close": "တဘ်ကို ပိတ်ပါ။",
   "command.tab.reopenClosed": "ပိတ်ထားသော တက်ဘ်ကို ပြန်ဖွင့်ပါ။",

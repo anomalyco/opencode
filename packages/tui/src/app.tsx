@@ -1,9 +1,9 @@
 import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { Effect, Latch } from "effect"
-import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
-import { OpenCode, type SessionInfo } from "@opencode-ai/client"
-import { Global } from "@opencode-ai/util/global"
+import { Service, type Endpoint } from "@opencode/client/effect/service"
+import { OpenCode, type SessionInfo } from "@opencode/client"
+import { Global } from "@opencode/util/global"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { LogProvider, useLog, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
@@ -80,14 +80,15 @@ import { PromptHistoryProvider } from "./prompt/history"
 import { FrecencyProvider } from "./prompt/frecency"
 import { PromptStashProvider } from "./prompt/stash"
 import { Toast, ToastProvider, useToast } from "./ui/toast"
-import { isFallbackTitle } from "@opencode-ai/util/session-title-fallback"
+import { isFallbackTitle } from "@opencode/util/session-title-fallback"
 import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
 import { newSessionLocation } from "./config/new-session-location"
-import { PluginProvider, usePlugin, type PackageResolver } from "./plugin/context"
+import { UpdateNotificationProvider, useUpdateNotification, type UpdateSource } from "./context/update-notification"
+import { PluginProvider, usePlugin, type PackageSource } from "./plugin/context"
 import { localPluginDirectories } from "./plugin/discovery"
 import { PluginRoute, Slot } from "./plugin/render"
 import { CommandPaletteDialog } from "./component/command-palette"
@@ -99,6 +100,7 @@ import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
 import { StorageProvider, useStorage } from "./context/storage"
 import { SessionTerminalsProvider } from "./context/session-terminals"
+import { PanelProvider, usePanel } from "./context/panel"
 import { SessionFrame } from "./component/session-frame"
 import { createTuiClipboard } from "./clipboard"
 
@@ -153,6 +155,7 @@ const appBindingCommands = [
   "provider.connect",
   "opencode.settings",
   "opencode.status",
+  "opencode.update",
   "server.pair",
   "service.restart",
   "opencode.debug",
@@ -184,7 +187,8 @@ export type TuiInput = {
   }
   args: Args
   config: Config.Interface
-  packages: PackageResolver
+  updater?: UpdateSource
+  packages: PackageSource
   environment?: Readonly<Record<string, string>>
   terminalHandoff?: () => Promise<
     | {
@@ -247,7 +251,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
           )
         }
         if (process.env.OPENCODE_DRIVE) {
-          const { Drive } = yield* Effect.promise(() => import("@opencode-ai/simulation/frontend"))
+          const { Drive } = yield* Effect.promise(() => import("@opencode/simulation/frontend"))
           return yield* Drive.create(options, input.app.version)
         }
         return yield* Effect.acquireRelease(
@@ -392,21 +396,27 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                     <PromptRefProvider>
                                                                       <EditorContextProvider>
                                                                         <AttentionProvider>
-                                                                          <PluginProvider
-                                                                            packages={input.packages}
-                                                                            directories={pluginDirectories}
+                                                                          <UpdateNotificationProvider
+                                                                            updater={input.updater}
                                                                           >
-                                                                            <App
-                                                                              pair={
-                                                                                input.server.endpoint.auth
-                                                                                  ? input.server.endpoint.auth
-                                                                                  : {
-                                                                                      username: "opencode",
-                                                                                      password: "",
-                                                                                    }
-                                                                              }
-                                                                            />
-                                                                          </PluginProvider>
+                                                                            <PanelProvider>
+                                                                              <PluginProvider
+                                                                                packages={input.packages}
+                                                                                directories={pluginDirectories}
+                                                                              >
+                                                                                <App
+                                                                                  pair={
+                                                                                    input.server.endpoint.auth
+                                                                                      ? input.server.endpoint.auth
+                                                                                      : {
+                                                                                          username: "opencode",
+                                                                                          password: "",
+                                                                                        }
+                                                                                  }
+                                                                                />
+                                                                              </PluginProvider>
+                                                                            </PanelProvider>
+                                                                          </UpdateNotificationProvider>
                                                                         </AttentionProvider>
                                                                       </EditorContextProvider>
                                                                     </PromptRefProvider>
@@ -468,10 +478,12 @@ function App(props: { pair?: DialogPairCredentials }) {
   const dialog = useDialog()
   const local = useLocal()
   const sessionTabs = useSessionTabs()
+  const panels = usePanel()
   const keymap = Keymap.use()
   const event = useEvent()
   const client = useClient()
   const toast = useToast()
+  const updater = useUpdateNotification()
   const theme = useTheme()
   const { mode, supports, setMode, locked, lock, unlock } = useThemes()
   const data = useData()
@@ -567,9 +579,22 @@ function App(props: { pair?: DialogPairCredentials }) {
   const terminalTitleEnabled = () => config.data.terminal?.title ?? true
   const pasteSummaryEnabled = () => config.data.prompt?.paste !== "full"
   const tabsVertical = () =>
-    config.data.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width, tabsResize.preferredSize())
-  const tabsVisible = () => sessionTabs.enabled() && sessionTabs.tabs().length > 0 && route.data.type !== "plugin"
+    config.data.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width, tabsResize.size())
+  const tabsAvailable = () => sessionTabs.enabled() && sessionTabs.tabs().length > 0 && route.data.type !== "plugin"
+  const fullscreenPanel = () =>
+    route.data.type === "session" &&
+    panels.current()?.sessionID === route.data.sessionID &&
+    panels.presentation() === "fullscreen"
+  const tabsVisible = () => tabsAvailable() && !fullscreenPanel()
   const verticalTabsVisible = () => tabsVisible() && tabsVertical()
+
+  // Measure the prospective split layout, even while full-screen hides the tabs.
+  createEffect(() => panels.setWidth(dimensions().width - (tabsAvailable() && tabsVertical() ? tabsResize.size() : 0)))
+  createEffect(() => {
+    const current = panels.current()
+    if (!current || (route.data.type === "session" && route.data.sessionID === current.sessionID)) return
+    panels.close()
+  })
 
   createEffect(() => {
     renderer.useMouse = config.data.mouse
@@ -697,6 +722,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         slash: { name: "new", aliases: ["clear"] },
         run: () => {
           const model = local.model.current()
+          const agent = local.agent.current()
           const current =
             route.data.type === "session"
               ? (data.session.get(route.data.sessionID)?.location ?? location.ref)
@@ -710,6 +736,7 @@ function App(props: { pair?: DialogPairCredentials }) {
               location.error?.location,
             ),
           })
+          if (agent) local.agent.set(agent.id)
           if (model) local.model.set(model)
           dialog.clear()
         },
@@ -930,6 +957,17 @@ function App(props: { pair?: DialogPairCredentials }) {
         },
         category: "System",
       },
+      ...(updater.open
+        ? [
+            {
+              name: "opencode.update",
+              title: "Update OpenCode",
+              slash: { name: "update" },
+              run: () => updater.open?.("manual"),
+              category: "System",
+            },
+          ]
+        : []),
       {
         name: "server.pair",
         title: "Pair device",

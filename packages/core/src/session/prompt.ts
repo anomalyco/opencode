@@ -1,17 +1,18 @@
 export * as SessionPrompt from "./prompt.js"
 
-import { Base64, FileAttachment, Prompt } from "@opencode-ai/schema/prompt"
-import { PromptInput } from "@opencode-ai/schema/prompt-input"
-import { SessionInbox } from "@opencode-ai/schema/session-inbox"
-import type { Session } from "@opencode-ai/schema/session"
-import type { SessionMessage } from "@opencode-ai/schema/session-message"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Base64, FileAttachment, Prompt } from "@opencode/schema/prompt"
+import { PromptInput } from "@opencode/schema/prompt-input"
+import { SessionInbox } from "@opencode/schema/session-inbox"
+import type { Session } from "@opencode/schema/session"
+import type { SessionMessage } from "@opencode/schema/session-message"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Effect } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
 import { Image } from "../image.js"
 import { Instance } from "../instance/service.js"
 import { Mime } from "../mime.js"
+import { Plugin } from "../plugin/service.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { Skill } from "../skill.js"
 import { AttachmentError, SkillNotFoundError } from "./error.js"
@@ -34,6 +35,7 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
   const instances = yield* Instance.Service
 
   return yield* Effect.gen(function* () {
+    yield* Plugin.awaitActivation
     const hooks = yield* PluginHooks.Service
     const event = yield* hooks.trigger("session", "prompt", {
       sessionID: request.session.id,

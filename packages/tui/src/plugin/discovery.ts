@@ -1,9 +1,7 @@
 import { readdir, stat } from "node:fs/promises"
 import path from "node:path"
-import { fileURLToPath, pathToFileURL } from "node:url"
+export { localSource } from "@opencode/plugin/source"
 import { isMissingPath, localProjectDirectory, projectConfigDirectories } from "../util/config-directories"
-
-const extensions = [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".cts", ".cjs"]
 
 export async function localPluginDirectories(cwd: string, configDirectory: string) {
   const projectDirectory = await localProjectDirectory(cwd)
@@ -21,7 +19,7 @@ export async function localPluginDirectories(cwd: string, configDirectory: strin
   return directories.filter((_, index) => exists[index]).map((directory) => path.join(directory, "plugins"))
 }
 
-export async function discoverTuiPlugins(directories: string[]) {
+export async function discoverPluginTargets(directories: string[]) {
   return (
     await Promise.all(
       directories.map(async (directory) => {
@@ -43,37 +41,11 @@ export async function discoverTuiPlugins(directories: string[]) {
                     (error) => (isMissingPath(error) ? false : Promise.reject(error)),
                   ))
                 if (!isDirectory) return undefined
-                return tuiEntrypoint(plugin)
+                return plugin
               }),
           )
         ).filter((entry): entry is string => entry !== undefined)
       }),
     )
   ).flat()
-}
-
-export async function tuiEntrypoint(directory: string) {
-  const files = await readdir(directory, { withFileTypes: true })
-  const names = new Set(files.filter((file) => file.isFile() || file.isSymbolicLink()).map((file) => file.name))
-  if (!extensions.some((extension) => names.has("index" + extension))) return undefined
-  const tui = extensions.find((extension) => names.has("tui" + extension))
-  return tui ? path.join(directory, "tui" + tui) : undefined
-}
-
-export function localSource(spec: string, directory: string) {
-  if (spec.startsWith("file://")) return new URL(spec)
-  if (spec.startsWith("./") || spec.startsWith("../") || path.isAbsolute(spec))
-    return pathToFileURL(path.resolve(directory, spec))
-  return undefined
-}
-
-// Key local plugin imports by a numeric source version so edited sources
-// re-import fresh instead of hitting the ESM cache. Bun ignores query params
-// when caching file:// URL imports, so bust with a plain path there; Node keys
-// its cache on the full URL. Fractional versions break Bun's runtime JSX/solid
-// plugin hooks, so always truncate them.
-export function freshSpecifier(entrypoint: string, sourceVersion: number) {
-  const version = Math.trunc(sourceVersion)
-  if (typeof Bun !== "undefined") return `${fileURLToPath(entrypoint).replaceAll("\\", "/")}?mtime=${version}`
-  return `${entrypoint}?mtime=${version}`
 }

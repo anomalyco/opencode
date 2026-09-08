@@ -3,13 +3,13 @@ import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Deferred, Effect, Fiber, Layer } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { Git } from "@opencode-ai/core/git"
-import { Global } from "@opencode-ai/util/global"
-import { Location } from "@opencode-ai/core/location"
-import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
-import { Snapshot } from "@opencode-ai/core/snapshot"
-import { Hash } from "@opencode-ai/util/hash"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Git } from "@opencode/core/git"
+import { Global } from "@opencode/util/global"
+import { Location } from "@opencode/core/location"
+import { AbsolutePath, RelativePath } from "@opencode/core/schema"
+import { Snapshot } from "@opencode/core/snapshot"
+import { Hash } from "@opencode/util/hash"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -166,7 +166,7 @@ describe("Snapshot", () => {
 
           yield* Effect.gen(function* () {
             const snapshot = yield* Snapshot.Service
-            const registration = yield* snapshot.transform((draft) => draft.configure(false))
+            const registration = yield* snapshot.transform((editor) => editor.configure(false))
             expect(yield* snapshot.capture()).toBeUndefined()
 
             yield* registration.dispose

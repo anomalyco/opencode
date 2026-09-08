@@ -1,5 +1,5 @@
-import { checksum } from "@opencode-ai/util/encode"
-import { parseSmallMarkdown } from "@opencode-ai/ui/context/marked-base"
+import { checksum } from "@opencode/util/encode"
+import { parseSmallMarkdown } from "@opencode/ui/context/marked-base"
 import DOMPurify from "dompurify"
 import { MarkdownWorkerDisposedError, parseMarkdown } from "./markdown-worker"
 import { localImagePath } from "./markdown-image"

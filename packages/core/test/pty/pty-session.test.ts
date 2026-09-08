@@ -1,13 +1,13 @@
 import { describe, expect } from "bun:test"
 import { Cause, Deferred, Effect, Exit, Layer, Queue } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
-import { Location } from "@opencode-ai/core/location"
-import { Pty } from "@opencode-ai/core/pty"
-import { PtyID } from "@opencode-ai/core/pty/schema"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { ShellSelect } from "@opencode-ai/core/shell/select"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { Location } from "@opencode/core/location"
+import { Pty } from "@opencode/core/pty"
+import { PtyID } from "@opencode/core/pty/schema"
+import { AbsolutePath } from "@opencode/core/schema"
+import { ShellSelect } from "@opencode/core/shell/select"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 
@@ -212,7 +212,7 @@ describe("pty create defaults", () => {
       if (!configuredShell) return
       const pty = yield* Pty.Service
       const shell = yield* ShellSelect.Service
-      yield* shell.transform((draft) => draft.configure(configuredShell))
+      yield* shell.transform((editor) => editor.configure(configuredShell))
       const info = yield* Effect.acquireRelease(pty.create({ title: "configured" }), (created) =>
         pty.remove(created.id).pipe(Effect.ignore),
       )

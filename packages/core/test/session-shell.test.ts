@@ -1,21 +1,25 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, setDefaultTimeout } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Schedule, Stream } from "effect"
-import { Bus } from "@opencode-ai/core/bus"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { Location } from "@opencode-ai/core/location"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Session } from "@opencode-ai/core/session"
-import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
-import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
-import { Shell } from "@opencode-ai/core/shell"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Location } from "@opencode/core/location"
+import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Session } from "@opencode/core/session"
+import { SessionEvent } from "@opencode/core/session/event"
+import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionRunCoordinator } from "@opencode/core/session/run-coordinator"
+import { Shell } from "@opencode/core/shell"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { location } from "./fixture/location"
+import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
+
+// Every test boots a real Location, so shell start waits for cold plugin activation before spawning.
+setDefaultTimeout(15_000)
 
 class ExecutionControl extends Context.Service<
   ExecutionControl,
@@ -56,6 +60,7 @@ const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Bus.node, Session.node, SessionExecution.node, LocationServiceMap.node]), [
     Bus.node.replace(Bus.configured({ persist: true })),
     SessionExecution.node.replace(executionLayer.pipe(Layer.provide(controlLayer))),
+    offlineModels,
   ]).pipe(Layer.provideMerge(controlLayer)),
 )
 

@@ -1,12 +1,12 @@
-import { AISDK } from "@opencode-ai/core/aisdk"
+import { AISDK } from "@opencode/core/aisdk"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Model } from "@opencode-ai/core/model"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { Npm } from "@opencode-ai/util/npm"
-import { SapAICorePlugin } from "@opencode-ai/core/plugin/provider/sap-ai-core"
-import { Provider } from "@opencode-ai/core/provider"
+import { Model } from "@opencode/core/model"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { Npm } from "@opencode/util/npm"
+import { SapAICorePlugin } from "@opencode/core/plugin/provider/sap-ai-core"
+import { Provider } from "@opencode/core/provider"
 import { withEnv } from "../fixture/env"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -14,10 +14,10 @@ import { PluginTestLayer } from "./fixture"
 const fixtureProvider = new URL("./fixtures/provider-factory.ts", import.meta.url).href
 const it = testEffect(PluginTestLayer)
 const npm = Npm.Service.of({
-  add: () => Effect.succeed({ directory: "", entrypoint: undefined }),
-  resolve: () => Effect.succeed({ directory: "", entrypoint: undefined }),
+  add: (name) => Effect.succeed({ directory: "", name }),
+  resolve: (name) => Effect.succeed({ directory: "", name }),
   check: () => Effect.succeed(false),
-  update: () => Effect.succeed({ directory: "", entrypoint: undefined }),
+  update: (name) => Effect.succeed({ directory: "", name }),
   which: () => Effect.undefined,
 })
 

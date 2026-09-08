@@ -1,7 +1,7 @@
 export * as SessionRestart from "./restart.js"
 
 import { Context, Effect, Layer } from "effect"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "../../bus.js"
 import { Job } from "../../job.js"
 import { Session } from "../../session.js"
@@ -176,13 +176,7 @@ export const layer = (options?: Options) =>
                 (message) =>
                   message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
               )
-              if (assistant?.type !== "assistant") return "Subagent completed without a text response."
-              return (
-                assistant.content
-                  .filter((part) => part.type === "text")
-                  .map((part) => part.text)
-                  .join("") || "Subagent completed without a text response."
-              )
+              return SubagentCompletion.text(assistant)
             }),
           ),
         })

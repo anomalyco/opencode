@@ -1,7 +1,7 @@
-import type { FileDiffInfo } from "@opencode-ai/client/promise"
-import type { SessionReviewLineComment } from "@opencode-ai/session-ui/session-review"
-import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
-import { checksum } from "@opencode-ai/util/encode"
+import type { FileDiffInfo } from "@opencode/client/promise"
+import type { SessionReviewLineComment } from "@opencode/session-ui/session-review"
+import { previewSelectedLines } from "@opencode/session-ui/pierre/selection-bridge"
+import { checksum } from "@opencode/util/encode"
 import { createQuery, skipToken, useQueryClient } from "@tanstack/solid-query"
 import { debounce } from "@solid-primitives/scheduled"
 import { createEffect, createMemo, on, onCleanup, type Accessor } from "solid-js"
@@ -55,9 +55,9 @@ export function createSessionReview(input: {
   const options = createMemo<ChangeMode[]>(() => {
     const list: ChangeMode[] = []
     const project = input.session.project()
-    if (project?.vcs === "git") list.push("git")
+    if (project?.vcs) list.push("git")
     if (
-      project?.vcs === "git" &&
+      project?.vcs &&
       vcs()?.branch.current &&
       vcs()?.branch.default &&
       vcs()?.branch.current !== vcs()?.branch.default
@@ -94,7 +94,7 @@ export function createSessionReview(input: {
     const value = vcsMode()
     return {
       queryKey: [...vcsKey(), value] as const,
-      enabled: server.connection.status() === "connected" && wantsReview() && input.session.project()?.vcs === "git",
+      enabled: server.connection.status() === "connected" && wantsReview() && !!input.session.project()?.vcs,
       refetchOnMount: "always" as const,
       refetchOnWindowFocus: true,
       queryFn: value
@@ -110,7 +110,7 @@ export function createSessionReview(input: {
   })
   const detailsQuery = createQuery(() => ({
     queryKey: [server.scope, "session-details", input.session.workspace.directory()] as const,
-    enabled: state.detailsOpen && server.connection.status() === "connected" && input.session.project()?.vcs === "git",
+    enabled: state.detailsOpen && server.connection.status() === "connected" && !!input.session.project()?.vcs,
     queryFn: () =>
       server.api.vcs
         .diff({ location: { directory: input.session.workspace.directory() }, mode: "working" })
@@ -413,7 +413,7 @@ export function createSessionReview(input: {
       tab: () => state.mobileTab,
     },
     mode,
-    noGit: createMemo(() => !!input.session.project() && input.session.project()?.vcs !== "git"),
+    noGit: createMemo(() => !!input.session.project() && !input.session.project()?.vcs),
     open,
     openFile,
     options,

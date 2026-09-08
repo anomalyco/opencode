@@ -1,10 +1,10 @@
-export { CallID, Error } from "@opencode-ai/schema/tool"
-export type { Metadata, Options, Result } from "@opencode-ai/schema/tool"
+export { CallID, Error } from "@opencode/schema/tool"
+export type { Metadata, Options, Result } from "@opencode/schema/tool"
 
-import { Tool } from "@opencode-ai/schema/tool"
-import type { Agent } from "@opencode-ai/schema/agent"
-import type { Session } from "@opencode-ai/schema/session"
-import type { SessionMessage } from "@opencode-ai/schema/session-message"
+import { Tool } from "@opencode/schema/tool"
+import type { Agent } from "@opencode/schema/agent"
+import type { Session } from "@opencode/schema/session"
+import type { SessionMessage } from "@opencode/schema/session-message"
 import type { Types } from "effect"
 import type { Hooks, Transform } from "./registration.js"
 
@@ -22,7 +22,7 @@ export type Info<
   ) => Promise<Tool.Result<Output>>
 }
 
-interface ToolDraft {
+export interface ToolEditor {
   list(): readonly (Info & { readonly id: string })[]
   get(id: string): (Info & { readonly id: string }) | undefined
   namespace(namespace: Tool.Namespace): void
@@ -63,7 +63,7 @@ interface ToolHooks {
 }
 
 export interface ToolDomain {
-  readonly transform: Transform<ToolDraft>
+  readonly transform: Transform<ToolEditor>
   readonly reload: () => Promise<void>
   readonly hook: Hooks<ToolHooks>
 }

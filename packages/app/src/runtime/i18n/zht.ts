@@ -149,6 +149,7 @@ export const dict = {
   "command.language.set": "使用語言: {{language}}",
 
   "command.session.new": "新增工作階段",
+  "command.session.import": "匯入工作階段",
   "command.file.open": "開啟檔案",
   "command.tab.close": "關閉分頁",
   "command.tab.reopenClosed": "重新開啟已關閉的分頁",

@@ -2,20 +2,20 @@ import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Fiber, Schema, Stream } from "effect"
-import { Agent } from "@opencode-ai/core/agent"
-import { Bus } from "@opencode-ai/core/bus"
-import { Config } from "@opencode-ai/core/config"
-import { Directory, Document, Info } from "@opencode-ai/schema/config"
-import { ConfigAgentPlugin } from "@opencode-ai/core/config/plugin/agent"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Global } from "@opencode-ai/util/global"
-import { Permission } from "@opencode-ai/core/permission"
-import { AgentPlugin } from "@opencode-ai/core/plugin/agent"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { ConfigMigrateV1 } from "@opencode-ai/core/v1/config/migrate"
-import { ConfigAgentV1 } from "@opencode-ai/core/v1/config/agent"
+import { Agent } from "@opencode/core/agent"
+import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
+import { Directory, Document, Event, Info } from "@opencode/schema/config"
+import { ConfigAgentPlugin } from "@opencode/core/config/plugin/agent"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
+import { Permission } from "@opencode/core/permission"
+import { AgentPlugin } from "@opencode/core/plugin/agent"
+import { AbsolutePath } from "@opencode/core/schema"
+import { ConfigMigrateV1 } from "@opencode/core/v1/config/migrate"
+import { ConfigAgentV1 } from "@opencode/core/v1/config/agent"
 import { advance, drain } from "../lib/clock"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
@@ -499,6 +499,30 @@ Use native v2 fields.`,
         }).pipe(Effect.provide(Config.testLayer([directoryEntry(tmp.path)]))),
       ),
     ),
+  )
+
+  it.effect("rebuilds on a config update published immediately after startup", () =>
+    Effect.gen(function* () {
+      const agents = yield* Agent.Service
+      const bus = yield* Bus.Service
+      let reloads = 0
+      // No directory entries, so startup has no filesystem hop that could hide a late subscription.
+      yield* ConfigAgentPlugin.Plugin.effect(
+        host({
+          agent: {
+            ...agentHost(agents),
+            reload: () => agents.reload().pipe(Effect.tap(() => Effect.sync(() => reloads++))),
+          },
+          event: { subscribe: () => bus.subscribe(Event.Updated) },
+        }),
+      )
+
+      // Published in the same fiber step as startup: the subscription must
+      // already be open when the plugin effect returns.
+      yield* bus.publish(Event.Updated, {})
+      yield* advance(() => reloads >= 1)
+      expect(reloads).toBe(1)
+    }).pipe(Effect.provide(Config.testLayer([]))),
   )
 
   it.effect("ignores updates outside agent source directories", () =>

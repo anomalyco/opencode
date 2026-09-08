@@ -8,7 +8,7 @@ The Effect plugin API grants plugins two in-process capabilities:
 ## Defining A Plugin
 
 ```ts
-import { Plugin } from "@opencode-ai/plugin/effect"
+import { Plugin } from "@opencode/plugin/effect"
 import { Effect } from "effect"
 
 export default Plugin.define({
@@ -31,7 +31,7 @@ Registrations are owned by the plugin scope. Closing the scope removes them auto
 
 ## Transform Hooks
 
-Transform hooks contribute to stateful domains. Their draft callbacks are
+Transform hooks contribute to stateful domains. Their editor callbacks are
 synchronous, so load effectful data before registering a transform or reloading
 its domain:
 

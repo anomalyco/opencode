@@ -17,7 +17,7 @@ There are three values to compose:
 
 ```ts
 import { Context, Effect, Layer } from "effect"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 
 class Database extends Context.Service<Database, { readonly name: string }>()("example/Database") {}
 class Users extends Context.Service<Users, { readonly name: string }>()("example/Users") {}

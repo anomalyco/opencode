@@ -1,6 +1,6 @@
 export * as AISDK from "./aisdk.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { APICallError } from "@ai-sdk/provider"
 import type {
   JSONSchema7,
@@ -29,9 +29,9 @@ import {
   type LLMRequest,
   type ToolDefinition,
   type UsageInput,
-} from "@opencode-ai/ai"
-import { Auth, Endpoint, RequestExecutor, type AnyRoute } from "@opencode-ai/ai/route"
-import { ProviderShared } from "@opencode-ai/ai/protocols/shared"
+} from "@opencode/ai"
+import { Auth, Endpoint, RequestExecutor, type AnyRoute } from "@opencode/ai/route"
+import { ProviderShared } from "@opencode/ai/protocols/shared"
 import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream } from "effect"
 import { makeParser } from "effect/unstable/encoding/Sse"
 import type { ID, Info } from "./model.js"
@@ -416,8 +416,9 @@ function callOptions(
   modelID: ID,
   optionKey: string,
 ): LanguageModelV3CallOptions {
+  const flattened = ProviderShared.flattenToolRequest(request)
   return {
-    prompt: prompt(request),
+    prompt: prompt(flattened.request),
     maxOutputTokens: request.generation?.maxTokens,
     temperature: request.generation?.temperature,
     stopSequences: request.generation?.stop === undefined ? undefined : [...request.generation.stop],
@@ -426,7 +427,7 @@ function callOptions(
     presencePenalty: request.generation?.presencePenalty,
     frequencyPenalty: request.generation?.frequencyPenalty,
     seed: request.generation?.seed,
-    tools: request.tools.map(tool),
+    tools: flattened.tools.map(tool),
     toolChoice: toolChoice(request.toolChoice),
     headers: request.http?.headers,
     providerOptions: requestProviderOptions(request.providerOptions, packageName, modelID, optionKey),
@@ -522,7 +523,11 @@ function userPart(part: ContentPart): UserContent {
 function assistantPart(part: ContentPart): AssistantContent {
   switch (part.type) {
     case "compaction":
-      throw ProviderShared.invalidRequest("AI SDK routes cannot replay native provider compaction state")
+      throw ProviderShared.unsupportedOperation({
+        operation: "compaction-replay",
+        provider: part.provider,
+        message: "AI SDK routes cannot replay native provider compaction state",
+      })
     case "text":
       return [{ type: "text", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "media":

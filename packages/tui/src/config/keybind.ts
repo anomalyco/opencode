@@ -46,6 +46,7 @@ export const Definitions = {
   leader: keybind(LeaderDefault, "Leader key for keybind combinations"),
 
   "app.exit": keybind("ctrl+c,ctrl+d,<leader>q", "Exit the application"),
+  "app.clear": keybind("ctrl+l", "Clear the screen in mini"),
   "app.debug": keybind("none", "Toggle debug panel"),
   "app.console": keybind("none", "Toggle console"),
   "app.scrap": keybind("none", "Open scrap screen"),
@@ -93,7 +94,7 @@ export const Definitions = {
   "theme.mode.lock": keybind("none", "Lock or unlock theme mode"),
   "session.sidebar.toggle": keybind("<leader>b", "Toggle sidebar"),
   "pane.focus.left": keybind("<leader>left", "Focus session pane"),
-  "pane.focus.right": keybind("<leader>right", "Focus terminal pane"),
+  "pane.focus.right": keybind("<leader>right", "Focus right pane"),
   "terminal.select": keybind("<leader>down", "Select terminal"),
   "terminal.toggle": keybind("<leader>t", "Toggle terminal pane"),
   "terminal.close": keybind("<leader>up", "Close terminal pane"),
@@ -103,6 +104,7 @@ export const Definitions = {
 
   "session.export": keybind("<leader>x", "Export session to editor"),
   "session.copy": keybind("none", "Copy session transcript"),
+  "session.copy.id": keybind("none", "Copy session ID"),
   "session.move": keybind("none", "Move session"),
   "session.new": keybind("<leader>n", "Create a new session"),
   "session.list": keybind("<leader>l", "List all sessions"),
@@ -243,6 +245,7 @@ export const Definitions = {
   "composer.subagent.interrupt": keybind("ctrl+d", "Interrupt subagent"),
   "composer.shell.up": keybind("up", "Previous shell"),
   "composer.shell.down": keybind("down", "Next shell"),
+  "composer.shell.select": keybind("return", "View shell output"),
   "composer.shell.kill": keybind("ctrl+d", "Kill shell command"),
   "composer.terminal.up": keybind("up,k", "Previous terminal"),
   "composer.terminal.down": keybind("down,j", "Next terminal"),
@@ -272,6 +275,7 @@ export const Definitions = {
   "dialog.mcp.toggle": keybind("space", "Toggle MCP server"),
   "dialog.plugins.install": keybind("shift+i", "Install plugin from plugin dialog"),
   "dialog.plugins.update": keybind("ctrl+u", "Update plugin from plugin dialog"),
+  "dialog.plugins.check": keybind("ctrl+r", "Check for plugin updates from plugin dialog"),
 
   "terminal.suspend": keybind("ctrl+z", "Suspend terminal"),
   "terminal.title.toggle": keybind("none", "Toggle terminal title"),

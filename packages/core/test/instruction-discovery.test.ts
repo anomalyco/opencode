@@ -2,16 +2,16 @@ import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import fs from "fs/promises"
 import path from "path"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { Bus } from "@opencode-ai/core/bus"
-import { ConfigInstructionPlugin } from "@opencode-ai/core/config/plugin/instruction"
-import { Watcher } from "@opencode-ai/core/filesystem/watcher"
-import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
-import { Location } from "@opencode-ai/core/location"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Global } from "@opencode-ai/util/global"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Bus } from "@opencode/core/bus"
+import { ConfigInstructionPlugin } from "@opencode/core/config/plugin/instruction"
+import { Watcher } from "@opencode/core/filesystem/watcher"
+import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
+import { Location } from "@opencode/core/location"
+import { AbsolutePath } from "@opencode/core/schema"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { tempGlobalLayer } from "./fixture/global"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
@@ -79,15 +79,15 @@ describe("InstructionDiscovery", () => {
   it.effect("stores ordered values with last-write-wins precedence", () =>
     Effect.gen(function* () {
       const discovery = yield* InstructionDiscovery.Service
-      yield* discovery.transform((draft) => {
-        draft.add(file("/repo/AGENTS.md", "first"))
-        draft.add(file("/repo/packages/AGENTS.md", "package"))
-        draft.add(file("/repo/AGENTS.md", "last"))
-        draft.update("/repo/packages/AGENTS.md", (current) => {
+      yield* discovery.transform((editor) => {
+        editor.add(file("/repo/AGENTS.md", "first"))
+        editor.add(file("/repo/packages/AGENTS.md", "package"))
+        editor.add(file("/repo/AGENTS.md", "last"))
+        editor.update("/repo/packages/AGENTS.md", (current) => {
           current.content = "updated"
           current.path = AbsolutePath.make("/ignored")
         })
-        draft.remove("/missing")
+        editor.remove("/missing")
       })
 
       expect(yield* discovery.list()).toEqual([
@@ -100,7 +100,7 @@ describe("InstructionDiscovery", () => {
   it.effect("preserves admitted values while the source is unavailable", () =>
     Effect.gen(function* () {
       const discovery = yield* InstructionDiscovery.Service
-      yield* discovery.transform((draft) => draft.unavailable())
+      yield* discovery.transform((editor) => editor.unavailable())
       expect(
         (yield* readUpdate(
           yield* discovery.load(),
@@ -113,16 +113,16 @@ describe("InstructionDiscovery", () => {
   it.effect("renders granular instruction updates", () =>
     Effect.gen(function* () {
       const discovery = yield* InstructionDiscovery.Service
-      yield* discovery.transform((draft) => {
-        draft.add(file("/global/AGENTS.md", "global"))
-        draft.add(
+      yield* discovery.transform((editor) => {
+        editor.add(file("/global/AGENTS.md", "global"))
+        editor.add(
           file("/repo/AGENTS.md", ["old", ...Array.from({ length: 20 }, (_, index) => `keep ${index}`)].join("\n")),
         )
       })
       const initial = yield* readInitial(yield* discovery.load())
 
-      yield* discovery.transform((draft) => {
-        draft.update("/repo/AGENTS.md", (current) => {
+      yield* discovery.transform((editor) => {
+        editor.update("/repo/AGENTS.md", (current) => {
           current.content = ["new", ...Array.from({ length: 20 }, (_, index) => `keep ${index}`)].join("\n")
         })
       })
@@ -134,9 +134,9 @@ describe("InstructionDiscovery", () => {
       const rewritten = state({
         "core/instructions": [{ path: "/repo/AGENTS.md", content: "old one\nold two\nold three\nold four" }],
       })
-      yield* discovery.transform((draft) => {
-        draft.remove("/global/AGENTS.md")
-        draft.update("/repo/AGENTS.md", (current) => {
+      yield* discovery.transform((editor) => {
+        editor.remove("/global/AGENTS.md")
+        editor.update("/repo/AGENTS.md", (current) => {
           current.content = "new"
         })
       })
@@ -144,8 +144,8 @@ describe("InstructionDiscovery", () => {
         "The instructions changed:\nInstructions from: /repo/AGENTS.md\nnew",
       )
 
-      yield* discovery.transform((draft) => {
-        draft.add(file("/repo/packages/AGENTS.md", "package"))
+      yield* discovery.transform((editor) => {
+        editor.add(file("/repo/packages/AGENTS.md", "package"))
       })
       const structural = (yield* readUpdate(yield* discovery.load(), initial)).text
       expect(structural).toContain("The instructions from /global/AGENTS.md no longer apply.")

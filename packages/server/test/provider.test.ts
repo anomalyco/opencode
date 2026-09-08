@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
-import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
-import { Plugin } from "@opencode-ai/plugin/effect"
+import { SdkPlugins } from "@opencode/core/plugin/sdk"
+import { Plugin } from "@opencode/plugin/effect"
 import { Context, Deferred, Effect, Fiber, Layer } from "effect"
 import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
@@ -27,7 +27,7 @@ it.live(
               providers: {
                 custom: {
                   name: "Configured Custom Provider",
-                  package: "@opencode-ai/ai/providers/openai-compatible",
+                  package: "@opencode/ai/providers/openai-compatible",
                   settings: { apiKey: "secret" },
                   models: { chat: {} },
                 },
@@ -86,7 +86,7 @@ it.live(
         id: "custom",
         name: "Configured Custom Provider",
         activation: "enabled",
-        package: "@opencode-ai/ai/providers/openai-compatible",
+        package: "@opencode/ai/providers/openai-compatible",
         settings: { apiKey: "secret" },
       }
       const configuredList = yield* request("GET", "/api/provider").pipe(Effect.timeout("2 seconds"))

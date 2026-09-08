@@ -14,11 +14,11 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useCommand } from "@/shell/commands/command"
 import { useTabs } from "@/shell/tabs/tabs"
 import { createTabComposerState } from "@/composer/persistence"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import { showToast } from "@/shell/notifications/toast"
 import { canStartTabDrag, isTabCloseTarget } from "./tab-gesture"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
-import type { SessionInfo } from "@opencode-ai/client/promise"
+import type { SessionInfo } from "@opencode/client/promise"
 
 function SessionTabSlot(props: {
   tab: SessionTab
@@ -171,7 +171,7 @@ function SessionTabEntry(props: {
         preparing={!!pending()}
         fallbackTitle={
           pending()
-            ? language.t("command.session.new")
+            ? language.t("session.tab.session")
             : (persisted()?.title ?? (missingSession() ? language.t("session.tab.unknown") : undefined))
         }
         onRename={rename}
@@ -211,7 +211,7 @@ function DraftTabSlot(props: {
       data-orientation={props.orientation}
       class="relative flex"
       classList={{
-        "w-max min-w-7 max-w-56 shrink-0": props.orientation === "horizontal",
+        "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
         "w-full shrink-0": props.orientation === "vertical",
       }}
     >
@@ -377,7 +377,7 @@ export function TitlebarTabStrip(props: {
                     index={visibleIndex()}
                     active={props.currentTab === tab}
                     orientation={vertical() ? "vertical" : "horizontal"}
-                    title={language.t("command.session.new")}
+                    title={language.t("session.tab.session")}
                     onNavigate={(element) => {
                       ref = element
                       props.onNavigate(tab, element)

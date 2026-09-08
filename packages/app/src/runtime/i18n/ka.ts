@@ -133,6 +133,7 @@ export const dict = {
   "command.language.cycle": "ციკლის ენა",
   "command.language.set": "გამოიყენე ენა: {{language}}",
   "command.session.new": "ახალი სესია",
+  "command.session.import": "სესიის იმპორტი",
   "command.file.open": "გახსენით ფაილი",
   "command.tab.close": "ჩანართის დახურვა",
   "command.tab.reopenClosed": "დახურული ჩანართის ხელახლა გახსნა",

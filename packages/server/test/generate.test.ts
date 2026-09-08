@@ -1,9 +1,9 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import { expect } from "bun:test"
-import { Config } from "@opencode-ai/core/config"
-import { Generate } from "@opencode-ai/core/generate"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { Config } from "@opencode/core/config"
+import { Generate } from "@opencode/core/generate"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Effect, Layer, Predicate } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
@@ -47,6 +47,7 @@ it.live("uses base configuration without depending on process.cwd()", () =>
         database: { path: ":memory:" },
         config: { directory: global },
         fs: { filewatcher: false },
+        models: { fetch: false },
       },
       { overrides: [Generate.node.replace(generate)] },
     )

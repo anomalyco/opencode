@@ -67,7 +67,10 @@ for (const mode of ["hidden", "compact", "full"] as const) {
       await expect(part).toHaveCount(mode === "hidden" ? 0 : 1)
       if (mode === "hidden") return
       const thought = part.locator('[data-slot="collapsible-trigger"]')
-      await expect(thought.locator('[data-slot="basic-tool-tool-title"]')).toContainText("Thought")
+      const thoughtTitle = thought.locator('[data-slot="basic-tool-tool-title"]')
+      await expect(thoughtTitle).toContainText("Thought")
+      await expect(thoughtTitle).toHaveCSS("font-size", "13px")
+      await expect(thoughtTitle).toHaveCSS("line-height", "16px")
       await expect(thought.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText("7s")
       await expect(thought).toHaveAttribute("aria-expanded", String(mode === "full"))
       await expect(thought).not.toContainText("Inspecting stability")

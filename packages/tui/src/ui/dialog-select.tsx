@@ -2,7 +2,7 @@ import { CliRenderEvents, InputRenderable, RGBA, ScrollBoxRenderable, TextAttrib
 import { Keymap, type KeymapCommand } from "../context/keymap"
 import { useTheme, useThemes } from "../context/theme"
 import { entries, filter, flatMap, groupBy, pipe } from "remeda"
-import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
@@ -27,6 +27,7 @@ export interface DialogSelectProps<T> {
   onMove?: (option: DialogSelectOption<T>) => void
   onFilter?: (query: string) => void
   onSelect?: (option: DialogSelectOption<T>) => void
+  onCancel?: () => void
   skipFilter?: boolean
   renderFilter?: boolean
   locked?: boolean
@@ -39,6 +40,7 @@ export interface DialogSelectProps<T> {
   }[]
   bindings?: readonly KeymapCommand[]
   current?: T
+  focusTarget?: T
   focusCurrent?: boolean
   sectionNavigation?: boolean
 }
@@ -93,6 +95,8 @@ export function dialogSelectContentWidth(dialogWidth: number) {
 export type DialogSelectRef<T> = {
   filter: string
   filtered: DialogSelectOption<T>[]
+  selected: DialogSelectOption<T> | undefined
+  setFilter(value: string): void
   moveTo(value: T): void
 }
 
@@ -112,7 +116,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const [store, setStore] = createStore({
     selected: 0,
     filter: "",
-    input: "keyboard" as "keyboard" | "mouse",
   })
   const [focusedAction, setFocusedAction] = createSignal<number>()
   const actionFocused = createMemo(() => focusedAction() !== undefined)
@@ -133,21 +136,23 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   createEffect(
     on(
-      () => props.current,
-      (current) => {
+      [() => props.focusTarget ?? props.current, () => (props.focusTarget === undefined ? undefined : flat())],
+      ([current]) => {
         if (props.focusCurrent === false) return
-        if (current) {
+        if (props.focusTarget !== undefined && (props.preserveSelection || store.filter.length > 0)) return
+        if (current !== undefined) {
           const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
           if (currentIndex >= 0) {
             setStore("selected", currentIndex)
             selection = flat()[currentIndex]
+            scrollAfterLayout(true, current)
           }
         }
       },
     ),
   )
 
-  let input: InputRenderable
+  let input: InputRenderable | undefined
 
   const actions = createMemo(() => props.actions ?? [])
   const shownActions = createMemo(() => actions().filter((item) => !item.hidden))
@@ -201,12 +206,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     return result
   })
 
-  // When the filter changes due to how TUI works, the mousemove might still be triggered
-  // via a synthetic event as the layout moves underneath the cursor. This is a workaround to make sure the input mode remains keyboard
-  // that the mouseover event doesn't trigger when filtering.
   createEffect(() => {
     filtered()
-    setStore("input", "keyboard")
     setFocusedAction(undefined)
   })
 
@@ -247,7 +248,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     on(
       () => props.options,
       () => {
-        if (!props.preserveSelection && (props.current === undefined || props.focusCurrent === false)) {
+        if (
+          !props.preserveSelection &&
+          ((props.focusTarget ?? props.current) === undefined || props.focusCurrent === false)
+        ) {
           const count = flat().length
           if (count === 0) return
           const next = reconcileSelection(store.selected, count)
@@ -262,8 +266,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           return
         }
         if (!selection) {
-          if (props.focusCurrent !== false && props.current !== undefined) {
-            const index = flat().findIndex((option) => isDeepEqual(option.value, props.current))
+          if (props.focusCurrent !== false && (props.focusTarget ?? props.current) !== undefined) {
+            const index = flat().findIndex((option) => isDeepEqual(option.value, props.focusTarget ?? props.current))
             if (index >= 0) {
               setStore("selected", index)
               selection = flat()[index]
@@ -285,7 +289,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           if (!moved) return
           if (
             !props.preserveSelection &&
-            (props.current === undefined || props.focusCurrent === false || store.filter.length > 0)
+            ((props.focusTarget ?? props.current) === undefined ||
+              props.focusCurrent === false ||
+              store.filter.length > 0)
           )
             return
           scrollAfterLayout(false, option.value)
@@ -305,7 +311,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   })
 
   createEffect(
-    on([() => store.filter, () => props.current], ([filter, current]) => {
+    on([() => store.filter, () => props.focusTarget ?? props.current], ([filter, current]) => {
       if (filter.length > 0) resetSelection = true
       if (filter.length > 0) {
         const option = flat()[0]
@@ -314,7 +320,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         scrollAfterLayout(true, option.value)
         return
       }
-      if (!current || props.focusCurrent === false) return
+      if (current === undefined || props.focusCurrent === false) return
       const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
       if (currentIndex < 0) return
       moveTo(currentIndex, true)
@@ -384,7 +390,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   function submit() {
     if (props.locked) return
-    setStore("input", "keyboard")
     const index = focusedAction()
     if (index !== undefined) {
       trigger(actionItems()[index])
@@ -418,7 +423,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           title: "Previous item",
           group: "Dialog",
           run() {
-            setStore("input", "keyboard")
             move(-1)
           },
         },
@@ -427,7 +431,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           title: "Next item",
           group: "Dialog",
           run() {
-            setStore("input", "keyboard")
             move(1)
           },
         },
@@ -436,7 +439,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           title: "Page up",
           group: "Dialog",
           run() {
-            setStore("input", "keyboard")
             move(-10)
           },
         },
@@ -445,7 +447,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           title: "Page down",
           group: "Dialog",
           run() {
-            setStore("input", "keyboard")
             move(10)
           },
         },
@@ -455,7 +456,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           group: "Dialog",
           run() {
             if (props.locked) return
-            setStore("input", "keyboard")
             moveTo(0)
           },
         },
@@ -465,7 +465,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           group: "Dialog",
           run() {
             if (props.locked) return
-            setStore("input", "keyboard")
             moveTo(flat().length - 1)
           },
         },
@@ -498,6 +497,22 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             ]
           : []),
         ...(props.bindings ?? []),
+        ...(props.onCancel
+          ? [
+              {
+                bind: "escape",
+                title: "Back",
+                group: "Dialog",
+                run: () => {
+                  if (renderer.getSelection()) {
+                    renderer.clearSelection()
+                    return
+                  }
+                  props.onCancel?.()
+                },
+              },
+            ]
+          : []),
         ...(props.sectionNavigation
           ? [
               {
@@ -526,19 +541,32 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     get filtered() {
       return filtered()
     },
+    get selected() {
+      return selected()
+    },
+    setFilter(value) {
+      if (input) {
+        input.value = value
+        return
+      }
+      if (value === store.filter) return
+      batch(() => {
+        setStore("filter", value)
+        props.onFilter?.(value)
+      })
+    },
     moveTo(value) {
       const index = flat().findIndex((option) => isDeepEqual(option.value, value))
       if (index >= 0) moveTo(index, true)
     },
   }
-  props.ref?.(ref)
+  onMount(() => props.ref?.(ref))
 
   const left = createMemo(() => visibleActions().filter((item) => item.side !== "right"))
   const right = createMemo(() => visibleActions().filter((item) => item.side === "right"))
 
   function trigger(item: Action | undefined) {
     if (props.locked || !item || isActionDisabled(item)) return
-    setStore("input", "keyboard")
     if (item.selection === "none") {
       item.onTrigger()
       return
@@ -619,7 +647,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               {props.title}
             </text>
           )}
-          <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
+          <text fg={theme.text.subdued} onMouseUp={() => (props.onCancel ?? dialog.clear)()}>
             esc
           </text>
         </box>
@@ -642,8 +670,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                 input.traits = { status: "FILTER" }
                 setTimeout(() => {
                   if (!input) return
-                  if (input.isDestroyed) return
-                  input.focus()
+                  if (r.isDestroyed) return
+                  r.focus()
                 }, 1)
               }}
               placeholder={props.placeholder ?? "Search"}
@@ -709,20 +737,15 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                           position="relative"
                           onMouseMove={() => {
                             if (props.locked) return
-                            setStore("input", "mouse")
                             setFocusedAction(undefined)
+                            const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
+                            if (index === -1 || index === store.selected) return
+                            moveTo(index)
                           }}
                           onMouseUp={() => {
                             if (props.locked) return
                             option.onSelect?.(dialog)
                             props.onSelect?.(option)
-                          }}
-                          onMouseOver={() => {
-                            if (props.locked) return
-                            if (store.input !== "mouse") return
-                            const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
-                            if (index === -1) return
-                            moveTo(index)
                           }}
                           onMouseDown={() => {
                             if (props.locked) return
@@ -792,7 +815,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       </box>
       <Show when={props.footer || visibleActions().length} fallback={<box flexShrink={0} />}>
         <box paddingRight={2} paddingLeft={4} flexDirection="row" justifyContent="space-between" flexShrink={0}>
-          <box flexDirection="row" gap={2}>
+          <box flexDirection={dimensions().width < 60 ? "column" : "row"} gap={dimensions().width < 60 ? 0 : 2}>
             {props.footer}
             <For each={left()}>{(item) => <FooterAction item={item} />}</For>
           </box>

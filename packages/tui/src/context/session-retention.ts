@@ -1,5 +1,5 @@
 import { createEffect, untrack, type Accessor } from "solid-js"
-import type { Data } from "@opencode-ai/client/solid"
+import type { Data } from "@opencode/client/solid"
 
 export function createSessionRetention(input: {
   session: Pick<Data["session"], "list" | "root" | "evict">

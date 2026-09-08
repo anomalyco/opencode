@@ -4,6 +4,7 @@ import {
   ContentPolicyError,
   InvalidProviderOutputError,
   InvalidRequestError,
+  UnsupportedOperationError,
   AIError,
   NoRouteError,
   ModelID,
@@ -15,14 +16,14 @@ import {
   UnknownProviderError,
   ToolFailure,
   HttpContext,
-} from "@opencode-ai/ai"
-import { Permission } from "@opencode-ai/core/permission"
-import { ID } from "@opencode-ai/core/model"
-import { ModelResolver } from "@opencode-ai/core/model-resolver"
-import { Provider } from "@opencode-ai/core/provider"
-import { Tool } from "@opencode-ai/schema/tool"
-import { toSessionError } from "@opencode-ai/core/session/to-session-error"
-import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
+} from "@opencode/ai"
+import { Permission } from "@opencode/core/permission"
+import { ID } from "@opencode/core/model"
+import { ModelResolver } from "@opencode/core/model-resolver"
+import { Provider } from "@opencode/core/provider"
+import { Tool } from "@opencode/schema/tool"
+import { toSessionError } from "@opencode/core/session/to-session-error"
+import { SessionRunnerRetry } from "@opencode/core/session/runner/retry"
 
 const llm = (reason: AIError["reason"]) => new AIError({ reason })
 
@@ -43,6 +44,18 @@ describe("toSessionError", () => {
       "provider.invalid-output",
     )
     expect(toSessionError(llm(new InvalidRequestError({ message: "request" }))).type).toBe("provider.invalid-request")
+    expect(
+      toSessionError(
+        llm(
+          new UnsupportedOperationError({
+            message: "no compact endpoint",
+            operation: "compact",
+            provider: ProviderID.make("provider"),
+            route: "route",
+          }),
+        ),
+      ),
+    ).toEqual({ type: "provider.unsupported-operation", message: "no compact endpoint" })
     expect(
       toSessionError(
         llm(
@@ -140,6 +153,7 @@ describe("toSessionError", () => {
       llm(new ContentPolicyError({ message: "blocked" })),
       llm(new InvalidProviderOutputError({ message: "output" })),
       llm(new InvalidRequestError({ message: "request" })),
+      llm(new UnsupportedOperationError({ message: "unsupported", operation: "compact" })),
       llm(
         new NoRouteError({
           message: "failed",
@@ -151,7 +165,7 @@ describe("toSessionError", () => {
     ]
 
     expect(eligible.map(SessionRunnerRetry.isRetryable)).toEqual([true, true, true, true])
-    expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false, false, false, false, false])
+    expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false, false, false, false, false, false])
   })
 
   test("retries transport failures only when delivery is absent or not sent", () => {

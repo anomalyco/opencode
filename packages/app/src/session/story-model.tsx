@@ -7,15 +7,15 @@ import {
   type SessionComposerRegionViewController,
 } from "@/session/composer/session-composer-region"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
-import type { FormInfo, PermissionRequest, SessionStatus } from "@opencode-ai/client/promise"
-import type { SessionDocument } from "@opencode-ai/session-ui/document"
-import { CurrentSessionProviders, STORY_MODEL } from "@opencode-ai/session-ui/storybook"
-import { SessionTimeline } from "@opencode-ai/session-ui/timeline"
-import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-review-empty-changes-v2"
+import type { FormInfo, PermissionRequest, SessionStatus } from "@opencode/client/promise"
+import type { SessionDocument } from "@opencode/session-ui/document"
+import { CurrentSessionProviders, STORY_MODEL } from "@opencode/session-ui/storybook"
+import { SessionTimeline } from "@opencode/session-ui/timeline"
+import { SessionReviewEmptyChangesV2 } from "@opencode/session-ui/v2/session-review-empty-changes-v2"
 import { createComposerEditor } from "@/composer/editor/interaction"
 import type { ComposerPersistedState } from "@/composer/types"
-import { Button } from "@opencode-ai/ui/button"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Button } from "@opencode/ui/button"
+import { Icon } from "@opencode/ui/icon"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Show } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -23,6 +23,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { ReviewPanelView } from "@/session/review/panel"
 import { createReviewPanelState } from "@/session/review/panel-state"
 import { TerminalSurface } from "@/session/terminal/surface"
+import type { WebSearchRequestModel } from "./requests/websearch"
 
 const modelReady = Object.assign(() => true, { promise: undefined }) satisfies ModelSelection["ready"]
 const storyComposerModel = {
@@ -82,7 +83,7 @@ export type SessionPreviewProps = {
   description: string
   document: SessionDocument
   draft?: string
-  request?: { type: "permission"; value: PermissionRequest } | { type: "question"; value: FormInfo }
+  request?: { type: "permission"; value: PermissionRequest } | { type: "question" | "websearch"; value: FormInfo }
   reviewOpened?: boolean
   child?: { parentID: string }
   terminal?: { title: string; lines: string[] }
@@ -173,10 +174,12 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
     activity: string
     reviewOpened: boolean
     request: SessionPreviewProps["request"]
+    searchProvider: string
   }>({
     activity: "Ready",
     reviewOpened: props.reviewOpened ?? false,
     request: props.request,
+    searchProvider: "random",
   })
   const prompt = createPromptController({
     initial: props.draft ?? "",
@@ -189,6 +192,27 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
   const region = {
     state: {
       questionRequest: () => (state.request?.type === "question" ? state.request.value : undefined),
+      websearch: {
+        request: () => (state.request?.type === "websearch" ? state.request.value : undefined),
+        options: () => [
+          { value: "exa", label: "Exa" },
+          { value: "parallel", label: "Parallel" },
+          { value: "tavily", label: "Tavily" },
+        ],
+        selected: () => state.searchProvider,
+        specific: () => false,
+        loading: () => false,
+        loadFailed: () => false,
+        failed: () => false,
+        sending: () => false,
+        connected: () => true,
+        select: (value) => setState("searchProvider", value),
+        retry() {},
+        submit: async (value) => {
+          setState("request", undefined)
+          setState("activity", `Web search selection (local only): ${value}`)
+        },
+      } satisfies WebSearchRequestModel,
       permissionRequest: () => (state.request?.type === "permission" ? state.request.value : undefined),
       permissionResponding: () => false,
       decide: (response) => {

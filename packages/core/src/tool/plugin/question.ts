@@ -1,11 +1,11 @@
 export * as QuestionTool from "./question.js"
 
-import type { Context } from "@opencode-ai/plugin/effect/plugin"
-import { ToolFailure } from "@opencode-ai/ai"
+import type { Context } from "@opencode/plugin/effect/plugin"
+import { ToolFailure } from "@opencode/ai"
 import { Effect, Schema } from "effect"
 import { Form } from "../../form.js"
 import { Permission } from "../../permission.js"
-import { Question } from "@opencode-ai/schema/question"
+import { Question } from "@opencode/schema/question"
 
 export const name = "question"
 
@@ -52,8 +52,8 @@ export const Plugin = {
     const permission = yield* Permission.Service
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false },
           description,

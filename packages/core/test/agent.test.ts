@@ -1,16 +1,15 @@
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
-import { TestClock } from "effect/testing"
-import { Agent } from "@opencode-ai/core/agent"
-import { Bus } from "@opencode-ai/core/bus"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Location } from "@opencode-ai/core/location"
-import { Permission } from "@opencode-ai/core/permission"
-import { AgentPlugin } from "@opencode-ai/core/plugin/agent"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Global } from "@opencode-ai/util/global"
+import { Agent } from "@opencode/core/agent"
+import { Bus } from "@opencode/core/bus"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Location } from "@opencode/core/location"
+import { Permission } from "@opencode/core/permission"
+import { AgentPlugin } from "@opencode/core/plugin/agent"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Global } from "@opencode/util/global"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 import { agentHost, host } from "./plugin/host"
@@ -102,9 +101,7 @@ describe("Agent", () => {
       )
       description = "New description"
       hidden = false
-      const reload = yield* agent.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(reload)
+      yield* agent.reload()
 
       expect(yield* agent.get(id)).toMatchObject({ description: "New description", hidden: false })
     }),

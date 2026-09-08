@@ -6,12 +6,12 @@ import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
 import { AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
 import { RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers"
 import { RestrictToElement } from "@dnd-kit/dom/modifiers"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { ProjectAvatar } from "@opencode-ai/ui/project-avatar"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Menu } from "@opencode-ai/ui/menu"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { ScrollView } from "@opencode/ui/scroll-view"
+import { ProjectAvatar } from "@opencode/ui/project-avatar"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Menu } from "@opencode/ui/menu"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { getProjectAvatarVariant, type HomeProjectSelection, type LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -57,6 +57,8 @@ export type HomeProjectsViewProps = {
   onSelectProject: (server: ServerConnection.Any, directory: string) => void
   onAddProjects: (server: ServerConnection.Any, directories: string[]) => void
   onOpenProjectNewSession: (server: ServerConnection.Any, directory: string) => void
+  canImportSession: boolean
+  onImportSession: (server: ServerConnection.Any, project: LocalProject) => void
   onEditProject: (server: ServerConnection.Any, project: LocalProject) => void
   onRevealProject: (server: ServerConnection.Any, project: LocalProject) => void
   onClearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
@@ -196,26 +198,30 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
         <Show
           when={props.servers.length > 1}
           fallback={
-            <div class={props.dropdown ? "" : "pr-3"}>
-              <Show
-                when={props.projects.length > 0}
-                fallback={<HomeProjectEmpty {...props} server={props.servers[0]} items={props.recentlyClosed} />}
-              >
-                <HomeProjectList {...props} {...contextMenuProps} server={props.servers[0]} items={props.projects} />
-                <Show when={props.dropdown}>
-                  <HomeProjectNavButton
-                    type="button"
-                    data-action="home-add-project-row"
-                    class="mt-1 disabled:opacity-60"
-                    disabled={props.serverHealth(props.servers[0])?.healthy === false}
-                    onClick={() => props.onChooseProject(props.servers[0])}
+            <Show when={props.servers[0]}>
+              {(server) => (
+                <div class={props.dropdown ? "" : "pr-3"}>
+                  <Show
+                    when={props.projects.length > 0}
+                    fallback={<HomeProjectEmpty {...props} server={server()} items={props.recentlyClosed} />}
                   >
-                    <Icon name="folder-add-left" size="small" />
-                    <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("home.project.add")}</span>
-                  </HomeProjectNavButton>
-                </Show>
-              </Show>
-            </div>
+                    <HomeProjectList {...props} {...contextMenuProps} server={server()} items={props.projects} />
+                    <Show when={props.dropdown}>
+                      <HomeProjectNavButton
+                        type="button"
+                        data-action="home-add-project-row"
+                        class="mt-1 disabled:opacity-60"
+                        disabled={props.serverHealth(server())?.healthy === false}
+                        onClick={() => props.onChooseProject(server())}
+                      >
+                        <Icon name="folder-add-left" size="small" />
+                        <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("home.project.add")}</span>
+                      </HomeProjectNavButton>
+                    </Show>
+                  </Show>
+                </div>
+              )}
+            </Show>
           }
         >
           <div class={`flex min-w-0 flex-col ${props.dropdown ? "gap-1" : "gap-4 pr-3"}`}>
@@ -670,6 +676,11 @@ function HomeProjectRow(
               <Menu.Item onSelect={() => props.onOpenProjectNewSession(props.server, props.project.worktree)}>
                 {props.language.t("command.session.new")}
               </Menu.Item>
+              <Show when={props.canImportSession}>
+                <Menu.Item onSelect={() => props.onImportSession(props.server, props.project)}>
+                  {props.language.t("command.session.import")}
+                </Menu.Item>
+              </Show>
               <Menu.Item onSelect={() => props.onEditProject(props.server, props.project)}>
                 {props.language.t("dialog.project.edit.title")}
               </Menu.Item>

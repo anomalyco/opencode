@@ -2,15 +2,15 @@ export * as SessionStore from "./store.js"
 
 import { and, asc, desc, eq, gt, isNotNull, isNull, like, lt, notInArray, or, sql, type SQL } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Project } from "@opencode-ai/schema/project"
-import { Workspace } from "@opencode-ai/schema/workspace"
-import { AbsolutePath, PositiveInt, RelativePath } from "@opencode-ai/schema/schema"
+import { Project } from "@opencode/schema/project"
+import { Workspace } from "@opencode/schema/workspace"
+import { AbsolutePath, PositiveInt, RelativePath } from "@opencode/schema/schema"
 import { Database } from "../database/database.js"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { SessionHistory } from "./history.js"
 import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
-import { Session } from "@opencode-ai/schema/session"
+import { Session } from "@opencode/schema/session"
 import { SessionMessageTable, SessionTable } from "./sql.js"
 import { fromRow } from "./info.js"
 
@@ -172,7 +172,7 @@ const layer = Layer.effect(
           SessionHistory.decodeMessageRow,
         )
       }),
-      context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID)),
+      context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID, "latest")),
       message: Effect.fn("SessionStore.message")(function* (messageID) {
         const row = yield* db
           .select()

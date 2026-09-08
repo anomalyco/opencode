@@ -1,11 +1,11 @@
 import { type ComponentProps, createMemo, Show, splitProps } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Card, CardDescription } from "@opencode-ai/ui/card"
-import { Collapsible } from "@opencode-ai/ui/collapsible"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { useI18n } from "@opencode-ai/ui/context/i18n"
+import { Card, CardDescription } from "@opencode/ui/card"
+import { Collapsible } from "@opencode/ui/collapsible"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { useI18n } from "@opencode/ui/context/i18n"
 
 export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "children" | "variant"> {
   tool: string
@@ -97,7 +97,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
           <div data-component="tool-trigger">
             <div data-slot="basic-tool-tool-trigger-content">
               <span data-slot="basic-tool-tool-indicator" data-component="tool-error-card-icon">
-                <Icon name="circle-exclamation" />
+                <Icon name="outline-hexagonal-warning" />
               </span>
               <div data-slot="basic-tool-tool-info">
                 <div data-slot="basic-tool-tool-info-structured">
@@ -121,9 +121,6 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                         </a>
                       </Show>
                     </Show>
-                    <span data-slot="tool-error-card-dot" aria-hidden="true">
-                      ·
-                    </span>
                     <span data-slot="tool-error-card-summary">{summary()}</span>
                   </div>
                 </div>

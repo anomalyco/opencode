@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Tool } from "@opencode-ai/schema/tool"
+import { Tool } from "@opencode/schema/tool"
 import { ModelID, ProviderID, RouteID } from "./ids.js"
 
 export const ProviderFailureClassification = Schema.Literals(["context-overflow", "payload-too-large"])
@@ -34,6 +34,21 @@ export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>
     classification: Schema.optional(ProviderFailureClassification),
   },
 ) {}
+
+/**
+ * A caller-requested operation the selected route does not implement, such as
+ * explicit compaction on a route without a compact endpoint. Detected locally
+ * before any network I/O, so unlike transport or provider-output failures it
+ * never carries HTTP context from a provider round-trip.
+ */
+export class UnsupportedOperationError extends Schema.TaggedError<UnsupportedOperationError>(
+  "AI.Error.UnsupportedOperation",
+)("UnsupportedOperation", {
+  ...ReasonFields,
+  operation: Schema.String,
+  provider: Schema.optional(ProviderID),
+  route: Schema.optional(RouteID),
+}) {}
 
 export class NoRouteError extends Schema.TaggedError<NoRouteError>("AI.Error.NoRoute")("NoRoute", {
   ...ReasonFields,
@@ -107,6 +122,7 @@ export class UnknownProviderError extends Schema.TaggedError<UnknownProviderErro
 
 export const AIErrorReason = Schema.Union([
   InvalidRequestError,
+  UnsupportedOperationError,
   NoRouteError,
   AuthenticationError,
   RateLimitError,

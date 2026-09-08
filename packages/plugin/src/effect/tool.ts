@@ -1,11 +1,11 @@
-import { Tool } from "@opencode-ai/schema/tool"
-import type { Agent } from "@opencode-ai/schema/agent"
-import type { Session } from "@opencode-ai/schema/session"
-import type { SessionMessage } from "@opencode-ai/schema/session-message"
+import { Tool } from "@opencode/schema/tool"
+import type { Agent } from "@opencode/schema/agent"
+import type { Session } from "@opencode/schema/session"
+import type { SessionMessage } from "@opencode/schema/session-message"
 import type { Effect, Types } from "effect"
 import type { Hooks, Transform } from "./registration.js"
 
-export interface ToolDraft {
+export interface ToolEditor {
   list(): readonly (Tool.Info & { readonly id: string })[]
   get(id: string): (Tool.Info & { readonly id: string }) | undefined
   namespace(namespace: Tool.Namespace): void
@@ -52,7 +52,7 @@ export interface ToolFailures extends Record<keyof ToolHooks, unknown> {
 }
 
 export interface ToolDomain {
-  readonly transform: Transform<ToolDraft>
+  readonly transform: Transform<ToolEditor>
   readonly reload: () => Effect.Effect<void>
   readonly hook: Hooks<ToolHooks, ToolFailures>
 }

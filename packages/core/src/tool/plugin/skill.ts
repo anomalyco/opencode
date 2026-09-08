@@ -1,9 +1,9 @@
 export * as SkillTool from "./skill.js"
 
-import type { Context } from "@opencode-ai/plugin/effect/plugin"
-import { ToolFailure } from "@opencode-ai/ai"
+import type { Context } from "@opencode/plugin/effect/plugin"
+import { ToolFailure } from "@opencode/ai"
 import { Effect, Schema } from "effect"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Skill } from "../../skill.js"
 import { Permission } from "../../permission.js"
 
@@ -36,8 +36,8 @@ export const Plugin = {
     const skills = yield* Skill.Service
     const permission = yield* Permission.Service
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false },
           description,

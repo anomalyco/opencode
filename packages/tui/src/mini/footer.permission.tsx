@@ -54,7 +54,7 @@ function buttons(
             paddingLeft={1}
             paddingRight={1}
             backgroundColor={option === selected ? theme.actionFocusedBg : transparent}
-            onMouseOver={() => {
+            onMouseMove={() => {
               if (!disabled) onHover(option)
             }}
             onMouseUp={() => {

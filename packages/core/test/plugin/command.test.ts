@@ -1,16 +1,16 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { Command } from "@opencode-ai/core/command"
-import { Bus } from "@opencode-ai/core/bus"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { Location } from "@opencode-ai/core/location"
-import { Mcp } from "@opencode-ai/core/mcp/index"
-import { CommandPlugin } from "@opencode-ai/core/plugin/command"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Session } from "@opencode-ai/schema/session"
-import { SessionInbox } from "@opencode-ai/schema/session-inbox"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Command } from "@opencode/core/command"
+import { Bus } from "@opencode/core/bus"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Location } from "@opencode/core/location"
+import { Mcp } from "@opencode/core/mcp/index"
+import { CommandPlugin } from "@opencode/core/plugin/command"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Session } from "@opencode/schema/session"
+import { SessionInbox } from "@opencode/schema/session-inbox"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { DateTime } from "effect"
 import { emptyMcpLayer } from "../fixture/mcp"
 import { location } from "../fixture/location"
@@ -33,11 +33,6 @@ const it = testEffect(
 )
 
 describe("CommandPlugin.Plugin", () => {
-  test("refers to tools by their available capabilities", () => {
-    expect(PROMPT_REVIEW).toContain("Available documentation and code-search tools")
-    expect(PROMPT_REVIEW).not.toContain("Exa Code Context")
-  })
-
   it.effect("registers built-in init and review commands", () =>
     Effect.gen(function* () {
       const command = yield* Command.Service

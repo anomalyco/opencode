@@ -1,8 +1,8 @@
 export * as RpcClientRuntime from "./rpc.js"
 
-import type { Rpc } from "@opencode-ai/schema/rpc"
-import type { RpcError, RpcInternalError } from "@opencode-ai/protocol/errors"
-import type { OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
+import type { Rpc } from "@opencode/schema/rpc"
+import type { RpcError, RpcInternalError } from "@opencode/protocol/errors"
+import type { OpenCodeEvent } from "@opencode/protocol/groups/event"
 import { Effect, Schema, Stream } from "effect"
 import type { RpcArguments, RpcCallOptions } from "../promise/rpc.js"
 import { RpcRuntime } from "../rpc-runtime.js"

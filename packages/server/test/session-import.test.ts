@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Session } from "@opencode-ai/schema/session"
+import { Session } from "@opencode/schema/session"
 import { Effect, Schema } from "effect"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"

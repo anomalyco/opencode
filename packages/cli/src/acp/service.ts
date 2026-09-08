@@ -7,8 +7,8 @@ import {
   type SessionInfo,
   type SessionMessageInfo,
   type SkillInfo,
-} from "@opencode-ai/client/promise"
-import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
+} from "@opencode/client/promise"
+import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import type {
   AgentSideConnection,
   AuthenticateRequest,
@@ -40,7 +40,7 @@ import type {
   SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
 import { OPENCODE_VERSION } from "../version"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { buildConfigOptions, parseModelSelection, type ConfigOptionProvider } from "./config-option"
 import { promptContentToParts } from "./content"
 import {

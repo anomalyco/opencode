@@ -1,5 +1,5 @@
-import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Clock, Effect, Option, Schema } from "effect"
 import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
@@ -88,12 +88,12 @@ export const XAIPlugin = define({
       { discard: true },
     )
 
-    yield* ctx.integration.transform((draft) => {
-      draft.update("xai", (integration) => {
+    yield* ctx.integration.transform((editor) => {
+      editor.update("xai", (integration) => {
         integration.name = "xAI"
       })
-      draft.method.update(device(ctx.app))
-      draft.method.update({ integrationID: "xai", method: { type: "key", label: "Manually enter API Key" } })
+      editor.method.update(device(ctx.app))
+      editor.method.update({ integrationID: "xai", method: { type: "key", label: "Manually enter API Key" } })
     })
     yield* ctx.catalog.transform((catalog) => {
       const provider = catalog.provider.get(providerID)

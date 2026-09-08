@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode-ai/plugin/tui"
+import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import { usePlugin } from "../../plugin/context"
@@ -52,7 +52,11 @@ function Plugins(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const visibility = createMemo(() => homeFooterVisibility(dimensions().width))
   const plugins = usePlugin()
-  const failed = createMemo(() => plugins.list().filter((item) => item.status === "failed").length)
+  const failed = createMemo(
+    () =>
+      plugins.list().filter((item) => item.status === "failed").length +
+      plugins.server().filter((item) => item.state.status === "failed").length,
+  )
 
   return (
     <Show when={failed()}>

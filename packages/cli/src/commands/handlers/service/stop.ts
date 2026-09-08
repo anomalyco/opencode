@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { Service } from "@opencode-ai/client/effect/service"
+import { Service } from "@opencode/client/effect/service"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { ServiceConfig } from "../../../services/service-config"

@@ -1,19 +1,20 @@
 import { createMemo, createEffect, on, onCleanup, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
 import { useData } from "@/runtime/server/current"
-import { checksum } from "@opencode-ai/util/encode"
+import { checksum } from "@opencode/util/encode"
 import { same } from "@/runtime/persistence/equality"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Button } from "@opencode-ai/ui/button"
-import { Accordion } from "@opencode-ai/ui/accordion"
-import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
-import { File } from "@opencode-ai/session-ui/file"
-import { Markdown } from "@opencode-ai/session-ui/markdown"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import type { SessionMessageInfo } from "@opencode-ai/client/promise"
+import { Icon } from "@opencode/ui/icon"
+import { Button } from "@opencode/ui/button"
+import { Accordion } from "@opencode/ui/accordion"
+import { StickyAccordionHeader } from "@opencode/ui/sticky-accordion-header"
+import { File } from "@opencode/session-ui/file"
+import { Markdown } from "@opencode/session-ui/markdown"
+import { ScrollView } from "@opencode/ui/scroll-view"
+import type { SessionMessageInfo } from "@opencode/client/promise"
 import { showToast } from "@/shell/notifications/toast"
-import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/session/commands/export"
+import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import { useProviders } from "@/providers/catalog/providers"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServerSDK } from "@/runtime/server/client"
@@ -84,6 +85,7 @@ const emptyMessages: SessionMessageInfo[] = []
 export function SessionContextTab() {
   const data = useData()
   const language = useLanguage()
+  const platform = usePlatform()
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
   const providers = useProviders(() => sdk().directory)
@@ -199,7 +201,7 @@ export function SessionContextTab() {
         api: serverSDK.api,
       })
       const filename = sessionExportFilename(data.info)
-      downloadSessionExport(filename, data)
+      if (!(await saveSessionExport(filename, data, platform))) return
       showToast({
         variant: "success",
         icon: "circle-check",

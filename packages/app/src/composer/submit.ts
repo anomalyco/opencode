@@ -1,6 +1,7 @@
-import { SessionMessage } from "@opencode-ai/schema/session-message"
-import type { SessionMessageUser } from "@opencode-ai/client/promise"
-import { Event } from "@opencode-ai/schema/event"
+import { SessionMessage } from "@opencode/schema/session-message"
+import type { SessionMessageUser, SkillInfo } from "@opencode/client/promise"
+import { Skill } from "@opencode/schema/skill"
+import { Event } from "@opencode/schema/event"
 import type { Accessor } from "solid-js"
 import type { PromptHistoryComment } from "./history/entry"
 import type { ImageAttachmentPart, Prompt } from "./state"
@@ -10,6 +11,7 @@ import { createComposerSubmission } from "./submission-state"
 import { buildPromptRequest } from "./request"
 import { setCursorPosition } from "./editor/dom"
 import { blobDataUrl } from "@/runtime/persistence/drafts"
+import type { ModelSelection } from "@/providers/models/selection"
 
 const submitting = new WeakSet<object>()
 
@@ -27,6 +29,8 @@ type ComposerSubmission = {
 type ComposerSubmitInput = {
   adapter: ComposerAdapter
   mode: Accessor<"normal" | "shell">
+  commands: Accessor<readonly { name: string }[] | undefined>
+  skills: Accessor<readonly Pick<SkillInfo, "id" | "name" | "slash">[] | undefined>
   editor: () => HTMLDivElement | undefined
   queueScroll: () => void
   addToHistory: (prompt: Prompt, mode: "normal" | "shell") => void
@@ -65,6 +69,9 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
     if (submitting.has(input.adapter.state)) return
     submitting.add(input.adapter.state)
     const comments = input.comments.capture()
+    // Capture command intent before starting a session in a worktree whose catalog has not loaded.
+    const command = value.mode === "normal" ? findCommand(input.commands(), value.text) : undefined
+    if (value.mode === "normal" && !command) value.prompt = withSlashSkill(value.prompt, input.skills())
 
     try {
       const started =
@@ -78,12 +85,11 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
       input.resetHistory()
       const restore = () => restoreSubmission(input, submission, value, comments)
 
-      const command = value.mode === "normal" ? findCommand(session, value.text) : undefined
       if (value.mode === "normal" && !command) {
         session.handoff?.set(handoffMessage(value))
         const optimisticBusy = !input.adapter.working()
         if (optimisticBusy) session.data.session.setStatus(session.id, "running")
-        const sending = sendPrompt(session, value).then(
+        const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit).then(
           () => ({ ok: true as const }),
           (error) => ({ ok: false as const, error }),
         )
@@ -119,9 +125,12 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
         // Commands always steer: the server applies a command's configured
         // agent and model immediately at admission, so queueing one would
         // reconfigure the turn it is supposed to wait behind.
-        void sendCommand(session, { ...value, delivery: "steer" }, command).catch((error) =>
-          failSubmission(input, session, "command", error, restore, value.id),
-        )
+        void sendCommand(
+          session,
+          { ...value, delivery: "steer" },
+          command,
+          input.adapter.controls().model.selection.trackSessionCommit,
+        ).catch((error) => failSubmission(input, session, "command", error, restore, value.id))
         return
       }
     } finally {
@@ -277,21 +286,43 @@ async function sendShell(session: ComposerSession, value: ComposerSubmission) {
   await session.api.shell({ sessionID: session.id, id: Event.ID.create(), command: value.text })
 }
 
-function findCommand(session: ComposerSession, text: string) {
+function findCommand(commands: ReturnType<ComposerSubmitInput["commands"]>, text: string) {
   if (!text.startsWith("/")) return
   const [name, ...arguments_] = text.split(" ")
   const command = name.slice(1)
-  if (!session.data.location.command.list({ directory: session.directory })?.some((item) => item.name === command))
-    return
+  if (!commands?.some((item) => item.name === command)) return
   return { command, arguments: arguments_.join(" ") }
+}
+
+export function withSlashSkill(prompt: Prompt, skills: ReturnType<ComposerSubmitInput["skills"]>): Prompt {
+  const first = prompt[0]
+  if (first?.type !== "text") return prompt
+  const name = /^\/(\S+)(?:\s|$)/.exec(first.content)?.[1]
+  const skill = skills?.find((item) => item.slash === true && item.id === name)
+  if (!skill || prompt.some((part) => part.type === "skill" && part.id === skill.id)) return prompt
+  const content = `/${skill.id}`
+  return [
+    {
+      type: "skill",
+      id: Skill.ID.make(skill.id),
+      name: Skill.Name.make(skill.name),
+      content,
+      start: 0,
+      end: content.length,
+    },
+    { ...first, content: first.content.slice(content.length), start: content.length },
+    ...prompt.slice(1),
+  ]
 }
 
 async function sendCommand(
   session: ComposerSession,
   value: ComposerSubmission,
   command: { command: string; arguments: string },
+  track?: ModelSelection["trackSessionCommit"],
 ) {
   const request = await buildSubmissionRequest(session, value)
+  await applySelection(session, value.selection, track)
   await session.api.command({
     sessionID: session.id,
     command: command.command,
@@ -303,7 +334,33 @@ async function sendCommand(
   })
 }
 
-async function sendPrompt(session: ComposerSession, value: ComposerSubmission) {
+async function applySelection(
+  session: ComposerSession,
+  selection: ComposerSelection,
+  track?: ModelSelection["trackSessionCommit"],
+) {
+  const cancel = track?.(session.id, selection)
+  try {
+    const current = session.current()
+    if (current?.agent !== selection.agent) {
+      await session.api.switchAgent({ sessionID: session.id, agent: selection.agent })
+    }
+    // The server deduplicates unchanged selections; cached SSE state may still be behind an earlier switch.
+    await session.api.switchModel({
+      sessionID: session.id,
+      model: { id: selection.model.modelID, providerID: selection.model.providerID, variant: selection.variant },
+    })
+  } catch (error) {
+    cancel?.()
+    throw error
+  }
+}
+
+async function sendPrompt(
+  session: ComposerSession,
+  value: ComposerSubmission,
+  track?: ModelSelection["trackSessionCommit"],
+) {
   const request = await buildSubmissionRequest(session, value)
   // Switching agent or model reconfigures the session immediately, and with it
   // the remainder of a running turn. A steer targets that turn, so its
@@ -311,24 +368,7 @@ async function sendPrompt(session: ComposerSession, value: ComposerSubmission) {
   // waits behind, so it runs with the session selection at delivery time (the
   // intended selection stays recorded in its metadata).
   if (value.delivery === "steer") {
-    const current = session.current()
-    if (current?.agent !== value.selection.agent) {
-      await session.api.switchAgent({ sessionID: session.id, agent: value.selection.agent })
-    }
-    if (
-      current?.model?.providerID !== value.selection.model.providerID ||
-      current.model.id !== value.selection.model.modelID ||
-      (current.model.variant ?? "default") !== (value.selection.variant ?? "default")
-    ) {
-      await session.api.switchModel({
-        sessionID: session.id,
-        model: {
-          id: value.selection.model.modelID,
-          providerID: value.selection.model.providerID,
-          variant: value.selection.variant,
-        },
-      })
-    }
+    await applySelection(session, value.selection, track)
   }
 
   const admission = {

@@ -1,7 +1,7 @@
 import { type Accessor, createMemo } from "solid-js"
 import { DateTime } from "luxon"
 import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import { useProviders } from "@/providers/catalog/providers"
 import { useGlobal } from "@/runtime/server/runtime"
 
@@ -122,10 +122,10 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
   const setVariant = (model: ModelKey, value: string | undefined) => {
     const key = variantKey(model)
     if (!store.variant) {
-      setStore("variant", { [key]: value })
+      setStore("variant", { [key]: value ?? "default" })
       return
     }
-    setStore("variant", key, value)
+    setStore("variant", key, value ?? "default")
   }
 
   return {

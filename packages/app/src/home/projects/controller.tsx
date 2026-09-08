@@ -8,12 +8,13 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { closeHomeProject, errorMessage, homeProjectDirectories } from "@/shell/layout/helpers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { showToast } from "@/shell/notifications/toast"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { createResource } from "solid-js"
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import type { HomeController } from "../model"
 import { useGlobal } from "@/runtime/server/runtime"
+import { SessionTransfer } from "@opencode/schema/session-transfer"
 
 export const HomeServersSchema = Schema.Struct({
   collapsed: Persistence.record(Persistence.fallback(Schema.Boolean, () => false)),
@@ -79,6 +80,35 @@ export function createHomeProjectsController(home: HomeController) {
       select: home.project.select,
       add: home.project.add,
       openNewSession: home.project.openProjectNewSession,
+      canImportSession: !!platform.openAttachmentPickerDialog,
+      importSession: (conn: ServerConnection.Any, project: LocalProject) => {
+        if (!platform.openAttachmentPickerDialog) return
+        void platform
+          .openAttachmentPickerDialog(
+            {
+              title: language.t("command.session.import"),
+              accept: ["application/json"],
+              extensions: ["json"],
+            },
+            async (file) => {
+              const data = await Schema.decodeUnknownPromise(Schema.fromJsonString(SessionTransfer.Data))(
+                await file.text(),
+              )
+              const api = home.server.context(conn).sdk.api.session
+              const imported = await api.import({
+                ...Schema.encodeSync(SessionTransfer.Data)(data),
+                location: { directory: project.worktree },
+              } as Parameters<typeof api.import>[0])
+              home.project.openProjectSession(conn, project.worktree, imported)
+            },
+          )
+          .catch((cause: unknown) => {
+            showToast({
+              title: language.t("common.requestFailed"),
+              description: errorMessage(cause, language.t("common.requestFailed")),
+            })
+          })
+      },
       edit: (conn: ServerConnection.Any, project: LocalProject) => {
         void import("@/settings/workspaces/project-dialog").then(({ DialogEditProject }) => {
           void dialog.show(() => <DialogEditProject server={conn} project={project} />)

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { Worktree } from "@opencode-ai/schema/worktree"
+import { Worktree } from "@opencode/schema/worktree"
 
 describe("Worktree.adopt", () => {
   const event = {

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { Effect, FileSystem } from "effect"
 import { createEventStream, createFetch, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
@@ -41,7 +41,7 @@ test("stats shows only this year and returns after errors or success", async () 
         get: async () => ({ animations: false, tabs: { enabled: false } }),
         update: async () => ({}),
       },
-      packages: { resolve: async () => undefined },
+      packages: { prepare: async () => ({ directory: "" }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
       args: {},
       log: () => {},

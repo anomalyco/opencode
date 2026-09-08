@@ -1,9 +1,9 @@
 import { createMemo, createUniqueId, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createQuery } from "@tanstack/solid-query"
-import { Icon } from "@opencode-ai/ui/icon"
-import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode-ai/session-ui/v2/session-file-panel-v2"
-import { SessionReviewV2Sidebar } from "@opencode-ai/session-ui/v2/session-review-v2"
+import { Icon } from "@opencode/ui/icon"
+import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode/session-ui/v2/session-file-panel-v2"
+import { SessionReviewV2Sidebar } from "@opencode/session-ui/v2/session-review-v2"
 import FileTreeV2, { type Kind } from "@/session/files/file-tree-v2"
 import { useFile } from "@/workspaces/files/model"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -170,10 +170,10 @@ export function SessionFileBrowserTab(props: {
         when={!props.placeholder}
         fallback={
           <SessionFilePanelV2Empty>
-            <div class="flex flex-col items-center gap-3 text-center text-text-weak">
-              <Icon name="file-tree" size="large" />
-              <div class="text-14-medium text-text-strong">{language.t("command.file.open")}</div>
-              <div class="text-13-regular">{language.t("session.files.selectToOpen")}</div>
+            <div class="flex flex-col items-center gap-2 text-center text-text-weak">
+              <Icon name="file-tree" size="large" class="mb-2" />
+              <div class="text-[13px] font-medium leading-[13px] text-text-strong">{language.t("command.file.open")}</div>
+              <div class="h-5 text-13-regular leading-5">{language.t("session.files.selectToOpen")}</div>
             </div>
           </SessionFilePanelV2Empty>
         }

@@ -7,18 +7,17 @@
  */
 import path from "path"
 import { Clock, Context, Duration, Effect, Layer, Option, Schema } from "effect"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Git } from "./git.js"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { Repository } from "./repository.js"
 import { AbsolutePath } from "./schema.js"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { EffectFlock } from "@opencode-ai/util/effect-flock"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { EffectFlock } from "@opencode/util/effect-flock"
 import { KV } from "./kv.js"
 
 const Refresh = Schema.Struct({
   attemptedAt: Schema.Number,
-  refreshedAt: Schema.optionalKey(Schema.Number),
 })
 const refreshInterval = Duration.toMillis(Duration.days(1))
 
@@ -161,7 +160,7 @@ const layer = Layer.effect(
 
               if (status !== "cached") {
                 // Record attempts before network work so failures obey the same refresh interval.
-                yield* kv.set(key, { ...previous, attemptedAt: now })
+                yield* kv.set(key, { attemptedAt: now })
 
                 if (status === "cloned") {
                   yield* git.repo
@@ -205,8 +204,6 @@ const layer = Layer.effect(
                     .resetHard(existing, target ? `origin/${target}` : "HEAD")
                     .pipe(Effect.mapError((error) => new ResetFailedError({ repository, message: error.message })))
                 }
-
-                yield* kv.set(key, { attemptedAt: now, refreshedAt: yield* Clock.currentTimeMillis })
               }
 
               const checkout = yield* git.repo.discover(AbsolutePath.make(localPath))

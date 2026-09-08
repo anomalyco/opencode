@@ -1,5 +1,5 @@
-import type { WebSearch } from "@opencode-ai/schema/websearch"
-import type { WebSearchApi } from "@opencode-ai/client/effect/api"
+import type { WebSearch } from "@opencode/schema/websearch"
+import type { WebSearchApi } from "@opencode/client/effect/api"
 import type { Effect } from "effect"
 import type { Transform } from "./registration.js"
 
@@ -10,11 +10,11 @@ export interface WebSearchDefinition {
 }
 
 export interface WebSearchDomain extends WebSearchApi<unknown> {
-  readonly transform: Transform<WebSearchDraft>
+  readonly transform: Transform<WebSearchEditor>
   readonly reload: () => Effect.Effect<void>
 }
 
-export interface WebSearchDraft {
+export interface WebSearchEditor {
   add(definition: WebSearchDefinition): void
   readonly default: {
     get(): string | false | undefined

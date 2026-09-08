@@ -1,7 +1,7 @@
 import { Component, For, Show, createMemo, createSignal } from "solid-js"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Icon } from "@opencode/ui/icon"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, serverName } from "@/runtime/server/registry"
@@ -42,7 +42,7 @@ export const SettingsProjects: Component = () => {
     const name = () => displayName(props.project)
     return (
       <div
-        class="group flex items-center justify-between gap-5 px-4 py-2.5 rounded-lg bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)] transition-all hover:bg-v2-background-bg-layer-01"
+        class="group mx-px flex items-center justify-between gap-5 px-4 py-2.5 rounded-lg bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)] transition-all hover:bg-v2-background-bg-layer-01"
         onClick={() => openProjectSettings(props.project, props.server)}
       >
         <div class="flex items-center gap-2.5 min-w-0 flex-1">

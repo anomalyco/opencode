@@ -1,14 +1,14 @@
 import { Duration, Effect, Schema, Semaphore, Stream } from "effect"
 import type { Scope } from "effect"
-import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
+import { define } from "@opencode/plugin/effect/plugin"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { Provider } from "../../provider.js"
-import { ConfigProvider } from "@opencode-ai/schema/config/provider"
-import { Money } from "@opencode-ai/schema/money"
+import { ConfigProvider } from "@opencode/schema/config/provider"
+import { Money } from "@opencode/schema/money"
 
 const defaultServer = "https://opencode.ai/console"
 const clientID = "opencode-cli"
@@ -103,12 +103,12 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
         : undefined
     })
 
-    yield* ctx.integration.transform((draft) => {
-      draft.update("opencode", (integration) => {
+    yield* ctx.integration.transform((editor) => {
+      editor.update("opencode", (integration) => {
         integration.name = "OpenCode"
       })
-      draft.method.update(oauth(http))
-      draft.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
+      editor.method.update(oauth(http))
+      editor.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
     })
 
     yield* load()
@@ -163,11 +163,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
                 existing.settings = Provider.mergeOverlay(existing.settings, withoutCredentials(variant.settings))
               if (variant.headers !== undefined)
                 existing.headers = Provider.mergeHeaders(existing.headers, variant.headers)
-              if (variant.body !== undefined)
-                existing.body = Provider.mergeOverlay(
-                  existing.body,
-                  variantBody(variant.body, model.package ?? item.package ?? source?.provider.package),
-                )
+              if (variant.body !== undefined) existing.body = Provider.mergeOverlay(existing.body, variant.body)
             }
             if (config.cost !== undefined)
               model.cost = (Array.isArray(config.cost) ? config.cost : [config.cost]).map((cost) => ({
@@ -234,18 +230,6 @@ function fetchProviders(http: HttpClient.HttpClient, value: Credential.Value) {
         )
       }),
     )
-}
-
-function variantBody(body: Readonly<Record<string, unknown>>, packageName: string | undefined) {
-  if (packageName !== Provider.aisdk("@ai-sdk/openai")) return body
-  const { reasoningEffort, reasoningSummary, ...native } = body
-  const reasoning = {
-    ...(typeof reasoningEffort === "string" ? { effort: reasoningEffort } : {}),
-    ...(typeof reasoningSummary === "string" ? { summary: reasoningSummary } : {}),
-  }
-  if (Object.keys(reasoning).length === 0) return body
-  // Existing Console variants stored SDK options here before V2 consumed raw bodies.
-  return Provider.mergeOverlay({ reasoning }, native)
 }
 
 function withoutCredentials<Value>(body: Readonly<Record<string, Value>> | undefined) {

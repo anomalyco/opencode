@@ -1,7 +1,7 @@
 export * as ConfigPolicyPlugin from "./policy.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Document } from "@opencode-ai/schema/config"
+import { define } from "@opencode/plugin/effect/plugin"
+import { Document } from "@opencode/schema/config"
 import { Effect } from "effect"
 import { Config } from "../../config.js"
 import { Wildcard } from "../../util/wildcard.js"

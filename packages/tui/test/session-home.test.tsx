@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { type Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
@@ -103,7 +103,7 @@ test.each([
         }),
         update: async () => ({}),
       },
-      packages: { resolve: async () => undefined },
+      packages: { prepare: async () => ({ directory: "" }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
       args: { sessionID: "ses_test" },
       log: () => {},

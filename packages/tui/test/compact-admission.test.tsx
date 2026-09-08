@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { InputRenderable } from "@opentui/core"
 import { Effect, FileSystem } from "effect"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
@@ -59,7 +59,7 @@ test.each([70, 120])(
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({ animations: false }), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
         args: { sessionID },
         log: () => {},
@@ -184,7 +184,7 @@ test.each(["first", "second"])(
         app: { name: "test", version: "test", channel: "test" },
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({ animations: false }), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
+        packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
         args: { sessionID },
         log: () => {},

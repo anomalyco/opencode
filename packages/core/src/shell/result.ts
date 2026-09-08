@@ -1,6 +1,6 @@
 export * as ShellResult from "./result.js"
 
-import type { Shell } from "@opencode-ai/schema/shell"
+import type { Shell } from "@opencode/schema/shell"
 
 export type Result = {
   info: Shell.Info

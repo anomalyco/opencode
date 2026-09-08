@@ -4,42 +4,43 @@ import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
-import { Money } from "@opencode-ai/schema/money"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { makeGlobalNode, makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { filesystem } from "@opencode-ai/util/effect/app-node-platform"
-import { Database } from "@opencode-ai/core/database/database"
-import { Bus } from "@opencode-ai/core/bus"
-import { Config } from "@opencode-ai/core/config"
-import { Environment } from "@opencode-ai/core/environment/index"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Global } from "@opencode-ai/util/global"
-import { Location } from "@opencode-ai/core/location"
-import { LocationMutation } from "@opencode-ai/core/location-mutation"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
-import { Model } from "@opencode-ai/core/model"
-import { Provider } from "@opencode-ai/core/provider"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Agent } from "@opencode-ai/core/agent"
-import { Job } from "@opencode-ai/core/job"
-import { Session } from "@opencode-ai/core/session"
-import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
-import { SessionMessage } from "@opencode-ai/core/session/message"
-import { SessionStore } from "@opencode-ai/core/session/store"
-import { Permission } from "@opencode-ai/core/permission"
-import { PermissionSaved } from "@opencode-ai/core/permission/saved"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
-import { Shell } from "@opencode-ai/core/shell"
-import { ShellSelect } from "@opencode-ai/core/shell/select"
-import { ID } from "@opencode-ai/schema/shell"
-import { ShellTool } from "@opencode-ai/core/tool/plugin/shell"
-import { ToolOutput } from "@opencode-ai/core/tool-output"
-import { Tool } from "@opencode-ai/core/tool"
+import { Money } from "@opencode/schema/money"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
+import { filesystem } from "@opencode/util/effect/app-node-platform"
+import { Database } from "@opencode/core/database/database"
+import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
+import { Environment } from "@opencode/core/environment/index"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
+import { Location } from "@opencode/core/location"
+import { FileAccess } from "@opencode/core/file-access"
+import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { Model } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Agent } from "@opencode/core/agent"
+import { Job } from "@opencode/core/job"
+import { Session } from "@opencode/core/session"
+import { SessionEvent } from "@opencode/core/session/event"
+import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionMessage } from "@opencode/core/session/message"
+import { SessionStore } from "@opencode/core/session/store"
+import { Permission } from "@opencode/core/permission"
+import { PermissionSaved } from "@opencode/core/permission/saved"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
+import { Shell } from "@opencode/core/shell"
+import { ShellSelect } from "@opencode/core/shell/select"
+import { ID } from "@opencode/schema/shell"
+import { ShellTool } from "@opencode/core/tool/plugin/shell"
+import { ToolOutput } from "@opencode/core/tool-output"
+import { Tool } from "@opencode/core/tool"
 import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
+import { offlineModels } from "./fixture/models"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { Expected } from "./lib/session-message"
@@ -130,7 +131,7 @@ const shellPluginSupervisor = makeLocationNode({
   deps: [
     Config.node,
     Environment.node,
-    LocationMutation.node,
+    FileAccess.node,
     Permission.node,
     Session.node,
     Job.node,
@@ -155,6 +156,7 @@ const replacements = [
   SessionExecution.node.replace(executionNode),
   Permission.node.replace(permission),
   Global.node.replace(tempGlobalLayer),
+  offlineModels,
 ] satisfies LayerNode.Replacements
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
 const it = testEffect(
@@ -165,6 +167,7 @@ const permissionIt = testEffect(
     SessionExecution.node.replace(executionNode),
     Global.node.replace(tempGlobalLayer),
     PluginSupervisor.node.replace(shellPluginSupervisor),
+    offlineModels,
   ]),
 )
 
@@ -239,10 +242,10 @@ const withScanner = <A, E, R>(
         return yield* withSession(fixture.active, (registry) =>
           Effect.gen(function* () {
             const selection = yield* ShellSelect.Service
-            yield* selection.transform((draft) => draft.configure(shell))
+            yield* selection.transform((editor) => editor.configure(shell))
             const agents = yield* Agent.Service
-            yield* agents.transform((draft) =>
-              draft.update(toolIdentity.agent, (agent) => {
+            yield* agents.transform((editor) =>
+              editor.update(toolIdentity.agent, (agent) => {
                 agent.permissions = []
               }),
             )
@@ -348,8 +351,8 @@ describe("ShellTool scanner permissions", () => {
           expect((yield* saved.list()).map((item) => item.resource)).toEqual(["printf *"])
 
           const agents = yield* Agent.Service
-          yield* agents.transform((draft) =>
-            draft.update(toolIdentity.agent, (agent) => {
+          yield* agents.transform((editor) =>
+            editor.update(toolIdentity.agent, (agent) => {
               agent.permissions = [{ action: "shell", resource: "printf hello", effect: "deny" }]
             }),
           )
@@ -384,8 +387,8 @@ describe("ShellTool scanner permissions", () => {
           expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
 
           const agents = yield* Agent.Service
-          yield* agents.transform((draft) =>
-            draft.update(toolIdentity.agent, (agent) => {
+          yield* agents.transform((editor) =>
+            editor.update(toolIdentity.agent, (agent) => {
               agent.permissions = [{ action: "shell", resource: "cat", effect: "deny" }]
             }),
           )
@@ -404,8 +407,8 @@ describe("ShellTool scanner permissions", () => {
       withScanner(portable, (registry, fixture) =>
         Effect.gen(function* () {
           const agents = yield* Agent.Service
-          yield* agents.transform((draft) =>
-            draft.update(toolIdentity.agent, (agent) => {
+          yield* agents.transform((editor) =>
+            editor.update(toolIdentity.agent, (agent) => {
               agent.permissions = [{ action: "shell", resource: "*", effect: "allow" }]
             }),
           )
@@ -445,8 +448,8 @@ describe("ShellTool scanner permissions", () => {
         Effect.gen(function* () {
           yield* Effect.promise(() => fs.symlink(fixture.outside, path.join(fixture.active, "123")))
           const agents = yield* Agent.Service
-          yield* agents.transform((draft) =>
-            draft.update(toolIdentity.agent, (agent) => {
+          yield* agents.transform((editor) =>
+            editor.update(toolIdentity.agent, (agent) => {
               agent.permissions = [
                 { action: "shell", resource: "*", effect: "allow" },
                 { action: "external_directory", resource: "*", effect: "deny" },
@@ -477,8 +480,8 @@ describe("ShellTool scanner permissions", () => {
       withScanner(portable, (registry, fixture) =>
         Effect.gen(function* () {
           const agents = yield* Agent.Service
-          yield* agents.transform((draft) =>
-            draft.update(toolIdentity.agent, (agent) => {
+          yield* agents.transform((editor) =>
+            editor.update(toolIdentity.agent, (agent) => {
               agent.permissions = [
                 { action: "shell", resource: "*", effect: "allow" },
                 { action: "external_directory", resource: path.join(fixture.outside, "*"), effect: "deny" },
@@ -520,6 +523,150 @@ describe("ShellTool scanner permissions", () => {
           }
         }),
       ))
+  }
+})
+
+describe("ShellTool conditional process substitution", () => {
+  const test = isWindows || !Bun.which("bash") ? permissionIt.live.skip : permissionIt.live
+  for (const portable of [false, true]) {
+    test(`${portable ? "native" : "legacy"}: a nested deny prevents the substitution from running`, () =>
+      withScanner(
+        portable,
+        (registry, directory) =>
+          Effect.gen(function* () {
+            const agents = yield* Agent.Service
+            yield* agents.transform((editor) =>
+              editor.update(toolIdentity.agent, (agent) => {
+                agent.permissions = [
+                  { action: "shell", resource: "*", effect: "allow" },
+                  { action: "shell", resource: "printf *", effect: "deny" },
+                ]
+              }),
+            )
+            const marker = path.join(directory.active, "marker")
+            const result = yield* runPermissionCommand(
+              registry,
+              '[[ -n <(printf reached > marker) ]]; wait "$!"',
+              marker,
+              [],
+            )
+            expect(result.exit).toMatchObject({
+              _tag: "Success",
+              value: { status: "error", error: { message: expect.stringContaining("Permission denied: shell") } },
+            })
+            expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+          }),
+        "bash",
+      ))
+
+    for (const reply of ["reject", "once", "always"] as const) {
+      test(`${portable ? "native" : "legacy"}: conditional substitutions respect ${reply}`, () =>
+        withScanner(
+          portable,
+          (registry, directory) =>
+            Effect.gen(function* () {
+              const saved = yield* PermissionSaved.Service
+              const location = yield* Location.Service
+              yield* saved.add({ projectID: location.project.id, action: "shell", resources: ["wait *"] })
+              const marker = path.join(directory.active, "marker")
+              const command = '[[ -n <(printf reached > marker) ]]; wait "$!"'
+              const result = yield* runPermissionCommand(registry, command, marker, [reply])
+              expect(result.requests).toMatchObject([
+                { action: "shell", resources: ["printf reached > marker", 'wait "$!"'], save: ["printf *", "wait *"] },
+              ])
+              if (reply === "reject") {
+                expect(Exit.isFailure(result.exit)).toBe(true)
+                expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+                return
+              }
+              expect(result.exit).toMatchObject({
+                _tag: "Success",
+                value: { status: "completed", metadata: { exit: 0 } },
+              })
+              expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("reached")
+              yield* Effect.promise(() => fs.unlink(marker))
+              const repeat = yield* runPermissionCommand(
+                registry,
+                command,
+                marker,
+                reply === "always" ? [] : ["reject"],
+              )
+              expect(repeat.requests).toHaveLength(reply === "always" ? 0 : 1)
+              expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(reply === "always")
+            }),
+          "bash",
+        ))
+    }
+  }
+})
+
+describe("ShellTool compound syntax approval compatibility", () => {
+  for (const fixture of [
+    {
+      shell: "zsh",
+      command: 'for value (a b) printf %s "$value"',
+      equivalent: 'for value in a b; do printf %s "$value"; done',
+      output: "ab",
+      saved: ["printf *"],
+    },
+    {
+      shell: "zsh",
+      command: 'for value (a b) { printf %s "$value"; }',
+      equivalent: 'for value in a b; do printf %s "$value"; done',
+      output: "ab",
+      saved: ["printf *"],
+    },
+    {
+      shell: "zsh",
+      command: 'for value ($(printf a)) do printf %s "$value"; done',
+      equivalent: 'for value in $(printf a); do printf %s "$value"; done',
+      output: "a",
+      saved: ["printf *"],
+    },
+    {
+      shell: "bash",
+      command: 'probe() for value in a b; do printf %s "$value"; done; probe',
+      equivalent: 'probe() { for value in a b; do printf %s "$value"; done; }; probe',
+      output: "ab",
+      saved: ["printf *", "probe *"],
+    },
+    {
+      shell: "bash",
+      command: 'printf %s "$(probe() case value in value) printf hello;; esac; probe)"',
+      equivalent: 'printf %s "$(probe() { case value in value) printf hello;; esac; }; probe)"',
+      output: "hello",
+      saved: ["printf *", "probe *"],
+    },
+  ]) {
+    const test = isWindows || !Bun.which(fixture.shell) ? permissionIt.live.skip : permissionIt.live
+    for (const portable of [false, true]) {
+      test(`${fixture.shell} ${portable ? "native" : "legacy equivalent"}: ${fixture.command}`, () =>
+        withScanner(
+          portable,
+          (registry, directory) =>
+            Effect.gen(function* () {
+              const saved = yield* PermissionSaved.Service
+              const location = yield* Location.Service
+              yield* saved.add({ projectID: location.project.id, action: "shell", resources: fixture.saved })
+              const result = yield* runPermissionCommand(
+                registry,
+                portable ? fixture.command : fixture.equivalent,
+                path.join(directory.active, "marker"),
+                [],
+              )
+              expect(result.requests).toEqual([])
+              expect(result.exit).toMatchObject({
+                _tag: "Success",
+                value: {
+                  status: "completed",
+                  metadata: { exit: 0 },
+                  content: [{ type: "text", text: fixture.output }, { type: "text" }],
+                },
+              })
+            }),
+          fixture.shell,
+        ))
+    }
   }
 })
 
@@ -595,8 +742,8 @@ describe("ShellTool ordinary shell syntax", () => {
           (registry, directory) =>
             Effect.gen(function* () {
               const agents = yield* Agent.Service
-              yield* agents.transform((draft) =>
-                draft.update(toolIdentity.agent, (agent) => {
+              yield* agents.transform((editor) =>
+                editor.update(toolIdentity.agent, (agent) => {
                   agent.permissions = [
                     { action: "shell", resource: "*", effect: "allow" },
                     { action: "shell", resource: "printf *", effect: "deny" },
@@ -682,8 +829,8 @@ describe("ShellTool ordinary shell syntax", () => {
             })
 
             const agents = yield* Agent.Service
-            yield* agents.transform((draft) =>
-              draft.update(toolIdentity.agent, (agent) => {
+            yield* agents.transform((editor) =>
+              editor.update(toolIdentity.agent, (agent) => {
                 agent.permissions = [{ action: "shell", resource: command, effect: "deny" }]
               }),
             )
@@ -706,8 +853,8 @@ describe("ShellTool", () => {
         reset()
         return withSession(tmp.path, (registry) =>
           Effect.gen(function* () {
-            yield* registry.transform((draft) =>
-              draft.update("shell", (tool) => {
+            yield* registry.transform((editor) =>
+              editor.update("shell", (tool) => {
                 tool.options = { ...tool.options, codemode: true }
               }),
             )
@@ -1068,7 +1215,7 @@ describe("ShellTool", () => {
               const settled = yield* withSession(tmp.path, (registry) =>
                 Effect.gen(function* () {
                   const selection = yield* ShellSelect.Service
-                  yield* selection.transform((draft) => draft.configure("sh"))
+                  yield* selection.transform((editor) => editor.configure("sh"))
                   return yield* executeTool(
                     registry,
                     call({ command: 'printf hello > marker\necho "' }, "call-portable-malformed"),
@@ -1117,7 +1264,7 @@ describe("ShellTool", () => {
                   yield* withSession(tmp.path, (registry) =>
                     Effect.gen(function* () {
                       const selection = yield* ShellSelect.Service
-                      yield* selection.transform((draft) => draft.configure(shell))
+                      yield* selection.transform((editor) => editor.configure(shell))
                       for (const [command, output] of [
                         ["echo $((1 + 1))", "2\n"],
                         ["cd ~ && pwd", `${realpathSync(os.homedir())}\n`],

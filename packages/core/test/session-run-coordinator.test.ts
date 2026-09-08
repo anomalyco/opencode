@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
-import { SessionInbox } from "@opencode-ai/core/session/inbox"
-import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
+import { SessionInbox } from "@opencode/core/session/inbox"
+import { SessionRunCoordinator } from "@opencode/core/session/run-coordinator"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(Layer.empty)

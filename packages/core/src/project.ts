@@ -7,12 +7,12 @@ import path from "path"
 import { AbsolutePath } from "./schema.js"
 import { Bus } from "./bus.js"
 import { Database } from "./database/database.js"
-import { Worktree } from "@opencode-ai/schema/worktree"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Worktree } from "@opencode/schema/worktree"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Git } from "./git.js"
-import { AppProcess } from "@opencode-ai/util/process"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Hash } from "@opencode-ai/util/hash"
+import { AppProcess } from "@opencode/util/process"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { Hash } from "@opencode/util/hash"
 import { ProjectSchema } from "./project/schema.js"
 import { ProjectTable, upsertProject } from "./project/sql.js"
 import { WorktreeTable } from "./worktree/sql.js"
@@ -212,6 +212,7 @@ const layer = Layer.effect(
       const row = yield* db
         .update(ProjectTable)
         .set({
+          worktree: input.canonical,
           name: input.name === undefined ? undefined : input.name || null,
           icon_url_override: input.icon?.override === undefined ? undefined : input.icon.override || null,
           icon_color: input.icon?.color === undefined ? undefined : input.icon.color || null,

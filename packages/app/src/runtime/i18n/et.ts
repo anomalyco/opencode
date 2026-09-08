@@ -133,6 +133,7 @@ export const dict = {
   "command.language.cycle": "Tsükli keel",
   "command.language.set": "Kasuta keelt: {{language}}",
   "command.session.new": "Uus seanss",
+  "command.session.import": "Impordi seanss",
   "command.file.open": "Ava fail",
   "command.tab.close": "Sule vahekaart",
   "command.tab.reopenClosed": "Ava suletud vaheleht uuesti",

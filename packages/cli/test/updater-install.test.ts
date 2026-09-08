@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node"
-import { Global } from "@opencode-ai/util/global"
-import { AppProcess } from "@opencode-ai/util/process"
-import { expect, test } from "bun:test"
+import { Global } from "@opencode/util/global"
+import { AppProcess } from "@opencode/util/process"
+import { expect, spyOn, test } from "bun:test"
 import { Effect, FileSystem, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { existsSync } from "node:fs"
@@ -17,11 +17,29 @@ function fixture(
   respond: (command: ChildProcess.StandardCommand) => Partial<AppProcess.RunResult> & {
     error?: AppProcess.AppProcessError
   } = () => ({}),
+  name = "@opencode/cli",
 ) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-updater-" })
+    const executable = path.join(root, "package", "bin", "opencode")
+    yield* fs.makeDirectory(path.dirname(executable), { recursive: true })
+    yield* fs.writeFileString(
+      path.join(root, "package", "package.json"),
+      JSON.stringify({ name, bin: { opencode: "bin/opencode" } }),
+    )
+    // The updater uses global fetch; scope this replacement to each install test.
+    yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        spyOn(globalThis, "fetch").mockImplementation(
+          Object.assign(async () => Response.json({ version: "2.3.4", metadata: { package: name } }), {
+            preconnect: fetch.preconnect,
+          }),
+        ),
+      ),
+      (request) => Effect.sync(() => request.mockRestore()),
+    )
     const global = Global.make({
       home: path.join(root, "home"),
       data: path.join(root, "data"),
@@ -37,6 +55,10 @@ function fixture(
     const updater = yield* Updater.Service.pipe(
       Effect.provide(Updater.layer),
       Effect.provideService(Global.Service, global),
+      Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        realPath: (input) => (input === process.execPath ? Effect.succeed(executable) : fs.realPath(input)),
+      }),
       Effect.provideService(
         AppProcess.Service,
         AppProcess.Service.of({
@@ -66,12 +88,12 @@ function fixture(
 }
 
 const installs = [
-  { method: "npm", command: ["npm", "install", "--global", "@opencode-ai/cli@2.3.4-beta.1"] },
+  { method: "npm", command: ["npm", "install", "--global", "@opencode/cli@2.3.4-beta.1"] },
   {
     method: "pnpm",
-    command: ["pnpm", "add", "--global", "--allow-build=@opencode-ai/cli", "@opencode-ai/cli@2.3.4-beta.1"],
+    command: ["pnpm", "add", "--global", "--allow-build=@opencode/cli", "@opencode/cli@2.3.4-beta.1"],
   },
-  { method: "yarn", command: ["yarn", "global", "add", "@opencode-ai/cli@2.3.4-beta.1"] },
+  { method: "yarn", command: ["yarn", "global", "add", "@opencode/cli@2.3.4-beta.1"] },
 ] as const
 
 installs.forEach(({ method, command }) => {
@@ -95,7 +117,7 @@ installs.forEach(({ method, command }) => {
       const cache = test.commands[0]?.[5]
       expect(cache).toStartWith(path.join(test.global.cache, "update-"))
       expect(test.commands).toEqual([
-        ["bun", "install", "--global", "--trust", "--cache-dir", cache, "@opencode-ai/cli@2.3.4-beta.1"],
+        ["bun", "install", "--global", "--trust", "--cache-dir", cache, "@opencode/cli@2.3.4-beta.1"],
       ])
       expect(yield* test.fs.readDirectory(test.global.cache)).toEqual([])
       expect(result._tag).toBe(exitCode === 0 ? "None" : "Some")
@@ -162,12 +184,12 @@ it.live("install failures expose stderr and process errors do not report success
   it.live(`method detection identifies ${method ?? "an unknown installation"} using the V2 package`, () =>
     Effect.gen(function* () {
       const test = yield* fixture((command) => ({
-        stdout: Buffer.from(command.command === method ? "@opencode-ai/cli@2.3.4" : "opencode-ai@1.0.0"),
+        stdout: Buffer.from(command.command === method ? "@opencode/cli@2.3.4" : "opencode-ai@1.0.0"),
       }))
       expect(yield* test.updater.method()).toBe(method)
       expect(test.commands).toEqual([
-        ["npm", "list", "-g", "--depth=0", "@opencode-ai/cli"],
-        ["pnpm", "list", "-g", "--depth=0", "@opencode-ai/cli"],
+        ["npm", "list", "-g", "--depth=0", "@opencode/cli"],
+        ["pnpm", "list", "-g", "--depth=0", "@opencode/cli"],
         ["bun", "pm", "ls", "-g"],
         ["yarn", "global", "list"],
       ])
@@ -179,7 +201,7 @@ it.live("method detection tolerates unavailable package managers", () =>
   Effect.gen(function* () {
     const test = yield* fixture((command) =>
       command.command === "yarn"
-        ? { stdout: Buffer.from("@opencode-ai/cli@2.3.4") }
+        ? { stdout: Buffer.from("@opencode/cli@2.3.4") }
         : { error: new AppProcess.AppProcessError({ command: command.command }) },
     )
     expect(yield* test.updater.method()).toBe("yarn")
@@ -214,19 +236,22 @@ test("Node distribution honors the compile-time CLI name", async () => {
 if (typeof OPENCODE_CLI_NAME === "string" && OPENCODE_CLI_NAME === "opencode2-node") {
   it.live("Node distribution resolves the published npm package", () =>
     Effect.gen(function* () {
-      const test = yield* fixture((command) => ({
-        stdout: Buffer.from(command.command === "npm" ? "opencode-node@2.3.4" : ""),
-      }))
+      const test = yield* fixture(
+        (command) => ({
+          stdout: Buffer.from(command.command === "npm" ? "@opencode/cli-node@2.3.4" : ""),
+        }),
+        "@opencode/cli-node",
+      )
       expect(yield* test.updater.method()).toBe("npm")
       yield* test.updater.upgrade("npm", "v2.3.4")
       yield* test.updater.upgrade("pnpm", "v2.3.4")
       expect(test.commands).toEqual([
-        ["npm", "list", "-g", "--depth=0", "opencode-node"],
-        ["pnpm", "list", "-g", "--depth=0", "opencode-node"],
+        ["npm", "list", "-g", "--depth=0", "@opencode/cli-node"],
+        ["pnpm", "list", "-g", "--depth=0", "@opencode/cli-node"],
         ["bun", "pm", "ls", "-g"],
         ["yarn", "global", "list"],
-        ["npm", "install", "--global", "opencode-node@2.3.4"],
-        ["pnpm", "add", "--global", "--allow-build=opencode-node", "opencode-node@2.3.4"],
+        ["npm", "install", "--global", "@opencode/cli-node@2.3.4"],
+        ["pnpm", "add", "--global", "--allow-build=@opencode/cli-node", "@opencode/cli-node@2.3.4"],
       ])
     }),
   )

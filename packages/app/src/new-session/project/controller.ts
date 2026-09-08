@@ -50,6 +50,7 @@ export function createComposerProjectControls(props: { draftId: string; worktree
     if (!connection) return
     pickDirectory({
       server: connection,
+      location: ServerConnection.key(connection) === ServerConnection.key(projectServer()) ? location().ref : undefined,
       title,
       onSelect: (result) => {
         const directory = Array.isArray(result) ? result[0] : result

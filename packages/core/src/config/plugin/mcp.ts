@@ -1,8 +1,8 @@
 export * as ConfigMcpPlugin from "./mcp.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Document, type Entry } from "@opencode-ai/schema/config"
-import type { ServerConfig } from "@opencode-ai/schema/mcp"
+import { define } from "@opencode/plugin/effect/plugin"
+import { Document, type Entry } from "@opencode/schema/config"
+import type { ServerConfig } from "@opencode/schema/mcp"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config.js"
 import { Mcp } from "../../mcp/index.js"
@@ -36,7 +36,7 @@ export const register = Effect.fn("ConfigMCPPlugin.register")(function* (
 
   // Subscribe before the initial load so updates racing it trigger a rebuild.
   loaded.entries = yield* config.entries()
-  yield* mcp.transform((draft) => {
+  yield* mcp.transform((editor) => {
     const documents = loaded.entries.filter((entry): entry is Document => entry.type === "document")
     // Global timeout defaults merge in config order; each server can override them.
     const timeout = Object.assign(
@@ -50,8 +50,8 @@ export const register = Effect.fn("ConfigMCPPlugin.register")(function* (
       }
     }
     for (const [name, server] of servers) {
-      if (draft.get(name)) continue
-      draft.set(name, { ...server, timeout: { ...timeout, ...server.timeout } })
+      if (editor.get(name)) continue
+      editor.set(name, { ...server, timeout: { ...timeout, ...server.timeout } })
     }
   })
 })

@@ -3,11 +3,11 @@ export * as VcsHgPlugin from "./hg.js"
 import path from "path"
 import { Effect } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import { FileDiff } from "@opencode-ai/schema/file-diff"
-import { FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { AppProcess } from "@opencode-ai/util/process"
+import { define } from "@opencode/plugin/effect/plugin"
+import { FileDiff } from "@opencode/schema/file-diff"
+import { FileStatus, Info, Mode } from "@opencode/schema/vcs"
+import { FSUtil } from "@opencode/util/fs-util"
+import { AppProcess } from "@opencode/util/process"
 import { Location } from "../../location.js"
 import type { Adapter, DiffOptions } from "../../vcs.js"
 import { DiffError } from "../../vcs.js"
@@ -35,8 +35,8 @@ export const Plugin = define({
       worktree: location.project.directory,
     })
 
-    yield* ctx.vcs.transform((draft) => {
-      draft.add({
+    yield* ctx.vcs.transform((editor) => {
+      editor.add({
         id: "hg",
         name: "Mercurial",
         info: () => adapter.info(),

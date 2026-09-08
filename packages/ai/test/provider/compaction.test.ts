@@ -125,12 +125,15 @@ testEffect(
       response: { output: [{ type: "compaction", encrypted_content: "opaque" }] },
     }),
   ),
-).effect("rejects terminal checkpoints missing an id", () =>
+).effect("mints an id for terminal checkpoints that omit one", () =>
   Effect.gen(function* () {
-    const error = yield* LLMClient.generate(
+    const response = yield* LLMClient.generate(
       LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" }),
-    ).pipe(Effect.flip)
-    expect(error.reason._tag).toBe("InvalidProviderOutput")
-    expect(error.message).toContain("missing its id")
+    )
+    const part = response.message.content[0]
+    expect(part?.type).toBe("compaction")
+    if (part?.type !== "compaction") return
+    expect(part.id).toMatch(/^cmp_[0-9a-f]{32}$/)
+    expect(part.encrypted).toBe("opaque")
   }),
 )

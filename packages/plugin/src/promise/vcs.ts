@@ -1,6 +1,6 @@
-import type { VcsApi } from "@opencode-ai/client/promise/api"
-import type { FileDiff } from "@opencode-ai/schema/file-diff"
-import type { Vcs } from "@opencode-ai/schema/vcs"
+import type { VcsApi } from "@opencode/client/promise/api"
+import type { FileDiff } from "@opencode/schema/file-diff"
+import type { Vcs } from "@opencode/schema/vcs"
 import type { Transform } from "./registration.js"
 
 export interface VcsScope {
@@ -33,11 +33,11 @@ export interface VcsDefinition {
 }
 
 export interface VcsDomain extends VcsApi {
-  readonly transform: Transform<VcsDraft>
+  readonly transform: Transform<VcsEditor>
   readonly reload: () => Promise<void>
 }
 
-export interface VcsDraft {
+export interface VcsEditor {
   add(definition: VcsDefinition): void
   readonly default: {
     get(): string | undefined

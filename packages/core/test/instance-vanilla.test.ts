@@ -2,18 +2,19 @@ import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Duration, Effect, Layer, LayerMap } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Global } from "@opencode-ai/util/global"
-import { Config } from "@opencode-ai/core/config"
-import { Instance } from "@opencode-ai/core/instance"
-import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
-import { LocationServiceMap } from "@opencode-ai/core/location-services"
-import { Location } from "@opencode-ai/core/location"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Global } from "@opencode/util/global"
+import { Config } from "@opencode/core/config"
+import { Instance } from "@opencode/core/instance"
+import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
+import { LocationServiceMap } from "@opencode/core/location-services"
+import { Location } from "@opencode/core/location"
+import { Plugin } from "@opencode/core/plugin"
+import { AbsolutePath } from "@opencode/core/schema"
 import { tmpdir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
+import { offlineModels } from "./fixture/models"
 import { testEffect } from "./lib/effect"
 import { Database } from "../src/database/database"
 import { Bus } from "../src/bus"
@@ -47,6 +48,7 @@ const instances = Layer.effect(
     )
     const bindings: LayerNode.Replacements = [
       Global.node.replace(tempGlobalLayer),
+      offlineModels,
       LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, map)),
       Instance.node.replace(
         Layer.succeed(Instance.Service, {
@@ -61,6 +63,7 @@ const instances = Layer.effect(
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
     Global.node.replace(tempGlobalLayer),
+    offlineModels,
     LocationServiceMap.node.replace(instances),
   ]),
 )

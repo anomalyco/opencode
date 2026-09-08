@@ -8,7 +8,7 @@ if (process.argv[2] !== "serve") {
   plugin({
     name: "vite-tui-entry",
     setup(build) {
-      build.module("@opencode-ai/tui", () => ({ loader: "object", exports: { run } }))
+      build.module("@opencode/tui", () => ({ loader: "object", exports: { run } }))
     },
   })
 }

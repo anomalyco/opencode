@@ -2,7 +2,7 @@ export * as UpdaterLive from "./live"
 
 import { dialog } from "electron"
 import { Effect, Layer } from "effect"
-import type { UpdaterState } from "@opencode-ai/app/updater"
+import type { UpdaterState } from "@opencode/app/updater"
 import { UPDATER_ENABLED } from "../constants"
 import { DesktopInitialization } from "../lifecycle/desktop-initialization"
 import { ApplicationLifecycle } from "../lifecycle"

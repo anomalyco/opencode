@@ -6,6 +6,7 @@ import {
   identifierSegment,
   inputProperties,
   inputTypeScript,
+  isEmptyInput,
   outputTypeScript,
 } from "./tool-schema.js"
 import { isNamespace, type Namespace } from "./namespace.js"
@@ -328,7 +329,9 @@ const flattenTools = <R>(
 const describeTool = <R>(visible: VisibleTool<R>): ToolDescription => ({
   path: visible.path,
   description: visible.tool.description,
-  signature: `${toolExpression(visible.path)}(input: ${inputTypeScript(visible.tool, true)}): Promise<${outputTypeScript(visible.tool, true)}>`,
+  signature: isEmptyInput(visible.tool)
+    ? `${toolExpression(visible.path)}(): Promise<${outputTypeScript(visible.tool, true)}>`
+    : `${toolExpression(visible.path)}(input: ${inputTypeScript(visible.tool, true)}): Promise<${outputTypeScript(visible.tool, true)}>`,
 })
 
 // Discovery bytes are durable instructions, so order only after canonical-path collisions settle.
@@ -522,10 +525,11 @@ export const make = <R>(
 
   const executeTool = (name: string, tool: Tool<R>, externalArgs: Array<unknown>) =>
     Effect.gen(function* () {
-      if (externalArgs.length !== 1)
-        throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects exactly one input object.`)
+      const normalized = externalArgs.length === 0 ? [{}] : externalArgs
+      if (normalized.length !== 1)
+        throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects at most one input object.`)
       const input = yield* Effect.try({
-        try: () => decodeToolInput(tool, externalArgs[0]),
+        try: () => decodeToolInput(tool, normalized[0]),
         catch: (cause) =>
           new ToolRuntimeError(
             "InvalidToolInput",

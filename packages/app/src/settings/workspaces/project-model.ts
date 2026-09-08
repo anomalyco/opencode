@@ -1,5 +1,5 @@
-import { getFilename } from "@opencode-ai/util/path"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { getFilename } from "@opencode/util/path"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
 import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -70,12 +70,13 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
       const start = store.startup.trim()
 
       if (props.project.id && props.project.id !== "global") {
-        await serverCtx().sdk.api.project.update({
+        const project = await serverCtx().sdk.api.project.update({
           projectID: props.project.id,
           name,
           icon: { color: store.color ?? "", override: store.iconOverride ?? "" },
           commands: { start },
         })
+        serverCtx().sync.project.update(project)
         dialog.close()
         return
       }

@@ -410,7 +410,10 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               ...current,
               status: "completed",
               reason: event.data.reason,
+              model: event.data.model,
+              providerState: event.data.providerState,
               summary: event.data.text,
+              providerContext: event.data.providerContext,
               recent: event.data.recent,
             })
             return
@@ -422,7 +425,10 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               status: "completed",
               metadata: event.metadata,
               reason: event.data.reason,
+              model: event.data.model,
+              providerState: event.data.providerState,
               summary: event.data.text,
+              providerContext: event.data.providerContext,
               recent: event.data.recent,
               time: { created },
             }),

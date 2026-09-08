@@ -1,9 +1,9 @@
 export * as Reference from "./reference.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Scope } from "effect"
-import { Reference } from "@opencode-ai/schema/reference"
-import { Global } from "@opencode-ai/util/global"
+import { Reference } from "@opencode/schema/reference"
+import { Global } from "@opencode/util/global"
 import { Bus } from "./bus.js"
 import { Repository } from "./repository.js"
 import { RepositoryCache } from "./repository-cache.js"
@@ -19,7 +19,7 @@ export type GitSource = Reference.GitSource
 export const Source = Reference.Source
 export type Source = Reference.Source
 
-export { Event } from "@opencode-ai/schema/reference"
+export { Event } from "@opencode/schema/reference"
 
 export const Info = Reference.Info
 export type Info = Reference.Info
@@ -28,13 +28,14 @@ type Data = {
   sources: Map<string, Source>
 }
 
-type Draft = {
+type Editor = {
   add(name: string, source: Source): void
   remove(name: string): void
   list(): readonly [string, Source][]
+  get(name: string): Source | undefined
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<Info[]>
 }
 
@@ -91,18 +92,20 @@ const layer = Layer.effect(
         { concurrency: 4, discard: true },
       )
     })
-    const state = State.create<Data, Draft>({
+    const state = State.create<Data, Editor>({
       name: "reference",
       initial: () => ({ sources: new Map() }),
-      draft: (draft) => ({
-        add: (name, source) => draft.sources.set(name, source),
-        remove: (name) => draft.sources.delete(name),
-        list: () => Array.from(draft.sources),
+      editor: (editor) => ({
+        add: (name, source) => editor.sources.set(name, source),
+        remove: (name) => editor.sources.delete(name),
+        list: () => Array.from(editor.sources),
+        get: (name) => editor.sources.get(name),
       }),
-      notify: Effect.gen(function* () {
-        yield* refresh().pipe(Effect.forkIn(scope))
-        yield* bus.publish(Reference.Event.Updated, {})
-      }),
+      notify: () =>
+        Effect.gen(function* () {
+          yield* refresh().pipe(Effect.forkIn(scope))
+          yield* bus.publish(Reference.Event.Updated, {})
+        }),
     })
 
     // Check independently of session activity; the shared cache throttles Git work daily.

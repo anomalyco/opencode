@@ -5,10 +5,10 @@ import { AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/d
 import { RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers"
 import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { arrayMove } from "@dnd-kit/helpers"
-import { Button } from "@opencode-ai/ui/button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Button } from "@opencode/ui/button"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { SessionQueueView } from "./queue"
 
@@ -156,10 +156,10 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
                   data-action="session-queue-steer"
                   type="button"
                   size="small"
-                  variant="ghost-muted"
+                  variant="ghost-faint"
                   icon="arrow-up"
                   disabled={props.queue.busy()}
-                  class="text-v2-text-text-muted ![font-weight:530]"
+                  class="![font-weight:530]"
                   onClick={() => void props.queue.steer(props.id)}
                 >
                   {props.queue.working() ? language.t("session.queue.steer") : language.t("session.queue.send")}

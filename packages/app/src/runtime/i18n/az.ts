@@ -135,6 +135,7 @@ export const dict = {
   "command.language.cycle": "Dili dəyiş",
   "command.language.set": "Dildən istifadə et: {{language}}",
   "command.session.new": "Yeni sessiya",
+  "command.session.import": "Sessiyanı idxal et",
   "command.file.open": "Faylı aç",
   "command.tab.close": "Tabı bağla",
   "command.tab.reopenClosed": "Bağlanmış tabı yenidən aç",

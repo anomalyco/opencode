@@ -1,13 +1,13 @@
 export * as Rpc from "./rpc.js"
-export { define } from "@opencode-ai/schema/rpc"
-export type { Definition, EventPayload, Failure } from "@opencode-ai/schema/rpc"
+export { define } from "@opencode/schema/rpc"
+export type { Definition, EventPayload, Failure } from "@opencode/schema/rpc"
 
-import type { RpcClient, RpcDomain, RpcHandlers } from "@opencode-ai/plugin/effect/rpc"
-import type { Rpc } from "@opencode-ai/schema/rpc"
-import { Event } from "@opencode-ai/schema/event"
-import type { Tool } from "@opencode-ai/schema/tool"
+import type { RpcClient, RpcDomain, RpcHandlers } from "@opencode/plugin/effect/rpc"
+import type { Rpc } from "@opencode/schema/rpc"
+import { Event } from "@opencode/schema/event"
+import type { Tool } from "@opencode/schema/tool"
 import type { StandardSchemaV1 } from "@standard-schema/spec"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, JsonSchema, Layer, Schema, SchemaRepresentation, Stream } from "effect"
 import { Bus } from "./bus.js"
 import { Location } from "./location.js"
@@ -121,7 +121,15 @@ const layer = Layer.effect(
         // The heterogeneous registry erases handlers after their selected schema validates input.
         const execution: Effect.Effect<unknown, unknown> = Reflect.apply(handler, undefined, [parsed, callContext])
         return execution
-      }).pipe(Effect.catch((error) => encodeError(method, error)))
+      }).pipe(
+        Effect.catch((error) => encodeError(method, error)),
+        // Normalize handler bugs here so direct callers can recover just like HTTP callers.
+        Effect.catchDefect((defect) =>
+          Effect.logError("rpc handler failed", { rpc: rpcID, method: name, defect }).pipe(
+            Effect.andThen(Effect.fail(failure("rpc.internal", "RPC call failed"))),
+          ),
+        ),
+      )
       return yield* encode(method.output, result).pipe(
         Effect.mapError((error) => failure("rpc.invalid_output", errorMessage(error, "Invalid RPC output"))),
       )

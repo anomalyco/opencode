@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "MiniMax-M3",
+    "tags": [
+      "prefix:minimax-responses",
+      "provider:minimax",
+      "protocol:open-responses",
+      "text",
+      "usage",
+      "thinking-off"
+    ],
+    "name": "minimax-responses/m3-streams-text-with-effort-none",
+    "recordedAt": "2026-09-07T16:53:21.223Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.minimax.io/v1/responses",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"MiniMax-M3\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"What is 173 multiplied by 219? Reply with only the final integer.\"}]}],\"reasoning\":{\"effort\":\"none\"},\"max_output_tokens\":1536,\"stream\":true}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":0,\"response\":{\"id\":\"40d878e9c7ecc67905d069cdf9bec7c0\",\"object\":\"response\",\"created_at\":1788800001,\"model\":\"MiniMax-M3\",\"status\":\"in_progress\",\"output\":[],\"output_text\":null,\"usage\":null,\"error\":null,\"incomplete_details\":null,\"instructions\":null,\"metadata\":{},\"tools\":null,\"tool_choice\":\"auto\",\"temperature\":1,\"top_p\":0.95,\"text\":{\"format\":{\"type\":\"text\"}},\"reasoning\":{\"effort\":\"none\",\"summary\":null},\"max_output_tokens\":1536,\"parallel_tool_calls\":true,\"previous_response_id\":null,\"conversation\":null,\"store\":false,\"service_tier\":\"standard\",\"safety_identifier\":null,\"truncation\":\"disabled\"}}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"sequence_number\":1,\"response\":{\"id\":\"40d878e9c7ecc67905d069cdf9bec7c0\",\"object\":\"response\",\"created_at\":1788800001,\"model\":\"MiniMax-M3\",\"status\":\"in_progress\",\"output\":[],\"output_text\":null,\"usage\":null,\"error\":null,\"incomplete_details\":null,\"instructions\":null,\"metadata\":{},\"tools\":null,\"tool_choice\":\"auto\",\"temperature\":1,\"top_p\":0.95,\"text\":{\"format\":{\"type\":\"text\"}},\"reasoning\":{\"effort\":\"none\",\"summary\":null},\"max_output_tokens\":1536,\"parallel_tool_calls\":true,\"previous_response_id\":null,\"conversation\":null,\"store\":false,\"service_tier\":\"standard\",\"safety_identifier\":null,\"truncation\":\"disabled\"}}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":2,\"item\":{\"id\":\"40d878e9c7ecc67905d069cdf9bec7c0_msg\",\"type\":\"message\",\"status\":\"in_progress\",\"role\":\"assistant\",\"content\":[]},\"output_index\":0}\n\nevent: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"sequence_number\":3,\"part\":{\"type\":\"output_text\",\"text\":\"\",\"annotations\":[]},\"output_index\":0,\"content_index\":0,\"item_id\":\"40d878e9c7ecc67905d069cdf9bec7c0_msg\"}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":4,\"output_index\":0,\"content_index\":0,\"item_id\":\"40d878e9c7ecc67905d069cdf9bec7c0_msg\",\"delta\":\"378\"}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":5,\"output_index\":0,\"content_index\":0,\"item_id\":\"40d878e9c7ecc67905d069cdf9bec7c0_msg\",\"delta\":\"87\"}\n\nevent: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"sequence_number\":6,\"output_index\":0,\"content_index\":0,\"item_id\":\"40d878e9c7ecc67905d069cdf9bec7c0_msg\",\"text\":\"37887\"}\n\nevent: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"sequence_number\":7,\"part\":{\"type\":\"output_text\",\"text\":\"37887\",\"annotations\":[]},\"output_index\":0,\"content_index\":0,\"item_id\":\"40d878e9c7ecc67905d069cdf9bec7c0_msg\"}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":8,\"item\":{\"status\":\"completed\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"37887\",\"annotations\":[]}],\"id\":\"40d878e9c7ecc67905d069cdf9bec7c0_msg\",\"type\":\"message\"},\"output_index\":0}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":9,\"response\":{\"id\":\"40d878e9c7ecc67905d069cdf9bec7c0\",\"object\":\"response\",\"created_at\":1788800001,\"model\":\"MiniMax-M3\",\"status\":\"completed\",\"output\":[{\"id\":\"40d878e9c7ecc67905d069cdf9bec7c0_msg\",\"type\":\"message\",\"status\":\"completed\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"37887\",\"annotations\":null}]}],\"output_text\":\"37887\",\"usage\":{\"input_tokens\":179,\"output_tokens\":3,\"total_tokens\":182,\"input_tokens_details\":{\"cached_tokens\":128}},\"error\":null,\"incomplete_details\":null,\"instructions\":null,\"metadata\":{},\"tools\":null,\"tool_choice\":\"auto\",\"temperature\":1,\"top_p\":0.95,\"text\":{\"format\":{\"type\":\"text\"}},\"reasoning\":{\"effort\":\"none\",\"summary\":null},\"max_output_tokens\":1536,\"parallel_tool_calls\":true,\"previous_response_id\":null,\"conversation\":null,\"store\":false,\"service_tier\":\"standard\",\"safety_identifier\":null,\"truncation\":\"disabled\"}}\n\n"
+      }
+    }
+  ]
+}

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { BoxRenderable, EmbeddedTerminalRenderable, type Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
@@ -79,7 +79,7 @@ test.each([80, 120, 180])("session wheel scrolling preserves pane focus at width
         get: async () => ({ animations: false, session: { terminal: true }, tabs: { enabled: false } }),
         update: async () => ({}),
       },
-      packages: { resolve: async () => undefined },
+      packages: { prepare: async () => ({ directory: "" }) },
       args: { sessionID: session.id },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
       log: () => {},

@@ -1,6 +1,6 @@
 import { EOL } from "node:os"
 import { Cause, Effect, Exit, Option } from "effect"
-import { Npm } from "@opencode-ai/util/npm"
+import { Npm } from "@opencode/util/npm"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { inspect } from "./inventory"
@@ -26,7 +26,7 @@ export default Runtime.handler(
       (item) =>
         (item.runtime === "Server"
           ? Effect.promise(() => result.client.plugin.update({ location: result.location, targets: [item.target] }))
-          : npm.update(item.target, { subpaths: ["tui"] }).pipe(Effect.asVoid)
+          : npm.update(item.target).pipe(Effect.asVoid)
         ).pipe(
           Effect.exit,
           Effect.map((result) => ({ item, result })),

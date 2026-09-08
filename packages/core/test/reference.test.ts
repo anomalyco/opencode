@@ -1,14 +1,14 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Exit, Layer, Scope } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { Bus } from "@opencode-ai/core/bus"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { State } from "@opencode-ai/core/state"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Global } from "@opencode-ai/util/global"
-import { Reference } from "@opencode-ai/core/reference"
-import { Repository } from "@opencode-ai/core/repository"
-import { RepositoryCache } from "@opencode-ai/core/repository-cache"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Bus } from "@opencode/core/bus"
+import { AbsolutePath } from "@opencode/core/schema"
+import { State } from "@opencode/core/state"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Global } from "@opencode/util/global"
+import { Reference } from "@opencode/core/reference"
+import { Repository } from "@opencode/core/repository"
+import { RepositoryCache } from "@opencode/core/repository-cache"
 import { it } from "./lib/effect"
 
 const cache = Layer.mock(RepositoryCache.Service, {
@@ -19,6 +19,26 @@ const referenceLayer = AppNodeBuilder.build(LayerNode.group([Reference.node, Bus
 ])
 
 describe("Reference", () => {
+  it.effect("reads the current editor source by name", () =>
+    Effect.gen(function* () {
+      const references = yield* Reference.Service
+      const source = Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/docs") })
+      yield* references.transform((editor) => editor.add("docs", source))
+      yield* references.transform((editor) => {
+        expect(editor.get("docs")).toBe(editor.list()[0]?.[1])
+        expect(editor.get("docs")).toEqual(source)
+        expect(editor.get("missing")).toBeUndefined()
+        const replacement = Reference.GitSource.make({ type: "git", repository: "owner/repo" })
+        editor.add("docs", replacement)
+        expect(editor.get("docs")).toBe(replacement)
+        editor.remove("docs")
+        expect(editor.get("docs")).toBeUndefined()
+      })
+
+      expect(yield* references.list()).toEqual([])
+    }).pipe(Effect.provide(referenceLayer)),
+  )
+
   it.effect("reads batched references before cache work and update events", () => {
     const operations: RepositoryCache.EnsureInput[] = []
     const started = Deferred.makeUnsafe<void>()
@@ -61,13 +81,13 @@ describe("Reference", () => {
 
       yield* State.batch(
         Effect.gen(function* () {
-          yield* references.transform((draft) =>
-            draft.add("docs", Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/docs") })),
+          yield* references.transform((editor) =>
+            editor.add("docs", Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/docs") })),
           )
           expect((yield* references.list()).map((info) => info.name)).toEqual(["docs"])
 
-          yield* references.transform((draft) => {
-            draft.add(
+          yield* references.transform((editor) => {
+            editor.add(
               "sdk",
               Reference.GitSource.make({
                 type: "git",
@@ -77,12 +97,12 @@ describe("Reference", () => {
                 hidden: true,
               }),
             )
-            draft.add("invalid", Reference.GitSource.make({ type: "git", repository: "invalid" }))
-            draft.add(
+            editor.add("invalid", Reference.GitSource.make({ type: "git", repository: "invalid" }))
+            editor.add(
               "invalid-branch",
               Reference.GitSource.make({ type: "git", repository: "owner/repo", branch: "../escape" }),
             )
-            draft.add("file", Reference.GitSource.make({ type: "git", repository: "file:///docs" }))
+            editor.add("file", Reference.GitSource.make({ type: "git", repository: "file:///docs" }))
           })
           const infos = yield* references.list()
           expect(infos.map((info) => info.name)).toEqual(["docs", "sdk"])
@@ -122,8 +142,8 @@ describe("Reference", () => {
           if (event.type !== Reference.Event.Updated.type || reentered) return
           reentered = true
           yield* references
-            .transform((draft) =>
-              draft.add("docs", Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/new") })),
+            .transform((editor) =>
+              editor.add("docs", Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/new") })),
             )
             .pipe(Scope.provide(scope))
         }),
@@ -139,8 +159,8 @@ describe("Reference", () => {
       )
       yield* Effect.addFinalizer(() => first.pipe(Effect.andThen(second)))
 
-      yield* references.transform((draft) =>
-        draft.add("docs", Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/old") })),
+      yield* references.transform((editor) =>
+        editor.add("docs", Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/old") })),
       )
 
       expect((yield* references.list()).map((info) => info.path)).toEqual([AbsolutePath.make("/new")])

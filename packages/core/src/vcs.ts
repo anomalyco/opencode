@@ -2,13 +2,13 @@ export * as Vcs from "./vcs.js"
 
 import path from "path"
 import { Cause, Context, Effect, FiberSet, Layer, Schema, Semaphore, Stream } from "effect"
-import type { VcsDefinition, VcsDraft } from "@opencode-ai/plugin/effect/vcs"
-import { FileDiff } from "@opencode-ai/schema/file-diff"
-import { FileSystem } from "@opencode-ai/schema/filesystem"
-import { Base, BranchList, FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
-import { VcsEvent } from "@opencode-ai/schema/vcs-event"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import type { VcsDefinition, VcsEditor } from "@opencode/plugin/effect/vcs"
+import { FileDiff } from "@opencode/schema/file-diff"
+import { FileSystem } from "@opencode/schema/filesystem"
+import { Base, BranchList, FileStatus, Info, Mode } from "@opencode/schema/vcs"
+import { VcsEvent } from "@opencode/schema/vcs-event"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "./location.js"
 import { Bus } from "./bus.js"
 import { State } from "./state.js"
@@ -38,7 +38,7 @@ export interface Adapter {
   readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff.Info[], DiffError>
 }
 
-export interface Interface extends Adapter, State.Transformable<VcsDraft> {
+export interface Interface extends Adapter, State.Transformable<VcsEditor> {
   readonly base: () => Effect.Effect<Base | null, DiffError>
 }
 
@@ -71,17 +71,17 @@ const layer = Layer.effect(
     const decodeBranches = Schema.decodeUnknownEffect(BranchList)
     const decodeStatus = Schema.decodeUnknownEffect(Schema.Array(FileStatus))
     const decodeDiff = Schema.decodeUnknownEffect(Schema.Array(FileDiff.Info))
-    const state: State.Interface<Data, VcsDraft> = State.create<Data, VcsDraft>({
+    const state: State.Interface<Data, VcsEditor> = State.create<Data, VcsEditor>({
       name: "vcs",
       initial: () => ({ providers: new Map() }),
-      draft: (draft) => ({
-        add: (provider) => draft.providers.set(provider.id, provider),
+      editor: (editor) => ({
+        add: (provider) => editor.providers.set(provider.id, provider),
         default: {
-          get: () => draft.selection,
-          set: (selection) => (draft.selection = selection),
+          get: () => editor.selection,
+          set: (selection) => (editor.selection = selection),
         },
       }),
-      notify: State.reconcile(root, fork, () => refresh()),
+      notify: () => State.reconcile(root, fork, () => refresh()),
     })
     const selected = () => {
       const value = state.get()
