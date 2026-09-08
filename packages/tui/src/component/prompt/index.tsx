@@ -615,11 +615,11 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Move session",
-        desc: "Move to another project dir",
+        title: "Manage workspaces",
+        desc: "Manage workspaces",
         name: "session.move",
         category: "Session",
-        slash: { name: "move" },
+        slash: { name: "worktrees" },
         run: () => {
           move.open()
         },

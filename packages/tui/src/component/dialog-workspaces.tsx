@@ -20,23 +20,23 @@ import type { WorktreeListOutput } from "@opencode/client"
 import { useRoute } from "../context/route"
 import { DialogWorktreeName } from "./dialog-worktree-name"
 
-export type MoveSessionSelection =
+export type WorkspaceSelection =
   | { type: "directory"; directory: string; subdirectory: boolean }
   | { type: "new"; name: string }
 type ProjectDirectory = WorktreeListOutput[number]
 
-type DialogMoveSessionProps = {
+type DialogWorkspacesProps = {
   projectID: string
   location?: { directory: string; workspaceID?: string }
-  current?: MoveSessionSelection
-  onSelect: (selection: MoveSessionSelection) => void
-  onCurrentChange?: (selection: MoveSessionSelection) => void
+  current?: WorkspaceSelection
+  onSelect: (selection: WorkspaceSelection) => void
+  onCurrentChange?: (selection: WorkspaceSelection) => void
   initialDirectories?: ReadonlyArray<ProjectDirectory>
   fixture?: boolean
   initialRemoving?: string
 }
 
-export function DialogMoveSession(props: DialogMoveSessionProps) {
+export function DialogWorkspaces(props: DialogWorkspacesProps) {
   const dialog = useDialog()
   const client = useClient()
   const dimensions = useTerminalDimensions()
@@ -60,7 +60,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
 
   function reopen(initialRemoving?: string) {
     dialog.replace(() => (
-      <DialogMoveSession {...props} initialDirectories={directoryData()} initialRemoving={initialRemoving} />
+      <DialogWorkspaces {...props} initialDirectories={directoryData()} initialRemoving={initialRemoving} />
     ))
   }
 
@@ -113,7 +113,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
       .toSorted((a, b) => b.directory.length - a.directory.length)[0]
   })
 
-  const options = createMemo<DialogSelectOption<MoveSessionSelection | undefined>[]>(() => {
+  const options = createMemo<DialogSelectOption<WorkspaceSelection | undefined>[]>(() => {
     if (showError()) return []
     const data = directoryData()
     const current = currentRoot()?.directory
@@ -213,7 +213,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     return true
   }
 
-  async function remove(option: DialogSelectOption<MoveSessionSelection | undefined>) {
+  async function remove(option: DialogSelectOption<WorkspaceSelection | undefined>) {
     if (!option.value || option.value.type !== "directory" || option.value.subdirectory || removing()) return
     const data = directoryData()
     const selected = option.value
@@ -299,6 +299,14 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     props.onSelect({ type: "new", name })
   }
 
+  async function move(option: DialogSelectOption<WorkspaceSelection | undefined>) {
+    if (route.data.type !== "session" || option.value?.type !== "directory") return
+    const sessionID = route.data.sessionID
+    const directory = option.value.directory
+    dialog.clear()
+    await client.api.session.move({ sessionID, directory }).catch(toast.error)
+  }
+
   const fullHeight = createMemo(() =>
     Math.max(8, Math.min(16, dimensions().height - Math.floor(dimensions().height / 4) - 2)),
   )
@@ -306,11 +314,11 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   return (
     <box minHeight={showError() ? 5 : fullHeight()}>
       <DialogSelect
-        title="Move session"
+        title="Worktrees"
         titleView={
           <box flexDirection="row" gap={1}>
             <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
-              Move session
+              Worktrees
             </text>
             <Show when={working() || directories.loading || loadedProject.loading}>
               <Spinner />
@@ -327,7 +335,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
                 Could not load worktrees
               </text>
               <text fg={theme.text.subdued}>{errorMessage(loadError())}</text>
-              <text fg={theme.text.subdued}>Close and reopen Move session to try again.</text>
+              <text fg={theme.text.subdued}>Close and reopen Worktrees to try again.</text>
             </box>
           ) : directories.loading || loadedProject.loading ? (
             <box paddingLeft={4} paddingRight={4}>
@@ -354,6 +362,9 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
           showError() || props.fixture
             ? []
             : [
+                ...(route.data.type === "session"
+                  ? [{ command: "dialog.move_session.move", title: "move", onTrigger: move }]
+                  : []),
                 {
                   command: "dialog.move_session.new",
                   title: "new",
