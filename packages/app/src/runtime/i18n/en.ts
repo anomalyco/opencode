@@ -655,6 +655,15 @@ export const dict = {
   "home.sessions.search.noResults": "No sessions found for {{query}}",
   "home.sessions.empty": "Nothing here yet",
   "home.sessions.empty.description": "Create a session to get started",
+  "home.connect.title": "Connect a server",
+  "home.connect.description":
+    "This is the OpenCode web interface. Connect your own server to access your projects and sessions.",
+  "home.connect.instructions":
+    "Run OpenCode on the machine with your code, then add its server address and password here.",
+  "home.connect.add": "Add remote server",
+  "home.connect.manage": "Manage servers",
+  "home.connect.unavailable": "Could not connect. Check that this server is running and reachable from your browser.",
+  "home.connect.help": "Learn about connecting to a server",
   "home.sessions.group.today": "Today",
   "home.sessions.group.yesterday": "Yesterday",
   "home.sessions.group.older": "Older",

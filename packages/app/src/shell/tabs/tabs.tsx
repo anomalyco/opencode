@@ -141,6 +141,8 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     createEffect(() => {
       if (!ready() || !recentReady()) return
       const serversSet = new Set(servers.list.map(ServerConnection.key))
+      // Hosted web no longer auto-connects to localhost; retain its tabs so re-adding it recovers them.
+      if (servers.canonicalLocalServer) serversSet.add(servers.canonicalLocalServer)
       const next = store.filter((tab) => serversSet.has(tab.server))
       if (next.length !== store.length) {
         for (const tab of store) {
@@ -167,6 +169,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     createEffect(() => {
       if (!closedReady()) return
       const serversSet = new Set(servers.list.map(ServerConnection.key))
+      if (servers.canonicalLocalServer) serversSet.add(servers.canonicalLocalServer)
       const next = closed.filter((entry) => serversSet.has(entry.tab.server))
       if (next.length !== closed.length) setClosed(() => next)
     })

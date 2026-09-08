@@ -201,7 +201,11 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
             <div class={props.dropdown ? "" : "pr-3"}>
               <Show
                 when={props.projects.length > 0}
-                fallback={<HomeProjectEmpty {...props} server={props.servers[0]} items={props.recentlyClosed} />}
+                fallback={
+                  <Show when={props.servers[0]}>
+                    {(server) => <HomeProjectEmpty {...props} server={server()} items={props.recentlyClosed} />}
+                  </Show>
+                }
               >
                 <HomeProjectList {...props} {...contextMenuProps} server={props.servers[0]} items={props.projects} />
                 <Show when={props.dropdown}>

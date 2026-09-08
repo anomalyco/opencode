@@ -194,7 +194,7 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
   name: "Server",
   gate: true,
   init: (props: {
-    defaultServer: ServerConnection.Key
+    defaultServer?: ServerConnection.Key
     canonicalLocalServer?: ServerConnection.Key
     servers?: Array<ServerConnection.Any>
   }) => {
@@ -250,6 +250,9 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
     }
 
     return {
+      get canonicalLocalServer() {
+        return props.canonicalLocalServer
+      },
       get list() {
         return allServers()
       },

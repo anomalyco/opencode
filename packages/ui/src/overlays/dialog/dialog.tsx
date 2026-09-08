@@ -10,6 +10,7 @@ export interface DialogProps extends ParentProps {
   containerClass?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
   fit?: boolean
+  onCloseAutoFocus?: ComponentProps<typeof Content>["onCloseAutoFocus"]
 }
 
 export interface DialogHeaderProps extends ParentProps {
@@ -93,6 +94,7 @@ export function Dialog(props: DialogProps) {
     >
       <div data-slot="dialog-container" class={local.containerClass}>
         <Content
+          onCloseAutoFocus={props.onCloseAutoFocus}
           data-slot="dialog-content"
           classList={{
             ...local.classList,

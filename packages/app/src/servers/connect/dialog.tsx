@@ -23,11 +23,14 @@ type FormMode = "list" | "add" | "edit"
 export const DialogServer: Component<{
   mode: "add" | "edit"
   server?: ServerConnection.Http
+  onAdd?: (server: ServerConnection.Http) => void
+  onCloseAutoFocus?: (event: Event) => void
 }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
   const form = createFormController({
     onSelect: () => dialog.close(),
+    onAdd: (server) => props.onAdd?.(server),
   })
   const [opened, setOpened] = createSignal(false)
 
@@ -63,7 +66,7 @@ export const DialogServer: Component<{
   }
 
   return (
-    <Dialog fit class="settings-server-dialog">
+    <Dialog fit class="settings-server-dialog" onCloseAutoFocus={props.onCloseAutoFocus}>
       <DialogHeader hideClose={true}>
         <DialogTitle>{title()}</DialogTitle>
       </DialogHeader>
@@ -128,7 +131,9 @@ export const DialogServer: Component<{
   )
 }
 
-function createFormController(options: { onSelect?: () => void } = {}) {
+function createFormController(
+  options: { onSelect?: () => void; onAdd?: (server: ServerConnection.Http) => void } = {},
+) {
   const server = useServers()
   const tabs = useTabs()
   const global = useGlobal()
@@ -212,7 +217,8 @@ function createFormController(options: { onSelect?: () => void } = {}) {
       }
 
       reset()
-      add(connection)
+      const added = add(connection)
+      if (added) options.onAdd?.(added)
       options.onSelect?.()
     },
   }))
