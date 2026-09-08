@@ -161,6 +161,10 @@ Plugins can subscribe to events as seen below in the Examples section. Here is a
 - `lsp.client.diagnostics`
 - `lsp.updated`
 
+#### MCP Events
+
+- `mcp.call.before`
+
 #### Message Events
 
 - `message.part.removed`
@@ -272,6 +276,28 @@ export const InjectEnvPlugin = async () => {
   }
 }
 ```
+
+---
+
+### Forward session identity to MCP servers
+
+The `mcp.call.before` hook fires once per outbound MCP `client.callTool` request, before headers are committed. The hook receives `{ server, tool, sessionID, callID }` and a mutable `output.headers` map that is pre-populated with the server's static `mcp.<server>.headers` from config. Anything you write to `output.headers` is merged onto the request — plugin-set keys override static keys regardless of case. Throws inside the hook are logged at `warn` and the MCP call proceeds; it cannot fail the tool call.
+
+Typical use: tell a remote MCP server which opencode session and tool call a given request belongs to, so its logs / observability / multi-tenant routing can correlate to the upstream session.
+
+```javascript title=".opencode/plugins/mcp-forward-session.js"
+export const McpForwardSession = async () => {
+  return {
+    "mcp.call.before": async (input, output) => {
+      output.headers["x-session-id"] = input.sessionID
+      output.headers["x-call-id"] = input.callID
+      output.headers["x-user-id"] = process.env.OPENCODE_USER_ID ?? ""
+    },
+  }
+}
+```
+
+The hook fires only for `callTool`. SDK connect-time traffic (initialize, `tools/list`, OAuth probes) and stdio-transport MCP servers are not affected by this hook — they continue to carry only the static config headers.
 
 ---
 

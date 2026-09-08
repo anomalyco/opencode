@@ -8,6 +8,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
+import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js"
+import { AsyncLocalStorage } from "node:async_hooks"
 import {
   ListRootsRequestSchema,
   type LoggingMessageNotification,
@@ -36,6 +38,48 @@ import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { McpBrowser } from "./browser"
 
 const DEFAULT_TIMEOUT = 30_000
+
+/** @internal Exported for testing */
+export interface McpCallStore {
+  server: string
+  tool: string
+  sessionID: string
+  callID: string
+  headers: Record<string, string>
+}
+
+/** @internal Exported for testing */
+export const McpCallContext = new AsyncLocalStorage<McpCallStore>()
+
+function normalizeHeaders(headers: HeadersInit | undefined): Record<string, string> {
+  if (!headers) return {}
+  const out: Record<string, string> = {}
+  if (headers instanceof Headers) {
+    headers.forEach((value, key) => {
+      out[key.toLowerCase()] = value
+    })
+    return out
+  }
+  if (Array.isArray(headers)) {
+    for (const [k, v] of headers) out[k.toLowerCase()] = v
+    return out
+  }
+  for (const [k, v] of Object.entries(headers)) out[k.toLowerCase()] = v
+  return out
+}
+
+/** @internal Exported for testing */
+export function makeMcpFetch(base: FetchLike = fetch): FetchLike {
+  return async (url, init) => {
+    const store = McpCallContext.getStore()
+    if (!store) return base(url, init)
+    const merged: Record<string, string> = {
+      ...normalizeHeaders(init?.headers),
+      ...normalizeHeaders(store.headers),
+    }
+    return base(url, { ...init, headers: merged })
+  }
+}
 const CLIENT_OPTIONS = {
   capabilities: {
     // https://github.com/anomalyco/opencode/issues/11948
@@ -159,6 +203,7 @@ export interface McpTool {
   readonly def: MCPToolDef
   readonly client: MCPClient
   readonly timeout?: number
+  readonly server: string
 }
 
 export interface Interface {
@@ -272,6 +317,7 @@ const layer = Layer.effect(
           transport: new StreamableHTTPClientTransport(url, {
             authProvider,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            fetch: makeMcpFetch(),
           }),
         },
         {
@@ -279,6 +325,7 @@ const layer = Layer.effect(
           transport: new SSEClientTransport(url, {
             authProvider,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            fetch: makeMcpFetch(),
           }),
         },
       ]
@@ -681,7 +728,7 @@ const layer = Layer.effect(
         }
         const timeout = requestTimeout(s, clientName, mcpConfig, defaultTimeout)
         for (const def of listed) {
-          result[McpCatalog.toolName(clientName, def.name)] = { def, client, timeout }
+          result[McpCatalog.toolName(clientName, def.name)] = { def, client, timeout, server: clientName }
         }
       }
       return result
