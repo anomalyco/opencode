@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, HttpContext, TransportError } from "@opencode/ai"
+import { AIError, HttpContext, InvalidRequestError, TransportError } from "@opencode/ai"
 import type {
   ChannelObservation,
   WebSocketChannelExchange,
@@ -280,6 +280,36 @@ describe("SessionModelTransport", () => {
         yield* Effect.result(collect(executor, rejected))
         yield* collect(executor, exchange("retry"))
 
+        expect(fixture.connections).toHaveLength(2)
+        expect(fixture.connections[0]?.closed).toBe(1)
+      }),
+    )
+  })
+
+  test("closes the connection after a provider error frame so the next call reconnects", async () => {
+    const fixture = automatic()
+    const failed: WebSocketChannelExchange = {
+      ...exchange("failed"),
+      driver: {
+        create: () => Effect.succeed({ message: "failed", mode: "full" }),
+        observe: () =>
+          Effect.succeed({
+            type: "provider-failure",
+            error: new AIError({ reason: new InvalidRequestError({ message: "unsupported model" }) }),
+          }),
+      },
+    }
+
+    await run(
+      fixture.connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+        const result = yield* Effect.result(collect(executor, failed))
+        expect(result._tag).toBe("Failure")
+        expect(yield* collect(executor, exchange("next"))).toEqual(["completed:next"])
+
+        // The provider closes the socket after an error frame; a reused connection would race that close.
         expect(fixture.connections).toHaveLength(2)
         expect(fixture.connections[0]?.closed).toBe(1)
       }),

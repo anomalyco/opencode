@@ -145,6 +145,12 @@ export const makeLayer = (connector: WebSocketConnector) =>
         if (owner.channel === channel) owner.channel = undefined
         if (channel.closing) return
         channel.closing = true
+        yield* Effect.logDebug("session websocket poisoned", {
+          sessionTransport: "websocket",
+          phase: error.reason._tag === "Transport" && error.reason.phase === "close" ? "close" : "receive",
+          code: error.reason._tag === "Transport" ? error.reason.code : error.reason._tag,
+          active: channel.active !== undefined,
+        })
         if (channel.active) Queue.failCauseUnsafe(channel.active.queue, Cause.fail(error))
         yield* metric(
           error.reason._tag === "Transport" && error.reason.code === "queue-overflow"
@@ -388,7 +394,12 @@ export const makeLayer = (connector: WebSocketConnector) =>
               if (terminal && pending === 0) {
                 yield* metric("terminal", { type: terminal.type })
                 if (terminal.type === "rejected") yield* metric("rejection", { recovery: terminal.recovery })
-                if (terminal.type === "rejected" && terminal.recovery === "rotate-and-retry-full")
+                // Providers close the socket after an error frame. Drop it now so the next exchange
+                // reconnects instead of racing that close and failing with an ambiguous delivery.
+                if (
+                  terminal.type === "provider-failure" ||
+                  (terminal.type === "rejected" && terminal.recovery === "rotate-and-retry-full")
+                )
                   yield* closeChannel(owner, channel)
                 return
               }
