@@ -10,6 +10,8 @@ import { BrowserToolbar } from "./toolbar"
 
 export default Plugin.define({
   id: "opencode.browser",
+  name: "session.tab.browser",
+  main: true,
   setup(ctx) {
     if (!ctx.app.native) return
     const [settings, setSettings] = ctx.storage.store("settings", { initial: { enabled: false } })
