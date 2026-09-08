@@ -243,7 +243,9 @@ describe("SessionModelTransport", () => {
         yield* collect(executor, item("retry"))
 
         expect(checkpoints).toEqual([undefined, candidate, undefined])
-        expect(fixture.connections).toHaveLength(1)
+        // Error frames end the connection on some backends, so the full retry uses a fresh one.
+        expect(fixture.connections).toHaveLength(2)
+        expect(fixture.connections[0]?.closed).toBe(1)
       }),
     )
   })
@@ -309,7 +311,6 @@ describe("SessionModelTransport", () => {
         expect(result._tag).toBe("Failure")
         expect(yield* collect(executor, exchange("next"))).toEqual(["completed:next"])
 
-        // The provider closes the socket after an error frame; a reused connection would race that close.
         expect(fixture.connections).toHaveLength(2)
         expect(fixture.connections[0]?.closed).toBe(1)
       }),
