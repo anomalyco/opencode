@@ -5477,6 +5477,9 @@ export class Session3 extends HeyApiClient {
       agent?: string
       model?: ModelRef
       location?: LocationRef
+      metadata?: {
+        [key: string]: unknown
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5489,6 +5492,7 @@ export class Session3 extends HeyApiClient {
             { in: "body", key: "agent" },
             { in: "body", key: "model" },
             { in: "body", key: "location" },
+            { in: "body", key: "metadata" },
           ],
         },
       ],

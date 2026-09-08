@@ -10172,6 +10172,10 @@
                   },
                   "location": {
                     "$ref": "#/components/schemas/LocationRef"
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
                   }
                 },
                 "additionalProperties": false
@@ -27323,6 +27327,10 @@
           },
           "revert": {
             "$ref": "#/components/schemas/RevertState"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
           }
         },
         "required": ["id", "projectID", "cost", "tokens", "time", "title", "location"],

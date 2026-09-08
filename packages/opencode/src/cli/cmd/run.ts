@@ -519,6 +519,7 @@ export const RunCommand = effectCmd({
         const result = await sdk.session.create({
           title: name,
           permission: [...rules],
+          metadata: { origin: "run" },
         })
         const id = result.data?.id
         if (!id) {
@@ -562,6 +563,7 @@ export const RunCommand = effectCmd({
               }
             : undefined,
           permission: [...rules],
+          metadata: { origin: "run" },
         })
         const id = result.data?.id
         if (!id) {

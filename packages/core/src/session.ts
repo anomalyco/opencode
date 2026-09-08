@@ -81,6 +81,7 @@ type CreateInput = {
   agent?: AgentV2.ID
   model?: ModelV2.Ref
   location: Location.Ref
+  metadata?: Record<string, unknown>
 }
 
 type CompactInput = {
@@ -227,6 +228,7 @@ const layer = Layer.effect(
           workspaceID: input.location.workspaceID ? WorkspaceV2.ID.make(input.location.workspaceID) : undefined,
           title: `New session - ${new Date(now).toISOString()}`,
           agent: input.agent,
+          metadata: input.metadata,
           model: input.model
             ? {
                 id: ModelV2.ID.make(input.model.id),

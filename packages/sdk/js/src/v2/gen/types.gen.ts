@@ -3930,6 +3930,9 @@ export type SessionV2Info = {
   location: LocationRef
   subpath?: string
   revert?: RevertState
+  metadata?: {
+    [key: string]: unknown
+  }
 }
 
 export type PromptInputFileAttachment = {
