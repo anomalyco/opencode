@@ -1057,8 +1057,8 @@ const resolveOptions = Effect.fn("AnthropicMessages.resolveOptions")(function* (
 const supportsThinkingBlockBinding = (model: LLMRequest["model"]) => {
   const override = model.compatibility?.supportsThinkingBlockBinding
   if (override !== undefined) return override
-  // Accept namespaced IDs, dotted versions, and dated snapshots without treating a date as a minor version.
-  const version = /(?:^|[./])claude-[a-z]+-(?<major>\d+)(?:[.-](?<minor>\d{1,2}))?(?:$|[-:])/i.exec(model.id)?.groups
+  // Accept gateway namespaces and Vertex suffixes without treating a snapshot date as a minor version.
+  const version = /(?:^|[./])claude-[a-z]+-(?<major>\d+)(?:[.-](?<minor>\d{1,2}))?(?:$|[-:@])/i.exec(model.id)?.groups
   if (!version) return false
   const major = Number(version.major)
   const minor = Number(version.minor ?? 0)

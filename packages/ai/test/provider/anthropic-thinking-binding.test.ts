@@ -8,10 +8,15 @@ import { it } from "../lib/effect.js"
 for (const [id, enabled] of [
   ["claude-fable-5-1", true],
   ["claude-mythos-5-1", true],
+  ["claude-fable-5.1", true],
   ["anthropic/claude-fable-5.1", true],
+  ["claude-fable-5-1@default", true],
+  ["claude-fable-5-1@20260901", true],
   ["claude-sonnet-6", true],
   ["claude-opus-5-20260901", false],
   ["claude-opus-4-8", false],
+  ["anthropic/claude-opus-4.8", false],
+  ["claude-fable-5@default", false],
   ["kimi-k2.5", false],
 ] as const) {
   it.effect(`thinking-binding defaults for ${id}`, () =>
