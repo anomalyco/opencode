@@ -7,6 +7,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { reply } from "../../lib/llm-server"
 import { cliIt } from "../../lib/cli-process"
+import { testProviderConfig } from "../../lib/test-provider"
 
 describe("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
@@ -299,12 +300,111 @@ describe("opencode run (non-interactive subprocess)", () => {
         })
 
         opencode.expectExit(result, 0)
+        expect(result.stdout).toBe("attachment received\n")
         const input = JSON.stringify(yield* llm.inputs)
         expect(input).toContain(sentinel)
         expect(input).not.toContain(`file://${source}`)
       }),
     60_000,
   )
+
+  for (const mode of ["stream", "missing-idle", "command"]) {
+    cliIt.live(
+      `attach preserves completed output (${mode})`,
+      ({ llm, opencode }) =>
+        Effect.gen(function* () {
+          yield* llm.push(
+            reply().reason("thinking").text("before").tool("bash", {
+              command: "printf tool-output",
+              description: "Print deterministic output",
+            }),
+          )
+          yield* llm.text("after")
+          const server = yield* opencode.serve({
+            env: {
+              OPENCODE_CONFIG_CONTENT: JSON.stringify({
+                ...testProviderConfig(llm.url),
+                command: { probe: { template: "exercise output" } },
+              }),
+            },
+          })
+          // Keep SSE connected but withhold its events, including session idle.
+          const proxy = yield* Effect.acquireRelease(
+            Effect.sync(() =>
+              Bun.serve({
+                hostname: "127.0.0.1",
+                port: 0,
+                fetch(request) {
+                  const url = new URL(request.url)
+                  if (url.pathname === "/event" && mode !== "stream") {
+                    return new Response(
+                      new ReadableStream({
+                        start(controller) {
+                          controller.enqueue(
+                            new TextEncoder().encode('data: {"type":"server.connected","properties":{}}\n\n'),
+                          )
+                        },
+                      }),
+                      { headers: { "Content-Type": "text/event-stream" } },
+                    )
+                  }
+                  const forwarded = new Request(new URL(url.pathname + url.search, server.url), request)
+                  forwarded.headers.set("Accept-Encoding", "identity")
+                  return fetch(forwarded)
+                },
+              }),
+            ),
+            (proxy) => Effect.sync(() => proxy.stop(true)),
+          )
+          const result = yield* opencode.run("exercise output", {
+            command: mode === "command" ? "probe" : undefined,
+            format: "json",
+            extraArgs: ["--attach", proxy.url.origin, "--thinking", "--dangerously-skip-permissions"],
+          })
+          opencode.expectExit(result, 0)
+          const events = opencode.parseJsonEvents(result.stdout)
+          expect(events.map((event) => event.type)).toEqual([
+            "step_start",
+            "reasoning",
+            "text",
+            "tool_use",
+            "step_finish",
+            "step_start",
+            "text",
+            "step_finish",
+          ])
+          expect(events.filter((event) => event.type === "text").map((event) => event.part)).toEqual([
+            expect.objectContaining({ text: "before" }),
+            expect.objectContaining({ text: "after" }),
+          ])
+
+          yield* llm.text("next turn")
+          const resumed = yield* opencode.run("continue", {
+            format: "json",
+            extraArgs: ["--attach", proxy.url.origin, "--session", String(events[0].sessionID)],
+          })
+          opencode.expectExit(resumed, 0)
+          expect(opencode.parseJsonEvents(resumed.stdout).map((event) => event.type)).toEqual([
+            "step_start",
+            "text",
+            "step_finish",
+          ])
+          expect(resumed.stdout).toContain("next turn")
+          expect(resumed.stdout).not.toContain('"before"')
+
+          const rejected = yield* opencode.run("unknown model", {
+            model: "test/nonexistent-model",
+            format: "json",
+            extraArgs: ["--attach", proxy.url.origin],
+          })
+          expect(rejected.exitCode).not.toBe(0)
+          const errors = opencode.parseJsonEvents(rejected.stdout)
+          expect(errors.length).toBeGreaterThan(0)
+          expect(errors.every((event) => event.type === "error")).toBe(true)
+        }),
+      60_000,
+    )
+  }
 
   cliIt.concurrent(
     "attach mode rejects local directories before prompt admission",
