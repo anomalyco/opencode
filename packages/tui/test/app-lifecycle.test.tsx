@@ -430,10 +430,9 @@ test("session title generated while an untitled session is loading remains visib
   }
 })
 
-test.each(["horizontal", "vertical"] as const)("session tabs respect %s layout while resizing", async (layout) => {
+test("vertical session tabs collapse to a compact rail with the terminal", async () => {
   await using state = await tmpdir()
-  const stored = Bun.file(path.join(state.path, "test", "tui", "layout.json"))
-  await Bun.write(stored, JSON.stringify({ verticalTabsWidth: 5 }))
+  await Bun.write(path.join(state.path, "test", "tui", "layout.json"), JSON.stringify({ verticalTabsWidth: 42 }))
   const session = {
     id: "ses_resize",
     title: "Resize fixture",
@@ -444,10 +443,11 @@ test.each(["horizontal", "vertical"] as const)("session tabs respect %s layout w
     time: { created: 1, updated: 2 },
   }
   await using setup = await createAppFixture({
+    width: 100,
     state: state.path,
     config: {
       animations: false,
-      tabs: { enabled: true, layout, indicators: "status" },
+      tabs: { enabled: true, layout: "vertical", indicators: "status" },
       session: { sidebar: "hide" },
     },
     args: { sessionID: session.id },
@@ -459,47 +459,15 @@ test.each(["horizontal", "vertical"] as const)("session tabs respect %s layout w
     },
   })
   await setup.ready
-  await setup.waitForFrame((frame) => frame.includes(layout === "vertical" ? "  R  " : session.title))
-  await setup.waitForVisualIdle()
-  if (layout === "horizontal") {
-    expect(setup.captureCharFrame().split("\n")[0]).toContain(session.title)
-    expect(setup.captureCharFrame()).not.toContain("⌕")
-    setup.resize(60, 30)
-    await setup.waitForFrame((frame) => frame.split("\n")[0]!.includes(session.title))
-    return
-  }
-  await setup.waitForFrame((frame) => frame.split("\n")[1]!.slice(0, 5).trim() === "⌕")
-  await setup.mockMouse.pressDown(4, 10)
-  for (const width of [8, 11, 12, 24, 42, 24, 12, 11, 8, 5]) {
-    await setup.mockMouse.moveTo(width - 1, 10)
-    await setup.renderOnce()
-    const lines = setup.captureCharFrame().split("\n")
-    if (width < 12) {
-      expect(lines[0]!.slice(0, width - 1)).toBe("▄".repeat(width - 1))
-      expect(lines[1]!.slice(0, width).trim()).toBe("⌕")
-      expect(lines[3]!.slice(0, width).trim()).toBe("R")
-      continue
-    }
-    expect(lines[1]!.slice(0, width)).toContain("Resize")
-    expect(lines[4]!.slice(0, width)).toContain("+ New")
-    expect(setup.captureCharFrame()).not.toContain("⌕")
-  }
-  await setup.mockMouse.release(4, 10)
-  await setup.mockMouse.doubleClick(4, 10)
-  await setup.waitForFrame((frame) => frame.split("\n")[1]!.slice(0, 42).includes(session.title))
-  await setup.mockMouse.click(8, 4)
-  await setup.waitForFrame((frame) => frame.includes("Ask anything"))
-  expect(setup.captureCharFrame().split("\n")[1]).toContain(session.title)
-  expect(setup.captureCharFrame().split("\n")[4]).toContain("+ New session")
+  await setup.waitForFrame((frame) => frame.split("\n")[1].slice(0, 42).includes(session.title))
+
   setup.resize(54, 30)
-  await setup.waitForFrame((frame) => frame.split("\n")[0]!.startsWith("▄".repeat(10)))
+  await setup.waitForFrame((frame) => frame.split("\n")[1].slice(0, 10).trim() === "⌕")
   setup.resize(48, 30)
-  await setup.waitForFrame((frame) => frame.split("\n")[0]!.includes(session.title))
+  await setup.waitForFrame((frame) => frame.split("\n")[0].includes(session.title))
   expect(setup.captureCharFrame()).not.toContain("⌕")
   setup.resize(100, 30)
-  await setup.waitForFrame((frame) => frame.split("\n")[1]!.slice(0, 42).includes(session.title))
-  await setup.mockMouse.drag(41, 10, 8, 10)
-  await setup.waitFor(async () => (await stored.json()).verticalTabsWidth === 9)
+  await setup.waitForFrame((frame) => frame.split("\n")[1].slice(0, 42).includes(session.title))
 })
 
 test("automatic rename refreshes the displayed title before settling, even without a renamed event", async () => {

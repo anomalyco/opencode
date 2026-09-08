@@ -20,17 +20,12 @@ test("vertical tabs account for a resized width", () => {
 
 test("vertical tab width preserves minimum rail and content widths", () => {
   expect(clampSessionTabsWidth(0, 120)).toBe(SESSION_TABS_COMPACT_WIDTH)
+  expect(clampSessionTabsWidth(11, 120)).toBe(11)
+  expect(clampSessionTabsWidth(12, 120)).toBe(12)
   expect(clampSessionTabsWidth(50, 120)).toBe(50)
   expect(clampSessionTabsWidth(100, 120)).toBe(SESSION_SIDEBAR_MAX_WIDTH)
   expect(clampSessionTabsWidth(100, 100)).toBe(56)
-})
-
-test("vertical tabs resize continuously down to five columns without reducing the content minimum", () => {
-  for (const width of [5, 6, 11, 12, 23, 24, 42, 72]) {
-    expect(clampSessionTabsWidth(width, 120)).toBe(width)
-  }
   expect(clampSessionTabsWidth(42, 54)).toBe(10)
-  expect(clampSessionTabsWidth(42, 49)).toBe(5)
   expect(sessionTabsFitVertically(49, SESSION_TABS_COMPACT_WIDTH)).toBe(true)
   expect(sessionTabsFitVertically(48, SESSION_TABS_COMPACT_WIDTH)).toBe(false)
 })

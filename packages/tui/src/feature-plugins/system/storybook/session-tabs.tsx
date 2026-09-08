@@ -15,7 +15,6 @@ import { closeSessionTab, cycleSessionTab, moveSessionTab } from "../../../conte
 import { StoryFooter } from "./footer"
 import { DialogPrompt } from "../../../ui/dialog-prompt"
 import { useDialog } from "../../../ui/dialog"
-import { useConfig } from "../../../config"
 import { DialogSelect } from "../../../ui/dialog-select"
 import {
   clampSessionTabsWidth,
@@ -68,7 +67,6 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const theme = props.context.theme
   const dialog = useDialog()
-  const config = useConfig().data
   // A keyed store mirrors production: retitles mutate rows in place instead of remounting them.
   const [tabStore, setTabStore] = createStore<{ items: { sessionID: string; title?: string }[] }>({
     items: FIXTURE_TABS.slice(0, 6).map((tab) => ({ ...tab })),
@@ -90,7 +88,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
     onCommit: setWidth,
   })
   const vertical = () => orientation() === "vertical" && sessionTabsFitVertically(dimensions().width, resize.size())
-  const [indicators, setIndicators] = createSignal(config.tabs.indicators)
+  const [indicators, setIndicators] = createSignal<"status" | "numbers">("status")
   const railCompact = () => resize.size() < SESSION_TABS_COMPACT_BREAKPOINT
   const spinners = Object.keys(TAB_SPINNERS) as TabSpinner[]
   const [spinner, setSpinner] = createSignal<TabSpinner>("dots")
@@ -174,7 +172,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
           onConfirm={(title) => {
             if (!title.trim()) return
             setTabStore("items", (tab) => tab.sessionID === sessionID, "title", title.trim())
-            props.context.ui.dialog.clear()
+            dialog.clear()
           }}
         />
       ))
@@ -324,7 +322,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
       setAnimations(true)
       setOrientation("vertical")
       setWidth(SESSION_SIDEBAR_WIDTH)
-      setIndicators(config.tabs.indicators)
+      setIndicators("status")
     })
     setLastEvent(showcase ? "all six states are visible" : "reset; all tabs idle")
   }
@@ -477,12 +475,6 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
           if (!tabs().some((tab) => tab.sessionID === active())) setActive("fixture-1")
         },
       },
-      ...([-1, 1] as const).map((direction) => ({
-        bind: direction === -1 ? "shift+left" : "shift+right",
-        title: direction === -1 ? "Narrow tabs" : "Widen tabs",
-        group: "Storybook",
-        run: () => setWidth(clampSessionTabsWidth(resize.size() + direction, dimensions().width)),
-      })),
       {
         bind: "o",
         title: "Toggle tab orientation",
@@ -562,7 +554,6 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
           { shortcut: "m", label: "motion" },
           { shortcut: "↑/↓", label: "select" },
           { shortcut: "o", label: "layout" },
-          { shortcut: "shift+←/→", label: "resize" },
           { shortcut: "drag edge", label: "resize / double-click reset" },
           { shortcut: "r", label: "reset idle" },
           { shortcut: "v", label: "all states" },

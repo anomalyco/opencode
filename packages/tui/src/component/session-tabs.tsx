@@ -38,7 +38,6 @@ import {
 } from "../context/session-tabs-model"
 import { createAnimatable, spring, tween } from "../ui/animation"
 import { Locale } from "../util/locale"
-import { stringWidth } from "../util/string-width"
 import { TabPulse, unreadGlowIntensity } from "./tab-pulse"
 import { tint } from "../theme/color"
 import { SESSION_SIDEBAR_WIDTH, SESSION_TABS_COMPACT_BREAKPOINT } from "../ui/layout"
@@ -184,8 +183,7 @@ function TabIndicator(props: {
       height={props.centered ? 1 : undefined}
       flexShrink={0}
       flexDirection="row"
-      justifyContent={props.centered ? "flex-start" : "flex-end"}
-      paddingLeft={props.centered ? Math.max(0, Math.floor((props.width - stringWidth(label())) / 2)) : 0}
+      justifyContent={props.centered ? "center" : "flex-end"}
       paddingRight={props.centered ? 0 : 1}
     >
       <Show
@@ -544,7 +542,8 @@ function VerticalSessionTabs(props: {
   const config = useConfig().data
   const animations = () => props.animations ?? config.animations ?? true
   const width = () => props.width ?? SESSION_SIDEBAR_WIDTH
-  const compact = () => width() < SESSION_TABS_COMPACT_BREAKPOINT
+  const compact = createMemo(() => width() < SESSION_TABS_COMPACT_BREAKPOINT)
+  const tooltipWidth = () => Math.min(54, dimensions().width - width())
   const stride = () => (compact() ? 2 : 3)
   const unreadColor = () => theme.text.status.unread
   const activeNumber = () => theme.text.status.running
@@ -555,7 +554,7 @@ function VerticalSessionTabs(props: {
   const marquee = createTabMarquee(animations)
   const hovered = marquee.hovered
   createEffect(() => {
-    width()
+    compact()
     untrack(marquee.reset)
   })
   const [hoverY, setHoverY] = createSignal(0)
@@ -868,13 +867,8 @@ function VerticalSessionTabs(props: {
                   position="relative"
                   flexDirection="column"
                   backgroundColor={background()}
-                  onMouseOver={() => {
-                    setHoverY(
-                      (scroll?.viewport.screenY ?? 0) +
-                        (compact() ? 1 : 0) +
-                        index() * stride() -
-                        (scroll?.scrollTop ?? 0),
-                    )
+                  onMouseOver={(event) => {
+                    setHoverY(event.y)
                     marquee.enter(tab.sessionID, title(), compact() ? Infinity : hoveredTitleWidth())
                   }}
                   onMouseOut={() => marquee.leave(tab.sessionID)}
@@ -1235,7 +1229,7 @@ function VerticalSessionTabs(props: {
             position="absolute"
             left={width()}
             top={Math.max(0, Math.min(hoverY() - 1, dimensions().height - 4) - (rail?.screenY ?? 0))}
-            width={Math.min(54, dimensions().width - width())}
+            width={tooltipWidth()}
             height={4}
             paddingY={1}
             zIndex={2000}
@@ -1243,7 +1237,7 @@ function VerticalSessionTabs(props: {
             <SessionTabHalfRow
               top={0}
               edge="top"
-              width={Math.min(54, dimensions().width - width())}
+              width={tooltipWidth()}
               color={theme.background.default}
               background={base.background.default}
             />
@@ -1253,17 +1247,17 @@ function VerticalSessionTabs(props: {
                   data?.session.get(sessionID())?.title ??
                     items().find((tab) => tab.sessionID === sessionID())?.title ??
                     "Untitled session",
-                  Math.min(52, dimensions().width - width() - 2),
+                  tooltipWidth() - 2,
                 )}
               </text>
               <text fg={theme.text.subdued} wrapMode="none" selectable={false}>
-                {Locale.takeWidth(detail(sessionID()), Math.min(52, dimensions().width - width() - 2))}
+                {Locale.takeWidth(detail(sessionID()), tooltipWidth() - 2)}
               </text>
             </box>
             <SessionTabHalfRow
               top={3}
               edge="bottom"
-              width={Math.min(54, dimensions().width - width())}
+              width={tooltipWidth()}
               color={theme.background.default}
               background={base.background.default}
             />
