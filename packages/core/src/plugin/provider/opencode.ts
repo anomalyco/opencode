@@ -1,4 +1,4 @@
-import { Duration, Effect, Schema, Semaphore, Stream } from "effect"
+import { Duration, Effect, Equal, Schema, Semaphore, Stream } from "effect"
 import type { Scope } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
@@ -85,22 +85,24 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
     const bus = yield* Bus.Service
     const http = yield* HttpClient.HttpClient
     const loading = Semaphore.makeUnsafe(1)
-    let connected = false
-    let providers: typeof RemoteResponse.Type.providers | undefined
+    let snapshot: {
+      connected: boolean
+      providers: typeof RemoteResponse.Type.providers | undefined
+    } = { connected: false, providers: undefined }
 
     const load = Effect.fn("OpencodePlugin.load")(function* () {
       const connection = yield* ctx.integration.connection.active("opencode")
       const credential = connection
         ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
         : undefined
-      connected = connection !== undefined
-      providers = credential
+      const providers = credential
         ? yield* fetchProviders(http, credential).pipe(
             Effect.catch((cause) =>
               Effect.logWarning("failed to load OpenCode provider config", { cause }).pipe(Effect.as(undefined)),
             ),
           )
         : undefined
+      return { connected: connection !== undefined, providers }
     })
 
     yield* ctx.integration.transform((editor) => {
@@ -111,9 +113,9 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
       editor.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
     })
 
-    yield* load()
+    snapshot = yield* load()
     yield* ctx.catalog.transform((catalog) => {
-      for (const [providerID, item] of Object.entries(providers ?? {})) {
+      for (const [providerID, item] of Object.entries(snapshot.providers ?? {})) {
         const source = catalog.provider.get(item.canonical ?? providerID)
         catalog.provider.update(providerID, (provider) => {
           if (source && source.provider !== provider)
@@ -183,7 +185,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
 
       const item = catalog.provider.get(Provider.ID.opencode)
       if (!item) return
-      const hasKey = Boolean(process.env.OPENCODE_API_KEY || connected || item.provider.settings?.apiKey)
+      const hasKey = Boolean(process.env.OPENCODE_API_KEY || snapshot.connected || item.provider.settings?.apiKey)
       catalog.provider.update(item.provider.id, (provider) => {
         if (!hasKey) {
           provider.activation = "enabled"
@@ -199,11 +201,28 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
       }
     })
 
-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
+    const apply = Effect.fn("OpencodePlugin.apply")(function* (next: typeof snapshot) {
+      snapshot = next
+      yield* ctx.catalog.reload()
+    })
+    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(apply)))
+
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("opencode")),
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),
+    )
+
+    // Console config can change independently of local credential activity, so re-fetch
+    // periodically and only rebuild the catalog when the loaded snapshot actually differs.
+    yield* Effect.sleep(Duration.minutes(10)).pipe(
+      Effect.andThen(
+        loading.withPermit(
+          load().pipe(Effect.flatMap((next) => (Equal.equals(snapshot, next) ? Effect.void : apply(next)))),
+        ),
+      ),
+      Effect.forever,
+      Effect.forkScoped,
     )
   }),
 })
