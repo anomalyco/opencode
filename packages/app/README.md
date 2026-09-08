@@ -117,13 +117,6 @@ browser local-network permissions can allow some HTTP LAN connections.
 QR scanning is enabled only in a browser-reported secure context with camera support and an available
 video input; insecure pages and unavailable cameras show an explanation beside the disabled action.
 
-Run `bun run test:server-connect` to build in `none` mode and test onboarding, password authentication,
-persistence, and QR scanning through Chromium's virtual camera. To use an existing `none`-mode app build:
-
-```bash
-PLAYWRIGHT_BASE_URL=http://127.0.0.1:4446 bun run test:server-connect
-```
-
 The workflow reuses the repository's `CLOUDFLARE_API_TOKEN` and web Sentry settings. The Cloudflare token
 must cover SST's R2 state storage, KV assets, Workers, and custom-domain management in the account that
 owns `opencode.ai`. The beta GitHub environment must allow deployments from the `beta` branch; it does not
