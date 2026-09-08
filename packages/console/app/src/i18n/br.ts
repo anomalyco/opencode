@@ -58,6 +58,7 @@ export const dict = {
   "common.cancel": "Cancelar",
   "common.creating": "Criando...",
   "common.create": "Criar",
+  "common.contactUs": "Contate-nos",
 
   "common.videoUnsupported": "Seu navegador não suporta a tag de vídeo.",
   "common.figure": "Fig {{n}}.",
@@ -228,6 +229,9 @@ export const dict = {
   "zen.faq.q8": "Posso usar o Zen com outros agentes de codificação?",
   "zen.faq.a8":
     "Embora o Zen funcione muito bem com o OpenCode, você pode usar o Zen com qualquer agente. Siga as instruções de configuração no seu agente de codificação preferido.",
+  "zen.faq.q9": "Posso receber um reembolso?",
+  "zen.faq.a9":
+    "Você pode ter direito a um reembolso se a cobrança foi feita nos últimos 14 dias e você não usou os créditos dessa compra. {{contact}} para solicitar um reembolso.",
 
   "zen.cta.start": "Comece com o Zen",
   "zen.pricing.title": "Adicionar $20 de saldo pré-pago",
@@ -373,6 +377,9 @@ export const dict = {
   "go.faq.q9": "Qual a diferença entre os modelos gratuitos e o Go?",
   "go.faq.a9":
     "Os modelos gratuitos incluem Big Pickle e modelos promocionais disponíveis no momento, com uma cota de 200 requisições/dia. O Go oferece uma seleção de modelos com cotas de requisição mais altas aplicadas em janelas móveis (5 horas, semanal e mensal), aproximadamente equivalentes a cotas básicas de $12 por 5 horas, $30 por semana e $60 por mês; as cotas específicas podem variar por modelo (as contagens reais de requisições variam de acordo com o modelo e o uso).",
+  "go.faq.q10": "Posso receber um reembolso?",
+  "go.faq.a10":
+    "Você pode ter direito a um reembolso se a cobrança foi feita nos últimos 14 dias e você não usou sua cota do Go durante esse período de faturamento. {{contact}} para solicitar um reembolso.",
 
   "zen.api.error.rateLimitExceeded": "Limite de taxa excedido. Por favor, tente novamente mais tarde.",
   "zen.api.error.modelNotSupported": "Modelo {{model}} não suportado",
