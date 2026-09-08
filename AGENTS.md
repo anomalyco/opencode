@@ -4,6 +4,21 @@
 - The default branch in this repo is `dev`.
 - Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
 
+## Quick Start
+
+```bash
+bun install                        # install deps (postinstall fixes node-pty)
+bun dev                            # start TUI dev server (--conditions=browser)
+bun dev serve                      # headless API server on :4096
+bun dev <directory>                # run against a specific directory
+bun typecheck                      # typecheck all packages (runs turbo)
+bun lint                           # oxlint (type-aware)
+./script/format.ts                 # prettier
+./script/generate.ts               # regenerate SDK + OpenAPI after protocol/server changes
+```
+
+Pre-push hook enforces bun version check + `bun typecheck`. Tests cannot run from repo root (`bun test` exits with error by design); run from package dirs like `packages/opencode`.
+
 ## Branch Names
 
 Use a short branch name of at most three words, separated by hyphens. Do not use slashes or type prefixes such as `feat/` or `fix/`.
