@@ -152,7 +152,6 @@
         "@lydell/node-pty-win32-x64": "1.2.0-beta.12",
         "@opencode-ai/protocol": "workspace:*",
         "@opencode-ai/script": "workspace:*",
-        "@opencode-ai/theme": "workspace:*",
         "@parcel/watcher-darwin-arm64": "2.5.1",
         "@parcel/watcher-linux-arm64-glibc": "2.5.1",
         "@parcel/watcher-linux-x64-glibc": "2.5.1",
