@@ -1,10 +1,11 @@
-import { createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
+import { batch, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
 import type { OpenCodeEvent, SessionInfo } from "@opencode-ai/client"
 import path from "path"
 import { useTerminalDimensions } from "@opentui/solid"
 import type { RGBA } from "@opentui/core"
 import { dialogWidth, useDialog } from "../ui/dialog"
 import { DialogSelect, dialogSelectContentWidth, type DialogSelectRef } from "../ui/dialog-select"
+import { DialogPrompt } from "../ui/dialog-prompt"
 import { useRoute } from "../context/route"
 import { useData } from "../context/data"
 import { useClient } from "../context/client"
@@ -29,8 +30,11 @@ export const DialogOpenKey = Symbol("DialogOpen")
 type OpenTarget =
   | { type: "session"; sessionID: string }
   | { type: "project"; directory: string; projectID?: string }
-  | { type: "browse"; directory: string }
   | { type: "new"; projectID: string }
+
+type OpenView = { type: "projects" } | { type: "worktrees"; projectID: string }
+
+type OpenSelection = { view: OpenView; filter: string; selected?: OpenTarget }
 
 export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: SessionInfo[]) => void }) {
   const dialog = useDialog()
@@ -83,16 +87,40 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
       () => false,
     ),
   )
-  const [selected, setSelected] = createSignal<OpenTarget>()
-  const [directory, setDirectory] = createSignal<string>()
-  const [projectID, setProjectID] = createSignal<string>()
+  const [view, setView] = createSignal<OpenView>({ type: "projects" })
+  const projectID = () => {
+    const current = view()
+    return current.type === "worktrees" ? current.projectID : undefined
+  }
+  const [focus, setFocus] = createSignal<OpenTarget>()
+  const [creation, setCreation] = createSignal<OpenSelection>()
+  const [creating, setCreating] = createSignal(false)
+  const history: OpenSelection[] = []
   let select: DialogSelectRef<OpenTarget> | undefined
-  function browse(next?: string) {
-    select?.clearFilter()
-    setSelectionMoved(false)
-    setSelected(undefined)
-    setProjectID(undefined)
-    setDirectory(next)
+  let pending: OpenSelection | undefined
+  function snapshot(): OpenSelection {
+    return { view: view(), filter: select?.filter ?? "", selected: select?.selected?.value }
+  }
+  function restore(next: OpenSelection) {
+    batch(() => {
+      setView(next.view)
+      setSelectionMoved(false)
+      setFocus(next.selected)
+      select?.setFilter(next.filter)
+    })
+    if (next.selected) select?.moveTo(next.selected)
+  }
+  function back() {
+    const previous = history.pop()
+    if (previous) restore(previous)
+  }
+  function newWorktree() {
+    if (!projectID()) return
+    setCreation(snapshot())
+  }
+  function cancelCreation() {
+    pending = creation()
+    setCreation(undefined)
   }
   const [worktrees] = createResource(projectID, (projectID) =>
     client.api.worktree
@@ -106,12 +134,6 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         toast.show({ title: "Loading worktrees failed", message: errorMessage(error), variant: "error" })
         return []
       }),
-  )
-  const [entries] = createResource(directory, (directory) =>
-    client.api.file
-      .list({ location: { directory, workspace: location.ref?.workspaceID ?? data.location.default().workspaceID } })
-      .then((result) => result.data.filter((entry) => entry.type === "directory"))
-      .catch(() => undefined),
   )
 
   const [matched] = createResource(
@@ -268,213 +290,177 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
             title,
             footer: footer + " ".repeat(Math.max(0, width - stringWidth(footer))),
             value: { type: "project", directory } as OpenTarget,
-            category: "Worktrees",
             gutter: directory === current ? () => <text fg={theme.text.formfield.selected}>●</text> : undefined,
           }
         }),
       {
-        title: "+ New worktree",
+        title: "+ New worktree…",
         value: { type: "new", projectID: id } as OpenTarget,
-        category: "Worktrees",
+        category: "Actions",
+        alwaysVisible: true,
       },
-    ]
-  })
-
-  const directoryOptions = createMemo(() => {
-    const current = directory()
-    if (!current) return []
-    return [
-      {
-        title: "Open this directory",
-        footer: truncateFilePath(
-          abbreviateHome(current, paths.home),
-          dialogSelectContentWidth(Math.min(dialogWidth("large"), dimensions().width - 2)) -
-            stringWidth("Open this directory"),
-        ),
-        value: { type: "project", directory: current } as OpenTarget,
-        category: "Current",
-      },
-      ...(path.dirname(current) !== current
-        ? [
-            {
-              title: "..",
-              value: { type: "browse", directory: path.dirname(current) } as OpenTarget,
-              category: "Current",
-            },
-          ]
-        : []),
-      ...(entries() ?? [])
-        .toSorted((a, b) => a.path.localeCompare(b.path))
-        .map((entry) => ({
-          title: path.basename(entry.path),
-          value: { type: "browse", directory: path.resolve(current, entry.path) } as OpenTarget,
-          category: "Directories",
-        })),
     ]
   })
 
   return (
-    <DialogSelect
-      ref={(value) => (select = value)}
-      title={projectID() ? "Worktrees" : "Open"}
-      placeholder={
-        directory()
-          ? abbreviateHome(directory()!, paths.home)
-          : projectID()
-            ? "Search worktrees…"
-            : "Search sessions and projects…"
-      }
-      options={directory() ? directoryOptions() : projectID() ? worktreeOptions() : options()}
-      current={
-        directory()
-          ? ({ type: "project", directory: directory()! } as OpenTarget)
-          : projectID() && (location.ref?.directory ?? location.current?.directory)
-            ? ({ type: "project", directory: (location.ref?.directory ?? location.current?.directory)! } as OpenTarget)
-            : currentSessionID()
-              ? ({ type: "session", sessionID: currentSessionID()! } as OpenTarget)
-              : undefined
-      }
-      focusCurrent={Boolean(directory() || projectID())}
-      sectionNavigation={true}
-      preserveSelection={selectionMoved()}
-      onMove={(option) => {
-        setSelectionMoved(true)
-        setSelected(option.value)
-      }}
-      onFilter={setFilter}
-      emptyView={
-        <Show when={!recent.loading && !projects.loading}>
-          <box paddingLeft={4} paddingRight={4}>
-            <text fg={theme.text.subdued}>No recent sessions or projects</text>
-          </box>
-        </Show>
-      }
-      footer={
-        <Show when={recent.loading || projects.loading || recent() === false || projects() === false}>
-          <box>
-            <Show when={recent.loading || projects.loading}>
-              <Spinner color={theme.text.subdued}>Refreshing sessions and projects…</Spinner>
-            </Show>
-            <Show when={recent() === false || projects() === false}>
-              <text fg={theme.text.feedback.error.default}>
-                Could not refresh{" "}
-                {recent() === false ? (projects() === false ? "sessions and projects" : "sessions") : "projects"}.
-              </text>
-            </Show>
-          </box>
-        </Show>
-      }
-      bindings={[
-        {
-          bind: "ctrl+o",
-          title: directory() ? "Return to projects" : "Browse directories",
-          group: "Dialog",
-          run: () =>
-            browse(directory() ? undefined : (location.ref?.directory ?? location.current?.directory ?? paths.cwd)),
-        },
-        ...(!directory() && !projectID()
-          ? [
-              {
-                bind: "right",
-                title: "Show project worktrees",
-                group: "Dialog",
-                run: () => {
-                  const target = selected() ?? select?.filtered[0]?.value
-                  if (target?.type !== "project" || !target.projectID) return
-                  select?.clearFilter()
-                  setSelectionMoved(false)
-                  setSelected(undefined)
-                  setProjectID(target.projectID)
-                },
-              },
-            ]
-          : []),
-        ...(projectID()
-          ? [
-              {
-                bind: "left",
-                title: "Return to projects",
-                group: "Dialog",
-                run: () => browse(),
-              },
-            ]
-          : []),
-        ...(directory() && path.dirname(directory()!) !== directory()
-          ? [
-              {
-                bind: "ctrl+u",
-                title: "Browse parent directory",
-                group: "Dialog",
-                run: () => browse(path.dirname(directory()!)),
-              },
-            ]
-          : []),
-      ]}
-      footerHints={[
-        ...(projectID() ? [{ title: "back", label: "←" }] : []),
-        { title: directory() ? "back" : "browse directories", label: "ctrl+o" },
-        ...(directory() && path.dirname(directory()!) !== directory() ? [{ title: "parent", label: "ctrl+u" }] : []),
-      ]}
-      noMatchView={
-        <box paddingLeft={4} paddingRight={4}>
-          <text fg={theme.text.subdued}>
-            {directory()
-              ? entries.loading
-                ? "Loading directories…"
-                : "No matching directories"
-              : recent.loading || projects.loading || matched.loading
-                ? "Searching sessions and projects…"
-                : shortcuts.get("session.list")
-                  ? `No matches · search all sessions with ${shortcuts.get("session.list")}`
-                  : "No matches"}
-          </text>
-        </box>
-      }
-      onSelect={(option) => {
-        if (option.value.type === "browse") {
-          browse(option.value.directory)
-          return
-        }
-        if (option.value.type === "new") {
-          const id = option.value.projectID
-          void client.api.worktree
-            .create({
-              location: {
-                directory: data.project.get(id)!.canonical,
-                workspace: location.ref?.workspaceID ?? data.location.default().workspaceID,
-              },
-              strategy: "git",
-              directory: path.join(paths.worktree, id.slice(0, 6)),
-            })
-            .then((created) => {
-              const target = {
-                directory: created.directory,
-                ...(location.ref?.workspaceID ? { workspaceID: location.ref.workspaceID } : {}),
+    <box>
+      <Show
+        when={creation()}
+        fallback={
+          <DialogSelect
+            ref={(value) => {
+              select = value
+              dialog.setSize("large")
+              if (!pending) return
+              const previous = pending
+              pending = undefined
+              queueMicrotask(() => {
+                if (!closed) restore(previous)
+              })
+            }}
+            title={projectID() ? `${projectName(data.project.get(projectID()!)) ?? "Project"} / Worktrees` : "Open"}
+            placeholder={projectID() ? "Search worktrees…" : "Search sessions and projects…"}
+            options={projectID() ? worktreeOptions() : options()}
+            current={
+              currentSessionID() ? ({ type: "session", sessionID: currentSessionID()! } as OpenTarget) : undefined
+            }
+            focusTarget={focus()}
+            focusCurrent={focus() !== undefined}
+            sectionNavigation={true}
+            preserveSelection={selectionMoved()}
+            onMove={() => {
+              setSelectionMoved(true)
+            }}
+            onCancel={view().type === "projects" ? undefined : back}
+            onFilter={setFilter}
+            emptyView={
+              <Show when={!recent.loading && !projects.loading}>
+                <box paddingLeft={4} paddingRight={4}>
+                  <text fg={theme.text.subdued}>No recent sessions or projects</text>
+                </box>
+              </Show>
+            }
+            footer={
+              <Show when={recent.loading || projects.loading || recent() === false || projects() === false}>
+                <box>
+                  <Show when={recent.loading || projects.loading}>
+                    <Spinner color={theme.text.subdued}>Refreshing sessions and projects…</Spinner>
+                  </Show>
+                  <Show when={recent() === false || projects() === false}>
+                    <text fg={theme.text.feedback.error.default}>
+                      Could not refresh{" "}
+                      {recent() === false ? (projects() === false ? "sessions and projects" : "sessions") : "projects"}.
+                    </text>
+                  </Show>
+                </box>
+              </Show>
+            }
+            bindings={[
+              ...(!projectID()
+                ? [
+                    {
+                      bind: "right",
+                      title: "Show project worktrees",
+                      group: "Dialog",
+                      run: () => {
+                        const target = select?.selected?.value
+                        if (target?.type !== "project" || !target.projectID) return
+                        history.push(snapshot())
+                        restore({
+                          view: { type: "worktrees", projectID: target.projectID },
+                          filter: "",
+                          selected: { type: "project", directory: target.directory },
+                        })
+                      },
+                    },
+                  ]
+                : []),
+              ...(projectID()
+                ? [
+                    {
+                      bind: "left",
+                      title: "Return to projects",
+                      group: "Dialog",
+                      run: back,
+                    },
+                    { bind: "ctrl+n", title: "New worktree", group: "Dialog", run: newWorktree },
+                  ]
+                : []),
+            ]}
+            footerHints={[...(projectID() ? [{ title: "new worktree", label: "ctrl+n" }] : [])]}
+            noMatchView={
+              <box paddingLeft={4} paddingRight={4}>
+                <text fg={theme.text.subdued}>
+                  {recent.loading || projects.loading || matched.loading
+                    ? "Searching sessions and projects…"
+                    : shortcuts.get("session.list")
+                      ? `No matches · search all sessions with ${shortcuts.get("session.list")}`
+                      : "No matches"}
+                </text>
+              </box>
+            }
+            onSelect={(option) => {
+              if (option.value.type === "new") {
+                newWorktree()
+                return
               }
               dialog.clear()
+              if (option.value.type === "session") {
+                route.navigate({ type: "session", sessionID: option.value.sessionID })
+                return
+              }
+              const target = {
+                directory: option.value.directory,
+                ...(projectID() && location.ref?.workspaceID
+                  ? { workspaceID: location.ref.workspaceID }
+                  : {}),
+              }
               route.navigate({ type: "home", location: target })
               location.set(target)
-            })
-            .catch((error: unknown) =>
-              toast.show({ title: "Creating worktree failed", message: errorMessage(error), variant: "error" }),
-            )
-          return
+            }}
+          />
         }
-        dialog.clear()
-        if (option.value.type === "session") {
-          route.navigate({ type: "session", sessionID: option.value.sessionID })
-          return
-        }
-        const target = {
-          directory: option.value.directory,
-          ...((directory() || projectID()) && location.ref?.workspaceID
-            ? { workspaceID: location.ref.workspaceID }
-            : {}),
-        }
-        route.navigate({ type: "home", location: target })
-        location.set(target)
-      }}
-    />
+      >
+        <DialogPrompt
+          size="large"
+          title={`${projectName(data.project.get(projectID()!)) ?? "Project"} / New worktree`}
+          placeholder="Worktree name (optional)"
+          description={() => <text fg={theme.text.subdued}>Leave blank for a random name.</text>}
+          busy={creating()}
+          busyText="Creating worktree…"
+          onCancel={cancelCreation}
+          onConfirm={(value) => {
+            const id = projectID()!
+            const previous = creation()
+            setCreating(true)
+            void client.api.worktree
+              .create({
+                location: {
+                  directory: data.project.get(id)!.canonical,
+                  workspace: location.ref?.workspaceID ?? data.location.default().workspaceID,
+                },
+                strategy: "git",
+                directory: path.join(paths.worktree, id.slice(0, 6)),
+                ...(value.trim() ? { name: value.trim() } : {}),
+              })
+              .then((created) => {
+                if (closed || creation() !== previous) return
+                const target = {
+                  directory: created.directory,
+                  ...(location.ref?.workspaceID ? { workspaceID: location.ref.workspaceID } : {}),
+                }
+                dialog.clear()
+                route.navigate({ type: "home", location: target })
+                location.set(target)
+              })
+              .catch((error: unknown) =>
+                toast.show({ title: "Creating worktree failed", message: errorMessage(error), variant: "error" }),
+              )
+              .finally(() => setCreating(false))
+          }}
+        />
+      </Show>
+    </box>
   )
 }
 

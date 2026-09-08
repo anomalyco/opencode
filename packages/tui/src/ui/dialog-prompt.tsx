@@ -1,13 +1,14 @@
 import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
-import { useDialog } from "./dialog"
+import { useDialog, type DialogSize } from "./dialog"
 import { Show, createEffect, createSignal, onMount, type JSX } from "solid-js"
 import { Spinner } from "../component/spinner"
 import { useConfig } from "../config"
 
 export type DialogPromptProps = {
   title: string
+  size?: DialogSize
   description?: () => JSX.Element
   placeholder?: string
   value?: string
@@ -46,8 +47,24 @@ export function DialogPrompt(props: DialogPromptProps) {
     ],
   }))
 
+  Keymap.createLayer(() => ({
+    mode: "modal",
+    enabled: props.onCancel !== undefined,
+    priority: 1,
+    commands: [
+      {
+        bind: "escape",
+        title: "Back",
+        group: "Dialog",
+        run: () => {
+          if (!props.busy) props.onCancel?.()
+        },
+      },
+    ],
+  }))
+
   onMount(() => {
-    dialog.setSize("medium")
+    dialog.setSize(props.size ?? "medium")
     setTimeout(() => {
       if (!textarea || textarea.isDestroyed) return
       if (props.busy) return
@@ -78,7 +95,12 @@ export function DialogPrompt(props: DialogPromptProps) {
         <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
           {props.title}
         </text>
-        <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
+        <text
+          fg={theme.text.subdued}
+          onMouseUp={() => {
+            if (!props.busy) (props.onCancel ?? dialog.clear)()
+          }}
+        >
           esc
         </text>
       </box>

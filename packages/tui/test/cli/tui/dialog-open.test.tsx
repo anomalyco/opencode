@@ -228,9 +228,10 @@ test("shows nested Git session directories as projects and in their session foot
 
   try {
     const frame = await fixture.app.waitForFrame(
-      (value) => value.includes("Improve dashboard") && value.includes("browse directories"),
+      (value) => value.includes("Improve dashboard") && value.includes("Projects"),
     )
     expect(frame).toContain("OpenCode · dashboard")
+    expect(frame).not.toContain("browse directories")
     expect(frame).toContain("/tmp/opencode/project/packages/dashboard")
   } finally {
     await fixture.dispose()
@@ -298,6 +299,14 @@ test("loads Git worktrees only when drilling into a project or its associated di
     fixture.app.mockInput.pressArrow("right")
     await fixture.app.waitForFrame((frame) => frame.includes("other-branch") && frame.includes("+ New worktree"))
     expect(requests).toBe(2)
+    fixture.app.mockInput.pressEscape()
+    const restored = await fixture.app.waitForFrame(
+      (frame) => frame.includes("current-branch") && !frame.includes("Worktrees"),
+    )
+    expect(restored).toContain("current-branch")
+    expect(restored).not.toContain("OpenCode")
+    fixture.app.mockInput.pressArrow("right")
+    await fixture.app.waitForFrame((frame) => frame.includes("other-branch") && frame.includes("+ New worktree"))
 
     await fixture.app.mockInput.typeText("other-branch")
     fixture.app.mockInput.pressEnter()
@@ -355,7 +364,7 @@ test("does not show or trigger worktree navigation for non-Git and global direct
   }
 })
 
-test("creates an unnamed Git worktree and opens it in the current workspace", async () => {
+test.each(["", "search-ui"])("creates a worktree named '%s' and opens it in the current workspace", async (name) => {
   const projectID = "proj_git_create"
   const root = path.resolve("/tmp/opencode/project")
   const created = path.resolve("/tmp/opencode/created-branch")
@@ -393,153 +402,30 @@ test("creates an unnamed Git worktree and opens it in the current workspace", as
     await fixture.app.waitForFrame((frame) => frame.includes("OpenCode") && frame.includes("→"))
     fixture.app.mockInput.pressArrow("right")
     await fixture.app.waitForFrame((frame) => frame.includes("+ New worktree"))
-    fixture.app.mockInput.pressArrow("down")
+    await fixture.app.mockInput.typeText("unmatched-search")
+    const filtered = await fixture.app.waitForFrame((frame) => frame.includes("unmatched-search"))
+    expect(filtered).toContain("+ New worktree")
+    fixture.app.mockInput.pressKey("n", { ctrl: true })
+    await fixture.app.waitForFrame((frame) => frame.includes("Worktree name (optional)"))
+    fixture.app.mockInput.pressEscape()
+    const restored = await fixture.app.waitForFrame(
+      (frame) => frame.includes("unmatched-search") && frame.includes("+ New worktree"),
+    )
+    expect(restored).toContain("unmatched-search")
+    expect(payload).toBeUndefined()
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitForFrame((frame) => frame.includes("Worktree name (optional)"))
+    if (name) await fixture.app.mockInput.typeText(name)
     fixture.app.mockInput.pressEnter()
     await fixture.app.waitFor(() => fixture.route.data.type === "home")
 
     expect(payload).toEqual({
       strategy: "git",
       directory: path.join("/tmp/opencode", projectID.slice(0, 6)),
+      ...(name ? { name } : {}),
     })
     expect(fixture.route.data).toEqual({ type: "home", location: { directory: created, workspaceID } })
     expect(fixture.location.ref).toEqual({ directory: created, workspaceID })
-  } finally {
-    await fixture.dispose()
-  }
-})
-
-test("keeps directory browsing in the footer and clears its search when toggling the browser", async () => {
-  const root = path.resolve(
-    "/private/var/folders/very-long-temporary-directory/opencode-drive/run-6462634d-8106-4652-ab87-e7e3cf5177ad/files",
-  )
-  const fixture = await renderOpen(
-    (url) => {
-      if (url.pathname === "/api/location")
-        return json({ directory: root, project: { id: "proj_current", directory: root, canonical: root } })
-      if (url.pathname !== "/api/fs/list") return undefined
-      return json({
-        location: { directory: root, project: { id: "proj_current", directory: root, canonical: root } },
-        data: [{ path: "packages", type: "directory" }],
-      })
-    },
-    async ({ data, location }) => {
-      await data.location.sync({ directory: root })
-      location.set({ directory: root })
-    },
-  )
-
-  try {
-    const initial = await fixture.app.waitForFrame((frame) => frame.includes("browse directories"))
-    expect(initial).not.toContain("Browse directories")
-    await fixture.app.mockInput.typeText("missing")
-    await fixture.app.waitForFrame((frame) => frame.includes("No matches"))
-    fixture.app.mockInput.pressKey("o", { ctrl: true })
-    const browser = await fixture.app.waitForFrame(
-      (frame) => frame.includes("Open this directory") && frame.includes("packages"),
-    )
-    expect(browser).not.toContain("No matching directories")
-
-    await fixture.app.mockInput.typeText("packages")
-    fixture.app.mockInput.pressKey("o", { ctrl: true })
-    const projects = await fixture.app.waitForFrame((frame) => frame.includes("Search sessions and projects"))
-    expect(projects).toContain("browse directories")
-    expect(projects).not.toContain("Browse directories")
-  } finally {
-    await fixture.dispose()
-  }
-})
-
-test("browses from the current directory and opens an arbitrary child directory", async () => {
-  const root = path.resolve("/tmp/opencode/project")
-  const packages = path.resolve(root, "packages")
-  const untracked = path.resolve(packages, "untracked")
-  const workspaceID = "ws_browser"
-  const fixture = await renderOpen(
-    (url) => {
-      if (url.pathname === "/api/location")
-        return json({ directory: root, workspaceID, project: { id: "proj_current", directory: root, canonical: root } })
-      if (url.pathname !== "/api/fs/list") return undefined
-      expect(url.searchParams.get("location[workspace]")).toBe(workspaceID)
-      const current = url.searchParams.get("location[directory]")
-      return json({
-        location: {
-          directory: current,
-          workspaceID,
-          project: { id: "proj_current", directory: root, canonical: root },
-        },
-        data:
-          current === root
-            ? [
-                { path: "packages", type: "directory" },
-                { path: "README.md", type: "file" },
-              ]
-            : current && path.normalize(current) === path.normalize(packages)
-              ? [{ path: "untracked", type: "directory" }]
-              : [],
-      })
-    },
-    async ({ data, location }) => {
-      await data.location.sync({ directory: root, workspaceID })
-      location.set({ directory: root, workspaceID })
-    },
-  )
-
-  try {
-    await fixture.app.waitForFrame((frame) => frame.includes("browse"))
-    fixture.app.mockInput.pressKey("o", { ctrl: true })
-    const rootFrame = await fixture.app.waitForFrame(
-      (frame) => frame.includes("Open this directory") && frame.includes("packages"),
-    )
-    expect(rootFrame).not.toContain("README.md")
-
-    fixture.app.mockInput.pressArrow("down", { meta: true })
-    fixture.app.mockInput.pressEnter()
-    await fixture.app.waitForFrame((frame) => frame.includes("untracked"))
-
-    fixture.app.mockInput.pressArrow("down", { meta: true })
-    fixture.app.mockInput.pressEnter()
-    await fixture.app.waitForFrame((frame) => frame.includes(untracked))
-    fixture.app.mockInput.pressEnter()
-    await fixture.app.waitFor(() => fixture.route.data.type === "home")
-    expect(fixture.route.data).toEqual({
-      type: "home",
-      location: { directory: untracked, workspaceID },
-    })
-  } finally {
-    await fixture.dispose()
-  }
-})
-
-test("navigates to the parent directory and returns to the project picker", async () => {
-  const root = path.resolve("/tmp/opencode/project")
-  const parent = path.dirname(root)
-  const fixture = await renderOpen(
-    (url) => {
-      if (url.pathname === "/api/location")
-        return json({ directory: root, project: { id: "proj_current", directory: root, canonical: root } })
-      if (url.pathname !== "/api/fs/list") return undefined
-      const current = url.searchParams.get("location[directory]")
-      return json({
-        location: { directory: current, project: { id: "proj_current", directory: root, canonical: root } },
-        data:
-          current && path.normalize(current) === path.normalize(parent) ? [{ path: "sibling", type: "directory" }] : [],
-      })
-    },
-    async ({ data, location }) => {
-      await data.location.sync({ directory: root })
-      location.set({ directory: root })
-    },
-  )
-
-  try {
-    await fixture.app.waitForFrame((frame) => frame.includes("browse"))
-    fixture.app.mockInput.pressKey("o", { ctrl: true })
-    await fixture.app.waitForFrame((frame) => frame.includes("Open this directory"))
-    fixture.app.mockInput.pressKey("u", { ctrl: true })
-    await fixture.app.waitForFrame((frame) => frame.includes("sibling") && frame.includes(parent))
-    fixture.app.mockInput.pressKey("o", { ctrl: true })
-    await fixture.app.waitForFrame((frame) => frame.includes("Search sessions and projects"))
-    expect(fixture.location.ref).toEqual({ directory: root })
   } finally {
     await fixture.dispose()
   }

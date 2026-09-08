@@ -27,6 +27,7 @@ export interface DialogSelectProps<T> {
   onMove?: (option: DialogSelectOption<T>) => void
   onFilter?: (query: string) => void
   onSelect?: (option: DialogSelectOption<T>) => void
+  onCancel?: () => void
   skipFilter?: boolean
   renderFilter?: boolean
   locked?: boolean
@@ -39,6 +40,7 @@ export interface DialogSelectProps<T> {
   }[]
   bindings?: readonly KeymapCommand[]
   current?: T
+  focusTarget?: T
   focusCurrent?: boolean
   sectionNavigation?: boolean
 }
@@ -78,6 +80,7 @@ export interface DialogSelectOption<T = any> {
   category?: string
   categoryView?: JSX.Element
   disabled?: boolean
+  alwaysVisible?: boolean
   bg?: RGBA
   fg?: RGBA
   gutter?: (color: RGBA) => JSX.Element
@@ -93,7 +96,8 @@ export function dialogSelectContentWidth(dialogWidth: number) {
 export type DialogSelectRef<T> = {
   filter: string
   filtered: DialogSelectOption<T>[]
-  clearFilter(): void
+  selected: DialogSelectOption<T> | undefined
+  setFilter(value: string): void
   moveTo(value: T): void
 }
 
@@ -133,9 +137,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   createEffect(
     on(
-      () => props.current,
-      (current) => {
+      [() => props.focusTarget ?? props.current, () => (props.focusTarget === undefined ? undefined : flat())],
+      ([current]) => {
         if (props.focusCurrent === false) return
+        if (props.focusTarget !== undefined && (props.preserveSelection || store.filter.length > 0)) return
         if (current !== undefined) {
           const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
           if (currentIndex >= 0) {
@@ -198,7 +203,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       })
       .map((x) => x.obj)
 
-    return result
+    return [...result.filter((option) => !option.alwaysVisible), ...options.filter((option) => option.alwaysVisible)]
   })
 
   createEffect(() => {
@@ -243,7 +248,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     on(
       () => props.options,
       () => {
-        if (!props.preserveSelection && (props.current === undefined || props.focusCurrent === false)) {
+        if (
+          !props.preserveSelection &&
+          ((props.focusTarget ?? props.current) === undefined || props.focusCurrent === false)
+        ) {
           const count = flat().length
           if (count === 0) return
           const next = reconcileSelection(store.selected, count)
@@ -258,8 +266,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           return
         }
         if (!selection) {
-          if (props.focusCurrent !== false && props.current !== undefined) {
-            const index = flat().findIndex((option) => isDeepEqual(option.value, props.current))
+          if (props.focusCurrent !== false && (props.focusTarget ?? props.current) !== undefined) {
+            const index = flat().findIndex((option) => isDeepEqual(option.value, props.focusTarget ?? props.current))
             if (index >= 0) {
               setStore("selected", index)
               selection = flat()[index]
@@ -281,7 +289,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           if (!moved) return
           if (
             !props.preserveSelection &&
-            (props.current === undefined || props.focusCurrent === false || store.filter.length > 0)
+            ((props.focusTarget ?? props.current) === undefined ||
+              props.focusCurrent === false ||
+              store.filter.length > 0)
           )
             return
           scrollAfterLayout(false, option.value)
@@ -301,7 +311,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   })
 
   createEffect(
-    on([() => store.filter, () => props.current], ([filter, current]) => {
+    on([() => store.filter, () => props.focusTarget ?? props.current], ([filter, current]) => {
       if (filter.length > 0) resetSelection = true
       if (filter.length > 0) {
         const option = flat()[0]
@@ -487,6 +497,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             ]
           : []),
         ...(props.bindings ?? []),
+        ...(props.onCancel ? [{ bind: "escape", title: "Back", group: "Dialog", run: props.onCancel }] : []),
         ...(props.sectionNavigation
           ? [
               {
@@ -515,11 +526,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     get filtered() {
       return filtered()
     },
-    clearFilter() {
-      input.value = ""
+    get selected() {
+      return selected()
+    },
+    setFilter(value) {
+      input.value = value
       batch(() => {
-        setStore("filter", "")
-        props.onFilter?.("")
+        setStore("filter", value)
+        props.onFilter?.(value)
       })
     },
     moveTo(value) {
@@ -614,7 +628,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               {props.title}
             </text>
           )}
-          <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
+          <text fg={theme.text.subdued} onMouseUp={() => (props.onCancel ?? dialog.clear)()}>
             esc
           </text>
         </box>
