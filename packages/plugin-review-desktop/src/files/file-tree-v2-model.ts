@@ -1,4 +1,4 @@
-import type { FileNode } from "@/runtime/server/types"
+import type { FileNode } from "@opencode/plugin/desktop/workspace"
 
 export type FileTreeV2Model = {
   children: ReadonlyMap<string, readonly FileTreeV2Node[]>

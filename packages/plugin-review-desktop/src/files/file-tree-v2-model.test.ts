@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { buildFileTreeV2Model, flattenFileTreeV2, flattenLiveFileTreeV2, sortFileTreeV2Paths } from "./file-tree-v2-model"
-import type { FileNode } from "@/runtime/server/types"
+import {
+  buildFileTreeV2Model,
+  flattenFileTreeV2,
+  flattenLiveFileTreeV2,
+  sortFileTreeV2Paths,
+} from "./file-tree-v2-model"
+import type { FileNode } from "@opencode/plugin/desktop/workspace"
 
 describe("buildFileTreeV2Model", () => {
   test("builds a sorted tree and flattens expanded directories", () => {

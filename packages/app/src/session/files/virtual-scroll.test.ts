@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { virtualScrollElement } from "./virtual-scroll"
+import { virtualScrollElement } from "@opencode/plugin-review-desktop/files/virtual-scroll"
 
 test("resolves the connected viewport that owns the virtual root", () => {
   const stale = document.createElement("div")

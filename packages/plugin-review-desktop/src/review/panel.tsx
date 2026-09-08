@@ -17,20 +17,18 @@ import type {
   SessionReviewFocus,
   SessionReviewLineComment,
 } from "@opencode/session-ui/session-review"
-import FileTreeV2 from "@/session/files/file-tree-v2"
-import { sortFileTreeV2Paths } from "@/session/files/file-tree-v2-model"
-import { useLanguage } from "@/runtime/i18n/language"
-import { useWorkspaceLocation } from "@/workspaces/location"
-import { useServerSDK } from "@/runtime/server/client"
+import FileTreeV2 from "../files/file-tree-v2"
+import { sortFileTreeV2Paths } from "../files/file-tree-v2-model"
+import { useLanguage, useWorkspaceLocation, useServerSDK } from "../environment"
 import {
   filterRenderableDiff,
   filterReviewFiles,
   reviewDiffKinds,
   reviewDiffNeedsLoad,
   type RenderDiff,
-} from "@/session/review/review-diff-kinds"
-import type { ReviewPanelState } from "@/session/review/panel-state"
-import { applyFileListKeyDown, SessionFileList } from "@/session/files/list"
+} from "./review-diff-kinds"
+import type { ReviewPanelState } from "./panel-state"
+import { applyFileListKeyDown, SessionFileList, FileListView } from "../files/list"
 
 type ReviewDiff = FileDiffInfo
 
@@ -57,6 +55,7 @@ export type ReviewPanelProps = {
 }
 
 export function ReviewPanel(props: ReviewPanelProps) {
+  const language = useLanguage()
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
   const readFile = async (path: string) =>
@@ -68,11 +67,18 @@ export function ReviewPanel(props: ReviewPanelProps) {
         return undefined
       })
 
-  return <ReviewPanelView {...props} readFile={readFile} />
+  return (
+    <ReviewPanelView
+      {...props}
+      readFile={readFile}
+      labels={{ loading: language.t("common.loading"), empty: language.t("palette.empty") }}
+    />
+  )
 }
 
 export function ReviewPanelView(
   props: ReviewPanelProps & {
+    labels: { loading: string; empty: string }
     readFile?: (path: string) => Promise<{ type: "text"; content: string } | undefined>
   },
 ) {
@@ -132,6 +138,7 @@ export function ReviewPanelView(
         // Always mounted: the sidebar header hosts the changes-mode dropdown,
         // which must stay reachable when the current mode has zero diffs.
         <ReviewPanelSidebar
+          labels={props.labels}
           title={props.title}
           state={props.state}
           diffsReady={props.diffsReady}
@@ -183,6 +190,7 @@ export function ReviewPanelView(
 }
 
 function ReviewPanelSidebar(props: {
+  labels: { loading: string; empty: string }
   title?: JSX.Element
   state: ReviewPanelState
   diffsReady: boolean
@@ -194,7 +202,6 @@ function ReviewPanelSidebar(props: {
   activeDiff: string | undefined
   flat: boolean
 }) {
-  const language = useLanguage()
   const [explicitHighlight, setExplicitHighlight] = createSignal<string | undefined>()
   const highlightedPath = createMemo(() => {
     if (!props.searching) return undefined
@@ -229,12 +236,7 @@ function ReviewPanelSidebar(props: {
     >
       <Show
         when={props.diffsReady}
-        fallback={
-          <div class="px-2 py-2 text-12-regular text-text-weak">
-            {language.t("common.loading")}
-            {language.t("common.loading.ellipsis")}
-          </div>
-        }
+        fallback={<div class="px-2 py-2 text-12-regular text-text-weak">{props.labels.loading}</div>}
       >
         <Show
           when={props.searching}
@@ -251,7 +253,7 @@ function ReviewPanelSidebar(props: {
                 />
               }
             >
-              <SessionFileList
+              <FileListView
                 files={props.filteredFiles}
                 kinds={props.kinds}
                 active={props.activeDiff}
@@ -262,18 +264,31 @@ function ReviewPanelSidebar(props: {
         >
           <Show
             when={props.filteredFiles.length > 0}
-            fallback={<div class="px-2 py-2 text-12-regular text-text-weak">{language.t("palette.empty")}</div>}
+            fallback={<div class="px-2 py-2 text-12-regular text-text-weak">{props.labels.empty}</div>}
           >
-            <SessionFileList
-              files={props.filteredFiles}
-              kinds={props.kinds}
-              active={props.activeDiff}
-              highlighted={highlightedPath()}
-              onFileClick={(path) => {
-                setExplicitHighlight(path)
-                props.onSelectFile(path)
-              }}
-            />
+            <Show
+              when={!props.flat}
+              fallback={
+                <FileListView
+                  files={props.filteredFiles}
+                  kinds={props.kinds}
+                  active={props.activeDiff}
+                  highlighted={highlightedPath()}
+                  onFileClick={props.onSelectFile}
+                />
+              }
+            >
+              <SessionFileList
+                files={props.filteredFiles}
+                kinds={props.kinds}
+                active={props.activeDiff}
+                highlighted={highlightedPath()}
+                onFileClick={(path) => {
+                  setExplicitHighlight(path)
+                  props.onSelectFile(path)
+                }}
+              />
+            </Show>
           </Show>
         </Show>
       </Show>

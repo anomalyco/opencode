@@ -1,4 +1,4 @@
-import { useFile } from "@/workspaces/files/model"
+import { useFile, useWorkspaceLocation, usePlatform } from "../environment"
 import { FileIcon } from "@opencode/ui/file-icon"
 import "@opencode/ui/file-tree.css"
 import {
@@ -12,9 +12,9 @@ import {
   type ParentProps,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import type { FileNode } from "@/runtime/server/types"
+import type { FileNode } from "@opencode/plugin/desktop/workspace"
 import { Icon } from "@opencode/ui/icon"
-import { pathToFileUrl, withFileDragImage, type Kind } from "@/session/files/file-tree"
+import { pathToFileUrl, withFileDragImage, type Kind } from "./file-tree"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
 import {
   buildFileTreeV2Model,
@@ -22,15 +22,13 @@ import {
   flattenLiveFileTreeV2,
   normalizeFileTreeV2Path,
   type FileTreeV2Node,
-} from "@/session/files/file-tree-v2-model"
-import { virtualScrollElement } from "@/session/files/virtual-scroll"
-import { useWorkspaceLocation } from "@/workspaces/location"
-import { useOpenInApp } from "@/session/files/open-in-app"
-import { OpenInAppContextMenuV2 } from "@/session/files/open-in-app-button"
-import { resolveOpenInAppPath } from "@/session/files/open-in-app-path"
-import { usePlatform } from "@/runtime/platform/platform"
+} from "./file-tree-v2-model"
+import { createVirtualScrollElement } from "./virtual-scroll"
+import { useOpenInApp } from "./open-in-app"
+import { OpenInAppContextMenuV2 } from "./open-in-app-button"
+import { resolveOpenInAppPath } from "./open-in-app-path"
 
-export type { Kind } from "@/session/files/file-tree"
+export type { Kind } from "./file-tree"
 
 const INDENT_STEP = 16
 
@@ -159,7 +157,7 @@ export default function FileTreeV2(props: {
     get count() {
       return rows().length
     },
-    getScrollElement: () => virtualScrollElement(root()),
+    getScrollElement: createVirtualScrollElement(root),
     initialRect: { width: 0, height: 600 },
     estimateSize: () => 28,
     gap: 2,

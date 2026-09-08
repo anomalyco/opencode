@@ -20,8 +20,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
-import { ReviewPanelView } from "@/session/review/panel"
-import { createReviewPanelState } from "@/session/review/panel-state"
+import { ReviewPanelView } from "@opencode/plugin-review-desktop/review/panel"
+import { createReviewPanelState } from "@opencode/plugin-review-desktop/review/panel-state"
 import { TerminalSurface } from "@/session/terminal/surface"
 import type { WebSearchRequestModel } from "./requests/websearch"
 
@@ -365,6 +365,7 @@ function SessionReviewPane(props: { diffs: SessionDocument["diffs"] }) {
   })
   return (
     <ReviewPanelView
+      labels={{ loading: language.t("common.loading"), empty: language.t("palette.empty") }}
       title={language.t("ui.sessionReview.title.lastTurn")}
       empty={<SessionReviewEmptyChangesV2 />}
       diffs={props.diffs}

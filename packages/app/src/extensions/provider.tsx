@@ -29,6 +29,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { persisted, Persist } from "@/runtime/persistence/storage"
 import { extensionTabKey } from "./keys"
 import { showToast } from "@/shell/notifications/toast"
+import { ReviewDesktop } from "@opencode/plugin-review-desktop"
 import type { SessionServices } from "@opencode/plugin/desktop/workspace"
 
 export type Contribution = Claim<{
@@ -90,7 +91,7 @@ function createHost() {
   const memories = new Map<string, unknown>()
   const attempted = new WeakSet<Plugin.Definition>()
   let instanceID = 0
-  const builtins = () => platform.extensionPlugins ?? []
+  const builtins = () => [ReviewDesktop, ...(platform.extensionPlugins ?? [])]
   createEffect(() => {
     const manager = platform.extensionManager
     if (!manager) return
