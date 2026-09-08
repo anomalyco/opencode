@@ -110,7 +110,7 @@ export function TerminalPanel(
 
     const workspace = workspaceKey()
     if (!terminal.ready() || terminal.all().length !== 0 || store.autoCreated === workspace) return
-    terminal.new()
+    terminal.new({ focus: true })
     setStore("autoCreated", workspace)
   })
 
