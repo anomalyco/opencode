@@ -43,7 +43,12 @@ function oauth(http: HttpClient.HttpClient) {
     authorize: (answer) =>
       Effect.gen(function* () {
         const server = yield* normalizeServer(answer.server ?? defaultServer)
-        const device = yield* post(http, `${server}/auth/device/code`, { client_id: clientID }, Device)
+        const device = yield* post(
+          http,
+          `${server}/auth/device/code`,
+          { client_id: clientID, supports_org_scope: true },
+          Device,
+        )
         const verification = yield* Effect.try({
           try: () => {
             const url = new URL(device.verification_uri_complete, `${server}/`)
@@ -332,13 +337,13 @@ function get<S extends Schema.Top>(http: HttpClient.HttpClient, url: string, tok
 function post<S extends Schema.Top>(
   http: HttpClient.HttpClient,
   url: string,
-  body: Record<string, string>,
+  body: Record<string, string | boolean>,
   schema: S,
   statusOk = true,
 ) {
   return HttpClientRequest.post(url).pipe(
     HttpClientRequest.acceptJson,
-    HttpClientRequest.schemaBodyJson(Schema.Record(Schema.String, Schema.String))(body),
+    HttpClientRequest.schemaBodyJson(Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Boolean])))(body),
     Effect.flatMap((request) => http.execute(request)),
     Effect.flatMap((response) => (statusOk ? HttpClientResponse.filterStatusOk(response) : Effect.succeed(response))),
     Effect.flatMap(HttpClientResponse.schemaBodyJson(schema)),

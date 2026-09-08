@@ -30,10 +30,11 @@ function consoleServer(orgID: string | null | undefined, unavailable = false) {
   const requests: string[] = []
   const server = Bun.serve({
     port: 0,
-    fetch: (request) => {
+    fetch: async (request) => {
       const path = new URL(request.url).pathname
       requests.push(path)
       if (path === "/auth/device/code") {
+        expect(await request.json()).toEqual({ client_id: "opencode-cli", supports_org_scope: true })
         return Response.json({
           device_code: "device",
           user_code: "user",
