@@ -1,6 +1,6 @@
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
-import type { run } from "@opencode-ai/tui"
+import { run } from "@opencode-ai/tui"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Config } from "../../config"
@@ -11,8 +11,6 @@ import { UpdatePreflight } from "../../services/update-preflight"
 import { Npm } from "@opencode-ai/util/npm"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../../version"
 import { Env } from "../../env"
-
-type TuiRun = typeof run
 
 export default Runtime.handler(Commands, (input) =>
   Effect.gen(function* () {
@@ -59,8 +57,6 @@ export default Runtime.handler(Commands, (input) =>
     const runFork = Effect.runForkWith(context)
     const runPromise = Effect.runPromiseWith(context)
     const service = server.service
-    const entry = process.env.OPENCODE_TUI_ENTRY
-    const { run }: { run: TuiRun } = yield* Effect.promise(() => (entry ? import(entry) : import("@opencode-ai/tui")))
     yield* run({
       app: {
         name: process.env.OPENCODE_CLIENT ?? "cli",
