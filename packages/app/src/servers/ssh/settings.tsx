@@ -3,22 +3,20 @@ import { useLanguage } from "@/runtime/i18n/language"
 import type { ServerCollectionController } from "@/servers/registry/controller"
 import { ServerHealthIndicator } from "@/servers/registry/row"
 import { ServerConnection } from "@/runtime/server/registry"
-import { useSshServers } from "./context"
+import { useSsh } from "./context"
 import { SshMenu } from "./menu"
 import { Badge } from "@opencode/ui/badge"
 import { Button } from "@opencode/ui/button"
-import { useSshReconnect } from "./reconnect"
 import { Spinner } from "@opencode/ui/spinner"
 import { sshName } from "./name"
 import { isSshConnecting } from "./status"
 
 export function SshServerSettings(props: { filter: string; domain: ServerCollectionController }) {
-  const ssh = useSshServers()
+  const ssh = useSsh()
   const language = useLanguage()
-  const reconnect = useSshReconnect()
   return (
     <For
-      each={ssh.data?.servers.filter(
+      each={ssh.servers.filter(
         (item) =>
           item.saved && `${item.config.name} ${item.config.target}`.toLowerCase().includes(props.filter.toLowerCase()),
       )}
@@ -62,18 +60,18 @@ export function SshServerSettings(props: { filter: string; domain: ServerCollect
               </div>
             </div>
             <div class="settings-servers-actions">
-              <Show when={item.stage === "authentication" || reconnect.pending(item.config.id)}>
+              <Show when={item.stage === "authentication" || ssh.pending(item.config.id)}>
                 <Button
                   size="small"
                   variant="ghost-muted"
-                  disabled={reconnect.pending(item.config.id)}
-                  aria-busy={reconnect.pending(item.config.id)}
-                  onClick={() => reconnect.start(item.config)}
+                  disabled={ssh.pending(item.config.id)}
+                  aria-busy={ssh.pending(item.config.id)}
+                  onClick={() => ssh.connect(item.config)}
                 >
-                  <Show when={reconnect.pending(item.config.id)}>
+                  <Show when={ssh.pending(item.config.id)}>
                     <Spinner class="size-3.5" />
                   </Show>
-                  {language.t(reconnect.pending(item.config.id) ? "ssh.session.connecting" : "ssh.action.authenticate")}
+                  {language.t(ssh.pending(item.config.id) ? "ssh.session.connecting" : "ssh.action.authenticate")}
                 </Button>
               </Show>
               <Show when={props.domain.defaults.available() && props.domain.defaults.key() === key}>

@@ -5,13 +5,11 @@ import { TextInput } from "@opencode/ui/text-input"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { createEffect, createMemo, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Effect, Fiber } from "effect"
 import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useDirectoryPicker } from "@/workspaces/selection/picker"
-import { useSshServers } from "./context"
+import { useSsh } from "./context"
 import type { SshConfig, SshItem } from "./types"
 import { sshName } from "./name"
 import { isSshConnecting } from "./status"
@@ -49,8 +47,7 @@ export function DialogSsh(props: {
 }) {
   const dialog = useDialog()
   const language = useLanguage()
-  const platform = usePlatform()
-  const ssh = useSshServers()
+  const ssh = useSsh()
   // Entry-point behavior is fixed for the lifetime of this dialog. Settings
   // connects without needing the project/tab contexts used by the palette.
   const openProject = props.openProject ? useOpenSshProject() : undefined
@@ -62,50 +59,28 @@ export function DialogSsh(props: {
     started: !!props.promptOnly,
     prompted: !!props.promptOnly,
     response: "",
-    answered: "",
-    submitting: false,
     complete: false,
-    error: false,
   })
-  let task: Fiber.Fiber<void> | undefined
-  const runAction = (effect: Effect.Effect<unknown, unknown>) => {
-    setState({ submitting: true, error: false })
-    task = Effect.runFork(
-      effect.pipe(
-        Effect.asVoid,
-        Effect.catch(() => Effect.sync(() => setState("error", true))),
-        Effect.ensuring(Effect.sync(() => setState("submitting", false))),
-      ),
-    )
-  }
-  const item = createMemo(() => ssh.data?.servers.find((item) => item.config.id === id))
+  const item = createMemo(() => ssh.item(id))
   const error = createMemo(() => {
-    if (state.error) return language.t("common.requestFailed")
+    if (ssh.error(id)) return language.t("common.requestFailed")
     const error = item()?.error
     return error ? language.t(`ssh.error.${error}`) : undefined
   })
   const busy = createMemo(
-    () => state.submitting || (state.started && !state.error && isSshConnecting(item()?.stage ?? "connecting")),
+    () => ssh.submitting(id) || (state.started && !ssh.error(id) && isSshConnecting(item()?.stage ?? "connecting")),
   )
   const prompt = createMemo<SshItem["prompt"]>((previous) => item()?.prompt ?? (busy() ? previous : undefined))
-  const waiting = () => busy() || (!state.error && state.answered === prompt()?.id)
+  const waiting = () => busy() || ssh.answered(id)
   const start = (replace = false) => {
-    const api = platform.sshServers
-    if (!api || busy() || !state.target.trim()) return
+    if (busy() || !state.target.trim()) return
     setState({ started: true, prompted: !!prompt() })
-    runAction(
-      Effect.gen(function* () {
-        yield* Effect.tryPromise(() => api.start({ id, target: state.target, name: state.name, replace }))
-        yield* Effect.tryPromise(() => ssh.refetch())
-      }),
-    )
+    ssh.connect({ id, target: state.target, name: state.name }, { dialog: true, replace })
   }
   const respond = () => {
     const current = item()?.prompt
-    const api = platform.sshServers
-    if (!current || waiting() || !api || (!current.confirm && !state.response)) return
-    setState("answered", current.id)
-    runAction(Effect.tryPromise(() => api.respond(id, current.id, current.confirm ? "yes" : state.response)))
+    if (!current || waiting() || (!current.confirm && !state.response)) return
+    ssh.respond(id, current.id, current.confirm ? "yes" : state.response)
   }
   createEffect(() => {
     prompt()?.id
@@ -115,7 +90,7 @@ export function DialogSsh(props: {
     if (prompt()?.confirm) queueMicrotask(() => cancelButton?.focus())
   })
   createEffect(() => {
-    if (!state.started || item()?.stage !== "ready" || state.submitting || state.complete) return
+    if (!state.started || item()?.stage !== "ready" || ssh.submitting(id) || state.complete) return
     setState("complete", true)
     dialog.close()
     if (openProject) queueMicrotask(() => openProject(id))
@@ -125,17 +100,7 @@ export function DialogSsh(props: {
     if (props.connect) start()
   })
   onCleanup(() => {
-    const api = platform.sshServers
-    const cancel = state.started && !state.complete
-    const forget = !props.config && !item()?.saved
-    Effect.runFork(
-      Effect.gen(function* () {
-        if (task) yield* Fiber.interrupt(task)
-        if (!cancel || !api) return
-        yield* Effect.tryPromise(() => api.cancel(id))
-        if (forget) yield* Effect.tryPromise(() => api.forget(id))
-      }).pipe(Effect.ignore),
-    )
+    if (state.started && !state.complete) ssh.cancel(id)
   })
   const keyDown = (event: KeyboardEvent) => {
     if (event.key !== "Enter" || event.isComposing) return

@@ -17,9 +17,8 @@ import { ServerConnection, ServersProvider } from "@/runtime/server/registry"
 import { SettingsProvider } from "@/settings/model"
 import { TabsProvider } from "@/shell/tabs/tabs"
 import { WslServersProvider } from "@/servers/wsl/context"
-import { SshServersProvider } from "@/servers/ssh/context"
+import { SshProvider } from "@/servers/ssh/context"
 import { SshRestore } from "@/servers/ssh/restore"
-import { SshReconnectProvider } from "@/servers/ssh/reconnect"
 import { ErrorPage } from "@/shell/errors/error"
 import { AppRoutes, File, preloadRoute } from "@/shell/routes/routes"
 
@@ -83,13 +82,11 @@ export function AppBaseProviders(
             >
               <QueryProvider>
                 <WslServersProvider>
-                  <SshServersProvider>
-                    <DialogProvider>
-                      <SshReconnectProvider>
-                        <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                      </SshReconnectProvider>
-                    </DialogProvider>
-                  </SshServersProvider>
+                  <DialogProvider>
+                    <SshProvider>
+                      <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
+                    </SshProvider>
+                  </DialogProvider>
                 </WslServersProvider>
               </QueryProvider>
             </ErrorBoundary>

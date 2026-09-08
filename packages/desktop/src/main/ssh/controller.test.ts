@@ -6,10 +6,11 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { testEffect } from "../../../../core/test/lib/effect"
 import { createSshController } from "./controller"
 import { quote } from "./command"
+import { buildDesktop, headless } from "../../../test/ssh/desktop"
 
 const it = testEffect(Layer.merge(NodeServices.layer, FetchHttpClient.layer))
 // The askpass ProxyCommand fixture is a POSIX shell executable.
-const posix = process.platform === "win32" ? it.live.skip : it.live
+const posix = process.platform === "win32" || headless ? it.live.skip : it.live
 
 it.live(
   "resolution validates a live tunnel and rediscovers changed remote credentials and ports",
@@ -41,7 +42,7 @@ it.live(
     const config = { id: "fixture", target: "fixture", name: "Fixture" }
     const controller = yield* createSshController({
       configs: [config],
-      binary: process.execPath,
+      askpass: ["unused"],
       version: "2.0.0",
       save: () => Effect.void,
     }).pipe(
@@ -114,8 +115,7 @@ posix(
     }
     const controller = yield* createSshController({
       configs: [config],
-      binary: process.execPath,
-      command: [process.execPath, "run", path.resolve("../cli/src/index.ts")],
+      askpass: yield* Effect.promise(() => buildDesktop(path.join(path.dirname(configFile), "desktop"))),
       version: "2.0.0",
       save: () => Effect.die("must not save"),
     })
@@ -156,7 +156,7 @@ it.live(
     const config = { id: "fixture", target: "unreachable.invalid", name: "Fixture" }
     const controller = yield* createSshController({
       configs: [config],
-      binary: "unused",
+      askpass: ["unused"],
       version: "2.0.0",
       save: (configs) =>
         Effect.sync(() => {
@@ -177,7 +177,7 @@ it.live(
   Effect.gen(function* () {
     const controller = yield* createSshController({
       configs: [],
-      binary: "unused",
+      askpass: ["unused"],
       version: "2.0.0",
       save: () => Effect.die("must not save"),
     })
@@ -201,7 +201,7 @@ it.live(
     const saves: unknown[] = []
     const controller = yield* createSshController({
       configs: [config],
-      binary: "unused",
+      askpass: ["unused"],
       version: "2.0.0",
       save: (configs) =>
         Effect.sync(() => {
@@ -241,7 +241,7 @@ it.live(
       .pipe(Effect.forkScoped({ startImmediately: true }))
     const controller = yield* createSshController({
       configs: [],
-      binary: "unused",
+      askpass: ["unused"],
       version: "2.0.0",
       save: () => Effect.die("must not save"),
     })

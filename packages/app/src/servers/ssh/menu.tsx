@@ -5,14 +5,12 @@ import { Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { ServerActionsController } from "@/servers/registry/controller"
 import { ServerConnection } from "@/runtime/server/registry"
-import { useSshServers } from "./context"
-import { useSshReconnect } from "./reconnect"
+import { useSsh } from "./context"
 
 export function SshMenu(props: { id: string; domain: ServerActionsController }) {
-  const ssh = useSshServers()
+  const ssh = useSsh()
   const language = useLanguage()
-  const reconnect = useSshReconnect()
-  const item = () => ssh.data?.servers.find((item) => item.config.id === props.id)
+  const item = () => ssh.item(props.id)
   const key = () => ServerConnection.Key.make(`ssh:${props.id}`)
   return (
     <Show when={item()}>
@@ -30,7 +28,7 @@ export function SshMenu(props: { id: string; domain: ServerActionsController }) 
               <Menu.Group>
                 <Menu.GroupLabel>{language.t("ssh.server.menu.label")}</Menu.GroupLabel>
                 <Show when={item().stage !== "ready"}>
-                  <Menu.Item disabled={reconnect.pending(props.id)} onSelect={() => reconnect.start(item().config)}>
+                  <Menu.Item disabled={ssh.pending(props.id)} onSelect={() => ssh.connect(item().config)}>
                     {language.t(item().stage === "authentication" ? "ssh.authenticate" : "ssh.connect")}
                   </Menu.Item>
                 </Show>

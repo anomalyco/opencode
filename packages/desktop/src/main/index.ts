@@ -1,34 +1,12 @@
-import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
-import * as NodePath from "@effect/platform-node/NodePath"
-import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
-import { app } from "electron"
-import { Effect, Layer } from "effect"
-import { Ipc } from "./ipc"
-import { DesktopInitialization } from "./lifecycle/desktop-initialization"
-import { ApplicationLifecycle } from "./lifecycle"
-import { BackgroundService } from "./service/background-service"
-import { DesktopCli } from "./service/desktop-cli"
-import { UpdaterLive } from "./updater/live"
+export {}
 
-const runIpc = Effect.fn("Desktop.runIpc")(function* () {
-  const lifecycle = yield* ApplicationLifecycle.Service
-  const ipc = yield* Ipc.registerIpcHandlers
-  if (lifecycle.restoreWindows().length) ipc.installMenu()
-  yield* Effect.callback<void>((resume) => {
-    const quit = () => resume(Effect.void)
-    app.once("will-quit", quit)
-    return Effect.sync(() => app.off("will-quit", quit))
-  })
-})
+// OpenSSH launches the desktop executable for each authentication prompt.
+// Dispatch before importing application logging, storage, or single-instance handling.
+if (process.env.OPENCODE_SSH_ASKPASS_PORT) {
+  const { app } = await import("electron")
+  if (process.platform === "darwin") app.setActivationPolicy("prohibited")
+  const { runAskpass } = await import("./ssh/worker")
+  process.exit(await runAskpass())
+}
 
-runIpc().pipe(
-  Effect.provide(Ipc.layer),
-  Effect.provide(BackgroundService.layer),
-  Effect.provide(DesktopCli.layer),
-  Effect.provide(UpdaterLive.layer),
-  Effect.provide(DesktopInitialization.layer),
-  Effect.provide(ApplicationLifecycle.layer),
-  Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer)),
-  Effect.scoped,
-  NodeRuntime.runMain,
-)
+await import("./desktop")

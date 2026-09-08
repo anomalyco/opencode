@@ -1,13 +1,11 @@
-import { usePlatform } from "@/runtime/platform/platform"
-import { useSshServers } from "./context"
+import { useSsh } from "./context"
 import { createSshRestore } from "./restore-state"
 
 export function SshRestore() {
-  const platform = usePlatform()
-  const ssh = useSshServers()
+  const ssh = useSsh()
   createSshRestore({
-    state: () => ssh.data,
-    start: (input) => platform.sshServers?.start(input),
+    state: () => ({ servers: ssh.servers }),
+    start: ssh.restore,
   })
   return null
 }

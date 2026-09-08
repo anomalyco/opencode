@@ -13,7 +13,7 @@ import {
   useLanguage,
   useTabs,
   useWslServers,
-  useSshServers,
+  useSsh,
   type LayoutRoute,
   type UpdaterPlatform,
 } from "@opencode/app/desktop"
@@ -87,12 +87,11 @@ function DesktopWindow(props: {
 
   function ReadyApp() {
     const wslServers = useWslServers()
-    const sshServers = useSshServers()
+    const ssh = useSsh()
     const sshConnections = createSshConnections(props.api.sshServers)
     const language = useLanguage()
     const ready = createMemo(
-      () =>
-        !defaultServer.loading && !sidecar.loading && !locale.loading && !wslServers.isLoading && !sshServers.isLoading,
+      () => !defaultServer.loading && !sidecar.loading && !locale.loading && !wslServers.isLoading && !ssh.loading,
     )
     const servers = createMemo(() => {
       const data = initializationData(sidecar)
@@ -107,7 +106,7 @@ function DesktopWindow(props: {
         })
       }
       list.push(...readyWslConnections(wslServers.data, language.t("wsl.server.label")))
-      list.push(...sshConnections(sshServers.data, language.t("ssh.label")))
+      list.push(...sshConnections({ servers: ssh.servers }, language.t("ssh.label")))
       return list
     })
     const effectiveDefaultServer = createMemo(() =>

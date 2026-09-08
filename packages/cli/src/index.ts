@@ -15,11 +15,6 @@ import { Npm } from "@opencode/util/npm"
 import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
 
-if (process.env.OPENCODE_SSH_ASKPASS_PORT) {
-  const { askpass } = await import("./ssh-askpass")
-  process.exit(await Effect.runPromise(askpass.pipe(Effect.provide(NodeServices.layer))))
-}
-
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
   upgrade: () => import("./commands/handlers/upgrade"),

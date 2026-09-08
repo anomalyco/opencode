@@ -3,7 +3,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { onCleanup, onMount, Show } from "solid-js"
 import { PlatformProvider } from "@/runtime/platform/platform"
-import { SshServersProvider, useSshServers } from "./context"
+import { SshProvider, useSsh } from "./context"
 import { useSshAuthenticate } from "./authenticate"
 import { HomeProjectsView } from "@/home/projects/view"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -11,7 +11,6 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { DialogSsh } from "./dialog"
 import type { SshItem, SshPlatform, SshState } from "./types"
 import { SshConnectionPanel } from "./connection-panel"
-import { SshReconnectProvider, useSshReconnect } from "./reconnect"
 import { SshServerSettings } from "./settings"
 
 function Fixture(props: {
@@ -137,19 +136,17 @@ function Fixture(props: {
       }}
     >
       <QueryClientProvider client={new QueryClient()}>
-        <SshServersProvider>
-          <SshReconnectProvider>
-            {props.settings ? (
-              <AuthenticationSettings />
-            ) : props.session ? (
-              <AuthenticationSession />
-            ) : props.initial === "required" ? (
-              <AuthenticationHome />
-            ) : (
-              <Open initial={props.initial} />
-            )}
-          </SshReconnectProvider>
-        </SshServersProvider>
+        <SshProvider>
+          {props.settings ? (
+            <AuthenticationSettings />
+          ) : props.session ? (
+            <AuthenticationSession />
+          ) : props.initial === "required" ? (
+            <AuthenticationHome />
+          ) : (
+            <Open initial={props.initial} />
+          )}
+        </SshProvider>
       </QueryClientProvider>
     </PlatformProvider>
   )
@@ -177,17 +174,16 @@ function AuthenticationSettings() {
 }
 
 function AuthenticationSession() {
-  const ssh = useSshServers()
-  const reconnect = useSshReconnect()
+  const ssh = useSsh()
   return (
     <div style={{ height: "70vh" }}>
-      <Show when={ssh.data?.servers[0]}>
+      <Show when={ssh.servers[0]}>
         {(item) => (
           <Show when={item().stage !== "ready"} fallback={<div>Session connected</div>}>
             <SshConnectionPanel
               item={item()}
-              pending={reconnect.pending(item().config.id)}
-              onReconnect={() => reconnect.start(item().config)}
+              pending={ssh.pending(item().config.id)}
+              onReconnect={() => ssh.connect(item().config)}
             />
           </Show>
         )}
@@ -198,7 +194,7 @@ function AuthenticationSession() {
 
 function AuthenticationHome() {
   const language = useLanguage()
-  const ssh = useSshServers()
+  const ssh = useSsh()
   const authenticate = useSshAuthenticate()
   const server: ServerConnection.Ssh = {
     type: "ssh",
@@ -208,10 +204,10 @@ function AuthenticationHome() {
     label: "SSH",
     http: { url: "http://127.0.0.1:0" },
     get authenticationRequired() {
-      return ssh.data?.servers[0]?.stage === "authentication"
+      return ssh.servers[0]?.stage === "authentication"
     },
     get connecting() {
-      return ssh.data?.servers[0]?.stage === "connecting"
+      return ssh.servers[0]?.stage === "connecting"
     },
   }
   const projects = [{ worktree: "/home/user/project", expanded: true }]
@@ -225,7 +221,7 @@ function AuthenticationHome() {
         recentlyClosed={[]}
         selection={{ server: ServerConnection.key(server) }}
         homedir="/home/user"
-        serverHealth={() => ({ healthy: ssh.data?.servers[0]?.stage === "ready" })}
+        serverHealth={() => ({ healthy: ssh.servers[0]?.stage === "ready" })}
         projectsForServer={() => projects}
         collapsed={() => false}
         canDefaultServer={false}
