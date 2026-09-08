@@ -11,10 +11,13 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { DialogSsh } from "./dialog"
 import type { SshItem, SshPlatform, SshState } from "./types"
 import { SshConnectionPanel } from "./connection-panel"
-import { useSshReconnect } from "./reconnect"
+import { SshReconnectProvider, useSshReconnect } from "./reconnect"
+import { SshServerSettings } from "./settings"
 
 function Fixture(props: {
   session?: boolean
+  settings?: boolean
+  incompatible?: boolean
   keyOnly?: boolean
   connectionDelay?: number
   initial?: "connecting" | "password" | "confirmation" | "failure" | "required"
@@ -26,7 +29,7 @@ function Fixture(props: {
       props.initial === "required"
         ? {
             config: { id: "story", target: "ssh linuxbook", name: "" },
-            stage: props.session ? "disconnected" : "authentication",
+            stage: props.session || props.settings ? "disconnected" : "authentication",
             saved: true,
             detail: "",
           }
@@ -70,6 +73,10 @@ function Fixture(props: {
         destination: "brendon@dev.example.com:22",
       }
       if (props.initial === "connecting") return
+      if (props.incompatible && !input.replace) {
+        update({ stage: "incompatible", error: "version" })
+        return
+      }
       if (props.connectionDelay) {
         update({ stage: "connecting" })
         state.timer = setTimeout(
@@ -107,6 +114,7 @@ function Fixture(props: {
       update({ stage: "disconnected", prompt: undefined })
     },
     cancel: async () => {
+      if (state.item?.stage === "incompatible") return
       clearTimeout(state.timer)
       update({ ...state.before, stage: state.before?.stage ?? "disconnected", prompt: undefined })
     },
@@ -130,16 +138,41 @@ function Fixture(props: {
     >
       <QueryClientProvider client={new QueryClient()}>
         <SshServersProvider>
-          {props.session ? (
-            <AuthenticationSession />
-          ) : props.initial === "required" ? (
-            <AuthenticationHome />
-          ) : (
-            <Open initial={props.initial} />
-          )}
+          <SshReconnectProvider>
+            {props.settings ? (
+              <AuthenticationSettings />
+            ) : props.session ? (
+              <AuthenticationSession />
+            ) : props.initial === "required" ? (
+              <AuthenticationHome />
+            ) : (
+              <Open initial={props.initial} />
+            )}
+          </SshReconnectProvider>
         </SshServersProvider>
       </QueryClientProvider>
     </PlatformProvider>
+  )
+}
+
+function AuthenticationSettings() {
+  return (
+    <div class="settings-servers" style={{ width: "min(100%, 480px)" }}>
+      <SshServerSettings
+        filter=""
+        domain={{
+          collection: { items: () => [], health: () => ({}) },
+          defaults: { available: () => false, key: () => null, set: async () => {} },
+          connection: {
+            canRemove: () => false,
+            remove: async () => {},
+            canHide: () => false,
+            isHidden: () => false,
+            setHidden: () => {},
+          },
+        }}
+      />
+    </div>
   )
 }
 
@@ -248,6 +281,8 @@ function Open(props: { initial?: string }) {
 
 export default { title: "App/Dialogs/SSH", id: "app-dialog-ssh" }
 export const AuthenticationRequired = { render: () => <Fixture initial="required" /> }
+export const SettingsReconnect = { render: () => <Fixture initial="required" settings connectionDelay={200} /> }
+export const IncompatibleSession = { render: () => <Fixture initial="required" session incompatible /> }
 export const InactiveSession = { render: () => <Fixture initial="required" session connectionDelay={3000} /> }
 export const KeyReconnect = { render: () => <Fixture initial="required" session keyOnly connectionDelay={3000} /> }
 export const Host = { render: () => <Fixture /> }

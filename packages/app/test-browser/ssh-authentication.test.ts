@@ -67,3 +67,34 @@ test("a selected tab waits for authentication and other dialogs before offering 
     fixture.dispose()
   }
 })
+
+test("selecting a tab waits for another window to release authentication", () => {
+  const opened: string[] = []
+  const fixture = createRoot((dispose) => {
+    const [state, setState] = createStore<{ item: SshItem }>({
+      item: {
+        config: { id: "host", target: "linuxbook", name: "" },
+        stage: "authentication",
+        authenticatingElsewhere: true,
+        saved: true,
+        detail: "",
+      },
+    })
+    createSshAuthentication({
+      selection: () => "session-1",
+      item: () => state.item,
+      busy: () => false,
+      open: (item) => opened.push(item.config.id),
+    })
+    return { dispose, setState }
+  })
+  try {
+    expect(opened).toEqual([])
+    fixture.setState("item", "detail", "still waiting in another window")
+    expect(opened).toEqual([])
+    fixture.setState("item", "authenticatingElsewhere", false)
+    expect(opened).toEqual(["host"])
+  } finally {
+    fixture.dispose()
+  }
+})

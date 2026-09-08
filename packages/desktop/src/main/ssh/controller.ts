@@ -60,6 +60,10 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
       servers: [...items.values()].map((item) => ({
         ...item,
         prompt: attempts.get(item.config.id)?.owner === owner ? item.prompt : undefined,
+        authenticatingElsewhere:
+          item.stage === "authentication" &&
+          attempts.get(item.config.id)?.owner !== undefined &&
+          attempts.get(item.config.id)?.owner !== owner,
       })),
     }))
   const update = Effect.fnUntraced(function* (id: string, value: Partial<SshItem>) {
@@ -186,6 +190,9 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
     const id = request.id
     if (lifecycle.closed || !/^[a-zA-Z0-9-]{1,80}$/.test(id)) return
     const previous = attempts.get(id)
+    // A second window must not replace an interactive attempt while its owner
+    // is connecting or answering a challenge.
+    if (previous?.owner !== undefined && previous.owner !== owner && items.get(id)?.stage !== "ready") return
     const config = { id, target: request.target.trim(), name: request.name.trim() }
     const connection: Connection = {
       owner,
@@ -228,7 +235,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
           yield* Deferred.succeed(connection.ready, null)
           if (attempts.get(id)?.ready !== connection.ready) return
           attempts.delete(id)
-          if (items.get(id)?.prompt) yield* update(id, { prompt: undefined })
+          yield* update(id, { prompt: undefined })
         }),
       ),
       Effect.forkIn(lifetime, { uninterruptible: false }),
@@ -291,8 +298,16 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
     resolve: Effect.fn("Ssh.resolve")(function* (id: string) {
       const item = items.get(id)
       if (lifecycle.closed || !item || paused.has(id)) return null
-      if (item.stage === "ready" && item.http) return item.http
-      if (!attempts.has(id)) yield* start({ ...item.config, background: true })
+      if (item.stage === "ready" && item.http) {
+        const healthy = yield* checkHealth(item.http).pipe(Effect.provideService(HttpClient.HttpClient, httpClient))
+        if (lifecycle.closed || paused.has(id)) return null
+        // Another window may already have replaced this tunnel during the probe.
+        if (items.get(id) === item) {
+          if (healthy) return item.http
+          yield* start({ ...item.config, background: true })
+        }
+      }
+      if (!attempts.has(id) && items.has(id)) yield* start({ ...item.config, background: true })
       const attempt = attempts.get(id)
       return attempt ? yield* Deferred.await(attempt.ready) : null
     }),
@@ -327,20 +342,24 @@ const freePort = Effect.gen(function* () {
 }).pipe(Effect.scoped)
 
 const waitReady = Effect.fn("Ssh.waitReady")(function* (http: SshHttp, authenticating: () => boolean) {
-  const client = yield* HttpClient.HttpClient
   const clock = { deadline: (yield* Clock.currentTimeMillis) + 30_000 }
   yield* Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis
     if (authenticating()) clock.deadline = now + 30_000
     if (now >= clock.deadline) return yield* Effect.fail(new SshFailure("service"))
-    return yield* client
-      .get(`${http.url}/api/health`, {
-        headers: { authorization: `Basic ${Buffer.from(`opencode:${http.password}`).toString("base64")}` },
-      })
-      .pipe(
-        Effect.timeout(2000),
-        Effect.map((response) => response.status >= 200 && response.status < 300),
-        Effect.orElseSucceed(() => false),
-      )
+    return yield* checkHealth(http)
   }).pipe(Effect.repeat({ until: (ready) => ready, schedule: Schedule.spaced(100) }))
+})
+
+const checkHealth = Effect.fn("Ssh.checkHealth")(function* (http: SshHttp) {
+  const client = yield* HttpClient.HttpClient
+  return yield* client
+    .get(`${http.url}/api/health`, {
+      headers: { authorization: `Basic ${Buffer.from(`opencode:${http.password}`).toString("base64")}` },
+    })
+    .pipe(
+      Effect.timeout(2000),
+      Effect.map((response) => response.status >= 200 && response.status < 300),
+      Effect.orElseSucceed(() => false),
+    )
 })

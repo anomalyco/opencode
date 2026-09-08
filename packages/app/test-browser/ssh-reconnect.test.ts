@@ -12,6 +12,7 @@ function fixture() {
       busy: false,
     })
     const calls = { starts: 0, prompts: 0, errors: 0, connected: 0 }
+    const dialogs: (() => void)[] = []
     const admission = Promise.withResolvers<void>()
     const reconnect = createSshReconnect({
       items: () => state.items,
@@ -20,14 +21,15 @@ function fixture() {
         calls.starts++
         return admission.promise
       },
-      prompt: () => {
+      prompt: (_item, settled) => {
         calls.prompts++
+        dialogs.push(settled)
       },
       error: () => {
         calls.errors++
       },
     })
-    return { dispose, config, setState, calls, admission, reconnect }
+    return { dispose, config, setState, calls, admission, reconnect, dialogs }
   })
 }
 
@@ -93,6 +95,58 @@ test("failed reconnect becomes retryable without opening a connection form", asy
     expect(app.calls.prompts).toBe(0)
     app.reconnect.start(app.config)
     expect(app.reconnect.pending("host")).toBe(true)
+  } finally {
+    app.dispose()
+  }
+})
+
+test("cancelling a version-mismatch dialog allows another reconnect", async () => {
+  const app = fixture()
+  try {
+    app.reconnect.start(app.config)
+    app.setState("items", 0, "stage", "incompatible")
+    app.admission.resolve()
+    await app.admission.promise
+    await Promise.resolve()
+    expect(app.calls.prompts).toBe(1)
+    app.dialogs[0]?.()
+    app.reconnect.start(app.config)
+    await Promise.resolve()
+    expect(app.calls.starts).toBe(2)
+    expect(app.calls.prompts).toBe(2)
+  } finally {
+    app.dispose()
+  }
+})
+
+test("closing a completed authentication dialog invokes its continuation once", async () => {
+  const app = fixture()
+  try {
+    app.reconnect.start(app.config, () => app.calls.connected++)
+    app.setState("items", 0, { stage: "authentication", prompt: { id: "password", text: "Password:", confirm: false } })
+    app.admission.resolve()
+    await app.admission.promise
+    await Promise.resolve()
+    expect(app.calls.prompts).toBe(1)
+    app.setState("items", 0, "stage", "ready")
+    app.dialogs[0]?.()
+    await Promise.resolve()
+    expect(app.calls.connected).toBe(1)
+  } finally {
+    app.dispose()
+  }
+})
+
+test("another window's authentication stays pending without starting a competing attempt", () => {
+  const app = fixture()
+  try {
+    app.setState("items", 0, { stage: "authentication", authenticatingElsewhere: true })
+    app.reconnect.start(app.config)
+    expect(app.reconnect.pending(app.config.id)).toBe(true)
+    expect(app.calls.starts).toBe(0)
+    app.setState("items", 0, "authenticatingElsewhere", false)
+    app.reconnect.start(app.config)
+    expect(app.calls.starts).toBe(1)
   } finally {
     app.dispose()
   }

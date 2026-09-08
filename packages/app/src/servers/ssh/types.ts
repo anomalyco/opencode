@@ -30,6 +30,7 @@ export const SshItem = Schema.Struct({
   stage: SshStage,
   http: Schema.optional(SshHttp),
   prompt: Schema.optional(SshPrompt),
+  authenticatingElsewhere: Schema.optional(Schema.Boolean),
   detail: Schema.String,
   error: Schema.optional(
     Schema.Literals([

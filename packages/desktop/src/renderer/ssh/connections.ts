@@ -40,10 +40,10 @@ function connection(item: SshItem, api: Pick<SshPlatform, "resolve">, label: str
         return state.current.stage
       },
       get connecting() {
-        return isSshConnecting(state.current.stage)
+        return isSshConnecting(state.current.stage) || !!state.current.authenticatingElsewhere
       },
       get authenticationRequired() {
-        return state.current.stage === "authentication"
+        return state.current.stage === "authentication" && !state.current.authenticatingElsewhere
       },
       get label() {
         return state.label

@@ -36,6 +36,18 @@ test("progress and endpoint changes preserve the connection object used by route
   expect(connections({ servers: [] })).toEqual([])
 })
 
+test("authentication owned by another window is presented as pending", () => {
+  const connections = createSshConnections({ resolve: async () => null })
+  const config = { id: "fixture", target: "devbox", name: "Devbox" }
+  const item = { config, saved: true, stage: "authentication" as const, detail: "", authenticatingElsewhere: true }
+  const connection = connections({ servers: [item] })[0]
+  expect(connection?.connecting).toBe(true)
+  expect(connection?.authenticationRequired).toBe(false)
+  expect(connections({ servers: [{ ...item, authenticatingElsewhere: false }] })[0]).toBe(connection)
+  expect(connection?.connecting).toBe(false)
+  expect(connection?.authenticationRequired).toBe(true)
+})
+
 test("existing unnamed connections show the hostname and preserve identity when renamed", () => {
   const connections = createSshConnections({ resolve: async () => null })
   const config = { id: "fixture", target: "ssh -p 2222 anomaly@brendan-box.exe.xyz", name: "" }

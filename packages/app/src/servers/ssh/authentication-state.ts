@@ -17,7 +17,8 @@ export function createSshAuthentication(input: {
       state.offered = false
     }
     const item = input.item()
-    if (!selection || state.offered || item?.stage !== "authentication" || input.busy()) return
+    if (!selection || state.offered || item?.stage !== "authentication" || item.authenticatingElsewhere || input.busy())
+      return
     state.offered = true
     input.open(item)
   })

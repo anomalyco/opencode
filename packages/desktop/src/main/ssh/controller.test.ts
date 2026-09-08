@@ -2,6 +2,7 @@ import { expect } from "bun:test"
 import { NodeServices, NodeSocketServer } from "@effect/platform-node"
 import { Deferred, Effect, Fiber, FileSystem, Layer, Path, Stream } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { testEffect } from "../../../../core/test/lib/effect"
 import { createSshController } from "./controller"
 import { quote } from "./command"
@@ -9,6 +10,91 @@ import { quote } from "./command"
 const it = testEffect(Layer.merge(NodeServices.layer, FetchHttpClient.layer))
 // The askpass ProxyCommand fixture is a POSIX shell executable.
 const posix = process.platform === "win32" ? it.live.skip : it.live
+
+it.live(
+  "resolution validates a live tunnel and rediscovers changed remote credentials and ports",
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const file = path.join(yield* fs.makeTempDirectoryScoped({ prefix: "ssh-resolve-test-" }), "registration.json")
+    const state = { password: "first", tunnels: 0 }
+    const remote = () =>
+      Bun.serve({
+        hostname: "127.0.0.1",
+        port: 0,
+        fetch: (request) =>
+          new Response(null, {
+            status:
+              request.headers.get("authorization") ===
+              `Basic ${Buffer.from(`opencode:${state.password}`).toString("base64")}`
+                ? 200
+                : 401,
+          }),
+      })
+    const first = remote()
+    yield* Effect.addFinalizer(() => Effect.sync(() => first.stop(true)))
+    yield* fs.writeFileString(
+      file,
+      JSON.stringify({ url: first.url.href.replace(/\/$/, ""), password: state.password, version: "2.0.0", pid: 1 }),
+    )
+    const config = { id: "fixture", target: "fixture", name: "Fixture" }
+    const controller = yield* createSshController({
+      configs: [config],
+      binary: process.execPath,
+      version: "2.0.0",
+      save: () => Effect.void,
+    }).pipe(
+      Effect.provideService(
+        ChildProcessSpawner.ChildProcessSpawner,
+        ChildProcessSpawner.make((command) => {
+          if (command._tag !== "StandardCommand") return spawner.spawn(command)
+          if (command.args.includes("-L")) state.tunnels++
+          return spawner.spawn(
+            ChildProcess.make(
+              process.execPath,
+              [path.join(import.meta.dirname, "../../../test/ssh/transport.ts"), file, ...command.args],
+              command.options,
+            ),
+          )
+        }),
+      ),
+    )
+    yield* controller.start(config, 1)
+    const initial = yield* controller.resolve(config.id)
+    expect((yield* controller.state()).servers[0]).toMatchObject({ stage: "ready" })
+    expect(initial?.password).toBe("first")
+    expect(yield* controller.resolve(config.id)).toEqual(initial)
+    expect(state.tunnels).toBe(1)
+
+    state.password = "second"
+    yield* fs.writeFileString(
+      file,
+      JSON.stringify({ url: first.url.href.replace(/\/$/, ""), password: state.password, version: "2.0.0", pid: 2 }),
+    )
+    const refreshed = yield* Effect.all([controller.resolve(config.id), controller.resolve(config.id)], {
+      concurrency: "unbounded",
+    })
+    expect(refreshed[0]?.password).toBe("second")
+    expect(refreshed[0]).toEqual(refreshed[1])
+    expect(refreshed[0]?.url).not.toBe(initial?.url)
+    expect(state.tunnels).toBe(2)
+
+    const second = remote()
+    yield* Effect.addFinalizer(() => Effect.sync(() => second.stop(true)))
+    yield* fs.writeFileString(
+      file,
+      JSON.stringify({ url: second.url.href.replace(/\/$/, ""), password: state.password, version: "2.0.0", pid: 3 }),
+    )
+    yield* Effect.promise(() => first.stop(true))
+    const moved = yield* controller.resolve(config.id)
+    expect(moved?.url).not.toBe(refreshed[0]?.url)
+    expect(state.tunnels).toBe(3)
+    expect((yield* controller.state()).servers[0]?.stage).toBe("ready")
+    expect(yield* controller.resolve(config.id)).toEqual(moved)
+    expect(state.tunnels).toBe(3)
+  }).pipe(Effect.timeout("20 seconds")),
+)
 
 posix(
   "cancelling an authentication attempt restores the previous state and permits another attempt",
@@ -44,6 +130,11 @@ posix(
       )
       yield* controller.start(config, owner)
       yield* Fiber.join(prompted)
+      const prompt = (yield* controller.state(owner)).servers[0]?.prompt
+      expect((yield* controller.state(owner + 10)).servers[0]?.authenticatingElsewhere).toBe(true)
+      yield* controller.start(config, owner + 10)
+      expect((yield* controller.state(owner)).servers[0]?.prompt).toEqual(prompt)
+      expect((yield* controller.state(owner + 10)).servers[0]?.prompt).toBeUndefined()
       yield* controller.cancel(config.id, owner + 10)
       expect((yield* controller.state(owner)).servers[0]?.prompt).toBeDefined()
       yield* controller.cancel(config.id, owner)
@@ -52,6 +143,7 @@ posix(
       expect(item?.prompt).toBeUndefined()
       expect(item?.error).toBeUndefined()
       expect(item?.config).toEqual(config)
+      expect((yield* controller.state(owner + 10)).servers[0]?.authenticatingElsewhere).toBe(false)
       expect(yield* controller.resolve(config.id)).toBeNull()
     }
   }).pipe(Effect.timeout("20 seconds")),
