@@ -1,0 +1,34 @@
+import { expect } from "bun:test"
+import { Effect } from "effect"
+import { LLM } from "../../src/index.js"
+import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
+import { compileRequest } from "../../src/route/client.js"
+import { it } from "../lib/effect.js"
+
+for (const [id, enabled] of [
+  ["claude-fable-5-1", true],
+  ["claude-mythos-5-1", true],
+  ["anthropic/claude-fable-5.1", true],
+  ["claude-sonnet-6", true],
+  ["claude-opus-5-20260901", false],
+  ["claude-opus-4-8", false],
+  ["kimi-k2.5", false],
+] as const) {
+  it.effect(`thinking-binding defaults for ${id}`, () =>
+    Effect.gen(function* () {
+      const request = LLM.request({
+        model: AnthropicMessages.route.model({ id }),
+        prompt: "Hello",
+        http: { headers: { "anthropic-beta": "existing-beta" } },
+      })
+      const compiled = yield* compileRequest(request)
+      const prepared = yield* AnthropicMessages.route.prepareTransport(compiled.body, request)
+      expect(compiled.body.thinking).toEqual(
+        enabled ? { type: "adaptive", block_binding: { prefix_mismatch_behavior: "drop_block" } } : undefined,
+      )
+      expect(prepared.request.headers["anthropic-beta"]).toBe(
+        enabled ? "existing-beta,thinking-binding-controls-2026-08-01" : "existing-beta",
+      )
+    }),
+  )
+}

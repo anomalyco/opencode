@@ -195,11 +195,19 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   return yield* Effect.try({
     try: () => {
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
+      // Keep catalog dates here; the AI protocol also recognizes versioned Claude IDs.
+      const thinkingBinding =
+        runtime.route.protocol === "anthropic-messages" &&
+        /(?:^|[./])claude-/i.test(runtime.id) &&
+        resolved.time.released >= Date.UTC(2026, 8, 1)
+          ? { supportsThinkingBlockBinding: true }
+          : undefined
       return LanguageModel.update(runtime, {
         provider: resolved.canonical ?? resolved.providerID,
-        compatibility: resolved.compatibility
-          ? Object.assign({}, runtime.compatibility, resolved.compatibility)
-          : runtime.compatibility,
+        compatibility:
+          resolved.compatibility || thinkingBinding
+            ? Object.assign({}, thinkingBinding, runtime.compatibility, resolved.compatibility)
+            : runtime.compatibility,
       })
     },
     catch: () => unsupported(resolved),
