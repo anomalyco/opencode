@@ -10,6 +10,7 @@ import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
+import { useServerSync } from "@/context/server-sync"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
@@ -21,6 +22,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { useSessionArchive } from "@/pages/session/session-archive"
 import { createSessionOwnership } from "./session-ownership"
 import { useLocal } from "@/context/local"
+import { createSessionMutation } from "@/utils/session-mutation"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -47,6 +49,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const sdk = useSDK()
   const settings = useSettings()
   const sync = useSync()
+  const serverSync = useServerSync()
   const terminal = useTerminal()
   const layout = useLayout()
   const local = useLocal()
@@ -197,9 +200,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       return
     }
 
-    const url = await sdk()
-      .client.session.share({ sessionID })
-      .then((res) => res.data?.share?.url)
+    const session = info()
+    if (!session) return
+    const url = await createSessionMutation({ client: sdk().client, serverSync: serverSync() })
+      .publish(session)
       .catch(() => undefined)
     if (!url) {
       showToast({
@@ -217,8 +221,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
 
-    await sdk()
-      .client.session.unshare({ sessionID })
+    const session = info()
+    if (!session) return
+    await createSessionMutation({ client: sdk().client, serverSync: serverSync() })
+      .unpublish(session)
       .then(() =>
         showToast({
           title: language.t("toast.session.unshare.success.title"),

@@ -8,7 +8,7 @@ import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { usePlatform } from "./platform"
 import { uuid } from "@/utils/uuid"
 import { SessionTabsRemovedDetail } from "@/components/titlebar-session-events"
-import { sessionHref } from "@/utils/session-route"
+import { requireServerKey, sessionHref } from "@/utils/session-route"
 import { createTabMemory } from "./tab-memory"
 import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed-tabs"
 import { createDraftPromptSession, type PromptModel } from "./prompt-state"
@@ -179,12 +179,15 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const actions = {
       addSessionTab: (tab: Omit<SessionTab, "type">) => {
         const next = { type: "session" as const, ...tab }
-        const existing = store.find((item) => tabKey(item) === tabKey(next))
+        const key = tabKey(next)
+        const existing = store.find((item) => tabKey(item) === key)
         if (existing) return existing
+        if (closing.has(key)) return next
         void startTransition(() => {
           setStore(
             produce((tabs) => {
-              if (tabs.some((item) => tabKey(item) === tabKey(next))) return
+              if (closing.has(key)) return
+              if (tabs.some((item) => tabKey(item) === key)) return
               tabs.push(next)
             }),
           )
@@ -298,17 +301,17 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       removeSessions: (input: SessionTabsRemovedDetail) => {
         const targetServer = input.server ?? server.key
         updateClosed((stack) => removeClosedTabs(stack, targetServer, input.sessionIDs))
-        const removed = store
-          .filter(
-            (tab) => tab.type === "session" && tab.server === targetServer && input.sessionIDs.includes(tab.sessionId),
-          )
-          .map(tabKey)
+        const removed = input.sessionIDs.map((sessionId) =>
+          tabKey({ type: "session", server: targetServer, sessionId }),
+        )
+        removed.forEach((key) => closing.add(key))
         void startTransition(() => {
           setStore(
             produce((tabs) => {
               const sessionIDs = new Set(input.sessionIDs)
+              const routeServer = params.serverKey ? requireServerKey(params.serverKey) : server.key
               const currentHref =
-                targetServer === server.key && params.dir && params.id
+                params.id && routeServer === targetServer
                   ? tabHref({
                       type: "session",
                       server: targetServer,
@@ -343,7 +346,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
             }),
           )
           if (recent.key && removed.includes(recent.key)) setRecentKey(undefined)
-        })
+        }).finally(() => removed.forEach((key) => closing.delete(key)))
         for (const key of removed) memory.remove(key)
         for (const key of removed) removeInfo(key)
       },

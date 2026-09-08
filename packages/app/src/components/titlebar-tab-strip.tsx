@@ -20,6 +20,7 @@ import { showToast } from "@/utils/toast"
 import { canStartTabDrag, isTabCloseTarget } from "./titlebar-tab-gesture"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./titlebar-tab-order"
 import type { Session } from "@opencode-ai/sdk/v2"
+import { createSessionMutation } from "@/utils/session-mutation"
 
 function SessionTabSlot(props: {
   tab: SessionTab
@@ -103,13 +104,9 @@ function SessionTabEntry(props: {
     const ctx = props.serverCtx()
     if (!value || !ctx) return
 
-    ctx.sync.session.remember({ ...value, title })
     try {
-      await ctx.sdk.api.session.rename({ sessionID: value.id, title })
+      await createSessionMutation({ client: ctx.sdk.client, serverSync: ctx.sync }).rename(value, title)
     } catch (err) {
-      const current = session()
-      const currentCtx = props.serverCtx()
-      if (current && currentCtx) currentCtx.sync.session.remember({ ...current, title: value.title })
       showToast({
         title: language.t("common.requestFailed"),
         description: err instanceof Error ? err.message : undefined,
