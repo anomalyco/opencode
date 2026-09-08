@@ -3,6 +3,7 @@ import { LLM } from "@opencode/ai"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Money } from "@opencode/schema/money"
 import { Effect, Layer, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Catalog } from "@opencode/core/catalog"
 import { Credential } from "@opencode/core/credential"
@@ -15,6 +16,7 @@ import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
 import { Provider } from "@opencode/core/provider"
 import { WebSearch } from "@opencode/core/websearch"
 import { withEnv } from "../fixture/env"
+import { drain } from "../lib/clock"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -376,6 +378,75 @@ describe("OpencodePlugin", () => {
           yield* Effect.yieldNow
           expect(authorization).toEqual(["Bearer secret", "Bearer replacement"])
           expect((yield* credentials.list(Integration.ID.make("opencode"))).at(-1)?.id).toBe(replacement.id)
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.effect("refreshes hosted search with Console config and skips unchanged snapshots", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state = { advertised: false, requests: 0 }
+        const server = Bun.serve({
+          port: 0,
+          fetch: () => {
+            state.requests++
+            return Response.json({
+              providers: {},
+              ...(state.advertised ? { websearch: { providerID: "opencode" } } : {}),
+            })
+          },
+        })
+        return { server, state }
+      }),
+      ({ server, state }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const catalog = yield* Catalog.Service
+          const websearch = yield* WebSearch.Service
+          const rebuilds = { catalog: 0, websearch: 0 }
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
+          })
+          yield* catalog.transform(() => {
+            rebuilds.catalog++
+          })
+          yield* websearch.transform(() => {
+            rebuilds.websearch++
+          })
+          yield* addPlugin()
+          yield* drain
+          const initial = { ...rebuilds }
+          expect(state.requests).toBe(1)
+          expect(yield* websearch.default()).toBeUndefined()
+
+          state.advertised = true
+          yield* TestClock.adjust("9 minutes")
+          yield* drain
+          expect(state.requests).toBe(1)
+          expect(rebuilds).toEqual(initial)
+          expect(yield* websearch.default()).toBeUndefined()
+
+          yield* TestClock.adjust("1 minute")
+          yield* drain
+          expect(state.requests).toBe(2)
+          expect(rebuilds).toEqual({ catalog: initial.catalog + 1, websearch: initial.websearch + 1 })
+          expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode" })
+
+          yield* TestClock.adjust("10 minutes")
+          yield* drain
+          expect(state.requests).toBe(3)
+          expect(rebuilds).toEqual({ catalog: initial.catalog + 1, websearch: initial.websearch + 1 })
+          expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode" })
+
+          state.advertised = false
+          yield* TestClock.adjust("10 minutes")
+          yield* drain
+          expect(state.requests).toBe(4)
+          expect(rebuilds).toEqual({ catalog: initial.catalog + 2, websearch: initial.websearch + 2 })
+          expect(yield* websearch.providers()).toEqual([])
+          expect(yield* websearch.default()).toBeUndefined()
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
