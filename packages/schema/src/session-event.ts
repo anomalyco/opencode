@@ -120,6 +120,7 @@ export const Viewed = Event.durable({
 })
 export type Viewed = typeof Viewed.Type
 
+// Replay-only: older releases allowed replacing completed assistant content.
 export const MessageContentUpdated = Event.durable({
   type: "session.message.content.updated",
   ...options,
@@ -669,13 +670,13 @@ export const Definitions = Event.inventory(
   RevertEvent.Staged,
   RevertEvent.Cleared,
   RevertEvent.Committed,
-  MessageContentUpdated,
 )
 
-// UsageRecorded is durable but internal: excluded from Definitions so it never reaches the public manifest.
+// Internal and replay-only events are excluded from the public manifest.
 export const DurableDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "durable"),
   UsageRecorded,
+  MessageContentUpdated,
 )
 export const EphemeralDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "ephemeral"),

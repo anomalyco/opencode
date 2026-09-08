@@ -2252,8 +2252,8 @@ export type SessionEventDurable =
   | SessionRevertStaged
   | SessionRevertCleared
   | SessionRevertCommitted
-  | SessionMessageContentUpdated
   | SessionUsageRecorded
+  | SessionMessageContentUpdated
 
 export type IntegrationInfo = {
   id: string
@@ -2317,7 +2317,6 @@ export type V2Event =
   | SessionRevertStaged
   | SessionRevertCleared
   | SessionRevertCommitted
-  | SessionMessageContentUpdated
   | FilesystemChanged
   | ReferenceUpdated
   | PermissionAsked
@@ -4269,91 +4268,6 @@ export type SessionMessageInput = {
 }
 
 export type SessionMessageOutput = { data: SessionMessageInfo }["data"]
-
-export type SessionMessageUpdateInput = {
-  readonly sessionID: { readonly sessionID: string; readonly messageID: string }["sessionID"]
-  readonly messageID: { readonly sessionID: string; readonly messageID: string }["messageID"]
-  readonly content: {
-    readonly content: ReadonlyArray<
-      | { readonly type: "text"; readonly text: string; readonly state?: { readonly [x: string]: JsonValue } }
-      | {
-          readonly type: "reasoning"
-          readonly text: string
-          readonly state?: { readonly [x: string]: JsonValue }
-          readonly time?: { readonly created: number; readonly completed?: number }
-        }
-      | {
-          readonly type: "tool"
-          readonly id: string
-          readonly name: string
-          readonly executed?: boolean
-          readonly providerState?: { readonly [x: string]: JsonValue }
-          readonly providerResultState?: { readonly [x: string]: JsonValue }
-          readonly state:
-            | { readonly status: "streaming"; readonly input: string }
-            | {
-                readonly status: "running"
-                readonly input: { readonly [x: string]: JsonValue }
-                readonly metadata: { readonly [x: string]: JsonValue }
-              }
-            | {
-                readonly status: "completed"
-                readonly input: { readonly [x: string]: JsonValue }
-                readonly content: readonly [
-                  (
-                    | { readonly type: "text"; readonly text: string }
-                    | {
-                        readonly type: "file"
-                        readonly uri: string
-                        readonly mime: string
-                        readonly name?: string | null
-                      }
-                  ),
-                  ...Array<
-                    | { readonly type: "text"; readonly text: string }
-                    | {
-                        readonly type: "file"
-                        readonly uri: string
-                        readonly mime: string
-                        readonly name?: string | null
-                      }
-                  >,
-                ]
-                readonly metadata?: { readonly [x: string]: JsonValue }
-              }
-            | {
-                readonly status: "error"
-                readonly input: { readonly [x: string]: JsonValue }
-                readonly error: { readonly type: string; readonly message: string; readonly status?: number }
-                readonly content?: readonly [
-                  (
-                    | { readonly type: "text"; readonly text: string }
-                    | {
-                        readonly type: "file"
-                        readonly uri: string
-                        readonly mime: string
-                        readonly name?: string | null
-                      }
-                  ),
-                  ...Array<
-                    | { readonly type: "text"; readonly text: string }
-                    | {
-                        readonly type: "file"
-                        readonly uri: string
-                        readonly mime: string
-                        readonly name?: string | null
-                      }
-                  >,
-                ]
-                readonly metadata?: { readonly [x: string]: JsonValue }
-              }
-          readonly time: { readonly created: number; readonly ran?: number; readonly completed?: number }
-        }
-    >
-  }["content"]
-}
-
-export type SessionMessageUpdateOutput = { data: SessionMessageAssistant }["data"]
 
 export type SessionEnvironmentInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
