@@ -372,7 +372,18 @@ function CurrentHighlightedText(props: {
     if (last < props.text.length) result.push({ text: props.text.slice(last) })
     return result
   })
-  return <For each={segments()}>{(segment) => <span data-highlight={segment.type}>{segment.text}</span>}</For>
+  return (
+    <For each={segments()}>
+      {(segment) => (
+        <span data-highlight={segment.type}>
+          <Show when={segment.type && segment.text.startsWith("@")} fallback={segment.text}>
+            <span data-slot="user-message-mention-prefix">@</span>
+            {segment.text.slice(1)}
+          </Show>
+        </span>
+      )}
+    </For>
+  )
 }
 
 type HighlightSegment = { text: string; type?: "file" | "agent" }
