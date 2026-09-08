@@ -177,7 +177,7 @@ export function PromptWorkspaceSelector(props: {
                     </span>
                   </Menu.SubTrigger>
                   <Menu.Portal>
-                    <Menu.SubContent class="max-h-[calc(100dvh-16px)] w-[200px] overflow-y-auto">
+                    <Menu.SubContent class="max-h-[224px] w-[200px] overflow-y-auto">
                       <Show when={props.workspaces.length >= 10}>
                         <div class="flex h-7 items-center gap-2 rounded-sm ps-3 pe-2 text-v2-icon-icon-muted">
                           <Icon name="magnifying-glass" size="small" class="shrink-0" />
