@@ -26,6 +26,7 @@ interface CompiledEndpoint {
 }
 
 const compiledEndpoints = new WeakMap<object, CompiledEndpoint>()
+const JsonInput = Schema.fromJsonString(Schema.Unknown)
 
 interface HostRpcCallContext {
   readonly error: (type: string, message: string, data?: unknown) => unknown
@@ -263,7 +264,11 @@ export function fromPromise(plugin: Plugin) {
           const compiled = compileEndpoint(endpoint)
           return ((input?: unknown) =>
             Effect.gen(function* () {
-              const decoded = yield* Effect.forEach(compiled.decode, (decode) => decode(input ?? {}))
+              // Match the generated Promise client, whose request body crosses JSON before endpoint decoding.
+              const normalized = yield* Schema.encodeUnknownEffect(JsonInput)(input ?? {}).pipe(
+                Effect.flatMap(Schema.decodeUnknownEffect(JsonInput)),
+              )
+              const decoded = yield* Effect.forEach(compiled.decode, (decode) => decode(normalized))
               const result = yield* method(Object.assign({}, ...decoded) as never)
               if (compiled.noContent) return undefined
               return yield* compiled.encode(result)
