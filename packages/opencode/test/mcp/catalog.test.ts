@@ -2,11 +2,72 @@ import { describe, expect, test } from "bun:test"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
 import { Server } from "@modelcontextprotocol/sdk/server/index.js"
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
+import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } from "@modelcontextprotocol/sdk/types.js"
 import { McpCatalog } from "@/mcp/catalog"
-import { Effect } from "effect"
+import { Effect, Logger } from "effect"
 
 const options = { toolCallId: "call_mcp", abortSignal: new AbortController().signal } as any
+
+describe("McpCatalog.defs", () => {
+  test("preserves a disconnected transport error", async () => {
+    const client = new Client({ name: "disconnected", version: "1.0.0" })
+    const error = await Effect.runPromise(McpCatalog.defs(client).pipe(Effect.flip))
+    expect(error.message).toContain("Not connected")
+  })
+
+  test.each([
+    { code: ErrorCode.MethodNotFound, message: "tools/list is not supported" },
+    { code: ErrorCode.InternalError, message: "catalog service unavailable" },
+  ])("preserves and logs protocol error: $message", async ({ code, message }) => {
+    const server = new Server({ name: "errors", version: "1.0.0" }, { capabilities: { tools: {} } })
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
+      throw new McpError(code, message)
+    })
+    const client = new Client({ name: "errors-test", version: "1.0.0" })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
+    const logs: unknown[] = []
+    try {
+      const error = await Effect.runPromise(
+        McpCatalog.defs(client).pipe(
+          Effect.flip,
+          Effect.provide(Logger.layer([Logger.make((entry) => logs.push(entry.message))])),
+        ),
+      )
+      expect(error.message).toContain(message)
+      expect(error.cause).toBeInstanceOf(McpError)
+      expect(JSON.stringify(logs)).toContain(message)
+    } finally {
+      await Promise.all([client.close(), server.close()])
+    }
+  })
+
+  test.each([
+    { name: "empty tools", delay: 0, tools: [], error: undefined },
+    { name: "invalid response schema", delay: 0, tools: [{ name: "broken" }], error: "inputSchema" },
+    { name: "request timeout", delay: 100, tools: [], error: "timed out" },
+  ])("handles $name", async ({ delay, tools, error }) => {
+    const server = new Server({ name: "catalog", version: "1.0.0" }, { capabilities: { tools: {} } })
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
+      if (delay) await Bun.sleep(delay)
+      return { tools }
+    })
+    const client = new Client({ name: "catalog-test", version: "1.0.0" })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
+    try {
+      const result = McpCatalog.defs(client, 30)
+      if (error) {
+        const failure = await Effect.runPromise(result.pipe(Effect.flip))
+        expect(failure.message).toContain(error)
+        return
+      }
+      expect(await Effect.runPromise(result)).toEqual([])
+    } finally {
+      await Promise.all([client.close(), server.close()])
+    }
+  })
+})
 
 function clientReturning(result: unknown) {
   return {
