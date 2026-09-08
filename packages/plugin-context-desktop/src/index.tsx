@@ -7,6 +7,7 @@ import { toggleContext } from "./toggle"
 
 export const ContextDesktop = Plugin.define({
   id: "opencode.context",
+  name: "session.tab.context",
   setup(ctx) {
     ctx.commands.register(() => {
       const session = ctx.sessions.current()
