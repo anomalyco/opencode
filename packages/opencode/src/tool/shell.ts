@@ -236,7 +236,7 @@ function tail(text: string, maxLines: number, maxBytes: number) {
   for (let i = lines.length - 1; i >= 0 && out.length < maxLines; i--) {
     const size = Buffer.byteLength(lines[i], "utf-8") + (out.length > 0 ? 1 : 0)
     if (bytes + size > maxBytes) {
-      if (out.length === 0) {
+      if (bytes === 0) {
         const buf = Buffer.from(lines[i], "utf-8")
         let start = buf.length - maxBytes
         if (start < 0) start = 0
