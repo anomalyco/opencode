@@ -3,7 +3,7 @@ import { LLM } from "@opencode/ai"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Money } from "@opencode/schema/money"
 import { Effect, Layer, Stream } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Catalog } from "@opencode/core/catalog"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
@@ -413,14 +413,12 @@ describe("OpencodePlugin", () => {
                   ? {
                       websearch: {
                         providerID: "opencode",
-                        name: "OpenCode",
-                        url: `${new URL(request.url).origin}/api/websearch`,
                       },
                     }
                   : {}),
               })
             }
-            if (path === "/api/websearch") {
+            if (path === "/api/websearch" || path === "/other/api/websearch") {
               return Response.json({
                 providerID: state.providerID,
                 results: [
@@ -498,12 +496,17 @@ describe("OpencodePlugin", () => {
             body: { query: "fresh credential", providerID: "opencode" },
           })
 
-          const requestCount = requests.length
           yield* credentials.update(initial.id, {
-            value: account("moved", `${server.url.origin}/other`),
+            value: account("moved", `${server.url.origin}/other///?ignored=true#ignored`),
           })
-          expect((yield* websearch.query({ query: "stale server" }).pipe(Effect.flip))._tag).toBe("WebSearch.Request")
-          expect(requests).toHaveLength(requestCount)
+          yield* websearch.query({ query: "updated server" })
+          expect(requests.at(-1)).toMatchObject({
+            method: "POST",
+            path: "/other/api/websearch",
+            authorization: "Bearer moved",
+            orgID: "org_test",
+            body: { query: "updated server", providerID: "opencode" },
+          })
           yield* credentials.update(initial.id, {
             value: account("replacement"),
           })
@@ -541,6 +544,61 @@ describe("OpencodePlugin", () => {
     ),
   )
 
+  it.live("derives hosted search identity and the default Console endpoint locally", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            if (new URL(request.url).pathname === "/console/api/v2/config") {
+              return Response.json({
+                providers: {},
+                websearch: {
+                  providerID: "managed-search",
+                  name: "Remote name",
+                  url: "https://example.invalid/search",
+                },
+              })
+            }
+            return Response.json({ providerID: "managed-search", results: [] })
+          },
+        }),
+      ),
+      (server) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const websearch = yield* WebSearch.Service
+          const http = yield* HttpClient.HttpClient
+          const requests: string[] = []
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "secret" }),
+          })
+          yield* addPlugin().pipe(
+            Effect.provideService(
+              HttpClient.HttpClient,
+              http.pipe(
+                HttpClient.mapRequest((request) => {
+                  requests.push(request.url)
+                  return HttpClientRequest.setUrl(request, `${server.url.origin}${new URL(request.url).pathname}`)
+                }),
+              ),
+            ),
+          )
+
+          expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("managed-search"), name: "OpenCode" })
+          expect(yield* websearch.query({ query: "default Console" })).toEqual(
+            new WebSearch.Response({ providerID: WebSearch.ID.make("managed-search"), results: [] }),
+          )
+          expect(requests).toEqual([
+            "https://opencode.ai/console/api/v2/config",
+            "https://opencode.ai/console/api/websearch",
+          ])
+        }),
+      (server) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
   it.live("does not forward hosted search credentials through redirects", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
@@ -556,8 +614,6 @@ describe("OpencodePlugin", () => {
                 providers: {},
                 websearch: {
                   providerID: "opencode",
-                  name: "OpenCode",
-                  url: `${url.origin}/console/api/websearch`,
                 },
               })
             }
@@ -608,8 +664,6 @@ describe("OpencodePlugin", () => {
                 providers: {},
                 websearch: {
                   providerID: "opencode",
-                  name: "OpenCode",
-                  url: `${url.origin}/api/websearch`,
                 },
               })
             }

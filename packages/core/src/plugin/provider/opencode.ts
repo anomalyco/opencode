@@ -18,8 +18,6 @@ const RemoteResponse = Schema.Struct({
   providers: Schema.Record(Schema.String, ConfigProvider.Info),
   websearch: Schema.Struct({
     providerID: WebSearch.ID,
-    name: Schema.String,
-    url: Schema.String,
   }).pipe(Schema.optional),
 })
 const Device = Schema.Struct({
@@ -69,10 +67,9 @@ function oauth(http: HttpClient.HttpClient) {
       }),
     refresh: (credential) =>
       Effect.gen(function* () {
-        const server = typeof credential.metadata?.server === "string" ? credential.metadata.server : defaultServer
         const token = yield* post(
           http,
-          `${server}/auth/device/token`,
+          `${serverUrl(credential)}/auth/device/token`,
           { grant_type: "refresh_token", refresh_token: credential.refresh, client_id: clientID },
           Token,
         )
@@ -216,7 +213,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
       if (!descriptor || !connection) return
       editor.add({
         id: descriptor.providerID,
-        name: descriptor.name,
+        name: "OpenCode",
         execute: (input) =>
           Effect.gen(function* () {
             const active = yield* ctx.integration.connection.active("opencode")
@@ -233,7 +230,8 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
             const metadata = credential.metadata
             const orgID = typeof metadata?.orgID === "string" ? metadata.orgID : undefined
             const token = credential.type === "oauth" ? credential.access : credential.key
-            const request = yield* HttpClientRequest.post(yield* webSearchRequestUrl(credential, descriptor.url)).pipe(
+            const server = yield* normalizeServer(serverUrl(credential))
+            const request = yield* HttpClientRequest.post(`${server}/api/websearch`).pipe(
               HttpClientRequest.acceptJson,
               HttpClientRequest.bearerToken(token),
               HttpClientRequest.setHeaders(orgID ? { "x-org-id": orgID } : {}),
@@ -293,12 +291,11 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
 
 function fetchConfig(http: HttpClient.HttpClient, value: Credential.Value) {
   const metadata = value.metadata
-  const server = typeof metadata?.server === "string" ? metadata.server : defaultServer
   const orgID = typeof metadata?.orgID === "string" ? metadata.orgID : undefined
   const token = value.type === "oauth" ? value.access : value.key
   return http
     .execute(
-      HttpClientRequest.get(`${server}/api/v2/config`).pipe(
+      HttpClientRequest.get(`${serverUrl(value)}/api/v2/config`).pipe(
         HttpClientRequest.acceptJson,
         HttpClientRequest.bearerToken(token),
         HttpClientRequest.setHeaders(orgID ? { "x-org-id": orgID } : {}),
@@ -314,24 +311,8 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Value) {
     )
 }
 
-function webSearchRequestUrl(value: Credential.Value, input: string) {
-  return Effect.try({
-    try: () => {
-      const metadata = value.metadata
-      const server = new URL(typeof metadata?.server === "string" ? metadata.server : defaultServer)
-      const url = new URL(input)
-      if (![server.protocol, url.protocol].every((protocol) => protocol === "http:" || protocol === "https:")) {
-        throw new Error("expected HTTP(S)")
-      }
-      const basePath = server.pathname.replace(/\/+$/, "")
-      if (url.origin !== server.origin || (basePath && !url.pathname.startsWith(`${basePath}/`))) {
-        throw new Error("expected the connected OpenCode server")
-      }
-      return url.toString()
-    },
-    catch: (cause) =>
-      new Error(`Invalid OpenCode web search URL: ${cause instanceof Error ? cause.message : String(cause)}`),
-  })
+function serverUrl(value: Credential.Value) {
+  return typeof value.metadata?.server === "string" ? value.metadata.server : defaultServer
 }
 
 function withoutCredentials<Value>(body: Readonly<Record<string, Value>> | undefined) {
