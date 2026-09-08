@@ -118,12 +118,18 @@ function Declarations(props: { setModel(model: SessionReviewModel | undefined): 
   const files = environment.services.files
   const view = environment.services.view
   const opened = createMemo(() => view.tabs.all().filter((tab) => !!files.pathFromTab(tab)))
+  const fileTab = createMemo<string>((previous) => {
+    const active = view.tabs.active()
+    return active && (active === openFileReference || files.pathFromTab(active))
+      ? active
+      : (previous ?? openFileReference)
+  })
   const content = () => (
     <Show when={view.desktop()} fallback={<SessionMobileFiles />}>
       <SessionFileBrowserTab
-        tab={view.tabs.active() ?? openFileReference}
-        placeholder={view.tabs.active() === openFileReference}
-        active={files.pathFromTab(view.tabs.active() ?? "")}
+        tab={fileTab()}
+        placeholder={fileTab() === openFileReference}
+        active={files.pathFromTab(fileTab())}
         kinds={review.kinds()}
         state={review.panelState}
         onSelect={(path) => review.openFile(path, false)}

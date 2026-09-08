@@ -1,5 +1,6 @@
 import { useFile, useWorkspaceLocation, usePlatform } from "../environment"
 import { FileIcon } from "@opencode/ui/file-icon"
+import { FileTreeItem } from "@opencode/ui/file-tree-item"
 import "@opencode/ui/file-tree.css"
 import {
   createEffect,
@@ -81,7 +82,7 @@ const FileTreeNodeV2 = (
 
   return (
     <Dynamic
-      component={local.as ?? "div"}
+      component={local.as === "button" ? FileTreeItem : "div"}
       data-slot="file-tree-v2-row"
       data-path={local.node.path}
       data-selected={local.node.path === local.active ? "" : undefined}

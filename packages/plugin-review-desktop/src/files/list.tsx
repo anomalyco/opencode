@@ -1,4 +1,5 @@
 import { FileIcon } from "@opencode/ui/file-icon"
+import { FileTreeItem } from "@opencode/ui/file-tree-item"
 import "@opencode/ui/file-tree.css"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
@@ -151,7 +152,7 @@ export function FileListView(props: FileListProps & { directory?: string; openIn
                     state={props.openIn}
                     path={() => resolveOpenInAppPath(props.directory ?? "", path)}
                   >
-                    <button
+                    <FileTreeItem
                       type="button"
                       id={props.optionID?.(path)}
                       role={props.role ? "option" : undefined}
@@ -183,7 +184,7 @@ export function FileListView(props: FileListProps & { directory?: string; openIn
                           </span>
                         )}
                       </Show>
-                    </button>
+                    </FileTreeItem>
                   </OpenInAppContextMenuV2>
                 </div>
               )}
