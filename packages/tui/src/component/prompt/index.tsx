@@ -619,7 +619,7 @@ export function Prompt(props: PromptProps) {
         desc: "Manage workspaces",
         name: "session.move",
         category: "Session",
-        slash: { name: "worktrees" },
+        slash: { name: "worktrees", aliases: ["move", "mov"] },
         run: () => {
           move.open()
         },
