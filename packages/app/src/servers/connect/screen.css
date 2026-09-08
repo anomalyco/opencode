@@ -79,10 +79,6 @@
     color: var(--v2-state-fg-danger);
   }
 
-  .server-connect-warning {
-    color: var(--v2-state-fg-warning);
-  }
-
   footer {
     text-align: center;
     margin-block-start: 16px;

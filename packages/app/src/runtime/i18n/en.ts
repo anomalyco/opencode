@@ -379,7 +379,7 @@ export const dict = {
   "server.connect.camera": "Pairing camera",
   "server.connect.camera.starting": "Opening camera…",
   "server.connect.mixedContent":
-    "This page uses HTTPS. Your browser may block connections to HTTP servers. Use an HTTPS server address; localhost and loopback addresses are exceptions.",
+    "Could not connect to this HTTP server from an HTTPS page. Use an HTTPS server address instead.",
   "server.connect.camera.insecure": "QR scanning requires opening this page over HTTPS or on localhost.",
   "server.connect.camera.unavailable":
     "No camera is available to this browser. Enter your connection details manually.",

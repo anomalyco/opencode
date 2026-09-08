@@ -1,4 +1,4 @@
-import { createMemo, createResource, lazy, Show, Suspense } from "solid-js"
+import { createResource, lazy, Show, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode/ui/button"
@@ -37,7 +37,12 @@ export function ConnectServerScreen() {
     { initialValue: false },
   )
   const [state, setState] = createStore({ url: "", password: "", urls: [] as string[], error: "", scanning: false })
-  const mixedContent = createMemo(() => platform.platform === "web" && isMixedContent(location.href, state.url))
+  const connectionError = () =>
+    language.t(
+      platform.platform === "web" && isMixedContent(location.href, state.url)
+        ? "server.connect.mixedContent"
+        : "server.connect.failed",
+    )
   const request = useMutation(() => ({
     mutationFn: async () => {
       const url = serverAddress(state.url)
@@ -48,12 +53,12 @@ export function ConnectServerScreen() {
       const http = { url, password: state.password || undefined }
       const result = await check(http)
       if (!result.healthy) {
-        setState("error", language.t("server.connect.failed"))
+        setState("error", connectionError())
         return
       }
       servers.add({ type: "http", http })
     },
-    onError: () => setState("error", language.t("server.connect.failed")),
+    onError: () => setState("error", connectionError()),
   }))
 
   return (
@@ -114,7 +119,7 @@ export function ConnectServerScreen() {
                 placeholder={language.t("dialog.server.add.placeholder")}
                 value={state.url}
                 disabled={request.isPending}
-                aria-describedby={mixedContent() ? "server-connect-mixed-content" : undefined}
+                aria-describedby={state.error ? "server-connect-error" : undefined}
                 onInput={(event) => setState({ url: event.currentTarget.value, error: "" })}
               />
               <datalist id="server-connect-addresses">
@@ -122,11 +127,6 @@ export function ConnectServerScreen() {
                   <option value={url} />
                 ))}
               </datalist>
-              <Show when={mixedContent()}>
-                <p id="server-connect-mixed-content" class="server-connect-warning" role="status">
-                  {language.t("server.connect.mixedContent")}
-                </p>
-              </Show>
             </div>
             <div class="server-connect-field">
               <label for="server-connect-password">{language.t("dialog.server.add.password")}</label>
@@ -142,7 +142,7 @@ export function ConnectServerScreen() {
               />
             </div>
             <Show when={state.error}>
-              <p class="server-connect-error" role="alert">
+              <p id="server-connect-error" class="server-connect-error" role="alert">
                 {state.error}
               </p>
             </Show>

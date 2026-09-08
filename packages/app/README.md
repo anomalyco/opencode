@@ -110,9 +110,10 @@ This replaces the addresses printed and encoded in the QR code while retaining t
 The proxy URL must reach the OpenCode API, not just the frontend. For separate frontend and API processes,
 route `/api` to the service while preserving the `/api` prefix. No machine-specific app or CLI build is required.
 
-The connection forms warn when an HTTPS page targets a non-loopback HTTP server. HTTP servers on
-`localhost`, `*.localhost`, `127.0.0.0/8`, or `::1` are treated as trustworthy loopback targets. The warning
-does not block an attempt, since browser local-network permissions can allow some HTTP LAN connections.
+When an HTTPS page fails to connect to a non-loopback HTTP server, the connection forms show a specific
+HTTPS-to-HTTP error instead of the generic connection failure. HTTP servers on `localhost`, `*.localhost`,
+`127.0.0.0/8`, or `::1` are treated as trustworthy loopback targets. Connection attempts still run, since
+browser local-network permissions can allow some HTTP LAN connections.
 QR scanning is enabled only in a browser-reported secure context with camera support and an available
 video input; insecure pages and unavailable cameras show an explanation beside the disabled action.
 
