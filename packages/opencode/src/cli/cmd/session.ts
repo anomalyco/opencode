@@ -115,23 +115,54 @@ export const SessionListCommand = effectCmd({
   }),
 })
 
+type SessionTableColumn = {
+  header: string
+  minWidth: number
+  value: (session: Session.Info) => string
+  truncate: (value: string, width: number) => string
+}
+
+const sessionTableColumns: SessionTableColumn[] = [
+  {
+    header: "Session ID",
+    minWidth: 20,
+    value: (session) => session.id,
+    truncate: (value) => value,
+  },
+  {
+    header: "Title",
+    minWidth: 25,
+    value: (session) => session.title,
+    truncate: Locale.truncate,
+  },
+  {
+    header: "WorkDir",
+    minWidth: 30,
+    value: (session) => session.directory,
+    truncate: Locale.truncateMiddle,
+  },
+  {
+    header: "Updated",
+    minWidth: 0,
+    value: (session) => Locale.todayTimeOrDateTime(session.time.updated),
+    truncate: (value) => value,
+  },
+]
+
 function formatSessionTable(sessions: Session.Info[]): string {
-  const lines: string[] = []
+  const widths = sessionTableColumns.map((column) => {
+    const contentWidth = Math.max(...sessions.map((session) => column.value(session).length))
+    return Math.max(column.minWidth, column.header.length, contentWidth)
+  })
 
-  const maxIdWidth = Math.max(20, ...sessions.map((s) => s.id.length))
-  const maxTitleWidth = Math.max(25, ...sessions.map((s) => s.title.length))
+  const formatRow = (cells: string[]) => cells.map((cell, index) => cell.padEnd(widths[index])).join("  ")
 
-  const header = `Session ID${" ".repeat(maxIdWidth - 10)}  Title${" ".repeat(maxTitleWidth - 5)}  Updated`
-  lines.push(header)
-  lines.push("─".repeat(header.length))
-  for (const session of sessions) {
-    const truncatedTitle = Locale.truncate(session.title, maxTitleWidth)
-    const timeStr = Locale.todayTimeOrDateTime(session.time.updated)
-    const line = `${session.id.padEnd(maxIdWidth)}  ${truncatedTitle.padEnd(maxTitleWidth)}  ${timeStr}`
-    lines.push(line)
-  }
+  const header = formatRow(sessionTableColumns.map((column) => column.header))
+  const rows = sessions.map((session) =>
+    formatRow(sessionTableColumns.map((column, index) => column.truncate(column.value(session), widths[index]))),
+  )
 
-  return lines.join(EOL)
+  return [header, "─".repeat(header.length), ...rows].join(EOL)
 }
 
 function formatSessionJSON(sessions: Session.Info[]): string {
