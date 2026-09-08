@@ -127,6 +127,17 @@ export type ToolFileContent = { type: "file"; uri: string; mime: string; name?: 
 
 export type SessionStructuredError = { type: string; message: string; status?: number }
 
+export type SessionMessageCompactionRunning = {
+  type: "compaction"
+  id: string
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  status: "running"
+  reason: "auto" | "manual"
+  summary: string
+  recent: string
+}
+
 export type SessionProviderContextProvenance = {
   providerID: string
   provider: string
@@ -504,29 +515,16 @@ export type ToolContent = ToolTextContent | ToolFileContent
 
 export type SessionMessageAssistantRetry = { attempt: number; at: number; error: SessionStructuredError }
 
-export type SessionMessageCompactionRunning = {
-  type: "compaction"
-  id: string
-  metadata?: { [x: string]: JsonValue }
-  time: { created: number }
-  cost?: MoneyUSD
-  tokens?: TokenUsageInfo
-  status: "running"
-  reason: "auto" | "manual"
-  summary: string
-  recent: string
-}
-
 export type SessionMessageCompactionFailed = {
   type: "compaction"
   id: string
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
-  cost?: MoneyUSD
-  tokens?: TokenUsageInfo
   status: "failed"
   reason: "auto" | "manual"
   error: SessionStructuredError
+  cost?: MoneyUSD
+  tokens?: TokenUsageInfo
 }
 
 export type SessionProviderContext = { version: 1; provenance: SessionProviderContextProvenance; messages: JsonValue }
@@ -1742,8 +1740,6 @@ export type SessionMessageCompactionCompleted = {
   id: string
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
-  cost?: MoneyUSD
-  tokens?: TokenUsageInfo
   status: "completed"
   reason: "auto" | "manual"
   model?: ModelRef
@@ -1751,6 +1747,8 @@ export type SessionMessageCompactionCompleted = {
   summary: string
   recent: string
   providerContext?: SessionProviderContext
+  cost?: MoneyUSD
+  tokens?: TokenUsageInfo
 }
 
 export type SessionCompactionEnded = {
@@ -3098,13 +3096,6 @@ export type SessionImportInput = {
               readonly id: string
               readonly metadata?: { readonly [x: string]: JsonValue }
               readonly time: { readonly created: number }
-              readonly cost?: number
-              readonly tokens?: {
-                readonly input: number
-                readonly output: number
-                readonly reasoning: number
-                readonly cache: { readonly read: number; readonly write: number }
-              }
               readonly status: "running"
               readonly reason: "auto" | "manual"
               readonly summary: string
@@ -3115,13 +3106,6 @@ export type SessionImportInput = {
               readonly id: string
               readonly metadata?: { readonly [x: string]: JsonValue }
               readonly time: { readonly created: number }
-              readonly cost?: number
-              readonly tokens?: {
-                readonly input: number
-                readonly output: number
-                readonly reasoning: number
-                readonly cache: { readonly read: number; readonly write: number }
-              }
               readonly status: "completed"
               readonly reason: "auto" | "manual"
               readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
@@ -3140,12 +3124,6 @@ export type SessionImportInput = {
                 }
                 readonly messages: JsonValue
               }
-            }
-          | {
-              readonly type: "compaction"
-              readonly id: string
-              readonly metadata?: { readonly [x: string]: JsonValue }
-              readonly time: { readonly created: number }
               readonly cost?: number
               readonly tokens?: {
                 readonly input: number
@@ -3153,9 +3131,22 @@ export type SessionImportInput = {
                 readonly reasoning: number
                 readonly cache: { readonly read: number; readonly write: number }
               }
+            }
+          | {
+              readonly type: "compaction"
+              readonly id: string
+              readonly metadata?: { readonly [x: string]: JsonValue }
+              readonly time: { readonly created: number }
               readonly status: "failed"
               readonly reason: "auto" | "manual"
               readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+              readonly cost?: number
+              readonly tokens?: {
+                readonly input: number
+                readonly output: number
+                readonly reasoning: number
+                readonly cache: { readonly read: number; readonly write: number }
+              }
             }
         )
     >
@@ -3410,13 +3401,6 @@ export type SessionImportInput = {
               readonly id: string
               readonly metadata?: { readonly [x: string]: JsonValue }
               readonly time: { readonly created: number }
-              readonly cost?: number
-              readonly tokens?: {
-                readonly input: number
-                readonly output: number
-                readonly reasoning: number
-                readonly cache: { readonly read: number; readonly write: number }
-              }
               readonly status: "running"
               readonly reason: "auto" | "manual"
               readonly summary: string
@@ -3427,13 +3411,6 @@ export type SessionImportInput = {
               readonly id: string
               readonly metadata?: { readonly [x: string]: JsonValue }
               readonly time: { readonly created: number }
-              readonly cost?: number
-              readonly tokens?: {
-                readonly input: number
-                readonly output: number
-                readonly reasoning: number
-                readonly cache: { readonly read: number; readonly write: number }
-              }
               readonly status: "completed"
               readonly reason: "auto" | "manual"
               readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
@@ -3452,12 +3429,6 @@ export type SessionImportInput = {
                 }
                 readonly messages: JsonValue
               }
-            }
-          | {
-              readonly type: "compaction"
-              readonly id: string
-              readonly metadata?: { readonly [x: string]: JsonValue }
-              readonly time: { readonly created: number }
               readonly cost?: number
               readonly tokens?: {
                 readonly input: number
@@ -3465,9 +3436,22 @@ export type SessionImportInput = {
                 readonly reasoning: number
                 readonly cache: { readonly read: number; readonly write: number }
               }
+            }
+          | {
+              readonly type: "compaction"
+              readonly id: string
+              readonly metadata?: { readonly [x: string]: JsonValue }
+              readonly time: { readonly created: number }
               readonly status: "failed"
               readonly reason: "auto" | "manual"
               readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+              readonly cost?: number
+              readonly tokens?: {
+                readonly input: number
+                readonly output: number
+                readonly reasoning: number
+                readonly cache: { readonly read: number; readonly write: number }
+              }
             }
         )
     >
@@ -3722,13 +3706,6 @@ export type SessionImportInput = {
               readonly id: string
               readonly metadata?: { readonly [x: string]: JsonValue }
               readonly time: { readonly created: number }
-              readonly cost?: number
-              readonly tokens?: {
-                readonly input: number
-                readonly output: number
-                readonly reasoning: number
-                readonly cache: { readonly read: number; readonly write: number }
-              }
               readonly status: "running"
               readonly reason: "auto" | "manual"
               readonly summary: string
@@ -3739,13 +3716,6 @@ export type SessionImportInput = {
               readonly id: string
               readonly metadata?: { readonly [x: string]: JsonValue }
               readonly time: { readonly created: number }
-              readonly cost?: number
-              readonly tokens?: {
-                readonly input: number
-                readonly output: number
-                readonly reasoning: number
-                readonly cache: { readonly read: number; readonly write: number }
-              }
               readonly status: "completed"
               readonly reason: "auto" | "manual"
               readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
@@ -3764,12 +3734,6 @@ export type SessionImportInput = {
                 }
                 readonly messages: JsonValue
               }
-            }
-          | {
-              readonly type: "compaction"
-              readonly id: string
-              readonly metadata?: { readonly [x: string]: JsonValue }
-              readonly time: { readonly created: number }
               readonly cost?: number
               readonly tokens?: {
                 readonly input: number
@@ -3777,9 +3741,22 @@ export type SessionImportInput = {
                 readonly reasoning: number
                 readonly cache: { readonly read: number; readonly write: number }
               }
+            }
+          | {
+              readonly type: "compaction"
+              readonly id: string
+              readonly metadata?: { readonly [x: string]: JsonValue }
+              readonly time: { readonly created: number }
               readonly status: "failed"
               readonly reason: "auto" | "manual"
               readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+              readonly cost?: number
+              readonly tokens?: {
+                readonly input: number
+                readonly output: number
+                readonly reasoning: number
+                readonly cache: { readonly read: number; readonly write: number }
+              }
             }
         )
     >

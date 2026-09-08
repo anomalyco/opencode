@@ -383,14 +383,7 @@ export const layer = Layer.effect(
         },
       }),
     })
-    const failed = Effect.fnUntraced(function* (input: {
-      readonly sessionID: SessionSchema.ID
-      readonly reason: SessionMessage.Compaction["reason"]
-      readonly error: SessionError.Error
-      readonly inputID?: SessionMessage.ID
-      readonly cost?: SessionUsage.Recorded["cost"]
-      readonly tokens?: SessionUsage.Recorded["tokens"]
-    }) {
+    const failed = Effect.fnUntraced(function* (input: SessionEvent.Compaction.Failed["data"]) {
       yield* bus.publish(SessionEvent.Compaction.Failed, input)
       return { status: "failed" as const, error: input.error }
     })
@@ -404,14 +397,13 @@ export const layer = Layer.effect(
             inputID: input.inputID,
           })
     // Manual controls settle through the inbox; only automatic work needs a durable interruption record.
-    const interrupted = (input: ExecuteInput, usage?: SessionUsage.Recorded) =>
+    const interrupted = (input: ExecuteInput) =>
       input.reason === "auto"
         ? failed({
             sessionID: input.context.session.id,
             reason: input.reason,
             inputID: input.inputID,
             error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
-            ...usage,
           }).pipe(Effect.asVoid)
         : Effect.void
     const compactionRequest = (
@@ -649,7 +641,7 @@ export const layer = Layer.effect(
               failure = toSessionError(error)
             }),
           ),
-          Effect.onInterrupt(() => recordUsage.pipe(Effect.andThen(interrupted(input, usage)))),
+          Effect.onInterrupt(() => recordUsage.pipe(Effect.andThen(interrupted(input)))),
         )
         if (failure || hasSummarySection(chunks.join(""))) break
       }

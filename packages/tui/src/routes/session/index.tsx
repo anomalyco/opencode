@@ -2100,8 +2100,8 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
   const color = () => (status() === "failed" && !cancelled() ? theme.text.feedback.error.default : theme.text.subdued)
   // Usage of the compaction request itself; the resulting context size only shows on the next assistant step.
   const usage = () => {
+    if (props.message.status === "running" || !props.message.tokens) return
     const tokens = props.message.tokens
-    if (!tokens) return
     const input = tokens.input + tokens.cache.read + tokens.cache.write
     const output = tokens.output + tokens.reasoning
     if (input + output <= 0) return
@@ -3851,12 +3851,7 @@ function recordValue(value: unknown): Record<string, unknown> | undefined {
   return isRecord(value) ? value : undefined
 }
 
-function formatSessionTranscript(
-  session: SessionInfo,
-  messages: SessionMessageInfo[],
-  thinking: boolean,
-  tools = true,
-) {
+function formatSessionTranscript(session: SessionInfo, messages: SessionMessageInfo[], thinking: boolean, tools = true) {
   const body = messages.flatMap((message) => {
     if (message.type === "user") return [`## User\n\n${message.text}`]
     if (message.type === "shell")

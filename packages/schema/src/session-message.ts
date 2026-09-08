@@ -235,10 +235,10 @@ export const Assistant = Schema.Struct({
   }),
 }).annotate({ identifier: "Session.Message.Assistant" })
 
-const CompactionBase = {
-  type: Schema.tag("compaction"),
-  ...Base,
-  /** Usage of the compaction request itself, not the size of the resulting context. */
+const CompactionBase = { type: Schema.tag("compaction"), ...Base }
+
+/** Usage of the compaction request itself, not the size of the resulting context. */
+const CompactionUsage = {
   cost: Money.USD.pipe(optional),
   tokens: TokenUsage.Info.pipe(optional),
 }
@@ -262,6 +262,7 @@ export const CompactionCompleted = Schema.Struct({
   summary: Schema.String,
   recent: Schema.String,
   providerContext: SessionProviderContext.Info.pipe(optional),
+  ...CompactionUsage,
 }).annotate({ identifier: "Session.Message.Compaction.Completed" })
 
 export interface CompactionFailed extends Schema.Schema.Type<typeof CompactionFailed> {}
@@ -270,6 +271,7 @@ export const CompactionFailed = Schema.Struct({
   status: Schema.tag("failed"),
   reason: Schema.Literals(["auto", "manual"]),
   error: SessionError.Error,
+  ...CompactionUsage,
 }).annotate({ identifier: "Session.Message.Compaction.Failed" })
 
 export const Compaction = Schema.Union([CompactionRunning, CompactionCompleted, CompactionFailed]).pipe(
