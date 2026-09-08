@@ -75,7 +75,15 @@ export const ReviewDesktop = Plugin.define({
       append: "session.panel.tools",
       render: ({ session }) => (
         <SessionEnvironment session={session}>
-          <Tooltip value={ctx.i18n.t("command.file.open")}><IconButton icon={<Icon name="open-file" />} variant="ghost-muted" size="large" aria-label={ctx.i18n.t("command.file.open")} onClick={() => ctx.ui.panel.open("files", session)} /></Tooltip>
+          <Tooltip value={ctx.i18n.t("command.file.open")}>
+            <IconButton
+              icon={<Icon name="open-file" />}
+              variant="ghost-muted"
+              size="large"
+              aria-label={ctx.i18n.t("command.file.open")}
+              onClick={() => ctx.ui.panel.open("files", session)}
+            />
+          </Tooltip>
           <OpenInAppButton directory={() => session.services?.files.directory ?? ""} />
         </SessionEnvironment>
       ),
@@ -110,18 +118,20 @@ function Declarations(props: { setModel(model: SessionReviewModel | undefined): 
   const files = environment.services.files
   const view = environment.services.view
   const opened = createMemo(() => view.tabs.all().filter((tab) => !!files.pathFromTab(tab)))
-  const content = () => <Show when={view.desktop()} fallback={<SessionMobileFiles />}>
-    <SessionFileBrowserTab
-      tab={view.tabs.active() ?? openFileReference}
-      placeholder={view.tabs.active() === openFileReference}
-      active={files.pathFromTab(view.tabs.active() ?? "")}
-      kinds={review.kinds()}
-      state={review.panelState}
-      onSelect={(path) => review.openFile(path, false)}
-      onSelectPermanent={review.openFile}
-      mobile={!view.desktop()}
-    />
-  </Show>
+  const content = () => (
+    <Show when={view.desktop()} fallback={<SessionMobileFiles />}>
+      <SessionFileBrowserTab
+        tab={view.tabs.active() ?? openFileReference}
+        placeholder={view.tabs.active() === openFileReference}
+        active={files.pathFromTab(view.tabs.active() ?? "")}
+        kinds={review.kinds()}
+        state={review.panelState}
+        onSelect={(path) => review.openFile(path, false)}
+        onSelectPermanent={review.openFile}
+        mobile={!view.desktop()}
+      />
+    </Show>
+  )
   return (
     <>
       <Panel
@@ -130,12 +140,16 @@ function Declarations(props: { setModel(model: SessionReviewModel | undefined): 
         default
         closable={false}
         title={
-          !view.desktop() ? ctx.i18n.plural("session.review.change", 0) : review.diffs().length
-            ? ctx.i18n.t("session.review.filesChanged", { count: review.diffs().length })
-            : ctx.i18n.t("session.tab.review")
+          !view.desktop()
+            ? ctx.i18n.plural("session.review.change", 0)
+            : review.diffs().length
+              ? ctx.i18n.t("session.review.filesChanged", { count: review.diffs().length })
+              : ctx.i18n.t("session.tab.review")
         }
       >
-        <Show when={view.desktop()} fallback={<MobileReview review={review} />}><ReviewContent review={review} /></Show>
+        <Show when={view.desktop()} fallback={<MobileReview review={review} />}>
+          <ReviewContent review={review} />
+        </Show>
       </Panel>
       <Panel
         id="files"

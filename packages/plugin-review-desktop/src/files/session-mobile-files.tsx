@@ -14,7 +14,7 @@ export function SessionMobileFiles() {
   const tabs = environment.services.view.tabs
   const language = useLanguage()
   const opened = createMemo(() => tabs.all().filter((tab) => !!file.pathFromTab(tab)))
-  const activeFileTab = () => opened().includes(tabs.active() ?? "") ? tabs.active() : opened()[0]
+  const activeFileTab = () => (opened().includes(tabs.active() ?? "") ? tabs.active() : opened()[0])
   const [store, setStore] = createStore({ browsing: !activeFileTab() })
   const browsing = () => store.browsing || !activeFileTab()
   const active = createMemo(() => file.pathFromTab(activeFileTab() ?? ""))
@@ -26,16 +26,67 @@ export function SessionMobileFiles() {
     void file.load(path)
     setStore("browsing", false)
   }
-  return <div data-slot="session-mobile-files" data-browsing={browsing()} class="flex h-full min-h-0 flex-col">
-    <div data-slot="session-mobile-files-header" class="relative flex h-10 shrink-0 items-center">
-      <Button size="small" variant="ghost" class="shrink-0 mx-2" onClick={() => setStore("browsing", true)} aria-pressed={browsing()}>{language.t("session.files.all")}</Button>
-      <Tabs value={browsing() ? "open-file" : activeFileTab()} onChange={(tab) => { if (browsing()) return; const path = file.pathFromTab(tab); if (path) open(path) }} variant="line" class="min-w-0 flex-1 !h-auto">
-        <Tabs.List aria-label={language.t("session.files.openTabs")} class="!h-10 !px-0 overflow-x-auto">
-          <For each={opened()}>{(tab) => <Tabs.Trigger value={tab} onClick={() => open(file.pathFromTab(tab)!)} class="shrink-0 max-w-48" classes={{ button: "min-w-0" }} closeButton={<Tabs.CloseButton aria-label={language.t("common.closeTab")} onClick={() => tabs.close(tab)} />}><span dir="ltr" class="truncate">{getFilename(file.pathFromTab(tab) ?? tab)}</span></Tabs.Trigger>}</For>
-        </Tabs.List>
-      </Tabs>
+  return (
+    <div data-slot="session-mobile-files" data-browsing={browsing()} class="flex h-full min-h-0 flex-col">
+      <div data-slot="session-mobile-files-header" class="relative flex h-10 shrink-0 items-center">
+        <Button
+          size="small"
+          variant="ghost"
+          class="shrink-0 mx-2"
+          onClick={() => setStore("browsing", true)}
+          aria-pressed={browsing()}
+        >
+          {language.t("session.files.all")}
+        </Button>
+        <Tabs
+          value={browsing() ? "open-file" : activeFileTab()}
+          onChange={(tab) => {
+            if (browsing()) return
+            const path = file.pathFromTab(tab)
+            if (path) open(path)
+          }}
+          variant="line"
+          class="min-w-0 flex-1 !h-auto"
+        >
+          <Tabs.List aria-label={language.t("session.files.openTabs")} class="!h-10 !px-0 overflow-x-auto">
+            <For each={opened()}>
+              {(tab) => (
+                <Tabs.Trigger
+                  value={tab}
+                  onClick={() => open(file.pathFromTab(tab)!)}
+                  class="shrink-0 max-w-48"
+                  classes={{ button: "min-w-0" }}
+                  closeButton={
+                    <Tabs.CloseButton aria-label={language.t("common.closeTab")} onClick={() => tabs.close(tab)} />
+                  }
+                >
+                  <span dir="ltr" class="truncate">
+                    {getFilename(file.pathFromTab(tab) ?? tab)}
+                  </span>
+                </Tabs.Trigger>
+              )}
+            </For>
+          </Tabs.List>
+        </Tabs>
+      </div>
+      <div class="min-h-0 flex-1">
+        <SessionFileBrowserTab
+          mobile
+          tab={activeFileTab() ?? "open-file"}
+          placeholder={browsing()}
+          active={active()}
+          kinds={kinds}
+          state={{
+            sidebarOpened: browsing,
+            sidebarWidth: () => 240,
+            sidebarTransition: () => false,
+            resizeSidebar: () => undefined,
+            toggleSidebar: () => setStore("browsing", !browsing()),
+          }}
+          onSelect={open}
+          onSelectPermanent={open}
+        />
+      </div>
     </div>
-    <div class="min-h-0 flex-1"><SessionFileBrowserTab mobile tab={activeFileTab() ?? "open-file"} placeholder={browsing()} active={active()} kinds={kinds}
-      state={{ sidebarOpened: browsing, sidebarWidth: () => 240, sidebarTransition: () => false, resizeSidebar: () => undefined, toggleSidebar: () => setStore("browsing", !browsing()) }} onSelect={open} onSelectPermanent={open} /></div>
-  </div>
+  )
 }

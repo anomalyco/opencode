@@ -9,5 +9,5 @@ export function createVirtualScrollElement(root: Accessor<HTMLElement | undefine
   const [mounted, setMounted] = createSignal(false)
   // Extension content roots are created before the host inserts their DOM.
   onMount(() => queueMicrotask(() => setMounted(true)))
-  return () => mounted() ? virtualScrollElement(root()) : null
+  return () => (mounted() ? virtualScrollElement(root()) : null)
 }

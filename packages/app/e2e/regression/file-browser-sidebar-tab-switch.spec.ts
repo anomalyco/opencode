@@ -59,6 +59,9 @@ test("keeps the file-browser sidebar mounted when switching file tabs", async ({
   expect(await readProbe(page)).toBe(PROBE)
   await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBe(scrolled)
 })
+test.afterEach(async ({ page }, info) => {
+  if (info.status === "passed") await page.screenshot({ path: info.outputPath("review-files-extension.png") })
+})
 
 type Probed = HTMLElement & { __e2eProbe?: string }
 
