@@ -102,7 +102,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
             }),
           )
           expect(response.toolCalls).toMatchObject([{ name: "get_weather", input: { city: "Paris" } }])
-          expect(response.finishReason.normalized).toBe("tool-calls")
+          expect(response.finishReason.normalized).toBe(api === "messages" ? "stop" : "tool-calls")
           if (api === "messages") expect(response.finishReason.raw).toBe("end_turn")
         }),
       120_000,

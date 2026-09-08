@@ -98,8 +98,6 @@ Use the API host shown in your console when configuring a dedicated endpoint.
 - **Messages:** `effort` → `output_config.effort`. `thinking.type` accepts enabled/disabled with an
   optional `budgetTokens` (or native `budget_tokens`). `outputConfig.format` accepts a JSON schema.
   Model Studio's empty thinking signatures are accepted; supplied signatures are replayed unchanged.
-  When it reports `end_turn` after a completed tool call, the normalized finish is `tool-calls`;
-  the raw reason remains `end_turn`.
 - **Responses:** `reasoningEffort` → `reasoning.effort`, plus `enableThinking`, `store`,
   `previousResponseId`, and `conversation`. Omitted `store` retains the API's default (`true`);
   set it to `false` for client-managed history. `previousResponseId` requires a stored response.
