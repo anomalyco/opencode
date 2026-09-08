@@ -338,6 +338,14 @@ export function createData(config: CreateDataInput) {
   const compacting = new Map<string, { id: string; observed: Set<string>; request: Promise<SessionInboxCompaction> }>()
   onCleanup(() => compacting.clear())
 
+  // Capture at public read invocation, before it can queue behind an older request.
+  // Eviction also invalidates the sync entry, so skipped work cannot complete a fresh read.
+  const evictions = new Map<string, number>()
+  function retained(sessionID: string) {
+    const count = evictions.get(sessionID)
+    return () => evictions.get(sessionID) === count
+  }
+
   // Register `promise` under `key` until it settles. A later registration
   // replaces an earlier one; settlement only clears its own entry.
   function track(map: Map<string, Promise<unknown>>, key: string, promise: Promise<unknown>) {
@@ -535,6 +543,7 @@ export function createData(config: CreateDataInput) {
 
   function evictSession(sessionID: string) {
     if (sessionOutbox.has(sessionID)) return
+    evictions.set(sessionID, (evictions.get(sessionID) ?? 0) + 1)
     sync.invalidate(`session.pending:${sessionID}`)
     sync.invalidate(`session.message:${sessionID}`)
     messageLoads.delete(sessionID)
@@ -1362,8 +1371,11 @@ export function createData(config: CreateDataInput) {
           return store.session.pending[sessionID] ?? []
         },
         sync(sessionID: string) {
+          const current = retained(sessionID)
           return sync.run(`session.pending:${sessionID}`, async () => {
+            if (!current()) return
             const pending = await api().session.inbox.list({ sessionID })
+            if (!current()) return
             // A positive read acknowledges admission even when its SSE echo is delayed.
             pending.forEach((item) => outbox.delete(item.id))
             // Compactions also coalesce by Session, not just by the proposed ID.
@@ -1570,8 +1582,11 @@ export function createData(config: CreateDataInput) {
           return position === undefined ? undefined : messages?.[position]
         },
         sync(sessionID: string) {
+          const current = retained(sessionID)
           return sync.run(`session.message:${sessionID}`, async () => {
+            if (!current()) return
             const response = await api().message.list({ sessionID, limit: messagePageLimit, order: "desc" })
+            if (!current()) return
             const fetched = response.data.toReversed()
             // Same protection as the pending sync: a re-fetch racing an
             // admission must not wipe its local transcript row.
@@ -1607,6 +1622,7 @@ export function createData(config: CreateDataInput) {
         ) {
           const signal = options?.signal
           if (signal?.aborted) return
+          const current = retained(sessionID)
           while (messageLoads.has(sessionID)) {
             const published = await (() => {
               const pending = messageLoads.get(sessionID)
@@ -1620,7 +1636,7 @@ export function createData(config: CreateDataInput) {
                 })
                 .finally(() => signal.removeEventListener("abort", cancel))
             })()
-            if ((!options?.all && published) || signal?.aborted) return
+            if ((!options?.all && published) || signal?.aborted || !current()) return
           }
           const cursor = store.session.messageCursor[sessionID]
           if (!cursor || signal?.aborted) return
@@ -1637,7 +1653,7 @@ export function createData(config: CreateDataInput) {
                 },
                 { signal },
               )
-              if (signal?.aborted) return
+              if (signal?.aborted || !current()) return
               fetched.push(...response.data)
               next = response.cursor.next ?? undefined
               if (!options?.all) break
@@ -1657,7 +1673,9 @@ export function createData(config: CreateDataInput) {
             .catch((error) => {
               if (!signal?.aborted) throw error
             })
-            .finally(() => setStore("session", "messageLoading", sessionID, false))
+            .finally(() => {
+              if (current()) setStore("session", "messageLoading", sessionID, false)
+            })
           track(messageLoads, sessionID, request)
           await request
         },

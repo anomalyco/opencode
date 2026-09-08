@@ -124,6 +124,105 @@ test("keeps the parent tab selected while a loaded child session resolves", asyn
   await Promise.all([expect(page).toHaveURL(sessionHref(childID)), expectSessionTitle(page, taskDescription)])
 })
 
+test("keeps the displayed cross-family child transcript while nested metadata is pending", async ({
+  page,
+}, testInfo) => {
+  const forkID = "ses_subagent_fork"
+  const nestedID = "ses_subagent_nested"
+  const requested = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const reads: string[] = []
+  const errors: string[] = []
+  page.on("pageerror", (error) => errors.push(error.message))
+  const pages = Object.fromEntries(
+    [forkID, childID, nestedID].map((id, index) => [
+      id,
+      parentMessages().map((message): SessionMessageInfo => {
+        if (message.type !== "assistant") return { ...message, id: `${message.id}_${id}` }
+        return {
+          ...message,
+          id: `${message.id}_${id}`,
+          content: [
+            ...message.content.flatMap((part) =>
+              part.type === "tool" && part.state.status === "completed" && index < 2
+                ? [
+                    {
+                      ...part,
+                      id: `${part.id}_${id}`,
+                      state: {
+                        ...part.state,
+                        input: { description: `Inspect ${id}`, agent: "explore", prompt: "Inspect nested work." },
+                        metadata: { sessionID: index === 0 ? childID : nestedID },
+                      },
+                    },
+                  ]
+                : [],
+            ),
+            { type: "text", text: `Ready transcript for ${id}` },
+          ],
+        }
+      }),
+    ]),
+  )
+  await mockOpenCodeServer(page, {
+    directory,
+    project: { id: projectID, worktree: directory, vcs: "git", sandboxes: [], time: { created: 1, updated: 1 } },
+    provider: { all: [], connected: [], default: {} },
+    sessions: [
+      session(forkID, "Fork with copied subagent link", 1),
+      session(parentID, parentTitle, 1),
+      childSession(),
+      session(nestedID, "Nested child", 3, { parentID: childID }),
+    ],
+    pageMessages: (id) => ({ items: pages[id] ?? [] }),
+    onMessages: ({ sessionID, phase }) => {
+      if (phase === "start") reads.push(sessionID)
+    },
+  })
+  // A fork retains the original subagent link, not ownership of that child's family.
+  // Keep descendants out of list hydration so the nested child must resolve by ID.
+  await page.route(
+    (url) => url.pathname === "/api/session",
+    (route) => route.fulfill({ json: { data: [], cursor: {} } }),
+  )
+  await page.route(
+    (url) => url.pathname === `/api/session/${nestedID}`,
+    async (route) => {
+      requested.resolve()
+      await release.promise
+      await route.fallback()
+    },
+  )
+  await configurePage(page, forkID)
+  try {
+    await page.goto(sessionHref(forkID))
+    await expect(page.getByText(`Ready transcript for ${forkID}`, { exact: true })).toBeVisible()
+    await page.getByRole("button", { name: "Used 1 Agent", exact: true }).click()
+    await page.locator(`[data-timeline-key] a[href="${sessionHref(childID)}"]`).click()
+    await expect(page).toHaveURL(sessionHref(childID))
+    const answer = page.locator(`[data-timeline-part-id="msg_assistant_0001_${childID}:text:0"]`)
+    await expect(answer).toContainText(`Ready transcript for ${childID}`)
+    await expect(answer.locator('[data-component="markdown"]')).toHaveAttribute("data-markdown-ready", "")
+    await expect(page.locator("[data-titlebar-tab-slot]")).toHaveCount(1)
+    await page.getByRole("button", { name: "Used 1 Agent", exact: true }).click()
+    await page.locator(`[data-timeline-key] a[href="${sessionHref(nestedID)}"]`).click()
+    await requested.promise
+    await expect(page).toHaveURL(sessionHref(childID))
+    await page.screenshot({ path: testInfo.outputPath("metadata-pending.png") })
+    await expect(answer).toContainText(`Ready transcript for ${childID}`)
+    await expect(answer).toBeInViewport()
+    await expect(answer.locator('[data-component="markdown"]')).toHaveAttribute("data-markdown-ready", "")
+    expect(reads.filter((id) => id === childID)).toHaveLength(1)
+    expect(reads).not.toContain(nestedID)
+    release.resolve()
+    await expect(page).toHaveURL(sessionHref(nestedID))
+    await expect(page.getByText(`Ready transcript for ${nestedID}`, { exact: true })).toBeVisible()
+    expect(errors).toEqual([])
+  } finally {
+    release.resolve()
+  }
+})
+
 test("shows the not found fallback when the viewed session is deleted", async ({ page }) => {
   const events: OpenCodeEvent[] = []
   await setup(page, () => events.splice(0, 1))
@@ -257,7 +356,7 @@ function parentMessages(): SessionMessageInfo[] {
   ]
 }
 
-async function configurePage(page: Page) {
+async function configurePage(page: Page, sessionId = parentID) {
   const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
   await page.addInitScript(
     ({ directory, server, sessionId }) => {
@@ -270,7 +369,7 @@ async function configurePage(page: Page) {
       )
       localStorage.setItem("opencode.window.browser.dat:tabs", JSON.stringify([{ type: "session", server, sessionId }]))
     },
-    { directory, server, sessionId: parentID },
+    { directory, server, sessionId },
   )
 }
 
