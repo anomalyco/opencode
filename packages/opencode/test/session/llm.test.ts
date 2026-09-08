@@ -2246,4 +2246,84 @@ describe("session.llm.stream", () => {
       }),
     },
   )
+
+  const geminiVertexFixture = { providerID: "google-vertex", modelID: "gemini-2.5-flash" }
+  it.instance(
+    "sends Google Vertex API payload for Gemini models omitting empty reasoning parts",
+    () =>
+      Effect.gen(function* () {
+        const model = loadFixture(geminiVertexFixture.providerID, geminiVertexFixture.modelID).model
+        const pathSuffix = `/v1beta1/projects/test-project/locations/us-central1/publishers/google/models/${model.id}:streamGenerateContent`
+
+        const chunks = [
+          {
+            candidates: [{ content: { parts: [{ text: "Hello" }] }, finishReason: "STOP" }],
+            usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1, totalTokenCount: 2 },
+          },
+        ]
+        const request = waitRequest(pathSuffix, createEventResponse(chunks))
+
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(geminiVertexFixture.providerID),
+          ModelV2.ID.make(model.id),
+        )
+        const sessionID = SessionID.make("session-test-vertex-1")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          temperature: 0.3,
+          topP: 0.8,
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("msg_user-vertex-1"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderV2.ID.make(geminiVertexFixture.providerID), modelID: resolved.id },
+        } satisfies SessionV1.User
+
+        yield* drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [
+            { role: "user", content: "Hello" },
+            { role: "assistant", content: [{ type: "reasoning", text: "" }] },
+          ],
+          tools: {},
+        })
+
+        const capture = yield* Effect.promise(() => request)
+        const body = capture.body
+        const config = body.generationConfig as
+          | { temperature?: number; topP?: number; maxOutputTokens?: number }
+          | undefined
+
+        expect(capture.url.pathname).toBe(pathSuffix)
+        expect(body.contents).toEqual([{ role: "user", parts: [{ text: "Hello" }] }])
+        expect(config?.temperature).toBe(0.3)
+        expect(config?.topP).toBe(0.8)
+        expect(config?.maxOutputTokens).toBe(ProviderTransform.maxOutputTokens(resolved))
+      }),
+    {
+      config: () => ({
+        enabled_providers: [geminiVertexFixture.providerID],
+        provider: {
+          [geminiVertexFixture.providerID]: {
+            options: {
+              project: "test-project",
+              location: "us-central1",
+              baseURL: `${state.server!.url.origin}/v1beta1/projects/test-project/locations/us-central1/publishers/google`,
+            },
+          },
+        },
+      }),
+    },
+  )
 })
