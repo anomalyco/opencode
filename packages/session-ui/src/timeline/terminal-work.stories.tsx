@@ -1,4 +1,4 @@
-import type { SessionMessageAssistant, SessionMessageShell } from "@opencode-ai/client/promise"
+import type { SessionMessageAssistant, SessionMessageShell } from "@opencode/client/promise"
 import { createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { DataProvider } from "../context/data"

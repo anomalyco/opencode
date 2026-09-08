@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { rm } from "node:fs/promises"
 import path from "node:path"
-import { Browser } from "@opencode-ai/plugin-browser/rpc"
+import { Browser } from "@opencode/plugin-browser/rpc"
 import { browserFailure, protocolError } from "../src/main/browser/errors"
 import { createBrowserFiles } from "../src/main/browser/files"
 import { analyzeCpu, analyzeTrace, parseHeap } from "../src/main/browser/analysis"

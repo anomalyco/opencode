@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { FormInfo, PermissionRequest, SessionInfo } from "@opencode-ai/client/promise"
+import type { FormInfo, PermissionRequest, SessionInfo } from "@opencode/client/promise"
 import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
 
 const session = (input: { id: string; parentID?: string }) =>

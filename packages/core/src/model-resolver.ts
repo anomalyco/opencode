@@ -1,8 +1,8 @@
 export * as ModelResolver from "./model-resolver.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { LanguageModel } from "@opencode-ai/ai"
-import { Auth } from "@opencode-ai/ai/route"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { LanguageModel } from "@opencode/ai"
+import { Auth } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
 import { AISDKNative } from "./aisdk-native.js"
@@ -10,7 +10,7 @@ import { Catalog } from "./catalog.js"
 import { Credential } from "./credential.js"
 import { Integration } from "./integration.js"
 import { Capabilities, ID, Info, Ref, VariantID } from "./model.js"
-import { Npm } from "@opencode-ai/util/npm"
+import { Npm } from "@opencode/util/npm"
 import { Provider } from "./provider.js"
 
 export class VariantUnavailableError extends Schema.TaggedError<VariantUnavailableError>()(
@@ -164,7 +164,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
         providerID: resolved.canonical ?? resolved.providerID,
       })
     : undefined
-  const native = mapping?.package ?? resolved.package
+  const native = mapping?.package ?? packageName
   if (Provider.isAISDK(resolved.package) && !mapping) {
     const loadAISDK = dependencies?.loadAISDK
     if (!loadAISDK) return yield* unsupported(resolved)
@@ -258,14 +258,11 @@ function unresolvedProviderVariables(model: Info, baseURL: string) {
 const nativeCredentialSettings = (specifier: string, credential: Credential.Value | undefined) => {
   if (!credential) return {}
   if (credential.type === "key") return { apiKey: credential.key }
-  if (
-    specifier === "@opencode-ai/ai/providers/anthropic" ||
-    specifier === "@opencode-ai/ai/providers/anthropic-compatible"
-  )
+  if (specifier === "@opencode/ai/providers/anthropic" || specifier === "@opencode/ai/providers/anthropic-compatible")
     return { authToken: credential.access }
   if (
-    specifier === "@opencode-ai/ai/providers/google-vertex" ||
-    specifier.startsWith("@opencode-ai/ai/providers/google-vertex/")
+    specifier === "@opencode/ai/providers/google-vertex" ||
+    specifier.startsWith("@opencode/ai/providers/google-vertex/")
   )
     return { accessToken: credential.access }
   return { apiKey: credential.access }
@@ -368,26 +365,26 @@ function usesAPIKeyAuth(packageName: string | undefined) {
     name === "@ai-sdk/xai" ||
     name === "@openrouter/ai-sdk-provider" ||
     name === "@ai-sdk/azure" ||
-    name === "@opencode-ai/ai/providers/openai" ||
-    name?.startsWith("@opencode-ai/ai/providers/openai/") === true ||
-    name === "@opencode-ai/ai/providers/anthropic" ||
-    name === "@opencode-ai/ai/providers/anthropic-compatible" ||
-    name === "@opencode-ai/ai/providers/baseten" ||
-    name === "@opencode-ai/ai/providers/cerebras" ||
-    name === "@opencode-ai/ai/providers/cloudflare-ai-gateway" ||
-    name === "@opencode-ai/ai/providers/cloudflare-workers-ai" ||
-    name === "@opencode-ai/ai/providers/deepinfra" ||
-    name === "@opencode-ai/ai/providers/deepseek" ||
-    name === "@opencode-ai/ai/providers/fireworks" ||
-    name === "@opencode-ai/ai/providers/openai-compatible" ||
-    name === "@opencode-ai/ai/providers/google" ||
-    name === "@opencode-ai/ai/providers/groq" ||
-    name === "@opencode-ai/ai/providers/mistral" ||
-    name === "@opencode-ai/ai/providers/togetherai" ||
-    name === "@opencode-ai/ai/providers/xai" ||
-    name === "@opencode-ai/ai/providers/openrouter" ||
-    name === "@opencode-ai/ai/providers/azure" ||
-    name?.startsWith("@opencode-ai/ai/providers/azure/") === true
+    name === "@opencode/ai/providers/openai" ||
+    name?.startsWith("@opencode/ai/providers/openai/") === true ||
+    name === "@opencode/ai/providers/anthropic" ||
+    name === "@opencode/ai/providers/anthropic-compatible" ||
+    name === "@opencode/ai/providers/baseten" ||
+    name === "@opencode/ai/providers/cerebras" ||
+    name === "@opencode/ai/providers/cloudflare-ai-gateway" ||
+    name === "@opencode/ai/providers/cloudflare-workers-ai" ||
+    name === "@opencode/ai/providers/deepinfra" ||
+    name === "@opencode/ai/providers/deepseek" ||
+    name === "@opencode/ai/providers/fireworks" ||
+    name === "@opencode/ai/providers/openai-compatible" ||
+    name === "@opencode/ai/providers/google" ||
+    name === "@opencode/ai/providers/groq" ||
+    name === "@opencode/ai/providers/mistral" ||
+    name === "@opencode/ai/providers/togetherai" ||
+    name === "@opencode/ai/providers/xai" ||
+    name === "@opencode/ai/providers/openrouter" ||
+    name === "@opencode/ai/providers/azure" ||
+    name?.startsWith("@opencode/ai/providers/azure/") === true
   )
 }
 

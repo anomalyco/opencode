@@ -1,9 +1,8 @@
 #!/usr/bin/env bun
 
-import { Script } from "@opencode-ai/script"
+import { Script } from "@opencode/script"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
-import { UpdateArtifact } from "./update-artifact"
 
 console.log("=== publishing ===\n")
 
@@ -80,11 +79,6 @@ await $`bun ./packages/sdk/script/publish.ts`
 console.log("\n=== ui ===\n")
 await $`bun ./packages/ui/script/publish.ts`
 
-if (Script.release) {
-  await $`bun ./packages/desktop/scripts/finalize-latest-json.ts`
-  await $`bun ./packages/desktop/scripts/finalize-latest-yml.ts`
-}
-
 if (Script.release && !Script.preview) {
   await $`git commit -am "release: ${tag}"`
   await $`git tag -d ${tag}`.nothrow()
@@ -99,14 +93,6 @@ if (Script.release && !Script.preview) {
 }
 
 if (Script.release) {
-  await $`gh release edit ${tag} --draft=false --repo ${process.env.GH_REPO}`
-  const repo = process.env.GH_REPO
-  if (!repo) throw new Error("GH_REPO is required")
-  await UpdateArtifact.publish({
-    channel: Script.channel,
-    name: "desktop",
-    distribution: "github",
-    version: Script.version,
-    metadata: await UpdateArtifact.desktopMetadata(Script.version, repo),
-  })
+  console.log("\n=== desktop ===\n")
+  await $`bun ./packages/desktop/scripts/publish.ts`
 }

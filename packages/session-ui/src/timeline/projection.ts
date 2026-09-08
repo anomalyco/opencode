@@ -5,7 +5,7 @@ import type {
   SessionMessageShell,
   SessionMessageUser,
   SessionStatus,
-} from "@opencode-ai/client/promise"
+} from "@opencode/client/promise"
 import { Option, Schema } from "effect"
 import { createMemo, mapArray, type Accessor } from "solid-js"
 import { currentContentDefaultOpen, currentToolFailed, currentToolHasLoadedFiles } from "../message/current-tool-state"

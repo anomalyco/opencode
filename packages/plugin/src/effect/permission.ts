@@ -1,7 +1,7 @@
-import type { PermissionApi } from "@opencode-ai/client/effect/api"
-import type { Agent } from "@opencode-ai/schema/agent"
-import type { Permission } from "@opencode-ai/schema/permission"
-import type { Session } from "@opencode-ai/schema/session"
+import type { PermissionApi } from "@opencode/client/effect/api"
+import type { Agent } from "@opencode/schema/agent"
+import type { Permission } from "@opencode/schema/permission"
+import type { Session } from "@opencode/schema/session"
 import type { Hooks } from "./registration.js"
 
 export interface PermissionEvaluation {

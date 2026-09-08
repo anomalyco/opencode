@@ -6,7 +6,7 @@ import {
   resolveThemeDocument,
   selectThemeMode,
   themeModes,
-} from "@opencode-ai/theme/tui"
+} from "@opencode/theme/tui"
 import { DEFAULT_THEMES, resolveTheme as resolveV1 } from "../../../src/theme"
 
 test("migrates resolved V1 modes into V2 tokens", () => {

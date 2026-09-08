@@ -1,5 +1,5 @@
-import type { Data } from "@opencode-ai/client/solid"
-import type { SessionInfo } from "@opencode-ai/client/promise"
+import type { Data } from "@opencode/client/solid"
+import type { SessionInfo } from "@opencode/client/promise"
 import { onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 

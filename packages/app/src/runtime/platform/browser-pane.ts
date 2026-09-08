@@ -1,4 +1,4 @@
-import type { Browser } from "@opencode-ai/plugin-browser/rpc"
+import type { Browser } from "@opencode/plugin-browser/rpc"
 
 export type BrowserPaneEndpoint = Readonly<{ url: string; username?: string; password?: string }>
 export type BrowserPaneTarget = Readonly<{ sessionID: string; endpoint: BrowserPaneEndpoint }>

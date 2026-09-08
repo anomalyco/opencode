@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import type { BrowserWindow } from "electron"
-import { Browser } from "@opencode-ai/plugin-browser/rpc"
+import { Browser } from "@opencode/plugin-browser/rpc"
 import { Schema } from "effect"
 import { createBrowserPage } from "../../src/main/browser-chromium"
 import { createCornerImages } from "../../src/main/browser/corners"

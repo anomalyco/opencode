@@ -1,4 +1,4 @@
-import { Wordmark } from "@opencode-ai/ui/wordmark"
+import { Wordmark } from "@opencode/ui/wordmark"
 import "./wordmark.css"
 
 export function NewSessionWordmark() {

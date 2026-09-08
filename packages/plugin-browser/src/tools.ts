@@ -1,7 +1,7 @@
 export * as BrowserTools from "./tools.js"
 
-import type { Context } from "@opencode-ai/plugin/effect/plugin"
-import { Tool } from "@opencode-ai/schema/tool"
+import type { Context } from "@opencode/plugin/effect/plugin"
+import { Tool } from "@opencode/schema/tool"
 import { Effect, Encoding, Result, Schema } from "effect"
 import type { BrowserConnection } from "./connection.js"
 import { BrowserFiles } from "./files.js"

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/simulation",
+  "name": "@opencode/simulation",
   "version": "1.17.13",
   "type": "module",
   "license": "MIT",
@@ -29,11 +29,11 @@
     "typecheck": "tsgo -b"
   },
   "dependencies": {
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/ai": "workspace:*",
-    "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/protocol": "workspace:*",
-    "@opencode-ai/util": "workspace:*",
+    "@opencode/core": "workspace:*",
+    "@opencode/ai": "workspace:*",
+    "@opencode/plugin": "workspace:*",
+    "@opencode/protocol": "workspace:*",
+    "@opencode/util": "workspace:*",
     "@opentui/core": "catalog:",
     "effect": "catalog:",
     "ws": "8.21.0"

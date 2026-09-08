@@ -1,6 +1,6 @@
 export * as SessionGenerate from "./generate.js"
 
-import { LLMClient, Message, type AIError } from "@opencode-ai/ai"
+import { LLMClient, Message, type AIError } from "@opencode/ai"
 import { Effect } from "effect"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/posts",
+  "name": "@opencode/posts",
   "private": true,
   "type": "module",
   "scripts": {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import type { FormCreated, FormReplyInput, OpenCodeEvent } from "@opencode-ai/client/promise"
+import type { FormCreated, FormReplyInput, OpenCodeEvent } from "@opencode/client/promise"
 import { createEffect, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createWebSearchRequest } from "@/session/requests/websearch"

@@ -1,6 +1,6 @@
 import { autocomplete, intro, outro, spinner } from "@clack/prompts"
 import { Effect, Option } from "effect"
-import type { IntegrationInfo } from "@opencode-ai/client"
+import type { IntegrationInfo } from "@opencode/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { handlePromptErrors, prompt, requireInteractive } from "../../../ui/prompt"

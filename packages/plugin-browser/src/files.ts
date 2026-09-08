@@ -1,7 +1,7 @@
 export * as BrowserFiles from "./files.js"
 
 import { Browser } from "./rpc.js"
-import { Tool } from "@opencode-ai/schema/tool"
+import { Tool } from "@opencode/schema/tool"
 import { Effect } from "effect"
 
 // Files cross machines as bytes. Only this endpoint interprets its local paths.

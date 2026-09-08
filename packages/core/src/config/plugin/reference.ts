@@ -1,14 +1,14 @@
 export * as ConfigReferencePlugin from "./reference.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Document } from "@opencode-ai/schema/config"
-import { ConfigReference } from "@opencode-ai/schema/config/reference"
+import { define } from "@opencode/plugin/effect/plugin"
+import { Document } from "@opencode/schema/config"
+import { ConfigReference } from "@opencode/schema/config/reference"
 import path from "path"
 import { Effect } from "effect"
 import { Config } from "../../config.js"
 import { Reference } from "../../reference.js"
 import { AbsolutePath } from "../../schema.js"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { Location } from "../../location.js"
 import { ConfigEntryObserver } from "./entry-observer.js"
 

@@ -1,4 +1,4 @@
-import { Browser } from "@opencode-ai/plugin-browser/rpc"
+import { Browser } from "@opencode/plugin-browser/rpc"
 import { mkdir, readFile, stat, writeFile, rm } from "node:fs/promises"
 import { mkdirSync } from "node:fs"
 import { tmpdir } from "node:os"

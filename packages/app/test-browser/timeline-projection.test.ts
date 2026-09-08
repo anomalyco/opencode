@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionMessageAssistant, SessionMessageInfo, SessionStatus } from "@opencode-ai/client/promise"
+import type { SessionMessageAssistant, SessionMessageInfo, SessionStatus } from "@opencode/client/promise"
 import { createRoot } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import {
@@ -8,7 +8,7 @@ import {
   Timeline,
   TimelineRow,
   type ReasoningMode,
-} from "@opencode-ai/session-ui/timeline/projection"
+} from "@opencode/session-ui/timeline/projection"
 import { createTimelineProjection } from "../src/session/timeline/projection"
 
 const assistant = (id: string, content: SessionMessageAssistant["content"]): SessionMessageAssistant => ({

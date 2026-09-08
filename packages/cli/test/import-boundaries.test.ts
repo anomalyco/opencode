@@ -10,15 +10,15 @@ describe("CLI frontend import boundaries", () => {
     const imports: string[] = []
     for await (const file of glob.scan({ cwd: path.join(root, "packages/cli") })) {
       const source = await Bun.file(path.join(root, "packages/cli", file)).text()
-      if (/["']@opencode-ai\/core(?:\/[^"']*)?["']/.test(source)) imports.push(file)
+      if (/["']@opencode\/core(?:\/[^"']*)?["']/.test(source)) imports.push(file)
     }
     expect(imports).toEqual([])
   })
 
   test("exposes only the intentional package entrypoints", async () => {
-    const run = await import("@opencode-ai/cli/run")
-    const mini = await import("@opencode-ai/tui/mini")
-    const tool = await import("@opencode-ai/tui/mini/tool")
+    const run = await import("@opencode/cli/run")
+    const mini = await import("@opencode/tui/mini")
+    const tool = await import("@opencode/tui/mini/tool")
     const cli = await Bun.file(path.join(root, "packages/cli/package.json")).json()
 
     expect(Object.keys(run).sort()).toEqual(["runNonInteractive", "runV1Bridge"])
@@ -59,7 +59,7 @@ describe("CLI frontend import boundaries", () => {
     const imports: string[] = []
     for await (const file of glob.scan({ cwd: path.join(root, "packages/tui/src/mini") })) {
       const source = await Bun.file(path.join(root, "packages/tui/src/mini", file)).text()
-      if (/["']@opencode-ai\/(?:core|server|cli)(?:\/[^"']*)?["']/.test(source)) imports.push(file)
+      if (/["']@opencode\/(?:core|server|cli)(?:\/[^"']*)?["']/.test(source)) imports.push(file)
     }
     expect(imports).toEqual([])
 

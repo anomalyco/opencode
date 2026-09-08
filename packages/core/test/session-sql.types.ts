@@ -1,4 +1,4 @@
-import { SessionMessageTable } from "@opencode-ai/core/session/sql"
+import { SessionMessageTable } from "@opencode/core/session/sql"
 
 type MessageData = (typeof SessionMessageTable.$inferInsert)["data"]
 

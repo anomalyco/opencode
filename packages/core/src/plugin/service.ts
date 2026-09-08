@@ -2,8 +2,8 @@ export * as Plugin from "./service.js"
 
 // The service tag lives apart from the layer so Session entry points can wait on activation without
 // importing the plugin host, which itself depends on Session.
-import { Plugin } from "@opencode-ai/schema/plugin"
-import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
+import { Plugin } from "@opencode/schema/plugin"
+import type { Plugin as PluginDefinition } from "@opencode/plugin/effect/plugin"
 import { Context, type Effect, type Exit } from "effect"
 
 export interface Interface {

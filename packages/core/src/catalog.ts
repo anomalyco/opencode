@@ -1,8 +1,8 @@
 export * as Catalog from "./catalog.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Array, Context, Effect, Layer, Order, pipe } from "effect"
-import { Catalog } from "@opencode-ai/schema/catalog"
+import { Catalog } from "@opencode/schema/catalog"
 import { Model } from "./model.js"
 import { Provider } from "./provider.js"
 import { Bus } from "./bus.js"
@@ -16,7 +16,7 @@ export type ProviderRecord = {
 
 export type DefaultModel = { providerID: Provider.ID; modelID: Model.ID }
 
-export { Event } from "@opencode-ai/schema/catalog"
+export { Event } from "@opencode/schema/catalog"
 
 type Data = {
   providers: Map<Provider.ID, ProviderRecord>

@@ -2,7 +2,7 @@ export * as SessionInbox from "./inbox.js"
 
 import { and, asc, eq, or } from "drizzle-orm"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import {
   Compaction,
   CompactionPayload,
@@ -15,7 +15,7 @@ import {
   SyntheticPayload,
   User,
   UserPayload,
-} from "@opencode-ai/schema/session-inbox"
+} from "@opencode/schema/session-inbox"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"

@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test"
-import { ModalModels } from "@opencode-ai/core/modal/models"
-import { Model } from "@opencode-ai/core/model"
-import { Provider } from "@opencode-ai/core/provider"
-import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
-import { Money } from "@opencode-ai/schema/money"
+import { ModalModels } from "@opencode/core/modal/models"
+import { Model } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
+import { ProviderPlugins } from "@opencode/core/plugin/provider"
+import { Money } from "@opencode/schema/money"
 
 const providerID = Provider.ID.make("modal")
 

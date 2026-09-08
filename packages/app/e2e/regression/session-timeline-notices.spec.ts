@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
-import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client/promise"
-import { timelinePresets } from "@opencode-ai/session-ui/timeline/detail"
+import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
+import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import {
   compactionDelta,
   compactionEnded,

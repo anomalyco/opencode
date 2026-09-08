@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, HttpContext, TransportError } from "@opencode-ai/ai"
+import { AIError, HttpContext, TransportError } from "@opencode/ai"
 import type {
   ChannelObservation,
   WebSocketChannelExchange,
   WebSocketConnection,
   WebSocketConnector,
-} from "@opencode-ai/ai/route"
-import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
-import { Session } from "@opencode-ai/schema/session"
+} from "@opencode/ai/route"
+import { SessionModelTransport } from "@opencode/core/session/model-transport"
+import { Session } from "@opencode/schema/session"
 import { Cause, Deferred, Effect, Fiber, Metric, Queue, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Headers } from "effect/unstable/http"

@@ -13,7 +13,7 @@ import {
   STORY_TIME,
   subagentDocument,
   terminalPassedDocument,
-} from "@opencode-ai/session-ui/storybook"
+} from "@opencode/session-ui/storybook"
 import { SessionPreview } from "./story-model"
 
 const description = "opencode · modular-session-ui"

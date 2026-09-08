@@ -10,7 +10,7 @@ import type {
   FormFields,
   FormValue,
   LocationRef,
-} from "@opencode-ai/client"
+} from "@opencode/client"
 import open from "open"
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useClipboard } from "../context/clipboard"

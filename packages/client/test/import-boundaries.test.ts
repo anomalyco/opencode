@@ -12,7 +12,7 @@ const server = resolve(import.meta.dir, "../../server")
 
 describe("public import boundaries", () => {
   test("isolates each public entrypoint", async () => {
-    const root = await bundleInputs("@opencode-ai/client", "browser")
+    const root = await bundleInputs("@opencode/client", "browser")
 
     expect(within(root.all, effect)).toEqual([])
     expect(within(root.all, schema)).toEqual([])
@@ -20,7 +20,7 @@ describe("public import boundaries", () => {
     expect(within(root.all, core)).toEqual([])
     expect(within(root.all, server)).toEqual([])
 
-    const network = await bundleInputs("@opencode-ai/client/effect", "browser")
+    const network = await bundleInputs("@opencode/client/effect", "browser")
 
     expect(within(network.eager, effect).length).toBeGreaterThan(0)
     expect(within(network.eager, schema).length).toBeGreaterThan(0)
@@ -28,7 +28,7 @@ describe("public import boundaries", () => {
     expect(within(network.all, core)).toEqual([])
     expect(within(network.all, server)).toEqual([])
 
-    const promiseService = await bundleInputs("@opencode-ai/client/service", "bun")
+    const promiseService = await bundleInputs("@opencode/client/service", "bun")
 
     expect(within(promiseService.all, effect)).toEqual([])
     expect(within(promiseService.all, schema)).toEqual([])
@@ -36,7 +36,7 @@ describe("public import boundaries", () => {
     expect(within(promiseService.all, core)).toEqual([])
     expect(within(promiseService.all, server)).toEqual([])
 
-    const effectService = await bundleInputs("@opencode-ai/client/effect/service", "bun")
+    const effectService = await bundleInputs("@opencode/client/effect/service", "bun")
 
     expect(within(effectService.eager, effect).length).toBeGreaterThan(0)
     expect(within(effectService.eager, protocol).length).toBeGreaterThan(0)

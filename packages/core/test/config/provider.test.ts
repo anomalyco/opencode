@@ -1,17 +1,17 @@
 import { describe, expect } from "bun:test"
-import { Money } from "@opencode-ai/schema/money"
-import { Document, Info, type Entry } from "@opencode-ai/schema/config"
+import { Money } from "@opencode/schema/money"
+import { Document, Info, type Entry } from "@opencode/schema/config"
 import { Effect, Schema } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Config } from "@opencode-ai/core/config"
-import { ConfigProviderPlugin } from "@opencode-ai/core/config/plugin/provider"
-import { ConfigNormalize } from "@opencode-ai/core/config/normalize"
-import { Integration } from "@opencode-ai/core/integration"
-import { Model } from "@opencode-ai/core/model"
-import { ModelResolver } from "@opencode-ai/core/model-resolver"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { Provider } from "@opencode-ai/core/provider"
+import { Catalog } from "@opencode/core/catalog"
+import { Config } from "@opencode/core/config"
+import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
+import { ConfigNormalize } from "@opencode/core/config/normalize"
+import { Integration } from "@opencode/core/integration"
+import { Model } from "@opencode/core/model"
+import { ModelResolver } from "@opencode/core/model-resolver"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { Provider } from "@opencode/core/provider"
 import { withEnv } from "../fixture/env"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
@@ -41,17 +41,17 @@ describe("ConfigProviderPlugin.Plugin", () => {
           info: decode({
             providers: {
               custom: {
-                package: "@opencode-ai/ai/providers/openai/responses",
+                package: "@opencode/ai/providers/openai/responses",
                 compaction: { mode: "provider", threshold: 120_000 },
                 models: {
                   native: {},
                   reset: { compaction: { mode: "provider" } },
                   threshold: { compaction: { mode: "provider", threshold: 90_000 } },
-                  local: { compaction: { mode: "local" }, package: "@opencode-ai/ai/providers/openai/chat" },
-                  unsupported: { package: "@opencode-ai/ai/providers/openai/chat" },
+                  local: { compaction: { mode: "local" }, package: "@opencode/ai/providers/openai/chat" },
+                  unsupported: { package: "@opencode/ai/providers/openai/chat" },
                 },
               },
-              default: { package: "@opencode-ai/ai/providers/openai/chat", models: { chat: {} } },
+              default: { package: "@opencode/ai/providers/openai/chat", models: { chat: {} } },
             },
           }),
         }),

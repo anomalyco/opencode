@@ -1,6 +1,6 @@
 import { readdir, stat } from "node:fs/promises"
 import path from "node:path"
-export { localSource } from "@opencode-ai/plugin/source"
+export { localSource } from "@opencode/plugin/source"
 import { isMissingPath, localProjectDirectory, projectConfigDirectories } from "../util/config-directories"
 
 export async function localPluginDirectories(cwd: string, configDirectory: string) {

@@ -1,5 +1,5 @@
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { Icon } from "@opencode/ui/icon"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import {
   children,

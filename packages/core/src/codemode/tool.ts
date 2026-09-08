@@ -1,6 +1,6 @@
 export * as CodeModeTool from "./tool.js"
 
-import { CodeMode, Namespace, Tool, toolError } from "@opencode-ai/codemode"
+import { CodeMode, Namespace, Tool, toolError } from "@opencode/codemode"
 import type {
   Content,
   Context,
@@ -9,7 +9,7 @@ import type {
   Metadata,
   Namespace as ToolNamespace,
   Result,
-} from "@opencode-ai/schema/tool"
+} from "@opencode/schema/tool"
 import { Effect, Ref, Schema, Semaphore } from "effect"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { CodeModeCatalog } from "./catalog.js"

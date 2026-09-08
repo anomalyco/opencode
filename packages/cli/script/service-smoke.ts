@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 
 import { NodeFileSystem } from "@effect/platform-node"
-import { Service } from "@opencode-ai/client/effect/service"
-import { ServiceStatus } from "@opencode-ai/protocol/groups/health"
+import { Service } from "@opencode/client/effect/service"
+import { ServiceStatus } from "@opencode/protocol/groups/health"
 import { Effect, Schema } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"

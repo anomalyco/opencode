@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "muse-spark-1.3",
+    "tags": ["prefix:meta-messages", "provider:meta", "protocol:meta-messages", "text", "reasoning", "adaptive"],
+    "name": "meta-messages/streams-text-with-adaptive-thinking",
+    "recordedAt": "2026-09-07T17:26:18.565Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.meta.ai/v1/messages",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"muse-spark-1.3\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is 173 multiplied by 219? Reply with only the final integer.\"}]}],\"stream\":true,\"max_tokens\":2048,\"thinking\":{\"type\":\"adaptive\",\"display\":\"omitted\"},\"output_config\":{\"effort\":\"low\"}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: message_start\ndata: {\"message\":{\"content\":[],\"id\":\"msg_6a9ef3b8e46a777cfdc94a93\",\"model\":\"muse-spark-1.3\",\"role\":\"assistant\",\"stop_reason\":null,\"stop_sequence\":null,\"type\":\"message\",\"usage\":{\"input_tokens\":0,\"output_tokens\":0}},\"type\":\"message_start\"}\n\nevent: content_block_start\ndata: {\"content_block\":{\"data\":\"Q-PaDgFtwwNGqSqKxPk9Zj-j9xogYigpDsDHrLKPV-DxmXcbhtXDPrGPuj5qB4l1FslhuEQFCA8zIRyNGaCmzM0JG4GOZe3LpFYM2iegBbi24l4V7souryAwUs_7PrInxObuguMwh2S66ML6PwlfVRVTAwPsgDSCl6Y9tkoDHr2KBRY2fzJhmjkotuFRK2LYvNp9pKi89JxnoIKK8B_UJc_B2r4vU_Txq9_rWTmo2eXFoGOSMZNaHpVrvACRQKC1jc6-8Pj5JkJN11_Cs2fHqlaCwOoPDVJxHXUXP1AMHU1mG0jR4qf9wUaz8kMmyCBBijlfQJ4G7nsQs7LJO9gS2ropmynDoO5IEIAFf7ekxLw54Fx3JigC0_qz4Jx4a04Ey8JBzWRlZNdqggpq2_I_VoT3S0zhCYDp8ZAJQs2JqvvF-ZmLcMPH1PmpkgRySqXl5TDxERIpdL3aOUzTl-PTHVMIGEcSAz84fFwU4p1kS5llGEGC6jHlClscEEto1Y-qthL6BoeDALzk7GHEMVQD0bfC4E5yGCh0_xlWqsG3XPj0wpYKBc0hfh7vjO1NpzPxCtaDjnRwR6TzSo6x_HrEL3VELArHhpYAXl30fNO-EepduZ3Hd_kWqWj_GhdIM4dRh2zoytbhIesVD7OvBqU47urKFnpXw4kswJ-NoVVNk00ysMMHwobT9BdJL9UCoXlNzyErPe8LkA9f0VrKkuLCg5FDr_DCEYXHXr7fdRmC3JTKuzvxffvPYppUt3hs5gbdXWgT2iZzunt4bSfFne7BPkj9OGREyfLcukvGAh_oqPLXuu0lert9wbTAqRUTyM5Y1nSjw3h2B3jv91mH78mGvhy8LeVNLkrSMxEa4GtrrUvlzkPnZayc_LE2Sr7JnQjhwylVNWvkcIAjstOZShjPKe4pUJwj-cUXmXZB7Zwr-Q9WLtprFgQoBvadd5DHD4aynsYEabKZVcOqhV8l2zyaUCGobUzdPqBC5kk5-VPmNTqm6Qs91mb1y_5ydmHjTWmSW6qtN_op-Xfwqr_hllvOjhnAvvDJWUOKH-YIgZw_k_db2mzW1hO093jSDMYv6wpiy_5XWMNJBjcH8hvR_pFjXIqScUnKPranEZvCyGfHR-UBNJ89s_JEE49chcIt8LiukBeXQ_TOe29kzWnT1tYtfGQXP8FY2Wukw5yhvP3coGp1-LPZRuw3BLP2tWmiijmyj5lMikp8MIeqOztN8zgsArZ9jq21EtDSNfpO_0C4GEOtCZQYvZHRpDeY966XDnN7Blenn_8FZ95M-M-1My8hsmF__JrnY4ZFZr2274f_FbyJaSqGj6H-YRuzawO2TVLWHxAr6v2LCiB_QX01PwUI1yaJmP0mI-Qz5zXgSHzfVzhF7l1zEnM8qIYcSXzD1Gp3rjpn2sq-rR-JLqeHq080Hl0X9c8lzozw3qCpvcTfA-4ZTdXU9ax3nt7emcPVFo9N_JBjYashC7KvjkIWjMhQoTbIRlO18gjEa-Dvtsmo4_xE1ApYRoylbhxg3_fQJjKLfCBv32V6BM8qWKINL7d1nYP7PtAKnglCdnT_dK0_pCK6ejGfmdWZgVj0DhVZUCXf2kN530Y0hoCb1jBgwJ16a5gUqJMtnWScarIGSVrsYMA_uEt7DwQzGYAGESVIgi8JVATkxoq4EbyOLCHX7MIKmAPGV2WWTjWAWLnE2ITjlXtBkUAwjq2v957BMgIqxSNxEjG75Gd0i1XjZAujCSCXMrywZ72-VdQy4cD6kzH9mv04fZ7_dqn9eKPHBY7_T7V6myRDj_ImkffXcygmd7F-_-kHMExI6ABas1WtfDjkYgbRM0jMtIHYL-W9xT8vCSLSdvHcb5Y8XSXT5GTwI7eIlBHnCvFrgunbCo9bJJlT2Gc1RcgeZ4rg3yu1MNF4Mfk6DBwDhduGh5l7nypL00B0HokLfF4H7N1oSKL9jdVE3oMyJuA9NV1SJiyqcneSVHBzqjFZ5sszFXPlBKEz31izxFToAF4tDYMR507zYLcxyLA4AmHlkmn0qeozPb5qk-qZB6yLywtewv8O1KqxieAEJnEmyiqGnoKBdkjpeYmplErSxJyzoRX4fXb9mOdb-izJgvqSQ5uLm0_EXf3OklpMoAJ2CPJ6cxpg_5bhiwbgEtafCuDyXVL9Zzi872yUb_Z-ATlqU1M2Ai67f1piHIUDzMn4kulXQhPMb_R4eznMbX_aRigQh92-t1USoFtX2vmyCUQageFcrHHK524gPQ7rkOfDvZ8GHPXi3YZFnzGkSKjQD0jumFtzDiRqYkkMECep0zgY8MjuWLMjlMuigpkzSm8GPZ2aFeIMxJCYR8iMf7fH9NyHAJnicx4wdW_UqqgY5jfVtDvPSL0SRScyyK0jNdmofDHjWp4Tehih5OOw81E3BYLCiIv2p2zTMRSTZxFyG3HI91tIEaJu_RnIMFxzCilaP1LcbMrjyFzBtLJiXXJ--eFYyIMYKgfbWIOTsjLLJGC8NS2wuzaXB-C6GLsuSEHci5a8f5KGqaXK99LvHtY4k36WhEoVUjQEGY7HNJrtdjBUlqDgnT9iO06gGd2QCGvlP4us-Z3q2Bcyhf0LzOgn_Bpjc6YBk4TNF1AMxG15qmhnsrWcGElkpk3Vh9npC8--vkvhh7pOPfTZlNjQQh900OemY9gwxHyCBbt1096g4qkYOntGJmw-wVjyWxOt9K9CaM9WxY3wFyOmwqiFL1PK4CMeKMZk54iZ1ZiyXDOvsO7qUa9XQGDy3W8ic6R3DUzdkxEEBFYHAjDy3qE\",\"type\":\"redacted_thinking\"},\"index\":0,\"type\":\"content_block_start\"}\n\nevent: content_block_stop\ndata: {\"index\":0,\"type\":\"content_block_stop\"}\n\nevent: content_block_start\ndata: {\"content_block\":{\"text\":\"\",\"type\":\"text\"},\"index\":1,\"type\":\"content_block_start\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"text\":\"37887\",\"type\":\"text_delta\"},\"index\":1,\"type\":\"content_block_delta\"}\n\nevent: content_block_stop\ndata: {\"index\":1,\"type\":\"content_block_stop\"}\n\nevent: message_delta\ndata: {\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"type\":\"message_delta\",\"usage\":{\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"input_tokens\":23,\"output_tokens\":266,\"output_tokens_details\":{\"thinking_tokens\":254}}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    }
+  ]
+}

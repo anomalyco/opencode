@@ -1,17 +1,17 @@
 import { EOL } from "node:os"
 import path from "node:path"
 import { Effect } from "effect"
-import { OpenCode, type PluginInfo } from "@opencode-ai/client"
-import { Service } from "@opencode-ai/client/effect/service"
+import { OpenCode, type PluginInfo } from "@opencode/client"
+import { Service } from "@opencode/client/effect/service"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { ServiceConfig } from "../../../services/service-config"
 import { Config } from "../../../config"
-import { Global } from "@opencode-ai/util/global"
-import { Npm } from "@opencode-ai/util/npm"
-import { Host } from "@opencode-ai/plugin/host"
+import { Global } from "@opencode/util/global"
+import { Npm } from "@opencode/util/npm"
+import { Host } from "@opencode/plugin/host"
 import { fileURLToPath } from "node:url"
-import { discoverPluginTargets, localPluginDirectories, localSource } from "@opencode-ai/tui/plugin/discovery"
+import { discoverPluginTargets, localPluginDirectories, localSource } from "@opencode/tui/plugin/discovery"
 
 export default Runtime.handler(
   Commands.commands.plugin.commands.list,

@@ -1,4 +1,4 @@
-import { Browser } from "@opencode-ai/plugin-browser/rpc"
+import { Browser } from "@opencode/plugin-browser/rpc"
 import { Schema } from "effect"
 import { Rpc } from "effect/unstable/rpc"
 

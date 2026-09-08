@@ -1,9 +1,9 @@
 export * as OpenCodeTools from "./opencode.js"
 
-import { SystemPart, ToolFailure } from "@opencode-ai/ai"
-import type { Context } from "@opencode-ai/plugin/effect/plugin"
-import { AbsolutePath } from "@opencode-ai/schema/schema"
-import { Session } from "@opencode-ai/schema/session"
+import { SystemPart, ToolFailure } from "@opencode/ai"
+import type { Context } from "@opencode/plugin/effect/plugin"
+import { AbsolutePath } from "@opencode/schema/schema"
+import { Session } from "@opencode/schema/session"
 import { Effect, Schema } from "effect"
 
 export const RenameInput = Schema.Struct({
