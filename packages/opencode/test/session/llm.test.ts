@@ -185,6 +185,31 @@ describe("session.llm.ai-sdk adapter", () => {
   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- tests defensive adapter branches outside AI SDK's current typed surface
   const uncheckedAdapterEvent = (input: unknown) => input as AISDKAdapterEvent
 
+  test("parses Ollama reasoning tags split across stream chunks", async () => {
+    const state = LLMAISDK.adapterState({ parseReasoningTags: true })
+    const events = await Effect.runPromise(
+      Effect.forEach(
+        [
+          { type: "text-start", id: "text-1" },
+          { type: "text-delta", id: "text-1", text: "<thi" },
+          { type: "text-delta", id: "text-1", text: "nk>plan</thi" },
+          { type: "text-delta", id: "text-1", text: "nk>answer" },
+          { type: "text-end", id: "text-1" },
+        ].map(uncheckedAdapterEvent),
+        (event) => LLMAISDK.toLLMEvents(state, event),
+      ).pipe(Effect.map((items) => items.flat())),
+    )
+
+    expect(events).toMatchObject([
+      { type: "reasoning-start", id: "reasoning-0" },
+      { type: "reasoning-delta", id: "reasoning-0", text: "plan" },
+      { type: "reasoning-end", id: "reasoning-0" },
+      { type: "text-start", id: "text-0" },
+      { type: "text-delta", id: "text-0", text: "answer" },
+      { type: "text-end", id: "text-0" },
+    ])
+  })
+
   test("maps AI SDK stream chunks without losing session-visible fields", async () => {
     const metadata = { openai: { itemID: "item-1" } }
     const events = await adapt([

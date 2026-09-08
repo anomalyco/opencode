@@ -817,6 +817,10 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       max: { effort: "max" },
     }
   }
+  if (model.providerID === "ollama" && model.api.npm === "@ai-sdk/openai-compatible") {
+    // Local Ollama uses /v1/chat/completions, where native `think` is exposed as `reasoning_effort`.
+    return Object.fromEntries(["none", "high"].map((effort) => [effort, { reasoningEffort: effort }]))
+  }
   // Kimi's Anthropic-compatible transports implement adaptive thinking effort.
   if (isKimiFamily(model) && ["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic"].includes(model.api.npm)) {
     return Object.fromEntries(

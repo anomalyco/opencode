@@ -7,7 +7,7 @@ import { ProviderError } from "@/provider/error"
 type Result = Awaited<ReturnType<typeof streamText>>
 type AISDKEvent = Result["fullStream"] extends AsyncIterable<infer T> ? T : never
 
-export function adapterState() {
+export function adapterState(options: { parseReasoningTags?: boolean } = {}) {
   return {
     step: 0,
     text: 0,
@@ -16,6 +16,11 @@ export function adapterState() {
     currentReasoningID: undefined as string | undefined,
     toolNames: {} as Record<string, string>,
     copilotTotalNanoAiu: undefined as number | undefined,
+    parseReasoningTags: options.parseReasoningTags ?? false,
+    structuredReasoning: false,
+    tagBuffer: "",
+    tagReasoning: false,
+    tagMetadata: undefined as ProviderMetadata | undefined,
   }
 }
 
@@ -74,6 +79,79 @@ function currentReasoningID(state: ReturnType<typeof adapterState>, id: string |
   return state.currentReasoningID
 }
 
+// Some Ollama model templates expose reasoning as tagged text instead of the
+// OpenAI-compatible reasoning field. Buffer partial tags across stream chunks.
+function reasoningTags(
+  state: ReturnType<typeof adapterState>,
+  text: string,
+  metadata: ProviderMetadata | undefined,
+  end = false,
+) {
+  const events: LLMEvent[] = []
+  const write = (value: string) => {
+    if (!value) return
+    if (state.tagReasoning) {
+      const active = state.currentReasoningID
+      const id = currentReasoningID(state, undefined)
+      if (!active) {
+        events.push(LLMEvent.reasoningStart({ id, providerMetadata: state.tagMetadata ?? metadata }))
+        state.tagMetadata = undefined
+      }
+      events.push(LLMEvent.reasoningDelta({ id, text: value, providerMetadata: metadata }))
+      return
+    }
+    const active = state.currentTextID
+    const id = currentTextID(state, undefined)
+    if (!active) {
+      events.push(LLMEvent.textStart({ id, providerMetadata: state.tagMetadata ?? metadata }))
+      state.tagMetadata = undefined
+    }
+    events.push(LLMEvent.textDelta({ id, text: value, providerMetadata: metadata }))
+  }
+  const close = () => {
+    if (state.tagReasoning && state.currentReasoningID) {
+      events.push(LLMEvent.reasoningEnd({ id: state.currentReasoningID, providerMetadata: metadata }))
+      state.currentReasoningID = undefined
+      return
+    }
+    if (!state.tagReasoning && state.currentTextID) {
+      events.push(LLMEvent.textEnd({ id: state.currentTextID, providerMetadata: metadata }))
+      state.currentTextID = undefined
+    }
+  }
+
+  let content = state.tagBuffer + text
+  state.tagBuffer = ""
+  while (content) {
+    const tag = state.tagReasoning ? "</think>" : "<think>"
+    const index = content.indexOf(tag)
+    if (index !== -1) {
+      write(content.slice(0, index))
+      close()
+      state.tagReasoning = !state.tagReasoning
+      content = content.slice(index + tag.length)
+      continue
+    }
+
+    const pending = end
+      ? 0
+      : (Array.from(
+          { length: Math.min(tag.length - 1, content.length) },
+          (_, index) => Math.min(tag.length - 1, content.length) - index,
+        ).find((length) => tag.startsWith(content.slice(-length))) ?? 0)
+    write(content.slice(0, content.length - pending))
+    state.tagBuffer = content.slice(content.length - pending)
+    content = ""
+  }
+
+  if (end) {
+    close()
+    state.tagReasoning = false
+    state.tagMetadata = undefined
+  }
+  return events
+}
+
 export function toLLMEvents(
   state: ReturnType<typeof adapterState>,
   event: AISDKEvent,
@@ -114,6 +192,7 @@ export function toLLMEvents(
     case "finish":
       return Effect.sync(() => {
         const events = [
+          ...(state.parseReasoningTags && !state.structuredReasoning ? reasoningTags(state, "", undefined, true) : []),
           LLMEvent.finish({
             reason: finishReason(event.finishReason),
             usage: usage(event.totalUsage),
@@ -122,11 +201,16 @@ export function toLLMEvents(
         ]
         // Reset so the adapter can be reused for a follow-up stream without leaking
         // counters or block IDs. adapterState() is the single source of truth for shape.
-        Object.assign(state, adapterState())
+        Object.assign(state, adapterState({ parseReasoningTags: state.parseReasoningTags }))
         return events
       })
 
     case "text-start":
+      if (state.parseReasoningTags && !state.structuredReasoning)
+        return Effect.sync(() => {
+          state.tagMetadata = providerMetadata(event.providerMetadata)
+          return []
+        })
       return Effect.sync(() => {
         state.currentTextID = currentTextID(state, event.id)
         return [
@@ -138,6 +222,8 @@ export function toLLMEvents(
       })
 
     case "text-delta":
+      if (state.parseReasoningTags && !state.structuredReasoning)
+        return Effect.sync(() => reasoningTags(state, event.text, providerMetadata(event.providerMetadata)))
       return Effect.succeed([
         LLMEvent.textDelta({
           id: currentTextID(state, event.id),
@@ -147,6 +233,8 @@ export function toLLMEvents(
       ])
 
     case "text-end":
+      if (state.parseReasoningTags && !state.structuredReasoning)
+        return Effect.sync(() => reasoningTags(state, "", providerMetadata(event.providerMetadata), true))
       return Effect.sync(() => {
         const id = currentTextID(state, event.id)
         state.currentTextID = undefined
@@ -160,6 +248,7 @@ export function toLLMEvents(
 
     case "reasoning-start":
       return Effect.sync(() => {
+        state.structuredReasoning = true
         state.currentReasoningID = currentReasoningID(state, event.id)
         return [
           LLMEvent.reasoningStart({
