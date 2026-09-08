@@ -228,6 +228,7 @@ export function SessionSidePanel(props: {
     return active !== "review" && active !== "context" && active !== "empty" && !isSessionBrowserTab(active)
   })
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
+  const openBrowserKeybind = createMemo(() => command.keybindParts("browser.open"))
   const closeTabKeybind = createMemo(() => command.keybindParts("file.close"))
   createEffect(() => {
     if (!file.ready()) return
@@ -465,7 +466,7 @@ export function SessionSidePanel(props: {
                                 placement="bottom"
                                 class="flex items-center"
                               >
-                                <Menu appearance="standard" modal={false} placement="bottom-end" gutter={4}>
+                                <Menu appearance="standard" modal={false} placement="bottom-start" gutter={4}>
                                   <Menu.Trigger
                                     as={IconButton}
                                     icon={<Icon name="plus" />}
@@ -479,6 +480,7 @@ export function SessionSidePanel(props: {
                                   <Menu.Portal>
                                     <Menu.Content>
                                       <Menu.Item
+                                        class="!gap-6"
                                         onSelect={openFileBrowser}
                                         shortcut={
                                           <Show when={openFileKeybind().length > 0}>
@@ -491,7 +493,15 @@ export function SessionSidePanel(props: {
                                           <span>{language.t("command.file.open")}</span>
                                         </div>
                                       </Menu.Item>
-                                      <Menu.Item onSelect={props.browser.open}>
+                                      <Menu.Item
+                                        class="!gap-6"
+                                        onSelect={props.browser.open}
+                                        shortcut={
+                                          <Show when={openBrowserKeybind().length > 0}>
+                                            <Keybind keys={openBrowserKeybind()} variant="neutral" />
+                                          </Show>
+                                        }
+                                      >
                                         <div class="flex items-center gap-2">
                                           <Icon name="window-cursor" size="small" />
                                           <span>{language.t("session.tab.browser")}</span>

@@ -4,6 +4,7 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { BrowserPaneCommand } from "@/runtime/platform/browser-pane"
 import { useServer } from "@/runtime/server/current"
+import { useCommand } from "@/shell/commands/command"
 import type { SessionModel } from "../model"
 import { isSessionBrowserTab, sessionBrowserTab } from "../helpers"
 import { useBrowserAttachments } from "./attachments"
@@ -12,6 +13,7 @@ export function createSessionBrowser(session: SessionModel) {
   const attachments = useBrowserAttachments()
   const language = useLanguage()
   const server = useServer()
+  const commands = useCommand()
   const [local, setLocal] = createStore({ error: undefined as string | undefined })
   const attachment = () => {
     const sessionID = session.identity.sessionID()
@@ -47,6 +49,20 @@ export function createSessionBrowser(session: SessionModel) {
       if (owner.current()) setLocal("error", language.t("common.requestFailed"))
     })
   }
+  const open = () => {
+    if (!available()) return
+    command({ type: "tabs.open" })
+  }
+  commands.register("session.browser", () => [
+    {
+      id: "browser.open",
+      title: language.t("command.browser.open"),
+      category: language.t("command.category.view"),
+      keybind: "mod+shift+b",
+      disabled: !available(),
+      onSelect: open,
+    },
+  ])
   createEffect(() => {
     const sessionID = session.identity.sessionID()
     if (!sessionID) return
@@ -109,7 +125,7 @@ export function createSessionBrowser(session: SessionModel) {
     error: () => local.error ?? attachment()?.error,
     registration: () => attachment()?.registration,
     close: (tabID: Browser.TabID) => session.layout.tabs().close(sessionBrowserTab(tabID)),
-    open: () => command({ type: "tabs.open" }),
+    open,
     command,
   }
 }
