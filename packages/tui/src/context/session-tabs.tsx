@@ -395,6 +395,15 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         if (!enabled()) return
         route.navigate({ type: "session", sessionID: root(sessionID) })
       },
+      open(sessionID: string) {
+        if (!enabled()) return
+        const session = root(sessionID)
+        if (state().tabs.some((tab) => tab.sessionID === session)) return
+        cancelledTabs.delete(session)
+        update((draft) => {
+          draft.tabs = openSessionTab(draft.tabs, { sessionID: session, title: title(session) })
+        })
+      },
       promote(sessionID: string) {
         if (!enabled()) return
         const session = root(sessionID)

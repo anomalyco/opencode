@@ -265,6 +265,23 @@ test("loads VCS metadata for each persisted tab location", async () => {
   }
 })
 
+test("opens a background tab without changing the current session", async () => {
+  const setup = await renderSessionTabs("first")
+
+  try {
+    await wait(() => setup.tabs.current() === "first" && setup.tabs.tabs().some((tab) => tab.sessionID === "first"))
+    setup.tabs.open("background")
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "background"))
+
+    expect(setup.tabs.current()).toBe("first")
+    expect(setup.tabs.isPreview("background")).toBe(false)
+    setup.tabs.move("background", 0)
+    await wait(() => setup.tabs.tabs()[0]?.sessionID === "background")
+  } finally {
+    await setup.destroy()
+  }
+})
+
 test("loads location metadata when an open session moves", async () => {
   const destination = `${directory}/moved-worktree`
   const setup = await renderSessionTabs("first")

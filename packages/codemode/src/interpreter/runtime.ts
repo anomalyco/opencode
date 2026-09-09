@@ -1264,7 +1264,19 @@ class Frame<R> {
       const callee = yield* self.evaluateExpression(node.callee)
       // Globals are built with this interpreter's R; `instanceof` cannot recover the type argument.
       const construct = callee instanceof HostFunction ? (callee as HostFunction<R>).construct : undefined
-      if (construct === undefined) throw unsupportedSyntax("NewExpression", node)
+      if (construct === undefined) {
+        // `new` itself is supported, so a non-constructible callee is a TypeError like JS rather than
+        // unsupported syntax. Built-ins like Number are real constructors in JS, so do not claim
+        // otherwise; say `new` is unsupported for them and point at the plain call.
+        const name = calleeDescription(node.callee)
+        const message =
+          callee instanceof CodeModeFunction
+            ? `${name} cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead.`
+            : callee instanceof HostFunction
+              ? `new ${name}(...) is not supported; call ${name}(...) without new instead.`
+              : `${name} is not a constructor.`
+        throw new InterpreterRuntimeError(message, node).as("TypeError")
+      }
       const args = yield* self.evaluateCallArguments(node.arguments)
       return yield* construct(args, node)
     })

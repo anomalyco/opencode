@@ -55,7 +55,9 @@ describe("Number and Math", () => {
   })
 
   test("Number valueOf does not enable boxed numbers", async () => {
-    expect((await error(`return new Number(42)`)).kind).toBe("UnsupportedSyntax")
+    const failure = await error(`return new Number(42)`)
+    expect(failure.kind).toBe("ExecutionFailure")
+    expect(failure.message).toContain("new Number(...) is not supported; call Number(...) without new instead.")
   })
 })
 
@@ -725,9 +727,9 @@ describe("stdlib integration", () => {
     expect(await value(`const make = (C) => new C([["a", 1]]); return make(Map).get("a")`)).toBe(1)
     expect(await value(`const t = { M: Map }; return new t.M() instanceof Map`)).toBe(true)
     const shadowed = await error(`const Date = 5; return new Date()`)
-    expect(shadowed.kind).toBe("UnsupportedSyntax")
+    expect(shadowed.message).toStartWith("Date is not a constructor.")
     const fn = await error(`const f = () => 1; return new f()`)
-    expect(fn.kind).toBe("UnsupportedSyntax")
+    expect(fn.message).toStartWith("f cannot be constructed")
   })
 
   test("Object.is uses SameValue semantics", async () => {
