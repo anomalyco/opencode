@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { isBlockedMember, type SafeObject } from "../data.js"
 import { HostFunction, requiresNew } from "../interpreter/host.js"
 import { type AstNode, InterpreterRuntimeError, isRecord } from "../interpreter/model.js"
-import { isRuntimeReference } from "../interpreter/references.js"
+import { describeValue, isRuntimeReference } from "../interpreter/references.js"
 import { applyCollectionCallback, preserveConsumerError, type Runner, toPrimitive } from "../interpreter/runner.js"
 import { Values } from "../values.js"
 import { coerceToString } from "./value.js"
@@ -73,7 +73,11 @@ const coerceGroupByPropertyKey = <R>(
 ): Effect.Effect<string, unknown, R> => {
   if (value instanceof Values.Promise) return Effect.succeed("[object Promise]")
   if (!Values.isValue(value) && isRuntimeReference(value)) {
-    throw new InterpreterRuntimeError("Object.groupBy callback must return a data value.", node, "InvalidDataValue")
+    throw new InterpreterRuntimeError(
+      `Object.groupBy callback must return a data value, received ${describeValue(value)}.`,
+      node,
+      "InvalidDataValue",
+    )
   }
   return Effect.map(toPrimitive(runner, value, "string", node), coerceToString)
 }

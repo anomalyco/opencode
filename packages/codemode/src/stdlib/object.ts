@@ -2,7 +2,12 @@ import { Effect } from "effect"
 import { isBlockedMember, toProgram } from "../data.js"
 import { HostFunction, sync, syncCall } from "../interpreter/host.js"
 import { type AstNode, AsyncIteratorSymbol, InterpreterRuntimeError, IteratorSymbol } from "../interpreter/model.js"
-import { containsOpaqueReference, rejectCircularInsertion, typeofValue } from "../interpreter/references.js"
+import {
+  containsOpaqueReference,
+  describeValue,
+  rejectCircularInsertion,
+  typeofValue,
+} from "../interpreter/references.js"
 import { preserveConsumerError, type Runner } from "../interpreter/runner.js"
 import { ToolReference } from "../tool-runtime.js"
 import { Values } from "../values.js"
@@ -12,19 +17,13 @@ import { coerceToString } from "./value.js"
 const requireObject = (name: string, input: unknown, node: AstNode): Record<string, unknown> => {
   if (Array.isArray(input)) return input as unknown as Record<string, unknown>
   if (Values.isValue(input)) return {}
-  if (input instanceof Values.Promise) {
+  const prototype = input === null || typeof input !== "object" ? undefined : Object.getPrototypeOf(input)
+  if (prototype !== null && prototype !== Object.prototype) {
     throw new InterpreterRuntimeError(
-      `Object.${name} received an un-awaited Promise; await it before inspecting the result.`,
+      `Object.${name} expects a data object or array, received ${describeValue(input)}.`,
       node,
       "InvalidDataValue",
     )
-  }
-  if (input === null || typeof input !== "object") {
-    throw new InterpreterRuntimeError(`Object.${name} expects a data object or array.`, node, "InvalidDataValue")
-  }
-  const prototype = Object.getPrototypeOf(input)
-  if (prototype !== null && prototype !== Object.prototype) {
-    throw new InterpreterRuntimeError(`Object.${name} expects a data object or array.`, node, "InvalidDataValue")
   }
   return input as Record<string, unknown>
 }

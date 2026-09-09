@@ -1,8 +1,8 @@
 import { Effect } from "effect"
 import { HostFunction, sync, syncCall } from "../interpreter/host.js"
 import { type AstNode, CodeModeGenerator, InterpreterRuntimeError } from "../interpreter/model.js"
+import { describeValue } from "../interpreter/references.js"
 import { applyCollectionCallback, preserveConsumerError, type Runner } from "../interpreter/runner.js"
-import { Values } from "../values.js"
 
 const constructArray = (args: Array<unknown>, node: AstNode): Array<unknown> => {
   if (args.length !== 1) return [...args]
@@ -16,13 +16,6 @@ const constructArray = (args: Array<unknown>, node: AstNode): Array<unknown> => 
 }
 
 const arrayLikeSource = (source: unknown, node: AstNode): { readonly length: number; readonly source: object } => {
-  if (source instanceof Values.Promise) {
-    throw new InterpreterRuntimeError(
-      "Array.from received an un-awaited Promise; await it before creating the array.",
-      node,
-      "InvalidDataValue",
-    )
-  }
   if (
     source !== null &&
     typeof source === "object" &&
@@ -35,7 +28,7 @@ const arrayLikeSource = (source: unknown, node: AstNode): { readonly length: num
     return { length: normalized, source }
   }
   throw new InterpreterRuntimeError(
-    "Array.from expects an array, string, Map, Set, or array-like value.",
+    `Array.from expects an array, string, Map, Set, or array-like value, received ${describeValue(source)}.`,
     node,
     "InvalidDataValue",
   )

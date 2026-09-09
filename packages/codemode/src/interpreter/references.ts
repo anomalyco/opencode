@@ -77,6 +77,24 @@ export const rejectCircularInsertion = (
   }
 }
 
+/** Names a value for diagnostics: what the program actually passed where data was expected. */
+export const describeValue = (value: unknown): string => {
+  if (value === null) return "null"
+  if (Array.isArray(value)) return "an array"
+  if (value instanceof Values.Promise) return "an un-awaited Promise"
+  if (value instanceof ToolReference) return "a tool reference"
+  if (value instanceof Values.Date) return "a Date"
+  if (value instanceof Values.RegExp) return "a RegExp"
+  if (value instanceof Values.Map) return "a Map"
+  if (value instanceof Values.Set) return "a Set"
+  if (value instanceof Values.URL) return "a URL"
+  if (value instanceof Values.URLSearchParams) return "a URLSearchParams"
+  if (value instanceof CodeModeGenerator) return "a generator"
+  if (isRuntimeReference(value)) return "a function"
+  if (typeof value === "object") return "a data object"
+  return `a ${typeof value}`
+}
+
 export const typeofValue = (value: unknown): string => {
   if (
     value instanceof HostFunction ||

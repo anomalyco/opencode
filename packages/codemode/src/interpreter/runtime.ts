@@ -71,7 +71,13 @@ import { HostFunction, HostNamespace } from "./host.js"
 import { invokeIntrinsic } from "./methods.js"
 import { preserveConsumerError, type Runner } from "./runner.js"
 import { invokePromiseInstanceMethod, PromiseRuntime, resolvePromise, resolvePromiseValue } from "./promises.js"
-import { containsOpaqueReference, isRuntimeReference, rejectCircularInsertion, typeofValue } from "./references.js"
+import {
+  containsOpaqueReference,
+  describeValue,
+  isRuntimeReference,
+  rejectCircularInsertion,
+  typeofValue,
+} from "./references.js"
 import { ScopeStack } from "./scope.js"
 import { arrayMethods, mapMethods, setMethods } from "../stdlib/collections.js"
 import { dateMethods } from "../stdlib/date.js"
@@ -1025,7 +1031,7 @@ class Frame<R> {
       if (pattern.type === "ObjectPattern") {
         if (value === null || typeof value !== "object" || isRuntimeReference(value)) {
           throw new InterpreterRuntimeError(
-            "Object destructuring requires a data object or array value.",
+            `Object destructuring requires a data object or array value, received ${describeValue(value)}.`,
             pattern,
             "InvalidDataValue",
           )
@@ -1091,7 +1097,7 @@ class Frame<R> {
       if (pattern.type === "ObjectPattern") {
         if (value === null || typeof value !== "object" || isRuntimeReference(value)) {
           throw new InterpreterRuntimeError(
-            "Object destructuring requires a data object or array value.",
+            `Object destructuring requires a data object or array value, received ${describeValue(value)}.`,
             pattern,
             "InvalidDataValue",
           )
@@ -1896,7 +1902,11 @@ class Frame<R> {
           const spread = yield* self.evaluateExpression(property.argument)
           if (spread === null || spread === undefined || Values.isValue(spread)) continue
           if (typeof spread !== "object" || Array.isArray(spread) || isRuntimeReference(spread)) {
-            throw new InterpreterRuntimeError("Object spread requires a data object.", property, "InvalidDataValue")
+            throw new InterpreterRuntimeError(
+              `Object spread requires a data object, received ${describeValue(spread)}.`,
+              property,
+              "InvalidDataValue",
+            )
           }
           for (const [key, value] of Object.entries(spread)) {
             if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available.`, property)
@@ -2126,7 +2136,7 @@ class Frame<R> {
 
       if (isRuntimeReference(objectValue)) {
         throw new InterpreterRuntimeError(
-          "Runtime references are opaque and do not expose properties.",
+          `Cannot read properties of ${describeValue(objectValue)}; only data values expose properties.`,
           objectNode,
           "InvalidDataValue",
         )

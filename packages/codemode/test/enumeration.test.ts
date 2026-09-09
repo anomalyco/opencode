@@ -85,9 +85,22 @@ describe("Object.keys over arrays", () => {
     expect(await value(`return Object.keys({ a: 1, b: 2 })`)).toEqual(["a", "b"])
   })
 
-  test("non-object inputs still fail clearly", async () => {
-    const failure = await error(`return Object.keys("nope")`)
-    expect(failure.message).toContain("Object.keys expects a data object or array")
+  test("non-object inputs name what was received", async () => {
+    expect((await error(`return Object.keys("nope")`)).message).toContain(
+      "Object.keys expects a data object or array, received a string.",
+    )
+    expect((await error(`return Object.entries(42)`)).message).toContain("received a number.")
+    expect((await error(`return Object.values(null)`)).message).toContain("received null.")
+    expect((await error(`return Object.keys(tools.github.list_issues({ value: "x" }))`)).message).toContain(
+      "received an un-awaited Promise.",
+    )
+    expect((await error(`return Object.entries(() => 1)`)).message).toContain("received a function.")
+    expect((await error(`return { ...[1] }`)).message).toContain(
+      "Object spread requires a data object, received an array.",
+    )
+    expect((await error(`const { a } = new Map(); return a`)).message).toContain("received a Map.")
+    expect((await error(`return Array.from(7)`)).message).toContain("received a number.")
+    expect((await error(`return (() => 1).x`)).message).toContain("Cannot read properties of a function")
   })
 })
 
