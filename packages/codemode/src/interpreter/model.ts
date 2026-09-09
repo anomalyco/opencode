@@ -109,8 +109,17 @@ export class InterpreterRuntimeError extends Error {
   }
 }
 
+// Orient the agent rather than enumerate JavaScript; interpreter-support.md is the full matrix.
+export const supportedSyntaxMessage =
+  "Programs run a JavaScript subset for calling tools: plain and async functions, data literals, destructuring, standard control flow, await/Promise, and common built-ins (Array, Object, Math, JSON, Date, RegExp, Map, Set, URL). Classes, this, getters/setters, tagged templates, BigInt, and custom Symbols are unavailable; use plain functions and data objects instead."
+
 export const unsupportedSyntax = (kind: string, node: AstNode): InterpreterRuntimeError =>
-  new InterpreterRuntimeError(`Syntax '${kind}' is not supported.`, node, "UnsupportedSyntax")
+  new InterpreterRuntimeError(
+    `Syntax '${kind}' is not supported. ${supportedSyntaxMessage}`,
+    node,
+    "UnsupportedSyntax",
+    [supportedSyntaxMessage],
+  )
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null

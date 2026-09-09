@@ -70,6 +70,7 @@ describe("new on a non-constructible callee", () => {
   test("classes remain unsupported syntax", async () => {
     const failure = await error(`class A {}; return new A()`)
     expect(failure.kind).toBe("UnsupportedSyntax")
-    expect(failure.message).toStartWith("Syntax 'ClassDeclaration' is not supported.")
+    expect(failure.message).toStartWith("Syntax 'ClassDeclaration' is not supported. Programs run a JavaScript subset")
+    expect(failure.message).toContain("Classes, this, getters/setters, tagged templates, BigInt, and custom Symbols")
   })
 })

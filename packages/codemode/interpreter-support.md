@@ -370,7 +370,8 @@ ultimate source of truth.
       tool-call-limit failures; parse/compile failures, cooperative timeout, and output bounding remain outside program
       `catch`.
 - [x] Source locations on unsupported-syntax diagnostics for JavaScript-shaped input; TypeScript transpilation may
-      shift them. The diagnostic names the rejected node type; this matrix is the supported-syntax reference.
+      shift them. The diagnostic names the rejected node type and attaches a short orientation to the supported
+      subset; this matrix is the full reference.
 - [x] Model-visible host failure messages and underlying causes, including output-validation errors.
 - [ ] Distinguish user-thrown failures from interpreter defects and explicit tool refusals from internal tool
       failures; preserve those categories in caught errors, promise rejection handlers, and `Promise.allSettled`
