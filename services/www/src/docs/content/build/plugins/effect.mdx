@@ -1089,7 +1089,7 @@ effect: (ctx) =>
 
 ### Sessions
 
-Modify assembled system instructions, messages, tools, or request options immediately before model dispatch.
+Modify assembled system instructions, messages, or tools immediately before model dispatch.
 
 ```ts
 effect: (ctx) =>
@@ -1099,14 +1099,10 @@ effect: (ctx) =>
       Effect.sync(() => {
         event.system.push({ text: "Keep the review focused on correctness." })
         delete event.tools.write
-        event.options.maxTokens = 8_000
       }),
     )
   }),
 ```
-
-Title generation runs `title` instead, with the same shape minus `agent` and `tools`. Setting `result` skips the
-model request and uses that title.
 
 Modify model request settings and optionally scope the hook to one provider. The event carries the same `kind` as
 the HTTP hooks below.
@@ -1182,7 +1178,6 @@ Context-overflow recovery remains separate because it compacts the conversation 
 ```ts
 interface SessionHooks {
   readonly context: SessionContext
-  readonly title: SessionTitle
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse
@@ -1198,34 +1193,6 @@ interface SessionRetry {
   readonly error: { type: string; message: string; status?: number }
   readonly attempt: number
   decision: RetryDecision
-}
-
-type SessionRequestOptions = {
-  maxTokens?: number
-  temperature?: number
-  topP?: number
-  topK?: number
-  frequencyPenalty?: number
-  presencePenalty?: number
-  seed?: number
-  stop?: string[]
-} & Record<string, unknown>
-
-interface SessionRequest {
-  readonly sessionID: string
-  readonly model: { providerID: string; id: string; variant?: string }
-  system: SystemPart[]
-  messages: Message[]
-  options: SessionRequestOptions
-}
-
-interface SessionContext extends SessionRequest {
-  readonly agent: string
-  tools: Record<string, { description: string; input: JsonSchema }>
-}
-
-interface SessionTitle extends SessionRequest {
-  result?: string
 }
 
 interface SessionHookDomain {

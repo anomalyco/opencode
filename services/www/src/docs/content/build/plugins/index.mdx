@@ -1212,10 +1212,9 @@ await ctx.session.hook("context", (event) => {
 
 Context changes affect only the outgoing model call, not persisted history or
 configuration. The hook runs again for subsequent calls such as tool-driven
-continuations, transient session generation, and compaction. Title generation
-has its own hook.
+continuations, transient session generation, and compaction, but not for title requests.
 
-Request options follow these rules:
+Request overrides follow these rules:
 
 - `options` starts empty for each model call; it does not contain resolved model settings.
 - Typed keys are generation settings; any other key is passed to the selected protocol as a provider option.
@@ -1244,19 +1243,6 @@ Generation options depend on the selected protocol and model:
 
 - `maxTokens` is the semantic output-token limit.
 - Gemini supports `topK`; OpenAI Responses does not expose it.
-
-#### Title generation
-
-Title generation is not an agent conversation, so its hook carries no `agent` or `tools`.
-
-Set `result` to supply the title yourself and skip the model request.
-
-```ts
-await ctx.session.hook("title", (event) => {
-  event.system.push({ text: "Titles are at most five words." })
-  event.options.maxTokens = 32
-})
-```
 
 #### Model request
 
@@ -1335,7 +1321,6 @@ import type { SessionPrompt } from "@opencode/plugin/promise/session"
 interface SessionHooks {
   prompt: SessionPrompt
   context: SessionContextHook
-  title: SessionTitleHook
   "model.request": SessionModelRequestHook
   "http.request": SessionHttpRequestHook
   "http.response": SessionHttpResponseHook
@@ -1353,32 +1338,23 @@ interface SessionRetryHook {
   decision: RetryDecision
 }
 
-type SessionRequestOptions = {
-  maxTokens?: number
-  temperature?: number
-  topP?: number
-  topK?: number
-  frequencyPenalty?: number
-  presencePenalty?: number
-  seed?: number
-  stop?: string[]
-} & Record<string, unknown>
-
-interface SessionRequestHook {
+interface SessionContextHook {
   readonly sessionID: string
+  readonly agent: string
   readonly model: { providerID: string; id: string; variant?: string }
   system: SystemPart[]
   messages: Message[]
-  options: SessionRequestOptions
-}
-
-interface SessionContextHook extends SessionRequestHook {
-  readonly agent: string
   tools: Record<string, { description: string; input: JsonSchema }>
-}
-
-interface SessionTitleHook extends SessionRequestHook {
-  result?: string
+  options: {
+    maxTokens?: number
+    temperature?: number
+    topP?: number
+    topK?: number
+    frequencyPenalty?: number
+    presencePenalty?: number
+    seed?: number
+    stop?: string[]
+  } & Record<string, unknown>
 }
 
 interface SessionHookContext {
