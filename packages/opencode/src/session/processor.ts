@@ -66,6 +66,11 @@ type ToolCall = {
 
 interface ProcessorContext extends Input {
   toolcalls: Record<string, ToolCall>
+  // Call IDs whose part already reached a terminal state. Some providers
+  // re-emit argument deltas for a call that has already produced its result;
+  // without this, those late events would create a second part for the same
+  // call ID (see ensureToolCall).
+  settled: Set<string>
   shouldBreak: boolean
   snapshot: string | undefined
   blocked: boolean
@@ -105,6 +110,7 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         model: input.model,
         toolcalls: {},
+        settled: new Set(),
         shouldBreak: false,
         snapshot: initialSnapshot,
         blocked: false,
@@ -123,6 +129,7 @@ const layer = Layer.effect(
       const settleToolCall = Effect.fn("SessionProcessor.settleToolCall")(function* (toolCallID: string) {
         const done = ctx.toolcalls[toolCallID]?.done
         delete ctx.toolcalls[toolCallID]
+        ctx.settled.add(toolCallID)
         if (done) yield* Deferred.succeed(done, undefined).pipe(Effect.ignore)
       })
 
@@ -219,6 +226,10 @@ const layer = Layer.effect(
         providerExecuted?: boolean
       }) {
         const existing = yield* readToolCall(input.id)
+        // A settled call never gets a fresh part. Late events for it carry no
+        // tool name, so recreating one would persist a phantom `unknown` call
+        // that shares its call ID with the real, already-completed part.
+        if (!existing && ctx.settled.has(input.id)) return undefined
         if (existing) {
           if (!input.providerExecuted || existing.part.metadata?.providerExecuted) return existing
           const part = yield* session.updatePart({
@@ -606,6 +617,7 @@ const layer = Layer.effect(
           })
         }
         ctx.toolcalls = {}
+        ctx.settled.clear()
         ctx.assistantMessage.time.completed = Date.now()
         yield* session.updateMessage(ctx.assistantMessage)
       })
