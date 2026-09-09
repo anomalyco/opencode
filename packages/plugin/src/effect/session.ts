@@ -34,6 +34,13 @@ export interface SessionContext extends SessionRequest {
   tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>
 }
 
+export interface SessionCompaction extends SessionContext {
+  /** Set to use this summary and skip the model request. `recent` defaults to the retained tail. */
+  result?: { summary: string; recent?: string }
+}
+
+export interface SessionGenerate extends SessionContext {}
+
 export interface SessionTitle extends SessionRequest {
   /** Set to use this title and skip the model request. */
   result?: string
@@ -85,6 +92,8 @@ export interface SessionRetry {
 export interface SessionHooks {
   readonly prompt: SessionPrompt
   readonly context: SessionContext
+  readonly compaction: SessionCompaction
+  readonly generate: SessionGenerate
   readonly title: SessionTitle
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest

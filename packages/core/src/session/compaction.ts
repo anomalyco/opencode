@@ -402,6 +402,16 @@ export const layer = Layer.effect(
             recent,
             inputID: input.inputID,
           })
+    const supplied = (input: ExecuteInput, result: { summary: string; recent?: string }, recent: string) =>
+      bus
+        .publish(SessionEvent.Compaction.Ended, {
+          sessionID: input.context.session.id,
+          reason: input.reason,
+          model: input.context.model.ref,
+          text: result.summary,
+          recent: result.recent ?? recent,
+        })
+        .pipe(Effect.as({ status: "completed" as const }))
     // Manual controls settle through the inbox; only automatic work needs a durable interruption record.
     const interrupted = (input: ExecuteInput) =>
       input.reason === "auto"
@@ -456,6 +466,10 @@ export const layer = Layer.effect(
           error: { type: "provider.unsupported-operation", message },
         })
       const prepared = yield* compactionRequest(input, context.messages, [], "session")
+      if (prepared.event.result) {
+        yield* started(input, "")
+        return yield* supplied(input, prepared.event.result, "")
+      }
       const request = prepared.request
       const provenance = SessionProviderContext.provenance(context.model)
       if (!provenance) return yield* reject("Provider compaction requires a stable, configured endpoint")
@@ -571,6 +585,7 @@ export const layer = Layer.effect(
       const prepared = yield* compactionRequest(input, history.messages, [
         Message.user(buildPrompt(previous !== undefined, legacy)),
       ])
+      if (prepared.event.result) return yield* supplied(input, prepared.event.result, history.recent)
       // Both requests share the retry allowance; rejected output never enters the reminder request.
       const transient = SessionRunnerRetry.transient(yield* SessionRunnerRetry.policy(context.session.id), {
         agent: context.agent.id,

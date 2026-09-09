@@ -11,7 +11,14 @@ import {
   SystemPart,
 } from "@opencode/ai"
 import type { StreamOptions } from "@opencode/ai/route"
-import type { SessionContext, SessionRequest, SessionRequestKind, SessionTitle } from "@opencode/plugin/effect/session"
+import type {
+  SessionCompaction,
+  SessionContext,
+  SessionGenerate,
+  SessionRequest,
+  SessionRequestKind,
+  SessionTitle,
+} from "@opencode/plugin/effect/session"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { Content } from "@opencode/schema/tool"
@@ -178,8 +185,8 @@ type Definitions = PluginHooks.Domains["session"]["context"]["tools"]
 /** Builds the model request for each session flow. Each entry runs its own plugin hook. */
 export interface Interface {
   readonly primary: (input: Input) => Effect.Effect<Prepared<SessionContext>>
-  readonly compaction: (input: Input) => Effect.Effect<Prepared<SessionContext>>
-  readonly generate: (input: Input) => Effect.Effect<Prepared<SessionContext>>
+  readonly compaction: (input: Input) => Effect.Effect<Prepared<SessionCompaction>>
+  readonly generate: (input: Input) => Effect.Effect<Prepared<SessionGenerate>>
   readonly title: (input: Input) => Effect.Effect<Prepared<SessionTitle>>
 }
 
@@ -342,13 +349,14 @@ export const layer = Layer.effect(
       }
     })
 
-    const context = (agent: Agent.ID) => (draft: SessionRequest, tools: Definitions) =>
-      hooks.trigger("session", "context", { ...draft, agent, tools })
+    const agentHook =
+      (name: "context" | "compaction" | "generate", agent: Agent.ID) => (draft: SessionRequest, tools: Definitions) =>
+        hooks.trigger("session", name, { ...draft, agent, tools })
 
     return Service.of({
-      primary: (input) => prepare("primary", input, context(input.agent)),
-      generate: (input) => prepare("generate", input, context(input.agent)),
-      compaction: (input) => prepare("compaction", input, context(input.agent)),
+      primary: (input) => prepare("primary", input, agentHook("context", input.agent)),
+      compaction: (input) => prepare("compaction", input, agentHook("compaction", input.agent)),
+      generate: (input) => prepare("generate", input, agentHook("generate", input.agent)),
       title: (input) => prepare("title", input, (draft) => hooks.trigger("session", "title", draft)),
     })
   }),

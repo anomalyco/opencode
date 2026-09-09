@@ -54,7 +54,7 @@ function make(
   return define({
     id,
     effect: Effect.fn(`OptimizePlugin.${id}`)(function* (ctx) {
-      yield* ctx.session.hook("context", (event) =>
+      const hook = (event: SessionHooks["context"]) =>
         Effect.gen(function* () {
           const model =
             (yield* ctx.catalog.model.list()).data.find(
@@ -67,8 +67,10 @@ function make(
           const system = event.system[0]
           if (!system) return
           event.system[0] = { ...system, text: SessionSystemPrompt.render(template, Object.keys(event.tools)) }
-        }).pipe(Effect.catch(() => Effect.void)),
-      )
+        }).pipe(Effect.catch(() => Effect.void))
+      yield* ctx.session.hook("context", hook)
+      yield* ctx.session.hook("compaction", hook)
+      yield* ctx.session.hook("generate", hook)
     }),
   })
 }

@@ -2,6 +2,7 @@ export * as PlanPlugin from "./plan.js"
 
 import { Message, ToolFailure } from "@opencode/ai"
 import { define } from "@opencode/plugin/effect/plugin"
+import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Agent } from "@opencode/schema/agent"
 import type { SessionEvent } from "@opencode/schema/session-event"
 import { Global } from "@opencode/util/global"
@@ -55,7 +56,7 @@ export const Plugin = define({
 
     // Compaction and committed reverts can strip reminders while the session's agent stays
     // put. Reconcile per request, appending near the tail so the cached prefix stays warm.
-    yield* ctx.session.hook("context", (event) => {
+    const hook = (event: SessionHooks["context"]) => {
       const reminder = lastReminder(event.messages, enterReminder)
       const missing = event.agent === plan && reminder !== enterReminder
       const stale = event.agent !== plan && reminder === enterReminder
@@ -71,7 +72,10 @@ export const Plugin = define({
             Effect.logWarning("failed to persist Plan mode reminder", { sessionID: event.sessionID, cause }),
           ),
         )
-    })
+    }
+    yield* ctx.session.hook("context", hook)
+    yield* ctx.session.hook("compaction", hook)
+    yield* ctx.session.hook("generate", hook)
 
     yield* ctx.event.subscribe().pipe(
       Stream.filter(
