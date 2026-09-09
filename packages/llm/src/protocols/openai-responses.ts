@@ -221,6 +221,7 @@ const OpenAIResponsesEvent = Schema.Struct({
         id: Schema.optional(Schema.String),
         service_tier: optionalNull(Schema.String),
         incomplete_details: optionalNull(Schema.Struct({ reason: Schema.String })),
+        truncated: Schema.optional(Schema.Boolean),
         usage: optionalNull(OpenAIResponsesUsage),
         error: optionalNull(OpenAIResponsesErrorPayload),
       }),
@@ -239,6 +240,20 @@ interface ParserState {
   readonly lifecycle: Lifecycle.State
   readonly reasoningItems: Readonly<Record<string, ReasoningStreamItem>>
   readonly store: boolean | undefined
+  readonly unparsedTools: ReadonlyArray<UnparsedTool>
+}
+
+/**
+ * A function-call item whose streamed JSON arguments never parsed into a
+ * complete value. The tool is never dispatched; the entry is kept so the
+ * terminal response event can classify whether the provider truncated the
+ * stream or shipped malformed JSON for a finished call. Only the id, name,
+ * and UTF-8 byte count are retained — never the argument contents.
+ */
+interface UnparsedTool {
+  readonly id: string
+  readonly name: string
+  readonly bytes: number
 }
 
 type ReasoningSummaryStatus = "active" | "can-conclude" | "concluded"
@@ -817,12 +832,19 @@ const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function*
     const tools = state.tools[item.id]
       ? state.tools
       : ToolStream.start(state.tools, item.id, { id: item.call_id, name: item.name })
-    const result =
-      item.arguments === undefined
-        ? yield* ToolStream.finish(ADAPTER, tools, item.id)
-        : yield* ToolStream.finishWithInput(ADAPTER, tools, item.id, item.arguments)
+    // A malformed argument buffer is not fatal by itself: truncation is only
+    // diagnosable once the terminal response event arrives (`truncated` /
+    // `max_output_tokens`), so record the call and settle it there instead of
+    // failing the whole stream mid-turn.
+    const settled = yield* (item.arguments === undefined
+      ? ToolStream.finish(ADAPTER, tools, item.id)
+      : ToolStream.finishWithInput(ADAPTER, tools, item.id, item.arguments)
+    ).pipe(
+      Effect.catchTag("LLM.Error", () => Effect.succeed(undefined)),
+    )
+    if (settled === undefined) return unparsedToolStep(state, tools, item)
     const events: LLMEvent[] = []
-    const resultEvents = result.events ?? []
+    const resultEvents = settled.events ?? []
     const lifecycle = resultEvents.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
     events.push(...resultEvents)
     return [
@@ -830,7 +852,7 @@ const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function*
         ...state,
         lifecycle,
         hasFunctionCall: resultEvents.some(LLMEvent.is.toolCall) ? true : state.hasFunctionCall,
-        tools: result.tools,
+        tools: settled.tools,
       },
       events,
     ] satisfies StepResult
@@ -872,7 +894,40 @@ const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function*
   return [state, NO_EVENTS] satisfies StepResult
 })
 
+// A tool call whose arguments failed to parse: emit the input-end event so
+// the lifecycle stays coherent, drop the pending accumulator (the tool is
+// never dispatched), and defer the failure to the terminal response event.
+const unparsedToolStep = (
+  state: ParserState,
+  tools: ToolStream.State<string>,
+  item: OpenAIResponsesStreamItem,
+): StepResult => {
+  const tool = tools[item.id ?? ""]
+  const { [item.id ?? ""]: _removed, ...nextTools } = tools
+  const id = item.call_id ?? item.id ?? ""
+  const name = item.name ?? ""
+  const events: LLMEvent[] = []
+  const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
+  events.push(LLMEvent.toolInputEnd({ id, name, providerMetadata: tool?.providerMetadata }))
+  return [
+    {
+      ...state,
+      lifecycle,
+      tools: nextTools,
+      unparsedTools: [
+        ...state.unparsedTools,
+        { id, name, bytes: Buffer.byteLength(item.arguments ?? tool?.input ?? "", "utf8") },
+      ],
+    },
+    events,
+  ]
+}
+
 const onResponseFinish = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
+  if (state.unparsedTools.length > 0) {
+    const events = state.unparsedTools.map((tool) => unparsedToolError(event, tool))
+    return [{ ...state, unparsedTools: [] }, events]
+  }
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.finish(state.lifecycle, events, {
     reason: mapFinishReason(event, state.hasFunctionCall),
@@ -886,6 +941,28 @@ const onResponseFinish = (state: ParserState, event: OpenAIResponsesEvent): Step
         : undefined,
   })
   return [{ ...state, lifecycle }, events]
+}
+
+// A clean terminal event alone cannot distinguish truncation from a provider
+// that finalized a malformed buffer: `response.completed` with `truncated`,
+// and `response.incomplete` with `incomplete_details.reason` of
+// `max_output_tokens`, mean the model ran out of budget mid-argument.
+const isTruncatedResponse = (event: OpenAIResponsesEvent): boolean =>
+  event.response?.truncated === true ||
+  event.type === "response.incomplete" ||
+  event.response?.incomplete_details?.reason === "max_output_tokens"
+
+// Surface an unparsed tool call as a `provider-error` carrying the terminal
+// event, the truncation classification, and the argument byte count — without
+// exposing the argument contents themselves.
+const unparsedToolError = (event: OpenAIResponsesEvent, tool: UnparsedTool) => {
+  const truncated = isTruncatedResponse(event)
+  const message = truncated
+    ? `OpenAI Responses truncated tool call ${tool.name}: ${tool.bytes} argument bytes streamed before JSON completed (${event.type})`
+    : `Invalid JSON input for ${ADAPTER} tool call ${tool.name} (${tool.bytes} bytes streamed, ${event.type})`
+  return truncated
+    ? LLMEvent.providerError({ message, classification: "truncated" })
+    : LLMEvent.providerError({ message })
 }
 
 // Build a single human-readable message from whatever the provider supplied.
@@ -911,14 +988,31 @@ const providerError = (event: OpenAIResponsesEvent, fallback: string) => {
 }
 
 const onResponseFailed = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
-  state,
-  [providerError(event, "OpenAI Responses response failed")],
+  { ...state, unparsedTools: [] },
+  [
+    providerError(event, "OpenAI Responses response failed"),
+    ...state.unparsedTools.map((tool) => unparsedToolError(event, tool)),
+  ],
 ]
 
 const onError = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
-  state,
-  [providerError(event, "OpenAI Responses stream error")],
+  { ...state, unparsedTools: [] },
+  [
+    providerError(event, "OpenAI Responses stream error"),
+    ...state.unparsedTools.map((tool) => unparsedToolError(event, tool)),
+  ],
 ]
+
+// The stream ended without a terminal response event (EOF, dropped
+// connection, server-side close). Any pending unparsed tool calls are
+// reported here so the boundary is localizable; the terminal-event handlers
+// above clear `unparsedTools`, so a normal completion never reaches this path.
+const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> =>
+  state.unparsedTools.map((tool) =>
+    LLMEvent.providerError({
+      message: `OpenAI Responses stream ended with incomplete tool call ${tool.name}: ${tool.bytes} argument bytes before a terminal response event`,
+    }),
+  )
 
 const step = (state: ParserState, event: OpenAIResponsesEvent) => {
   if (event.type === "response.output_text.delta") return Effect.succeed(onOutputTextDelta(state, event))
@@ -970,9 +1064,11 @@ export const protocol = Protocol.make({
       lifecycle: Lifecycle.initial(),
       reasoningItems: {},
       store: OpenAIOptions.store(request),
+      unparsedTools: [],
     }),
     step,
     terminal: (event) => TERMINAL_TYPES.has(event.type),
+    onHalt,
   },
 })
 
