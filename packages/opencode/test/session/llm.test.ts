@@ -3,7 +3,7 @@ import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import path from "path"
-import { tool, type ModelMessage } from "ai"
+import { NoSuchToolError, tool, type ModelMessage } from "ai"
 import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
@@ -170,6 +170,53 @@ describe("session.llm.hasToolCalls", () => {
       },
     ] as ModelMessage[]
     expect(LLM.hasToolCalls(messages)).toBe(true)
+  })
+})
+
+describe("session.llm.repairToolCall", () => {
+  const tools = {
+    bash: tool({
+      inputSchema: z.object({ command: z.string() }),
+    }),
+    invalid: tool({
+      inputSchema: z.object({ tool: z.string(), error: z.string() }),
+    }),
+  }
+
+  const failure = (toolName: string, providerExecuted = false) => ({
+    system: undefined,
+    messages: [],
+    toolCall: {
+      type: "tool-call" as const,
+      toolCallId: "call-1",
+      toolName,
+      input: "{}",
+      providerExecuted,
+    },
+    tools,
+    inputSchema: async () => ({ type: "object" as const }),
+    error: new NoSuchToolError({ toolName, availableTools: Object.keys(tools) }),
+  })
+
+  test("declines to rewrite provider-executed calls", async () => {
+    expect(await LLM.repairToolCall(tools)(failure("tool_search_tool_1", true))).toBeNull()
+  })
+
+  test("repairs case-only tool name mismatches", async () => {
+    expect(await LLM.repairToolCall(tools)(failure("BASH"))).toMatchObject({
+      toolName: "bash",
+      input: "{}",
+    })
+  })
+
+  test("routes unknown client tool calls through invalid", async () => {
+    expect(await LLM.repairToolCall(tools)(failure("missing"))).toMatchObject({
+      toolName: "invalid",
+      input: JSON.stringify({
+        tool: "missing",
+        error: "Model tried to call unavailable tool 'missing'. Available tools: bash, invalid.",
+      }),
+    })
   })
 })
 
