@@ -398,11 +398,7 @@ const layer = Layer.effect(
             defs: listed,
             instructions: mcpClient.getInstructions()?.trim(),
           } satisfies CreateResult
-        }).pipe(
-          Effect.catchCause((cause) =>
-            Effect.tryPromise(() => mcpClient.close()).pipe(Effect.ignore, Effect.andThen(Effect.failCause(cause))),
-          ),
-        )
+        }).pipe(Effect.catchCause((cause) => terminate(mcpClient).pipe(Effect.andThen(Effect.failCause(cause)))))
       },
       Effect.map((result): CreateResult => result),
       Effect.catchCause((cause) => {
@@ -438,6 +434,21 @@ const layer = Layer.effect(
       Effect.scoped,
       Effect.catch(() => Effect.succeed([] as number[])),
     )
+
+    function terminate(client: MCPClient) {
+      return Effect.gen(function* () {
+        const pid = client.transport instanceof StdioClientTransport ? client.transport.pid : null
+        if (typeof pid === "number") {
+          const pids = yield* descendants(pid)
+          for (const dpid of pids) {
+            try {
+              process.kill(dpid, "SIGTERM")
+            } catch {}
+          }
+        }
+        yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
+      })
+    }
 
     function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
       client.onclose = () => {
@@ -534,23 +545,7 @@ const layer = Layer.effect(
             s.clients = {}
             s.defs = {}
             s.instructions = {}
-            yield* Effect.forEach(
-              clients,
-              (client) =>
-                Effect.gen(function* () {
-                  const pid = client.transport instanceof StdioClientTransport ? client.transport.pid : null
-                  if (typeof pid === "number") {
-                    const pids = yield* descendants(pid)
-                    for (const dpid of pids) {
-                      try {
-                        process.kill(dpid, "SIGTERM")
-                      } catch {}
-                    }
-                  }
-                  yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
-                }),
-              { concurrency: "unbounded" },
-            )
+            yield* Effect.forEach(clients, terminate, { concurrency: "unbounded" })
             pendingOAuthTransports.clear()
           }),
         )
@@ -565,7 +560,7 @@ const layer = Layer.effect(
       delete s.defs[name]
       delete s.instructions[name]
       if (!client) return Effect.void
-      return Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
+      return terminate(client)
     }
 
     const storeClient = Effect.fnUntraced(function* (
@@ -584,7 +579,7 @@ const layer = Layer.effect(
       if (instructions) s.instructions[name] = instructions
       else delete s.instructions[name]
       watch(s, name, client, bridge, timeout)
-      if (previous) yield* Effect.tryPromise(() => previous.close()).pipe(Effect.ignore)
+      if (previous) yield* terminate(previous)
       return s.status[name]
     })
 

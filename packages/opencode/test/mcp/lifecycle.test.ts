@@ -528,6 +528,100 @@ it.instance("local stdio timeout terminates the real server process", () =>
   }),
 )
 
+it.instance("disconnect and replacement terminate real local MCP process trees", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const files = {
+      previous: {
+        parent: path.join(test.directory, "previous-parent.pid"),
+        child: path.join(test.directory, "previous-child.pid"),
+      },
+      current: {
+        parent: path.join(test.directory, "current-parent.pid"),
+        child: path.join(test.directory, "current-child.pid"),
+      },
+    }
+    yield* Effect.addFinalizer(() =>
+      Effect.promise(async () => {
+        for (const file of Object.values(files).flatMap((item) => Object.values(item))) {
+          if (!(await Bun.file(file).exists())) continue
+          try {
+            process.kill(Number(await Bun.file(file).text()), "SIGKILL")
+          } catch {}
+        }
+      }),
+    )
+    const stopped = (label: string, pids: readonly [number, number]) =>
+      Effect.forEach(
+        [
+          ["parent", pids[0]],
+          ["child", pids[1]],
+        ] as const,
+        ([name, pid]) =>
+          pollWithTimeout(
+            Effect.sync(() => {
+              try {
+                process.kill(pid, 0)
+                return undefined
+              } catch {
+                return true
+              }
+            }),
+            `${label} ${name} stdio fixture process was not terminated`,
+            "1 second",
+          ),
+        { discard: true },
+      )
+
+    const mcp = yield* MCP.Service
+    yield* mcp.add("process-tree", {
+      type: "local",
+      command: [process.execPath, stdioFixture],
+      environment: {
+        MCP_LIFECYCLE_PID_FILE: files.previous.parent,
+        MCP_LIFECYCLE_CHILD_PID_FILE: files.previous.child,
+      },
+    })
+    const previous = yield* pollWithTimeout(
+      Effect.promise(async () => {
+        if (!(await Bun.file(files.previous.parent).exists()) || !(await Bun.file(files.previous.child).exists())) {
+          return undefined
+        }
+        return [
+          Number(await Bun.file(files.previous.parent).text()),
+          Number(await Bun.file(files.previous.child).text()),
+        ] as const
+      }),
+      "previous stdio fixture did not publish its process tree",
+    )
+
+    yield* mcp.add("process-tree", {
+      type: "local",
+      command: [process.execPath, stdioFixture],
+      environment: {
+        MCP_LIFECYCLE_PID_FILE: files.current.parent,
+        MCP_LIFECYCLE_CHILD_PID_FILE: files.current.child,
+      },
+    })
+    const current = yield* pollWithTimeout(
+      Effect.promise(async () => {
+        if (!(await Bun.file(files.current.parent).exists()) || !(await Bun.file(files.current.child).exists())) {
+          return undefined
+        }
+        return [
+          Number(await Bun.file(files.current.parent).text()),
+          Number(await Bun.file(files.current.child).text()),
+        ] as const
+      }),
+      "current stdio fixture did not publish its process tree",
+    )
+    yield* stopped("previous", previous)
+
+    yield* mcp.disconnect("process-tree")
+    yield* stopped("current", current)
+  }),
+)
+
 it.instance("remote timeout aborts both real HTTP transport attempts", () =>
   Effect.gen(function* () {
     const server = yield* hangingLifecycleServer()
