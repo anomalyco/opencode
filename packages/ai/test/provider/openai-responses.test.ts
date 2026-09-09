@@ -406,7 +406,7 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body.input).toEqual([
         { role: "user", content: [{ type: "input_text", text: "Before." }] },
         { role: "developer", content: "Operator update." },
-        { type: "message", role: "assistant", content: [{ type: "output_text", text: "After." }] },
+        { type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: "After." }] },
       ])
     }),
   )
@@ -2118,6 +2118,7 @@ describe("OpenAI Responses route", () => {
           type: "message",
           id: "msg_refusal",
           role: "assistant",
+          status: "completed",
           content: [{ type: "output_text", text: "I can't help with that." }],
           phase: "final_answer",
         },
@@ -2200,6 +2201,7 @@ describe("OpenAI Responses route", () => {
           type: "message",
           id: "msg_commentary",
           role: "assistant",
+          status: "completed",
           content: [{ type: "output_text", text: "Checking." }],
           phase: "commentary",
         },
@@ -2207,6 +2209,7 @@ describe("OpenAI Responses route", () => {
           type: "message",
           id: "msg_final",
           role: "assistant",
+          status: "completed",
           content: [{ type: "output_text", text: "Finished." }],
           phase: "final_answer",
         },
@@ -2214,6 +2217,7 @@ describe("OpenAI Responses route", () => {
           type: "message",
           id: "msg_null",
           role: "assistant",
+          status: "completed",
           content: [{ type: "output_text", text: "Unclassified." }],
           phase: null,
         },
@@ -3344,14 +3348,19 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(prepared.body.input).toEqual([
-        { type: "message", role: "assistant", content: [{ type: "output_text", text: "Before." }] },
+        {
+          type: "message",
+          role: "assistant",
+          status: "completed",
+          content: [{ type: "output_text", text: "Before." }],
+        },
         {
           type: "reasoning",
           id: "rs_1",
           encrypted_content: "encrypted-state",
           summary: [{ type: "summary_text", text: "Checked order." }],
         },
-        { type: "message", role: "assistant", content: [{ type: "output_text", text: "After." }] },
+        { type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: "After." }] },
       ])
     }),
   )
@@ -3615,12 +3624,14 @@ describe("OpenAI Responses route", () => {
           type: "message",
           id: "history_1",
           role: "assistant",
+          status: "completed",
           content: [{ type: "output_text", text: "Hello" }],
         },
         {
           type: "message",
           id: `message_${"a".repeat(64)}`,
           role: "assistant",
+          status: "completed",
           content: [{ type: "output_text", text: "World" }],
         },
         {
