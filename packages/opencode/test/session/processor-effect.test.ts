@@ -558,6 +558,67 @@ it.live("session.processor effect tests do not retry unknown json errors", () =>
   ),
 )
 
+it.live("session.processor effect tests do not replay a failed compaction task on resume", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        yield* llm.error(400, { error: { message: "no_kv_space" } })
+
+        const chat = yield* session.create({})
+        const original = yield* user(chat.id, "keep this context")
+        const parent = yield* user(chat.id, "compact")
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID: chat.id,
+          messageID: parent.id,
+          type: "compaction",
+          auto: true,
+        })
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        // Real compaction messages start unfinished; the shared helper does not.
+        delete msg.finish
+        msg.summary = true
+        msg.mode = "compaction"
+        msg.agent = "compaction"
+        yield* session.updateMessage(msg)
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const result = yield* handle.process({
+          user: parent,
+          sessionID: chat.id,
+          model: mdl,
+          agent: { ...agent(), name: "compaction" },
+          system: [],
+          messages: [{ role: "user", content: "summarize the conversation" }],
+          tools: {},
+        })
+
+        expect(result).toBe("stop")
+        const resumed = yield* user(chat.id, "continue after the provider recovers")
+        const messages = MessageV2.filterCompacted(yield* MessageV2.stream(chat.id))
+        const latest = MessageV2.latest(messages)
+        const failed = messages.find((message) => message.info.id === msg.id)?.info
+
+        expect(failed?.role).toBe("assistant")
+        if (failed?.role !== "assistant") throw new Error("Missing failed compaction message")
+        expect(failed.error?.name).toBe("APIError")
+        expect(messages.map((message) => message.info.id)).toContain(original.id)
+        expect(latest.user?.id).toBe(resumed.id)
+        // runLoop selects tasks from this persisted frontier on the next prompt.
+        expect(latest.tasks).toEqual([])
+        expect(latest.finished?.id).toBe(msg.id)
+        expect(failed.finish).toBe("error")
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
 it.live("session.processor effect tests retry recognized structured json errors", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>
@@ -670,6 +731,8 @@ it.live("session.processor effect tests compact on structured context overflow",
         const chat = yield* session.create({})
         const parent = yield* user(chat.id, "compact json")
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        delete msg.finish
+        yield* session.updateMessage(msg)
         const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
         const handle = yield* processors.create({
           assistantMessage: msg,
@@ -697,6 +760,7 @@ it.live("session.processor effect tests compact on structured context overflow",
         expect(value).toBe("compact")
         expect(yield* llm.calls).toBe(1)
         expect(handle.message.error).toBeUndefined()
+        expect(handle.message.finish).toBeUndefined()
       }),
     { config: (url) => providerCfg(url) },
   ),
