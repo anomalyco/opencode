@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { HostFunction, sync } from "../interpreter/host.js"
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
-import { type CallbackRunner, toPrimitive } from "../interpreter/runner.js"
+import { type Runner, toPrimitive } from "../interpreter/runner.js"
 import { Values } from "../values.js"
 import { coerceToNumber, coerceToString } from "./value.js"
 
@@ -51,7 +51,7 @@ export const dateMethods = new Set([
   ...dateSetterArguments.keys(),
 ])
 
-const constructDate = <R>(runner: CallbackRunner<R>, args: Array<unknown>, node: AstNode) => {
+const constructDate = <R>(runner: Runner<R>, args: Array<unknown>, node: AstNode) => {
   if (args.length === 0) return Effect.succeed(new Values.Date(Date.now()))
   if (args.length === 1) {
     const arg = args[0]
@@ -66,7 +66,7 @@ const constructDate = <R>(runner: CallbackRunner<R>, args: Array<unknown>, node:
   return Effect.succeed(new Values.Date(new Date(...(parts as [number, number])).getTime()))
 }
 
-export const dateGlobal = <R>(runner: CallbackRunner<R>) =>
+export const dateGlobal = <R>(runner: Runner<R>) =>
   new HostFunction<R>({
     name: "Date",
     // ISO instead of the host's locale string: date strings are deterministic and must not leak the host timezone.

@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { HostFunction, HostNamespace, sync } from "../interpreter/host.js"
-import { preserveConsumerError, type SyncIteratorRunner } from "../interpreter/runner.js"
+import { preserveConsumerError, type Runner } from "../interpreter/runner.js"
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
 
 // Bun exposes ES2026 Math.sumPrecise before TypeScript's standard library types.
@@ -35,7 +35,7 @@ const variadic = (name: string, op: (...values: Array<number>) => number) =>
     ),
   )
 
-const sumPrecise = <R>(runner: SyncIteratorRunner<R>) =>
+const sumPrecise = <R>(runner: Runner<R>) =>
   new HostFunction<R>({
     name: "Math.sumPrecise",
     call: (args, node) =>
@@ -63,7 +63,7 @@ const sumPrecise = <R>(runner: SyncIteratorRunner<R>) =>
       }),
   })
 
-export const mathGlobal = <R>(runner: SyncIteratorRunner<R>) =>
+export const mathGlobal = <R>(runner: Runner<R>) =>
   new HostNamespace("Math", {
     PI: Math.PI,
     E: Math.E,

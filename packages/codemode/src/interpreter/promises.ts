@@ -8,19 +8,12 @@ import {
   ProgramThrow,
   PromiseInstanceMethodReference,
 } from "./model.js"
-import { sync } from "./host.js"
-import type { PromiseMethodName } from "../stdlib/promise.js"
+import { HostFunction, requiresNew, sync } from "./host.js"
 import { caughtErrorValue, normalizeError } from "./errors.js"
 import { typeofValue } from "./references.js"
 import { createAggregateErrorValue } from "../stdlib/value.js"
 import { Values } from "../values.js"
-import {
-  applyCollectionCallback,
-  type CallbackRunner,
-  isSupportedCallback,
-  type SupportedCallback,
-  type SyncIteratorRunner,
-} from "./runner.js"
+import { applyCollectionCallback, isSupportedCallback, type Runner, type SupportedCallback } from "./runner.js"
 
 // A `resolve`/`reject` handed to an executor or thenable: calling it settles the capability.
 const capability = (name: string, settle: (value: unknown) => void) =>
@@ -100,7 +93,7 @@ export const selfResolutionError = (node?: AstNode): InterpreterRuntimeError =>
   new InterpreterRuntimeError("Chaining cycle detected: a promise cannot resolve with itself.", node).as("TypeError")
 
 export const resolvePromiseValue = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   value: unknown,
   node: AstNode,
   own?: { promise?: Values.Promise },
@@ -127,7 +120,7 @@ export const resolvePromiseValue = <R>(
 }
 
 export const resolvePromise = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   promises: PromiseRuntime<R>,
   value: unknown,
   node: AstNode,
@@ -140,10 +133,12 @@ export const resolvePromise = <R>(
   })
 }
 
-export const invokePromiseMethod = <R>(
-  runner: CallbackRunner<R> & SyncIteratorRunner<R>,
+const promiseStatics = ["all", "allSettled", "race", "any", "resolve", "reject"] as const
+
+const invokePromiseMethod = <R>(
+  runner: Runner<R>,
   promises: PromiseRuntime<R>,
-  name: PromiseMethodName,
+  name: (typeof promiseStatics)[number],
   args: Array<unknown>,
   node: AstNode,
 ): Effect.Effect<unknown, unknown, R> => {
@@ -229,7 +224,7 @@ export const invokePromiseMethod = <R>(
 }
 
 export const invokePromiseInstanceMethod = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   promises: PromiseRuntime<R>,
   ref: PromiseInstanceMethodReference,
   args: Array<unknown>,
@@ -245,8 +240,8 @@ export const invokePromiseInstanceMethod = <R>(
   return chainReaction(runner, promises, ref.promise, onFulfilled, onRejected, method, node)
 }
 
-export const constructPromise = <R>(
-  runner: CallbackRunner<R>,
+const constructPromise = <R>(
+  runner: Runner<R>,
   promises: PromiseRuntime<R>,
   executor: unknown,
   node: AstNode,
@@ -307,7 +302,7 @@ const reactionExit = <R>(
   })
 
 const chainReaction = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   promises: PromiseRuntime<R>,
   source: Values.Promise,
   onFulfilled: SupportedCallback | undefined,
@@ -331,7 +326,7 @@ const chainReaction = <R>(
 }
 
 const chainFinally = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   promises: PromiseRuntime<R>,
   source: Values.Promise,
   cleanup: SupportedCallback | undefined,
@@ -354,3 +349,32 @@ const chainFinally = <R>(
       return yield* exit
     }),
   )
+
+export const promiseGlobal = <R>(runner: Runner<R>, promises: PromiseRuntime<R>) => {
+  // Combinators are not callbacks: `[p].map(Promise.resolve)` must ask for an arrow function.
+  const statics = new Map<string, HostFunction<R>>(
+    promiseStatics.map((name) => [
+      name,
+      new HostFunction<R>({
+        name: `Promise.${name}`,
+        call: (args, node) => invokePromiseMethod(runner, promises, name, args, node),
+        callback: false,
+      }),
+    ]),
+  )
+  return new HostFunction<R>({
+    name: "Promise",
+    call: requiresNew("Promise"),
+    construct: (args, node) => constructPromise(runner, promises, args[0], node),
+    instanceOf: (value) => value instanceof Values.Promise,
+    // Unknown statics fail loudly so a missing await cannot hide behind `undefined`.
+    members: (key, node) => {
+      const method = typeof key === "string" ? statics.get(key) : undefined
+      if (method !== undefined) return method
+      throw new InterpreterRuntimeError(
+        `Promise.${String(key)} is not available. Available: Promise.all, Promise.allSettled, Promise.race, Promise.any, Promise.resolve, and Promise.reject; consume promises with await.`,
+        node,
+      )
+    },
+  })
+}

@@ -3,7 +3,7 @@ import { toProgram } from "../data.js"
 import { HostFunction, requiresNew, sync, syncCall } from "../interpreter/host.js"
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
 import { isRuntimeReference } from "../interpreter/references.js"
-import { preserveConsumerError, type SyncIteratorRunner } from "../interpreter/runner.js"
+import { preserveConsumerError, type Runner } from "../interpreter/runner.js"
 import { Values } from "../values.js"
 import { coerceToString } from "./value.js"
 
@@ -119,7 +119,7 @@ export const urlGlobal = new HostFunction({
 })
 
 const readURLSearchParamsPair = <R>(
-  runner: SyncIteratorRunner<R>,
+  runner: Runner<R>,
   value: unknown,
   node: AstNode,
 ): Effect.Effect<Array<string>, unknown, R> =>
@@ -144,7 +144,7 @@ const readURLSearchParamsPair = <R>(
   })
 
 const constructURLSearchParams = <R>(
-  runner: SyncIteratorRunner<R>,
+  runner: Runner<R>,
   init: unknown,
   node: AstNode,
 ): Effect.Effect<Values.URLSearchParams, unknown, R> => {
@@ -196,7 +196,7 @@ const constructURLSearchParams = <R>(
   })
 }
 
-export const urlSearchParamsGlobal = <R>(runner: SyncIteratorRunner<R>) =>
+export const urlSearchParamsGlobal = <R>(runner: Runner<R>) =>
   new HostFunction<R>({
     name: "URLSearchParams",
     call: requiresNew("URLSearchParams"),

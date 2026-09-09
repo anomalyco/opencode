@@ -3,7 +3,7 @@ import { isBlockedMember, toProgram } from "../data.js"
 import { HostFunction, sync, syncCall } from "../interpreter/host.js"
 import { type AstNode, AsyncIteratorSymbol, InterpreterRuntimeError, IteratorSymbol } from "../interpreter/model.js"
 import { containsOpaqueReference, rejectCircularInsertion, typeofValue } from "../interpreter/references.js"
-import { preserveConsumerError, type Runner, type SyncIteratorRunner } from "../interpreter/runner.js"
+import { preserveConsumerError, type Runner } from "../interpreter/runner.js"
 import { ToolReference } from "../tool-runtime.js"
 import { Values } from "../values.js"
 import { groupBy } from "./collections.js"
@@ -64,7 +64,7 @@ export const objectAssign = (args: Array<unknown>, node: AstNode): unknown => {
 }
 
 const objectFromEntries = <R>(
-  runner: SyncIteratorRunner<R>,
+  runner: Runner<R>,
   source: unknown,
   node: AstNode,
 ): Effect.Effect<Record<string, unknown>, unknown, R> => {

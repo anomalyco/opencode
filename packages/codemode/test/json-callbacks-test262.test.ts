@@ -233,6 +233,7 @@ describe("CodeMode JSON callback boundaries", () => {
           invokeFunction: () => Effect.die("unused"),
           invokeCallable: () => Effect.die("unused"),
           settlePromise: () => Effect.die("unused"),
+          syncIterator: () => Effect.die("unused"),
         },
         "stringify",
         [Object.fromEntries([["constructor", 1]])],

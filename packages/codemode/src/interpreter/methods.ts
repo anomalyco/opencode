@@ -9,10 +9,10 @@ import { compareText } from "../tool-runtime.js"
 import { Values } from "../values.js"
 import { type AstNode, IntrinsicReference, InterpreterRuntimeError } from "./model.js"
 import { containsOpaqueReference, rejectCircularInsertion, typeofValue } from "./references.js"
-import { applyCollectionCallback, type CallbackRunner, isSupportedCallback, toPrimitive } from "./runner.js"
+import { applyCollectionCallback, isSupportedCallback, type Runner, toPrimitive } from "./runner.js"
 
 export const invokeIntrinsic = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   ref: IntrinsicReference,
   args: Array<unknown>,
   node: AstNode,
@@ -74,7 +74,7 @@ export const invokeIntrinsic = <R>(
  */
 
 const coerceNumericArgument = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   value: unknown,
   node: AstNode,
 ): Effect.Effect<number, unknown, R> => Effect.map(toPrimitive(runner, value, "number", node), coerceToNumber)
@@ -261,7 +261,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
 }
 
 const invokeStringReplacer = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   value: string,
   name: "replace" | "replaceAll",
   args: Array<unknown>,
@@ -326,7 +326,7 @@ const invokeStringReplacer = <R>(
 }
 
 const invokeMapMethod = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   target: Values.Map,
   name: string,
   args: Array<unknown>,
@@ -368,7 +368,7 @@ const invokeMapMethod = <R>(
 }
 
 const invokeSetMethod = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   target: Values.Set,
   name: string,
   args: Array<unknown>,
@@ -415,7 +415,7 @@ const invokeSetMethod = <R>(
 }
 
 const invokeSetOperation = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   target: Values.Set,
   name: string,
   source: unknown,
@@ -492,7 +492,7 @@ const copySet = (source: Values.Set): Values.Set => {
   return result
 }
 
-const loadSetRecord = <R>(runner: CallbackRunner<R>, source: unknown, name: string, node: AstNode) => {
+const loadSetRecord = <R>(runner: Runner<R>, source: unknown, name: string, node: AstNode) => {
   if (source instanceof Values.Set) {
     return Effect.succeed({
       size: source.set.size,
@@ -536,7 +536,7 @@ const loadSetRecord = <R>(runner: CallbackRunner<R>, source: unknown, name: stri
 }
 
 const invokeURLSearchParamsMethod = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   target: Values.URLSearchParams,
   name: string,
   args: Array<unknown>,
@@ -610,7 +610,7 @@ const invokeURLSearchParamsMethod = <R>(
 }
 
 const invokeArrayMethod = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   target: Array<unknown>,
   name: string,
   args: Array<unknown>,
@@ -853,7 +853,7 @@ const invokeArrayMethod = <R>(
 }
 
 const sortArray = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   target: Array<unknown>,
   comparator: unknown,
   name: string,

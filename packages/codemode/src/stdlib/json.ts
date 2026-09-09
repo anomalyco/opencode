@@ -1,13 +1,13 @@
 import { Effect } from "effect"
 import { HostFunction, HostNamespace } from "../interpreter/host.js"
-import { applyCollectionCallback, type CallbackRunner } from "../interpreter/runner.js"
+import { applyCollectionCallback, type Runner } from "../interpreter/runner.js"
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
 import { typeofValue } from "../interpreter/references.js"
 import { fromData, type SafeObject, toData, toProgram } from "../data.js"
 import { Values } from "../values.js"
 
 export const invokeJsonMethod = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   name: "parse" | "stringify",
   args: Array<unknown>,
   node: AstNode,
@@ -15,17 +15,13 @@ export const invokeJsonMethod = <R>(
   return name === "parse" ? parse(runner, args, node) : stringify(runner, args, node)
 }
 
-export const jsonGlobal = <R>(runner: CallbackRunner<R>) =>
+export const jsonGlobal = <R>(runner: Runner<R>) =>
   new HostNamespace("JSON", {
     parse: new HostFunction<R>({ name: "JSON.parse", call: (args, node) => parse(runner, args, node) }),
     stringify: new HostFunction<R>({ name: "JSON.stringify", call: (args, node) => stringify(runner, args, node) }),
   })
 
-const parse = <R>(
-  runner: CallbackRunner<R>,
-  args: Array<unknown>,
-  node: AstNode,
-): Effect.Effect<unknown, unknown, R> => {
+const parse = <R>(runner: Runner<R>, args: Array<unknown>, node: AstNode): Effect.Effect<unknown, unknown, R> => {
   const text = args[0]
   if (typeof text !== "string") throw new InterpreterRuntimeError("JSON.parse expects a string.", node)
 
@@ -66,11 +62,7 @@ const parse = <R>(
   return visit(root, "")
 }
 
-const stringify = <R>(
-  runner: CallbackRunner<R>,
-  args: Array<unknown>,
-  node: AstNode,
-): Effect.Effect<unknown, unknown, R> => {
+const stringify = <R>(runner: Runner<R>, args: Array<unknown>, node: AstNode): Effect.Effect<unknown, unknown, R> => {
   const space = args[2]
   const indent = typeof space === "number" || typeof space === "string" ? space : undefined
   const replacer = args[1]

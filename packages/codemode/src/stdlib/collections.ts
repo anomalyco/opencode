@@ -3,14 +3,7 @@ import { isBlockedMember, type SafeObject } from "../data.js"
 import { HostFunction, requiresNew } from "../interpreter/host.js"
 import { type AstNode, InterpreterRuntimeError, isRecord } from "../interpreter/model.js"
 import { isRuntimeReference } from "../interpreter/references.js"
-import {
-  applyCollectionCallback,
-  type CallbackRunner,
-  preserveConsumerError,
-  type Runner,
-  type SyncIteratorRunner,
-  toPrimitive,
-} from "../interpreter/runner.js"
+import { applyCollectionCallback, preserveConsumerError, type Runner, toPrimitive } from "../interpreter/runner.js"
 import { Values } from "../values.js"
 import { coerceToString } from "./value.js"
 
@@ -74,7 +67,7 @@ export const setMethods = new Set([
 ])
 
 const coerceGroupByPropertyKey = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   value: unknown,
   node: AstNode,
 ): Effect.Effect<string, unknown, R> => {
@@ -142,7 +135,7 @@ export const groupBy = <R>(runner: Runner<R>, namespace: "Map" | "Object") =>
     },
   })
 
-const constructMap = <R>(runner: SyncIteratorRunner<R>, init: unknown, node: AstNode) => {
+const constructMap = <R>(runner: Runner<R>, init: unknown, node: AstNode) => {
   const target = new Values.Map()
   if (init === undefined || init === null) return Effect.succeed(target)
   return Effect.gen(function* () {
@@ -171,7 +164,7 @@ const constructMap = <R>(runner: SyncIteratorRunner<R>, init: unknown, node: Ast
   })
 }
 
-const constructSet = <R>(runner: SyncIteratorRunner<R>, init: unknown, node: AstNode) => {
+const constructSet = <R>(runner: Runner<R>, init: unknown, node: AstNode) => {
   const target = new Values.Set()
   if (init === undefined || init === null) return Effect.succeed(target)
   return Effect.gen(function* () {

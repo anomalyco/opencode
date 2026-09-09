@@ -5,7 +5,7 @@ import { type SafeObject, toData, ToolRuntimeError } from "../data.js"
 import { type AstNode, formatLocation, InterpreterRuntimeError, ProgramThrow, sourceLocation } from "./model.js"
 import { containsRuntimeReference } from "./references.js"
 import { type HostCall, HostFunction } from "./host.js"
-import { type SyncIteratorRunner } from "./runner.js"
+import { type Runner } from "./runner.js"
 import {
   coerceToString,
   createAggregateErrorValue,
@@ -91,7 +91,7 @@ const constructErrorValue = (name: string, args: Array<unknown>): SafeObject =>
   createErrorValue(name, args[0] === undefined ? "" : coerceToString(args[0]))
 
 const constructAggregateErrorValue = <R>(
-  runner: SyncIteratorRunner<R>,
+  runner: Runner<R>,
   args: Array<unknown>,
   node: AstNode,
 ): Effect.Effect<SafeObject, unknown, R> =>
@@ -113,7 +113,7 @@ const constructAggregateErrorValue = <R>(
   })
 
 /** An error constructor such as `Error` or `TypeError`; callable with or without `new`, like JS. */
-export const errorGlobal = <R>(name: string, runner: SyncIteratorRunner<R>) => {
+export const errorGlobal = <R>(name: string, runner: Runner<R>) => {
   const construct: HostCall<R> = (args, node) =>
     name === "AggregateError"
       ? constructAggregateErrorValue(runner, args, node)

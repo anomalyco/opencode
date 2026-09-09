@@ -5,7 +5,13 @@ import { HostFunction } from "./host.js"
 import { type AstNode, CodeModeFunction, InterpreterRuntimeError, IntrinsicReference } from "./model.js"
 import { typeofValue } from "./references.js"
 
-export type CallbackRunner<R> = {
+export type IteratorCursor<R> = {
+  readonly next: Effect.Effect<{ readonly done: boolean; readonly value: unknown }, unknown, R>
+  readonly close: Effect.Effect<void, unknown, R>
+}
+
+/** Everything a host function needs to call back into the program. */
+export type Runner<R> = {
   readonly invokeFunction: (fn: CodeModeFunction, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
   readonly invokeCallable: (
     callable: unknown,
@@ -13,19 +19,8 @@ export type CallbackRunner<R> = {
     node: AstNode,
   ) => Effect.Effect<unknown, unknown, R>
   readonly settlePromise: (promise: Values.Promise) => Effect.Effect<unknown, unknown, never>
-}
-
-export type IteratorCursor<R> = {
-  readonly next: Effect.Effect<{ readonly done: boolean; readonly value: unknown }, unknown, R>
-  readonly close: Effect.Effect<void, unknown, R>
-}
-
-export type SyncIteratorRunner<R> = {
   readonly syncIterator: (value: unknown, node: AstNode) => Effect.Effect<IteratorCursor<R> | undefined, unknown, R>
 }
-
-/** Everything a host function needs to call back into the program. */
-export type Runner<R> = CallbackRunner<R> & SyncIteratorRunner<R>
 
 export const preserveConsumerError = <A, R>(
   cursor: IteratorCursor<R>,
@@ -38,7 +33,7 @@ export const preserveConsumerError = <A, R>(
   )
 
 export const toPrimitive = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   value: unknown,
   hint: "number" | "string",
   node: AstNode,
@@ -72,7 +67,7 @@ export const isSupportedCallback = (value: unknown): value is SupportedCallback 
   value instanceof IntrinsicReference
 
 export const applyCollectionCallback = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   callback: unknown,
   name: string,
   node: AstNode,
