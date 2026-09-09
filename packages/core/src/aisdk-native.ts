@@ -210,6 +210,10 @@ function mapBedrockRequest(input: MapInput): Pick<Mapping, "headers" | "body"> {
   const reasoning = isRecord(settings.reasoningConfig) ? settings.reasoningConfig : undefined
   const anthropic = input.modelID.includes("anthropic")
   const openai = input.modelID.includes("openai.")
+  // Converse passes OpenAI fields through verbatim. gpt-oss (Harmony) takes the
+  // flat chat-completions `reasoning_effort`; GPT-5.6+ reject it and take the
+  // Responses-style `reasoning.effort` instead.
+  const harmony = input.modelID.includes("openai.gpt-oss")
   const effort = typeof reasoning?.maxReasoningEffort === "string" ? reasoning.maxReasoningEffort : undefined
   const type = typeof reasoning?.type === "string" ? reasoning.type : undefined
   const budget = typeof reasoning?.budgetTokens === "number" ? reasoning.budgetTokens : undefined
@@ -236,7 +240,10 @@ function mapBedrockRequest(input: MapInput): Pick<Mapping, "headers" | "body"> {
           },
         }
       : {}),
-    ...(!anthropic && openai && effort !== undefined ? { reasoning_effort: effort } : {}),
+    ...(!anthropic && openai && harmony && effort !== undefined ? { reasoning_effort: effort } : {}),
+    ...(!anthropic && openai && !harmony && effort !== undefined
+      ? { reasoning: { ...(isRecord(additional.reasoning) ? additional.reasoning : {}), effort } }
+      : {}),
     ...(!anthropic && !openai && effort !== undefined
       ? {
           reasoningConfig: {

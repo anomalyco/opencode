@@ -251,11 +251,28 @@ describe("AISDKNative", () => {
       },
     })
 
-    for (const modelID of ["openai.gpt-oss-120b-1:0", "global.openai.gpt-5.6-sol", "us.openai.gpt-5.6-sol"]) {
+    // gpt-oss (Harmony) keeps the flat chat-completions field.
+    expect(
+      map("@ai-sdk/amazon-bedrock", { reasoningConfig: { maxReasoningEffort: "high" } }, "openai.gpt-oss-120b-1:0")
+        ?.body,
+    ).toEqual({ additionalModelRequestFields: { reasoning_effort: "high" } })
+
+    // GPT-5.6+ reject `reasoning_effort` and take the Responses-style nested field.
+    for (const modelID of ["global.openai.gpt-5.6-sol", "us.openai.gpt-5.6-sol", "us.openai.gpt-6-astra"]) {
       expect(
-        map("@ai-sdk/amazon-bedrock", { reasoningConfig: { maxReasoningEffort: "high" } }, modelID)?.body,
-      ).toEqual({ additionalModelRequestFields: { reasoning_effort: "high" } })
+        map("@ai-sdk/amazon-bedrock", { reasoningConfig: { maxReasoningEffort: "none" } }, modelID)?.body,
+      ).toEqual({ additionalModelRequestFields: { reasoning: { effort: "none" } } })
     }
+    expect(
+      map(
+        "@ai-sdk/amazon-bedrock",
+        {
+          reasoningConfig: { maxReasoningEffort: "high" },
+          additionalModelRequestFields: { reasoning: { summary: "auto" } },
+        },
+        "us.openai.gpt-5.6-sol",
+      )?.body,
+    ).toEqual({ additionalModelRequestFields: { reasoning: { summary: "auto", effort: "high" } } })
   })
 
   test("maps Bedrock Mantle models to their supported native APIs", () => {
