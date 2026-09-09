@@ -4,9 +4,11 @@
 // `opencode.run(message, opts?)` to spawn `bun src/index.ts run ...` with
 // `OPENCODE_CONFIG_CONTENT` providing the test provider config inline.
 import { describe, expect } from "bun:test"
+import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Effect } from "effect"
 import { reply } from "../../lib/llm-server"
 import { cliIt } from "../../lib/cli-process"
+import { pollWithTimeout } from "../../lib/effect"
 
 describe("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
@@ -280,6 +282,118 @@ describe("opencode run (non-interactive subprocess)", () => {
         opencode.expectExit(explicitlyDenied, 0)
         expect(explicitlyDenied.stdout).toContain("continued after explicit denial")
         expect(yield* Effect.promise(() => Bun.file(`${home}/explicitly-denied`).exists())).toBe(false)
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "--auto approves a persisted task_id child from a prior process",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const env = { OPENCODE_DB: `${home}/persisted.db` }
+        const persisted = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const server = yield* opencode.serve({ env })
+            const sdk = createOpencodeClient({ baseUrl: server.url, directory: home })
+            const permission = [{ permission: "bash", pattern: "*", action: "ask" as const }]
+            const root = yield* Effect.promise(() => sdk.session.create({ title: "root", permission }))
+            if (!root.data) throw new Error("Failed to create the root session")
+            const child = yield* Effect.promise(() =>
+              sdk.session.create({ title: "persisted child", parentID: root.data!.id, permission }),
+            )
+            if (!child.data) throw new Error("Failed to create the child session")
+            return { rootID: root.data.id, childID: child.data.id }
+          }),
+        )
+        // The creator has exited. This CLI never receives the child's session.created event.
+        yield* llm.push(
+          reply().tool("task", {
+            task_id: persisted.childID,
+            description: "Resume the existing child",
+            prompt: "Write the resumed-child marker",
+            subagent_type: "general",
+          }),
+        )
+        yield* llm.push(
+          reply().tool("bash", {
+            command: `printf resumed > "${home}/resumed-child"`,
+            description: "Write the resumed-child marker",
+          }),
+        )
+        yield* llm.text("child resumed")
+        yield* llm.text("parent completed")
+
+        const result = yield* opencode.run("resume the existing task", {
+          format: "json",
+          extraArgs: ["--dir", home, "--session", persisted.rootID, "--dangerously-skip-permissions"],
+          env,
+          timeoutMs: 20_000,
+        })
+        opencode.expectExit(result, 0)
+        expect(yield* Effect.promise(() => Bun.file(`${home}/resumed-child`).text())).toBe("resumed")
+        expect(opencode.parseJsonEvents(result.stdout)).toContainEqual(
+          expect.objectContaining({
+            type: "tool_use",
+            part: expect.objectContaining({
+              tool: "task",
+              state: expect.objectContaining({
+                status: "completed",
+                metadata: expect.objectContaining({ sessionId: persisted.childID }),
+              }),
+            }),
+          }),
+        )
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "--auto leaves permission requests from unrelated sessions pending",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const gate = Promise.withResolvers<void>()
+        yield* llm.push(
+          reply().wait(gate.promise).tool("bash", { command: "echo root", description: "Continue the root session" }),
+        )
+        yield* llm.push(reply().tool("bash", { command: "echo unrelated", description: "Wait for unrelated approval" }))
+        yield* llm.text("root done")
+
+        const server = yield* opencode.serve()
+        const sdk = createOpencodeClient({ baseUrl: server.url, directory: home })
+        const permission = [{ permission: "bash", pattern: "*", action: "ask" as const }]
+        const root = yield* Effect.promise(() => sdk.session.create({ title: "root", permission }))
+        const unrelated = yield* Effect.promise(() => sdk.session.create({ title: "unrelated", permission }))
+        expect(root.data?.id).toBeDefined()
+        expect(unrelated.data?.id).toBeDefined()
+
+        const run = yield* opencode.startRun("run the root tool", {
+          extraArgs: ["--attach", server.url, "--session", root.data!.id, "--dangerously-skip-permissions"],
+        })
+        yield* llm.wait(1)
+
+        yield* Effect.promise(() =>
+          sdk.session.promptAsync({
+            sessionID: unrelated.data!.id,
+            model: { providerID: "test", modelID: "test-model" },
+            agent: "build",
+            parts: [{ type: "text", text: "run the unrelated tool" }],
+          }),
+        )
+
+        const pending = yield* pollWithTimeout(
+          Effect.promise(async () =>
+            (await sdk.permission.list()).data?.find((item) => item.sessionID === unrelated.data!.id),
+          ),
+          "unrelated session did not request permission",
+        )
+
+        gate.resolve()
+        yield* llm.wait(3)
+
+        const remaining = yield* Effect.promise(() => sdk.permission.list())
+        expect(remaining.data?.some((item) => item.id === pending.id)).toBe(true)
+        const result = yield* run.result
+        opencode.expectExit(result, 0)
       }),
     60_000,
   )

@@ -699,6 +699,22 @@ export const RunCommand = effectCmd({
           const sessions = new Set([sessionID])
           let error: string | undefined
 
+          async function belongsToSessionTree(candidate: string) {
+            const path: string[] = []
+            const seen = new Set<string>()
+            let current = candidate
+            while (!sessions.has(current)) {
+              if (seen.has(current)) return false
+              seen.add(current)
+              path.push(current)
+              const result = await client.session.get({ sessionID: current }).catch(() => undefined)
+              if (!result?.data?.parentID) return false
+              current = result.data.parentID
+            }
+            path.forEach((id) => sessions.add(id))
+            return true
+          }
+
           for await (const event of events.stream) {
             if (event.type === "session.created" && event.properties.info.parentID) {
               if (sessions.has(event.properties.info.parentID)) sessions.add(event.properties.info.id)
@@ -800,7 +816,7 @@ export const RunCommand = effectCmd({
 
             if (event.type === "permission.asked") {
               const permission = event.properties
-              if (!sessions.has(permission.sessionID)) continue
+              if (!(await belongsToSessionTree(permission.sessionID))) continue
 
               if (auto) {
                 await client.permission.reply({
