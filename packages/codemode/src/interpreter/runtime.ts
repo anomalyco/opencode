@@ -1,10 +1,51 @@
+import type {
+  ArrayExpression,
+  ArrayPattern,
+  ArrowFunctionExpression,
+  AssignmentExpression,
+  AssignmentProperty,
+  BinaryExpression,
+  BlockStatement,
+  BreakStatement,
+  CallExpression,
+  ConditionalExpression,
+  ContinueStatement,
+  DoWhileStatement,
+  Expression,
+  ForInStatement,
+  ForOfStatement,
+  ForStatement,
+  FunctionDeclaration,
+  FunctionExpression,
+  IfStatement,
+  LabeledStatement,
+  LogicalExpression,
+  MemberExpression,
+  ModuleDeclaration,
+  NewExpression,
+  ObjectExpression,
+  Pattern,
+  Program,
+  Property,
+  SpreadElement,
+  Statement,
+  Super,
+  SwitchStatement,
+  TemplateLiteral,
+  ThrowStatement,
+  TryStatement,
+  UnaryExpression,
+  UpdateExpression,
+  VariableDeclaration,
+  WhileStatement,
+  YieldExpression,
+} from "acorn"
 import { Cause, Deferred, Effect, Exit } from "effect"
 import { isBlockedMember, ToolRuntimeError, type SafeObject, toProgram } from "../data.js"
 import { ToolReference } from "../tool-runtime.js"
 import {
   type AstNode,
   AsyncIteratorSymbol,
-  asNode,
   type Binding,
   CodeModeFunction,
   CodeModeGenerator,
@@ -17,11 +58,6 @@ import {
   GeneratorReturn,
   type GeneratorRequestKind,
   type GlobalNamespaceName,
-  getArray,
-  getBoolean,
-  getNode,
-  getOptionalNode,
-  getString,
   IntrinsicReference,
   InterpreterRuntimeError,
   isRecord,
@@ -36,7 +72,6 @@ import {
   type PromiseMethodName,
   PromiseNamespace,
   ProgramThrow,
-  type ProgramNode,
   SearchFunction,
   SymbolNamespace,
   type StatementResult,
@@ -121,18 +156,18 @@ const parseArrayIndex = (key: string | number): number | undefined => {
   return index < MAX_ARRAY_LENGTH ? index : undefined
 }
 
-const calleeDescription = (callee: AstNode): string => {
-  if (callee.type === "Identifier") return getString(callee, "name")
-  if (callee.type === "MemberExpression") {
-    const object = getNode(callee, "object")
-    const property = getNode(callee, "property")
+const calleeDescription = (callee: Expression | Super | undefined): string => {
+  if (callee?.type === "Identifier") return callee.name
+  if (callee?.type === "MemberExpression") {
+    const object = callee.object
+    const property = callee.property
     const key =
-      callee.computed !== true && property.type === "Identifier"
-        ? getString(property, "name")
+      !callee.computed && property.type === "Identifier"
+        ? property.name
         : property.type === "Literal" && typeof property.value === "string"
           ? property.value
           : undefined
-    if (object.type === "Identifier" && key !== undefined) return `${getString(object, "name")}.${key}`
+    if (object.type === "Identifier" && key !== undefined) return `${object.name}.${key}`
   }
   return "The called value"
 }
@@ -172,41 +207,40 @@ const instanceofValue = (lhs: unknown, rhs: unknown, node: AstNode): boolean => 
   )
 }
 
-const collectPatternNames = (pattern: AstNode, out: Array<string> = []): Array<string> => {
+const collectPatternNames = (pattern: Pattern, out: Array<string> = []): Array<string> => {
   switch (pattern.type) {
     case "Identifier":
-      out.push(getString(pattern, "name"))
+      out.push(pattern.name)
       break
     case "AssignmentPattern":
-      collectPatternNames(getNode(pattern, "left"), out)
+      collectPatternNames(pattern.left, out)
       break
     case "RestElement":
-      collectPatternNames(getNode(pattern, "argument"), out)
+      collectPatternNames(pattern.argument, out)
       break
     case "ArrayPattern":
-      for (const element of getArray(pattern, "elements")) {
-        if (element !== null) collectPatternNames(asNode(element, "elements"), out)
+      for (const element of pattern.elements) {
+        if (element !== null) collectPatternNames(element, out)
       }
       break
     case "ObjectPattern":
-      for (const property of getArray(pattern, "properties")) {
-        const prop = asNode(property, "properties")
-        collectPatternNames(prop.type === "RestElement" ? getNode(prop, "argument") : getNode(prop, "value"), out)
+      for (const prop of pattern.properties) {
+        collectPatternNames(prop.type === "RestElement" ? prop.argument : prop.value, out)
       }
       break
   }
   return out
 }
 
-const loopDeclaration = (left: AstNode, statement: "for...of" | "for...in") => {
+const loopDeclaration = (left: VariableDeclaration | Pattern, statement: "for...of" | "for...in") => {
   if (left.type !== "VariableDeclaration") return undefined
-  const declarations = getArray(left, "declarations")
-  if (declarations.length !== 1) {
+  const declaration = left.declarations.length === 1 ? left.declarations[0] : undefined
+  if (declaration === undefined) {
     throw new InterpreterRuntimeError(`${statement} supports one declared binding.`, left)
   }
-  const kind = getString(left, "kind")
+  const kind = left.kind
   return {
-    pattern: getNode(asNode(declarations[0], "declarations[0]"), "id"),
+    pattern: declaration.id,
     mutable: kind !== "const",
     lexical: kind !== "var",
   }
@@ -259,7 +293,7 @@ type GeneratorState = {
   available?: Deferred.Deferred<void>
 }
 
-const promiseResolutionNode: AstNode = { type: "PromiseResolution" }
+const promiseResolutionNode: AstNode = { type: "PromiseResolution", start: 0, end: 0 }
 
 export class Interpreter<R> {
   private scopes: ScopeStack
@@ -328,7 +362,7 @@ export class Interpreter<R> {
     globalScope.set("Infinity", { mutable: false, value: Infinity })
   }
 
-  run(program: ProgramNode): Effect.Effect<unknown, unknown, R> {
+  run(program: Program): Effect.Effect<unknown, unknown, R> {
     const self = this
     // Keep top-level declarations separate so they can shadow builtins.
     this.scopes.push()
@@ -338,7 +372,7 @@ export class Interpreter<R> {
       let value: unknown = undefined
       for (const [index, statement] of program.body.entries()) {
         if (index === program.body.length - 1 && statement.type === "ExpressionStatement") {
-          value = yield* self.evaluateExpression(getNode(statement, "expression"))
+          value = yield* self.evaluateExpression(statement.expression)
           break
         }
         const result = yield* self.evaluateStatement(statement)
@@ -380,14 +414,14 @@ export class Interpreter<R> {
     })
   }
 
-  private evaluateStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
+  private evaluateStatement(node: Statement | ModuleDeclaration): Effect.Effect<StatementResult, unknown, R> {
     switch (node.type) {
       case "ExpressionStatement":
-        return Effect.as(this.evaluateExpression(getNode(node, "expression")), { kind: "none" })
+        return Effect.as(this.evaluateExpression(node.expression), { kind: "none" })
       case "VariableDeclaration":
         return Effect.map(this.evaluateVariableDeclaration(node), () => ({ kind: "none" }))
       case "ReturnStatement": {
-        const argumentNode = getOptionalNode(node, "argument")
+        const argumentNode = node.argument
         return argumentNode
           ? Effect.map(this.evaluateExpression(argumentNode), (value) => ({ kind: "return", value }))
           : Effect.succeed({ kind: "return", value: undefined })
@@ -427,16 +461,15 @@ export class Interpreter<R> {
     }
   }
 
-  private evaluateBlock(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
+  private evaluateBlock(node: BlockStatement): Effect.Effect<StatementResult, unknown, R> {
     this.scopes.push()
     const self = this
     return Effect.gen(function* () {
-      const body = getArray(node, "body")
+      const body = node.body
       self.predeclareLexical(body)
       self.hoistFunctions(body)
 
-      for (const statementValue of body) {
-        const statement = asNode(statementValue, "body")
+      for (const statement of body) {
         const result = yield* self.evaluateStatement(statement)
 
         if (result.kind !== "none") {
@@ -448,72 +481,59 @@ export class Interpreter<R> {
     }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
   }
 
-  private createFunction(node: AstNode): CodeModeFunction {
-    return new CodeModeFunction(
-      getArray(node, "params").map((parameter, index) => asNode(parameter, `params[${index}]`)),
-      getNode(node, "body"),
-      this.scopes.capture(),
-      node.async === true,
-      node.generator === true,
-    )
+  private createFunction(node: FunctionDeclaration | FunctionExpression | ArrowFunctionExpression): CodeModeFunction {
+    return new CodeModeFunction(node.params, node.body, this.scopes.capture(), node.async, node.generator)
   }
 
-  private hoistFunctions(statements: Array<unknown>): void {
-    for (const statementValue of statements) {
-      if (!isRecord(statementValue) || statementValue.type !== "FunctionDeclaration") continue
-      const node = statementValue as AstNode
-      this.scopes.declare(getString(getNode(node, "id"), "name"), this.createFunction(node), true, node)
+  private hoistFunctions(statements: ReadonlyArray<Statement | ModuleDeclaration>): void {
+    for (const node of statements) {
+      if (node.type !== "FunctionDeclaration") continue
+      this.scopes.declare(node.id.name, this.createFunction(node), true, node)
     }
   }
 
-  private predeclareLexical(statements: Array<unknown>): void {
-    for (const statementValue of statements) {
-      if (!isRecord(statementValue) || statementValue.type !== "VariableDeclaration") continue
-      const statement = statementValue as AstNode
-      const kind = getString(statement, "kind")
+  private predeclareLexical(statements: ReadonlyArray<Statement | ModuleDeclaration>): void {
+    for (const statement of statements) {
+      if (statement.type !== "VariableDeclaration") continue
+      const kind = statement.kind
       if (kind === "var") continue
-      for (const declarationValue of getArray(statement, "declarations")) {
-        const declaration = asNode(declarationValue, "declarations")
-        for (const name of collectPatternNames(getNode(declaration, "id"))) {
+      for (const declaration of statement.declarations) {
+        for (const name of collectPatternNames(declaration.id)) {
           this.scopes.reserve(name, kind !== "const", declaration)
         }
       }
     }
   }
 
-  private predeclarePattern(pattern: AstNode, mutable: boolean, node: AstNode): void {
+  private predeclarePattern(pattern: Pattern, mutable: boolean, node: AstNode): void {
     for (const name of collectPatternNames(pattern)) this.scopes.reserve(name, mutable, node)
   }
 
-  private evaluateIfStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
-    const testNode = getNode(node, "test")
-    const consequentNode = getNode(node, "consequent")
-    const alternateNode = getOptionalNode(node, "alternate")
-
-    return Effect.flatMap(this.evaluateExpression(testNode), (test) =>
+  private evaluateIfStatement(node: IfStatement): Effect.Effect<StatementResult, unknown, R> {
+    return Effect.flatMap(this.evaluateExpression(node.test), (test) =>
       test
-        ? this.evaluateStatement(consequentNode)
-        : alternateNode
-          ? this.evaluateStatement(alternateNode)
+        ? this.evaluateStatement(node.consequent)
+        : node.alternate
+          ? this.evaluateStatement(node.alternate)
           : Effect.succeed({ kind: "none" }),
     )
   }
 
-  private evaluateSwitchStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
+  private evaluateSwitchStatement(node: SwitchStatement): Effect.Effect<StatementResult, unknown, R> {
     const self = this
     return Effect.gen(function* () {
-      const discriminant = yield* self.evaluateExpression(getNode(node, "discriminant"))
+      const discriminant = yield* self.evaluateExpression(node.discriminant)
       if (containsOpaqueReference(discriminant)) {
         throw new InterpreterRuntimeError("Switch discriminants must be data values.", node, "InvalidDataValue")
       }
       self.scopes.push()
       return yield* Effect.gen(function* () {
-        const cases = getArray(node, "cases").map((value, index) => asNode(value, `cases[${index}]`))
-        self.predeclareLexical(cases.flatMap((branch) => getArray(branch, "consequent")))
+        const cases = node.cases
+        self.predeclareLexical(cases.flatMap((branch) => branch.consequent))
         let defaultIndex: number | undefined
         let selected: number | undefined
         for (const [index, branch] of cases.entries()) {
-          const test = getOptionalNode(branch, "test")
+          const test = branch.test
           if (!test) {
             defaultIndex = index
             continue
@@ -530,8 +550,8 @@ export class Interpreter<R> {
         const start = selected ?? defaultIndex
         if (start === undefined) return { kind: "none" } satisfies StatementResult
         for (let index = start; index < cases.length; index += 1) {
-          for (const statementValue of getArray(cases[index]!, "consequent")) {
-            const result = yield* self.evaluateStatement(asNode(statementValue, "consequent"))
+          for (const statement of cases[index]!.consequent) {
+            const result = yield* self.evaluateStatement(statement)
             if (result.kind === "break") {
               if (result.label === undefined) return { kind: "none" } satisfies StatementResult
               return result
@@ -545,16 +565,13 @@ export class Interpreter<R> {
   }
 
   private evaluateWhileStatement(
-    node: AstNode,
+    node: WhileStatement,
     labels?: ReadonlySet<string>,
   ): Effect.Effect<StatementResult, unknown, R> {
-    const testNode = getNode(node, "test")
-    const bodyNode = getNode(node, "body")
-
     const self = this
     return Effect.gen(function* () {
-      while (yield* self.evaluateExpression(testNode)) {
-        const result = yield* self.evaluateStatement(bodyNode)
+      while (yield* self.evaluateExpression(node.test)) {
+        const result = yield* self.evaluateStatement(node.body)
 
         if (result.kind === "continue") {
           if (result.label !== undefined && !labels?.has(result.label)) return result
@@ -576,16 +593,13 @@ export class Interpreter<R> {
   }
 
   private evaluateDoWhileStatement(
-    node: AstNode,
+    node: DoWhileStatement,
     labels?: ReadonlySet<string>,
   ): Effect.Effect<StatementResult, unknown, R> {
-    const bodyNode = getNode(node, "body")
-    const testNode = getNode(node, "test")
-
     const self = this
     return Effect.gen(function* () {
       do {
-        const result = yield* self.evaluateStatement(bodyNode)
+        const result = yield* self.evaluateStatement(node.body)
 
         if (result.kind === "continue") {
           if (result.label !== undefined && !labels?.has(result.label)) return result
@@ -600,25 +614,24 @@ export class Interpreter<R> {
         if (result.kind === "return") {
           return result
         }
-      } while (yield* self.evaluateExpression(testNode))
+      } while (yield* self.evaluateExpression(node.test))
 
       return { kind: "none" } satisfies StatementResult
     })
   }
 
   private evaluateForStatement(
-    node: AstNode,
+    node: ForStatement,
     labels?: ReadonlySet<string>,
   ): Effect.Effect<StatementResult, unknown, R> {
     this.scopes.push()
     const self = this
     return Effect.gen(function* () {
-      const initNode = getOptionalNode(node, "init")
-      const testNode = getOptionalNode(node, "test")
-      const updateNode = getOptionalNode(node, "update")
-      const bodyNode = getNode(node, "body")
+      const initNode = node.init
+      const testNode = node.test
+      const updateNode = node.update
 
-      if (initNode?.type === "VariableDeclaration" && getString(initNode, "kind") !== "var") {
+      if (initNode?.type === "VariableDeclaration" && initNode.kind !== "var") {
         self.predeclareLexical([initNode])
       }
 
@@ -631,7 +644,7 @@ export class Interpreter<R> {
       }
 
       const perIterationBindings =
-        initNode?.type === "VariableDeclaration" && getString(initNode, "kind") !== "var"
+        initNode?.type === "VariableDeclaration" && initNode.kind !== "var"
           ? Array.from(self.scopes.current().keys())
           : []
 
@@ -646,7 +659,7 @@ export class Interpreter<R> {
       nextIteration()
 
       while (testNode ? yield* self.evaluateExpression(testNode) : true) {
-        const result = yield* self.evaluateStatement(bodyNode)
+        const result = yield* self.evaluateStatement(node.body)
 
         if (result.kind === "return") {
           return result
@@ -674,19 +687,18 @@ export class Interpreter<R> {
   }
 
   private evaluateForOfStatement(
-    node: AstNode,
+    node: ForOfStatement,
     labels?: ReadonlySet<string>,
   ): Effect.Effect<StatementResult, unknown, R> {
-    const awaiting = getBoolean(node, "await")
-    const left = getNode(node, "left")
+    const awaiting = node.await
+    const left = node.left
     const declared = loopDeclaration(left, "for...of")
     if (declared?.lexical) this.scopes.push()
 
     const self = this
     return Effect.gen(function* () {
       if (declared?.lexical) self.predeclarePattern(declared.pattern, declared.mutable, left)
-      const right = yield* self.evaluateExpression(getNode(node, "right"))
-      const body = getNode(node, "body")
+      const right = yield* self.evaluateExpression(node.right)
 
       const iterator = yield* self.customIterator(right, node, awaiting)
       const cursor = iterator === undefined ? yield* self.syncIterator(right, node) : undefined
@@ -703,19 +715,10 @@ export class Interpreter<R> {
             ? Effect.andThen(cursor?.close ?? Effect.void, Effect.yieldNow)
             : (cursor?.close ?? Effect.void)
 
-      let assignment: AstNode | undefined
-
-      if (
-        left.type !== "VariableDeclaration" &&
-        (left.type === "Identifier" ||
-          left.type === "MemberExpression" ||
-          left.type === "ArrayPattern" ||
-          left.type === "ObjectPattern")
-      ) {
-        assignment = left
-      } else if (left.type !== "VariableDeclaration") {
+      if (left.type === "RestElement" || left.type === "AssignmentPattern") {
         throw new InterpreterRuntimeError("Unsupported for...of binding.", left)
       }
+      const assignment = left.type === "VariableDeclaration" ? undefined : left
 
       const evaluateBody = (value: unknown) =>
         Effect.gen(function* () {
@@ -726,7 +729,7 @@ export class Interpreter<R> {
           } else if (assignment) {
             yield* self.assignPattern(assignment, value, left)
           }
-          return yield* self.evaluateStatement(body)
+          return yield* self.evaluateStatement(node.body)
         }).pipe(
           Effect.ensuring(
             Effect.sync(() => {
@@ -961,18 +964,17 @@ export class Interpreter<R> {
   }
 
   private evaluateForInStatement(
-    node: AstNode,
+    node: ForInStatement,
     labels?: ReadonlySet<string>,
   ): Effect.Effect<StatementResult, unknown, R> {
-    const left = getNode(node, "left")
+    const left = node.left
     const declared = loopDeclaration(left, "for...in")
     if (declared?.lexical) this.scopes.push()
 
     const self = this
     return Effect.gen(function* () {
       if (declared?.lexical) self.predeclarePattern(declared.pattern, declared.mutable, left)
-      const right = yield* self.evaluateExpression(getNode(node, "right"))
-      const body = getNode(node, "body")
+      const right = yield* self.evaluateExpression(node.right)
 
       const keys = self.enumerableKeys(right)
       if (keys === undefined) {
@@ -982,13 +984,10 @@ export class Interpreter<R> {
         )
       }
 
-      let assignmentName: string | undefined
-
-      if (left.type === "Identifier") {
-        assignmentName = getString(left, "name")
-      } else if (left.type !== "VariableDeclaration") {
+      if (left.type !== "Identifier" && left.type !== "VariableDeclaration") {
         throw new InterpreterRuntimeError("Unsupported for...in binding.", left)
       }
+      const assignmentName = left.type === "Identifier" ? left.name : undefined
 
       for (const key of keys) {
         const result = yield* Effect.gen(function* () {
@@ -999,7 +998,7 @@ export class Interpreter<R> {
           } else if (assignmentName) {
             self.scopes.set(assignmentName, key, left)
           }
-          return yield* self.evaluateStatement(body)
+          return yield* self.evaluateStatement(node.body)
         }).pipe(
           Effect.ensuring(
             Effect.sync(() => {
@@ -1033,22 +1032,20 @@ export class Interpreter<R> {
     )
   }
 
-  private evaluateBreakStatement(node: AstNode): StatementResult {
-    const labelNode = getOptionalNode(node, "label")
-    return labelNode ? { kind: "break", label: getString(labelNode, "name") } : { kind: "break" }
+  private evaluateBreakStatement(node: BreakStatement): StatementResult {
+    return node.label ? { kind: "break", label: node.label.name } : { kind: "break" }
   }
 
-  private evaluateContinueStatement(node: AstNode): StatementResult {
-    const labelNode = getOptionalNode(node, "label")
-    return labelNode ? { kind: "continue", label: getString(labelNode, "name") } : { kind: "continue" }
+  private evaluateContinueStatement(node: ContinueStatement): StatementResult {
+    return node.label ? { kind: "continue", label: node.label.name } : { kind: "continue" }
   }
 
-  private evaluateLabeledStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
+  private evaluateLabeledStatement(node: LabeledStatement): Effect.Effect<StatementResult, unknown, R> {
     const labels = new Set<string>()
-    let body = node
+    let body: Statement = node
     while (body.type === "LabeledStatement") {
-      labels.add(getString(getNode(body, "label"), "name"))
-      body = getNode(body, "body")
+      labels.add(body.label.name)
+      body = body.body
     }
 
     const evaluated = (() => {
@@ -1067,15 +1064,14 @@ export class Interpreter<R> {
     )
   }
 
-  private evaluateThrowStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
-    const argument = getNode(node, "argument")
-    return Effect.flatMap(this.evaluateExpression(argument), (value) => Effect.fail(new ProgramThrow(value)))
+  private evaluateThrowStatement(node: ThrowStatement): Effect.Effect<StatementResult, unknown, R> {
+    return Effect.flatMap(this.evaluateExpression(node.argument), (value) => Effect.fail(new ProgramThrow(value)))
   }
 
-  private evaluateTryStatement(node: AstNode): Effect.Effect<StatementResult, unknown, R> {
-    const body = getNode(node, "block")
-    const handler = getOptionalNode(node, "handler")
-    const finalizer = getOptionalNode(node, "finalizer")
+  private evaluateTryStatement(node: TryStatement): Effect.Effect<StatementResult, unknown, R> {
+    const body = node.block
+    const handler = node.handler
+    const finalizer = node.finalizer
     const self = this
 
     const attempted = Effect.matchCauseEffect(this.evaluateStatement(body), {
@@ -1085,11 +1081,11 @@ export class Interpreter<R> {
         }
 
         const caught = caughtErrorValue(Cause.squash(cause))
-        const parameter = getOptionalNode(handler, "param")
+        const parameter = handler.param
         self.scopes.push()
         return Effect.gen(function* () {
           if (parameter) yield* self.declarePattern(parameter, caught, true, handler)
-          return yield* self.evaluateStatement(getNode(handler, "body"))
+          return yield* self.evaluateStatement(handler.body)
         }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
       },
       onSuccess: Effect.succeed,
@@ -1114,27 +1110,24 @@ export class Interpreter<R> {
     })
   }
 
-  private evaluateVariableDeclaration(node: AstNode): Effect.Effect<void, unknown, R> {
-    const kind = getString(node, "kind")
-    const declarations = getArray(node, "declarations")
+  private evaluateVariableDeclaration(node: VariableDeclaration): Effect.Effect<void, unknown, R> {
+    const kind = node.kind
     const self = this
     return Effect.gen(function* () {
-      for (const declarationValue of declarations) {
-        const declaration = asNode(declarationValue, "declarations")
-
+      for (const declaration of node.declarations) {
         if (declaration.type !== "VariableDeclarator") {
           throw new InterpreterRuntimeError("Unsupported variable declaration shape.", declaration)
         }
 
-        const init = getOptionalNode(declaration, "init")
+        const init = declaration.init
         const value = init ? yield* self.evaluateExpression(init) : undefined
-        yield* self.declarePattern(getNode(declaration, "id"), value, kind !== "const", declaration, kind !== "var")
+        yield* self.declarePattern(declaration.id, value, kind !== "const", declaration, kind !== "var")
       }
     })
   }
 
   private declarePattern(
-    pattern: AstNode,
+    pattern: Pattern,
     value: unknown,
     mutable: boolean,
     node: AstNode,
@@ -1143,15 +1136,15 @@ export class Interpreter<R> {
     const self = this
     return Effect.gen(function* () {
       if (pattern.type === "Identifier") {
-        const name = getString(pattern, "name")
+        const name = pattern.name
         if (initialize) self.scopes.initialize(name, value, node)
         else self.scopes.declare(name, value, mutable, node)
         return
       }
 
       if (pattern.type === "AssignmentPattern") {
-        const resolved = value === undefined ? yield* self.evaluateExpression(getNode(pattern, "right")) : value
-        yield* self.declarePattern(getNode(pattern, "left"), resolved, mutable, node, initialize)
+        const resolved = value === undefined ? yield* self.evaluateExpression(pattern.right) : value
+        yield* self.declarePattern(pattern.left, resolved, mutable, node, initialize)
         return
       }
 
@@ -1165,16 +1158,14 @@ export class Interpreter<R> {
         }
 
         const consumed = new Set<PropertyKey>()
-        for (const propertyValue of getArray(pattern, "properties")) {
-          const property = asNode(propertyValue, "properties")
-
+        for (const property of pattern.properties) {
           if (property.type === "RestElement") {
             const rest: SafeObject = Object.create(null) as SafeObject
             for (const [key, item] of Object.entries(value as SafeObject)) {
               if (!consumed.has(key) && !isBlockedMember(key)) rest[key] = item
             }
             copyIteratorSymbols(value, rest, consumed)
-            yield* self.declarePattern(getNode(property, "argument"), rest, mutable, property, initialize)
+            yield* self.declarePattern(property.argument, rest, mutable, property, initialize)
             continue
           }
 
@@ -1184,7 +1175,7 @@ export class Interpreter<R> {
           }
           consumed.add(typeof key === "symbol" ? key : String(key))
           yield* self.declarePattern(
-            getNode(property, "value"),
+            property.value,
             self.destructuringPropertyValue(value as SafeObject | Array<unknown>, key),
             mutable,
             property,
@@ -1204,11 +1195,11 @@ export class Interpreter<R> {
     })
   }
 
-  private assignPattern(pattern: AstNode, value: unknown, node: AstNode): Effect.Effect<void, unknown, R> {
+  private assignPattern(pattern: Pattern, value: unknown, node: AstNode): Effect.Effect<void, unknown, R> {
     const self = this
     return Effect.gen(function* () {
       if (pattern.type === "Identifier") {
-        self.scopes.set(getString(pattern, "name"), value, pattern)
+        self.scopes.set(pattern.name, value, pattern)
         return
       }
 
@@ -1218,8 +1209,8 @@ export class Interpreter<R> {
       }
 
       if (pattern.type === "AssignmentPattern") {
-        const resolved = value === undefined ? yield* self.evaluateExpression(getNode(pattern, "right")) : value
-        yield* self.assignPattern(getNode(pattern, "left"), resolved, node)
+        const resolved = value === undefined ? yield* self.evaluateExpression(pattern.right) : value
+        yield* self.assignPattern(pattern.left, resolved, node)
         return
       }
 
@@ -1234,15 +1225,14 @@ export class Interpreter<R> {
 
         const source = value as SafeObject | Array<unknown>
         const consumed = new Set<PropertyKey>()
-        for (const propertyValue of getArray(pattern, "properties")) {
-          const property = asNode(propertyValue, "properties")
+        for (const property of pattern.properties) {
           if (property.type === "RestElement") {
             const rest: SafeObject = Object.create(null) as SafeObject
             for (const [key, item] of Object.entries(source)) {
               if (!consumed.has(key) && !isBlockedMember(key)) rest[key] = item
             }
             copyIteratorSymbols(source, rest, consumed)
-            yield* self.assignPattern(getNode(property, "argument"), rest, property)
+            yield* self.assignPattern(property.argument, rest, property)
             continue
           }
           const key = yield* self.destructuringPropertyKey(property)
@@ -1250,7 +1240,7 @@ export class Interpreter<R> {
             throw new InterpreterRuntimeError(`Property '${String(key)}' is not available.`, property)
           }
           consumed.add(typeof key === "symbol" ? key : String(key))
-          yield* self.assignPattern(getNode(property, "value"), self.destructuringPropertyValue(source, key), property)
+          yield* self.assignPattern(property.value, self.destructuringPropertyValue(source, key), property)
         }
         return
       }
@@ -1266,9 +1256,9 @@ export class Interpreter<R> {
   }
 
   private destructureArrayPattern(
-    pattern: AstNode,
+    pattern: ArrayPattern,
     value: unknown,
-    consume: (target: AstNode, value: unknown, context: AstNode) => Effect.Effect<void, unknown, R>,
+    consume: (target: Pattern, value: unknown, context: AstNode) => Effect.Effect<void, unknown, R>,
   ): Effect.Effect<void, unknown, R> {
     const self = this
     return Effect.gen(function* () {
@@ -1279,12 +1269,11 @@ export class Interpreter<R> {
         )
       }
       let done = false
-      for (const [index, item] of getArray(pattern, "elements").entries()) {
+      for (const element of pattern.elements) {
         if (done) {
-          if (item === null) continue
-          const element = asNode(item, `elements[${index}]`)
+          if (element === null) continue
           yield* consume(
-            element.type === "RestElement" ? getNode(element, "argument") : element,
+            element.type === "RestElement" ? element.argument : element,
             element.type === "RestElement" ? [] : undefined,
             element,
           )
@@ -1293,8 +1282,7 @@ export class Interpreter<R> {
         }
         const step = yield* cursor.next
         done = step.done
-        if (item === null) continue
-        const element = asNode(item, `elements[${index}]`)
+        if (element === null) continue
         if (element.type === "RestElement") {
           const rest: Array<unknown> = []
           if (!step.done) rest.push(step.value)
@@ -1303,7 +1291,7 @@ export class Interpreter<R> {
             done = next.done
             if (!done) rest.push(next.value)
           }
-          yield* consume(getNode(element, "argument"), rest, element)
+          yield* consume(element.argument, rest, element)
           return
         }
         const consumed = consume(element, step.done ? undefined : step.value, pattern)
@@ -1313,15 +1301,17 @@ export class Interpreter<R> {
     })
   }
 
-  private destructuringPropertyKey(property: AstNode): Effect.Effect<PropertyKey, unknown, R> {
-    if (property.type !== "Property" || getString(property, "kind") !== "init") {
+  private destructuringPropertyKey(property: Property | AssignmentProperty): Effect.Effect<PropertyKey, unknown, R> {
+    if (property.type !== "Property" || property.kind !== "init") {
       throw new InterpreterRuntimeError("Unsupported object destructuring property.", property)
     }
-    const keyNode = getNode(property, "key")
-    if (getBoolean(property, "computed")) {
+    const keyNode = property.key
+    if (property.computed) {
       return Effect.map(this.evaluateExpression(keyNode), (value) => this.toPropertyKey(value, keyNode))
     }
-    return Effect.succeed(keyNode.type === "Identifier" ? getString(keyNode, "name") : String(keyNode.value))
+    if (keyNode.type === "Identifier") return Effect.succeed(keyNode.name)
+    if (keyNode.type === "Literal") return Effect.succeed(String(keyNode.value))
+    throw unsupportedSyntax(keyNode.type, keyNode)
   }
 
   private destructuringPropertyValue(source: SafeObject | Array<unknown>, key: PropertyKey): unknown {
@@ -1333,19 +1323,15 @@ export class Interpreter<R> {
     return undefined
   }
 
-  private evaluateExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
+  private evaluateExpression(node: Expression): Effect.Effect<unknown, unknown, R> {
     switch (node.type) {
       case "Literal": {
         const regex = node.regex
-        if (isRecord(regex) && typeof regex.pattern === "string") {
-          return Effect.sync(() =>
-            this.constructRegExp([regex.pattern, typeof regex.flags === "string" ? regex.flags : ""], node),
-          )
-        }
+        if (regex) return Effect.sync(() => this.constructRegExp([regex.pattern, regex.flags], node))
         return Effect.sync(() => toProgram(node.value, "Literal"))
       }
       case "Identifier":
-        return Effect.sync(() => this.scopes.get(getString(node, "name"), node))
+        return Effect.sync(() => this.scopes.get(node.name, node))
       case "BinaryExpression":
         return this.evaluateBinaryExpression(node)
       case "LogicalExpression":
@@ -1358,8 +1344,8 @@ export class Interpreter<R> {
         const self = this
         return Effect.gen(function* () {
           let result: unknown
-          for (const expression of getArray(node, "expressions")) {
-            result = yield* self.evaluateExpression(asNode(expression, "expressions"))
+          for (const expression of node.expressions) {
+            result = yield* self.evaluateExpression(expression)
           }
           return result
         })
@@ -1372,7 +1358,7 @@ export class Interpreter<R> {
       case "MemberExpression":
         return this.readMember(node)
       case "ChainExpression":
-        return Effect.map(this.evaluateExpression(getNode(node, "expression")), (value) =>
+        return Effect.map(this.evaluateExpression(node.expression), (value) =>
           value === OptionalShortCircuit ? undefined : value,
         )
       case "ObjectExpression":
@@ -1387,9 +1373,7 @@ export class Interpreter<R> {
         return this.evaluateUpdateExpression(node)
       case "AwaitExpression": {
         // Await always suspends, including for plain values.
-        return Effect.flatMap(this.evaluateExpression(getNode(node, "argument")), (value) =>
-          this.awaitValue(value, node),
-        )
+        return Effect.flatMap(this.evaluateExpression(node.argument), (value) => this.awaitValue(value, node))
       }
       case "YieldExpression":
         return this.evaluateYieldExpression(node)
@@ -1400,13 +1384,13 @@ export class Interpreter<R> {
     }
   }
 
-  private evaluateNewExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
-    const callee = getNode(node, "callee")
+  private evaluateNewExpression(node: NewExpression): Effect.Effect<unknown, unknown, R> {
+    const callee = node.callee
     if (callee.type !== "Identifier") {
       throw unsupportedSyntax("NewExpression", node)
     }
-    const name = getString(callee, "name")
-    const argNodes = getArray(node, "arguments")
+    const name = callee.name
+    const argNodes = node.arguments
     const self = this
     if (name === "Promise") {
       return Effect.flatMap(this.evaluateCallArguments(argNodes), (args) =>
@@ -1652,12 +1636,14 @@ export class Interpreter<R> {
     })
   }
 
-  private evaluateBinaryExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
-    const operator = getString(node, "operator")
+  private evaluateBinaryExpression(node: BinaryExpression): Effect.Effect<unknown, unknown, R> {
+    const operator = node.operator
+    const left = node.left
+    if (left.type === "PrivateIdentifier") throw unsupportedSyntax(left.type, left)
     const self = this
     return Effect.gen(function* () {
-      const lhs = yield* self.evaluateExpression(getNode(node, "left"))
-      const rhs = yield* self.evaluateExpression(getNode(node, "right"))
+      const lhs = yield* self.evaluateExpression(left)
+      const rhs = yield* self.evaluateExpression(node.right)
       if (operator === "instanceof") return instanceofValue(lhs, rhs, node)
       return toProgram(self.applyBinaryOperator(operator, lhs, rhs, node), "Binary expression result")
     })
@@ -1728,25 +1714,23 @@ export class Interpreter<R> {
     }
   }
 
-  private evaluateLogicalExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
-    const operator = getString(node, "operator")
-    return Effect.flatMap(this.evaluateExpression(getNode(node, "left")), (left) => {
-      if (operator === "&&") return left ? this.evaluateExpression(getNode(node, "right")) : Effect.succeed(left)
-      if (operator === "||") return left ? Effect.succeed(left) : this.evaluateExpression(getNode(node, "right"))
+  private evaluateLogicalExpression(node: LogicalExpression): Effect.Effect<unknown, unknown, R> {
+    const operator = node.operator
+    return Effect.flatMap(this.evaluateExpression(node.left), (left) => {
+      if (operator === "&&") return left ? this.evaluateExpression(node.right) : Effect.succeed(left)
+      if (operator === "||") return left ? Effect.succeed(left) : this.evaluateExpression(node.right)
       if (operator === "??")
-        return left !== null && left !== undefined
-          ? Effect.succeed(left)
-          : this.evaluateExpression(getNode(node, "right"))
+        return left !== null && left !== undefined ? Effect.succeed(left) : this.evaluateExpression(node.right)
       throw new InterpreterRuntimeError(`Unsupported logical operator '${operator}'.`, node)
     })
   }
 
-  private evaluateUnaryExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
-    const operator = getString(node, "operator")
-    const argument = getNode(node, "argument")
+  private evaluateUnaryExpression(node: UnaryExpression): Effect.Effect<unknown, unknown, R> {
+    const operator = node.operator
+    const argument = node.argument
     if (operator === "delete") return this.evaluateDeleteExpression(argument)
     // Undeclared names short-circuit, but declared TDZ bindings must still throw.
-    if (operator === "typeof" && argument.type === "Identifier" && !this.scopes.resolve(getString(argument, "name"))) {
+    if (operator === "typeof" && argument.type === "Identifier" && !this.scopes.resolve(argument.name)) {
       return Effect.succeed("undefined")
     }
     return Effect.map(this.evaluateExpression(argument), (value) => {
@@ -1780,36 +1764,33 @@ export class Interpreter<R> {
     })
   }
 
-  private evaluateAssignmentExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
-    const left = getNode(node, "left")
-    const operator = getString(node, "operator")
+  private evaluateAssignmentExpression(node: AssignmentExpression): Effect.Effect<unknown, unknown, R> {
+    const left = node.left
+    const operator = node.operator
     const self = this
     return Effect.gen(function* () {
       if (operator === "??=" || operator === "||=" || operator === "&&=") {
         return yield* self.evaluateLogicalAssignment(node, left, operator)
       }
       if (operator === "=" && (left.type === "ObjectPattern" || left.type === "ArrayPattern")) {
-        const rightValue = yield* self.evaluateExpression(getNode(node, "right"))
+        const rightValue = yield* self.evaluateExpression(node.right)
         yield* self.assignPattern(left, rightValue, node)
         return rightValue
       }
       if (left.type === "Identifier") {
-        const name = getString(left, "name")
+        const name = left.name
         if (operator !== "=") {
           const current = self.scopes.get(name, left)
-          const rightValue = yield* self.evaluateExpression(getNode(node, "right"))
-          const next = toProgram(
-            self.applyCompoundAssignment(operator, current, rightValue, node),
-            "Assignment result",
-          )
+          const rightValue = yield* self.evaluateExpression(node.right)
+          const next = toProgram(self.applyCompoundAssignment(operator, current, rightValue, node), "Assignment result")
           return self.scopes.set(name, next, left)
         }
-        const rightValue = yield* self.evaluateExpression(getNode(node, "right"))
+        const rightValue = yield* self.evaluateExpression(node.right)
         return self.scopes.set(name, rightValue, left)
       }
       if (left.type === "MemberExpression") {
         return yield* self.modifyMember(left, (current) =>
-          Effect.map(self.evaluateExpression(getNode(node, "right")), (rightValue) => {
+          Effect.map(self.evaluateExpression(node.right), (rightValue) => {
             if (operator === "=") return { write: true, next: rightValue, result: rightValue }
             const next = toProgram(
               self.applyCompoundAssignment(operator, current, rightValue, node),
@@ -1824,26 +1805,26 @@ export class Interpreter<R> {
   }
 
   private evaluateLogicalAssignment(
-    node: AstNode,
-    left: AstNode,
+    node: AssignmentExpression,
+    left: Pattern,
     operator: string,
   ): Effect.Effect<unknown, unknown, R> {
     const self = this
     const shouldAssign = (current: unknown): boolean =>
       operator === "??=" ? current === null || current === undefined : operator === "||=" ? !current : Boolean(current)
     if (left.type === "Identifier") {
-      const name = getString(left, "name")
+      const name = left.name
       return Effect.gen(function* () {
         const current = self.scopes.get(name, left)
         if (!shouldAssign(current)) return current
-        const rightValue = yield* self.evaluateExpression(getNode(node, "right"))
+        const rightValue = yield* self.evaluateExpression(node.right)
         return self.scopes.set(name, rightValue, left)
       })
     }
     if (left.type === "MemberExpression") {
       return self.modifyMember(left, (current) =>
         shouldAssign(current)
-          ? Effect.map(self.evaluateExpression(getNode(node, "right")), (rightValue) => ({
+          ? Effect.map(self.evaluateExpression(node.right), (rightValue) => ({
               write: true,
               next: rightValue,
               result: rightValue,
@@ -1854,10 +1835,10 @@ export class Interpreter<R> {
     throw new InterpreterRuntimeError("Assignment target must be an Identifier or MemberExpression.", left)
   }
 
-  private evaluateUpdateExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
-    const operator = getString(node, "operator")
-    const argument = getNode(node, "argument")
-    const prefix = getBoolean(node, "prefix")
+  private evaluateUpdateExpression(node: UpdateExpression): Effect.Effect<unknown, unknown, R> {
+    const operator = node.operator
+    const argument = node.argument
+    const prefix = node.prefix
 
     const increment = operator === "++" ? 1 : operator === "--" ? -1 : undefined
 
@@ -1876,7 +1857,7 @@ export class Interpreter<R> {
 
     if (argument.type === "Identifier") {
       return Effect.sync(() => {
-        const name = getString(argument, "name")
+        const name = argument.name
         const current = operand(this.scopes.get(name, argument))
         const next = current + increment
         this.scopes.set(name, next, argument)
@@ -1895,17 +1876,17 @@ export class Interpreter<R> {
     throw new InterpreterRuntimeError("Update target must be an Identifier or MemberExpression.", argument)
   }
 
-  private evaluateCallExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
-    const callee = getNode(node, "callee")
-    const argNodes = getArray(node, "arguments")
+  private evaluateCallExpression(node: CallExpression): Effect.Effect<unknown, unknown, R> {
+    const callee = node.callee
 
     const self = this
     return Effect.gen(function* () {
+      if (callee.type === "Super") throw unsupportedSyntax(callee.type, callee)
       const callable = yield* self.evaluateExpression(callee)
       if (callable === OptionalShortCircuit) return OptionalShortCircuit
-      if ((callable === null || callable === undefined) && node.optional === true) return OptionalShortCircuit
+      if ((callable === null || callable === undefined) && node.optional) return OptionalShortCircuit
 
-      const args = yield* self.evaluateCallArguments(argNodes)
+      const args = yield* self.evaluateCallArguments(node.arguments)
       return yield* self.invokeCallable(callable, args, node, callee)
     })
   }
@@ -1915,12 +1896,14 @@ export class Interpreter<R> {
     callable: unknown,
     args: Array<unknown>,
     node: AstNode,
-    callee: AstNode = node,
+    callee?: Expression,
   ): Effect.Effect<unknown, unknown, R> {
     const self = this
     return Effect.gen(function* () {
       if (callable instanceof ToolReference) {
-        if (callable.path.length === 0) throw new InterpreterRuntimeError("The tools root is not callable.", callee)
+        if (callable.path.length === 0) {
+          throw new InterpreterRuntimeError("The tools root is not callable.", callee ?? node)
+        }
         return yield* self.createToolCallPromise(callable.path, args)
       }
       if (callable instanceof PromiseMethodReference) {
@@ -2006,9 +1989,11 @@ export class Interpreter<R> {
         return undefined
       }
       if (callable === undefined || callable === null) {
-        throw new InterpreterRuntimeError(`${calleeDescription(callee)} is not a function.`, callee).as("TypeError")
+        throw new InterpreterRuntimeError(`${calleeDescription(callee)} is not a function.`, callee ?? node).as(
+          "TypeError",
+        )
       }
-      throw new InterpreterRuntimeError("Only tools are callable here.", callee)
+      throw new InterpreterRuntimeError("Only tools are callable here.", callee ?? node)
     })
   }
 
@@ -2029,14 +2014,15 @@ export class Interpreter<R> {
     return undefined
   }
 
-  private evaluateCallArguments(argNodes: Array<unknown>): Effect.Effect<Array<unknown>, unknown, R> {
+  private evaluateCallArguments(
+    argNodes: ReadonlyArray<Expression | SpreadElement>,
+  ): Effect.Effect<Array<unknown>, unknown, R> {
     const self = this
     return Effect.gen(function* () {
       const args: Array<unknown> = []
-      for (const [index, arg] of argNodes.entries()) {
-        const argNode = asNode(arg, `arguments[${index}]`)
+      for (const argNode of argNodes) {
         if (argNode.type === "SpreadElement") {
-          const spread = yield* self.evaluateExpression(getNode(argNode, "argument"))
+          const spread = yield* self.evaluateExpression(argNode.argument)
           const cursor = yield* self.syncIterator(spread, argNode)
           if (cursor === undefined)
             throw new InterpreterRuntimeError("Spread arguments require a synchronous iterable.", argNode).as(
@@ -2068,7 +2054,7 @@ export class Interpreter<R> {
       }
       for (const [index, parameter] of fn.parameters.entries()) {
         if (parameter.type === "RestElement") {
-          yield* invocation.declarePattern(getNode(parameter, "argument"), args.slice(index), true, parameter, true)
+          yield* invocation.declarePattern(parameter.argument, args.slice(index), true, parameter, true)
           break
         }
         yield* invocation.declarePattern(parameter, args[index], true, parameter, true)
@@ -2219,12 +2205,12 @@ export class Interpreter<R> {
     return request
   }
 
-  private evaluateYieldExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
-    const argument = getOptionalNode(node, "argument")
+  private evaluateYieldExpression(node: YieldExpression): Effect.Effect<unknown, unknown, R> {
+    const argument = node.argument
     const self = this
     return Effect.gen(function* () {
       if (!self.generatorState) throw new InterpreterRuntimeError("yield is only valid inside a generator.", node)
-      if (node.delegate === true) {
+      if (node.delegate) {
         const value = argument ? yield* self.evaluateExpression(argument) : undefined
         return yield* self.delegateYield(value, node)
       }
@@ -2338,16 +2324,13 @@ export class Interpreter<R> {
     })
   }
 
-  private evaluateObjectExpression(node: AstNode): Effect.Effect<Record<string, unknown>, unknown, R> {
+  private evaluateObjectExpression(node: ObjectExpression): Effect.Effect<Record<string, unknown>, unknown, R> {
     const objectValue: Record<string, unknown> = Object.create(null) as Record<string, unknown>
-    const properties = getArray(node, "properties")
     const self = this
     return Effect.gen(function* () {
-      for (const propertyValue of properties) {
-        const property = asNode(propertyValue, "properties")
-
+      for (const property of node.properties) {
         if (property.type === "SpreadElement") {
-          const spread = yield* self.evaluateExpression(getNode(property, "argument"))
+          const spread = yield* self.evaluateExpression(property.argument)
           if (spread === null || spread === undefined || Values.isValue(spread)) continue
           if (typeof spread !== "object" || Array.isArray(spread) || isRuntimeReference(spread)) {
             throw new InterpreterRuntimeError("Object spread requires a data object.", property, "InvalidDataValue")
@@ -2360,24 +2343,18 @@ export class Interpreter<R> {
           continue
         }
 
-        if (property.type !== "Property") {
-          throw new InterpreterRuntimeError("Only standard object properties are supported.", property)
-        }
-
-        if (getString(property, "kind") !== "init") {
+        if (property.kind !== "init") {
           throw new InterpreterRuntimeError("Only init object properties are supported.", property)
         }
 
-        const keyNode = getNode(property, "key")
-        const valueNode = getNode(property, "value")
-        const computed = getBoolean(property, "computed")
+        const keyNode = property.key
 
         let key: PropertyKey
 
-        if (computed) {
+        if (property.computed) {
           key = self.toPropertyKey(yield* self.evaluateExpression(keyNode), keyNode)
         } else if (keyNode.type === "Identifier") {
-          key = getString(keyNode, "name")
+          key = keyNode.name
         } else if (keyNode.type === "Literal") {
           key = self.toPropertyKey(keyNode.value, keyNode)
         } else {
@@ -2387,28 +2364,26 @@ export class Interpreter<R> {
         if (isBlockedMember(String(key))) {
           throw new InterpreterRuntimeError(`Property '${String(key)}' is not available.`, keyNode)
         }
-        Reflect.set(objectValue, key, yield* self.evaluateExpression(valueNode))
+        Reflect.set(objectValue, key, yield* self.evaluateExpression(property.value))
       }
 
       return objectValue
     })
   }
 
-  private evaluateArrayExpression(node: AstNode): Effect.Effect<Array<unknown>, unknown, R> {
-    const elements = getArray(node, "elements")
+  private evaluateArrayExpression(node: ArrayExpression): Effect.Effect<Array<unknown>, unknown, R> {
     const values: Array<unknown> = []
 
     const self = this
     return Effect.gen(function* () {
-      for (const elementValue of elements) {
-        if (elementValue === null) {
+      for (const element of node.elements) {
+        if (element === null) {
           // A literal elision is a real hole, like JS: extend length without an own index.
           values.length += 1
           continue
         }
-        const element = asNode(elementValue, "elements")
         if (element.type === "SpreadElement") {
-          const spread = yield* self.evaluateExpression(getNode(element, "argument"))
+          const spread = yield* self.evaluateExpression(element.argument)
           const cursor = yield* self.syncIterator(spread, element)
           if (cursor === undefined)
             throw new InterpreterRuntimeError("Array spread requires a synchronous iterable.", element).as("TypeError")
@@ -2425,26 +2400,24 @@ export class Interpreter<R> {
     })
   }
 
-  private evaluateTemplateLiteral(node: AstNode): Effect.Effect<string, unknown, R> {
-    const quasis = getArray(node, "quasis")
-    const expressions = getArray(node, "expressions")
+  private evaluateTemplateLiteral(node: TemplateLiteral): Effect.Effect<string, unknown, R> {
+    const quasis = node.quasis
+    const expressions = node.expressions
 
     let output = ""
 
     const self = this
     return Effect.gen(function* () {
       for (let index = 0; index < quasis.length; index += 1) {
-        const quasi = asNode(quasis[index], "quasis")
-        const rawValue = quasi.value
-
-        if (!isRecord(rawValue) || typeof rawValue.cooked !== "string") {
+        const quasi = quasis[index]!
+        // acorn only omits `cooked` for invalid escapes in tagged templates, which are unsupported.
+        if (typeof quasi.value.cooked !== "string") {
           throw new InterpreterRuntimeError("Invalid template literal quasi.", quasi)
         }
-
-        output += rawValue.cooked
+        output += quasi.value.cooked
 
         if (index < expressions.length) {
-          const raw = yield* self.evaluateExpression(asNode(expressions[index], "expressions"))
+          const raw = yield* self.evaluateExpression(expressions[index])
           output += coerceToString(toProgram(raw, "Template interpolation"))
         }
       }
@@ -2453,9 +2426,9 @@ export class Interpreter<R> {
     })
   }
 
-  private evaluateConditionalExpression(node: AstNode): Effect.Effect<unknown, unknown, R> {
-    return Effect.flatMap(this.evaluateExpression(getNode(node, "test")), (test) =>
-      this.evaluateExpression(getNode(node, test ? "consequent" : "alternate")),
+  private evaluateConditionalExpression(node: ConditionalExpression): Effect.Effect<unknown, unknown, R> {
+    return Effect.flatMap(this.evaluateExpression(node.test), (test) =>
+      this.evaluateExpression(test ? node.consequent : node.alternate),
     )
   }
 
@@ -2467,7 +2440,7 @@ export class Interpreter<R> {
   }
 
   private getMemberReference(
-    node: AstNode,
+    node: MemberExpression,
     operation: "read" | "delete" = "read",
   ): Effect.Effect<
     | MemberReference
@@ -2484,20 +2457,20 @@ export class Interpreter<R> {
     unknown,
     R
   > {
-    const objectNode = getNode(node, "object")
-    const propertyNode = getNode(node, "property")
-    const computed = getBoolean(node, "computed")
-    const optional = node.optional === true
+    const objectNode = node.object
+    const propertyNode = node.property
+    if (objectNode.type === "Super") throw unsupportedSyntax(objectNode.type, objectNode)
+    if (propertyNode.type === "PrivateIdentifier") throw unsupportedSyntax(propertyNode.type, propertyNode)
     const self = this
     return Effect.gen(function* () {
       const objectValue = yield* self.evaluateExpression(objectNode)
       if (objectValue === OptionalShortCircuit) return OptionalShortCircuit
-      if ((objectValue === null || objectValue === undefined) && optional) return OptionalShortCircuit
+      if ((objectValue === null || objectValue === undefined) && node.optional) return OptionalShortCircuit
 
-      const key = computed
+      const key = node.computed
         ? self.toPropertyKey(yield* self.evaluateExpression(propertyNode), propertyNode)
         : propertyNode.type === "Identifier"
-          ? getString(propertyNode, "name")
+          ? propertyNode.name
           : self.toPropertyKey(yield* self.evaluateExpression(propertyNode), propertyNode)
 
       if (objectValue instanceof ToolReference) {
@@ -2667,7 +2640,7 @@ export class Interpreter<R> {
     })
   }
 
-  private readMember(node: AstNode): Effect.Effect<unknown, unknown, R> {
+  private readMember(node: MemberExpression): Effect.Effect<unknown, unknown, R> {
     return Effect.map(this.getMemberReference(node), (reference) => {
       if (reference === OptionalShortCircuit) return OptionalShortCircuit
       if (reference instanceof ComputedValue) return reference.value
@@ -2685,12 +2658,12 @@ export class Interpreter<R> {
     })
   }
 
-  private writeMember(node: AstNode, value: unknown): Effect.Effect<unknown, unknown, R> {
+  private writeMember(node: MemberExpression, value: unknown): Effect.Effect<unknown, unknown, R> {
     return this.modifyMember(node, () => Effect.succeed({ write: true, next: value, result: value }))
   }
 
-  private evaluateDeleteExpression(argument: AstNode): Effect.Effect<boolean, unknown, R> {
-    const target = argument.type === "ChainExpression" ? getNode(argument, "expression") : argument
+  private evaluateDeleteExpression(argument: Expression): Effect.Effect<boolean, unknown, R> {
+    const target = argument.type === "ChainExpression" ? argument.expression : argument
     if (target.type !== "MemberExpression") {
       throw new InterpreterRuntimeError("Only data fields may be deleted.", argument)
     }
@@ -2713,7 +2686,7 @@ export class Interpreter<R> {
 
   // Resolve side-effecting object and key expressions exactly once.
   private modifyMember(
-    node: AstNode,
+    node: MemberExpression,
     compute: (current: unknown) => Effect.Effect<{ write: boolean; next: unknown; result: unknown }, unknown, R>,
   ): Effect.Effect<unknown, unknown, R> {
     const self = this

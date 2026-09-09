@@ -835,7 +835,7 @@ describe("stdlib integration", () => {
         return target
       },
     })
-    expect(invokeObjectMethod("assign", [target, source], { type: "CallExpression" })).toBe(target)
+    expect(invokeObjectMethod("assign", [target, source], { type: "CallExpression", start: 0, end: 0 })).toBe(target)
     expect(reads).toEqual([])
     expect(Object.hasOwn(target, IteratorSymbol)).toBe(false)
   })
@@ -849,7 +849,9 @@ describe("stdlib integration", () => {
         return target
       },
     })
-    expect(invokeObjectMethod("assign", [target, { nested }], { type: "CallExpression" })).toBe(target)
+    expect(invokeObjectMethod("assign", [target, { nested }], { type: "CallExpression", start: 0, end: 0 })).toBe(
+      target,
+    )
     expect(reads).toEqual([])
     expect(target).toEqual({ nested })
   })
@@ -857,9 +859,9 @@ describe("stdlib integration", () => {
   test("Object.assign rejects cycles through supported symbols on nested arrays", () => {
     const target = {}
     const nested = Object.defineProperty([], IteratorSymbol, { enumerable: true, value: target })
-    expect(() => invokeObjectMethod("assign", [target, { nested }], { type: "CallExpression" })).toThrow(
-      "Object.assign result contains a circular value.",
-    )
+    expect(() =>
+      invokeObjectMethod("assign", [target, { nested }], { type: "CallExpression", start: 0, end: 0 }),
+    ).toThrow("Object.assign result contains a circular value.")
     expect(Object.hasOwn(target, "nested")).toBe(false)
   })
 
@@ -876,9 +878,9 @@ describe("stdlib integration", () => {
         },
       },
     })
-    expect(() => invokeObjectMethod("assign", [target, { nested }], { type: "CallExpression" })).toThrow(
-      "Object.assign result contains a circular value.",
-    )
+    expect(() =>
+      invokeObjectMethod("assign", [target, { nested }], { type: "CallExpression", start: 0, end: 0 }),
+    ).toThrow("Object.assign result contains a circular value.")
     expect(reads).toEqual([])
   })
 
@@ -899,7 +901,7 @@ describe("stdlib integration", () => {
         },
       },
     )
-    expect(() => invokeObjectMethod("assign", [target, source], { type: "CallExpression" })).toThrow(
+    expect(() => invokeObjectMethod("assign", [target, source], { type: "CallExpression", start: 0, end: 0 })).toThrow(
       "Object.assign could not assign property",
     )
     expect(Reflect.get(target, IteratorSymbol)).toBe(previous)
@@ -987,9 +989,13 @@ describe("stdlib integration", () => {
       },
     })
     const target = {}
-    expect(invokeObjectMethod("assign", [target, { left: shared, right: shared }], { type: "CallExpression" })).toBe(
-      target,
-    )
+    expect(
+      invokeObjectMethod("assign", [target, { left: shared, right: shared }], {
+        type: "CallExpression",
+        start: 0,
+        end: 0,
+      }),
+    ).toBe(target)
     expect(target).toEqual({ left: shared, right: shared })
     expect(reads).toEqual([true])
   })
