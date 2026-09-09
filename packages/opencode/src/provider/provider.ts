@@ -1357,6 +1357,21 @@ function modeOptions(model: Model, body: Record<string, unknown> | undefined) {
   return { ...rest, reasoningMode: reasoning.mode }
 }
 
+// OpenRouter route modifiers are request-time routing suffixes (e.g. `openrouter/openai/gpt-4:floor`),
+// not catalog model keys. Resolve a suffixed reference against its base catalog model while keeping
+// the suffixed ID for provider requests and the reference ID for session state.
+// https://openrouter.ai/docs/guides/routing/model-variants
+const OPENROUTER_ROUTE_MODIFIERS = [":floor", ":nitro", ":exacto", ":online"]
+
+function routeModifierModel(provider: Info, modelID: ModelV2.ID): Model | undefined {
+  if (provider.id !== ProviderV2.ID.openrouter) return undefined
+  const suffix = OPENROUTER_ROUTE_MODIFIERS.find((modifier) => modelID.endsWith(modifier))
+  if (!suffix) return undefined
+  const base = provider.models[modelID.slice(0, -suffix.length)]
+  if (!base) return undefined
+  return { ...base, id: modelID, api: { ...base.api, id: modelID } }
+}
+
 function modelSuggestions(provider: Info | undefined, modelID: ModelV2.ID, enableExperimentalModels: boolean) {
   const available = provider
     ? Object.keys(provider.models).filter((id) => {
@@ -1882,7 +1897,7 @@ const layer = Layer.effect(
         return yield* new ModelNotFoundError({ providerID, modelID, suggestions })
       }
 
-      const info = provider.models[modelID]
+      const info = provider.models[modelID] ?? routeModifierModel(provider, modelID)
       if (!info) {
         const current = modelSuggestions(provider, modelID, runtimeFlags.enableExperimentalModels)
         const suggestions = current.length
