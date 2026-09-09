@@ -54,6 +54,13 @@ export const Info = Schema.Struct({
       "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true.",
   }),
   plugin: Schema.optional(Schema.mutable(Schema.Array(ConfigPluginV1.Spec))),
+  plugin_autoupdate: Schema.optional(Schema.Boolean).annotate({
+    description: "Automatically update npm plugins to newer versions at startup",
+  }),
+  plugin_update_source: Schema.optional(Schema.String).annotate({
+    description:
+      "URL of a JSON manifest mapping plugin package names to their latest version, e.g. {\"acme-plugin\":\"2.0.0\"}. Checked before the npm registry, which is used as a fallback",
+  }),
   share: Schema.optional(Schema.Literals(["manual", "auto", "disabled"])).annotate({
     description:
       "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",

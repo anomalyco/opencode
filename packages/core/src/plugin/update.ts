@@ -119,7 +119,13 @@ function cachedDirectory(spec: string, name: string) {
   return path.join(Global.Path.cache, "packages", Npm.sanitize(spec), "node_modules", name)
 }
 
-export const maybeUpdate = Effect.fn("PluginUpdate.maybeUpdate")(function* (spec: string, source?: string) {
+export const maybeUpdate = Effect.fn("PluginUpdate.maybeUpdate")(function* (
+  spec: string,
+  source?: string,
+  enabled?: boolean,
+) {
+  // Opt in through config; the env flag remains a hard kill switch.
+  if (enabled !== true) return
   if (Flag.OPENCODE_DISABLE_PLUGIN_AUTOUPDATE) return
   if (!isAutoUpdateEligible(spec)) return
 
@@ -147,12 +153,12 @@ export const maybeUpdate = Effect.fn("PluginUpdate.maybeUpdate")(function* (spec
   yield* npm.add(spec).pipe(Effect.orElseSucceed(() => undefined))
 }, Effect.catchCause((cause) => Effect.logError("plugin auto-update failed", cause)))
 
-// Runs the update check with the node dependencies it needs. Callers in the
-// opencode package use this because plugin loading there is plain async code.
-export function update(spec: string, source?: string) {
-  return Effect.runPromise(maybeUpdate(spec, source).pipe(Effect.provide(layer))).catch(() => undefined)
-}
-
 const layer = LayerNode.compile(
   LayerNode.group([FSUtil.node, Global.node, Npm.node, filesystem, httpClient, EffectFlock.node]),
 )
+
+// Runs the update check with the node dependencies it needs. Callers in the
+// opencode package use this because plugin loading there is plain async code.
+export function update(spec: string, source?: string, enabled?: boolean) {
+  return Effect.runPromise(maybeUpdate(spec, source, enabled).pipe(Effect.provide(layer))).catch(() => undefined)
+}

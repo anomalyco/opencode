@@ -12,7 +12,6 @@ import { ConfigPlugin } from "@/config/plugin"
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { PluginUpdate } from "@opencode-ai/core/plugin/update"
-
 export namespace PluginLoader {
   // A normalized plugin declaration derived from config before any filesystem or npm work happens.
   export type Plan = {
@@ -95,7 +94,7 @@ export namespace PluginLoader {
     // First make sure the plugin exists locally, installing npm plugins on demand.
     let target = ""
     try {
-      await PluginUpdate.update(plan.spec)
+      await maybeUpdate(plan.spec)
       target = await resolvePluginTarget(plan.spec)
     } catch (error) {
       return { ok: false, stage: "install", error }
@@ -236,4 +235,11 @@ export namespace PluginLoader {
     for (const item of out) if (item.value !== undefined) ready.push(item.value)
     return ready
   }
+}
+
+async function maybeUpdate(spec: string) {
+  const { Config } = await import("@/config/config")
+  const { AppRuntime } = await import("@/effect/app-runtime")
+  const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal())).catch(() => undefined)
+  await PluginUpdate.update(spec, config?.plugin_update_source, config?.plugin_autoupdate)
 }
