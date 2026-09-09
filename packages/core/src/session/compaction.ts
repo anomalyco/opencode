@@ -47,38 +47,39 @@ const SUMMARY_TEMPLATE = `You MUST use this format for your response (you may om
 - [one or two brief sentences describing what the user is trying to accomplish]
 
 ## Requirements
-- [constraints, preferences, requirements, and scope boundaries, or "(none)"]
+- [constraints, preferences, requirements, and scope boundaries stated by the user, or "(none)"]
 
 ## Decisions
 - [decisions already made and why, or "(none)"]
 
 ## Work State
+Break the objective into smaller goals and report which are completed, which are being worked on, and which are blocked.
 ### Completed
-- [finished work or changes made; otherwise "(none)"]
+- [goals that have been completed; otherwise "(none)"]
 
 ### Active
-- [current work, partial changes, or investigation state; otherwise "(none)"]
+- [goals currently being worked on; otherwise "(none)"]
 
 ### Blocked
-- [blockers, failing commands, or unknowns; otherwise "(none)"]
+- [anything blocking progress, and why; otherwise "(none)"]
 
 ## Next Move
 1. [ordered list of next actions, or "(none)"]
 
 ## Relevant Files
-List files and directories that are important to the conversation. Include paths outside the current working directory when relevant. If none are relevant, write "(none)".
-- \`[exact path]\`: [why it matters]
+List the files and directories, other than the current working directory, that another agent would need to open to continue this work. Include at most 15, most important first. Do not list every file that was read or changed. Include paths outside the current working directory when relevant. If none, write "(none)".
+- \`[file or directory path]\`: [brief reason it matters]
 
-## Additional Context
-- [facts or references needed to continue the work that are not captured above; omit this section if none]
+## Important Context
+- [facts the next agent cannot continue without and cannot easily find on its own; or "(none)"]
 </template>`
 
 const SUMMARY_RULES = `Rules:
-- Use terse bullets, not prose paragraphs.
-- Preserve exact file paths, symbols, commands, error strings, URLs, and identifiers when known.
+- Keep each section concise. Use terse, single-line bullets, not prose paragraphs or nested lists.
+- Prefer short references over detailed restatement. It is fine to leave out information the next agent can recover from the code, the files listed above, or the recent messages that follow this summary.
+- Preserve exact file paths, symbols, commands, error strings, URLs, and identifiers.
 - Carry forward only user questions or requests that remain unanswered or require further action. Do not repeat ones that newer history has answered or resolved. Preserve exact wording when carrying one forward.
 - Preserve consequential workflow state, including whether changes are uncommitted, committed, pushed, under review, or merged.
-- Do not include ambient environment metadata such as the session ID, current working directory, repository root, current branch, or worktree path. The next agent receives current environment information separately. Include these details only when they directly affect the task.
 - Do not mention the summary process or that context was compacted.`
 
 const SUMMARY_HEADINGS = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
@@ -341,7 +342,7 @@ const findTailStart = (messages: readonly SessionMessage.Info[], keepTokens: num
 
 export const buildPrompt = (update: boolean) => {
   const shared = [
-    "Summarize only the history shown. More recent context may be retained and presented after this summary.",
+    "Summarize only what the user and the assistant said and did. Leave out instructions and setup the assistant was given rather than told by the user: repository conventions, instruction files such as AGENTS.md, and environment details like the session ID. The next agent receives current versions of all of these separately.",
     SUMMARY_TEMPLATE,
     SUMMARY_RULES,
     "Do not continue the task or call tools.",
@@ -350,7 +351,7 @@ export const buildPrompt = (update: boolean) => {
   if (update) {
     return [
       "Update the existing checkpoint in the conversation above into one consolidated summary.",
-      "Newer history always takes precedence over the existing checkpoint. Preserve previous information unless newer history clearly contradicts, supersedes, resolves, or makes it stale. When uncertain and there is no conflict, retain it under Additional Context.",
+      "Newer history always takes precedence over the existing checkpoint. Preserve previous information unless newer history clearly contradicts, supersedes, resolves, or makes it stale. If something is no longer relevant to continuing the work, you may remove it.",
       "Incorporate newer requirements, decisions, progress, and context. Reconcile Work State and Next Move: move completed work out of Active, remove resolved blockers and answered questions, and preserve unresolved or pending work.",
       "Return only the updated Markdown sections. Do not reproduce the `<conversation-checkpoint>`, `<summary>`, or `<recent-context>` wrapper tags from the previous checkpoint.",
       ...shared,
