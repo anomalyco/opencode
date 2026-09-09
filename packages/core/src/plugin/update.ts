@@ -3,18 +3,15 @@ export * as PluginUpdate from "./update"
 import npa from "npm-package-arg"
 import path from "path"
 import semver from "semver"
-import { Effect, FileSystem, Layer, Schema } from "effect"
+import { Effect, FileSystem, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Global } from "../global"
 import { Npm } from "../npm"
 import { NpmConfig } from "../npm-config"
 import { Flag } from "../flag/flag"
 import { FSUtil } from "../fs-util"
-import { EffectFlock } from "../util/effect-flock"
-import { makeGlobalNode } from "../effect/app-node"
 import { filesystem, httpClient } from "../effect/app-node-platform"
 import { LayerNode } from "../effect/layer-node"
-import { makeRuntime } from "../effect/runtime"
 
 const WINDOW_MS = 24 * 60 * 60 * 1000
 
@@ -94,25 +91,21 @@ function storePath() {
   return Flag.OPENCODE_PLUGIN_UPDATE_FILE ?? path.join(Global.Path.state, "plugin-update.json")
 }
 
-// One check per package per window, serialized across processes so concurrent
-// plugin loads do not each hit the network.
+// One check per package per window. This is deliberately lock free: the lock
+// acquire is uninterruptible, so a stale lock from a crashed process would hang
+// plugin loading. Losing the race only costs one extra version lookup.
 export const shouldCheck = Effect.fn("PluginUpdate.shouldCheck")(function* (pkg: string) {
   const afs = yield* FSUtil.Service
-  const flock = yield* EffectFlock.Service
   const file = storePath()
 
-  return yield* flock.withLock(
-    Effect.gen(function* () {
-      const store = yield* afs.readJson(file).pipe(Effect.orElseSucceed(() => undefined))
-      const prev = store && typeof store === "object" ? (store as Store)[pkg] : undefined
-      const now = Date.now()
-      if (prev && now - prev.last_checked < WINDOW_MS) return false
-      const next: Store = { ...(store as Store), [pkg]: { last_checked: now } }
-      yield* afs.writeJson(file, next).pipe(Effect.orElseSucceed(() => undefined))
-      return true
-    }),
-    `plugin-update:${file}`,
-  )
+  const store = yield* afs.readJson(file).pipe(Effect.orElseSucceed(() => undefined))
+  const prev = store && typeof store === "object" ? (store as Store)[pkg] : undefined
+  const now = Date.now()
+  if (prev && now - prev.last_checked < WINDOW_MS) return false
+
+  const next: Store = { ...(store as Store), [pkg]: { last_checked: now } }
+  yield* afs.writeJson(file, next).pipe(Effect.orElseSucceed(() => undefined))
+  return true
 })
 
 function cachedDirectory(spec: string, name: string) {
@@ -153,8 +146,8 @@ export const maybeUpdate = Effect.fn("PluginUpdate.maybeUpdate")(function* (
   yield* npm.add(spec).pipe(Effect.orElseSucceed(() => undefined))
 }, Effect.catchCause((cause) => Effect.logError("plugin auto-update failed", cause)))
 
-const layer = LayerNode.compile(
-  LayerNode.group([FSUtil.node, Global.node, Npm.node, filesystem, httpClient, EffectFlock.node]),
+export const layer = LayerNode.compile(
+  LayerNode.group([FSUtil.node, Global.node, Npm.node, filesystem, httpClient]),
 )
 
 // Runs the update check with the node dependencies it needs. Callers in the
