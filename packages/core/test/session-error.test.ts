@@ -168,7 +168,7 @@ describe("toSessionError", () => {
     expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false, false, false, false, false, false])
   })
 
-  test("retries transport failures only when delivery is absent or not sent", () => {
+  test("retries transport failures unless the provider accepted or rejected the request", () => {
     const retryable = [
       llm(new TransportError({ message: "http transport", transport: "http", operation: "request" })),
       llm(
@@ -180,8 +180,6 @@ describe("toSessionError", () => {
           phase: "connect",
         }),
       ),
-    ]
-    const ineligible = [
       llm(
         new TransportError({
           message: "send uncertain",
@@ -191,6 +189,8 @@ describe("toSessionError", () => {
           phase: "send",
         }),
       ),
+    ]
+    const ineligible = [
       llm(
         new TransportError({
           message: "response interrupted",
@@ -212,8 +212,8 @@ describe("toSessionError", () => {
       ),
     ]
 
-    expect(retryable.map(SessionRunnerRetry.isRetryable)).toEqual([true, true])
-    expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false, false])
+    expect(retryable.map(SessionRunnerRetry.isRetryable)).toEqual([true, true, true])
+    expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false])
   })
 
   test("honors provider retry header overrides", () => {

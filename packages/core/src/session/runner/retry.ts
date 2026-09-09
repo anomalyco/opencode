@@ -35,8 +35,10 @@ export function isRetryable(error: AIError) {
     case "RateLimit":
     case "ProviderInternal":
       return true
+    // HTTP never learns whether the provider saw a request and always retries. WebSocket does:
+    // only a request the provider accepted or rejected is final; an ambiguous send is pre-output.
     case "Transport":
-      return error.reason.delivery === undefined || error.reason.delivery === "not-sent"
+      return error.reason.delivery !== "accepted" && error.reason.delivery !== "rejected"
     case "InvalidProviderOutput":
       return error.reason.classification === "incomplete-stream"
     // Unrecognized failures retry: classification records affirmative
