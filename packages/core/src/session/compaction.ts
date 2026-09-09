@@ -340,7 +340,7 @@ const findTailStart = (messages: readonly SessionMessage.Info[], keepTokens: num
   return previousSummary?.recent ? conversation[0].index : messages.length
 }
 
-export const buildPrompt = (update: boolean) => {
+export const buildPrompt = (update: boolean, legacy = false) => {
   const shared = [
     "Summarize only what the user and the assistant said and did. Leave out instructions and setup the assistant was given rather than told by the user: repository conventions, instruction files such as AGENTS.md, and environment details like the session ID. The next agent receives current versions of all of these separately.",
     SUMMARY_TEMPLATE,
@@ -351,6 +351,11 @@ export const buildPrompt = (update: boolean) => {
   if (update) {
     return [
       "Update the existing checkpoint in the conversation above into one consolidated summary.",
+      ...(legacy
+        ? [
+            "The existing checkpoint was written with an earlier format that recorded far more detail than this one asks for. Rewrite it at the level of detail described below rather than carrying its detail forward. Keep its requirements, decisions, and open questions; they came from earlier conversation with the user.",
+          ]
+        : []),
       "Newer history always takes precedence over the existing checkpoint. Preserve previous information unless newer history clearly contradicts, supersedes, resolves, or makes it stale. If something is no longer relevant to continuing the work, you may remove it.",
       "Incorporate newer requirements, decisions, progress, and context. Reconcile Work State and Next Move: move completed work out of Active, remove resolved blockers and answered questions, and preserve unresolved or pending work.",
       "Return only the updated Markdown sections. Do not reproduce the `<conversation-checkpoint>`, `<summary>`, or `<recent-context>` wrapper tags from the previous checkpoint.",
@@ -566,12 +571,14 @@ export const layer = Layer.effect(
             })
           : Effect.void,
       )
+      const previous = history.messages.findLast(
+        (message): message is SessionMessage.CompactionCompleted =>
+          message.type === "compaction" && message.status === "completed",
+      )
+      // Checkpoints from the earlier template used "## Additional Context" and ran far longer than this one asks for.
+      const legacy = previous !== undefined && !previous.summary.includes("## Important Context")
       const prepared = yield* compactionRequest(input, history.messages, [
-        Message.user(
-          buildPrompt(
-            history.messages.some((message) => message.type === "compaction" && message.status === "completed"),
-          ),
-        ),
+        Message.user(buildPrompt(previous !== undefined, legacy)),
       ])
       // Both requests share the retry allowance; rejected output never enters the reminder request.
       const transient = SessionRunnerRetry.transient(yield* SessionRunnerRetry.policy(context.session.id), {
