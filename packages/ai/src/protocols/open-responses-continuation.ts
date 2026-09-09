@@ -103,6 +103,7 @@ const incremental = (
 }
 
 const code = (event: OpenResponses.Event) => event.code || event.error?.code || event.response?.error?.code || undefined
+const errorType = (event: OpenResponses.Event) => event.error?.type || event.response?.error?.type || undefined
 
 const rejected = (
   observation: Extract<ChannelObservation, { readonly type: "provider-failure" }>,
@@ -153,6 +154,10 @@ export const driver = (input: DriverInput): WebSocketChannelDriver => {
           const rejection = code(event)
           if (rejection === "previous_response_not_found") return rejected(observation, "retry-full")
           if (rejection === "websocket_connection_limit_reached") return rejected(observation, "rotate-and-retry-full")
+          // Only the continuation distinguishes an incremental send from a full one, so an invalid request
+          // there is retried full. Codex reports a stale previous_response_id with this type and no code.
+          if (create.mode === "incremental" && errorType(event) === "invalid_request_error")
+            return rejected(observation, "retry-full")
         }
         if (observation.type !== "completed") return observation
         // A trigger installs a different context window. Clear the append baseline, retaining the socket.

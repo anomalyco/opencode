@@ -852,6 +852,40 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("retries an incremental send in full when the provider rejects it without a code", () =>
+    Effect.gen(function* () {
+      const firstRequest = {
+        type: "response.create",
+        model: "gpt-5.2",
+        store: false,
+        input: [{ role: "user", content: [{ type: "input_text", text: "First" }] }],
+      }
+      const first = continuationDriver(firstRequest)
+      const saved = checkpoint(
+        yield* first.observe(
+          yield* first.create(undefined),
+          ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_1" } }),
+        ),
+      )
+      const second = continuationDriver({
+        ...firstRequest,
+        input: [...firstRequest.input, { role: "user", content: [{ type: "input_text", text: "Second" }] }],
+      })
+      // Codex reports a stale previous_response_id as a plain invalid_request_error.
+      const stale = ProviderShared.encodeJson({
+        type: "error",
+        error: { type: "invalid_request_error", message: "Invalid `previous_response_id`." },
+      })
+      const incremental = yield* second.create(saved)
+      expect(incremental.mode).toBe("incremental")
+      expect(yield* second.observe(incremental, stale)).toMatchObject({ type: "rejected", recovery: "retry-full" })
+
+      // A full send has no continuation to blame, so the same error stays a provider failure.
+      const full = yield* second.create(undefined)
+      expect(yield* second.observe(full, stale)).toMatchObject({ type: "provider-failure" })
+    }),
+  )
+
   it.effect("builds WebSocket and HTTP fallback from the same final request", () =>
     Effect.gen(function* () {
       const attempts = yield* Ref.make(0)
