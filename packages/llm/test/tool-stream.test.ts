@@ -96,4 +96,27 @@ describe("ToolStream", () => {
       })
     }),
   )
+
+  it.effect("treats an Object.prototype stream key as an unstarted tool call", () =>
+    Effect.gen(function* () {
+      const error = ToolStream.appendExisting(
+        ADAPTER,
+        ToolStream.empty<string>(),
+        "toString",
+        '{"query":"weather"}',
+        "missing tool",
+      )
+
+      expect(error).toBeInstanceOf(LLMError)
+      if (ToolStream.isError(error)) expect(error.reason.message).toBe("missing tool")
+    }),
+  )
+
+  it.effect("ignores a stop event for an Object.prototype stream key", () =>
+    Effect.gen(function* () {
+      const finished = yield* ToolStream.finish(ADAPTER, ToolStream.empty<string>(), "constructor")
+
+      expect(finished).toEqual({ tools: {} })
+    }),
+  )
 })
