@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Effect } from "effect"
+import { Cause, Effect, Exit } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { RelativePath } from "@opencode-ai/core/schema"
@@ -78,6 +78,26 @@ describe("Ripgrep", () => {
           })
 
           expect(matches[0]?.text).toBe(`needle${"x".repeat(1_993)}...`)
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("rejects malformed glob patterns", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const ripgrep = yield* Ripgrep.Service
+          const globExit = yield* ripgrep.glob({ cwd: tmp.path, pattern: "[", limit: 10 }).pipe(Effect.exit)
+          expect(Exit.isFailure(globExit)).toBe(true)
+          if (Exit.isFailure(globExit)) expect(String(Cause.squash(globExit.cause))).toContain("error parsing glob")
+
+          const grepExit = yield* ripgrep
+            .grep({ cwd: tmp.path, pattern: "needle", include: "[", limit: 10 })
+            .pipe(Effect.exit)
+          expect(Exit.isFailure(grepExit)).toBe(true)
+          if (Exit.isFailure(grepExit)) expect(String(Cause.squash(grepExit.cause))).toContain("error parsing glob")
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),

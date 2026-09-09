@@ -87,7 +87,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 const failure = (message: string, cause?: unknown) => new Error({ message, cause })
 
 const isInvalidPattern = (stderr: string) =>
-  stderr.includes("regex parse error") || stderr.includes("error parsing regex")
+  stderr.includes("regex parse error") || stderr.includes("error parsing regex") || stderr.includes("error parsing glob")
 
 const layer = Layer.effect(
   Service,
@@ -156,6 +156,7 @@ const layer = Layer.effect(
         run<string>({
           cwd: input.cwd,
           limit: input.limit,
+          pattern: input.pattern,
           signal: input.signal,
           args: [
             "--no-config",
