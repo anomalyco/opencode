@@ -273,13 +273,6 @@ describe("OpenAIPlugin", () => {
       expect(prepared.options.webSocket).toBe(executor)
       expect(prepared.options.http).toBeUndefined()
       expect(disabled.options.webSocket).toBeUndefined()
-
-      // HTTP hooks ride along for the HTTP fallback; they do not force the request onto HTTP.
-      const hooks = yield* PluginHooks.Service
-      yield* hooks.register("session", "http.request", () => Effect.void)
-      const hooked = yield* prepare()
-      expect(hooked.options.webSocket).toBe(executor)
-      expect(hooked.options.http).toBeDefined()
     }),
   )
 })
