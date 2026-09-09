@@ -18,11 +18,14 @@ const waitForFile = (file: string) =>
   Effect.promise(async () => {
     while (true) {
       try {
-        return await fs.readFile(file, "utf8")
+        // The file can be observed after creation but before its contents
+        // are visible, so only return once something was actually written.
+        const contents = await fs.readFile(file, "utf8")
+        if (contents.length > 0) return contents
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
-        await new Promise<void>((resolve) => setTimeout(resolve, 10))
       }
+      await new Promise<void>((resolve) => setTimeout(resolve, 10))
     }
   })
 
