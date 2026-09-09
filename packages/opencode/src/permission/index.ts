@@ -83,6 +83,21 @@ const layer = Layer.effect(
 
       if (!needsAsk) return
 
+      // Deduplicate: if an identical permission request is already pending in
+      // the same session (same permission + patterns), wait on the existing
+      // deferred instead of creating a duplicate prompt. When the user
+      // responds, all waiters proceed together.
+      for (const entry of pending.values()) {
+        if (
+          entry.info.sessionID === request.sessionID &&
+          entry.info.permission === request.permission &&
+          entry.info.patterns.length === request.patterns.length &&
+          entry.info.patterns.every((p, i) => p === request.patterns[i])
+        ) {
+          return yield* Deferred.await(entry.deferred)
+        }
+      }
+
       const id = request.id ?? PermissionV1.ID.ascending()
       const info: PermissionV1.Request = {
         id,
