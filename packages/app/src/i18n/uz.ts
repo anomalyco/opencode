@@ -729,6 +729,7 @@ export const dict = {
   "session.review.noChanges": "Oʻzgarishlar yoʻq",
   "session.review.noUncommittedChanges": "Hali tasdiqlanmagan o'zgarishlar yo'q",
   "session.review.noBranchChanges": "Hozircha filial o'zgarmadi",
+  "session.files.refresh": "Yangilash",
   "session.files.selectToOpen": "Ochish uchun faylni tanlang",
   "session.files.all": "Barcha fayllar",
   "session.files.empty": "Fayl yo'q",

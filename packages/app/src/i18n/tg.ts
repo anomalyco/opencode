@@ -727,6 +727,7 @@ export const dict = {
   "session.review.noChanges": "Тағйирот нест",
   "session.review.noUncommittedChanges": "Ҳанӯз ягон тағйироти беэътиборнашуда",
   "session.review.noBranchChanges": "То ҳол ягон филиал тағир наёфтааст",
+  "session.files.refresh": "Навсозӣ",
   "session.files.selectToOpen": "Барои кушодан файлеро интихоб кунед",
   "session.files.all": "Ҳама файлҳо",
   "session.files.empty": "Файл нест",

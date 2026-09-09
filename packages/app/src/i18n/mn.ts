@@ -730,6 +730,7 @@ export const dict = {
   "session.review.noChanges": "Өөрчлөлт байхгүй",
   "session.review.noUncommittedChanges": "Одоохондоо шийдэгдээгүй өөрчлөлт байхгүй байна",
   "session.review.noBranchChanges": "Одоогоор салбар өөрчлөлт ороогүй байна",
+  "session.files.refresh": "Сэргээх",
   "session.files.selectToOpen": "Нээх файлаа сонгоно уу",
   "session.files.all": "Бүх файлууд",
   "session.files.empty": "Файл байхгүй",

@@ -729,6 +729,7 @@ export const dict = {
   "session.review.noChanges": "Inga ändringar",
   "session.review.noUncommittedChanges": "Inga ändringar som inte har checkats in ännu",
   "session.review.noBranchChanges": "Inga grenändringar ännu",
+  "session.files.refresh": "Uppdatera",
   "session.files.selectToOpen": "Välj en fil att öppna",
   "session.files.all": "Alla filer",
   "session.files.empty": "Inga filer",
