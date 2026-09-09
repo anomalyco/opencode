@@ -2,7 +2,6 @@ import { Show } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
-import { useSessionLayout } from "@/session/session-layout"
 import { StatusPopover } from "@/shell/status/status-popover"
 import { TitlebarRight } from "@/shell/titlebar/right-slot"
 import { Tooltip } from "@opencode/ui/tooltip"
@@ -10,7 +9,6 @@ import { Tooltip } from "@opencode/ui/tooltip"
 export function SessionHeader() {
   const language = useLanguage()
   const settings = useSettings()
-  const { view } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
 
@@ -23,7 +21,8 @@ export function SessionHeader() {
           </Tooltip>
         </Show>
       </TitlebarRight>
-      <Show when={isDesktop() && !view().reviewPanel.opened()}>
+      {/* Keep the fixed toggle's slot mounted throughout panel motion. */}
+      <Show when={isDesktop()}>
         <div class="size-7 shrink-0" aria-hidden />
       </Show>
     </>

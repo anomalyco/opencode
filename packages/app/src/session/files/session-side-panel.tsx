@@ -272,7 +272,11 @@ export function SessionSidePanel(props: {
         style={{ width: panelWidth() }}
       >
         <Show when={visible()}>
-          <div class="size-full flex">
+          <div
+            data-slot="session-review-content"
+            class="h-full flex shrink-0"
+            style={{ width: "var(--session-side-content-width, 100%)" }}
+          >
             <Show when={reviewVisible()}>
               <div class="relative min-w-0 h-full flex-1 overflow-hidden bg-v2-background-bg-base">
                 <div class="size-full min-w-0 h-full bg-v2-background-bg-base">
@@ -537,7 +541,7 @@ export function SessionSidePanel(props: {
                           onClick={(event) => event.stopPropagation()}
                         >
                           <OpenInAppButton directory={projectDirectory} />
-                          <Show when={reviewOpen()}>
+                          <Show when={reviewVisible()}>
                             <div class="size-7 shrink-0" aria-hidden />
                           </Show>
                         </div>
