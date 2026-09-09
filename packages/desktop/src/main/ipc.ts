@@ -24,6 +24,7 @@ import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
 import { createDesktopDraftStore } from "./draft-store"
 import { nativeT } from "./native-translations"
+import { getKeepAwakeEnabled, initializeKeepAwake, setKeepAwakeEnabled, stopKeepAwake } from "./power-save"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -57,6 +58,8 @@ type Deps = {
 export function registerIpcHandlers(deps: Deps) {
   const drafts = createDesktopDraftStore(join(app.getPath("userData"), "drafts.sqlite"))
   const updaterSubscriptions = createUpdaterSubscriptions()
+  initializeKeepAwake()
+  app.once("will-quit", stopKeepAwake)
   app.once("will-quit", updaterSubscriptions.clear)
   app.on("before-quit", () => drafts.flush())
   app.once("will-quit", () => drafts.close())
@@ -78,6 +81,11 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("set-display-backend", (_event: IpcMainInvokeEvent, backend: string | null) =>
     deps.setDisplayBackend(backend),
   )
+  ipcMain.handle("get-keep-awake-enabled", () => getKeepAwakeEnabled())
+  ipcMain.handle("set-keep-awake-enabled", (_event: IpcMainInvokeEvent, enabled: boolean) => {
+    if (typeof enabled !== "boolean") throw new Error("Invalid keep-awake value")
+    setKeepAwakeEnabled(enabled)
+  })
   ipcMain.handle("check-app-exists", (_event: IpcMainInvokeEvent, appName: string) => deps.checkAppExists(appName))
   ipcMain.handle("resolve-app-path", (_event: IpcMainInvokeEvent, appName: string) => deps.resolveAppPath(appName))
   ipcMain.handle("updater-subscribe", (event) => {
