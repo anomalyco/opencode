@@ -35,10 +35,7 @@ ultimate source of truth.
       `undefined` are no-ops, while arrays are rejected.
 - [x] Template literals with interpolation.
 - [x] Regular-expression literals.
-- [x] `NaN` and `Infinity` globals. The complete global baseline is `tools`, `search`, `undefined`, `NaN`, `Infinity`,
-      the constructors and namespaces listed in this matrix, `parseInt`/`parseFloat`/`isFinite`/`isNaN`, and the URI
-      helpers. There is no `globalThis`, `window`, `self`, timers, `fetch`, `structuredClone`, `TextEncoder`, `Intl`,
-      `crypto`, or `process`.
+- [x] `NaN` and `Infinity` globals.
 - [ ] BigInt literals and in-interpreter BigInt arithmetic; BigInt remains invalid at JSON-like host boundaries.
 - [ ] Arbitrary Symbol primitive values and symbol-keyed properties. The confined `Symbol.iterator` and
       `Symbol.asyncIterator` keys are available only for custom iterator protocols.
@@ -216,14 +213,8 @@ ultimate source of truth.
       synchronous iterator support for `fromEntries`.
 - [x] `Object.keys` over arrays and tool references.
 - [x] Object identity is preserved by in-CodeMode Object helpers.
-- [x] Prototype traversal and mutation through `__proto__`, `constructor`, and `prototype` are blocked. Reading them on
-      any value, including globals such as `Object.prototype`, throws rather than reading as `undefined`; every other
-      unknown static member follows the feature-detection rule below.
-- [x] Circular references are rejected when they would be created (`o.self = o`, `array.push(array)`,
-      `Object.assign(o, { o })`), not at serialization as in JS. Values stay acyclic so every boundary walk terminates.
-- [x] Diagnostics for a non-data argument name what was received (`Object.keys expects a data object or array,
-    received a string.`), distinguishing strings, arrays, un-awaited Promises, tool references, functions, and the
-      built-in value kinds.
+- [x] Prototype traversal and mutation through `__proto__`, `constructor`, and `prototype` are blocked.
+- [x] Circular references are rejected when created (`o.self = o`, `array.push(array)`), not at serialization as in JS.
 - [ ] Legal own data fields named `__proto__`, `constructor`, or `prototype` are rejected at JSON/tool boundaries and
       cannot be created, read, or written in CodeMode; tool path segments with those names remain supported.
 - [x] `Object.is` for supported data values.
