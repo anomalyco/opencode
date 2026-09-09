@@ -21,6 +21,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Effect } from "effect"
 import { base64Encode } from "@opencode-ai/core/util/encode"
+import { useDirectoryPicker } from "@/components/directory-picker"
 import {
   type Component,
   createEffect,
@@ -46,7 +47,7 @@ import { ServerSyncProvider, useServerSync } from "@/context/server-sync"
 import { GlobalProvider, useGlobal } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
-import { LayoutProvider } from "@/context/layout"
+import { LayoutProvider, useLayout } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
@@ -326,6 +327,10 @@ function DesktopCommands() {
   const command = useCommand()
   const language = useLanguage()
   const platform = usePlatform()
+  const navigate = useNavigate()
+  const server = useServer()
+  const settings = useSettings()
+  const pickDirectory = useDirectoryPicker()
 
   command.register("desktop", () => {
     const commands: CommandOption[] = []
@@ -339,6 +344,49 @@ function DesktopCommands() {
         },
       })
     }
+    // Global menu commands – available on every page including home
+    const conn = server.current
+    commands.push({
+      id: "session.new",
+      title: language.t("command.session.new"),
+      keybind: "mod+shift+s",
+      onSelect: () => {
+        if (settings.general.newLayoutDesigns()) {
+          command.trigger("tab.new")
+          return
+        }
+        if (conn) {
+          const projects = server.projects.list()
+          const dir = projects[0]?.worktree
+          if (dir) navigate(`/${base64Encode(dir)}/session`)
+        }
+      },
+    })
+    commands.push({
+      id: "project.open",
+      title: language.t("command.project.open"),
+      keybind: "mod+o",
+      onSelect: () => {
+        if (!conn) return
+        function resolve(result: string | string[] | null) {
+          if (Array.isArray(result)) {
+            for (const directory of result) {
+              server.projects.open(directory)
+            }
+            if (result[0]) navigate(`/${base64Encode(result[0])}/session`)
+          } else if (result) {
+            server.projects.open(result)
+            navigate(`/${base64Encode(result)}/session`)
+          }
+        }
+        pickDirectory({
+          server: conn,
+          title: language.t("command.project.open"),
+          multiple: true,
+          onSelect: resolve,
+        })
+      },
+    })
     return commands
   })
 
