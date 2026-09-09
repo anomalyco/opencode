@@ -18,16 +18,26 @@ export interface SessionPrompt {
   delivery: SessionInbox.Delivery
 }
 
-export interface SessionContext {
+/** Request overrides. Typed keys are generation settings; any other key is a provider option. */
+export type SessionRequestOptions = Types.DeepMutable<GenerationOptionsFields> & Record<string, unknown>
+
+export interface SessionRequest {
   readonly sessionID: Session.ID
-  readonly agent: Agent.ID
   readonly model: Model.Ref
   system: Array<SystemPart>
   messages: Array<Message>
+  options: SessionRequestOptions
+}
+
+export interface SessionContext extends SessionRequest {
+  readonly agent: Agent.ID
   tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>
-  /** Request overrides; unset fields retain route and model defaults. */
-  generation: Types.DeepMutable<GenerationOptionsFields>
-  providerOptions: Record<string, unknown>
+}
+
+/** Title generation is not an agent conversation and exposes no agent or tools. */
+export interface SessionTitle extends SessionRequest {
+  /** Set to use this title and skip the model request. */
+  result?: string
 }
 
 /**
@@ -76,6 +86,7 @@ export interface SessionRetry {
 export interface SessionHooks {
   readonly prompt: SessionPrompt
   readonly context: SessionContext
+  readonly title: SessionTitle
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse

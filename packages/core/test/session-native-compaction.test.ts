@@ -230,7 +230,7 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
       messages: yield* store.context(sessionID),
       inputID: SessionMessage.ID.create(),
       resolveContext: () => load,
-      prepare: requests.prepare,
+      prepare: requests.compaction,
     })
   })
   const checkpoint = Effect.gen(function* () {
@@ -247,7 +247,7 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
   return {
     compact,
     automatic: Effect.gen(function* () {
-      return yield* compaction.compact({ context: yield* load, prepare: requests.prepare })
+      return yield* compaction.compact({ context: yield* load, prepare: requests.compaction })
     }),
     checkpoint,
     prompt,
@@ -284,10 +284,12 @@ it.live(
       expect(fixture.headers[0]?.get("x-http-hook")).toBe("compaction")
       yield* fixture.prompt("Second real user request")
       const context = yield* fixture.load
-      const prepared = yield* fixture.requests.prepare({
-        kind: "primary",
-        scope: { session: context.session, model: context.model, agentID: context.agent.id, tools: context.tools },
-        transcript: SessionModelRequest.baseTranscript({ ...context, agent: context.agent.info }),
+      const prepared = yield* fixture.requests.primary({
+        session: context.session,
+        agent: context.agent.id,
+        model: context.model,
+        tools: context.tools,
+        ...SessionModelRequest.baseTranscript({ ...context, agent: context.agent.info }),
       })
       const client = yield* LLMClient.Service
       yield* client.generate(prepared.request, prepared.options)
@@ -331,7 +333,7 @@ it.live(
       expect(fixture.state.calls).toBe(7)
       expect(retries).toMatchObject([
         {
-          agent: "compaction",
+          agent: "build",
           attempt: 2,
           error: { type: "provider.rate-limit" },
           decision: { retry: true, delay: 0 },

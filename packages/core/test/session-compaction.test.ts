@@ -384,7 +384,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       yield* compaction.compactManual({
         session,
         resolveContext: () => Effect.succeed(loaded(session, messages)),
-        prepare: modelRequests.prepare,
+        prepare: modelRequests.compaction,
         messages,
         inputID: SessionMessage.ID.make("msg_manual_compaction"),
       }),
@@ -460,7 +460,7 @@ it.effect("manual compaction records model resolution failures without calling t
               modelID: Model.ID.make("missing"),
             }),
           ),
-        prepare: modelRequests.prepare,
+        prepare: modelRequests.compaction,
         messages: [
           {
             id: SessionMessage.ID.create(),
@@ -511,7 +511,7 @@ it.effect("forked session compaction reuses the fork root prompt cache key", () 
       yield* compaction.compactManual({
         session,
         resolveContext: () => Effect.succeed(loaded(session, messages)),
-        prepare: modelRequests.prepare,
+        prepare: modelRequests.compaction,
         messages,
         inputID: SessionMessage.ID.make("msg_fork_compaction"),
       }),

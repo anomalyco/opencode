@@ -11,7 +11,6 @@ import {
   Message,
   type ContentPart,
 } from "@opencode/ai"
-import { Agent } from "@opencode/schema/agent"
 import { SessionError } from "@opencode/schema/session-error"
 import { Context, Effect, Layer, Stream } from "effect"
 import { Bus } from "../bus.js"
@@ -97,7 +96,7 @@ export type Editor = {
 
 export type AutoInput = {
   readonly context: SessionContext.Loaded
-  readonly prepare: SessionModelRequest.Interface["prepare"]
+  readonly prepare: SessionModelRequest.Interface["compaction"]
   /** Known overflow must recover from durable history, not submit the overflowing native window again. */
   readonly overflow?: boolean
 }
@@ -120,7 +119,7 @@ export type ManualInput = {
     SessionContext.Loaded & { readonly instructionUpdate: string },
     SessionRunnerModel.Error | AgentNotFoundError | Instructions.InitializationBlocked
   >
-  readonly prepare: SessionModelRequest.Interface["prepare"]
+  readonly prepare: SessionModelRequest.Interface["compaction"]
 }
 
 type ExecuteInput = AutoInput & {
@@ -428,22 +427,16 @@ export const layer = Layer.effect(
         messages,
       })
       return input.prepare({
-        kind: "compaction",
-        scope: {
-          session: context.session,
-          agentID: Agent.ID.make("compaction"),
-          contextAgentID: context.agent.id,
-          model: context.model,
-          tools: context.tools,
-        },
-        transcript: {
-          system: transcript.system,
-          messages: [
-            ...transcript.messages,
-            ...(input.instructionUpdate ? [Message.system(input.instructionUpdate)] : []),
-            ...prompt,
-          ],
-        },
+        session: context.session,
+        agent: context.agent.id,
+        model: context.model,
+        tools: context.tools,
+        system: transcript.system,
+        messages: [
+          ...transcript.messages,
+          ...(input.instructionUpdate ? [Message.system(input.instructionUpdate)] : []),
+          ...prompt,
+        ],
         webSocket,
       })
     }
@@ -478,7 +471,7 @@ export const layer = Layer.effect(
           "Provider compaction requires the endpoint in provider/model settings, not a model.request rewrite",
         )
       const transient = SessionRunnerRetry.transient(yield* SessionRunnerRetry.policy(context.session.id), {
-        agent: Agent.ID.make("compaction"),
+        agent: context.agent.id,
         model: context.model.ref,
         hook: prepared.retry,
       })
@@ -580,7 +573,7 @@ export const layer = Layer.effect(
       ])
       // Both requests share the retry allowance; rejected output never enters the reminder request.
       const transient = SessionRunnerRetry.transient(yield* SessionRunnerRetry.policy(context.session.id), {
-        agent: Agent.ID.make("compaction"),
+        agent: context.agent.id,
         model: context.model.ref,
         hook: prepared.retry,
       })

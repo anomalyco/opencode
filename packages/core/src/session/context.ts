@@ -65,7 +65,8 @@ export interface Interface {
       }
     | undefined
   >
-  readonly prepare: SessionModelRequest.Interface["prepare"]
+  /** Outbound request preparation, one entry per Session flow. */
+  readonly request: SessionModelRequest.Interface
 }
 
 /** Location-scoped model-context loader for durable Session Steps. */
@@ -84,7 +85,7 @@ const layer = Layer.effect(
     const mcpInstructions = yield* McpInstructions.Service
     const mcpTools = yield* McpTool.Service
     const models = yield* SessionRunnerModel.Service
-    const modelRequests = yield* SessionModelRequest.Service
+    const request = yield* SessionModelRequest.Service
     const referenceInstructions = yield* ReferenceInstructions.Service
     const skillInstructions = yield* SkillInstructions.Service
     const store = yield* SessionStore.Service
@@ -173,7 +174,7 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ select, load, resolveModel, selectTitle, prepare: modelRequests.prepare })
+    return Service.of({ select, load, resolveModel, selectTitle, request })
   }),
 )
 

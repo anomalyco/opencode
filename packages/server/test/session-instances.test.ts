@@ -94,7 +94,7 @@ it.live(
                             )
                             yield* ctx.session.hook("context", (event) =>
                               Effect.sync(() => {
-                                event.generation.temperature = config.temperature
+                                event.options.temperature = config.temperature
                               }),
                             )
                             yield* ctx.permission.hook("evaluate", (event) =>
