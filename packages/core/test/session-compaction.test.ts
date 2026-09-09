@@ -139,6 +139,13 @@ test("compaction prompt requires the checkpoint headings in order", () => {
   ])
 })
 
+test("compaction update prompt rewrites legacy checkpoints only when asked", () => {
+  const rewrite = "The existing checkpoint was written with an earlier format"
+  expect(SessionCompaction.buildPrompt(true, true)).toContain(rewrite)
+  expect(SessionCompaction.buildPrompt(true)).not.toContain(rewrite)
+  expect(SessionCompaction.buildPrompt(false, true)).not.toContain(rewrite)
+})
+
 test("compaction prompts prohibit task execution", () => {
   for (const update of [false, true])
     expect(SessionCompaction.buildPrompt(update)).toContain("Do not continue the task or call tools")
