@@ -44,24 +44,51 @@ function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
 }
 
+const RATE_LIMIT_DURATION_UNIT_MS: Record<string, number> = { ms: 1, s: 1000, m: 60_000, h: 3_600_000 }
+
+// A header that is just digits keeps its documented meaning (milliseconds for
+// `retry-after-ms`, seconds for `retry-after`, RFC 9110). Only a value that is
+// NOT a plain number is handed to the duration parser below, so nothing that
+// already parsed correctly changes behaviour.
+function isPlainNumber(value: string): boolean {
+  return /^\s*\d+(?:\.\d+)?\s*$/.test(value)
+}
+
+// Several providers answer with a duration string rather than a number of
+// seconds — "370ms", "6s", "2m59.56s". Order in the alternation matters: "ms"
+// must be tried before "m" alone, or every millisecond value is read as minutes.
+export function parseRateLimitDuration(value: string): number | undefined {
+  const matches = [...value.matchAll(/(\d+(?:\.\d+)?)(ms|h|m|s)/g)]
+  if (matches.length === 0) return undefined
+  return matches.reduce((total, [, amount, unit]) => total + Number.parseFloat(amount) * RATE_LIMIT_DURATION_UNIT_MS[unit], 0)
+}
+
 export function delay(attempt: number, error?: SessionV1.APIError, random = Math.random()) {
   if (error) {
     const headers = error.data.responseHeaders
     if (headers) {
+      // Number.parseFloat stops at the first non-digit, which on a duration
+      // string is not an error but a plausible wrong number, returned silently:
+      // "2m59.56s" becomes 2 -> 2_000 ms instead of 179_560 ms. That is two
+      // seconds instead of three minutes, in the direction that breaks — every
+      // retry is spent inside half a minute against a limit that lasts three,
+      // and then the request gives up.
       const retryAfterMs = headers["retry-after-ms"]
       if (retryAfterMs) {
-        const parsedMs = Number.parseFloat(retryAfterMs)
-        if (!Number.isNaN(parsedMs)) {
+        const parsedMs = isPlainNumber(retryAfterMs) ? Number.parseFloat(retryAfterMs) : parseRateLimitDuration(retryAfterMs)
+        if (parsedMs !== undefined && !Number.isNaN(parsedMs)) {
           return cap(parsedMs)
         }
       }
 
       const retryAfter = headers["retry-after"]
       if (retryAfter) {
-        const parsedSeconds = Number.parseFloat(retryAfter)
-        if (!Number.isNaN(parsedSeconds)) {
-          // convert seconds to milliseconds
-          return cap(Math.ceil(parsedSeconds * 1000))
+        // A bare number is seconds (RFC 9110); a duration string carries its units.
+        const parsedMs = isPlainNumber(retryAfter)
+          ? Number.parseFloat(retryAfter) * 1000
+          : parseRateLimitDuration(retryAfter)
+        if (parsedMs !== undefined && !Number.isNaN(parsedMs)) {
+          return cap(Math.ceil(parsedMs))
         }
         // Try parsing as HTTP date format
         const parsed = Date.parse(retryAfter) - Date.now()

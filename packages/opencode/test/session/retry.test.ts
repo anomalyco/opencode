@@ -57,6 +57,36 @@ describe("session.retry.delay", () => {
     expect(SessionRetry.delay(3, error)).toBe(30000)
   })
 
+  // Number.parseFloat stops at the first non-digit, so a duration string came
+  // back as a plausible wrong number rather than an error: "2m59.56s" -> 2 ->
+  // 2_000 ms instead of 179_560. Two seconds instead of three minutes, in the
+  // direction that breaks.
+  test("reads duration strings on retry-after", () => {
+    expect(SessionRetry.delay(1, apiError({ "retry-after": "2m59.56s" }))).toBe(2 * 60_000 + 59_560)
+    expect(SessionRetry.delay(1, apiError({ "retry-after": "1m30s" }))).toBe(90_000)
+    expect(SessionRetry.delay(1, apiError({ "retry-after": "6s" }))).toBe(6_000)
+    expect(SessionRetry.delay(1, apiError({ "retry-after": "370ms" }))).toBe(370)
+  })
+
+  test("reads duration strings on retry-after-ms", () => {
+    expect(SessionRetry.delay(1, apiError({ "retry-after-ms": "2m59.56s" }))).toBe(2 * 60_000 + 59_560)
+    expect(SessionRetry.delay(1, apiError({ "retry-after-ms": "370ms" }))).toBe(370)
+  })
+
+  // The other direction: a bare number must keep its documented unit, or this
+  // change would silently alter every provider that was already read correctly.
+  test("a bare number keeps its unit: seconds on retry-after, milliseconds on retry-after-ms", () => {
+    expect(SessionRetry.delay(1, apiError({ "retry-after": "30" }))).toBe(30_000)
+    expect(SessionRetry.delay(1, apiError({ "retry-after-ms": "1500" }))).toBe(1500)
+  })
+
+  test("parseRateLimitDuration sums units and rejects a non-duration", () => {
+    expect(SessionRetry.parseRateLimitDuration("370ms")).toBe(370)
+    expect(SessionRetry.parseRateLimitDuration("6s")).toBe(6000)
+    expect(SessionRetry.parseRateLimitDuration("2m59.56s")).toBeCloseTo(2 * 60_000 + 59_560, 0)
+    expect(SessionRetry.parseRateLimitDuration("not-a-duration")).toBeUndefined()
+  })
+
   test("accepts http-date retry-after values", () => {
     const date = new Date(Date.now() + 20000).toUTCString()
     const error = apiError({ "retry-after": date })
