@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { ShellSelect } from "@opencode-ai/core/shell/select"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { which } from "@opencode-ai/core/util/which"
+import { ShellSelect } from "@opencode/core/shell/select"
+import { FSUtil } from "@opencode/util/fs-util"
+import { which } from "@opencode/core/util/which"
 import fs from "node:fs/promises"
 import { tmpdir } from "./fixture/tmpdir"
 

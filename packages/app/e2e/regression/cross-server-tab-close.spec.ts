@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import { currentSession } from "../utils/mock-server"
 import { installSseTransport } from "../utils/sse-transport"
 
@@ -86,7 +86,12 @@ async function mockServers(page: Page, requests: string[]) {
       }
       return json(route, url.pathname === "/api/project" ? [project] : { id: project.id, directory: current.directory })
     }
-    if (url.pathname === "/api/location") return json(route, { directory: current.directory })
+    if (url.pathname === "/api/location")
+      return json(route, {
+        directory: current.directory,
+        project: { id: current.projectID, directory: current.directory, canonical: current.directory },
+      })
+    if (url.pathname === "/api/worktree") return json(route, [{ directory: current.directory }])
     if (url.pathname === "/api/vcs")
       return json(route, {
         location: { directory: current.directory },

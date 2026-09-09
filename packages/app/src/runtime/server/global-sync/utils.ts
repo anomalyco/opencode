@@ -1,6 +1,6 @@
-import type { AgentListOutput, ModelListOutput, ProviderListOutput } from "@opencode-ai/client/promise"
+import type { AgentListOutput, ModelListOutput, ProviderListOutput } from "@opencode/client/promise"
 import type { Agent, Project, Provider, ProviderListResponse } from "@/runtime/server/types"
-import type { Project as CurrentProject } from "@opencode-ai/client/promise"
+import type { Project as CurrentProject } from "@opencode/client/promise"
 import { unwrap } from "solid-js/store"
 export { pathKey as directoryKey, type PathKey as DirectoryKey } from "@/workspaces/path-key"
 

@@ -1,7 +1,7 @@
 import { createMemo, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
-import { OpenCode } from "@opencode-ai/client/promise"
+import { OpenCode } from "@opencode/client/promise"
 import { readLocalImage } from "../../app/src/runtime/server/image"
 import { MarkdownProvider } from "../src/context/markdown"
 import { CurrentSessionProviders } from "../src/storybook/current-session-story"

@@ -1,10 +1,10 @@
 export * as ConfigWorktreePlugin from "./worktree.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Effect } from "effect"
 import path from "path"
 import { Config } from "../../config.js"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { Location } from "../../location.js"
 import { AbsolutePath } from "../../schema.js"
 import { Worktree } from "../../worktree.js"
@@ -26,7 +26,7 @@ export const Plugin = define({
           directory: AbsolutePath.make(
             directory.startsWith("~/")
               ? path.join(global.home, directory.slice(2))
-              : path.resolve(entry.path ? path.dirname(entry.path) : location.directory, directory),
+              : path.resolve(location.project.canonical, directory),
           ),
         })
       }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { OpenCode, type LocationGetOutput, type ModelRef, type SessionInfo } from "@opencode-ai/client/promise"
+import { OpenCode, type LocationGetOutput, type ModelRef, type SessionInfo } from "@opencode/client/promise"
 import { resolveSessionTarget, SessionTargetMutationError } from "../src/session-target"
 
 function location(directory: string, workspaceID?: string): LocationGetOutput {

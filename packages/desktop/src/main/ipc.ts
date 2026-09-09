@@ -14,17 +14,18 @@ import { storageHandlers } from "./ipc-handlers/storage"
 import { updaterHandlers } from "./ipc-handlers/updater"
 import { windowHandlers } from "./ipc-handlers/window"
 import { wslHandlers } from "./ipc-handlers/wsl"
+import { sshHandlers } from "./ipc-handlers/ssh"
+import { Ssh } from "./ssh/service"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
 import { ApplicationLifecycle } from "./lifecycle"
 import { showCliInstaller } from "./native/install-cli"
 import { createMenu, sendMenuCommand } from "./native/menu"
 import { DesktopCli } from "./service/desktop-cli"
-import { DesktopStorage } from "./storage"
 import { Updater } from "./updater"
 import { getLastFocusedWindow } from "./windows"
 import { Wsl } from "./wsl/start"
 
-const services = Layer.mergeAll(DesktopFiles.layer, DesktopStorage.layer, Wsl.layer)
+const services = Layer.mergeAll(DesktopFiles.layer, Wsl.layer, Ssh.layer)
 const handlers = Layer.mergeAll(
   appHandlers,
   storageHandlers,
@@ -33,6 +34,7 @@ const handlers = Layer.mergeAll(
   menuHandlers,
   updaterHandlers,
   wslHandlers,
+  sshHandlers,
   eventHandlers,
 )
 export const layer = RpcServer.layer(DesktopRpcs, { disableFatalDefects: true }).pipe(

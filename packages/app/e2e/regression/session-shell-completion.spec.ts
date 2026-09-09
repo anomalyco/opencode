@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import type { SessionMessageAssistant, ShellInfo } from "@opencode-ai/client/promise"
+import type { SessionMessageAssistant, ShellInfo } from "@opencode/client/promise"
 import { directory, sessionID, setupTimeline } from "../performance/timeline-stability/fixture"
 
 const shell = {

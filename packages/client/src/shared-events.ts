@@ -1,10 +1,19 @@
 export * as SharedEvents from "./shared-events.js"
 
-export function make<A extends { readonly type: string }>(connect: (signal: AbortSignal) => AsyncIterable<A>) {
+export type SubscribeOptions = {
+  readonly signal?: AbortSignal
+  /** Reports transport activity on the shared stream, including keepalive frames that carry no event. */
+  readonly onActivity?: () => void
+}
+
+export function make<A extends { readonly type: string }>(
+  connect: (signal: AbortSignal, onActivity: () => void) => AsyncIterable<A>,
+) {
   type Completion = { readonly error: unknown } | Record<string, never>
   type Subscriber = {
     push: (value: A) => void
     finish: (completion: Completion) => void
+    activity?: () => void
   }
   type Connection = {
     controller: AbortController
@@ -26,7 +35,9 @@ export function make<A extends { readonly type: string }>(connect: (signal: Abor
     let completion: Completion = {}
     try {
       if (connection.controller.signal.aborted) return
-      iterator = connect(connection.controller.signal)[Symbol.asyncIterator]()
+      iterator = connect(connection.controller.signal, () => {
+        connection.subscribers.forEach((subscriber) => subscriber.activity?.())
+      })[Symbol.asyncIterator]()
       while (!connection.controller.signal.aborted) {
         const item = await iterator.next()
         if (item.done || connection.controller.signal.aborted) break
@@ -47,7 +58,7 @@ export function make<A extends { readonly type: string }>(connect: (signal: Abor
   }
 
   return {
-    subscribe(options?: { readonly signal?: AbortSignal }): AsyncIterable<A> {
+    subscribe(options?: SubscribeOptions): AsyncIterable<A> {
       return {
         [Symbol.asyncIterator]() {
           const pending: ReturnType<typeof Promise.withResolvers<IteratorResult<A>>>[] = []
@@ -72,6 +83,7 @@ export function make<A extends { readonly type: string }>(connect: (signal: Abor
           }
 
           const subscriber: Subscriber = {
+            activity: options?.onActivity,
             finish(result) {
               finish(result, false)
             },

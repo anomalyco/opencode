@@ -1,5 +1,5 @@
-import { Vcs } from "@opencode-ai/core/vcs"
-import { ServiceUnavailableError } from "@opencode-ai/protocol/errors"
+import { Vcs } from "@opencode/core/vcs"
+import { ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"

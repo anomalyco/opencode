@@ -1,10 +1,17 @@
 export * as OpenCodeTools from "./opencode.js"
 
-import { SystemPart, ToolFailure } from "@opencode-ai/ai"
-import type { Context } from "@opencode-ai/plugin/effect/plugin"
-import { AbsolutePath } from "@opencode-ai/schema/schema"
-import { Session } from "@opencode-ai/schema/session"
+import { SystemPart, ToolFailure } from "@opencode/ai"
+import type { Context } from "@opencode/plugin/effect/plugin"
+import { AbsolutePath } from "@opencode/schema/schema"
+import { Session } from "@opencode/schema/session"
 import { Effect, Schema } from "effect"
+
+export const RenameInput = Schema.Struct({
+  sessionID: Schema.optionalKey(Session.ID).annotate({ description: "Omit to rename the current session." }),
+  title: Schema.String.check(Schema.isMinLength(1)).annotate({ description: "New session title." }),
+})
+
+const RenameOutput = Schema.Struct({ sessionID: Session.ID, title: Schema.String })
 
 export const MoveInput = Schema.Struct({
   sessionID: Schema.optionalKey(Session.ID).annotate({ description: "Omit to move the current session." }),
@@ -30,6 +37,26 @@ export const Plugin = {
     yield* ctx.tool
       .transform((draft) => {
         draft.namespace({ name: "opencode", description: "OpenCode session and runtime tools." })
+        draft.add({
+          name: "session_rename",
+          description:
+            "Rename a session, or omit sessionID to rename the current session. Use a short, specific title that summarizes the work being done.",
+          input: RenameInput,
+          output: RenameOutput,
+          options: { namespace: "opencode", codemode: true },
+          execute: (input, context) => {
+            const sessionID = input.sessionID ?? context.sessionID
+            const title = input.title.trim()
+            if (!title) return Effect.fail(new ToolFailure({ message: "Session title must not be empty" }))
+            return ctx.session.rename({ sessionID, title }).pipe(
+              Effect.as({
+                output: { sessionID, title },
+                content: `Renamed session ${sessionID} to ${title}.`,
+              }),
+              Effect.mapError((error) => new ToolFailure({ message: `Unable to rename session ${sessionID}`, error })),
+            )
+          },
+        })
         draft.add({
           name: "session_move",
           description:

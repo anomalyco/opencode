@@ -19,7 +19,7 @@
   display: flex;
   flex-direction: column;
   max-height: min(75dvh, calc(100dvh - env(safe-area-inset-top, 0px) - 16px));
-  padding: 0 12px max(12px, env(safe-area-inset-bottom, 0px));
+  padding: 0 12px max(12px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   padding-left: max(12px, env(safe-area-inset-left, 0px));
   padding-right: max(12px, env(safe-area-inset-right, 0px));
   border-radius: 16px 16px 0 0;

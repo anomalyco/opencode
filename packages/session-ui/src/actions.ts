@@ -1,4 +1,4 @@
-import type { PromptFileAttachment } from "@opencode-ai/client/promise"
+import type { PromptFileAttachment } from "@opencode/client/promise"
 
 export type SessionUserComment = {
   path: string

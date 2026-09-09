@@ -1,13 +1,12 @@
 export * as ReadTool from "./read.js"
 
-import type { Context } from "@opencode-ai/plugin/effect/plugin"
+import type { Context } from "@opencode/plugin/effect/plugin"
 import { basename, dirname, join } from "path"
-import { ToolFailure } from "@opencode-ai/ai"
+import { ToolFailure } from "@opencode/ai"
 import { Effect, Schema } from "effect"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "../../location.js"
-import { LocationMutation } from "../../location-mutation.js"
-import { Permission } from "../../permission.js"
+import { FileAccess } from "../../file-access.js"
 import { SessionInstructions } from "../../session/instructions.js"
 import { AbsolutePath } from "../../schema.js"
 import { ReadToolFileSystem } from "../read-filesystem.js"
@@ -31,8 +30,7 @@ export const Plugin = {
   id: "opencode.tool.read",
   effect: Effect.fn("ReadTool.Plugin")(function* (ctx: Context) {
     const reader = yield* ReadToolFileSystem.Service
-    const mutation = yield* LocationMutation.Service
-    const permission = yield* Permission.Service
+    const access = yield* FileAccess.Service
     const sessionInstructions = yield* SessionInstructions.Service
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
@@ -48,37 +46,13 @@ export const Plugin = {
           output: Output,
           execute: (input, context) => {
             return Effect.gen(function* () {
-              const source = {
-                type: "tool" as const,
-                messageID: context.messageID,
-                id: context.id,
-              }
-              const authorize = (target: LocationMutation.Target, authorizeExternal = true) =>
-                Effect.gen(function* () {
-                  if (target.externalDirectory && authorizeExternal)
-                    yield* permission.assert({
-                      ...LocationMutation.externalDirectoryPermission(target.externalDirectory),
-                      sessionID: context.sessionID,
-                      agent: context.agent,
-                      source,
-                    })
-                  yield* permission.assert({
-                    action: name,
-                    resources: [target.resource],
-                    save: ["*"],
-                    sessionID: context.sessionID,
-                    agent: context.agent,
-                    source,
-                  })
-                })
-              const read = (target: LocationMutation.Target) =>
-                reader.read(AbsolutePath.make(target.absolute), target.resource, {
+              const read = (target: FileAccess.Target) =>
+                reader.read(target.absolute, target.resource, {
                   offset: input.offset,
                   limit: input.limit,
                 })
 
-              const requested = yield* mutation.resolve({ path: input.path })
-              yield* authorize(requested)
+              const requested = yield* access.authorizeRead(input.path, context)
               const result = yield* read(requested).pipe(
                 Effect.map((content) => ({ content, target: requested, path: input.path })),
                 Effect.catchIf(
@@ -89,9 +63,7 @@ export const Plugin = {
                         Effect.orElseSucceed(() => undefined),
                       )
                       if (!alternate) return yield* missing(input.path, requested.absolute)
-                      const target = yield* mutation.resolve({ path: alternate, kind: "file" })
-                      // The candidate is a sibling under the external directory already approved above.
-                      yield* authorize(target, false)
+                      const target = yield* access.authorizeRead(alternate, context, { siblingOf: requested })
                       const content = yield* read(target).pipe(
                         Effect.catchIf(
                           (error) => error instanceof Environment.NotFound,
@@ -220,7 +192,9 @@ export const toModelContent = (path: string, offset: number | undefined, output:
   }
 
   const start = output.type === "text-page" ? output.offset : 1
-  const lines = output.content === "" ? [] : output.content.replace(/\n$/, "").split("\n")
+  // Pages already join selected lines; a trailing newline represents a selected blank line.
+  const text = output.type === "file" ? output.content.replace(/\n$/, "") : output.content
+  const lines = output.content === "" ? [] : text.split("\n")
   const content = [
     lines.length === 0 ? `Read file ${path}, 0 lines` : `Read file ${path}, lines ${start}-${start + lines.length - 1}`,
   ]

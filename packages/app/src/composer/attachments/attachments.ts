@@ -1,5 +1,7 @@
 import { onCleanup, onMount } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { createBlobReference } from "@/runtime/persistence/drafts"
+import { uuid } from "@/runtime/persistence/uuid"
 import type { ComposerAttachment, ComposerPrompt } from "../types"
 
 const accepted = [
@@ -107,7 +109,7 @@ export function createComposerAttachments(
       if (toast) input.warn()
       return false
     }
-    const blob = input.store ? await input.store(file) : await blobReference(file)
+    const blob = input.store ? await input.store(file) : await createBlobReference(file)
     const sourcePath = input.getPathForFile?.(file) || undefined
     // Native clipboard images arrive with a fresh timestamped filename on every paste, so identical
     // clipboard content is matched on bytes alone.
@@ -127,7 +129,7 @@ export function createComposerAttachments(
     }
     const attachment: ComposerAttachment = {
       type: "image",
-      id: crypto.randomUUID(),
+      id: uuid(),
       filename: file.name,
       sourcePath,
       mime,
@@ -230,12 +232,6 @@ export function createComposerAttachments(
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
 
-async function blobReference(file: File) {
-  const id = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer())))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("")
-  return { id, url: URL.createObjectURL(file) }
-}
 const imageExtensions = new Map([
   ["gif", "image/gif"],
   ["jpeg", "image/jpeg"],

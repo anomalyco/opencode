@@ -1,83 +1,18 @@
 import { Effect } from "effect"
-import {
-  type AstNode,
-  CodeModeFunction,
-  CodeModeGenerator,
-  CoercionFunction,
-  ErrorConstructorReference,
-  GlobalMethodReference,
-  GlobalNamespace,
-  IntrinsicReference,
-  InterpreterRuntimeError,
-  JsonMethodReference,
-  PromiseCapabilityFunction,
-  PromiseNamespace,
-  UriFunction,
-} from "./model.js"
-import { containsOpaqueReference, isRuntimeReference, rejectCircularInsertion, typeofValue } from "./references.js"
-import { isBlockedMember, type SafeObject } from "../tool-runtime.js"
-import {
-  CodeModeDate,
-  CodeModeMap,
-  CodeModePromise,
-  CodeModeRegExp,
-  CodeModeSet,
-  CodeModeURL,
-  CodeModeURLSearchParams,
-  isCodeModeValue,
-} from "../values.js"
-import { dateSetterArgumentCount, invokeDateMethod, invokeDateStatic } from "../stdlib/date.js"
-import { invokeMathMethod } from "../stdlib/math.js"
-import { invokeNumberMethod, invokeNumberStatic } from "../stdlib/number.js"
-import { invokeObjectMethod } from "../stdlib/object.js"
-import { invokeRegExpMethod, invokeRegExpStatic, matchToValue, toHostRegex } from "../stdlib/regexp.js"
-import { invokeStringStatic } from "../stdlib/string.js"
-import { invokeURLMethod, invokeURLStatic, uriArgument } from "../stdlib/url.js"
-import { boundedData, coerceToNumber, coerceToString, errorBrandName } from "../stdlib/value.js"
-import { preserveConsumerError, type SyncIteratorRunner } from "./iterator.js"
-
-export type CallbackRunner<R> = {
-  readonly invokeFunction: (fn: CodeModeFunction, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
-  readonly invokeCallable: (
-    callable: unknown,
-    args: Array<unknown>,
-    node: AstNode,
-  ) => Effect.Effect<unknown, unknown, R>
-  readonly settlePromise: (promise: CodeModePromise) => Effect.Effect<unknown, unknown, never>
-}
-
-// The single acceptance list for callbacks: collections, sort, string replacers,
-// Array.from mappers, and promise reactions all admit exactly these callables.
-// Admission means dispatchable, not necessarily invocable: new-requiring
-// constructors pass the gate and throw a TypeError on call, like JS.
-export type SupportedCallback =
-  | CodeModeFunction
-  | CoercionFunction
-  | UriFunction
-  | PromiseCapabilityFunction
-  | GlobalMethodReference
-  | JsonMethodReference
-  | IntrinsicReference
-  | ErrorConstructorReference
-  | GlobalNamespace
-  | PromiseNamespace
-
-export const isSupportedCallback = (value: unknown): value is SupportedCallback =>
-  value instanceof CodeModeFunction ||
-  value instanceof CoercionFunction ||
-  value instanceof UriFunction ||
-  value instanceof PromiseCapabilityFunction ||
-  value instanceof GlobalMethodReference ||
-  value instanceof JsonMethodReference ||
-  value instanceof IntrinsicReference ||
-  value instanceof ErrorConstructorReference ||
-  // Callable namespaces dispatch like JS: Array/Object/Date/RegExp construct,
-  // new-requiring constructors throw a TypeError. Math/JSON/console stay non-callable.
-  (value instanceof GlobalNamespace && typeofValue(value) === "function") ||
-  value instanceof PromiseNamespace
+import { isBlockedMember, type SafeObject, toProgram } from "../data.js"
+import { dateSetterArgumentCount, invokeDateMethod } from "../stdlib/date.js"
+import { invokeNumberMethod } from "../stdlib/number.js"
+import { invokeRegExpMethod, matchToValue, toHostRegex } from "../stdlib/regexp.js"
+import { invokeURLMethod, uriArgument } from "../stdlib/url.js"
+import { coerceToNumber, coerceToString, errorBrandName } from "../stdlib/value.js"
+import { compareText } from "../tool-runtime.js"
+import { Values } from "../values.js"
+import { type AstNode, IntrinsicReference, InterpreterRuntimeError } from "./model.js"
+import { containsOpaqueReference, rejectCircularInsertion, typeofValue } from "./references.js"
+import { applyCollectionCallback, isSupportedCallback, type Runner, toPrimitive } from "./runner.js"
 
 export const invokeIntrinsic = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   ref: IntrinsicReference,
   args: Array<unknown>,
   node: AstNode,
@@ -100,7 +35,7 @@ export const invokeIntrinsic = <R>(
   if (Array.isArray(ref.receiver)) {
     return invokeArrayMethod(runner, ref.receiver, ref.name, args, node)
   }
-  if (ref.receiver instanceof CodeModeDate) {
+  if (ref.receiver instanceof Values.Date) {
     const target = ref.receiver
     const argumentCount = dateSetterArgumentCount(ref.name)
     if (argumentCount === undefined) return Effect.succeed(invokeDateMethod(target, ref.name, [], node))
@@ -113,67 +48,38 @@ export const invokeIntrinsic = <R>(
       (values) => invokeDateMethod(target, ref.name, values, node, initialTime),
     )
   }
-  if (ref.receiver instanceof CodeModeRegExp) {
+  if (ref.receiver instanceof Values.RegExp) {
     return Effect.succeed(invokeRegExpMethod(ref.receiver, ref.name, args, node))
   }
-  if (ref.receiver instanceof CodeModeMap) {
+  if (ref.receiver instanceof Values.Map) {
     return invokeMapMethod(runner, ref.receiver, ref.name, args, node)
   }
-  if (ref.receiver instanceof CodeModeSet) {
+  if (ref.receiver instanceof Values.Set) {
     return invokeSetMethod(runner, ref.receiver, ref.name, args, node)
   }
-  if (ref.receiver instanceof CodeModeURL) {
+  if (ref.receiver instanceof Values.URL) {
     return Effect.succeed(invokeURLMethod(ref.receiver, ref.name, node))
   }
-  if (ref.receiver instanceof CodeModeURLSearchParams) {
+  if (ref.receiver instanceof Values.URLSearchParams) {
     return invokeURLSearchParamsMethod(runner, ref.receiver, ref.name, args, node)
   }
   throw new InterpreterRuntimeError(`Method '${ref.name}' is not available.`, node)
 }
 
+/**
+ * ToPrimitive: tries an object's own `valueOf`/`toString` in hint order and returns the first
+ * primitive result. Runtime values behave like their JS counterparts (Date yields its time under a
+ * number hint; the rest yield their string form). An inherited `toString` yields the default
+ * string form, so plain objects become "[object Object]" and arrays join.
+ */
+
 const coerceNumericArgument = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   value: unknown,
   node: AstNode,
-): Effect.Effect<number, unknown, R> => {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || isCodeModeValue(value)) {
-    return Effect.succeed(coerceToNumber(value))
-  }
-  const object = value as Record<string, unknown>
-  return Effect.gen(function* () {
-    if (Object.hasOwn(object, "valueOf") && typeofValue(object.valueOf) === "function") {
-      const result = yield* runner.invokeCallable(object.valueOf, [], node)
-      if (result === null || (typeof result !== "object" && typeof result !== "function")) {
-        return coerceToNumber(result)
-      }
-    }
-    if (!Object.hasOwn(object, "toString")) return coerceToNumber(value)
-    if (typeofValue(object.toString) === "function") {
-      const result = yield* runner.invokeCallable(object.toString, [], node)
-      if (result === null || (typeof result !== "object" && typeof result !== "function")) {
-        return coerceToNumber(result)
-      }
-    }
-    throw new InterpreterRuntimeError("Cannot convert object to primitive value.", node).as("TypeError")
-  })
-}
+): Effect.Effect<number, unknown, R> => Effect.map(toPrimitive(runner, value, "number", node), coerceToNumber)
 
-export const invokeGlobalMethod = (ref: GlobalMethodReference, args: Array<unknown>, node: AstNode): unknown => {
-  if (ref.namespace === "console") throw new InterpreterRuntimeError(`console.${ref.name} is not available.`, node)
-  if (ref.namespace === "Object") return invokeObjectMethod(ref.name, args, node)
-  if (ref.namespace === "Math") return invokeMathMethod(ref.name, args, node)
-  if (ref.namespace === "Array") return invokeArrayStatic(ref.name, args, node)
-  if (ref.namespace === "Number") return invokeNumberStatic(ref.name, args, node)
-  if (ref.namespace === "String") return invokeStringStatic(ref.name, args, node)
-  if (ref.namespace === "URL") return invokeURLStatic(ref.name, args, node)
-  if (ref.namespace === "Date") return invokeDateStatic(ref.name, args, node)
-  if (ref.namespace === "RegExp") return invokeRegExpStatic(ref.name, args, node)
-  if (ref.namespace === "Map" || ref.namespace === "Set" || ref.namespace === "URLSearchParams") {
-    throw new InterpreterRuntimeError(`${ref.namespace}.${ref.name} is not available.`, node)
-  }
-  throw new InterpreterRuntimeError(`${ref.namespace}.${ref.name} is not available.`, node)
-}
-
+// console is intercepted by the interpreter before reaching here.
 const requireDataArgument = (name: string, index: number, arg: unknown, node: AstNode): unknown => {
   if (containsOpaqueReference(arg)) {
     throw new InterpreterRuntimeError(
@@ -192,7 +98,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
   const optNum = (index: number): number | undefined => (args[index] === undefined ? undefined : num(index))
   const optStr = (index: number): string | undefined => (args[index] === undefined ? undefined : str(index))
   const rejectRegex = (): void => {
-    if (args[0] instanceof CodeModeRegExp) {
+    if (args[0] instanceof Values.RegExp) {
       throw new InterpreterRuntimeError(
         `String.${name} cannot take a regular expression; use regex.test(string) or String.search instead.`,
         node,
@@ -241,7 +147,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
         result = requestedLimit !== undefined && requestedLimit >>> 0 === 0 ? [] : [value]
         break
       }
-      if (args[0] instanceof CodeModeRegExp) {
+      if (args[0] instanceof Values.RegExp) {
         result = value.split(args[0].regex, optNum(1))
         break
       }
@@ -272,7 +178,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
       break
     case "replace":
     case "replaceAll": {
-      if (args[0] instanceof CodeModeRegExp) {
+      if (args[0] instanceof Values.RegExp) {
         const pattern = args[0].regex
         const replacement = str(1)
         if (name === "replaceAll" && !pattern.global) {
@@ -296,7 +202,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
       const matched = value.match(pattern)
       if (matched === null) return null
       // Preserve the own `index` and `groups` properties on non-global matches.
-      if (pattern.global) return boundedData(matched, "String.match result")
+      if (pattern.global) return toProgram(matched, "String.match result")
       return matchToValue(matched)
     }
     case "matchAll": {
@@ -351,171 +257,11 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
     default:
       throw new InterpreterRuntimeError(`String method '${name}' is not available.`, node)
   }
-  return boundedData(result, `String.${name} result`)
-}
-
-export const arrayStatics = new Set(["isArray", "of", "from"])
-
-const invokeArrayStatic = (name: string, args: Array<unknown>, node: AstNode): unknown => {
-  switch (name) {
-    case "isArray":
-      return Array.isArray(args[0])
-    case "of":
-      return [...args]
-    default:
-      throw new InterpreterRuntimeError(`Array.${name} is not available.`, node)
-  }
-}
-
-const arrayLikeSource = (source: unknown, node: AstNode): { readonly length: number; readonly source: object } => {
-  if (source instanceof CodeModePromise) {
-    throw new InterpreterRuntimeError(
-      "Array.from received an un-awaited Promise; await it before creating the array.",
-      node,
-      "InvalidDataValue",
-    )
-  }
-  if (
-    source !== null &&
-    typeof source === "object" &&
-    (Object.getPrototypeOf(source) === Object.prototype || Object.getPrototypeOf(source) === null) &&
-    typeof (source as { length?: unknown }).length === "number"
-  ) {
-    const length = (source as { length: number }).length
-    const normalized = Number.isNaN(length) || length <= 0 ? 0 : Math.trunc(length)
-    if (normalized > 4_294_967_295) throw new RangeError("Invalid array length")
-    return { length: normalized, source }
-  }
-  throw new InterpreterRuntimeError(
-    "Array.from expects an array, string, Map, Set, or array-like value.",
-    node,
-    "InvalidDataValue",
-  )
-}
-
-export const invokeArrayFrom = <R>(
-  runner: CallbackRunner<R> & SyncIteratorRunner<R>,
-  args: Array<unknown>,
-  node: AstNode,
-): Effect.Effect<unknown, unknown, R> => {
-  const source = args[0]
-  const apply =
-    args.length < 2 || args[1] === undefined ? undefined : applyCollectionCallback(runner, args[1], "Array.from", node)
-  return Effect.gen(function* () {
-    const cursor = yield* runner.syncIterator(source, node)
-    if (cursor === undefined) {
-      if (source instanceof CodeModeGenerator) {
-        throw new InterpreterRuntimeError("Array.from expects a synchronous iterable or array-like value.", node).as(
-          "TypeError",
-        )
-      }
-      const arrayLike = arrayLikeSource(source, node)
-      const values: Array<unknown> = []
-      for (let index = 0; index < arrayLike.length; index += 1) {
-        const item = Reflect.get(arrayLike.source, index)
-        values.push(apply === undefined ? item : yield* apply([item, index]))
-      }
-      return values
-    }
-    const values: Array<unknown> = []
-    let index = 0
-    while (true) {
-      const step = yield* cursor.next
-      if (step.done) return values
-      values.push(apply === undefined ? step.value : yield* preserveConsumerError(cursor, apply([step.value, index])))
-      index += 1
-    }
-  })
-}
-
-export const invokeGroupBy = <R>(
-  runner: CallbackRunner<R> & SyncIteratorRunner<R>,
-  namespace: "Map" | "Object",
-  args: Array<unknown>,
-  node: AstNode,
-): Effect.Effect<unknown, unknown, R> => {
-  const source = args[0]
-  if (source === null || source === undefined) {
-    throw new InterpreterRuntimeError(`${namespace}.groupBy expects an iterable collection.`, node).as("TypeError")
-  }
-  const apply = applyCollectionCallback(runner, args[1], `${namespace}.groupBy`, node)
-  return Effect.gen(function* () {
-    const cursor = yield* runner.syncIterator(source, node)
-    if (cursor === undefined) {
-      throw new InterpreterRuntimeError(`${namespace}.groupBy expects an iterable collection.`, node).as("TypeError")
-    }
-    if (namespace === "Map") {
-      const result = new CodeModeMap()
-      let index = 0
-      while (true) {
-        const step = yield* cursor.next
-        if (step.done) return result
-        const item = step.value
-        const key = yield* preserveConsumerError(cursor, apply([item, index]))
-        const group = result.map.get(key)
-        if (group === undefined) result.map.set(key, [item])
-        else (group as Array<unknown>).push(item)
-        index += 1
-      }
-    }
-
-    const result: SafeObject = Object.create(null) as SafeObject
-    let index = 0
-    while (true) {
-      const step = yield* cursor.next
-      if (step.done) return result
-      const item = step.value
-      const key = yield* preserveConsumerError(
-        cursor,
-        Effect.flatMap(apply([item, index]), (value) => coerceGroupByPropertyKey(runner, value, node)),
-      )
-      if (isBlockedMember(key)) {
-        return yield* preserveConsumerError(
-          cursor,
-          Effect.fail(new InterpreterRuntimeError(`Property '${key}' is not available.`, node)),
-        )
-      }
-      const group = result[key]
-      if (group === undefined) result[key] = [item]
-      else (group as Array<unknown>).push(item)
-      index += 1
-    }
-  })
-}
-
-const coerceGroupByPropertyKey = <R>(
-  runner: CallbackRunner<R>,
-  value: unknown,
-  node: AstNode,
-): Effect.Effect<string, unknown, R> => {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || isCodeModeValue(value)) {
-    return Effect.succeed(coerceToString(value))
-  }
-  if (value instanceof CodeModePromise) return Effect.succeed("[object Promise]")
-  if (isRuntimeReference(value)) {
-    throw new InterpreterRuntimeError("Object.groupBy callback must return a data value.", node, "InvalidDataValue")
-  }
-  const object = value as Record<string, unknown>
-  if (!Object.hasOwn(object, "toString")) return Effect.succeed(coerceToString(value))
-  return Effect.gen(function* () {
-    if (typeofValue(object.toString) === "function") {
-      const result = yield* runner.invokeCallable(object.toString, [], node)
-      if (result === null || (typeof result !== "object" && typeof result !== "function")) {
-        return coerceToString(result)
-      }
-    }
-    if (Object.hasOwn(object, "valueOf") && typeofValue(object.valueOf) === "function") {
-      const result = yield* runner.invokeCallable(object.valueOf, [], node)
-      if (result === null || (typeof result !== "object" && typeof result !== "function")) {
-        return coerceToString(result)
-      }
-    }
-    throw new InterpreterRuntimeError("Cannot convert object to primitive value.", node).as("TypeError")
-  })
+  return toProgram(result, `String.${name} result`)
 }
 
 const invokeStringReplacer = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   value: string,
   name: "replace" | "replaceAll",
   args: Array<unknown>,
@@ -543,7 +289,7 @@ const invokeStringReplacer = <R>(
   }
 
   const pattern = args[0]
-  if (pattern instanceof CodeModeRegExp) {
+  if (pattern instanceof Values.RegExp) {
     if (name === "replaceAll" && !pattern.regex.global) {
       throw new InterpreterRuntimeError(
         `String.replaceAll requires a regular expression with the global (g) flag: write /${pattern.regex.source}/${pattern.regex.flags}g, or use String.replace to replace only the first match.`,
@@ -563,43 +309,25 @@ const invokeStringReplacer = <R>(
     let end = 0
     for (const match of matches) {
       const replacement = yield* apply(match.args)
-      // Error values are branded plain objects; boundedData would strip the brand before coercion.
+      // Error values are branded plain objects; toProgram would strip the brand before coercion.
       output.push(
         value.slice(end, match.offset),
-        replacement instanceof CodeModePromise
+        replacement instanceof Values.Promise
           ? "[object Promise]"
           : errorBrandName(replacement)
             ? coerceToString(replacement)
-            : coerceToString(boundedData(replacement, `String.${name} replacer result`)),
+            : coerceToString(toProgram(replacement, `String.${name} replacer result`)),
       )
       end = match.offset + match.match.length
     }
     output.push(value.slice(end))
-    return boundedData(output.join(""), `String.${name} result`)
+    return toProgram(output.join(""), `String.${name} result`)
   })
 }
 
-export const applyCollectionCallback = <R>(
-  runner: CallbackRunner<R>,
-  callback: unknown,
-  name: string,
-  node: AstNode,
-): ((args: Array<unknown>) => Effect.Effect<unknown, unknown, R>) => {
-  if (!isSupportedCallback(callback)) {
-    if (typeofValue(callback) === "function") {
-      throw new InterpreterRuntimeError(
-        `${name} cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => tools.ns.tool(value).`,
-        node,
-      )
-    }
-    throw new InterpreterRuntimeError(`${name} expects a function callback.`, node).as("TypeError")
-  }
-  return (callbackArgs) => runner.invokeCallable(callback, callbackArgs, node)
-}
-
 const invokeMapMethod = <R>(
-  runner: CallbackRunner<R>,
-  target: CodeModeMap,
+  runner: Runner<R>,
+  target: Values.Map,
   name: string,
   args: Array<unknown>,
   node: AstNode,
@@ -640,8 +368,8 @@ const invokeMapMethod = <R>(
 }
 
 const invokeSetMethod = <R>(
-  runner: CallbackRunner<R>,
-  target: CodeModeSet,
+  runner: Runner<R>,
+  target: Values.Set,
   name: string,
   args: Array<unknown>,
   node: AstNode,
@@ -687,8 +415,8 @@ const invokeSetMethod = <R>(
 }
 
 const invokeSetOperation = <R>(
-  runner: CallbackRunner<R>,
-  target: CodeModeSet,
+  runner: Runner<R>,
+  target: Values.Set,
   name: string,
   source: unknown,
   node: AstNode,
@@ -701,7 +429,7 @@ const invokeSetOperation = <R>(
       return result
     }
     if (name === "intersection") {
-      const result = new CodeModeSet()
+      const result = new Values.Set()
       if (target.set.size <= other.size) {
         for (const item of target.set.values()) {
           if (yield* other.has(item)) result.set.add(item)
@@ -758,28 +486,28 @@ const invokeSetOperation = <R>(
     return true
   })
 
-const copySet = (source: CodeModeSet): CodeModeSet => {
-  const result = new CodeModeSet()
+const copySet = (source: Values.Set): Values.Set => {
+  const result = new Values.Set()
   for (const item of source.set.values()) result.set.add(item)
   return result
 }
 
-const loadSetRecord = <R>(runner: CallbackRunner<R>, source: unknown, name: string, node: AstNode) => {
-  if (source instanceof CodeModeSet) {
+const loadSetRecord = <R>(runner: Runner<R>, source: unknown, name: string, node: AstNode) => {
+  if (source instanceof Values.Set) {
     return Effect.succeed({
       size: source.set.size,
       has: (item: unknown) => Effect.succeed(source.set.has(item)),
       keys: () => Effect.succeed(source.set.values()),
     })
   }
-  if (source instanceof CodeModeMap) {
+  if (source instanceof Values.Map) {
     return Effect.succeed({
       size: source.map.size,
       has: (item: unknown) => Effect.succeed(source.map.has(item)),
       keys: () => Effect.succeed(source.map.keys()),
     })
   }
-  if (source === null || typeof source !== "object" || isCodeModeValue(source)) {
+  if (source === null || typeof source !== "object" || Values.isValue(source)) {
     throw new InterpreterRuntimeError(`Set.${name} expects a Set-like object.`, node).as("TypeError")
   }
   const object = source as Record<string, unknown>
@@ -808,8 +536,8 @@ const loadSetRecord = <R>(runner: CallbackRunner<R>, source: unknown, name: stri
 }
 
 const invokeURLSearchParamsMethod = <R>(
-  runner: CallbackRunner<R>,
-  target: CodeModeURLSearchParams,
+  runner: Runner<R>,
+  target: Values.URLSearchParams,
   name: string,
   args: Array<unknown>,
   node: AstNode,
@@ -882,7 +610,7 @@ const invokeURLSearchParamsMethod = <R>(
 }
 
 const invokeArrayMethod = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   target: Array<unknown>,
   name: string,
   args: Array<unknown>,
@@ -899,7 +627,7 @@ const invokeArrayMethod = <R>(
       if (args.length > 1 || (args.length === 1 && typeof args[0] !== "string")) {
         throw new InterpreterRuntimeError("Array.join expects zero arguments or one string separator.", node)
       }
-      const input = boundedData(target, "Array.join input") as Array<unknown>
+      const input = toProgram(target, "Array.join input") as Array<unknown>
       return Effect.succeed(
         input.map((item) => coerceToString(item ?? "")).join(args.length === 0 ? "," : (args[0] as string)),
       )
@@ -1125,20 +853,14 @@ const invokeArrayMethod = <R>(
 }
 
 const sortArray = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   target: Array<unknown>,
   comparator: unknown,
   name: string,
   node: AstNode,
 ): Effect.Effect<Array<unknown>, unknown, R> => {
   if (comparator === undefined) {
-    return Effect.sync(() =>
-      [...target].sort((a, b) => {
-        const left = coerceToString(a)
-        const right = coerceToString(b)
-        return left < right ? -1 : left > right ? 1 : 0
-      }),
-    )
+    return Effect.sync(() => [...target].sort((a, b) => compareText(coerceToString(a), coerceToString(b))))
   }
   const apply = applyCollectionCallback(runner, comparator, name, node)
   const mergeSort = (items: Array<unknown>): Effect.Effect<Array<unknown>, unknown, R> => {

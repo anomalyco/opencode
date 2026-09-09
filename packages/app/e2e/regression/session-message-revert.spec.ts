@@ -1,5 +1,5 @@
-import type { SessionMessageInfo } from "@opencode-ai/client/promise"
-import { base64Encode } from "@opencode-ai/util/encode"
+import type { SessionMessageInfo } from "@opencode/client/promise"
+import { base64Encode } from "@opencode/util/encode"
 import { expect, test } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"

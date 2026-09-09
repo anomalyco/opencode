@@ -1,5 +1,5 @@
 import type { ElectronAPI } from "./api-types"
-import type { UpdaterState } from "@opencode-ai/app/updater"
+import type { UpdaterState } from "@opencode/app/updater"
 import { invoke, listen, send } from "./ipc-client"
 
 type Mutable<Value> =
@@ -25,6 +25,30 @@ const updaterHandler = (state: UpdaterState) => {
 export const api: ElectronAPI = {
   awaitInitialization: () => invoke("AppAwaitInitialization"),
   reconnectService: () => invoke("AppReconnectService"),
+  sshServers: {
+    getState: () => invoke("SshGetState"),
+    subscribe: (callback) => {
+      const off = listen("SshChanged", (event) => callback(event.state))
+      void invoke("SshSubscribe")
+      return () => {
+        off()
+        void invoke("SshUnsubscribe")
+      }
+    },
+    hosts: () => invoke("SshHosts"),
+    start: (input) => invoke("SshStart", input),
+    resolve: (id) => invoke("SshResolve", { id }),
+    respond: (id, prompt, value) => invoke("SshRespond", { id, prompt, value }),
+    disconnect: (id) => invoke("SshDisconnect", { id }),
+    cancel: (id) => invoke("SshCancel", { id }),
+    forget: (id) => invoke("SshForget", { id }),
+    openConfig: () => invoke("SshOpenConfig"),
+  },
+  browserPane: {
+    request: (request) => invoke("BrowserPane", { request }),
+    send: (request) => send("BrowserPane", { request }),
+    onEvent: (callback) => listen("BrowserPaneEvent", (value) => callback(value)),
+  },
   wslServers: {
     getState: () => invoke("WslGetState").then(mutable),
     subscribe: (cb) => {
@@ -75,14 +99,13 @@ export const api: ElectronAPI = {
     invoke("AppFinishFirstLaunchOnboarding", { createDefaultProject }),
   checkAppExists: (appName) => invoke("AppCheckAppExists", { appName }),
   resolveAppPath: (appName) => invoke("AppResolveAppPath", { appName }),
-  storeGet: (name, key) => invoke("StorageGet", { name, key }),
-  storeSet: (name, key, value) => invoke("StorageSet", { name, key, value }),
-  storeDelete: (name, key) => invoke("StorageDelete", { name, key }),
+  storeItems: (name) => invoke("StorageItems", { name }).then(mutable),
+  storeUpdate: (name, insert, remove) => invoke("StorageUpdate", { name, insert, remove }),
   storeClear: (name) => invoke("StorageClear", { name }),
-  storeKeys: (name) => invoke("StorageKeys", { name }).then(mutable),
-  storeLength: (name) => invoke("StorageLength", { name }),
+  onStoreChanged: (cb) =>
+    listen("StorageChanged", (event) => cb(event.name, mutable(event.insert), mutable(event.remove), event.revision)),
   draftGet: (key) => invoke("DraftsGet", { key }),
-  draftSet: (key, value) => invoke("DraftsSet", { key, value }),
+  draftSet: (key, value, strict) => invoke("DraftsSet", { key, value, strict }).then(mutable),
   draftDelete: (key) => invoke("DraftsDelete", { key }),
   draftBlobPut: (data) => invoke("DraftsPutBlob", { data: new Uint8Array(data) }),
   draftBlobGet: (id) => invoke("DraftsGetBlob", { id }).then((data) => (data ? toArrayBuffer(data) : null)),

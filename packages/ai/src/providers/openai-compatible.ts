@@ -1,9 +1,8 @@
 import { ProviderID, type ModelID } from "../schema/index.js"
-import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat.js"
+import { OpenAICompatibleChat } from "../protocols/openai-compatible-chat.js"
 import type { RouteDefaultsInput } from "../route/client.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { profiles, type OpenAICompatibleProfile } from "./openai-compatible-profile.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("openai-compatible")
@@ -21,12 +20,6 @@ export interface Settings extends ProviderPackage.Settings {
   readonly provider?: string
   readonly providerOptions?: OpenAIProviderOptionsInput
 }
-
-export type FamilyModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
-  ProviderAuthOption<"optional"> & {
-    readonly baseURL?: string
-    readonly providerOptions?: OpenAIProviderOptionsInput
-  }
 
 export const routes = [OpenAICompatibleChat.route]
 
@@ -47,22 +40,6 @@ export const configure = (input: GenericModelOptions) => {
   }
 }
 
-const define = (profile: OpenAICompatibleProfile) => {
-  const configureProfile = (input: FamilyModelOptions = {}) => {
-    const facade = configure({
-      ...input,
-      baseURL: input.baseURL ?? profile.baseURL,
-      provider: profile.provider,
-    })
-    return {
-      id: ProviderID.make(profile.provider),
-      model: facade.model,
-      configure: configureProfile,
-    }
-  }
-  return configureProfile()
-}
-
 export const provider = {
   id,
   configure,
@@ -78,10 +55,4 @@ export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsIn
     providerOptions: settings.providerOptions,
   }).model(modelID)
 
-export const baseten = define(profiles.baseten)
-export const cerebras = define(profiles.cerebras)
-export const deepinfra = define(profiles.deepinfra)
-export const deepseek = define(profiles.deepseek)
-export const fireworks = define(profiles.fireworks)
-export const groq = define(profiles.groq)
-export const togetherai = define(profiles.togetherai)
+export * as OpenAICompatible from "./openai-compatible.js"

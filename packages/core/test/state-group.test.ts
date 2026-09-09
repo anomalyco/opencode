@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { State } from "@opencode-ai/core/state"
+import { State } from "@opencode/core/state"
 import { it } from "./lib/effect"
 
 it.effect("detaches every registration of a failed group and refreshes every affected domain", () =>

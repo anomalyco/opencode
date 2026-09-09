@@ -1,5 +1,5 @@
-import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
-import type { SessionRequestKind } from "@opencode-ai/plugin/effect/session"
+import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
+import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { Effect, Option, Schema, Semaphore, Stream } from "effect"
 import { Catalog } from "../../catalog.js"
 import { Credential } from "../../credential.js"
@@ -8,7 +8,7 @@ import { CopilotModels } from "../../github-copilot/models.js"
 import { App } from "../../app.js"
 import { Integration } from "../../integration.js"
 import { Model } from "../../model.js"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
 import type { PluginInternal } from "../internal.js"
 
@@ -261,6 +261,7 @@ export const GithubCopilotPlugin = define({
             .pipe(Effect.orElseSucceed(() => undefined))
           const interaction = interactionType(evt.kind, session?.parentID !== undefined)
           evt.headers["X-Interaction-Type"] = interaction
+          evt.headers["X-Interaction-Id"] = evt.sessionID
           if (interaction !== "conversation-agent") evt.headers["x-initiator"] = "agent"
         }),
       { providerID: Provider.ID.githubCopilot },

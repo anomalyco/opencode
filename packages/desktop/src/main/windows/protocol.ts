@@ -4,11 +4,10 @@ import { pathToFileURL } from "node:url"
 import { Effect, Path } from "effect"
 import { scoped } from "../native/logging"
 import { DesktopPaths } from "../paths"
+import { documentPolicyHeader, jsCallStacksDocumentPolicy } from "./headers"
 
 const rendererProtocol = "oc"
 const rendererHost = "renderer"
-const documentPolicyHeader = "Document-Policy"
-const jsCallStacksDocumentPolicy = "include-js-call-stacks-in-crash-reports"
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -83,17 +82,6 @@ export function isRendererUrl(value?: string, html = false) {
   const devUrl = process.env.ELECTRON_RENDERER_URL
   if (!devUrl || !URL.canParse(devUrl)) return false
   return url.origin === new URL(devUrl).origin
-}
-
-export function addRendererHeaders(value: string, headers: object) {
-  upsertHeader(headers, "Access-Control-Allow-Origin", ["*"])
-  upsertHeader(headers, "Access-Control-Allow-Headers", ["*"])
-  if (isRendererUrl(value, true)) upsertHeader(headers, documentPolicyHeader, [jsCallStacksDocumentPolicy])
-}
-
-export function upsertHeader(headers: object, key: string, value: string | string[]) {
-  const current = Object.keys(headers).find((header) => header.toLowerCase() === key.toLowerCase())
-  Reflect.set(headers, current ?? key, value)
 }
 
 function addDocumentPolicy(response: Response, file: string) {

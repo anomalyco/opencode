@@ -1,4 +1,4 @@
-# @opencode-ai/codemode
+# @opencode/codemode
 
 This is our take on code mode: a lightweight, pure interpreter for a JavaScript-like language built around calling
 tools. It supports familiar JavaScript syntax with a few key differences and limitations. See the
@@ -26,7 +26,7 @@ Unsupported syntax returns an `UnsupportedSyntax` diagnostic with a source locat
 ## Quick Start
 
 ```ts
-import { CodeMode, Namespace, Tool } from "@opencode-ai/codemode"
+import { CodeMode, Namespace, Tool } from "@opencode/codemode"
 import { Effect, Schema } from "effect"
 
 const lookupOrder = Tool.make({
@@ -90,6 +90,12 @@ runtime.execute(source) // Effect<CodeMode.Result, never, ToolServices>
 
 The Effect environment is inferred from the supplied tools. `onToolCallStart` observes admitted calls with decoded
 input; `onToolCallEnd` observes settled outcomes and duration. Both hooks return Effects and must not fail.
+
+### `Values`
+
+`Values` exports the runtime's non-JSON value classes: `Values.URL`, `Values.URLSearchParams`, `Values.Date`,
+`Values.RegExp`, `Values.Map`, `Values.Set`, and `Values.Promise`. The interpreter recognizes these by class; a
+program's `new URL(...)` is a `Values.URL` wrapping the host `URL`. `Values.isValue` narrows to the data-like kinds.
 
 ### OpenAPI tools
 

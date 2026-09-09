@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { RGBA, TextRenderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
-import type { Context } from "@opencode-ai/plugin/tui/context"
+import type { Context } from "@opencode/plugin/tui/context"
 import { createSignal } from "solid-js"
 import { PromptFooter } from "../../src/feature-plugins/prompt/footer"
 

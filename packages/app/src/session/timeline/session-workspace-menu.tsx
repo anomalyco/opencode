@@ -1,13 +1,12 @@
-import { Menu } from "@opencode-ai/ui/menu"
-import { Icon } from "@opencode-ai/ui/icon"
-import { getFilename } from "@opencode-ai/util/path"
+import { Menu } from "@opencode/ui/menu"
+import { Icon } from "@opencode/ui/icon"
+import { getFilename } from "@opencode/util/path"
 import { createStore } from "solid-js/store"
 import { createSignal, For, Show, type ComponentProps, type JSX } from "solid-js"
 import type { Project } from "@/runtime/server/types"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
-import { useSettingsDialog } from "@/settings/command"
 import { pathKey } from "@/workspaces/path-key"
 import { showToast } from "@/shell/notifications/toast"
 import { containsDirectory, sameDirectory, workspaceDirectories } from "@/workspaces/paths"
@@ -28,7 +27,6 @@ export function SessionWorkspaceMenu(props: {
   const language = useLanguage()
   const serverSDK = useServerSDK()
   const data = useData()
-  const openWorkspaces = useSettingsDialog("workspaces")
   const [store, setStore] = createStore({ selected: undefined as string | undefined })
   const [directories, setDirectories] = createSignal(workspaceDirectories(props.project))
   const blocked = () => props.eligible === false || data.session.status(props.sessionID) === "running"
@@ -82,6 +80,7 @@ export function SessionWorkspaceMenu(props: {
     <Menu
       placement={props.placement ?? "bottom-end"}
       gutter={props.gutter ?? 4}
+      overflowPadding={24}
       modal={false}
       onOpenChange={onOpenChange}
     >
@@ -99,21 +98,21 @@ export function SessionWorkspaceMenu(props: {
               </Menu.Item>
             </Show>
             <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move("create")}>
-              <Icon name="workspace-new" />
+              <Icon name="plus" />
               {language.t("workspace.new")}
             </Menu.Item>
             <Show when={workspaces().length > 0}>
-              <Menu.Sub gutter={0} overlap overflowPadding={8}>
+              <Menu.Sub gutter={0} overlap overflowPadding={24}>
                 <Menu.SubTrigger>
-                  <Icon name="workspace-isolated" />
+                  <Icon name="outline-worktree" />
                   {language.t("session.new.workspace.existing").replace(/(…|\.{3})$/, "")}
                 </Menu.SubTrigger>
                 <Menu.Portal>
-                  <Menu.SubContent class="max-h-[calc(100dvh-16px)] w-[200px] overflow-y-auto">
+                  <Menu.SubContent class="max-h-[66.667dvh] w-[200px] overflow-y-auto !pb-0 [&>[data-component=menu-v2-item]:last-child]:mb-0.5 [@media(max-height:600px)]:max-h-[calc(100dvh-48px)]">
                     <For each={workspaces()}>
                       {(workspace) => (
                         <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move(workspace)}>
-                          <Icon name="workspace-isolated" />
+                          <Icon name="outline-worktree" />
                           <span class="min-w-0 flex-1 truncate">{getFilename(workspace)}</span>
                         </Menu.Item>
                       )}
@@ -123,10 +122,6 @@ export function SessionWorkspaceMenu(props: {
               </Menu.Sub>
             </Show>
           </Menu.Group>
-          <Menu.Separator class="h-[0.5px] bg-v2-border-border-base" />
-          <Menu.Item onSelect={() => openWorkspaces()}>
-            <span class="min-w-0 flex-1 truncate">{language.t("common.viewAll")}</span>
-          </Menu.Item>
         </Menu.Content>
       </Menu.Portal>
     </Menu>

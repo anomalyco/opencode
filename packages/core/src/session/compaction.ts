@@ -10,17 +10,20 @@ import {
   LLMRequest,
   Message,
   type ContentPart,
-} from "@opencode-ai/ai"
-import { Agent } from "@opencode-ai/schema/agent"
-import { SessionError } from "@opencode-ai/schema/session-error"
+} from "@opencode/ai"
+import { Agent } from "@opencode/schema/agent"
+import { SessionError } from "@opencode/schema/session-error"
 import { Context, Effect, Layer, Stream } from "effect"
 import { Bus } from "../bus.js"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { Database } from "../database/database.js"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { llmClient } from "../effect/app-node-platform.js"
 import { SessionEvent } from "./event.js"
 import type { SessionContext } from "./context.js"
+import { SessionHistory } from "./history.js"
 import type { SessionMessage } from "./message.js"
 import { SessionModelRequest } from "./model-request.js"
+import { SessionProviderContext } from "./provider-context.js"
 import type { SessionRunnerModel } from "./runner/model.js"
 import { SessionRunnerRetry } from "./runner/retry.js"
 import { SessionSchema } from "./schema.js"
@@ -44,41 +47,43 @@ const SUMMARY_TEMPLATE = `You MUST use this format for your response (you may om
 - [one or two brief sentences describing what the user is trying to accomplish]
 
 ## Requirements
-- [constraints, preferences, requirements, and scope boundaries, or "(none)"]
+- [constraints, preferences, requirements, and scope boundaries stated by the user, or "(none)"]
 
 ## Decisions
 - [decisions already made and why, or "(none)"]
 
 ## Work State
+Break the objective into smaller goals and report which are completed, which are being worked on, and which are blocked.
 ### Completed
-- [finished work or changes made; otherwise "(none)"]
+- [goals that have been completed; otherwise "(none)"]
 
 ### Active
-- [current work, partial changes, or investigation state; otherwise "(none)"]
+- [goals currently being worked on; otherwise "(none)"]
 
 ### Blocked
-- [blockers, failing commands, or unknowns; otherwise "(none)"]
+- [anything blocking progress, and why; otherwise "(none)"]
 
 ## Next Move
 1. [ordered list of next actions, or "(none)"]
 
 ## Relevant Files
-List files and directories that are important to the conversation. Include paths outside the current working directory when relevant. If none are relevant, write "(none)".
-- \`[exact path]\`: [why it matters]
+List the files and directories, other than the current working directory, that another agent would need to open to continue this work. Include at most 15, most important first. Do not list every file that was read or changed. Include paths outside the current working directory when relevant. If none, write "(none)".
+- \`[file or directory path]\`: [brief reason it matters]
 
-## Additional Context
-- [facts or references needed to continue the work that are not captured above; omit this section if none]
+## Important Context
+- [facts the next agent cannot continue without and cannot easily find on its own; or "(none)"]
 </template>`
 
 const SUMMARY_RULES = `Rules:
-- Use terse bullets, not prose paragraphs.
-- Preserve exact file paths, symbols, commands, error strings, URLs, and identifiers when known.
+- Keep each section concise. Use terse, single-line bullets, not prose paragraphs or nested lists.
+- Prefer short references over detailed restatement. It is fine to leave out information the next agent can recover from the code or the files listed above.
+- Preserve exact file paths, symbols, commands, error strings, URLs, and identifiers.
 - Carry forward only user questions or requests that remain unanswered or require further action. Do not repeat ones that newer history has answered or resolved. Preserve exact wording when carrying one forward.
 - Preserve consequential workflow state, including whether changes are uncommitted, committed, pushed, under review, or merged.
-- Do not include ambient environment metadata such as the session ID, current working directory, repository root, current branch, or worktree path. The next agent receives current environment information separately. Include these details only when they directly affect the task.
 - Do not mention the summary process or that context was compacted.`
 
 const SUMMARY_HEADINGS = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
+const LEGACY_HEADING = "## Additional Context"
 
 export type Settings = {
   auto: boolean
@@ -93,6 +98,8 @@ export type Editor = {
 export type AutoInput = {
   readonly context: SessionContext.Loaded
   readonly prepare: SessionModelRequest.Interface["prepare"]
+  /** Known overflow must recover from durable history, not submit the overflowing native window again. */
+  readonly overflow?: boolean
 }
 
 type RequiredInput = {
@@ -124,7 +131,10 @@ type ExecuteInput = AutoInput & {
 }
 
 export type Outcome =
-  | Pick<SessionMessage.CompactionCompleted, "status">
+  | (Pick<SessionMessage.CompactionCompleted, "status"> & {
+      /** Consumes the logical step's one overflow rebuild even when the native attempt overflowed first. */
+      readonly recoveredOverflow?: boolean
+    })
   | Pick<SessionMessage.CompactionFailed, "status" | "error">
 
 export interface Interface extends State.Transformable<Editor> {
@@ -136,14 +146,14 @@ export interface Interface extends State.Transformable<Editor> {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
 
+const hasInputUsage = (message: SessionMessage.Info) =>
+  message.type === "assistant" &&
+  !message.error &&
+  message.tokens !== undefined &&
+  message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0
+
 export const estimateTokens = (input: RequiredInput) => {
-  const index = input.messages.findLastIndex(
-    (message) =>
-      message.type === "assistant" &&
-      !message.error &&
-      message.tokens !== undefined &&
-      message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0,
-  )
+  const index = input.messages.findLastIndex(hasInputUsage)
   const last = input.messages[index]
   // Keep the anchor's local tool results: they are not covered by its provider usage.
   const added = SessionModelRequest.unsupportedParts(
@@ -197,6 +207,32 @@ const estimatePart = (part: ContentPart): number => {
   return Token.estimate(
     typeof part.result.value === "string" ? part.result.value : (JSON.stringify(part.result.value) ?? ""),
   )
+}
+
+/** Keep whole, real user messages, never synthetic guidance or half an attachment/tool exchange. */
+export const retainUsers = (
+  messages: readonly SessionMessage.Info[],
+  model: Pick<SessionRunnerModel.Resolved, "ref" | "capabilities">,
+  keepTokens: number,
+) => {
+  const users = SessionModelRequest.boundImages(
+    SessionModelRequest.unsupportedParts(
+      toLLMMessages(
+        messages.filter((message) => message.type === "user").map((message) => ({ ...message, skills: undefined })),
+        model.ref,
+      ),
+      model.capabilities,
+    ),
+  )
+  let tokens = 0
+  let start = users.length
+  for (let index = users.length - 1; index >= 0; index--) {
+    const size = users[index].content.reduce((sum, part) => sum + estimatePart(part), 0)
+    if (tokens + size > keepTokens) break
+    tokens += size
+    start = index
+  }
+  return users.slice(start)
 }
 
 export const truncateToolOutput = (value: string) => {
@@ -305,9 +341,9 @@ const findTailStart = (messages: readonly SessionMessage.Info[], keepTokens: num
   return previousSummary?.recent ? conversation[0].index : messages.length
 }
 
-export const buildPrompt = (update: boolean) => {
+export const buildPrompt = (update: boolean, legacy = false) => {
   const shared = [
-    "Summarize only the history shown. More recent context may be retained and presented after this summary.",
+    "Summarize only what the user and the assistant said and did. Leave out instructions and setup the assistant was given rather than told by the user: repository conventions, instruction files such as AGENTS.md, and environment details like the session ID. The next agent receives current versions of all of these separately.",
     SUMMARY_TEMPLATE,
     SUMMARY_RULES,
     "Do not continue the task or call tools.",
@@ -316,7 +352,12 @@ export const buildPrompt = (update: boolean) => {
   if (update) {
     return [
       "Update the existing checkpoint in the conversation above into one consolidated summary.",
-      "Newer history always takes precedence over the existing checkpoint. Preserve previous information unless newer history clearly contradicts, supersedes, resolves, or makes it stale. When uncertain and there is no conflict, retain it under Additional Context.",
+      ...(legacy
+        ? [
+            "The existing checkpoint was written with an earlier format that recorded far more detail than this one asks for. Rewrite it at the level of detail described below rather than carrying its detail forward. Keep its requirements, decisions, and open questions; they came from earlier conversation with the user.",
+          ]
+        : []),
+      "Newer history always takes precedence over the existing checkpoint. Preserve previous information unless newer history clearly contradicts, supersedes, resolves, or makes it stale. If something is no longer relevant to continuing the work, you may remove it.",
       "Incorporate newer requirements, decisions, progress, and context. Reconcile Work State and Next Move: move completed work out of Active, remove resolved blockers and answered questions, and preserve unresolved or pending work.",
       "Return only the updated Markdown sections. Do not reproduce the `<conversation-checkpoint>`, `<summary>`, or `<recent-context>` wrapper tags from the previous checkpoint.",
       ...shared,
@@ -336,6 +377,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const llm = yield* LLMClient.Service
+    const db = (yield* Database.Service).db
 
     const state = State.create<Settings, Editor>({
       name: "session-compaction",
@@ -348,14 +390,159 @@ export const layer = Layer.effect(
         },
       }),
     })
-    const failed = Effect.fnUntraced(function* (input: {
-      readonly sessionID: SessionSchema.ID
-      readonly reason: SessionMessage.Compaction["reason"]
-      readonly error: SessionError.Error
-      readonly inputID?: SessionMessage.ID
-    }) {
+    const failed = Effect.fnUntraced(function* (input: SessionEvent.Compaction.Failed["data"]) {
       yield* bus.publish(SessionEvent.Compaction.Failed, input)
       return { status: "failed" as const, error: input.error }
+    })
+    const started = (input: ExecuteInput, recent: string) =>
+      input.started
+        ? Effect.void
+        : bus.publish(SessionEvent.Compaction.Started, {
+            sessionID: input.context.session.id,
+            reason: input.reason,
+            recent,
+            inputID: input.inputID,
+          })
+    // Manual controls settle through the inbox; only automatic work needs a durable interruption record.
+    const interrupted = (input: ExecuteInput) =>
+      input.reason === "auto"
+        ? failed({
+            sessionID: input.context.session.id,
+            reason: input.reason,
+            inputID: input.inputID,
+            error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
+          }).pipe(Effect.asVoid)
+        : Effect.void
+    const compactionRequest = (
+      input: ExecuteInput,
+      messages: readonly SessionMessage.Info[],
+      prompt: Message[],
+      webSocket?: "session",
+    ) => {
+      const context = input.context
+      const transcript = SessionModelRequest.baseTranscript({
+        agent: context.agent.info,
+        model: context.model,
+        tools: context.tools,
+        initial: context.initial,
+        messages,
+      })
+      return input.prepare({
+        kind: "compaction",
+        scope: {
+          session: context.session,
+          agentID: Agent.ID.make("compaction"),
+          contextAgentID: context.agent.id,
+          model: context.model,
+          tools: context.tools,
+        },
+        transcript: {
+          system: transcript.system,
+          messages: [
+            ...transcript.messages,
+            ...(input.instructionUpdate ? [Message.system(input.instructionUpdate)] : []),
+            ...prompt,
+          ],
+        },
+        webSocket,
+      })
+    }
+    /** The durable transcript since the last local summary, re-expanding every native window. */
+    const original = (sessionID: SessionSchema.ID) => SessionHistory.load(db, sessionID, "local").pipe(Effect.orDie)
+    const recoverLocally = (input: ExecuteInput) =>
+      original(input.context.session.id).pipe(
+        Effect.flatMap((messages) => execute({ ...input, context: { ...input.context, messages } })),
+      )
+    const executeProvider = Effect.fn("SessionCompaction.executeProvider")(function* (input: ExecuteInput) {
+      const context = input.context
+      const reject = (message: string) =>
+        failed({
+          sessionID: context.session.id,
+          reason: input.reason,
+          inputID: input.inputID,
+          error: { type: "provider.unsupported-operation", message },
+        })
+      const prepared = yield* compactionRequest(input, context.messages, [], "session")
+      const request = prepared.request
+      const provenance = SessionProviderContext.provenance(context.model)
+      if (!provenance) return yield* reject("Provider compaction requires a stable, configured endpoint")
+      // History is selected before request hooks. Until that interface can select on the final route,
+      // require routing in the catalog; never install a checkpoint that the next request would skip.
+      if (
+        !SessionProviderContext.compatible(
+          provenance,
+          SessionProviderContext.provenance({ model: request.model, ref: context.model.ref }),
+        )
+      )
+        return yield* reject(
+          "Provider compaction requires the endpoint in provider/model settings, not a model.request rewrite",
+        )
+      const transient = SessionRunnerRetry.transient(yield* SessionRunnerRetry.policy(context.session.id), {
+        agent: Agent.ID.make("compaction"),
+        model: context.model.ref,
+        hook: prepared.retry,
+      })
+      yield* started(input, "")
+      return yield* Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          // Transient provider failures retry like any other request; only a known automatic overflow permits
+          // local recovery, and nothing is installed until the provider returns a checkpoint.
+          const result = yield* restore(
+            Effect.gen(function* () {
+              if (LLMClient.canCompact(request, { mechanism: "trigger" })) {
+                const retained = retainUsers(yield* original(context.session.id), context.model, state.get().tokens)
+                const result = yield* llm
+                  .compact(request, { ...prepared.options, mechanism: "trigger" })
+                  .pipe(transient)
+                return { replacement: [...retained, Message.assistant(result.checkpoint)], usage: result.usage }
+              }
+              if (LLMClient.canCompact(request))
+                return yield* llm
+                  .compact(request, { mechanism: "endpoint", http: prepared.options.http })
+                  .pipe(transient)
+              // Model resolution admits provider policies only for routes with a compaction operation.
+              return yield* Effect.die(
+                new Error(`${request.model.provider}/${request.model.route.id} has no compaction operation`),
+              )
+            }),
+          )
+          const usage = result.usage ? SessionUsage.record(result.usage, context.model.cost) : undefined
+          if (usage)
+            yield* bus.publish(SessionEvent.UsageRecorded, {
+              sessionID: context.session.id,
+              source: "compaction" as const,
+              ...usage,
+            })
+          yield* bus.publish(SessionEvent.Compaction.Ended, {
+            sessionID: context.session.id,
+            reason: input.reason,
+            model: context.model.ref,
+            text: "",
+            recent: "",
+            providerContext: SessionProviderContext.encode(provenance, result.replacement),
+            ...usage,
+          })
+          return { status: "completed" as const }
+        }),
+      ).pipe(
+        Effect.onInterrupt(() => interrupted(input)),
+        Effect.catchTag(
+          "AI.Error",
+          (cause): Effect.Effect<Outcome> =>
+            input.reason === "auto" && isContextOverflowFailure(cause)
+              ? recoverLocally({ ...input, started: true }).pipe(
+                  Effect.map((result) =>
+                    result.status === "completed" ? { ...result, recoveredOverflow: true } : result,
+                  ),
+                )
+              : failed({
+                  sessionID: context.session.id,
+                  reason: input.reason,
+                  inputID: input.inputID,
+                  error: toSessionError(cause),
+                }),
+        ),
+      )
     })
     const execute = Effect.fn("SessionCompaction.execute")(function* (input: ExecuteInput) {
       const context = input.context
@@ -367,13 +554,7 @@ export const layer = Layer.effect(
           error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
           inputID: input.inputID,
         })
-      if (!input.started)
-        yield* bus.publish(SessionEvent.Compaction.Started, {
-          sessionID: context.session.id,
-          reason: input.reason,
-          recent: history.recent,
-          inputID: input.inputID,
-        })
+      yield* started(input, history.recent)
 
       const chunks: string[] = []
       let failure: SessionError.Error | undefined
@@ -388,37 +569,21 @@ export const layer = Layer.effect(
             })
           : Effect.void,
       )
-      const transcript = SessionModelRequest.baseTranscript({
-        agent: context.agent.info,
-        model: context.model,
-        tools: context.tools,
-        initial: context.initial,
-        messages: history.messages,
-      })
-      const prepared = yield* input.prepare({
-        kind: "compaction",
-        scope: {
-          session: context.session,
-          agentID: Agent.ID.make("compaction"),
-          contextAgentID: context.agent.id,
-          model: context.model,
-          tools: context.tools,
-        },
-        transcript: {
-          system: transcript.system,
-          messages: [
-            ...transcript.messages,
-            ...(input.instructionUpdate ? [Message.system(input.instructionUpdate)] : []),
-            Message.user(
-              buildPrompt(
-                history.messages.some((message) => message.type === "compaction" && message.status === "completed"),
-              ),
-            ),
-          ],
-        },
-      })
-      const retry = yield* SessionRunnerRetry.policy(context.session.id)
+      const previous = history.messages.findLast(
+        (message): message is SessionMessage.CompactionCompleted =>
+          message.type === "compaction" && message.status === "completed",
+      )
+      // Checkpoints from the previous template ran far longer than this one asks for; its catch-all heading identifies them.
+      const legacy = previous?.summary.includes(LEGACY_HEADING) ?? false
+      const prepared = yield* compactionRequest(input, history.messages, [
+        Message.user(buildPrompt(previous !== undefined, legacy)),
+      ])
       // Both requests share the retry allowance; rejected output never enters the reminder request.
+      const transient = SessionRunnerRetry.transient(yield* SessionRunnerRetry.policy(context.session.id), {
+        agent: Agent.ID.make("compaction"),
+        model: context.model.ref,
+        hook: prepared.retry,
+      })
       for (const request of [
         prepared.request,
         LLMRequest.update(prepared.request, {
@@ -479,42 +644,13 @@ export const layer = Layer.effect(
             }
             return Effect.void
           }),
-          Effect.retry({
-            while: (cause) =>
-              Effect.gen(function* () {
-                if (isContextOverflowFailure(cause)) return false
-                const decision = yield* retry({
-                  cause,
-                  error: toSessionError(cause),
-                  agent: Agent.ID.make("compaction"),
-                  model: context.model.ref,
-                  hook: prepared.retry,
-                  retry: SessionRunnerRetry.isRetryable(cause),
-                })
-                if (!decision.retry) return false
-                yield* Effect.sleep(decision.delay)
-                return true
-              }),
-          }),
+          transient,
           Effect.catchTag("AI.Error", (error) =>
             Effect.sync(() => {
               failure = toSessionError(error)
             }),
           ),
-          Effect.onInterrupt(() =>
-            recordUsage.pipe(
-              Effect.andThen(
-                input.reason === "auto"
-                  ? failed({
-                      sessionID: context.session.id,
-                      reason: input.reason,
-                      error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
-                      inputID: input.inputID,
-                    }).pipe(Effect.asVoid)
-                  : Effect.void,
-              ),
-            ),
-          ),
+          Effect.onInterrupt(() => recordUsage.pipe(Effect.andThen(interrupted(input)))),
         )
         if (failure || hasSummarySection(chunks.join(""))) break
       }
@@ -532,6 +668,7 @@ export const layer = Layer.effect(
           reason: input.reason,
           error,
           inputID: input.inputID,
+          ...usage,
         })
       }
       yield* bus.publish(SessionEvent.Compaction.Ended, {
@@ -541,16 +678,28 @@ export const layer = Layer.effect(
         providerState,
         text: summary,
         recent: history.recent,
+        ...usage,
       })
       return { status: "completed" as const }
     })
-    const compact = (input: AutoInput) => execute({ ...input, reason: "auto" })
+    const compact = Effect.fn("SessionCompaction.compact")(function* (input: AutoInput): Effect.fn.Return<Outcome> {
+      const request = { ...input, reason: "auto" as const }
+      if (input.overflow) return yield* recoverLocally(request)
+      if (input.context.model.compaction?.mode !== "provider") return yield* execute(request)
+      return yield* executeProvider(request)
+    })
     const required = (input: RequiredInput) => {
       const config = state.get()
       if (!config.auto) return false
       // Run the completed checkpoint before considering another automatic compaction.
       const last = input.messages.at(-1)
       if (last?.type === "compaction" && last.status === "completed") return false
+      // Native usage describes the compaction operation, not the replacement's size. Wait for
+      // a primary response to anchor the new window, including after restart or new admission.
+      if (
+        input.messages.findLastIndex(hasInputUsage) < input.messages.findLastIndex(SessionProviderContext.isCheckpoint)
+      )
+        return false
       const limit = input.resolved.limit
       const context = limit.context
       if (context <= 0) return false
@@ -559,7 +708,12 @@ export const layer = Layer.effect(
         limit.input === undefined ? Number.POSITIVE_INFINITY : limit.input - config.buffer,
         context - Math.max(output, config.buffer),
       )
-      return estimateTokens(input) >= promptCeiling
+      const policy = input.resolved.compaction
+      const threshold =
+        policy?.mode === "provider" && policy.threshold !== undefined
+          ? Math.min(policy.threshold, promptCeiling)
+          : promptCeiling
+      return estimateTokens(input) >= threshold
     }
     const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: ManualInput) {
       if (findTailStart(input.messages, state.get().tokens) === undefined)
@@ -578,15 +732,17 @@ export const layer = Layer.effect(
               error: toSessionError(cause),
               inputID: input.inputID,
             }),
-          onSuccess: (context) =>
-            execute({
+          onSuccess: (context) => {
+            const request = {
               context,
               instructionUpdate: context.instructionUpdate,
               prepare: input.prepare,
-              reason: "manual",
+              reason: "manual" as const,
               inputID: input.inputID,
               started: input.started,
-            }),
+            }
+            return context.model.compaction?.mode === "provider" ? executeProvider(request) : execute(request)
+          },
         }),
       )
     })
@@ -604,5 +760,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, llmClient],
+  deps: [Bus.node, Database.node, llmClient],
 })

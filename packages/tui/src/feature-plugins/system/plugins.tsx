@@ -1,5 +1,5 @@
-import type { PluginInfo } from "@opencode-ai/client"
-import { Plugin } from "@opencode-ai/plugin/tui"
+import type { PluginInfo } from "@opencode/client"
+import { Plugin } from "@opencode/plugin/tui"
 import path from "path"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { DialogErrorDetails } from "../../component/dialog-error-details"

@@ -9,6 +9,8 @@ import {
   AIError,
   InvalidProviderOutputError,
   LLMEvent,
+  ProviderInternalError,
+  UnknownProviderError,
   Usage,
   type FinishReasonDetails,
   type LLMRequest,
@@ -699,6 +701,16 @@ const step = Effect.fn("MistralChat.step")(function* (state: ParserState, event:
   const finishReason = {
     normalized: mapFinishReason(choice.finish_reason),
     raw: choice.finish_reason,
+  }
+  if (finishReason.normalized === "error") {
+    const details = {
+      message: `Mistral Chat stopped with ${finishReason.raw}`,
+      body: ProviderShared.encodeJson(event),
+    }
+    return yield* new AIError({
+      reason:
+        finishReason.raw === "network_error" ? new ProviderInternalError(details) : new UnknownProviderError(details),
+    })
   }
   const incomplete = finishReason.normalized === "length" || finishReason.normalized === "content-filter"
   if (!incomplete && Object.keys(withTools.pendingTools).length > 0)

@@ -1,4 +1,4 @@
-import { Workspace } from "@opencode-ai/schema/workspace"
+import { Workspace } from "@opencode/schema/workspace"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { ConflictError, ProviderNotFoundError, UnknownError } from "../errors.js"

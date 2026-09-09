@@ -86,8 +86,6 @@ import type {
   SessionBackgroundOutput,
   SessionMessageInput,
   SessionMessageOutput,
-  SessionMessageUpdateInput,
-  SessionMessageUpdateOutput,
   SessionEnvironmentInput,
   SessionEnvironmentOutput,
   SessionViewInput,
@@ -278,6 +276,8 @@ export interface ClientOptions {
 export interface RequestOptions {
   readonly signal?: AbortSignal
   readonly headers?: RequestInit["headers"]
+  /** Reports every chunk a streaming response receives, including keepalive comments that yield no event. */
+  readonly onActivity?: () => void
 }
 
 interface RequestDescriptor {
@@ -369,6 +369,7 @@ export function make(options: ClientOptions) {
           } catch (cause) {
             throw new ClientError("Transport", { cause })
           }
+          if (!next.done) requestOptions?.onActivity?.()
           buffer += decoder.decode(next.value, { stream: !next.done })
           if (buffer.length > maxSseEventBytes) throw new ClientError("SseEventTooLarge")
           const trailingCarriageReturn = !next.done && buffer.endsWith("\r")
@@ -983,18 +984,6 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      messageUpdate: (input: SessionMessageUpdateInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionMessageUpdateOutput }>(
-          {
-            method: "PATCH",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/message/${encodeURIComponent(input.messageID)}`,
-            body: { content: input["content"] },
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404, 409],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
       environment: (input: SessionEnvironmentInput, requestOptions?: RequestOptions) =>
         request<SessionEnvironmentOutput>(
           {
@@ -1374,7 +1363,12 @@ export function make(options: ClientOptions) {
           {
             method: "PATCH",
             path: `/api/project/${encodeURIComponent(input.projectID)}`,
-            body: { name: input["name"], icon: input["icon"], commands: input["commands"] },
+            body: {
+              canonical: input["canonical"],
+              name: input["name"],
+              icon: input["icon"],
+              commands: input["commands"],
+            },
             successStatus: 200,
             declaredStatuses: [400, 401, 404],
             empty: false,

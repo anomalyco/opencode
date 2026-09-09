@@ -2,9 +2,9 @@ export * as Ripgrep from "./ripgrep.js"
 
 import { Context, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { Entry, Match } from "@opencode-ai/schema/filesystem"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { collectStream, waitForAbort } from "@opencode-ai/util/process"
+import { Entry, Match } from "@opencode/schema/filesystem"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { collectStream, waitForAbort } from "@opencode/util/process"
 import { Environment } from "./environment/index.js"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
 import { RipgrepBinary } from "./ripgrep/binary.js"
@@ -173,6 +173,8 @@ const layer = Layer.effect(
             ...(input.hidden ? ["--hidden"] : []),
             ...(input.follow ? ["--follow"] : []),
             `--glob=${input.pattern}`,
+            // Positive globs override rg's hidden-file filter; exclude before applying the result limit.
+            ...(input.hidden ? [] : ["--glob=!**/.*"]),
             "--glob=!**/.git/**",
             ".",
           ],

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import os from "os"
 import path from "path"
-import { ShellParse } from "@opencode-ai/core/shell/parse"
+import { ShellParse } from "@opencode/core/shell/parse"
 
 describe("ShellParse", () => {
   test("splits bash commands and derives reusable prefixes", async () => {
