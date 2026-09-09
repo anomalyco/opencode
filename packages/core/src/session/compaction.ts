@@ -83,7 +83,7 @@ const SUMMARY_RULES = `Rules:
 - Do not mention the summary process or that context was compacted.`
 
 const SUMMARY_HEADINGS = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
-const LEGACY_HEADINGS = ["## Additional Context", "## Important Details"]
+const LEGACY_HEADING = "## Additional Context"
 
 export type Settings = {
   auto: boolean
@@ -576,8 +576,8 @@ export const layer = Layer.effect(
         (message): message is SessionMessage.CompactionCompleted =>
           message.type === "compaction" && message.status === "completed",
       )
-      // Checkpoints from earlier templates ran far longer than this one asks for; their catch-all headings identify them.
-      const legacy = LEGACY_HEADINGS.some((heading) => previous?.summary.includes(heading))
+      // Checkpoints from the previous template ran far longer than this one asks for; its catch-all heading identifies them.
+      const legacy = previous?.summary.includes(LEGACY_HEADING) ?? false
       const prepared = yield* compactionRequest(input, history.messages, [
         Message.user(buildPrompt(previous !== undefined, legacy)),
       ])
