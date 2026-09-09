@@ -1270,22 +1270,20 @@ class Frame<R> {
       const callee = yield* self.evaluateExpression(node.callee)
       // Globals are built with this interpreter's R; `instanceof` cannot recover the type argument.
       const construct = callee instanceof HostFunction ? (callee as HostFunction<R>).construct : undefined
-      if (construct === undefined) throw self.notConstructible(callee, node)
+      if (construct === undefined) {
+        // `new` itself is supported, so a non-constructible callee is a TypeError like JS rather than
+        // unsupported syntax. User functions are a documented gap; everything else is not a constructor.
+        const name = calleeDescription(node.callee)
+        const hint = `Supported constructors: ${self.runtime.constructors.join(", ")}.`
+        const message =
+          callee instanceof CodeModeFunction
+            ? `${name} cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead.`
+            : `${name} is not a constructor.`
+        throw new InterpreterRuntimeError(`${message} ${hint}`, node, "ExecutionFailure", [hint]).as("TypeError")
+      }
       const args = yield* self.evaluateCallArguments(node.arguments)
       return yield* construct(args, node)
     })
-  }
-
-  // `new` itself is supported, so a non-constructible callee is a TypeError like JS rather than
-  // unsupported syntax. User functions are a documented gap; everything else is not a constructor.
-  private notConstructible(callee: unknown, node: NewExpression): InterpreterRuntimeError {
-    const name = calleeDescription(node.callee)
-    const hint = `Supported constructors: ${this.runtime.constructors.join(", ")}.`
-    const message =
-      callee instanceof CodeModeFunction
-        ? `${name} cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead.`
-        : `${name} is not a constructor.`
-    return new InterpreterRuntimeError(`${message} ${hint}`, node, "ExecutionFailure", [hint]).as("TypeError")
   }
 
   private evaluateBinaryExpression(node: BinaryExpression): Effect.Effect<unknown, unknown, R> {
