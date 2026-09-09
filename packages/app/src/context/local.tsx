@@ -1,6 +1,5 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { useParams } from "@solidjs/router"
 import { batch, createEffect, createMemo, startTransition } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useModels } from "@/context/models"
@@ -14,6 +13,7 @@ import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useServerSDK } from "./server-sdk"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
+import { useRouteParams } from "./route-params"
 
 export type ModelKey = { providerID: string; modelID: string; variant?: string }
 
@@ -59,7 +59,7 @@ const clone = (value: State | undefined) => {
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
-    const params = useParams()
+    const params = useRouteParams()
     const sdk = useSDK()
     const sync = useSync()
     const serverSDK = useServerSDK()

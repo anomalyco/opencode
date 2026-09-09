@@ -16,6 +16,7 @@ import { getSessionContext } from "@/components/session/session-context-metrics"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { useSettings } from "@/context/settings"
+import { useEmbeddedSessionView } from "@/pages/session/embedded-session-view"
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
@@ -50,6 +51,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const language = useLanguage()
   const sdk = useSDK()
   const settings = useSettings()
+  const embedded = useEmbeddedSessionView()
   const providers = useProviders(() => sdk().directory)
   const { params, tabs, view } = useSessionLayout()
   const isDesktop = createMediaQuery("(min-width: 768px)")
@@ -86,6 +88,10 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const openContext = () => {
     if (!params.id) return
+    if (embedded) {
+      embedded.select("context")
+      return
+    }
 
     const sessionView = view()
     if (contextVisible()) {

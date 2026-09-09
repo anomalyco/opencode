@@ -1,6 +1,6 @@
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { useParams, useSearchParams } from "@solidjs/router"
+import { useSearchParams } from "@solidjs/router"
 import { createMemo, createResource, createRoot, getOwner, onCleanup } from "solid-js"
 import { requireServerKey } from "@/utils/session-route"
 import { ServerConnection } from "./server"
@@ -8,6 +8,7 @@ import { useServerSDK } from "./server-sdk"
 import { useSettings } from "./settings"
 import { useSDK } from "./sdk"
 import { useTabs, type Tab } from "./tabs"
+import { useRouteParams } from "./route-params"
 import {
   createPromptReady,
   createPromptSession,
@@ -73,8 +74,8 @@ export const createTabPromptState = (
 export const { use: usePrompt, provider: PromptProvider } = createSimpleContext({
   name: "Prompt",
   gate: false,
-  init: () => {
-    const params = useParams<{ serverKey?: string; id?: string }>()
+  init: (props: { detached?: boolean }) => {
+    const params = useRouteParams()
     const sdk = useSDK()
     const [search] = useSearchParams<{ draftId?: string }>()
     const serverSDK = useServerSDK()
@@ -105,7 +106,10 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     const scope = (): PromptScope =>
       search.draftId ? { draftID: search.draftId } : { dir: base64Encode(sdk().directory), id: params.id }
     const load = (scope: PromptScope) => {
-      const current = settings.general.newLayoutDesigns() ? selectPromptTab(tabs.store, scope, serverKey()) : undefined
+      const current =
+        settings.general.newLayoutDesigns() && !props.detached
+          ? selectPromptTab(tabs.store, scope, serverKey())
+          : undefined
       if (current) return createTabPromptState(tabs, current, serverSDK().scope, scope)
 
       const key = scopeKey(scope)

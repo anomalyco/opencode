@@ -2,7 +2,7 @@ import type { Message, Session } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Binary } from "@opencode-ai/core/util/binary"
-import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
+import { useNavigate, useSearchParams } from "@solidjs/router"
 import { batch, startTransition, type Accessor } from "solid-js"
 import { useTabs } from "@/context/tabs"
 import { useServerSync, type ServerSync } from "@/context/server-sync"
@@ -23,6 +23,8 @@ import { createPromptSubmissionState } from "./submission-state"
 import { normalizeSessionInfo } from "@/utils/session"
 import { Event } from "@opencode-ai/schema/event"
 import { blobDataUrl } from "@/utils/draft-store"
+import { useRouteParams } from "@/context/route-params"
+import { requireServerKey } from "@/utils/session-route"
 
 type PendingPrompt = {
   abort: AbortController
@@ -241,7 +243,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const prompt = input.prompt
   const layout = useLayout()
   const language = useLanguage()
-  const params = useParams()
+  const params = useRouteParams()
   const [search] = useSearchParams<{ draftId?: string }>()
   const tabs = useTabs()
   const pendingKey = (sessionID: string) => ScopedKey.from(sdk().scope, sessionID)
@@ -351,7 +353,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     input.resetHistoryNavigation()
 
     const projectDirectory = sdk().directory
-    const permissionState = permission.currentServerState()
+    const permissionState = params.serverKey
+      ? permission.ensureServerState(requireServerKey(params.serverKey))
+      : permission.currentServerState()
     const isNewSession = !params.id
     const shouldAutoAccept = isNewSession && input.autoAccept()
     const worktreeSelection = input.newSessionWorktree?.() || "main"

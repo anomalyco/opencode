@@ -1,7 +1,6 @@
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createEffect, createMemo, createRoot, on, onCleanup } from "solid-js"
-import { useParams } from "@solidjs/router"
 import { useSDK, type DirectorySDK } from "./sdk"
 import type { Platform } from "./platform"
 import { useServerSDK } from "./server-sdk"
@@ -9,6 +8,7 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { defaultTitle, titleNumber } from "./terminal-title"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { ScopedKey, ServerScope, type ServerScope as ServerScopeValue } from "@/utils/server-scope"
+import { useRouteParams } from "./route-params"
 
 export type LocalPTY = {
   id: string
@@ -460,7 +460,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
   init: () => {
     const sdk = useSDK()
     const serverSDK = useServerSDK()
-    const params = useParams()
+    const params = useRouteParams()
     const cache = new Map<string, TerminalCacheEntry>()
     const scope = () => serverSDK().scope
     const directory = createMemo(() => base64Encode(sdk().directory))

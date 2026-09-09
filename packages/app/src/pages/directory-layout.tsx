@@ -1,7 +1,7 @@
 import { DataProvider } from "@opencode-ai/session-ui/context"
 import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { useLocation, useNavigate, useParams } from "@solidjs/router"
+import { useLocation, useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, createResource, onCleanup, type ParentProps, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
@@ -12,6 +12,7 @@ import { Schema } from "effect"
 import type { ServerConnection } from "@/context/server"
 import { sessionHref } from "@/utils/session-route"
 import { useServerSync } from "@/context/server-sync"
+import { useRouteParams } from "@/context/route-params"
 
 export function DirectoryDataProvider(
   props: ParentProps<{
@@ -22,7 +23,7 @@ export function DirectoryDataProvider(
 ) {
   const location = useLocation()
   const navigate = useNavigate()
-  const params = useParams()
+  const params = useRouteParams()
   const sync = useSync()
   const serverSync = useServerSync()
   const directory = () => (typeof props.directory === "function" ? props.directory() : props.directory)
@@ -84,7 +85,7 @@ export function decodeDirectory(dir: string): ProjectDirString | undefined {
 }
 
 export default function Layout(props: ParentProps) {
-  const params = useParams()
+  const params = useRouteParams()
   const language = useLanguage()
   const navigate = useNavigate()
   let invalid = ""

@@ -39,20 +39,20 @@ import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@/utils/toast"
 import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
 import { useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router"
-import { NewSessionView, SessionHeader } from "@/components/session"
+import { NewSessionView, SessionContextTab, SessionHeader } from "@/components/session"
 import { ErrorPage } from "@/pages/error"
 import { CommentsProvider, useComments } from "@/context/comments"
 import { useCommand } from "@/context/command"
 import { DirectoryDataProvider } from "@/pages/directory-layout"
-import { useServerSync } from "@/context/server-sync"
+import { ServerSyncProvider, useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
-import { useLayout } from "@/context/layout"
+import { LayoutProvider, useLayout } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { useNotification } from "@/context/notification"
 import { PromptProvider, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
 import { SDKProvider, useSDK } from "@/context/sdk"
-import { useServerSDK } from "@/context/server-sdk"
+import { ServerSDKProvider, useServerSDK } from "@/context/server-sdk"
 import { ServerConnection, serverName, useServer } from "@/context/server"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
@@ -103,6 +103,9 @@ import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/sessio
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { createSessionOwnership } from "./session/session-ownership"
 import { createSessionLineage } from "./session/session-lineage"
+import { useGlobal } from "@/context/global"
+import { RouteParamsProvider } from "@/context/route-params"
+import { EmbeddedSessionViewProvider, type EmbeddedSessionView } from "@/pages/session/embedded-session-view"
 
 type FollowupItem = FollowupDraft & { id: string }
 type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
@@ -144,11 +147,49 @@ async function runPromptRollbackMutation<T, R>(input: {
     })
 }
 
-export function SessionPage() {
+export function SessionPage(props: { embedded?: EmbeddedSessionView } = {}) {
   return (
-    <SessionProviders>
-      <Page />
+    <SessionProviders detachedPrompt={!!props.embedded}>
+      <Page embedded={props.embedded} />
     </SessionProviders>
+  )
+}
+
+export function EmbeddedSessionPage(props: {
+  server: ServerConnection.Key
+  directory: string
+  sessionID: string
+  view: EmbeddedSessionView
+  onViewChange: (view: EmbeddedSessionView) => void
+}) {
+  const global = useGlobal()
+  const conn = createMemo(() => global.servers.list().find((item) => ServerConnection.key(item) === props.server))
+  const directory = () => props.directory
+  const server = () => props.server
+
+  return (
+    <Show when={conn()} keyed>
+      {(conn) => (
+        <ServerSDKProvider server={() => conn}>
+          <ServerSyncProvider server={() => conn}>
+            <LayoutProvider>
+              <ModelsProvider directory={directory}>
+                <RouteParamsProvider value={{ serverKey: base64Encode(props.server), id: props.sessionID }}>
+                  <SDKProvider directory={directory}>
+                    <DirectoryDataProvider directory={directory} server={server}>
+                      <MarkSessionNotificationsViewed server={props.server} sessionID={() => props.sessionID} />
+                      <EmbeddedSessionViewProvider current={() => props.view} onSelect={props.onViewChange}>
+                        <SessionPage embedded={props.view} />
+                      </EmbeddedSessionViewProvider>
+                    </DirectoryDataProvider>
+                  </SDKProvider>
+                </RouteParamsProvider>
+              </ModelsProvider>
+            </LayoutProvider>
+          </ServerSyncProvider>
+        </ServerSDKProvider>
+      )}
+    </Show>
   )
 }
 
@@ -303,22 +344,26 @@ function TargetServerScopedProviders(
   )
 }
 
-function MarkSessionNotificationsViewed(props: { sessionID?: () => string | undefined }) {
+function MarkSessionNotificationsViewed(props: {
+  server?: ServerConnection.Key
+  sessionID?: () => string | undefined
+}) {
   const notification = useNotification()
   createEffect(() => {
     const sessionID = props.sessionID?.()
-    if (!notification.ready() || !sessionID) return
-    if (notification.session.unseenCount(sessionID) === 0) return
-    notification.session.markViewed(sessionID)
+    const state = props.server ? notification.ensureServerState(props.server) : notification
+    if (!state.ready() || !sessionID) return
+    if (state.session.unseenCount(sessionID) === 0) return
+    state.session.markViewed(sessionID)
   })
   return null
 }
 
-function SessionProviders(props: ParentProps) {
+function SessionProviders(props: ParentProps<{ detachedPrompt?: boolean }>) {
   return (
     <TerminalProvider>
       <FileProvider>
-        <PromptProvider>
+        <PromptProvider detached={props.detachedPrompt}>
           <CommentsProvider>{props.children}</CommentsProvider>
         </PromptProvider>
       </FileProvider>
@@ -334,15 +379,17 @@ function SessionRouteFrame(props: ParentProps<{ padded?: boolean }>) {
   )
 }
 
-function SessionPanelFrame(props: ParentProps<{ newLayout: boolean; raised?: boolean }>) {
+function SessionPanelFrame(props: ParentProps<{ newLayout: boolean; raised?: boolean; flush?: boolean }>) {
   return (
     <div
       classList={{
         "flex-1 min-h-0 flex flex-col": true,
+        "h-full": props.flush,
         "bg-v2-background-bg-base": props.newLayout,
         "bg-background-stronger": !props.newLayout,
-        "rounded-[10px] overflow-hidden": props.newLayout,
-        "shadow-[var(--v2-elevation-raised)]": props.newLayout && props.raised,
+        "overflow-hidden": props.newLayout,
+        "rounded-[10px]": props.newLayout && !props.flush,
+        "shadow-[var(--v2-elevation-raised)]": props.newLayout && props.raised && !props.flush,
       }}
     >
       {props.children}
@@ -350,7 +397,7 @@ function SessionPanelFrame(props: ParentProps<{ newLayout: boolean; raised?: boo
   )
 }
 
-export default function Page() {
+export default function Page(props: { embedded?: EmbeddedSessionView } = {}) {
   const serverSync = useServerSync()
   const layout = useLayout()
   const local = useLocal()
@@ -666,12 +713,14 @@ export default function Page() {
     return list
   })
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
-  const wantsReview = createMemo(() =>
-    isDesktop()
-      ? desktopFileTreeOpen() ||
-        (desktopReviewOpen() && (activeTab() === "review" || (newSessionDesign() && !!activeFileTab())))
-      : store.mobileTab === "changes",
-  )
+  const wantsReview = createMemo(() => {
+    if (props.embedded === "changes") return true
+    if (!isDesktop()) return store.mobileTab === "changes"
+    return (
+      desktopFileTreeOpen() ||
+      (desktopReviewOpen() && (activeTab() === "review" || (newSessionDesign() && !!activeFileTab())))
+    )
+  })
   const vcsMode = createMemo<VcsMode | undefined>(() => {
     const mode = reviewMode()
     if (mode === "git" || mode === "branch") return mode
@@ -2245,6 +2294,32 @@ export default function Page() {
       <Show when={!!params.id && mobileTabsBottom()}>{mobileTabs(true, true)}</Show>
     </>
   )
+
+  if (props.embedded) {
+    return (
+      <SessionPanelFrame newLayout flush>
+        <Show when={sessionPanelKey()} keyed>
+          {(_) => (
+            <ErrorBoundary fallback={sessionErrorFallback}>
+              <Switch>
+                <Match when={props.embedded === "conversation"}>{sessionPanelContent()}</Match>
+                <Match when={props.embedded === "changes"}>
+                  <div class="size-full min-h-0 overflow-hidden">
+                    {newSessionDesign() ? reviewPanelV2() : reviewPanel()}
+                  </div>
+                </Match>
+                <Match when={props.embedded === "context"}>
+                  <div class="size-full min-h-0 overflow-hidden bg-v2-background-bg-base pt-2">
+                    <SessionContextTab />
+                  </div>
+                </Match>
+              </Switch>
+            </ErrorBoundary>
+          )}
+        </Show>
+      </SessionPanelFrame>
+    )
+  }
 
   return (
     <SessionRouteFrame>

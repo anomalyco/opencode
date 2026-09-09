@@ -70,6 +70,7 @@ import { NewHome } from "@/pages/home"
 import { LegacyHome } from "@/pages/home/legacy-home"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
+const MissionControl = lazy(() => import("@/pages/mission-control"))
 
 const SessionRoute = () => {
   const settings = useSettings()
@@ -637,6 +638,8 @@ function Routes(props: { serverScoped?: JSX.Element }) {
       </Route>
       <Show when={settings.general.newLayoutDesigns()}>
         <Route path="/" component={NewHome} />
+        {/* Registered before /:dir so the literal path is not decoded as a base64 directory. */}
+        <Route path="/mission-control" component={MissionControl} />
         <Route path="/:dir/session/:id" component={NewLayoutLegacySessionRedirect} />
         <Route path="/server/:serverKey/session/:id" component={TargetSessionRoute} />
       </Show>

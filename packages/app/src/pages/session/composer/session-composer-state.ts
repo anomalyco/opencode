@@ -1,7 +1,6 @@
 import { createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { PermissionRequest, QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
-import { useParams } from "@solidjs/router"
 import { showToast } from "@/utils/toast"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
@@ -9,6 +8,8 @@ import { usePermission } from "@/context/permission"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
+import { useRouteParams } from "@/context/route-params"
+import { requireServerKey } from "@/utils/session-route"
 
 export const todoState = (input: {
   count: number
@@ -26,12 +27,17 @@ export const todoDockAtBoundary = (state: ReturnType<typeof todoState>) => state
 const idle = { type: "idle" as const }
 
 export function createSessionComposerController(options?: { closeMs?: number | (() => number) }) {
-  const params = useParams()
+  const params = useRouteParams()
   const sdk = useSDK()
   const sync = useSync()
   const serverSync = useServerSync()
   const language = useLanguage()
   const permission = usePermission()
+  const permissionState = createMemo(() =>
+    params.serverKey
+      ? permission.ensureServerState(requireServerKey(params.serverKey))
+      : permission.currentServerState(),
+  )
 
   const questionRequest = createMemo((): QuestionRequest | undefined => {
     return sessionQuestionRequest(sync().data.session, sync().data.question, params.id)
@@ -39,7 +45,7 @@ export function createSessionComposerController(options?: { closeMs?: number | (
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
     return sessionPermissionRequest(sync().data.session, sync().data.permission, params.id, (item) => {
-      return !permission.autoResponds(item, sdk().directory)
+      return !permissionState().autoResponds(item, sdk().directory)
     })
   })
 

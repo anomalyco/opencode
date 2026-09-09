@@ -91,6 +91,7 @@ export type ReviewPanelSource = "context-button" | "other"
 
 export type LayoutRoute =
   | { type: "home" }
+  | { type: "mission-control" }
   | { type: "draft"; draftID: string; server?: ServerConnection.Key }
   | { type: "dir-new-sesssion"; dir: string; dirBase64: string; server?: ServerConnection.Key }
   | { type: "session"; sessionId: string; server?: ServerConnection.Key }
@@ -131,6 +132,8 @@ export const currentRoute = (pathname: string, search: string): LayoutRoute => {
   const parts = pathname.split("/").filter(Boolean)
   if (parts.length === 0) return { type: "home" }
 
+  if (parts[0] === "mission-control") return { type: "mission-control" }
+
   if (parts[0] === "new-session") {
     const draftID = new URLSearchParams(search).get("draftId")
     if (!draftID) return { type: "home" }
@@ -168,7 +171,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const location = useLocation()
     const route = createMemo(() => {
       const value = currentRoute(location.pathname, location.search)
-      if (value.type === "home") return value
+      if (value.type === "home" || value.type === "mission-control") return value
       if (value.server) return value
       if (value.type === "draft") {
         const draft = tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === value.draftID)
@@ -309,6 +312,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const [ephemeral, setEphemeral] = createStore({
       reviewPanelSource: "other" as ReviewPanelSource,
       sessionTabPreview: {} as Record<string, string | undefined>,
+      missionControl: { selected: undefined as string | undefined, query: "" },
     })
 
     const MAX_SESSION_KEYS = 50
@@ -699,6 +703,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             return
           }
           setStore("review", "diffStyle", diffStyle)
+        },
+      },
+      missionControl: {
+        selected: createMemo(() => ephemeral.missionControl.selected),
+        setSelected(selected: string | undefined) {
+          setEphemeral("missionControl", "selected", selected)
+        },
+        query: createMemo(() => ephemeral.missionControl.query),
+        setQuery(query: string) {
+          setEphemeral("missionControl", "query", query)
         },
       },
       fileTree: {

@@ -20,6 +20,7 @@ import { ServerRowMenuView, serverMenuLabels } from "@/components/server/server-
 import { ServerHealthIndicator } from "@/components/server/server-row"
 import { type ServerHealth } from "@/utils/server-health"
 import { fileManagerApp } from "@/utils/file-manager"
+import { useAttentionCount } from "@/pages/mission-control/mission-control-attention-count"
 
 const HOME_PROJECT_NAV_LABEL = "min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
 
@@ -56,6 +57,7 @@ export type HomeProjectsViewProps = {
   onRevealProject: (server: ServerConnection.Any, project: LocalProject) => void
   onClearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
   onCloseProject: (server: ServerConnection.Any, directory: string) => void
+  onOpenMissionControl: () => void
   onOpenSettings: () => void
   onOpenHelp: () => void
 }
@@ -146,6 +148,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
       </ScrollView>
       <HomeUtilityNav
         class="mb-8 mt-4 hidden shrink-0 lg:flex"
+        onOpenMissionControl={props.onOpenMissionControl}
         onOpenSettings={props.onOpenSettings}
         onOpenHelp={props.onOpenHelp}
         language={props.language}
@@ -156,12 +159,27 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
 
 export function HomeUtilityNav(props: {
   class?: string
+  onOpenMissionControl: () => void
   onOpenSettings: () => void
   onOpenHelp: () => void
   language: ReturnType<typeof useLanguage>
 }) {
+  const attention = useAttentionCount()
   return (
     <div class={`${props.class ?? ""} min-w-0 flex-col gap-1 pr-3`}>
+      <HomeProjectNavButton
+        type="button"
+        class="text-v2-text-text-muted [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
+        onClick={props.onOpenMissionControl}
+      >
+        <IconV2 name="inbox" size="small" />
+        <span class={HOME_PROJECT_NAV_LABEL}>Mission control</span>
+        <Show when={attention() > 0}>
+          <span class="ms-auto min-w-4 rounded-full bg-v2-state-bg-warning px-1 text-center text-[10px] leading-4 text-v2-state-fg-warning [font-weight:560]">
+            {attention()}
+          </span>
+        </Show>
+      </HomeProjectNavButton>
       <HomeProjectNavButton
         type="button"
         class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
