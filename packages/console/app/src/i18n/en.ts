@@ -256,7 +256,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "following exceptions",
 
   "go.title": "OpenCode Go | Low cost coding models for everyone",
-  "go.banner.text": "GLM-5.3-Flash gets 2× usage limits for a limited time",
   "go.meta.description": "Go costs $10/month, with generous usage limits and reliable access to leading coding models.",
   "go.hero.title": "Low cost coding models for everyone",
   "go.hero.body":
@@ -271,6 +270,14 @@ export const dict = {
   "go.graph.freePill": "Big Pickle and free models",
   "go.graph.go": "Go",
   "go.graph.label": "Requests / 5 hours",
+  "go.graph.period": "Usage",
+  "go.graph.model": "Model",
+  "go.graph.requests": "Est. requests / 5 hr",
+  "go.graph.allowance": "Monthly usage",
+  "go.graph.new": "New",
+  "go.graph.scale": "Nonlinear request scale",
+  "go.graph.showAll": "View all {{count}} models",
+  "go.graph.showLess": "Show fewer models",
   "go.graph.limitedRegions": "limited regions",
   "go.graph.limitedTime": "limited time",
   "go.graph.tick": "{{n}}x",

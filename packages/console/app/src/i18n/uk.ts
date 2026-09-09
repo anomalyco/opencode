@@ -258,7 +258,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "такими винятками",
 
   "go.title": "OpenCode Go | Недорогі моделі кодування для всіх",
-  "go.banner.text": "GLM-5.3-Flash отримує 2x ліміти використання протягом обмеженого часу",
   "go.meta.description":
     "Go коштує $10/місяць, зі щедрими лімітами використання та надійним доступом до провідних моделей для кодування.",
   "go.hero.title": "Недорогі моделі кодування для всіх",
@@ -274,6 +273,14 @@ export const dict = {
   "go.graph.freePill": "Big Pickle та безкоштовні моделі",
   "go.graph.go": "Go",
   "go.graph.label": "Запитів за 5 годин",
+  "go.graph.period": "Використання",
+  "go.graph.model": "Модель",
+  "go.graph.requests": "Оцінка запитів / 5 год",
+  "go.graph.allowance": "Використання за місяць",
+  "go.graph.new": "Нове",
+  "go.graph.scale": "Нелінійна шкала кількості запитів",
+  "go.graph.showAll": "Показати всі моделі ({{count}})",
+  "go.graph.showLess": "Показати менше моделей",
   "go.graph.limitedRegions": "обмежені регіони",
   "go.graph.limitedTime": "обмежений час",
   "go.graph.usageLimits": "Ліміти використання",
