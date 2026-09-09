@@ -11,6 +11,7 @@ import { Location } from "../../location"
 import { Npm } from "../../npm"
 import { define } from "../../plugin/internal"
 import { PluginPromise } from "../../plugin/promise"
+import { PluginUpdate } from "../../plugin/update"
 
 const PluginModule = Schema.Struct({
   default: Schema.Union([
@@ -37,7 +38,7 @@ export const Plugin = define({
     const location = yield* Location.Service
     const npm = yield* Npm.Service
     yield* Effect.gen(function* () {
-      const configured: { package: string; options?: Record<string, any> }[] = []
+      const configured: { package: string; options?: Record<string, any>; source?: string }[] = []
 
       for (const entry of yield* config.entries()) {
         if (entry.type === "document") {
@@ -51,7 +52,7 @@ export const Plugin = define({
               }
               return ref.package
             })()
-            configured.push({ package: packageName, options: ref.options })
+            configured.push({ package: packageName, options: ref.options, source: entry.info.plugin_update_source })
           }
         }
 
@@ -72,6 +73,9 @@ export const Plugin = define({
 
       for (const ref of configured) {
         yield* Effect.gen(function* () {
+          if (!path.isAbsolute(ref.package)) {
+            yield* PluginUpdate.maybeUpdate(ref.package, ref.source)
+          }
           const entrypoint = path.isAbsolute(ref.package)
             ? pathToFileURL(ref.package).href
             : (yield* npm.add(ref.package)).entrypoint
