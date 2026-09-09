@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Skill } from "@opencode-ai/schema/skill"
+import { Skill } from "@opencode/schema/skill"
 
 export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>()(
   "InvalidRequestError",

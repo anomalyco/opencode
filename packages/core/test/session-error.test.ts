@@ -16,14 +16,14 @@ import {
   UnknownProviderError,
   ToolFailure,
   HttpContext,
-} from "@opencode-ai/ai"
-import { Permission } from "@opencode-ai/core/permission"
-import { ID } from "@opencode-ai/core/model"
-import { ModelResolver } from "@opencode-ai/core/model-resolver"
-import { Provider } from "@opencode-ai/core/provider"
-import { Tool } from "@opencode-ai/schema/tool"
-import { toSessionError } from "@opencode-ai/core/session/to-session-error"
-import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
+} from "@opencode/ai"
+import { Permission } from "@opencode/core/permission"
+import { ID } from "@opencode/core/model"
+import { ModelResolver } from "@opencode/core/model-resolver"
+import { Provider } from "@opencode/core/provider"
+import { Tool } from "@opencode/schema/tool"
+import { toSessionError } from "@opencode/core/session/to-session-error"
+import { SessionRunnerRetry } from "@opencode/core/session/runner/retry"
 
 const llm = (reason: AIError["reason"]) => new AIError({ reason })
 

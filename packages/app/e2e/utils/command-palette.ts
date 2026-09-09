@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import { mockOpenCodeServer } from "./mock-server"
 import { APP_READY_TIMEOUT } from "./waits"
 

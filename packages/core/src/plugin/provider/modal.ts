@@ -1,5 +1,5 @@
 import { Effect, Semaphore, Stream } from "effect"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Bus } from "../../bus.js"
 import { Catalog } from "../../catalog.js"
 import { Credential } from "../../credential.js"

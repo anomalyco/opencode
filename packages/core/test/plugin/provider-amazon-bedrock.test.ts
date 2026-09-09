@@ -1,11 +1,12 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Integration } from "@opencode-ai/core/integration"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { AmazonBedrockPlugin } from "@opencode-ai/core/plugin/provider/amazon-bedrock"
-import { Provider } from "@opencode-ai/core/provider"
+import { Catalog } from "@opencode/core/catalog"
+import { Integration } from "@opencode/core/integration"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { AmazonBedrockPlugin, PROFILE_ONLY_BARE_IDS } from "@opencode/core/plugin/provider/amazon-bedrock"
+import { Model } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -209,7 +210,7 @@ describe("AmazonBedrockPlugin", () => {
             item.package = Provider.aisdk("@ai-sdk/amazon-bedrock/mantle")
           })
           catalog.provider.update(Provider.ID.make("native"), (item) => {
-            item.package = "@opencode-ai/ai/providers/amazon-bedrock"
+            item.package = "@opencode/ai/providers/amazon-bedrock"
           })
           catalog.provider.update(Provider.ID.make("other"), (item) => {
             item.package = Provider.aisdk("@ai-sdk/anthropic")
@@ -219,6 +220,47 @@ describe("AmazonBedrockPlugin", () => {
         expect(required(yield* catalog.provider.get(Provider.ID.make("mantle"))).activation).toBe("enabled")
         expect(required(yield* catalog.provider.get(Provider.ID.make("native"))).activation).toBe("enabled")
         expect(required(yield* catalog.provider.get(Provider.ID.make("other"))).activation).toBe("auto")
+      }),
+    ),
+  )
+
+  it.effect("disables profile-only bare IDs while keeping working IDs", () =>
+    withEnv(noAmbientAWS, () =>
+      Effect.gen(function* () {
+        const catalog = yield* seedBedrock()
+        const controls = [
+          "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+          "amazon.nova-micro-v1:0",
+          "openai.gpt-6-astra",
+        ]
+        yield* catalog.transform((catalog) => {
+          for (const id of [...PROFILE_ONLY_BARE_IDS, ...controls]) {
+            catalog.model.update(Provider.ID.amazonBedrock, Model.ID.make(id), () => {})
+          }
+        })
+        yield* addPlugin()
+        for (const id of PROFILE_ONLY_BARE_IDS) {
+          expect(required(yield* catalog.model.get(Provider.ID.amazonBedrock, Model.ID.make(id))).enabled).toBe(
+            false,
+          )
+        }
+        for (const id of controls) {
+          expect(required(yield* catalog.model.get(Provider.ID.amazonBedrock, Model.ID.make(id))).enabled).toBe(
+            true,
+          )
+        }
+      }),
+    ),
+  )
+
+  it.effect("does not create catalog entries for absent profile-only IDs", () =>
+    withEnv(noAmbientAWS, () =>
+      Effect.gen(function* () {
+        const catalog = yield* seedBedrock()
+        yield* addPlugin()
+        for (const id of PROFILE_ONLY_BARE_IDS) {
+          expect(yield* catalog.model.get(Provider.ID.amazonBedrock, Model.ID.make(id))).toBeUndefined()
+        }
       }),
     ),
   )

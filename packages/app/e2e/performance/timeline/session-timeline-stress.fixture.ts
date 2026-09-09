@@ -389,4 +389,4 @@ export function pageMessages(sessionID: string, limit: number, before?: string) 
     cursor: start > 0 ? messages[start].id : undefined,
   }
 }
-import type { JsonValue, SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { JsonValue, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"

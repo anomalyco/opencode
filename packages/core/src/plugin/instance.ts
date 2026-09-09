@@ -1,8 +1,8 @@
 export * as InstancePlugins from "./instance.js"
 
-import type { Plugin } from "@opencode-ai/plugin/effect/plugin"
+import type { Plugin } from "@opencode/plugin/effect/plugin"
 import { Context, Layer } from "effect"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Generation } from "../plugin.js"
 
 /**

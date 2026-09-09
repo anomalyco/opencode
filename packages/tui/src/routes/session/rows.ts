@@ -1,4 +1,4 @@
-import type { SessionInboxEnqueued, SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
+import type { SessionInboxEnqueued, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
 import { createEffect, on, onCleanup, type Accessor } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useConfig } from "../../config"
@@ -171,8 +171,18 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
   const appendPart = (ref: PartRef, part: AppendPart) =>
     setRows(
       produce((draft) => {
-        if (hasPart(draft, ref)) return
-        append(draft, ref, part, queuedStart(draft))
+        if (!hasPart(draft, ref)) {
+          append(draft, ref, part, queuedStart(draft))
+          return
+        }
+        if (part.type !== "reasoning" || part.time?.completed === undefined) return
+        const row = draft.find(
+          (row) =>
+            row.type === "group" &&
+            row.kind === "reasoning" &&
+            row.refs.some((item) => item.messageID === ref.messageID && item.partID === ref.partID),
+        )
+        if (row?.type === "group" && row.kind === "reasoning") row.completed = true
       }),
     )
 
@@ -250,7 +260,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       if (event.data.sessionID === sessionID() && event.data.text.trim())
         appendPart(
           { messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` },
-          { type: "reasoning" },
+          { type: "reasoning", time: { completed: event.created } },
         )
     }),
     data.on("session.tool.input.started", (event) => {
@@ -437,17 +447,26 @@ export function resolvePart(message: SessionMessageAssistant, partID: string) {
   return message.content.filter((part) => part.type === match[1])[ordinal]
 }
 
-type AppendPart = { type: "text" } | { type: "reasoning" } | { type: "tool"; name: string }
+type AppendPart =
+  | { type: "text" }
+  | { type: "reasoning"; time?: { completed?: number } }
+  | { type: "tool"; name: string }
 
 function append(rows: SessionRow[], ref: PartRef, part: AppendPart, index = rows.length) {
   if (part.type === "reasoning") {
     const previous = rows[index - 1]
     if (previous?.type === "group" && previous.kind === "reasoning") {
       previous.refs.push(ref)
+      previous.completed &&= part.time?.completed !== undefined
       return
     }
     completePrevious(rows, index)
-    rows.splice(index, 0, { type: "group", kind: "reasoning", refs: [ref], completed: false })
+    rows.splice(index, 0, {
+      type: "group",
+      kind: "reasoning",
+      refs: [ref],
+      completed: part.time?.completed !== undefined,
+    })
     return
   }
   if (part.type === "tool" && exploration(part.name)) {

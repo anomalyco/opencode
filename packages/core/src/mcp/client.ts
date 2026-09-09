@@ -25,8 +25,8 @@ import {
   ToolSchema,
 } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Exit, Schema } from "effect"
-import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
-import type { Session } from "@opencode-ai/schema/session"
+import { ConfigMCP } from "@opencode/schema/config/mcp"
+import type { Session } from "@opencode/schema/session"
 import { McpStdio } from "./stdio.js"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000

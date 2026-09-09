@@ -16,7 +16,7 @@ import {
   type CliRenderer,
   type ScrollbackWriter,
 } from "@opentui/core"
-import { isFallbackTitle } from "@opencode-ai/util/session-title-fallback"
+import { isFallbackTitle } from "@opencode/util/session-title-fallback"
 import { monoSnapshot } from "./mono"
 import { entrySplash, exitSplash } from "./splash"
 import { resolveRunTheme } from "./theme"

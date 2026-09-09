@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import { currentSession } from "../utils/mock-server"
 
 const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
@@ -602,6 +602,7 @@ async function mockServer(page: Page) {
     if (url.origin !== server) return route.fallback()
     if (url.pathname === `/api/session/${unresolvedSessionID}`) return new Promise(() => {})
     if (url.pathname === "/api/event") return sse(route)
+    if (url.pathname === "/api/config") return json(route, [])
     if (url.pathname === "/api/session")
       return json(route, { data: sessions.map((session) => currentSession(session)), cursor: {} })
     if (url.pathname === "/api/session/active") return json(route, { data: {} })

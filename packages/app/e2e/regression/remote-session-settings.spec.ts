@@ -1,4 +1,4 @@
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import { expect, test, type Page, type Route } from "@playwright/test"
 import { installSseTransport } from "../utils/sse-transport"
 import { currentSession } from "../utils/mock-server"
@@ -342,6 +342,7 @@ async function mockServers(
     if (route.request().method() === "GET" && sessionPermission)
       return json(route, { data: options.sessionPending?.[sessionPermission[1]!] ?? [] })
     if (requestDirectory && requestDirectory !== directory) return json(route, { name: "InvalidDirectory" }, 500)
+    if (url.pathname === "/api/config") return json(route, [])
     if (url.pathname === "/api/provider")
       return json(route, {
         location: { directory },

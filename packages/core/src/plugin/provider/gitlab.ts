@@ -1,7 +1,7 @@
 import os from "os"
 import { App } from "../../app.js"
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
 
 export const GitLabPlugin = define({

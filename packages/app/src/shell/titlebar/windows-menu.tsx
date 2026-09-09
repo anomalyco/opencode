@@ -1,8 +1,8 @@
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { For, onMount, type JSX } from "solid-js"
-import { Menu } from "@opencode-ai/ui/menu"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Menu } from "@opencode/ui/menu"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
 
 import { matchKeybind, parseKeybind, useCommand } from "@/shell/commands/command"
 import {

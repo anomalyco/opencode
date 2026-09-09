@@ -1,7 +1,7 @@
 import { parseDiffFromFile, parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs"
 import { parsePatch } from "diff"
-import { checksum } from "@opencode-ai/util/encode"
-import type { FileDiffInfo } from "@opencode-ai/client/promise"
+import { checksum } from "@opencode/util/encode"
+import type { FileDiffInfo } from "@opencode/client/promise"
 import type { PresentationFileDiff } from "../file-presentation"
 
 type LegacyDiff = {

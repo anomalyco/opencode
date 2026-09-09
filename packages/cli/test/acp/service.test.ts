@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
-import { OpenCode } from "@opencode-ai/client/promise"
+import { OpenCode } from "@opencode/client/promise"
 import { ACPService } from "../../src/acp/service"
 import { ChildSessionUpdatesCapability } from "../../src/acp/event"
 

@@ -1,13 +1,14 @@
 import { lazy, Show, Suspense, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
+import { ResizeHandle } from "@opencode/ui/resize-handle"
 import { Titlebar, type TitlebarUpdate } from "@/shell/titlebar/titlebar"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ToastRegion } from "@/shell/notifications/toast"
 import { TitlebarRightProvider } from "@/shell/titlebar/right-slot"
 import { useSettingsSurface } from "@/settings/surface"
 import { useSettings } from "@/settings/model"
+import { SshAuthentication } from "@/servers/ssh/authentication"
 
 const DebugBar = lazy(() => import("@/shell/debug/debug-bar").then((module) => ({ default: module.DebugBar })))
 
@@ -97,9 +98,9 @@ export default function Layout(props: ParentProps) {
               "--settings-top-inset": mobile() && !bottomTitlebar() ? "0px" : "var(--shell-top-inset, 8px)",
             }}
           >
-            <div class="flex size-full min-h-0 min-w-0 flex-col">
+            <SshAuthentication>
               <Suspense>{props.children}</Suspense>
-            </div>
+            </SshAuthentication>
           </main>
         </div>
         <Show when={import.meta.env.DEV && state.debugTools}>

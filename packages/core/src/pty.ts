@@ -1,9 +1,9 @@
 export * as Pty from "./pty.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Disp, Proc } from "#pty"
 import { Context, Effect, Layer, Schema, Types } from "effect"
-import { Pty } from "@opencode-ai/schema/pty"
+import { Pty } from "@opencode/schema/pty"
 import { Bus } from "./bus.js"
 import { Location } from "./location.js"
 import { PtyID } from "./pty/schema.js"
@@ -46,7 +46,7 @@ export const UpdateInput = Pty.UpdateInput
 
 export type UpdateInput = Types.DeepMutable<typeof UpdateInput.Type>
 
-export { Event } from "@opencode-ai/schema/pty"
+export { Event } from "@opencode/schema/pty"
 
 export type AttachInput = {
   // Absolute output cursor to replay from. -1 tails from the current end; omitted replays the full retained buffer.

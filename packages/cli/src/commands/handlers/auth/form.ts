@@ -1,6 +1,6 @@
 import { confirm, log, multiselect, password, select, text, type Option } from "@clack/prompts"
 import { Effect } from "effect"
-import type { FormAnswer, FormField, FormFields } from "@opencode-ai/client"
+import type { FormAnswer, FormField, FormFields } from "@opencode/client"
 import { openUrl, prompt, requireInteractive } from "../../../ui/prompt"
 
 const skip = Symbol("skip")

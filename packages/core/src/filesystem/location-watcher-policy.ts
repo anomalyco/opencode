@@ -1,6 +1,6 @@
 export * as LocationWatcherPolicy from "./location-watcher-policy.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Scope } from "effect"
 import { State } from "../state.js"
 

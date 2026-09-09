@@ -1,7 +1,7 @@
 export * as OpenCode from "./opencode"
 
-import { OpenCode, type OpenCodeClient } from "@opencode-ai/client/effect"
-import type { Workspace } from "@opencode-ai/core/workspace"
+import { OpenCode, type OpenCodeClient } from "@opencode/client/effect"
+import type { Workspace } from "@opencode/core/workspace"
 import { Context, Effect, Layer } from "effect"
 import type { Config, Scope } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
@@ -57,7 +57,7 @@ export const create: <R = never>(
   }
 })
 
-export class Service extends Context.Service<Service, Interface>()("@opencode-ai/sdk/OpenCode") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/sdk/OpenCode") {}
 
 export const layer = <R = never>(
   options: CreateOptions<R> = {},

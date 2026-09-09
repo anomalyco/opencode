@@ -15,7 +15,7 @@
 // Demo mode handles permission and Form replies locally, completing or failing
 // the synthetic tool parts through the same callbacks used by the live footer.
 import path from "path"
-import type { JsonValue, SessionMessageAssistantTool } from "@opencode-ai/client/promise"
+import type { JsonValue, SessionMessageAssistantTool } from "@opencode/client/promise"
 import { parseSlashHead } from "../prompt/parse"
 import { writeSessionOutput } from "./stream"
 import { toolCommit, toolFinalPhase } from "./stream-v2.subagent"

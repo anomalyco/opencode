@@ -1,10 +1,10 @@
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { Menu } from "@opencode-ai/ui/menu"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { Icon } from "@opencode-ai/ui/icon"
-import { getFilename } from "@opencode-ai/util/path"
+import { Menu } from "@opencode/ui/menu"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { Icon } from "@opencode/ui/icon"
+import { getFilename } from "@opencode/util/path"
 import { useLanguage } from "@/runtime/i18n/language"
 import { sameDirectory } from "@/workspaces/paths"
 
@@ -89,7 +89,7 @@ export function PromptWorkspaceSelector(props: {
         contentClass={props.onboarding ? "max-w-[280px]" : undefined}
         class="min-w-0"
       >
-        <Menu placement="bottom" gutter={4} onOpenChange={onOpenChange}>
+        <Menu placement="bottom" gutter={4} overflowPadding={24} onOpenChange={onOpenChange}>
           <Menu.Trigger
             aria-description={language.t("session.new.workspace.trigger.tooltip")}
             class="flex h-6 min-w-0 max-w-[203px] items-center gap-1.5 rounded-sm px-1.5 hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-muted"
@@ -148,7 +148,7 @@ export function PromptWorkspaceSelector(props: {
                 <Menu.Sub
                   gutter={0}
                   overlap
-                  overflowPadding={8}
+                  overflowPadding={24}
                   onOpenChange={(open) => {
                     if (!open) {
                       focusSearch = false
@@ -177,7 +177,7 @@ export function PromptWorkspaceSelector(props: {
                     </span>
                   </Menu.SubTrigger>
                   <Menu.Portal>
-                    <Menu.SubContent class="max-h-[calc(100dvh-16px)] w-[200px] overflow-y-auto">
+                    <Menu.SubContent class="max-h-[66.667dvh] w-[200px] overflow-y-auto !pb-0 [&>[data-component=menu-v2-item]:last-child]:mb-0.5 [@media(max-height:600px)]:max-h-[calc(100dvh-48px)]">
                       <Show when={props.workspaces.length >= 10}>
                         <div class="flex h-7 items-center gap-2 rounded-sm ps-3 pe-2 text-v2-icon-icon-muted">
                           <Icon name="magnifying-glass" size="small" class="shrink-0" />

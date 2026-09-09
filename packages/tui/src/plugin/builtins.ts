@@ -8,8 +8,8 @@ import Notifications from "../feature-plugins/system/notifications"
 import Plugins from "../feature-plugins/system/plugins"
 import Storybook from "../feature-plugins/system/storybook"
 import Stats from "../feature-plugins/system/stats"
-import Latex from "@opencode-ai/latex/plugin"
-import Merman from "@opencode-ai/merman/plugin"
+import Latex from "@opencode/latex/plugin"
+import Merman from "@opencode/merman/plugin"
 
 export const builtins = [
   HomeFooter,

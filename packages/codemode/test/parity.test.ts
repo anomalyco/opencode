@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { CodeMode } from "../src/index.js"
-import { ToolRuntime } from "../src/tool-runtime.js"
+import { Data } from "../src/data.js"
 
 // Runs a CodeMode program with no host tools and returns the CodeMode.Result. These tests pin the
 // JS-parity behaviors for the "99% of ordinary defensive JavaScript just works" goal: cases where
@@ -299,23 +299,23 @@ describe("H1: NaN/Infinity flow as intermediates and normalize to null at the bo
 
   test("copyOut normalizes non-finite numbers to null (the shared return + tool-arg boundary)", () => {
     // Tool-call arguments funnel through copyOut too, so this one function pins both boundaries.
-    expect(ToolRuntime.copyOut(NaN, "json")).toBeNull()
-    expect(ToolRuntime.copyOut(Infinity, "json")).toBeNull()
-    expect(ToolRuntime.copyOut(-Infinity, "nullify")).toBeNull()
-    expect(ToolRuntime.copyOut(42, "json")).toBe(42)
-    expect(ToolRuntime.copyOut({ a: NaN, b: [Infinity, 1] }, "json")).toEqual({ a: null, b: [null, 1] })
+    expect(Data.toData(NaN, "value")).toBeNull()
+    expect(Data.toData(Infinity, "value")).toBeNull()
+    expect(Data.toData(-Infinity, "value", "result")).toBeNull()
+    expect(Data.toData(42, "value")).toBe(42)
+    expect(Data.toData({ a: NaN, b: [Infinity, 1] }, "value")).toEqual({ a: null, b: [null, 1] })
   })
 })
 
 describe("copyOut undefined handling per boundary mode", () => {
   test("json mode mirrors JSON.stringify for undefined", () => {
-    expect(ToolRuntime.copyOut({ q: undefined, keep: 1 }, "json")).toStrictEqual({ keep: 1 })
-    expect(ToolRuntime.copyOut([1, undefined, 2], "json")).toStrictEqual([1, null, 2])
-    expect(ToolRuntime.copyOut({ nested: { a: undefined, b: [undefined] } }, "json")).toStrictEqual({
+    expect(Data.toData({ q: undefined, keep: 1 }, "value")).toStrictEqual({ keep: 1 })
+    expect(Data.toData([1, undefined, 2], "value")).toStrictEqual([1, null, 2])
+    expect(Data.toData({ nested: { a: undefined, b: [undefined] } }, "value")).toStrictEqual({
       nested: { b: [null] },
     })
-    expect(ToolRuntime.copyOut(undefined, "json")).toBeUndefined()
-    expect(ToolRuntime.copyOut({ a: undefined }, "nullify")).toStrictEqual({ a: null })
+    expect(Data.toData(undefined, "value")).toBeUndefined()
+    expect(Data.toData({ a: undefined }, "value", "result")).toStrictEqual({ a: null })
   })
 })
 

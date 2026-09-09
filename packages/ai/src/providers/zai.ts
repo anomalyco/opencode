@@ -1,20 +1,53 @@
+import type { ProviderPackage } from "../provider-package.js"
+import { ZAIChat } from "../protocols/zai-chat.js"
 import { ZAIImages } from "../protocols/zai-images.js"
+import { OpenAIChat } from "../protocols/openai-chat.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Endpoint } from "../route/endpoint.js"
 import { HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
 
 export const id = ProviderID.make("zai")
 
-export type Config = ProviderAuthOption<"optional"> & {
+export type ChatOptionsInput = ZAIChat.OptionsInput
+
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+  ProviderAuthOption<"optional"> & {
+    readonly baseURL?: string
+    readonly providerOptions?: ChatOptionsInput
+  }
+
+export interface Settings extends ProviderPackage.Settings {
+  readonly apiKey?: string
   readonly baseURL?: string
-  readonly headers?: Record<string, string>
-  readonly http?: HttpOptions.Input
+  readonly providerOptions?: ChatOptionsInput
 }
 
 export type { ZAIImageOptions } from "../protocols/zai-images.js"
 
 const auth = (options: ProviderAuthOption<"optional">) => AuthOptions.bearer(options, "ZAI_API_KEY")
 
+const chatRoute = Route.make({
+  id: "zai-chat",
+  provider: id,
+  providerMetadataKey: "zai",
+  protocol: ZAIChat.protocol,
+  endpoint: Endpoint.path("/chat/completions", { baseURL: "https://api.z.ai/api/paas/v4" }),
+  framing: OpenAIChat.framing,
+})
+
+export const routes = [chatRoute]
+
 export const configure = (input: Config = {}) => {
+  const { apiKey: _apiKey, auth: _auth, baseURL, ...rest } = input
+  const chat = (modelID: string | ModelID) =>
+    chatRoute
+      .with({
+        ...rest,
+        endpoint: baseURL === undefined ? undefined : { baseURL },
+        auth: auth(input),
+      })
+      .model<ChatOptionsInput>({ id: modelID, compatibility: ZAIChat.compatibility })
   const image = (modelID: string | ModelID) =>
     ZAIImages.model({
       id: modelID,
@@ -26,6 +59,8 @@ export const configure = (input: Config = {}) => {
 
   return {
     id,
+    model: chat,
+    chat,
     image,
     configure,
   }
@@ -33,3 +68,15 @@ export const configure = (input: Config = {}) => {
 
 export const provider = configure()
 export const image = provider.image
+export const chat = provider.chat
+
+export const model: ProviderPackage.Definition<Settings, ChatOptionsInput>["model"] = (modelID, settings) =>
+  configure({
+    apiKey: settings.apiKey,
+    baseURL: settings.baseURL,
+    headers: settings.headers,
+    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
+    providerOptions: settings.providerOptions,
+  }).model(modelID)
+
+export * as ZAI from "./zai.js"

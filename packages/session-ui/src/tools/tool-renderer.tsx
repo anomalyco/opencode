@@ -16,24 +16,24 @@ import {
 import stripAnsi from "strip-ansi"
 import { Dynamic } from "solid-js/web"
 import { type SessionSummary, useData } from "../context"
-import { useFileComponent } from "@opencode-ai/ui/context/file"
-import { type UiI18n, useI18n } from "@opencode-ai/ui/context/i18n"
+import { useFileComponent } from "@opencode/ui/context/file"
+import { type UiI18n, useI18n } from "@opencode/ui/context/i18n"
 import { BasicTool, GenericTool } from "../components/basic-tool"
-import { Accordion } from "@opencode-ai/ui/accordion"
-import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
-import { Collapsible } from "@opencode-ai/ui/collapsible"
-import { FileIcon } from "@opencode-ai/ui/file-icon"
-import { Icon, type IconProps } from "@opencode-ai/ui/icon"
+import { Accordion } from "@opencode/ui/accordion"
+import { StickyAccordionHeader } from "@opencode/ui/sticky-accordion-header"
+import { Collapsible } from "@opencode/ui/collapsible"
+import { FileIcon } from "@opencode/ui/file-icon"
+import { Icon, type IconProps } from "@opencode/ui/icon"
 import { ToolErrorCard } from "../components/tool-error-card"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
+import { DiffChanges } from "@opencode/ui/diff-changes"
 import { Markdown } from "../components/markdown"
 import { createMarkdownImages } from "../components/markdown-image"
 import { useMarkdown } from "../context/markdown"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { checksum } from "@opencode-ai/util/encode"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
+import { getDirectory, getFilename } from "@opencode/util/path"
+import { checksum } from "@opencode/util/encode"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { IconButton } from "@opencode/ui/icon-button"
+import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { changedFileDiff, patchFileGroups } from "../components/apply-patch-file"
 import { animate } from "motion"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
@@ -41,7 +41,7 @@ import type {
   SessionMessageAssistantReasoning,
   SessionMessageAssistantTool,
   SessionMessageShell,
-} from "@opencode-ai/client/promise"
+} from "@opencode/client/promise"
 import {
   currentToolError,
   currentToolHasLoadedFiles,
@@ -51,6 +51,7 @@ import {
   executeToolFailed,
 } from "../message/current-tool-state"
 import { AssistantReasoningContent, writeClipboard } from "../message/message-content"
+import { followShellOutput } from "./shell-output"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -322,6 +323,11 @@ export function getToolInfo(
         title: i18n.t("ui.tool.grep"),
         subtitle: typeof input.pattern === "string" ? input.pattern : undefined,
       }
+    case "browser":
+      return {
+        icon: "window-cursor",
+        title: i18n.t("ui.tool.browser"),
+      }
     case "webfetch":
       return {
         icon: "window-cursor",
@@ -510,33 +516,45 @@ export function CurrentContextToolGroup(props: {
   )
   const names = createMemo(() =>
     [
-      ...props.parts.reduce((counts, part) => {
-        if (part.type !== "tool" && part.type !== "shell") return counts
-        const name =
-          part.type !== "tool"
-            ? i18n.t("ui.tool.shell")
-            : part.name === "skill"
-              ? i18n.t("ui.tool.skill")
-              : part.name === "subagent"
-                ? i18n.t("ui.tool.agent.default")
-                : getToolInfo(part.name, currentToolInput(part), currentToolMetadata(part)).title
-        counts.set(name, (counts.get(name) ?? 0) + 1)
-        return counts
-      }, new Map<string, number>()),
-    ]
-      .map(([name, count]) => `${count} ${name}`)
-      .join(", "),
+      ...new Set(
+        props.parts.flatMap((part) => {
+          if (part.type !== "tool" && part.type !== "shell") return []
+          return [
+            part.type !== "tool"
+              ? i18n.t("ui.tool.shell")
+              : part.name === "skill"
+                ? i18n.t("ui.tool.skill")
+                : part.name === "subagent"
+                  ? i18n.t("ui.tool.agent.default")
+                  : getToolInfo(part.name, currentToolInput(part), currentToolMetadata(part)).title,
+          ]
+        }),
+      ),
+    ].join(", "),
   )
   const label = createMemo(() => {
     const thoughts = props.parts.filter((part) => part.type === "reasoning").length
     if (!names() && !thoughts) {
       const title = i18n.t("ui.messagePart.context.details")
-      return { text: title, title, before: "", after: "" }
+      return { text: title, title, before: "", count: "", between: "", after: "" }
     }
     const title = names() || i18n.plural("ui.messagePart.context.thought", thoughts)
-    const text = i18n.t("ui.messagePart.tools.used", { tools: title })
+    const count = props.parts.filter((part) => part.type === "tool" || part.type === "shell").length || thoughts
+    const text = i18n.plural("ui.messagePart.tools.used", count, { tools: title })
     const index = text.indexOf(title)
-    return { text, title, before: text.slice(0, index).trim(), after: text.slice(index + title.length).trim() }
+    const before = text.slice(0, index).trim()
+    const countText = String(count)
+    const countIndex = before.indexOf(countText)
+    const after = text.slice(index + title.length).trim()
+    if (countIndex === -1) return { text, title, before, count: "", between: "", after }
+    return {
+      text,
+      title,
+      before: before.slice(0, countIndex).trim(),
+      count: countText,
+      between: before.slice(countIndex + countText.length).trim(),
+      after,
+    }
   })
   const items = createMemo(() =>
     props.parts.reduce<(SessionMessageAssistantTool[] | Exclude<ContextGroupPart, SessionMessageAssistantTool>)[]>(
@@ -601,8 +619,18 @@ export function CurrentContextToolGroup(props: {
         trigger={
           <div data-component="context-tool-group-trigger" aria-label={label().text}>
             <span data-slot="context-tool-group-title">
-              <Show when={label().before}>
-                {(before) => <span data-slot="context-tool-group-prefix">{before()}</span>}
+              <Show when={label().before || label().count || label().between}>
+                <span data-slot="context-tool-group-usage">
+                  <Show when={label().before}>
+                    {(before) => <span data-slot="context-tool-group-prefix">{before()} </span>}
+                  </Show>
+                  <Show when={label().count}>
+                    {(count) => <span data-slot="context-tool-group-count">{count()} </span>}
+                  </Show>
+                  <Show when={label().between}>
+                    {(between) => <span data-slot="context-tool-group-prefix">{between()} </span>}
+                  </Show>
+                </span>
               </Show>
               <span data-slot="basic-tool-tool-title">{label().title}</span>
               <Show when={label().after}>
@@ -1624,33 +1652,9 @@ ToolRegistry.register({
     createEffect(() => {
       if (saved() !== undefined) return
       const id = props.metadata.shellID
-      const shellOutput = data.shellOutput
-      if (typeof id !== "string" || !shellOutput) return
-      const directory = data.directory
-      const running = pending()
-      let cursor = 0
-      let loading = false
-      let disposed = false
-      const load = async () => {
-        if (loading) return
-        loading = true
-        do {
-          const response = await shellOutput({ id, location: { directory }, cursor }).catch(() => undefined)
-          if (disposed || !response) break
-          setStreamed((output) => (cursor === 0 ? response.data.output : output + response.data.output))
-          if (response.data.cursor <= cursor) break
-          cursor = response.data.cursor
-          if (running || cursor >= response.data.size) break
-        } while (!disposed)
-        loading = false
-      }
-      void load()
-      // Refresh the final snapshot on exit, but poll only while the shell is live.
-      const interval = running ? setInterval(() => void load(), 1_000) : undefined
-      onCleanup(() => {
-        disposed = true
-        clearInterval(interval)
-      })
+      const load = data.shellOutput
+      if (typeof id !== "string" || !load) return
+      onCleanup(followShellOutput({ id, directory: data.directory, running: pending(), load, onOutput: setStreamed }))
     })
     const command = () => {
       if (typeof props.input.command === "string") return props.input.command

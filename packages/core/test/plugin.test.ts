@@ -2,15 +2,15 @@ import { expect } from "bun:test"
 import path from "path"
 import { Clock, Deferred, Effect } from "effect"
 import { TestClock } from "effect/testing"
-import { Command } from "@opencode-ai/core/command"
-import { Bus } from "@opencode-ai/core/bus"
-import { Credential } from "@opencode-ai/core/credential"
-import { Integration } from "@opencode-ai/core/integration"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginModule } from "@opencode-ai/core/plugin/module"
-import { Watcher } from "@opencode-ai/core/filesystem/watcher"
-import { fromPromise } from "@opencode-ai/plugin/promise/adapter"
-import { Session } from "@opencode-ai/schema/session"
+import { Command } from "@opencode/core/command"
+import { Bus } from "@opencode/core/bus"
+import { Credential } from "@opencode/core/credential"
+import { Integration } from "@opencode/core/integration"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginModule } from "@opencode/core/plugin/module"
+import { Watcher } from "@opencode/core/filesystem/watcher"
+import { fromPromise } from "@opencode/plugin/promise/adapter"
+import { Session } from "@opencode/schema/session"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
@@ -446,6 +446,28 @@ it.live("retains Promise plugin groups for later registrations and ignores a dis
     expect(yield* commands.get("late")).toBeUndefined()
     yield* Effect.promise(register)
     expect(yield* commands.get("late")).toBeUndefined()
+  }),
+)
+
+it.effect("normalizes Promise plugin API inputs through JSON", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const created: boolean[] = []
+    yield* plugins.activate([
+      {
+        ...fromPromise({
+          id: "promise-input",
+          async setup(ctx) {
+            await ctx.session.create({ title: "Promise session", agent: undefined })
+            created.push(true)
+          },
+        }),
+        revision: "1",
+      },
+    ])
+    yield* plugins.awaitActivation
+
+    expect(created).toEqual([true])
   }),
 )
 

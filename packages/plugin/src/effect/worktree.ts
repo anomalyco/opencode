@@ -1,4 +1,4 @@
-import type { WorktreeApi } from "@opencode-ai/client/effect/api"
+import type { WorktreeApi } from "@opencode/client/effect/api"
 import type { Effect } from "effect"
 import type { WorktreeCreateInput, WorktreeEntry, WorktreeRemoveInput, WorktreeResult } from "../worktree.js"
 import type { Transform } from "./registration.js"

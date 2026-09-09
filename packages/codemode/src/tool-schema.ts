@@ -261,6 +261,11 @@ export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
 export const inputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>
   isEffectSchema(tool.input) ? toTypeScript(tool.input, false, pretty) : jsonSchemaToTypeScript(tool.input, pretty)
 
+// Empty object schemas render as `{}` in compact form; anything with properties,
+// an index signature, or union members renders differently, so equality is a
+// conservative emptiness test for both Effect and JSON Schema inputs.
+export const isEmptyInput = <R>(tool: Tool<R>): boolean => inputTypeScript(tool) === "{}"
+
 export const outputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>
   tool.output === undefined
     ? "void"

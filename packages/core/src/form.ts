@@ -1,8 +1,8 @@
 export * as Form from "./form.js"
 
-import { Form } from "@opencode-ai/schema/form"
+import { Form } from "@opencode/schema/form"
 import { Cache, Context, Deferred, Duration, Effect, Exit, Layer, Option, Schema } from "effect"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Bus } from "./bus.js"
 
 const RETENTION = Duration.minutes(10)
@@ -32,7 +32,7 @@ export type Answer = typeof Answer.Type
 export const Reply = Form.Reply
 export type Reply = typeof Reply.Type
 
-export { Event } from "@opencode-ai/schema/form"
+export { Event } from "@opencode/schema/form"
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Form.NotFoundError", {
   id: ID,

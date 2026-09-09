@@ -17,7 +17,7 @@ copy provenance.
 
 ## Local Boundary
 
-The supported local entrypoint is `@opencode-ai/core/database/drizzle`, exposed
+The supported local entrypoint is `@opencode/core/database/drizzle`, exposed
 as the `EffectDrizzleSqlite` namespace. OpenCode's database service consumes that
 facade from `database/database.ts`.
 

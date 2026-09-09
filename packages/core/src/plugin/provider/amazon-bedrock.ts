@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
 
 // Ambient inputs the AWS default credential chain can turn into credentials
@@ -15,8 +15,34 @@ const CHAIN_ENV = [
 
 const isBedrock = (item: { readonly package: string }) => {
   const name = Provider.packageName(item.package)
-  return name.startsWith("@ai-sdk/amazon-bedrock") || name.startsWith("@opencode-ai/ai/providers/amazon-bedrock")
+  return name.startsWith("@ai-sdk/amazon-bedrock") || name.startsWith("@opencode/ai/providers/amazon-bedrock")
 }
+
+// Bare Bedrock model IDs that AWS rejects unless sent as an inference-profile
+// ID (`us.`/`eu.`/`global.`/...). Verified via on-demand foundation-model
+// listings across six regions plus live Converse probes, all returning "with
+// on-demand throughput isn't supported. Retry ... with an inference profile".
+// V1 rewrites these to profiles at request time so they must stay in
+// models.dev; V2 sends IDs verbatim, so listing them only produces errors.
+// Interim until per-entry source-region metadata lands; region-aware
+// filtering will subsume this list then.
+export const PROFILE_ONLY_BARE_IDS = [
+  "amazon.nova-2-lite-v1:0",
+  "anthropic.claude-fable-5",
+  "anthropic.claude-fable-5-1",
+  "anthropic.claude-haiku-4-5-20251001-v1:0",
+  "anthropic.claude-opus-4-1-20250805-v1:0",
+  "anthropic.claude-opus-4-5-20251101-v1:0",
+  "anthropic.claude-opus-4-6-v1",
+  "anthropic.claude-opus-4-7",
+  "anthropic.claude-opus-4-8",
+  "anthropic.claude-opus-5",
+  "anthropic.claude-sonnet-4-5-20250929-v1:0",
+  "anthropic.claude-sonnet-4-6",
+  "anthropic.claude-sonnet-5",
+  "deepseek.r1-v1:0",
+  "mistral.pixtral-large-2502-v1:0",
+]
 
 export const AmazonBedrockPlugin = define({
   id: "opencode.provider.amazon.bedrock",
@@ -53,6 +79,12 @@ export const AmazonBedrockPlugin = define({
           }
           delete provider.settings.endpoint
         })
+        for (const modelID of PROFILE_ONLY_BARE_IDS) {
+          if (!evt.model.get(item.provider.id, modelID)) continue
+          evt.model.update(item.provider.id, modelID, (model) => {
+            model.enabled = false
+          })
+        }
       }
     })
   }),

@@ -1,7 +1,7 @@
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useData } from "@/runtime/server/current"
-import { Timeline } from "@opencode-ai/session-ui/timeline/projection"
+import { Timeline } from "@opencode/session-ui/timeline/projection"
 import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 

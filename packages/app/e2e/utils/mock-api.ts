@@ -39,6 +39,7 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(HttpApiEndpoint.get("reference", "/api/reference", { success: Json }))
+  .add(HttpApiEndpoint.get("config", "/api/config", { success: Json }))
   .add(HttpApiEndpoint.get("agent", "/api/agent", { success: Json }))
   .add(HttpApiEndpoint.get("provider", "/api/provider", { success: Json }))
   .add(HttpApiEndpoint.get("model", "/api/model", { success: Json }))

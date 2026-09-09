@@ -1,26 +1,28 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Dynamic } from "solid-js/web"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
-import type { SessionUserActions } from "@opencode-ai/session-ui/actions"
-import { Button } from "@opencode-ai/ui/button"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { InlineInput } from "@opencode-ai/ui/inline-input"
-import { Keybind } from "@opencode-ai/ui/keybind"
-import { Menu } from "@opencode-ai/ui/menu"
-import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
-import { ProjectAvatar } from "@opencode-ai/ui/project-avatar"
+import type { SessionUserActions } from "@opencode/session-ui/actions"
+import { useData } from "@opencode/session-ui/context"
+import { Button } from "@opencode/ui/button"
+import { DiffChanges } from "@opencode/ui/diff-changes"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { InlineInput } from "@opencode/ui/inline-input"
+import { Keybind } from "@opencode/ui/keybind"
+import { Menu } from "@opencode/ui/menu"
+import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { ProjectAvatar } from "@opencode/ui/project-avatar"
 import type { Project } from "@/runtime/server/types"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode/util/path"
 import { Popover } from "@kobalte/core/popover"
 import { SessionContextUsage } from "@/session/timeline/session-context-usage"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useData, useServer } from "@/runtime/server/current"
+import { useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { Timeline, TimelineRow } from "@opencode-ai/session-ui/timeline/projection"
-import { createSessionTimelineRowRenderer } from "@opencode-ai/session-ui/timeline/row"
-import { getReadyMarkdown, preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
+import { Timeline, TimelineRow } from "@opencode/session-ui/timeline/projection"
+import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/row"
+import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import { createTimelineVirtualizer } from "./virtualizer"
 import { containsDirectory, isWorkspaceDirectory, workspaceDirectories } from "@/workspaces/paths"
@@ -70,6 +72,7 @@ export function BackgroundMoveHint(props: { keybind?: string[]; onMove?: () => v
 
 export function BackgroundWorkSummary(props: { tasks: BackgroundTask[]; mobile?: boolean }) {
   const language = useLanguage()
+  const data = useData()
   const [open, setOpen] = createSignal(false)
   const [triggerRef, setTriggerRef] = createSignal<HTMLButtonElement>()
   const tasks = createMemo<BackgroundTask[]>((previous = []) => (props.tasks.length > 0 ? props.tasks : previous))
@@ -106,10 +109,7 @@ export function BackgroundWorkSummary(props: { tasks: BackgroundTask[]; mobile?:
           }}
           aria-label={language.plural("session.background.tasksRunning", tasks().length)}
         >
-          <Icon
-            name="outline-arrow-to-corner-top-right"
-            class="shrink-0 text-v2-icon-icon-muted"
-          />
+          <Icon name="outline-arrow-to-corner-top-right" class="shrink-0 text-v2-icon-icon-muted" />
           <TextShimmer
             as="span"
             text={language.plural("session.background.tasksRunning", tasks().length)}
@@ -125,13 +125,26 @@ export function BackgroundWorkSummary(props: { tasks: BackgroundTask[]; mobile?:
         >
           <For each={tasks().slice(0, 10)}>
             {(task) => (
-              <div
+              <Dynamic
+                component={task.type === "subagent" ? "a" : "div"}
                 data-component="session-background-list-item"
-                class="flex h-7 min-w-0 items-center gap-2 rounded-[4px] px-3 text-[13px] font-[440] leading-none tracking-[-0.04px]"
+                class="flex h-7 min-w-0 items-center gap-2 rounded-[4px] px-3 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px]"
+                classList={{
+                  "hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none":
+                    task.type === "subagent",
+                }}
+                href={task.type === "subagent" ? data.sessionHref?.(task.id) : undefined}
+                onClick={(event: MouseEvent) => {
+                  if (task.type !== "subagent" || !data.navigateToSession) return
+                  if (event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+                  event.preventDefault()
+                  setOpen(false)
+                  data.navigateToSession(task.id)
+                }}
               >
                 <span class="shrink-0 text-v2-text-text-base">{taskType(task)}</span>
                 <span class="min-w-0 flex-1 truncate text-v2-text-text-faint">{task.label}</span>
-              </div>
+              </Dynamic>
             )}
           </For>
         </Popover.Content>
@@ -389,8 +402,8 @@ function MessageTimelineView(
   },
 ) {
   const language = useLanguage()
-  const data = useData()
   const server = useServer()
+  const data = server.ctx.data
   const settings = useSettings()
   const sdk = useWorkspaceLocation()
   const sessionID = props.data.sessionID

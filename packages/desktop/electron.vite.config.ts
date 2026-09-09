@@ -10,7 +10,7 @@ const channel = (() => {
 
 const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
 
-const appPlugin = (await import("@opencode-ai/app/vite")).default
+const appPlugin = (await import("@opencode/app/vite")).default
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
     ? (await import("@sentry/vite-plugin")).sentryVitePlugin({
@@ -45,6 +45,9 @@ export default defineConfig(({ command }) => ({
         // corrupt bundled TypeScript, while an output banner places the shim safely.
         output: {
           format: "es",
+          // DesktopPaths resolves resources from the main output directory,
+          // including when the lazy desktop entry shares it with other chunks.
+          chunkFileNames: "[name]-[hash].js",
           banner: `
 // -- CommonJS Shims --
 import __cjs_mod__ from 'node:module';

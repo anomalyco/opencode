@@ -1,5 +1,5 @@
-import { Service, type Endpoint, type EnsureOptions } from "@opencode-ai/client/effect/service"
-import { ClientError, isUnauthorizedError, OpenCode } from "@opencode-ai/client/promise"
+import { Service, type Endpoint, type EnsureOptions } from "@opencode/client/effect/service"
+import { ClientError, isUnauthorizedError, OpenCode } from "@opencode/client/promise"
 import { OPENCODE_VERSION } from "../version"
 import { Effect, Redacted } from "effect"
 import { Env } from "../env"

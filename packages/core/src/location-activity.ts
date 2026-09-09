@@ -7,7 +7,7 @@ import { LocationServiceMap } from "./location-service-map.js"
 import { SessionEvent } from "./session/event.js"
 import { SessionExecution } from "./session/execution.js"
 import { SessionStore } from "./session/store.js"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
 
 const isSessionEvent = Schema.is(SessionEvent.Durable)
 

@@ -163,6 +163,8 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
   supportsStrictMode: Schema.optional(Schema.Boolean),
   zaiToolStream: Schema.optional(Schema.Boolean),
   requireSignature: Schema.optional(Schema.Boolean),
+  /** Supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */
+  supportsThinkingBlockBinding: Schema.optional(Schema.Boolean),
 }) {}
 
 export namespace LanguageModelCompatibility {

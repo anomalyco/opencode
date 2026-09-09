@@ -1,10 +1,10 @@
 import { createStore, produce } from "solid-js/store"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import { batch, createEffect, createMemo, createRoot, on, onCleanup } from "solid-js"
 import { useWorkspaceLocation, type LocationContext } from "@/workspaces/location"
 import type { Platform } from "@/runtime/platform/platform"
 import { useServerSDK } from "@/runtime/server/client"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import { defaultTitle, titleNumber } from "./title"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { ScopedKey, ServerScope } from "@/runtime/server/scope"
@@ -244,9 +244,9 @@ function createWorkspaceTerminalSession(
         setStore("all", [])
       })
     },
-    new(options?: { focus?: boolean }) {
+    new() {
       const nextNumber = pickNextTerminalNumber()
-      const focusRequest = options?.focus ? requestFocus(undefined, true) : undefined
+      const focusRequest = requestFocus(undefined, true)
 
       const doCreate = async () => {
         return serverSDK.api.pty.create({ location, title: defaultTitle(nextNumber) }).then((result) => result.data)
@@ -255,7 +255,7 @@ function createWorkspaceTerminalSession(
         .then((data) => {
           const id = data?.id
           if (!id) {
-            if (focusRequest !== undefined) cancelFocus(focusRequest)
+            cancelFocus(focusRequest)
             return
           }
           const newTerminal = {
@@ -266,13 +266,13 @@ function createWorkspaceTerminalSession(
           batch(() => {
             setStore("all", store.all.length, newTerminal)
             setStore("active", id)
-            if (focusRequest !== undefined && ui.focus?.request === focusRequest) {
+            if (ui.focus?.request === focusRequest) {
               setUi("focus", { request: focusRequest, id, pending: false })
             }
           })
         })
         .catch((error: unknown) => {
-          if (focusRequest !== undefined) cancelFocus(focusRequest)
+          cancelFocus(focusRequest)
           console.error("Failed to create terminal", error)
         })
     },
@@ -440,7 +440,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       ready: () => workspace().ready(),
       all: () => workspace().all(),
       active: () => workspace().active(),
-      new: (options?: { focus?: boolean }) => workspace().new(options),
+      new: () => workspace().new(),
       update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
       trim: (id: string) => workspace().trim(id),
       trimAll: () => workspace().trimAll(),

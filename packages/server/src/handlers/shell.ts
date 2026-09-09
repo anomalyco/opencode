@@ -1,8 +1,8 @@
-import { Shell } from "@opencode-ai/core/shell"
-import { Location } from "@opencode-ai/core/location"
+import { Shell } from "@opencode/core/shell"
+import { Location } from "@opencode/core/location"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
-import { ShellNotFoundError } from "@opencode-ai/protocol/errors"
+import { ShellNotFoundError } from "@opencode/protocol/errors"
 import { Api } from "../api"
 import { response } from "../location"
 

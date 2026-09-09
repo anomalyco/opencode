@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
 import { MouseButton } from "@opentui/core"
-import { expect, test } from "bun:test"
+import { expect, setSystemTime, test } from "bun:test"
 import { createSignal } from "solid-js"
 import { ConfigProvider } from "../../src/config"
 import { ClientProvider } from "../../src/context/client"
@@ -182,16 +182,21 @@ test("double-clicking a preview tab keeps it open without promoting permanent ta
     app.renderer.start()
     await app.waitForFrame((frame) => frame.includes("Second"))
 
+    // Keep click timing independent of renderer delays on busy CI runners.
+    setSystemTime(new Date(1_000))
     await app.mockMouse.doubleClick(5, 0)
     expect(promoted).toEqual([])
 
+    setSystemTime(new Date(2_000))
     await app.mockMouse.click(40, 0)
     expect(active()).toBe("second")
     expect(promoted).toEqual([])
 
+    setSystemTime(new Date(2_100))
     await app.mockMouse.click(40, 0)
     expect(promoted).toEqual(["second"])
   } finally {
+    setSystemTime()
     app.renderer.destroy()
   }
 })

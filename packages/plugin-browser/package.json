@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/plugin-browser",
+  "name": "@opencode/plugin-browser",
   "version": "0.0.0",
   "description": "OpenCode's desktop browser plugin",
   "type": "module",
@@ -27,8 +27,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/schema": "workspace:*",
+    "@opencode/plugin": "workspace:*",
+    "@opencode/schema": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

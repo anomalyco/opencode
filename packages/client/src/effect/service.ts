@@ -1,4 +1,4 @@
-import { ServiceStatus } from "@opencode-ai/protocol/groups/health"
+import { ServiceStatus } from "@opencode/protocol/groups/health"
 import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import { homedir } from "node:os"
 import { join } from "node:path"

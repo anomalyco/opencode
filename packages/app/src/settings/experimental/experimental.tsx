@@ -1,7 +1,8 @@
 import { Component, Show } from "solid-js"
-import { Select } from "@opencode-ai/ui/select"
-import { Switch } from "@opencode-ai/ui/switch"
+import { Select } from "@opencode/ui/select"
+import { Switch } from "@opencode/ui/switch"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsList } from "@/settings/list"
 import { useSettings } from "@/settings/model"
 import { SettingsRow } from "@/settings/row"
@@ -12,6 +13,7 @@ const tabLayoutOptions: ("horizontal" | "vertical")[] = ["horizontal", "vertical
 export const SettingsExperimental: Component = () => {
   const language = useLanguage()
   const settings = useSettings()
+  const platform = usePlatform()
 
   return (
     <>
@@ -47,6 +49,22 @@ export const SettingsExperimental: Component = () => {
                 onSelect={(option) => option && settings.appearance.setTabLayout(option)}
               />
             </SettingsRow>
+            <Show when={platform.browserPane}>
+              <SettingsRow
+                title={language.t("settings.general.row.browserPane.title")}
+                description={language.t("settings.general.row.browserPane.description")}
+              >
+                <div data-action="settings-experimental-browser">
+                  <Switch
+                    checked={settings.general.experimentalBrowser()}
+                    onChange={settings.general.setExperimentalBrowser}
+                    hideLabel
+                  >
+                    {language.t("settings.general.row.browserPane.title")}
+                  </Switch>
+                </div>
+              </SettingsRow>
+            </Show>
             <SettingsRow
               title={language.t("settings.appearance.row.projectName.title")}
               description={language.t("settings.appearance.row.projectName.description")}

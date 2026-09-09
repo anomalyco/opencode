@@ -1,6 +1,6 @@
-import type { SessionInfo, SessionMessageUser } from "@opencode-ai/client/promise"
+import type { SessionInfo, SessionMessageUser } from "@opencode/client/promise"
 import type { ComposerSelection } from "@/composer/adapter"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import { createStore, produce } from "solid-js/store"
 import { Persist, persisted, removePersisted, draftPersistedKeys } from "@/runtime/persistence/storage"
 import { ServerConnection, useServers } from "@/runtime/server/registry"

@@ -1,17 +1,24 @@
+export * as Values from "./values.js"
+
 import type { Fiber } from "effect"
 
-export class CodeModePromise {
+/**
+ * Runtime values the interpreter recognizes by class. Each wraps the host value it stands for,
+ * so hosts construct these to hand a value to a program and receive them back unchanged.
+ */
+
+export class Promise {
   constructor(readonly fiber: Fiber.Fiber<unknown, unknown>) {}
 }
 
-export class CodeModeDate {
+export class Date {
   constructor(public time: number) {}
 }
 
-export class CodeModeRegExp {
-  readonly regex: RegExp
+export class RegExp {
+  readonly regex: globalThis.RegExp
   constructor(pattern: string, flags: string) {
-    this.regex = new RegExp(pattern, flags)
+    this.regex = new globalThis.RegExp(pattern, flags)
   }
 
   get lastIndex(): unknown {
@@ -23,31 +30,30 @@ export class CodeModeRegExp {
   }
 }
 
-export class CodeModeMap {
-  readonly map = new Map<unknown, unknown>()
+export class Map {
+  readonly map = new globalThis.Map<unknown, unknown>()
 }
 
-export class CodeModeSet {
-  readonly set = new Set<unknown>()
+export class Set {
+  readonly set = new globalThis.Set<unknown>()
 }
 
-export class CodeModeURLSearchParams {
-  constructor(readonly params: URLSearchParams) {}
+export class URLSearchParams {
+  constructor(readonly params: globalThis.URLSearchParams) {}
 }
 
-export class CodeModeURL {
-  readonly searchParams: CodeModeURLSearchParams
-  constructor(readonly url: URL) {
-    this.searchParams = new CodeModeURLSearchParams(url.searchParams)
+export class URL {
+  readonly searchParams: URLSearchParams
+  constructor(readonly url: globalThis.URL) {
+    this.searchParams = new URLSearchParams(url.searchParams)
   }
 }
 
-export const isCodeModeValue = (
-  value: unknown,
-): value is CodeModeDate | CodeModeRegExp | CodeModeMap | CodeModeSet | CodeModeURL | CodeModeURLSearchParams =>
-  value instanceof CodeModeDate ||
-  value instanceof CodeModeRegExp ||
-  value instanceof CodeModeMap ||
-  value instanceof CodeModeSet ||
-  value instanceof CodeModeURL ||
-  value instanceof CodeModeURLSearchParams
+/** Data-like runtime values; excludes Promise, which never crosses a boundary. */
+export const isValue = (value: unknown): value is Date | RegExp | Map | Set | URL | URLSearchParams =>
+  value instanceof Date ||
+  value instanceof RegExp ||
+  value instanceof Map ||
+  value instanceof Set ||
+  value instanceof URL ||
+  value instanceof URLSearchParams

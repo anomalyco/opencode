@@ -1,8 +1,8 @@
 import { createEffect, createMemo, onCleanup, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useMutation } from "@tanstack/solid-query"
-import type { SessionInboxInfo } from "@opencode-ai/client/promise"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
+import type { SessionInboxInfo } from "@opencode/client/promise"
+import { SessionMessage } from "@opencode/schema/session-message"
 import type { ComposerDelivery } from "@/composer/adapter"
 import type { ComposerStateTarget } from "@/composer/submission-state"
 import type { ImageAttachmentPart, Prompt } from "@/composer/state"
@@ -237,7 +237,7 @@ export function queuedPromptRows(items: QueuedPrompt[], replacement?: { original
     .map((item) => ({
       id: item.id,
       text: queuedPromptText(item),
-      attachments: (item.payload.files?.length ?? 0) > 0,
+      attachments: item.payload.files?.length ?? 0,
     }))
 }
 

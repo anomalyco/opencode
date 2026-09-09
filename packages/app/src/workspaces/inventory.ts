@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/solid-query"
-import type { WorktreeDirectory } from "@opencode-ai/client/promise"
+import type { WorktreeDirectory } from "@opencode/client/promise"
 import type { ServerApi } from "@/runtime/server/api"
 import type { ServerScope } from "@/runtime/server/scope"
 import type { Project } from "@/runtime/server/types"

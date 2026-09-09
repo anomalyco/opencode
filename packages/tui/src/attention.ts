@@ -6,7 +6,7 @@ import type {
   AttentionNotifySkipReason,
   AttentionWhen,
   AttentionSoundName,
-} from "@opencode-ai/plugin/tui/context"
+} from "@opencode/plugin/tui/context"
 import { Config } from "./config"
 import { Schema } from "effect"
 import stripAnsi from "strip-ansi"

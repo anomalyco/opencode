@@ -1,9 +1,9 @@
 export * as PluginUpdate from "./update.js"
 
 import { Clock, Context, Effect, Exit, Layer, Option, PubSub, Stream } from "effect"
-import { Npm } from "@opencode-ai/util/npm"
-import { EffectFlock } from "@opencode-ai/util/effect-flock"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { Npm } from "@opencode/util/npm"
+import { EffectFlock } from "@opencode/util/effect-flock"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
 
 const interval = 24 * 60 * 60 * 1_000

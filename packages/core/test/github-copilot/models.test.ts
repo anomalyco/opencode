@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
-import { CopilotModels } from "@opencode-ai/core/github-copilot/models"
-import { Model } from "@opencode-ai/core/model"
-import { Provider } from "@opencode-ai/core/provider"
+import { CopilotModels } from "@opencode/core/github-copilot/models"
+import { Model } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
 
 test("defensively syncs advertised Copilot models", async () => {
   const server = Bun.serve({

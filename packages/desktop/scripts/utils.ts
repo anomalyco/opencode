@@ -17,37 +17,37 @@ export function resolveChannel(): Channel {
 export const CLI_BINARIES: Array<{ target: string; package: string; os: string; cpu: string }> = [
   {
     target: "aarch64-apple-darwin",
-    package: "@opencode-ai/cli-darwin-arm64",
+    package: "@opencode/cli-darwin-arm64",
     os: "darwin",
     cpu: "arm64",
   },
   {
     target: "x86_64-apple-darwin",
-    package: "@opencode-ai/cli-darwin-x64-baseline",
+    package: "@opencode/cli-darwin-x64-baseline",
     os: "darwin",
     cpu: "x64",
   },
   {
     target: "aarch64-pc-windows-msvc",
-    package: "@opencode-ai/cli-windows-arm64",
+    package: "@opencode/cli-windows-arm64",
     os: "win32",
     cpu: "arm64",
   },
   {
     target: "x86_64-pc-windows-msvc",
-    package: "@opencode-ai/cli-windows-x64-baseline",
+    package: "@opencode/cli-windows-x64-baseline",
     os: "win32",
     cpu: "x64",
   },
   {
     target: "x86_64-unknown-linux-gnu",
-    package: "@opencode-ai/cli-linux-x64-baseline",
+    package: "@opencode/cli-linux-x64-baseline",
     os: "linux",
     cpu: "x64",
   },
   {
     target: "aarch64-unknown-linux-gnu",
-    package: "@opencode-ai/cli-linux-arm64",
+    package: "@opencode/cli-linux-arm64",
     os: "linux",
     cpu: "arm64",
   },
@@ -88,7 +88,7 @@ export async function downloadCliToResources(version = CLI_VERSION, dest = windo
 
 export async function copyBuiltCliToResources(root: string, dest = windowsify("resources/opencode-cli")) {
   const cli = getCurrentCli()
-  const directory = cli.package.replace("@opencode-ai/", "")
+  const directory = cli.package.replace("@opencode/", "")
   await copyCliToResources(join(root, directory, "bin", cli.os === "win32" ? "opencode2.exe" : "opencode2"), dest)
 }
 

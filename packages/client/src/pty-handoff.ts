@@ -1,6 +1,6 @@
 export * as PtyHandoff from "./pty-handoff.js"
 
-import type { PersistentPty } from "@opencode-ai/schema/persistent-pty"
+import type { PersistentPty } from "@opencode/schema/persistent-pty"
 import { readFile, rename, rm, writeFile } from "node:fs/promises"
 import type { Info } from "./service.js"
 

@@ -1,20 +1,24 @@
 import { describe, expect, test } from "bun:test"
-import { SystemPart } from "@opencode-ai/ai"
-import { Agent } from "@opencode-ai/core/agent"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { OptimizePlugin } from "@opencode-ai/core/plugin/optimize"
-import { Session } from "@opencode-ai/core/session"
-import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
-import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
-import { Model } from "@opencode-ai/schema/model"
-import { Provider } from "@opencode-ai/schema/provider"
+import { SystemPart } from "@opencode/ai"
+import { Agent } from "@opencode/core/agent"
+import { Catalog } from "@opencode/core/catalog"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { OptimizePlugin } from "@opencode/core/plugin/optimize"
+import { Session } from "@opencode/core/session"
+import { SessionSystemPrompt } from "@opencode/core/session/system-prompt"
+import type { SessionHooks } from "@opencode/plugin/effect/session"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { Effect } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 import PROMPT_META from "../../src/plugin/system-prompt/meta.txt"
+import PROMPT_GPT from "../../src/plugin/system-prompt/gpt.txt"
+import PROMPT_ASTRA from "../../src/plugin/system-prompt/gpt-astra.txt"
+import PROMPT_KIMI from "../../src/plugin/system-prompt/kimi.txt"
+import PROMPT_TRINITY from "../../src/plugin/system-prompt/trinity.txt"
 
 const it = testEffect(PluginTestLayer)
 const fallback = SessionSystemPrompt.make([])
@@ -42,20 +46,6 @@ const context = (id: string, system = fallback): SessionHooks["context"] => ({
 })
 
 describe("OptimizePlugin", () => {
-  test("uses current vocabulary in the Meta prompt", () => {
-    expect(PROMPT_META).toContain("`webfetch` tool")
-    expect(PROMPT_META).toContain("`subagent` tool")
-    expect(PROMPT_META).toContain("Reserve `shell`")
-    expect(PROMPT_META).toContain("`read` for reading files")
-    expect(PROMPT_META).toContain("`edit` for editing")
-    expect(PROMPT_META).toContain("`write` for creating files")
-    expect(PROMPT_META).toContain("Follow that reminder for the files you may edit")
-    expect(PROMPT_META).toContain("https://opencode.ai/v2/docs/")
-    expect(PROMPT_META).not.toMatch(
-      /TodoWrite|Task tool|WebFetch|\bBash\b|including planning files|https:\/\/opencode\.ai\/docs/,
-    )
-  })
-
   test("enables prompt plugins without model-specific tool optimization", () => {
     expect(OptimizePlugin.Plugins.map((plugin) => plugin.id)).toEqual([
       "opencode.prompt.openai",
@@ -81,16 +71,16 @@ describe("OptimizePlugin", () => {
         discard: true,
       })
       const cases = [
-        ["gpt-5", "# Delegation"],
-        ["gpt-4.1", "# Delegation"],
+        ["gpt-5", PROMPT_GPT],
+        ["gpt-4.1", PROMPT_GPT],
         ["o3", fallback],
-        ["gpt-5-codex", "# Delegation"],
-        ["gpt-6-astra", "Do not settle for a partial"],
+        ["gpt-5-codex", PROMPT_GPT],
+        ["gpt-6-astra", PROMPT_ASTRA],
         ["gemini-2.5-pro", fallback],
         ["claude-sonnet-4", fallback],
-        ["kimi-k2", "# Prompt and Tool Use"],
-        ["trinity", "what command should I run to list files"],
-        ["meta/muse-spark-1.1", "powered by Muse Spark"],
+        ["kimi-k2", PROMPT_KIMI],
+        ["trinity", PROMPT_TRINITY],
+        ["meta/muse-spark-1.1", PROMPT_META.replaceAll("{{MODEL_NAME}}", "Muse Spark")],
         ["llama-3.3", fallback],
       ] as const
 
@@ -102,7 +92,11 @@ describe("OptimizePlugin", () => {
             .trigger("session", "context", event)
             .pipe(
               Effect.tap(() =>
-                Effect.sync(() => expect(event.system.map((part) => part.text).join("\n\n")).toContain(expected)),
+                Effect.sync(() =>
+                  expect(event.system.map((part) => part.text)).toEqual([
+                    SessionSystemPrompt.render(expected, Object.keys(event.tools)),
+                  ]),
+                ),
               ),
             )
         },
@@ -127,14 +121,10 @@ describe("OptimizePlugin", () => {
       yield* hooks.trigger("session", "context", event)
 
       expect(event.system.map((part) => part.text)).toEqual([
-        expect.stringContaining("# Delegation"),
+        SessionSystemPrompt.render(PROMPT_GPT, Object.keys(event.tools)),
         "Project instructions",
       ])
-      expect(event.system[0]?.text).toStartWith("You are an AI agent powered by OpenCode")
-      expect(event.system[0]?.text).toContain("Prefer dedicated tools over shell commands")
       expect(event.system[0]?.text).not.toContain("${OPENCODE_TOOL_GUIDANCE}")
-      expect(event.system[0]?.text).toContain("Use the write tool")
-      expect(event.system[0]?.text).toContain("Use the edit tool")
       expect(Object.keys(event.tools).sort()).toEqual(["edit", "glob", "grep", "patch", "read", "shell", "write"])
     }),
   )
@@ -187,14 +177,14 @@ describe("OptimizePlugin", () => {
           yield* OptimizePlugin.OpenAIToolsPlugin.effect(pluginHost)
           const event = context("gpt-5")
           yield* hooks.trigger("session", "context", event)
-          expect(event.system[0]?.text).toContain("# Delegation")
+          expect(event.system[0]?.text).toBe(SessionSystemPrompt.render(PROMPT_GPT, Object.keys(event.tools)))
           expect(Object.keys(event.tools).sort()).toEqual(["edit", "patch", "read", "shell", "write"])
         }),
       )
 
       const event = context("gpt-5")
       yield* hooks.trigger("session", "context", event)
-      expect(event.system[0]?.text).toContain("# Delegation")
+      expect(event.system[0]?.text).toBe(SessionSystemPrompt.render(PROMPT_GPT, Object.keys(event.tools)))
       expect(Object.keys(event.tools).sort()).toEqual(["edit", "glob", "grep", "patch", "read", "shell", "write"])
       const claude = context("claude-sonnet-4-6")
       yield* hooks.trigger("session", "context", claude)
@@ -229,8 +219,9 @@ describe("OptimizePlugin", () => {
           return hooks.trigger("session", "context", event).pipe(
             Effect.tap(() =>
               Effect.sync(() => {
-                expect(event.system[0]?.text).toContain(`powered by ${name},`)
-                expect(event.system[0]?.text).toContain(`using Meta ${name}.`)
+                expect(event.system[0]?.text).toBe(
+                  SessionSystemPrompt.render(PROMPT_META.replaceAll("{{MODEL_NAME}}", name), Object.keys(event.tools)),
+                )
                 expect(event.system[0]?.text).not.toContain("{{MODEL_NAME}}")
               }),
             ),
@@ -292,7 +283,7 @@ describe("OptimizePlugin", () => {
       yield* hooks.trigger("session", "context", kimi)
 
       expect(gemini.system[0]?.text).toBe(fallback)
-      expect(kimi.system[0]?.text).toContain("# Prompt and Tool Use")
+      expect(kimi.system[0]?.text).toBe(SessionSystemPrompt.render(PROMPT_KIMI, Object.keys(kimi.tools)))
     }),
   )
 
@@ -302,8 +293,8 @@ describe("OptimizePlugin", () => {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       const cases = [
-        ["gpt-5-alias", "custom-model", undefined, "# Delegation"],
-        ["gpt-6-alias", "custom-model", undefined, "Do not settle for a partial"],
+        ["gpt-5-alias", "custom-model", undefined, PROMPT_GPT],
+        ["gpt-6-alias", "custom-model", undefined, PROMPT_ASTRA],
         ["openai-alias", "GPT-5", undefined, fallback],
         ["codex-family-alias", "custom-deployment", "GPT-CODEX", fallback],
         ["astra-api-alias", "gpt-6-astra", undefined, fallback],
@@ -326,7 +317,7 @@ describe("OptimizePlugin", () => {
           Effect.gen(function* () {
             const event = context(id)
             yield* hooks.trigger("session", "context", event)
-            expect(event.system[0]?.text).toContain(prompt)
+            expect(event.system[0]?.text).toBe(SessionSystemPrompt.render(prompt, Object.keys(event.tools)))
             expect(Object.keys(event.tools).sort()).toEqual(["edit", "glob", "grep", "patch", "read", "shell", "write"])
           }),
         { discard: true },

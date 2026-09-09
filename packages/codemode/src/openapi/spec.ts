@@ -1,6 +1,6 @@
 import { fromSchemaOpenApi3_0, fromSchemaOpenApi3_1 } from "effect/JsonSchema"
 import type { JsonSchema } from "../tool.js"
-import { isBlockedMember } from "../tool-runtime.js"
+import { isBlockedMember } from "../data.js"
 import type {
   Body,
   Document,

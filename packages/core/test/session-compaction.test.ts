@@ -1,32 +1,32 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LLMEvent, LanguageModel, ToolDefinition, type LLMRequest } from "@opencode-ai/ai"
-import { OpenAIChat } from "@opencode-ai/ai/protocols"
-import { Database } from "@opencode-ai/core/database/database"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
-import { EventTable } from "@opencode-ai/core/event/sql"
-import { SessionCompaction } from "@opencode-ai/core/session/compaction"
-import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionMessage } from "@opencode-ai/core/session/message"
-import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
-import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
-import { SessionTable } from "@opencode-ai/core/session/sql"
-import { SessionStore } from "@opencode-ai/core/session/store"
-import { Session } from "@opencode-ai/core/session"
-import { Project } from "@opencode-ai/core/project"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { App } from "@opencode-ai/core/app"
-import { Agent } from "@opencode-ai/core/agent"
-import { Model } from "@opencode-ai/core/model"
-import { Provider } from "@opencode-ai/core/provider"
-import { Location } from "@opencode-ai/core/location"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Money } from "@opencode-ai/schema/money"
-import { Skill } from "@opencode-ai/schema/skill"
-import { Shell } from "@opencode-ai/schema/shell"
+import { LLMClient, LLMEvent, LanguageModel, ToolDefinition, type LLMRequest } from "@opencode/ai"
+import { OpenAIChat } from "@opencode/ai/protocols"
+import { Database } from "@opencode/core/database/database"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { llmClient } from "@opencode/core/effect/app-node-platform"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { EventTable } from "@opencode/core/event/sql"
+import { SessionCompaction } from "@opencode/core/session/compaction"
+import { SessionEvent } from "@opencode/core/session/event"
+import { SessionMessage } from "@opencode/core/session/message"
+import { SessionModelRequest } from "@opencode/core/session/model-request"
+import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionRunnerModel } from "@opencode/core/session/runner/model"
+import { SessionTable } from "@opencode/core/session/sql"
+import { SessionStore } from "@opencode/core/session/store"
+import { Session } from "@opencode/core/session"
+import { Project } from "@opencode/core/project"
+import { ProjectTable } from "@opencode/core/project/sql"
+import { App } from "@opencode/core/app"
+import { Agent } from "@opencode/core/agent"
+import { Model } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
+import { Location } from "@opencode/core/location"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Money } from "@opencode/schema/money"
+import { Skill } from "@opencode/schema/skill"
+import { Shell } from "@opencode/schema/shell"
 import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -93,7 +93,8 @@ const it = testEffect(
 test("compaction prompt preserves detailed work state and relevant files", () => {
   const prompt = SessionCompaction.buildPrompt(false)
 
-  expect(prompt).toContain("## Work State\n### Completed")
+  expect(prompt).toContain("## Work State")
+  expect(prompt).toContain("### Completed")
   expect(prompt).toContain("### Active")
   expect(prompt).toContain("### Blocked")
   expect(prompt).toContain("## Relevant Files")
@@ -134,8 +135,15 @@ test("compaction prompt requires the checkpoint headings in order", () => {
     "### Blocked",
     "## Next Move",
     "## Relevant Files",
-    "## Additional Context",
+    "## Important Context",
   ])
+})
+
+test("compaction update prompt rewrites legacy checkpoints only when asked", () => {
+  const rewrite = "The existing checkpoint was written with an earlier format"
+  expect(SessionCompaction.buildPrompt(true, true)).toContain(rewrite)
+  expect(SessionCompaction.buildPrompt(true)).not.toContain(rewrite)
+  expect(SessionCompaction.buildPrompt(false, true)).not.toContain(rewrite)
 })
 
 test("compaction prompts prohibit task execution", () => {
@@ -197,6 +205,20 @@ it.effect("auto compaction estimates current content against the buffered prompt
     const inputLimited = { context: 400_000, input: 272_000, output: 128_000 }
     expect(compaction.required(input(251_999, inputLimited))).toBe(false)
     expect(compaction.required(input(252_000, inputLimited))).toBe(true)
+    const native = (
+      tokens: number,
+      limit: { context: number; input?: number; output: number } = inputLimited,
+      threshold?: number,
+    ) => {
+      const selected = input(tokens, limit)
+      return { ...selected, resolved: { ...selected.resolved, compaction: { mode: "provider" as const, threshold } } }
+    }
+    expect(compaction.required(native(251_999))).toBe(false)
+    expect(compaction.required(native(252_000))).toBe(true)
+    expect(compaction.required(native(99_999, inputLimited, 100_000))).toBe(false)
+    expect(compaction.required(native(100_000, inputLimited, 100_000))).toBe(true)
+    expect(compaction.required(native(252_000, inputLimited, 500_000))).toBe(true)
+    expect(compaction.required(native(1_000_000, { context: 0, input: undefined, output: 0 }, 100_000))).toBe(false)
 
     const contextLimited = { context: 100_000, output: 10_000 }
     expect(compaction.required(input(79_999, contextLimited))).toBe(false)

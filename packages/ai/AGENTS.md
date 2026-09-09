@@ -13,6 +13,7 @@
 Per-type constructors live on the type, not as top-level re-exports. Use `Message.system(...)`, `Message.user(...)`, `Message.assistant(...)`, `Message.tool(...)`, `LanguageModel.make(...)`, `ToolDefinition.make(...)`, `ToolCallPart.make(...)`, `ToolResultPart.make(...)`, `ToolChoice.make(...)`, `ToolChoice.named(...)`, `SystemPart.make(...)`, and `GenerationOptions.make(...)` directly. The top-level `LLM` namespace is reserved for request-shaped call APIs: `LLM.request`, `LLM.generate`, `LLM.stream`, and `LLM.generateObject`. Use `LLMRequest.update(...)` when deriving canonical request data; do not add a duplicate `LLM.updateRequest(...)` path. Two ways to construct the same thing is one too many.
 
 - Keep provider-defined string enums forward-compatible. Expose known values for autocomplete while accepting future values with `Known | (string & {})`; use `Schema.String` at runtime unless rejecting unknown values is required for correctness.
+- Order reasoning-effort values from lowest to highest: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. Provider-specific subsets follow the same relative order in types, schemas, option lists, and tests.
 
 ## Tests
 
@@ -121,10 +122,10 @@ Keep provider facades small and explicit:
 
 ### Provider Package Entrypoints
 
-Catalog-selected native providers use package-like export paths from `@opencode-ai/ai`. They are internal entrypoints in one npm package, not separately published provider packages. Every entrypoint implements `ProviderPackage.Definition` and exposes `model(modelID, settings)`, where settings are serializable provider configuration plus common `headers`, `body`, and `limits` overlays.
+Catalog-selected native providers use package-like export paths from `@opencode/ai`. They are internal entrypoints in one npm package, not separately published provider packages. Every entrypoint implements `ProviderPackage.Definition` and exposes `model(modelID, settings)`, where settings are serializable provider configuration plus common `headers`, `body`, and `limits` overlays.
 
 ```ts
-import { model } from "@opencode-ai/ai/providers/openai/responses"
+import { model } from "@opencode/ai/providers/openai/responses"
 
 const selected = model("gpt-5", {
   apiKey,

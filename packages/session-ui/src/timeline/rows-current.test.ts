@@ -3,7 +3,7 @@ import type {
   SessionMessageAssistant,
   SessionMessageAssistantTool,
   SessionMessageInfo,
-} from "@opencode-ai/client/promise"
+} from "@opencode/client/promise"
 import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
 import { createTimelineProjection, Timeline, TimelineRow } from "./projection"
 

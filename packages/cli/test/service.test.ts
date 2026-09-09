@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { Service, type Info } from "@opencode-ai/client/effect/service"
-import { Global } from "@opencode-ai/util/global"
+import { Service, type Info } from "@opencode/client/effect/service"
+import { Global } from "@opencode/util/global"
 import { OPENCODE_VERSION } from "../src/version"
 import { expect, test } from "bun:test"
 import { Effect, Schema } from "effect"

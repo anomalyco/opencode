@@ -1,5 +1,5 @@
 import type { LspStatus } from "@/runtime/server/types"
-import type { McpServer } from "@opencode-ai/client/promise"
+import type { McpServer } from "@opencode/client/promise"
 
 export function hasServiceNeedingAttention(input: { mcp: Array<McpServer["status"]["status"]> }) {
   return input.mcp.some((status) => status === "needs_auth")

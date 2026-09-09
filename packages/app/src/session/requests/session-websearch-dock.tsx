@@ -1,7 +1,7 @@
 import { createMemo, Show } from "solid-js"
-import { Button } from "@opencode-ai/ui/button"
-import { DockShell, DockTray } from "@opencode-ai/ui/dock-surface"
-import { Select } from "@opencode-ai/ui/select"
+import { Button } from "@opencode/ui/button"
+import { DockShell, DockTray } from "@opencode/ui/dock-surface"
+import { Select } from "@opencode/ui/select"
 import { useLanguage } from "@/runtime/i18n/language"
 import { SettingsRow } from "@/settings/row"
 import type { WebSearchRequestModel } from "./websearch"
@@ -69,7 +69,7 @@ export function SessionWebSearchDock(props: { model: WebSearchRequestModel; onSu
             </Button>
           </Show>
           <Button
-            variant="neutral"
+            variant="submit"
             size="small"
             onClick={() => {
               const selected = props.model.selected()
