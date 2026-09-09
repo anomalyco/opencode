@@ -50,12 +50,6 @@ const request = LLM.request({
   prompt: "Explain this design.",
   providerOptions: { reasoningEffort: "medium" },
 })
-
-const search = LLM.request({
-  model: alibaba.responses("qwen3.8-max"),
-  prompt: "Find and summarize the official Model Studio documentation.",
-  tools: [Alibaba.webSearch(), Alibaba.webExtractor()],
-})
 ```
 
 ### Regions and credentials
@@ -69,22 +63,18 @@ const search = LLM.request({
 | Germany (Frankfurt) | `eu-central-1`   | Supply `workspaceID` or `baseURL`         |
 | Japan (Tokyo)       | `ap-northeast-1` | Supply `workspaceID` or `baseURL`         |
 
-With `workspaceID`, the host is `{workspaceID}.{region}.maas.aliyuncs.com`.
-Alibaba recommends workspace-dedicated hosts for production. A complete `baseURL` overrides
-regional URL construction and may be supplied without `region`. It includes the selected API's
-version prefix: `/compatible-mode/v1` for Chat and Responses, `/apps/anthropic/v1` for Messages.
-The route appends `/chat/completions`, `/responses`, or `/messages`, respectively.
+With `workspaceID`, the host is `{workspaceID}.{region}.maas.aliyuncs.com`. A complete `baseURL`
+overrides regional setup, including the API prefix: `/compatible-mode/v1` for Chat/Responses,
+or `/apps/anthropic/v1` for Messages. The selector appends its operation path.
 
-Keys and model availability are region-specific. Credentials resolve from explicit `apiKey`, then
-`DASHSCOPE_API_KEY`, then `ALIBABA_API_KEY`; an explicit `auth` overrides bearer authentication.
-There is no automatic regional fallback. Use the key belonging to the selected region/workspace.
+Keys and model availability are region-specific. Auth resolves from explicit `auth` or `apiKey`,
+then `DASHSCOPE_API_KEY`, then `ALIBABA_API_KEY`.
 
-The access region and inference deployment scope are separate concepts. For example, Virginia's
-`-us` model IDs request US-only inference; other regions may select scope through their workspace.
-Model IDs are passed through unchanged. See Alibaba's [regional documentation](https://www.alibabacloud.com/help/en/model-studio/regions)
-and [base URL table](https://www.alibabacloud.com/help/en/model-studio/base-url). Those pages currently
-disagree about Virginia's shared-host availability; its entry above follows the base URL table.
-Use the API host shown in your console when configuring a dedicated endpoint.
+The access region and inference scope differ: Virginia's `-us` model IDs request US-only inference;
+some regions select scope through their workspace. Model IDs pass through unchanged.
+Alibaba's [regional guide](https://www.alibabacloud.com/help/en/model-studio/regions) and
+[base URL table](https://www.alibabacloud.com/help/en/model-studio/base-url) disagree about Virginia's
+shared host; the entry above follows the base URL table. Dedicated hosts can be copied from the console.
 
 ### Native options
 
@@ -104,17 +94,12 @@ Use the API host shown in your console when configuring a dedicated endpoint.
   Hosted tools are `Alibaba.webSearch()`, `Alibaba.webExtractor()`, and `Alibaba.codeInterpreter()`.
   Web extraction is used together with web search. Hosted calls/results carry `providerExecuted: true`.
 
-Omitted options preserve provider defaults. Effort values stay in ascending order
-(`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`) and accept future strings.
-Alibaba owns the model-specific mappings: Qwen 3.8's native levels are `none`, `low`, `medium`,
-and `xhigh`; aliases and defaults are not rewritten locally. Thinking budgets and effort should
-not be combined on Qwen 3.8 Chat, where the API rejects that combination.
+Omitted options preserve provider defaults. Effort values pass through unchanged and accept future
+strings. Qwen 3.8 Chat rejects requests combining a thinking budget with effort.
 
 Package entrypoints are `@opencode/ai/providers/alibaba`, `alibaba/chat`, `alibaba/messages`,
-and `alibaba/responses`. Singapore recordings cover Qwen 3.8 reasoning efforts, tool loops and
-follow-ups on all three APIs, Qwen 3.7 thinking toggles/budgets, image input, named tool choice,
-structured output, stored Responses continuation, and hosted search/extraction/code execution.
-Regional URL construction is unit-tested for all six regions.
+and `alibaba/responses`. Live recordings cover all three APIs in Singapore; regional URL construction
+is unit-tested for all six regions.
 
 ## Z.AI
 

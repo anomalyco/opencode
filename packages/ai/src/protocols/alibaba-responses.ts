@@ -1,26 +1,18 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
-import type { AlibabaChat } from "./alibaba-chat.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, ProviderShared } from "./shared.js"
+import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
-import { ToolSchemaProjection } from "./utils/tool-schema.js"
-
-export type OptionsInput = {
-  readonly reasoningEffort?: AlibabaChat.ReasoningEffort
-  readonly enableThinking?: boolean
-  readonly store?: boolean
-  readonly previousResponseId?: string
-  readonly conversation?: string
-}
 
 const Options = Schema.Struct({
-  reasoningEffort: Schema.optional(Schema.String),
+  reasoningEffort: OpenResponsesOptions.Options.fields.reasoningEffort,
   enableThinking: Schema.optional(Schema.Boolean),
-  store: Schema.optional(Schema.Boolean),
+  store: OpenResponsesOptions.Options.fields.store,
   previousResponseId: Schema.optional(Schema.String),
   conversation: Schema.optional(Schema.String),
 })
+export type OptionsInput = typeof Options.Type
 const NativeTool = Schema.Struct({ type: Schema.Literals(["web_search", "web_extractor", "code_interpreter"]) })
 const WebExtractorItem = Schema.StructWithRest(
   Schema.Struct({
@@ -43,6 +35,7 @@ const Body = Schema.Struct({
 const adapter = {
   id: "alibaba-responses",
   name: "Alibaba Responses",
+  nativeTool: (native) => ProviderShared.validateWith(Schema.decodeUnknownEffect(NativeTool))(native.alibaba),
   restoreHostedToolItem: (item: unknown) => (Schema.is(WebExtractorItem)(item) ? item : undefined),
 } satisfies OpenResponses.ProviderAdapter
 
@@ -57,33 +50,16 @@ export const protocol = Protocol.make({
     schema: Body,
     from: Effect.fn("AlibabaResponses.fromRequest")(function* (req) {
       const opts = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(req.providerOptions ?? {})
-      const flat = ProviderShared.flattenToolRequest(req)
-      const choice = req.toolChoice ? yield* OpenResponses.lowerToolChoice(adapter.name, req.toolChoice) : undefined
+      const body = yield* OpenResponses.fromRequestWithAdapter(req, adapter)
+      const choice = body.tool_choice
       return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Body))({
-        ...(yield* OpenResponses.lowerConversation(flat.request, adapter)),
-        ...OpenResponses.lowerGeneration(req),
+        ...body,
         enable_thinking: opts.enableThinking,
         previous_response_id: opts.previousResponseId,
         conversation: opts.conversation,
-        tools:
-          flat.tools.length === 0
-            ? undefined
-            : yield* Effect.forEach(flat.tools, (tool) =>
-                Effect.gen(function* () {
-                  if (tool.native !== undefined)
-                    return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(NativeTool))(
-                      tool.native.alibaba,
-                    )
-                  return yield* OpenResponses.lowerTool(
-                    adapter.name,
-                    tool,
-                    ToolSchemaProjection.modelCompatibility(tool.inputSchema, req.model.compatibility?.toolSchema),
-                  )
-                }),
-              ),
         // Model Studio expresses named selection through allowed_tools.
         tool_choice:
-          typeof choice === "object"
+          typeof choice === "object" && choice.type === "function"
             ? { type: "allowed_tools" as const, mode: "required" as const, tools: [choice] }
             : choice,
       })

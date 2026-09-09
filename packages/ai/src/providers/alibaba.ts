@@ -113,7 +113,7 @@ export const responsesModel: ProviderPackage.Definition<
   ResponsesOptionsInput
 >["model"] = (id, input) => fromSettings(input).responses(id)
 
-function fromSettings(input: Settings<ChatOptionsInput | MessagesOptionsInput | ResponsesOptionsInput>) {
+function fromSettings(input: Settings<Config["providerOptions"]>) {
   const { body, ...rest } = input
   return configure({ ...rest, http: body === undefined ? undefined : { body } })
 }

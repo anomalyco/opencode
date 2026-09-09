@@ -3,51 +3,42 @@ import { Protocol } from "../route/protocol.js"
 import type { LanguageModelCompatibility } from "../schema/index.js"
 import { OpenAIChat } from "./openai-chat.js"
 import { JsonObject, ProviderShared } from "./shared.js"
+import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 
-export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | (string & {})
-
-export type OptionsInput = {
-  readonly reasoningEffort?: ReasoningEffort
-  readonly enableThinking?: boolean
-  readonly thinkingBudget?: number
-  readonly preserveThinking?: boolean
-  readonly clearThinking?: boolean
-  readonly thinking?: { readonly type: "adaptive" | "disabled" | (string & {}) }
-  readonly toolStream?: boolean
-  readonly parallelToolCalls?: boolean
-  readonly repetitionPenalty?: number
-  readonly responseFormat?: {
-    readonly type: "text" | "json_object" | "json_schema" | (string & {})
-    readonly json_schema?: Readonly<Record<string, unknown>>
-  }
-  readonly enableSearch?: boolean
-  readonly searchOptions?: {
-    readonly forced_search?: boolean
-    readonly search_strategy?: "turbo" | "max" | "agent" | "agent_max" | (string & {})
-    readonly enable_search_extension?: boolean
-  }
-}
+export type ReasoningEffort = OpenResponsesOptions.ReasoningEffort
 
 const Options = Schema.Struct({
-  reasoningEffort: Schema.optional(Schema.String),
+  reasoningEffort: OpenResponsesOptions.Options.fields.reasoningEffort,
   enableThinking: Schema.optional(Schema.Boolean),
   thinkingBudget: Schema.optional(Schema.Int),
   preserveThinking: Schema.optional(Schema.Boolean),
   clearThinking: Schema.optional(Schema.Boolean),
-  thinking: Schema.optional(Schema.Struct({ type: Schema.String })),
+  thinking: Schema.optional(
+    Schema.Struct({
+      type: Schema.declare<"adaptive" | "disabled" | (string & {})>(Schema.is(Schema.String)),
+    }),
+  ),
   toolStream: Schema.optional(Schema.Boolean),
-  parallelToolCalls: Schema.optional(Schema.Boolean),
+  parallelToolCalls: OpenResponsesOptions.Options.fields.parallelToolCalls,
   repetitionPenalty: Schema.optional(Schema.Number),
-  responseFormat: Schema.optional(Schema.Struct({ type: Schema.String, json_schema: Schema.optional(JsonObject) })),
+  responseFormat: Schema.optional(
+    Schema.Struct({
+      type: Schema.declare<"text" | "json_object" | "json_schema" | (string & {})>(Schema.is(Schema.String)),
+      json_schema: Schema.optional(JsonObject),
+    }),
+  ),
   enableSearch: Schema.optional(Schema.Boolean),
   searchOptions: Schema.optional(
     Schema.Struct({
       forced_search: Schema.optional(Schema.Boolean),
-      search_strategy: Schema.optional(Schema.String),
+      search_strategy: Schema.optional(
+        Schema.declare<"turbo" | "max" | "agent" | "agent_max" | (string & {})>(Schema.is(Schema.String)),
+      ),
       enable_search_extension: Schema.optional(Schema.Boolean),
     }),
   ),
 })
+export type OptionsInput = typeof Options.Type
 
 export const compatibility = {
   maxTokensField: "max_completion_tokens",

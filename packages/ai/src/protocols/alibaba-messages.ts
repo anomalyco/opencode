@@ -1,30 +1,21 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
 import { LLMRequest } from "../schema/index.js"
-import type { AlibabaChat } from "./alibaba-chat.js"
 import { AnthropicMessages } from "./anthropic-messages.js"
 import { ProviderShared } from "./shared.js"
-
-export type OptionsInput = {
-  readonly effort?: AlibabaChat.ReasoningEffort
-  readonly thinking?: {
-    readonly type: "enabled" | "disabled" | (string & {})
-    readonly budgetTokens?: number
-    readonly budget_tokens?: number
-  }
-  readonly outputConfig?: AnthropicMessages.OptionsInput["outputConfig"]
-}
+import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 
 const Options = Schema.Struct({
-  effort: Schema.optional(Schema.String),
+  effort: Schema.optional(OpenResponsesOptions.ReasoningEffort),
   thinking: Schema.optional(
     Schema.Struct({
-      type: Schema.String,
+      type: Schema.declare<"enabled" | "disabled" | (string & {})>(Schema.is(Schema.String)),
       budgetTokens: Schema.optional(Schema.Int),
       budget_tokens: Schema.optional(Schema.Int),
     }),
   ),
 })
+export type OptionsInput = typeof Options.Type & Pick<AnthropicMessages.OptionsInput, "outputConfig">
 export const protocol = Protocol.make({
   id: "alibaba-messages",
   body: {
