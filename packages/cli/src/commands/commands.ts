@@ -123,11 +123,29 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           },
         }),
         Spec.make("logout", {
-          description: "log out from a configured provider",
+          description: "log out of a saved account",
           params: {
             ...ServerParams,
             target: Argument.string("target").pipe(
               Argument.withDescription("Integration ID or name"),
+              Argument.optional,
+            ),
+            credential: Argument.string("credential").pipe(
+              Argument.withDescription("Credential ID or label (opens an account picker when omitted)"),
+              Argument.optional,
+            ),
+          },
+        }),
+        Spec.make("switch", {
+          description: "switch the active account for an integration",
+          params: {
+            ...ServerParams,
+            target: Argument.string("target").pipe(
+              Argument.withDescription("Integration ID or name"),
+              Argument.optional,
+            ),
+            credential: Argument.string("credential").pipe(
+              Argument.withDescription("Credential ID or label (opens an account picker when omitted)"),
               Argument.optional,
             ),
           },

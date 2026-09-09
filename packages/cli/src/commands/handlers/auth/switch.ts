@@ -7,9 +7,9 @@ import { createClient, loadIntegrations, location, request } from "./shared"
 import { chooseCredential, chooseIntegration } from "./account"
 
 export default Runtime.handler(
-  Commands.commands.auth.commands.logout,
-  Effect.fn("cli.auth.logout")((input) =>
-    logout({
+  Commands.commands.auth.commands.switch,
+  Effect.fn("cli.auth.switch")((input) =>
+    switchAccount({
       target: Option.getOrUndefined(input.target),
       credential: Option.getOrUndefined(input.credential),
       server: Option.getOrUndefined(input.server),
@@ -18,7 +18,7 @@ export default Runtime.handler(
   ),
 )
 
-const logout = Effect.fn("cli.auth.logout.run")(function* (input: {
+const switchAccount = Effect.fn("cli.auth.switch.run")(function* (input: {
   target?: string
   credential?: string
   server?: string
@@ -28,16 +28,16 @@ const logout = Effect.fn("cli.auth.logout.run")(function* (input: {
     yield* requireInteractive("Pass an integration ID or name when running without an interactive terminal")
   if (!input.credential)
     yield* requireInteractive("Pass a credential ID or label when running without an interactive terminal")
-  intro("Log out of an account")
+  intro("Switch account")
   const client = yield* createClient({ server: input.server, standalone: input.standalone })
   const integrations = yield* loadIntegrations(client)
   const integration = yield* chooseIntegration(integrations, input.target)
-  const credentialID = yield* chooseCredential(integration, "log out", input.credential)
+  const credentialID = yield* chooseCredential(integration, "switch to", input.credential)
   const progress = spinner()
-  progress.start("Removing credential...")
-  yield* request((signal) => client.credential.remove({ credentialID, location }, { signal })).pipe(
-    Effect.tap(() => Effect.sync(() => progress.stop(`Removed account from ${integration.name}`))),
-    Effect.tapCause(() => Effect.sync(() => progress.stop("Failed to remove credential", 1))),
+  progress.start("Switching account...")
+  yield* request((signal) => client.credential.activate({ credentialID, location }, { signal })).pipe(
+    Effect.tap(() => Effect.sync(() => progress.stop(`Switched account for ${integration.name}`))),
+    Effect.tapCause(() => Effect.sync(() => progress.stop("Failed to switch account", 1))),
   )
   outro("Done")
 })
