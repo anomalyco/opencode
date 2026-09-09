@@ -509,6 +509,12 @@ export function MessageTimeline(props: {
     content: () => virtualContent,
     getParts: getMsgParts,
     getPart: getMsgPart,
+    getUserText: (messageID) => {
+      const message = projectedMessages().find((item) => item.id === messageID)
+      if (!message) return
+      if (message.type === "user") return message.text
+      if (message.type === "shell") return [message.command, message.output].filter(Boolean).join("\n")
+    },
     headerOffset: () => (showHeader() ? 48 : 0),
     scrollToIndex: (index) => virtualizer.scrollToIndex(index, { align: "center" }),
     // Pause bottom-follow synchronously before navigating, otherwise the

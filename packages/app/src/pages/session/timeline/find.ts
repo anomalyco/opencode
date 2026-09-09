@@ -12,17 +12,28 @@ import { TimelineRow } from "./timeline-row"
 
 type GetParts = (messageID: string) => Part[]
 type GetPart = (messageID: string, partID: string) => Part | undefined
+type GetUserText = (messageID: string) => string | undefined
 
 // Searchable text mirrors what the row renders: user/assistant text and
 // reasoning parts, plus tool call input values shown in tool triggers.
-// Tool outputs stay collapsed, so their content is excluded.
-export function rowSearchText(row: TimelineRow.TimelineRow, getParts: GetParts, getPart: GetPart): string {
+// Tool outputs stay collapsed, so their content is excluded. User rows also
+// include the projected session message text because V2 sessions carry the
+// prompt on the message rather than only in parts.
+export function rowSearchText(
+  row: TimelineRow.TimelineRow,
+  getParts: GetParts,
+  getPart: GetPart,
+  getUserText?: GetUserText,
+): string {
   switch (row._tag) {
-    case "UserMessage":
-      return getParts(row.userMessageID)
+    case "UserMessage": {
+      const texts = getParts(row.userMessageID)
         .filter((part): part is Extract<Part, { type: "text" }> => part.type === "text" && !part.synthetic)
         .map((part) => part.text)
-        .join("\n")
+      const direct = getUserText?.(row.userMessageID)
+      if (direct) texts.unshift(direct)
+      return texts.join("\n")
+    }
     case "AssistantPart": {
       if (row.group.type !== "part") return ""
       const part = getPart(row.group.ref.messageID, row.group.ref.partID)
@@ -55,11 +66,12 @@ export function matchRowKeys(
   query: string,
   getParts: GetParts,
   getPart: GetPart,
+  getUserText?: GetUserText,
 ): string[] {
   const needle = query.trim().toLowerCase()
   if (!needle) return []
   return rows.flatMap((row) => {
-    const text = rowSearchText(row, getParts, getPart)
+    const text = rowSearchText(row, getParts, getPart, getUserText)
     if (!text.toLowerCase().includes(needle)) return []
     return [TimelineRow.key(row)]
   })
@@ -105,6 +117,7 @@ export function createTimelineFind(input: {
   content: () => HTMLElement | undefined
   getParts: GetParts
   getPart: GetPart
+  getUserText?: GetUserText
   headerOffset: () => number
   scrollToIndex: (index: number) => void
   onNavigate?: () => void
@@ -122,7 +135,7 @@ export function createTimelineFind(input: {
 
   const matches = createMemo(() => {
     if (!state.open) return []
-    return matchRowKeys(input.rows(), state.query, input.getParts, input.getPart)
+    return matchRowKeys(input.rows(), state.query, input.getParts, input.getPart, input.getUserText)
   })
 
   // Keep the active match valid while messages stream in.

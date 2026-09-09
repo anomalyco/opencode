@@ -52,6 +52,15 @@ describe("rowSearchText", () => {
     expect(rowSearchText(row, getParts, getPart)).toBe("hello\nagain")
   })
 
+  test("includes projected message text for user rows", () => {
+    reset({ user1: [textPart("p1", "part text")] })
+    const row = new TimelineRow.UserMessage({ userMessageID: "user1", anchor: true })
+    const getUserText = (id: string) => (id === "user1" ? "projected prompt" : undefined)
+    expect(rowSearchText(row, getParts, getPart, getUserText)).toBe("projected prompt\npart text")
+    reset({})
+    expect(rowSearchText(row, getParts, getPart, getUserText)).toBe("projected prompt")
+  })
+
   test("reads text and reasoning for single-part assistant groups", () => {
     reset({ asst1: [textPart("p1", "answer"), reasoningPart("p2", "thinking")] })
     const text = new TimelineRow.AssistantPart({
