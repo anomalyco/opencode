@@ -458,6 +458,7 @@ export const Assistant = Schema.Struct({
     completed: Schema.optional(NonNegativeInt),
   }),
   error: Schema.optional(AssistantErrorSchema),
+  warning: Schema.optional(AssistantErrorSchema),
   parentID: MessageID,
   modelID: Model.ID,
   providerID: Provider.ID,
@@ -483,8 +484,12 @@ export const Assistant = Schema.Struct({
   variant: Schema.optional(Schema.String),
   finish: Schema.optional(Schema.String),
 }).annotate({ identifier: "AssistantMessage" })
-export type Assistant = Omit<Types.DeepMutable<Schema.Schema.Type<typeof Assistant>>, "error"> & {
+export type Assistant = Omit<
+  Types.DeepMutable<Schema.Schema.Type<typeof Assistant>>,
+  "error" | "warning"
+> & {
   error?: AssistantError
+  warning?: AssistantError
 }
 
 export const Info = Schema.Union([User, Assistant]).annotate({ discriminator: "role", identifier: "Message" })
@@ -656,11 +661,20 @@ export const Error = define({
   },
 })
 
+export const Warning = define({
+  type: "session.warning",
+  schema: {
+    sessionID: Schema.optional(SessionID),
+    warning: Assistant.fields.warning,
+  },
+})
+
 export const Event = {
   ...events,
   PartDelta,
   Diff,
   Error,
+  Warning,
   Definitions: inventory(
     events.Created,
     events.Updated,
@@ -672,5 +686,6 @@ export const Event = {
     PartDelta,
     Diff,
     Error,
+    Warning,
   ),
 }

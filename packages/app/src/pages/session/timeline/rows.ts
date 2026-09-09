@@ -228,6 +228,19 @@ export namespace Timeline {
       )
     }
 
+    const warning = assistantMessages.at(-1)?.warning
+    if (warning) {
+      const data = warning.data?.message
+      rows.push(
+        new TimelineRow.Warning({
+          userMessageID: userMessage.id,
+          text: unwrapErrorMessage(
+            typeof data === "string" ? data : data === undefined || data === null ? "" : String(data),
+          ),
+        }),
+      )
+    }
+
     return rows
   }
 

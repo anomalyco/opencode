@@ -17,10 +17,12 @@ import { Effect } from "effect"
 import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
 import { SessionProcessor } from "./processor"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { PartID } from "./schema"
 import { EffectBridge } from "@/effect/bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
@@ -487,6 +489,22 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         }),
       )
     tools[key] = item
+  }
+
+  const skipped = yield* registry.skipped()
+  if (skipped.length > 0) {
+    const message = skipped
+      .map(({ file, error }) => {
+        const detail = error instanceof Error ? `${error.message}` : String(error)
+        return `Failed to load tool: ${file} (${detail})`
+      })
+      .join("\n")
+    input.processor.message.warning = new NamedError.Unknown({ message }).toObject()
+    const events = yield* EventV2Bridge.Service
+    yield* events.publish(Session.Event.Warning, {
+      sessionID: input.session.id,
+      warning: input.processor.message.warning,
+    })
   }
 
   return tools

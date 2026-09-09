@@ -36,6 +36,10 @@ export namespace TimelineRow {
     userMessageID: string
     text: string
   }> {}
+  export class Warning extends Data.TaggedClass("Warning")<{
+    userMessageID: string
+    text: string
+  }> {}
   export class Retry extends Data.TaggedClass("Retry")<{
     userMessageID: string
   }> {}
@@ -49,6 +53,7 @@ export namespace TimelineRow {
     | Thinking
     | DiffSummary
     | Error
+    | Warning
     | Retry
 
   export const key = (row: TimelineRow) => {
@@ -69,6 +74,8 @@ export namespace TimelineRow {
         return `diff-summary:${row.userMessageID}`
       case "Error":
         return `error:${row.userMessageID}`
+      case "Warning":
+        return `warning:${row.userMessageID}`
       case "Retry":
         return `retry:${row.userMessageID}`
     }
