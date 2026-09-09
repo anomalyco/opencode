@@ -59,5 +59,19 @@ export const Remote = Schema.Struct({
 }).annotate({ identifier: "McpRemoteConfig" })
 export type Remote = Schema.Schema.Type<typeof Remote>
 
-export const Info = Schema.Union([Local, Remote]).annotate({ discriminator: "type" })
+export const Info = Schema.Union([Local, Remote]).annotate({
+  discriminator: "type",
+  expected: 'an MCP server entry with a "type" of "local" or "remote"',
+})
 export type Info = Schema.Schema.Type<typeof Info>
+
+// A bare `{ "enabled": boolean }` entry that overrides the `enabled` flag of a server defined in a broader-scope config file
+export const BareEnabled = Schema.declare(
+  (u): u is { enabled: boolean } =>
+    typeof u === "object" && u !== null && Object.keys(u).length === 1 && "enabled" in u && typeof u.enabled === "boolean",
+  {
+    expected: 'an MCP server entry that is exactly { "enabled": boolean }',
+    description: 'A bare { "enabled": boolean } entry that overrides the enabled flag of an MCP server defined in a broader-scope config file',
+  },
+)
+export type BareEnabled = Schema.Schema.Type<typeof BareEnabled>
