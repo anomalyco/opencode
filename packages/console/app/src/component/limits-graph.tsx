@@ -1,13 +1,9 @@
 import { For, createSignal, onCleanup, onMount } from "solid-js"
 import { useI18n } from "~/context/i18n"
-import { RollingNumber } from "./rolling-number"
 
 export function LimitsGraph(props: { href: string }) {
   let root!: HTMLElement
   const [visible, setVisible] = createSignal(false)
-  const [boosted, setBoosted] = createSignal(false)
-  const [promoted, setPromoted] = createSignal<string[]>([])
-  let timer: ReturnType<typeof setTimeout> | undefined
 
   const i18n = useI18n()
 
@@ -15,14 +11,10 @@ export function LimitsGraph(props: { href: string }) {
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)")
     const finish = () => {
       if (!motion.matches) return
-      clearTimeout(timer)
       setVisible(true)
-      setBoosted(true)
-      setPromoted(bonuses.map((model) => model.id))
     }
     motion.addEventListener("change", finish)
     onCleanup(() => {
-      clearTimeout(timer)
       motion.removeEventListener("change", finish)
     })
     if (motion.matches) return finish()
@@ -46,18 +38,17 @@ export function LimitsGraph(props: { href: string }) {
     { id: "grok-4.6", name: "Grok 4.6", req: 169 },
     { id: "hy4-preview", name: "Hy4 preview", req: 1350 },
     { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", req: 2050 },
-    { id: "glm-5.3-flash", name: "GLM-5.3-Flash", req: 3160, baseReq: 1580, bonus: "2x usage" },
     { id: "minimax-m3", name: "MiniMax M3", req: 3200 },
     { id: "qwen3.7-plus", name: "Qwen3.7 Plus", req: 4300 },
     { id: "hy3", name: "Hy3", req: 4300 },
     { id: "qwen3.8-flash", name: "Qwen3.8 Flash", req: 5400 },
+    { id: "glm-5.3-flash", name: "GLM-5.3-Flash", req: 6320 },
     { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 7600 },
     { id: "longcat-2.0", name: "LongCat-2.0", req: 11400 },
     { id: "omen-alpha", name: "Omen Alpha", req: 11600 },
     { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100 },
     { id: "muse-spark-1.3-contributor", name: "Muse Spark 1.3 Contributor", req: 45300, edge: true },
   ].map((model, index) => ({ ...model, d: `${50 + index * 25}ms` }))
-  const bonuses = graph.filter((model) => model.baseReq)
 
   const w = 1040
   const chartW = 720
@@ -102,34 +93,13 @@ export function LimitsGraph(props: { href: string }) {
   const py = (n: number) => `${(n / h) * 100}%`
   const lx = px(left - 16)
   const ty = py(h - 18)
-  const timing = () => {
-    const style = getComputedStyle(root)
-    return {
-      duration: Number.parseFloat(style.getPropertyValue("--bonus-duration")),
-      easing: style.getPropertyValue("--spring-easing").trim(),
-      spinEasing: style.getPropertyValue("--digit-easing").trim(),
-    }
-  }
 
   return (
     <figure
       data-component="limit-graph"
       aria-label={i18n.t("go.graph.label")}
       data-visible={visible() ? "" : undefined}
-      data-boosted={boosted() ? "" : undefined}
       ref={root}
-      onAnimationStart={(event) => {
-        if (!(event.target instanceof SVGElement) || event.animationName !== "go-graph-reveal") return
-        if (event.target.hasAttribute("data-stage-end") && !boosted()) {
-          const duration = Number.parseFloat(getComputedStyle(root).getPropertyValue("--reveal-duration"))
-          timer = setTimeout(() => setBoosted(true), duration * 0.6)
-          return
-        }
-        if (event.target.dataset.animate !== "bonus") return
-        const model = event.target.dataset.model
-        if (!model) return
-        setPromoted((current) => [...current, model])
-      }}
     >
       <div data-slot="plot">
         <svg
@@ -152,33 +122,17 @@ export function LimitsGraph(props: { href: string }) {
           <g data-slot="bars">
             <For each={graph}>
               {(m, i) => (
-                <>
-                  <rect
-                    data-animate="bar"
-                    data-model={m.id}
-                    data-stage-end={i() === graph.length - 1 ? "" : undefined}
-                    style={{ "--d": m.d }}
-                    x={left}
-                    y={gy(i()) - bh / 2}
-                    width={Math.max(0, ("infinite" in m ? infiniteX : x(ratio(m.baseReq ?? m.req))) - left)}
-                    height={bh}
-                    data-bar
-                    data-kind={"infinite" in m ? "infinite" : "go"}
-                  />
-                  {m.baseReq && (
-                    <rect
-                      data-animate="bonus"
-                      data-model={m.id}
-                      style={{ "--bonus-delay": `${bonuses.indexOf(m) * 60}ms` }}
-                      x={x(ratio(m.baseReq)) + 2}
-                      y={gy(i()) - bh / 2}
-                      width={Math.max(0, x(ratio(m.req)) - x(ratio(m.baseReq)) - 2)}
-                      height={bh}
-                      data-bar
-                      data-kind="promo"
-                    />
-                  )}
-                </>
+                <rect
+                  data-animate="bar"
+                  data-model={m.id}
+                  style={{ "--d": m.d }}
+                  x={left}
+                  y={gy(i()) - bh / 2}
+                  width={Math.max(0, ("infinite" in m ? infiniteX : x(ratio(m.req))) - left)}
+                  height={bh}
+                  data-bar
+                  data-kind={"infinite" in m ? "infinite" : "go"}
+                />
               )}
             </For>
           </g>
@@ -213,25 +167,14 @@ export function LimitsGraph(props: { href: string }) {
                 data-model={m.id}
                 data-edge={"edge" in m ? "" : undefined}
                 data-infinite={"infinite" in m ? "" : undefined}
-                data-promo={m.baseReq ? "" : undefined}
                 style={{
-                  "--x": px("infinite" in m ? infiniteX : x(ratio(m.baseReq ?? m.req))),
+                  "--x": px("infinite" in m ? infiniteX : x(ratio(m.req))),
                   "--y": py(gy(i())),
                   "--d": m.d,
-                  "--bonus-delay": `${Math.max(0, bonuses.indexOf(m)) * 60}ms`,
-                  "--travel": `${"infinite" in m ? 0 : ((x(ratio(m.req)) - x(ratio(m.baseReq ?? m.req))) / w) * 100}cqw`,
                 }}
               >
                 <span data-label>
-                  {!("infinite" in m) && m.baseReq ? (
-                    <RollingNumber
-                      value={promoted().includes(m.id) ? m.req : m.baseReq}
-                      target={m.req}
-                      timing={timing}
-                    />
-                  ) : (
-                    <span data-value>{"infinite" in m ? "\u221e" : m.req.toLocaleString()}</span>
-                  )}
+                  <span data-value>{"infinite" in m ? "\u221e" : m.req.toLocaleString()}</span>
                   <span data-name>{m.name}</span>
                   {m.id === "muse-spark-1.3-contributor" && (
                     <span data-regions>
@@ -244,7 +187,6 @@ export function LimitsGraph(props: { href: string }) {
                   )}
                   {"infinite" in m && <span data-limited>({i18n.t("go.graph.limitedTime")})</span>}
                 </span>
-                {"bonus" in m && <span data-bonus>{m.bonus}</span>}
               </span>
             )}
           </For>
