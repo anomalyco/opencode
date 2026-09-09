@@ -370,6 +370,57 @@ describe("AmazonBedrockPlugin", () => {
     }),
   )
 
+  it.effect("creates Mantle Anthropic SDK on the Messages base path", () =>
+    withEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined, AWS_PROFILE: undefined, AWS_ACCESS_KEY_ID: undefined }, () =>
+      Effect.gen(function* () {
+        const plugin = yield* PluginV2.Service
+        const aisdk = yield* AISDK.Service
+        yield* addPlugin()
+        const result = yield* aisdk.runSDK({
+          model: ModelV2.Info.make({
+            ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-opus-4-8")),
+            api: {
+              id: ModelV2.ID.make("anthropic.claude-opus-4-8"),
+              type: "aisdk",
+              package: "@ai-sdk/amazon-bedrock/mantle-anthropic",
+            },
+          }),
+          package: "@ai-sdk/amazon-bedrock/mantle-anthropic",
+          options: { name: "amazon-bedrock", bearerToken: "token", region: "us-east-2" },
+        })
+        const language = result.sdk.languageModel("anthropic.claude-opus-4-8")
+        expect((language as unknown as { config: { baseURL: string } }).config.baseURL).toBe(
+          "https://bedrock-mantle.us-east-2.api.aws/anthropic/v1",
+        )
+      }),
+    ),
+  )
+
+  it.effect("selects the Messages API for Mantle Anthropic without region prefixes", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
+      const calls: string[] = []
+      yield* addPlugin()
+      const run = (region: string) =>
+        aisdk.runLanguage({
+          model: ModelV2.Info.make({
+            ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-opus-5")),
+            api: {
+              id: ModelV2.ID.make("anthropic.claude-opus-5"),
+              type: "aisdk",
+              package: "@ai-sdk/amazon-bedrock/mantle-anthropic",
+            },
+          }),
+          sdk: fakeSelectorSdk(calls),
+          options: { region },
+        })
+      yield* run("us-east-1")
+      yield* run("eu-west-1")
+      expect(calls).toEqual(["languageModel:anthropic.claude-opus-5", "languageModel:anthropic.claude-opus-5"])
+    }),
+  )
+
   it.effect("ignores other Bedrock provider subpaths", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
