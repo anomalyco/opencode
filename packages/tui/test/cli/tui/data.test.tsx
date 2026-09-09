@@ -92,6 +92,39 @@ test("refreshes resources into reactive getters", async () => {
   }
 })
 
+test("ignores expected startup cancellation while reporting refresh failures", async () => {
+  const events = createEventSource()
+  const failure = new Error("provider refresh failed")
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/agent") throw new DOMException("The operation was aborted.", "AbortError")
+    if (url.pathname === "/api/provider") throw failure
+    return undefined
+  }, events)
+  const original = console.error
+  const errors: unknown[][] = []
+  console.error = (...args) => errors.push(args)
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
+        <ProjectProvider>
+          <DataProvider>
+            <box />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => errors.length > 0)
+    expect(errors).toEqual([["Failed to refresh default location data", failure]])
+  } finally {
+    console.error = original
+    app.renderer.destroy()
+  }
+})
+
 test("refreshes integrations after integration updates", async () => {
   const events = createEventSource()
   const requests = { integration: 0, model: 0, provider: 0 }
