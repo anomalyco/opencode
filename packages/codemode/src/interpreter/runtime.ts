@@ -85,7 +85,7 @@ import { numberMethods } from "../stdlib/number.js"
 import { constructRegExp, regexpMethods, regexpProperties } from "../stdlib/regexp.js"
 import { stringMethods } from "../stdlib/string.js"
 import { uriArgument, urlMethods, urlProperties, urlSearchParamsMethods, urlWritableProperties } from "../stdlib/url.js"
-import { coerceToNumber, coerceToString, compoundOperators } from "../stdlib/value.js"
+import { coerceToNumber, coerceToString, compoundOperators, errorBrandName } from "../stdlib/value.js"
 import { Values } from "../values.js"
 
 const MAX_ARRAY_LENGTH = 4_294_967_295
@@ -111,6 +111,25 @@ const calleeDescription = (callee: Expression | Super | undefined): string => {
     if (object.type === "Identifier" && key !== undefined) return `${object.name}.${key}`
   }
   return "The called value"
+}
+
+const hasOwn = (value: unknown, key: PropertyKey): boolean =>
+  value !== null && typeof value === "object" && Object.hasOwn(value, key)
+
+const constructorName = (value: unknown): string | undefined => {
+  if (typeof value === "string") return "String"
+  if (typeof value === "number") return "Number"
+  if (typeof value === "boolean") return "Boolean"
+  if (Array.isArray(value)) return "Array"
+  if (value instanceof Values.Date) return "Date"
+  if (value instanceof Values.RegExp) return "RegExp"
+  if (value instanceof Values.Map) return "Map"
+  if (value instanceof Values.Set) return "Set"
+  if (value instanceof Values.URL) return "URL"
+  if (value instanceof Values.URLSearchParams) return "URLSearchParams"
+  if (value instanceof Values.Promise) return "Promise"
+  if (value === null || typeof value !== "object" || isRuntimeReference(value)) return undefined
+  return errorBrandName(value) ?? "Object"
 }
 
 const instanceofValue = (lhs: unknown, rhs: unknown, node: AstNode): boolean => {
@@ -206,6 +225,8 @@ const promiseResolutionNode: AstNode = { type: "PromiseResolution", start: 0, en
 /** One program execution: the tool bridge, promise scheduler, captured logs, and the global scope built once. */
 export class Runtime<R> {
   readonly runner: Runner<R>
+  /** Built-in globals by name, unaffected by program shadowing. */
+  readonly builtins: ReadonlyMap<string, unknown>
   private readonly root: Frame<R>
 
   constructor(
@@ -224,7 +245,8 @@ export class Runtime<R> {
       settlePromise: (promise) => this.root.settlePromise(promise),
       syncIterator: (value, node) => this.root.syncIterator(value, node),
     }
-    for (const [name, value] of globals(this)) globalScope.set(name, { mutable: false, value })
+    this.builtins = new Map(globals(this))
+    for (const [name, value] of this.builtins) globalScope.set(name, { mutable: false, value })
   }
 
   run(program: Program): Effect.Effect<unknown, unknown, R> {
@@ -2002,7 +2024,7 @@ class Frame<R> {
 
   private getMemberReference(
     node: MemberExpression,
-    operation: "read" | "delete" = "read",
+    operation: "read" | "write" | "delete" = "read",
   ): Effect.Effect<
     | MemberReference
     | ToolReference
@@ -2041,6 +2063,12 @@ class Frame<R> {
       if (objectValue instanceof HostFunction || objectValue instanceof HostNamespace) {
         // Unknown static members read as undefined so feature detection works like native JS.
         return new ComputedValue(objectValue.member(key, propertyNode))
+      }
+
+      // Values have no prototype chain, so `.constructor` resolves to the owning built-in directly.
+      if (operation === "read" && key === "constructor" && !hasOwn(objectValue, key)) {
+        const name = constructorName(objectValue)
+        if (name !== undefined) return new ComputedValue(self.runtime.builtins.get(name))
       }
 
       if (typeof objectValue === "string") {
@@ -2198,7 +2226,7 @@ class Frame<R> {
   ): Effect.Effect<unknown, unknown, R> {
     const self = this
     return Effect.gen(function* () {
-      const reference = yield* self.getMemberReference(node)
+      const reference = yield* self.getMemberReference(node, "write")
       if (
         reference === OptionalShortCircuit ||
         reference instanceof ComputedValue ||

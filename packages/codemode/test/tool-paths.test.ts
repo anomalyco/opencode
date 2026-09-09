@@ -185,17 +185,17 @@ describe("blocked member names on tool paths", () => {
         const array = []
         object.__proto__ = { polluted: true }
         return [
-          object.constructor, array.constructor, "".constructor, Math.constructor,
-          object.__proto__.polluted, ({}).polluted, array.__proto__, Object().__proto__, new Object().constructor,
-          typeof ({}).constructor, typeof [].__proto__,
+          object.constructor === Object, array.constructor === Array, "".constructor === String, Math.constructor,
+          object.__proto__.polluted, ({}).polluted, array.__proto__, Object().__proto__, new Object().constructor === Object,
+          ({}).constructor.constructor, [].constructor.__proto__, typeof [].__proto__,
         ]
       `,
       ),
-    ).toEqual([null, null, null, null, true, null, null, null, null, "undefined", "undefined"])
+    ).toEqual([true, true, true, null, true, null, null, null, true, null, null, "undefined"])
     expect((await failure(runtime, `return (() => 1).constructor`)).message).toContain(
       "Cannot read properties of a function",
     )
-    const escape = await failure(runtime, `return ({}).constructor.constructor("return 1")()`)
+    const escape = await failure(runtime, `return ({}).constructor.constructor.constructor("return 1")()`)
     expect(escape.message).toContain("Cannot access a property on a non-object value")
     const poisoned = await failure(runtime, `const o = {}; o.__proto__.constructor("return 1")`)
     expect(poisoned.message).toContain("Cannot access a property on a non-object value")

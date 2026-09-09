@@ -213,9 +213,10 @@ ultimate source of truth.
       synchronous iterator support for `fromEntries`.
 - [x] `Object.keys` over arrays and tool references.
 - [x] Object identity is preserved by in-CodeMode Object helpers.
-- [x] `__proto__`, `constructor`, and `prototype` are ordinary own data keys. Prototype machinery is not observable:
-      data objects have no prototype, so `({}).constructor` and `[].__proto__` read as `undefined` and `o.__proto__ = x`
-      sets an own field.
+- [x] `__proto__`, `constructor`, and `prototype` are ordinary own data keys. `x.constructor` without an own key resolves
+      to the owning built-in (`[].constructor === Array`, `new TypeError().constructor === TypeError`); prototype objects
+      are not observable, so `[].__proto__` and `Object.prototype` read as `undefined` and `o.__proto__ = x` sets an own
+      field.
 - [x] Circular references are rejected when created (`o.self = o`, `array.push(array)`), not at serialization as in JS.
 - [x] `Object.is` for supported data values.
 - [x] `Object.groupBy` over finite collections and custom synchronous iterators/generators, with string-key coercion
