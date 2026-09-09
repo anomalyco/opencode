@@ -409,17 +409,6 @@ export const layer = Layer.effect(
       recent: string,
     ) {
       const context = input.context
-      const provenance = SessionProviderContext.provenance(context.model)
-      if (result.replacement && !provenance)
-        return yield* failed({
-          sessionID: context.session.id,
-          reason: input.reason,
-          inputID: input.inputID,
-          error: {
-            type: "provider.unsupported-operation",
-            message: "Provider compaction requires a stable, configured endpoint",
-          },
-        })
       const usage = result.tokens
         ? { tokens: result.tokens, cost: result.cost ?? SessionUsage.calculateCost(context.model.cost, result.tokens) }
         : undefined
@@ -436,12 +425,8 @@ export const layer = Layer.effect(
           reason: input.reason,
           model: context.model.ref,
           providerState: result.providerState,
-          providerContext:
-            result.replacement && provenance
-              ? SessionProviderContext.encode(provenance, result.replacement)
-              : undefined,
           text: result.summary,
-          recent: result.recent ?? recent,
+          recent,
           ...usage,
         },
         { metadata: result.metadata },

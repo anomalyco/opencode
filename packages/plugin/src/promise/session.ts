@@ -40,10 +40,6 @@ export interface SessionContext extends SessionRequest {
 /** A completed compaction message without its identity. */
 export interface SessionCompactionResult {
   summary: string
-  /** Transcript tail kept verbatim after the summary. Defaults to the tail OpenCode would retain. */
-  recent?: string
-  /** Provider-native replacement for the compacted transcript, sent in place of the summary. */
-  replacement?: Array<Message>
   providerState?: SessionMessage.ProviderState
   metadata?: Record<string, unknown>
   /** Usage of the compaction request itself. `cost` defaults to the model's rate for `tokens`. */

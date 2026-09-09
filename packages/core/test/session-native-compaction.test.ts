@@ -400,16 +400,14 @@ it.live("only known automatic native overflow falls back locally and failed reco
   }),
 )
 
-it.live("compaction hooks replace provider compaction with their own summary", () =>
+it.live("compaction hooks supply the summary instead of provider compaction", () =>
   Effect.gen(function* () {
     const fixture = yield* setup()
     yield* fixture.prompt("Original user")
     yield* fixture.hooks.register("session", "compaction", (event) =>
       Effect.sync(() => {
         event.result = {
-          summary: "",
-          recent: "kept tail",
-          replacement: [Message.assistant("plugin checkpoint")],
+          summary: "## Objective\n- hooked summary",
           providerState: { responseId: "plugin" },
           metadata: { plugin: "custom" },
           tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -418,19 +416,15 @@ it.live("compaction hooks replace provider compaction with their own summary", (
     )
     expect(yield* fixture.compact).toEqual({ status: "completed" })
     expect(fixture.state.calls).toBe(0)
-    const last = (yield* fixture.load).messages.at(-1)
-    expect(last).toMatchObject({
+    expect((yield* fixture.load).messages.at(-1)).toMatchObject({
       type: "compaction",
       status: "completed",
-      summary: "",
-      recent: "kept tail",
+      summary: "## Objective\n- hooked summary",
+      recent: "",
       providerState: { responseId: "plugin" },
       metadata: { plugin: "custom" },
       tokens: { input: 10, output: 5 },
     })
-    if (last?.type !== "compaction" || last.status !== "completed" || !last.providerContext)
-      return yield* Effect.die("Missing plugin checkpoint")
-    expect(SessionProviderContext.decode(last.providerContext)).toEqual([Message.assistant("plugin checkpoint")])
   }),
 )
 

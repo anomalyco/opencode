@@ -1205,8 +1205,7 @@ differently:
 
 - `context` runs for the agent loop, including tool-driven continuations.
 - `compaction` runs for checkpoint summaries. Set `result` to record the compaction yourself and skip the model
-  call; it takes the same fields as a completed compaction message, so a plugin can write its own summary or install a
-  provider-native `replacement` transcript.
+  call; it takes the same fields as a completed compaction message.
 - `generate` runs for transient `ctx.session.generate` calls.
 - `title` runs for title generation. It has no `agent` or `tools`. Set `result` to supply the title yourself.
 
@@ -1378,8 +1377,6 @@ interface SessionContextHook extends SessionRequestHook {
 
 interface SessionCompactionResult {
   summary: string
-  recent?: string
-  replacement?: Message[]
   providerState?: Record<string, unknown>
   metadata?: Record<string, unknown>
   tokens?: TokenUsage
