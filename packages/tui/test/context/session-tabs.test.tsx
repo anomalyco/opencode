@@ -275,6 +275,8 @@ test("opens a background tab without changing the current session", async () => 
 
     expect(setup.tabs.current()).toBe("first")
     expect(setup.tabs.isPreview("background")).toBe(false)
+    setup.tabs.move("background", 0)
+    await wait(() => setup.tabs.tabs()[0]?.sessionID === "background")
   } finally {
     await setup.destroy()
   }

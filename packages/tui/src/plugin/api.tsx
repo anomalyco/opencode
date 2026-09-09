@@ -204,19 +204,21 @@ export function createPluginContext(input: {
               attention: Boolean(status.attention),
             }
           }),
-        open(sessionID, options) {
+        open(sessionID) {
           if (!host.sessionTabs.enabled()) return false
-          if (options?.focus === false) {
-            host.sessionTabs.open(sessionID)
-            return true
-          }
-          host.sessionTabs.select(sessionID)
+          host.sessionTabs.open(sessionID)
           return true
         },
         focus(sessionID) {
           if (!host.sessionTabs.enabled()) return false
-          if (!host.sessionTabs.tabs().some((tab) => tab.sessionID === sessionID)) return false
           host.sessionTabs.select(sessionID)
+          return true
+        },
+        move(sessionID, index) {
+          if (!host.sessionTabs.enabled()) return false
+          const target = host.data.session.root(sessionID)
+          if (!host.sessionTabs.tabs().some((tab) => tab.sessionID === target)) return false
+          host.sessionTabs.move(target, index)
           return true
         },
         close(sessionID) {
