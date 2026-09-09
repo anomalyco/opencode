@@ -860,6 +860,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "ማሳወቂያዎችን አጽዳ",
   "sidebar.empty.title": "ምንም ክፍት ፕሮጀክቶች የሉም",
   "sidebar.empty.description": "ለመጀመር ፕሮጀክት ይክፈቱ",
+  "sidebar.history.runningChat": "በሂደት ላይ: {{title}}",
   "debugBar.ariaLabel": "የልማት አፈጻጸም ምርመራዎች",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

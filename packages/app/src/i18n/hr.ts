@@ -885,6 +885,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Očistite obavijesti",
   "sidebar.empty.title": "Nema otvorenih projekata",
   "sidebar.empty.description": "Otvorite projekt da biste započeli",
+  "sidebar.history.runningChat": "U tijeku: {{title}}",
   "debugBar.ariaLabel": "Dijagnostika izvedbe razvoja",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

@@ -890,6 +890,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "ނޮޓިފިކޭޝަންތައް ސާފުކުރުން",
   "sidebar.empty.title": "އެއްވެސް މަޝްރޫއެއް ނުހުޅުވޭ",
   "sidebar.empty.description": "ފަށަން ޕްރޮޖެކްޓެއް ހުޅުވާށެވެ",
+  "sidebar.history.runningChat": "ހިންގަވަމުން: {{title}}",
   "debugBar.ariaLabel": "ޑިވެލޮޕްމަންޓް ޕާފޯމަންސް ޑައިގްނޯސްޓިކްސް",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV އެވެ",

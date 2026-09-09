@@ -14,10 +14,10 @@ async function installSessionSwitchProbe(
     lastID: string
     requiredPartID?: string
     requireBottomAnchor?: boolean
-    href: string
+    triggerSelector: string
   },
 ) {
-  await page.evaluate(({ destinationIDs, sourceIDs, lastID, requiredPartID, requireBottomAnchor, href }) => {
+  await page.evaluate(({ destinationIDs, sourceIDs, lastID, requiredPartID, requireBottomAnchor, triggerSelector }) => {
     const destination = new Set(destinationIDs)
     const source = new Set(sourceIDs)
     const samples: SessionSwitchSample[] = []
@@ -110,8 +110,8 @@ async function installSessionSwitchProbe(
     document.addEventListener(
       "click",
       (event) => {
-        const link = event.target instanceof Element ? event.target.closest("a") : undefined
-        if (link?.getAttribute("href") !== href) return
+        const target = event.target instanceof Element ? event.target : undefined
+        if (!target?.closest(triggerSelector)) return
         started = performance.now()
         for (const [name, selector] of Object.entries(reviewLevels)) {
           initialReviewNodes[name] = document.querySelector(selector)
@@ -167,7 +167,7 @@ export async function measureSessionSwitch(
     lastID: string
     requiredPartID?: string
     requireBottomAnchor?: boolean
-    href: string
+    triggerSelector: string
     switch: () => Promise<void>
   },
 ) {
