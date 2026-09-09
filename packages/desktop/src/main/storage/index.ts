@@ -2,8 +2,10 @@ export * as DesktopStorage from "./index"
 
 import { app, BrowserWindow } from "electron"
 import { Context, Effect, Layer, Path } from "effect"
-import { createDesktopDraftStore } from "./drafts"
-import { getStore, removeStoreFileIfEmpty } from "./store"
+import { openDatabase } from "./database"
+import { createDraftStore } from "./drafts"
+import { importLegacyStores } from "./legacy"
+import { createStateStore } from "./state"
 
 export type Interface = ReturnType<typeof make>
 
@@ -13,60 +15,52 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const path = yield* Path.Path
-    const storage = make(path.join(app.getPath("userData"), "drafts.sqlite"))
-    const flush = () => storage.drafts.flush()
-    const wire = (_event: Electron.Event, win: BrowserWindow) => win.on("session-end", flush)
-    app.on("before-quit", flush)
+    const runFork = Effect.runForkWith(yield* Effect.context())
+    const userData = app.getPath("userData")
+    const storage = make(path.join(userData, "drafts.sqlite"), (error) =>
+      runFork(Effect.logError("storage flush failed", { error })),
+    )
+    yield* importLegacyStores(storage.db, userData).pipe(
+      Effect.tap((result) =>
+        result.removed.length === 0
+          ? Effect.void
+          : Effect.logInfo("imported legacy store files", { imported: result.imported, files: result.removed }),
+      ),
+      Effect.catch((error) => Effect.logWarning("failed to import legacy store files", { error })),
+    )
+    const wire = (_event: Electron.Event, win: BrowserWindow) => win.on("session-end", storage.flush)
+    app.on("before-quit", storage.flush)
     app.on("browser-window-created", wire)
     BrowserWindow.getAllWindows().forEach((win) => wire({} as Electron.Event, win))
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
-        app.off("before-quit", flush)
+        app.off("before-quit", storage.flush)
         app.off("browser-window-created", wire)
-        BrowserWindow.getAllWindows().forEach((win) => win.off("session-end", flush))
-        storage.drafts.close()
+        BrowserWindow.getAllWindows().forEach((win) => win.off("session-end", storage.flush))
+        storage.close()
       }),
     )
     return Service.of(storage)
   }),
 )
 
-function make(draftFile: string) {
-  const drafts = createDesktopDraftStore(draftFile)
-  const deleteValue = Effect.fn("DesktopStorage.delete")(function* (name: string, key: string) {
-    getStore(name).delete(key)
-    yield* removeStoreFileIfEmpty(name).pipe(Effect.ignore)
-  })
-  const clear = Effect.fn("DesktopStorage.clear")(function* (name: string) {
-    getStore(name).clear()
-    yield* removeStoreFileIfEmpty(name).pipe(Effect.ignore)
-  })
-
+// The file keeps its historical name; renaming it would mean moving the drafts it already holds.
+export function make(filename: string, onError?: (error: unknown) => void) {
+  const database = openDatabase(filename)
+  const state = createStateStore(database.db, { onError })
+  const drafts = createDraftStore(database.db, { onError })
   return {
-    get(name: string, key: string) {
-      try {
-        const value = getStore(name).get(key)
-        if (value === undefined || value === null) return null
-        return typeof value === "string" ? value : JSON.stringify(value)
-      } catch {
-        return null
-      }
+    db: database.db,
+    state,
+    drafts,
+    flush() {
+      state.flush()
+      drafts.flush()
     },
-    set: (name: string, key: string, value: string) => getStore(name).set(key, value),
-    deleteValue,
-    clear,
-    keys: (name: string) => Object.keys(getStore(name).store),
-    length: (name: string) => Object.keys(getStore(name).store).length,
-    drafts: {
-      get: (key: string) => drafts.get(key),
-      set: (key: string, value: string | null) => drafts.set(key, value),
-      putBlob: (data: ArrayBuffer) => drafts.putBlob(new Uint8Array(data)),
-      getBlob(id: string) {
-        const data = drafts.getBlob(id)
-        return data ? new Uint8Array(data).buffer : null
-      },
-      flush: drafts.flush,
-      close: drafts.close,
+    close() {
+      state.close()
+      drafts.close()
+      database.close()
     },
   }
 }

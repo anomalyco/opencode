@@ -1,25 +1,25 @@
-import { AISDK } from "@opencode-ai/core/aisdk"
-import { App } from "@opencode-ai/core/app"
-import { Agent } from "@opencode-ai/schema/agent"
-import { Session } from "@opencode-ai/core/session"
-import { Location } from "@opencode-ai/core/location"
+import { AISDK } from "@opencode/core/aisdk"
+import { App } from "@opencode/core/app"
+import { Agent } from "@opencode/schema/agent"
+import { Session } from "@opencode/core/session"
+import { Location } from "@opencode/core/location"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Model } from "@opencode-ai/core/model"
-import { ModelResolver } from "@opencode-ai/core/model-resolver"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
+import { Catalog } from "@opencode/core/catalog"
+import { Model } from "@opencode/core/model"
+import { ModelResolver } from "@opencode/core/model-resolver"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import {
   copilotBaseURL,
   copilotEntitlementError,
   copilotFetch,
   GithubCopilotPlugin,
-} from "@opencode-ai/core/plugin/provider/github-copilot"
-import { Provider } from "@opencode-ai/core/provider"
-import { Integration } from "@opencode-ai/core/integration"
-import type { SessionRequestKind } from "@opencode-ai/plugin/effect/session"
+} from "@opencode/core/plugin/provider/github-copilot"
+import { Provider } from "@opencode/core/provider"
+import { Integration } from "@opencode/core/integration"
+import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { fakeSelectorSdk } from "../fixture/selector"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -175,7 +175,7 @@ describe("GithubCopilotPlugin", () => {
     Effect.gen(function* () {
       yield* addPlugin()
       const event = yield* modelRequest((yield* sessions()).parent, "primary")
-      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent" })
+      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent", "X-Interaction-Id": event.sessionID })
     }),
   )
 
@@ -183,7 +183,11 @@ describe("GithubCopilotPlugin", () => {
     Effect.gen(function* () {
       yield* addPlugin()
       const event = yield* modelRequest((yield* sessions()).child, "primary")
-      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-subagent", "x-initiator": "agent" })
+      expect(event.headers).toEqual({
+        "X-Interaction-Type": "conversation-subagent",
+        "X-Interaction-Id": event.sessionID,
+        "x-initiator": "agent",
+      })
     }),
   )
 
@@ -191,7 +195,11 @@ describe("GithubCopilotPlugin", () => {
     Effect.gen(function* () {
       yield* addPlugin()
       const event = yield* modelRequest((yield* sessions()).parent, "title")
-      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-background", "x-initiator": "agent" })
+      expect(event.headers).toEqual({
+        "X-Interaction-Type": "conversation-background",
+        "X-Interaction-Id": event.sessionID,
+        "x-initiator": "agent",
+      })
     }),
   )
 
@@ -199,7 +207,11 @@ describe("GithubCopilotPlugin", () => {
     Effect.gen(function* () {
       yield* addPlugin()
       const event = yield* modelRequest((yield* sessions()).child, "compaction", "build")
-      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-compaction", "x-initiator": "agent" })
+      expect(event.headers).toEqual({
+        "X-Interaction-Type": "conversation-compaction",
+        "X-Interaction-Id": event.sessionID,
+        "x-initiator": "agent",
+      })
     }),
   )
 
@@ -207,7 +219,7 @@ describe("GithubCopilotPlugin", () => {
     Effect.gen(function* () {
       yield* addPlugin()
       const event = yield* modelRequest((yield* sessions()).parent, "primary", "compaction")
-      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent" })
+      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent", "X-Interaction-Id": event.sessionID })
     }),
   )
 
@@ -252,7 +264,7 @@ describe("GithubCopilotPlugin", () => {
     Effect.gen(function* () {
       yield* addPlugin()
       const event = yield* modelRequest((yield* sessions()).parent, "generate")
-      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent" })
+      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent", "X-Interaction-Id": event.sessionID })
     }),
   )
 

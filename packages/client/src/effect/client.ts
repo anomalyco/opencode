@@ -7,7 +7,7 @@ import { ClientError, OpenCode } from "./generated/index.js"
 import { RpcClientRuntime } from "./rpc.js"
 import type { RpcCallOptions } from "../promise/rpc.js"
 
-const CurrentHeaders = Context.Reference<RpcCallOptions["headers"]>("@opencode-ai/client/effect/rpc/headers", {
+const CurrentHeaders = Context.Reference<RpcCallOptions["headers"]>("@opencode/client/effect/rpc/headers", {
   defaultValue: () => undefined,
 })
 

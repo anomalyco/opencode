@@ -4,7 +4,7 @@ import type {
   OpenCodeClient,
   SessionMessageAssistant,
   SessionMessageInfo,
-} from "@opencode-ai/client/promise"
+} from "@opencode/client/promise"
 import { partsToContentChunks, type ReplayPart } from "./content"
 import { ACPError } from "./error"
 import { replyPermission, syncEditedFiles } from "./permission"

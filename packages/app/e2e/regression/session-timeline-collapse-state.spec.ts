@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import type { JsonValue, OpenCodeEvent, SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { JsonValue, OpenCodeEvent, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible, expectSessionTitle } from "../utils/waits"
 import { createTwoFilesPatch } from "diff"
@@ -111,7 +111,7 @@ test.describe("regression: session timeline local row state", () => {
       const id = `prt_patch_${count}`
       events.push(...toolEvents({ ...part, id, callID: id }))
       await expect(summary).toHaveAccessibleName(`Used ${count} Patch`)
-      await expect(summary.locator('[data-slot="basic-tool-tool-title"]')).toHaveText(`${count} Patch`)
+      await expect(summary.locator('[data-slot="basic-tool-tool-title"]')).toHaveText("Patch")
       await expect(group).toHaveAttribute("data-timeline-part-ids", new RegExp(`${id}$`))
       await expect(trigger).toHaveAttribute("aria-expanded", String(count === 2))
       await expect(summary).toHaveAttribute("aria-expanded", "true")

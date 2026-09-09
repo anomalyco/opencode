@@ -1,16 +1,16 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, LLM, Message } from "@opencode-ai/ai"
+import { AIError, LLM, Message } from "@opencode/ai"
 import {
   LLMClient,
   RequestExecutor,
   WebSocketTransport,
   type ChannelObservation,
   type WebSocketChannelExchange,
-} from "@opencode-ai/ai/route"
-import { configure } from "@opencode-ai/ai/providers/openai"
-import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
-import { WebSocketConstructor } from "@opencode-ai/core/effect/websocket-constructor"
-import { Session } from "@opencode-ai/schema/session"
+} from "@opencode/ai/route"
+import { configure } from "@opencode/ai/providers/openai"
+import { SessionModelTransport } from "@opencode/core/session/model-transport"
+import { WebSocketConstructor } from "@opencode/core/effect/websocket-constructor"
+import { Session } from "@opencode/schema/session"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import { Headers } from "effect/unstable/http"
 import { Socket } from "effect/unstable/socket"
@@ -225,7 +225,7 @@ describe("SessionModelTransport local WebSocket server", () => {
           expect(requests).toHaveLength(3)
           expect(requests[1]).toHaveProperty("previous_response_id", "resp_1")
           expect(requests[2]).not.toHaveProperty("previous_response_id")
-          expect(server.state.opens).toBe(1)
+          expect(server.state.opens).toBe(2)
         }),
     )
   })

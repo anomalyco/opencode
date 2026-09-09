@@ -1,5 +1,5 @@
 import { sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
-import type { Project } from "@opencode-ai/schema/project"
+import type { Project } from "@opencode/schema/project"
 import { Timestamps } from "../database/schema.sql.js"
 import { ProjectTable } from "../project/sql.js"
 import type { PermissionSaved } from "./saved.js"

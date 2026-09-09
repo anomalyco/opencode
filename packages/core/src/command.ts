@@ -1,17 +1,17 @@
 export * as Command from "./command.js"
 
-import { Command } from "@opencode-ai/schema/command"
-import type { PromptInput } from "@opencode-ai/schema/prompt-input"
-import type { Session } from "@opencode-ai/schema/session"
-import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { Command } from "@opencode/schema/command"
+import type { PromptInput } from "@opencode/schema/prompt-input"
+import type { Session } from "@opencode/schema/session"
+import type { SessionInbox } from "@opencode/schema/session-inbox"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Bus } from "./bus.js"
 import { State } from "./state.js"
 
 export const Info = Command.Info
 export type Info = Command.Info
-export { Event } from "@opencode-ai/schema/command"
+export { Event } from "@opencode/schema/command"
 
 export interface Invocation {
   readonly sessionID: Session.ID

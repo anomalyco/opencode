@@ -23,17 +23,21 @@ test("changes timeline presets and saves custom thinking details", async ({ page
   const slider = settings.getByRole("slider", { name: "Timeline detail", exact: true })
   await expect(slider).toBeEnabled()
   await slider.press("Home")
-  for (const [index, name] of ["Everything", "Detailed", "Compact", "Quiet", "Text only"].entries()) {
+  for (const [index, name] of ["Messages only", "Quiet", "Compact", "Detailed", "Everything"].entries()) {
     if (index) await slider.press("ArrowRight")
     await expect(slider).toHaveValue(String(index))
     await expect(slider).toHaveAttribute("aria-valuetext", name)
   }
-  await slider.press("Home")
+  await slider.press("End")
   await settings.getByRole("button", { name: "Advanced", exact: true }).click()
-  await settings.getByRole("button", { name: "Thinking Placement Separate", exact: true }).click()
-  await page.getByRole("option", { name: "Grouped", exact: true }).click()
-  await settings.getByRole("button", { name: "Thinking Details Expanded", exact: true }).click()
-  await page.getByRole("option", { name: "Collapsed", exact: true }).click()
+  const grouped = settings.getByRole("switch", { name: "Thinking grouped", exact: true })
+  const collapsed = settings.getByRole("switch", { name: "Thinking collapsed", exact: true })
+  await expect(grouped).not.toBeChecked()
+  await expect(collapsed).not.toBeChecked()
+  await settings.locator('[data-category="thinking"][data-field="placement"] [data-slot="switch-control"]').click()
+  await settings.locator('[data-category="thinking"][data-field="details"] [data-slot="switch-control"]').click()
+  await expect(grouped).toBeChecked()
+  await expect(collapsed).toBeChecked()
   await expect(slider).toHaveAttribute("aria-valuetext", "Custom")
   await expect
     .poll(() =>

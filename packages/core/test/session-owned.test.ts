@@ -1,16 +1,16 @@
 import { describe, expect } from "bun:test"
 import { and, eq } from "drizzle-orm"
 import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
-import { Agent } from "@opencode-ai/schema/agent"
-import { Event } from "@opencode-ai/schema/event"
-import { Model } from "@opencode-ai/schema/model"
-import { Money } from "@opencode-ai/schema/money"
-import { Project } from "@opencode-ai/schema/project"
-import { Provider } from "@opencode-ai/schema/provider"
-import { ID, Info, Output } from "@opencode-ai/schema/shell"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Global } from "@opencode-ai/util/global"
+import { Agent } from "@opencode/schema/agent"
+import { Event } from "@opencode/schema/event"
+import { Model } from "@opencode/schema/model"
+import { Money } from "@opencode/schema/money"
+import { Project } from "@opencode/schema/project"
+import { Provider } from "@opencode/schema/provider"
+import { ID, Info, Output } from "@opencode/schema/shell"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
 import { Bus } from "../src/bus.js"
 import { Database } from "../src/database/database.js"
 import { EventTable } from "../src/event/sql.js"
@@ -166,7 +166,7 @@ const setup = Effect.fnUntraced(function* (options?: {
 })
 
 describe("Session-owned handles", () => {
-  it.live("owns state changes and message editing without caller services or Location acquisition", () =>
+  it.live("owns state changes and message reads without caller services or Location acquisition", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
       const handle = fixture.sessions.forSession(sessionID)
@@ -191,7 +191,7 @@ describe("Session-owned handles", () => {
         .where(eq(SessionTable.id, sessionID))
         .run()
         .pipe(Effect.orDie)
-      const { rename, switchAgent, switchModel, view, message, updateMessage } = handle
+      const { rename, switchAgent, switchModel, view, message } = handle
 
       yield* Effect.gen(function* () {
         yield* rename({ title: "Renamed" })
@@ -200,9 +200,7 @@ describe("Session-owned handles", () => {
         yield* switchModel({ model })
         yield* view({ idle: 0 })
         yield* view({ idle: 0 })
-        const content = [SessionMessage.AssistantText.make({ type: "text", text: "Edited" })]
-        expect((yield* updateMessage({ messageID, content })).content).toEqual(content)
-        expect(yield* message(messageID)).toMatchObject({ type: "assistant", content })
+        expect(yield* message(messageID)).toMatchObject({ type: "assistant", content: [] })
       }).pipe(Effect.satisfiesServicesType<never>(), Effect.setContext(Context.empty()))
 
       const session = yield* handle.get()

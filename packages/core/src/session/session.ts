@@ -1,10 +1,10 @@
 export * as Session from "./session.js"
 
-import { DateTime, Effect, Fiber, Schema, Scope } from "effect"
-import type { Agent } from "@opencode-ai/schema/agent"
-import type { Model } from "@opencode-ai/schema/model"
-import { Event } from "@opencode-ai/schema/event"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { DateTime, Effect, Fiber, Scope } from "effect"
+import type { Agent } from "@opencode/schema/agent"
+import type { Model } from "@opencode/schema/model"
+import { Event } from "@opencode/schema/event"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
@@ -14,10 +14,7 @@ import {
   BusyError,
   CompactionConflictError,
   InboxConflictError,
-  MessageIncompleteError,
-  MessageNotAssistantError,
   MessageNotFoundError,
-  MessageToolIncompleteError,
   NotFoundError,
   PromptConflictError,
   SyntheticConflictError,
@@ -60,26 +57,6 @@ export const make = Effect.fn("Session.make")(function* () {
   const message = Effect.fn("Session.message")(function* (sessionID: SessionSchema.ID, messageID: SessionMessage.ID) {
     const stored = yield* store.message(messageID)
     return stored?.sessionID === sessionID ? stored.message : undefined
-  })
-  const updateMessage = Effect.fn("Session.updateMessage")(function* (
-    sessionID: SessionSchema.ID,
-    input: { readonly messageID: SessionMessage.ID; readonly content: readonly SessionMessage.AssistantContent[] },
-  ) {
-    const ref = { sessionID, messageID: input.messageID }
-    yield* get(sessionID)
-    if (yield* execution.isActive(sessionID)) return yield* new BusyError({ sessionID })
-    const current = yield* message(sessionID, input.messageID)
-    if (!current) return yield* new MessageNotFoundError(ref)
-    if (current.type !== "assistant") return yield* new MessageNotAssistantError(ref)
-    if (!current.time.completed) return yield* new MessageIncompleteError(ref)
-    if (input.content.some(isUnfinishedTool)) return yield* new MessageToolIncompleteError(ref)
-    yield* bus.publish(SessionEvent.MessageContentUpdated, {
-      ...ref,
-      content: Schema.encodeSync(Schema.Array(SessionMessage.AssistantContent))(input.content),
-    })
-    const updated = yield* message(sessionID, input.messageID)
-    if (updated?.type !== "assistant") return yield* new MessageNotFoundError(ref)
-    return updated
   })
   const view = Effect.fn("Session.view")(function* (sessionID: SessionSchema.ID, input: { idle: number }) {
     const session = yield* get(sessionID)
@@ -355,7 +332,6 @@ export const make = Effect.fn("Session.make")(function* () {
   const operations = {
     get,
     message,
-    updateMessage,
     view,
     rename,
     switchAgent,
@@ -378,7 +354,6 @@ export const make = Effect.fn("Session.make")(function* () {
   const forSession = (sessionID: SessionSchema.ID) => {
     const get = operations.get.bind(undefined, sessionID)
     const message = operations.message.bind(undefined, sessionID)
-    const updateMessage = operations.updateMessage.bind(undefined, sessionID)
     const view = operations.view.bind(undefined, sessionID)
     const rename = operations.rename.bind(undefined, sessionID)
     const switchAgent = operations.switchAgent.bind(undefined, sessionID)
@@ -404,7 +379,6 @@ export const make = Effect.fn("Session.make")(function* () {
       id: sessionID,
       get,
       message,
-      updateMessage,
       view,
       rename,
       switchAgent,
@@ -428,9 +402,5 @@ export const make = Effect.fn("Session.make")(function* () {
 })
 
 export type Handle = ReturnType<Effect.Success<ReturnType<typeof make>>["forSession"]>
-
-function isUnfinishedTool(content: SessionMessage.AssistantContent) {
-  return content.type === "tool" && (content.state.status === "streaming" || content.state.status === "running")
-}
 
 // Mirrors the shell tool's in-memory preview safety limit.

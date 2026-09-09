@@ -1,7 +1,7 @@
 export * as ProjectSchema from "./schema.js"
 
 import { Schema } from "effect"
-import { Project } from "@opencode-ai/schema/project"
+import { Project } from "@opencode/schema/project"
 import { AbsolutePath } from "../schema.js"
 
 export const ID = Project.ID

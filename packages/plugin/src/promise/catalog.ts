@@ -1,6 +1,6 @@
-import type { CatalogApi } from "@opencode-ai/client/promise/api"
-import type { Model } from "@opencode-ai/schema/model"
-import type { Provider } from "@opencode-ai/schema/provider"
+import type { CatalogApi } from "@opencode/client/promise/api"
+import type { Model } from "@opencode/schema/model"
+import type { Provider } from "@opencode/schema/provider"
 import type { Transform } from "./registration.js"
 import type { DeepMutable } from "./types.js"
 

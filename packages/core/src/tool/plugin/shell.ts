@@ -1,14 +1,14 @@
 export * as ShellTool from "./shell.js"
 
-import { ToolFailure } from "@opencode-ai/ai"
-import type { Context } from "@opencode-ai/plugin/effect/plugin"
-import type { ShellCreateBefore } from "@opencode-ai/plugin/effect/shell"
-import type { Tool } from "@opencode-ai/schema/tool"
+import { ToolFailure } from "@opencode/ai"
+import type { Context } from "@opencode/plugin/effect/plugin"
+import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
+import type { Tool } from "@opencode/schema/tool"
 import { Deferred, Effect, Schema, Scope } from "effect"
 import { Config } from "../../config.js"
 import { Environment } from "../../environment/index.js"
 import { Job } from "../../job.js"
-import { LocationMutation } from "../../location-mutation.js"
+import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
 import { NonNegativeInt } from "../../schema.js"
 import { Session } from "../../session.js"
@@ -22,7 +22,7 @@ export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
 
 const BACKGROUND_INSTRUCTION =
-  "You will be notified automatically when the command finishes. The notification will include the command's output. DO NOT run sleep commands or poll the output file to check for completion. You can read from the file when its current output would be useful, such as when inspecting logs from a background server. Otherwise, continue with other work or end your response."
+  "You will be notified automatically when the command finishes. The notification will include the command's output. Unless the user explicitly asks otherwise, DO NOT poll for completion, even if you need the final result to continue. Repeatedly sleeping and reading or searching the output file is polling, not useful work. You may read the current output if it lets you do useful work now, but do not repeatedly check it while waiting for the command to finish. Keep working on anything that does not depend on the result. If you have nothing else to do, end your response; you will be resumed automatically when the command finishes."
 const OS =
   process.platform === "darwin"
     ? "macOS"
@@ -54,7 +54,7 @@ export const Input = Schema.Struct({
   }),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
-      "Run the command in the background and return immediately. You will be notified when it completes. DO NOT poll its progress.",
+      "Run the command in the background and return immediately (useful for dev servers and long-running builds). You do not need to use '&' at the end of the command when using this parameter. You will be notified when it completes. DO NOT poll for completion.",
   }),
 })
 
@@ -104,7 +104,7 @@ export const Plugin = {
     const jobs = yield* Job.Service
     const scope = yield* Scope.Scope
     const environment = yield* Environment.Service
-    const mutation = yield* LocationMutation.Service
+    const access = yield* FileAccess.Service
     const shell = yield* Shell.Service
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
@@ -117,30 +117,18 @@ export const Plugin = {
         messageID: context.messageID,
         id: context.id,
       }
-      const target = yield* mutation.resolve({ path: invocation.cwd, kind: "directory" })
+      const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
       invocation.cwd = target.absolute
       const timeout = invocation.timeout
       const portable = Config.latest(yield* config.entries(), "experimental")?.portable_shell_scanner === true
       const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute, { portable })
       const directories = yield* Effect.forEach(parsed.directories, (directory) =>
-        mutation.resolve({
-          path: LocationMutation.resolvePath(target.absolute, directory),
+        access.resolve({
+          path: FileAccess.resolvePath(target.absolute, directory),
           kind: "directory",
         }),
       )
-      const external = [target, ...directories]
-        .map((item) => item.externalDirectory)
-        .filter((item) => item !== undefined)
-        .filter((item, index, items) => items.findIndex((other) => other.resource === item.resource) === index)
-      if (external.length > 0)
-        yield* permission.assert({
-          action: "external_directory",
-          resources: external.map((item) => item.resource),
-          save: external.map((item) => item.save),
-          sessionID: context.sessionID,
-          agent: context.agent,
-          source,
-        })
+      yield* access.authorizeExternal([target, ...directories], context)
       if (parsed.commands.length > 0)
         yield* permission.assert({
           action: name,

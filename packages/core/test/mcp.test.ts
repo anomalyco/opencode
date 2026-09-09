@@ -13,30 +13,30 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js"
-import { Document, Event, Info } from "@opencode-ai/schema/config"
-import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
-import { McpEvent } from "@opencode-ai/schema/mcp-event"
-import { Config } from "@opencode-ai/core/config"
-import { ConfigMcpPlugin } from "@opencode-ai/core/config/plugin/mcp"
-import { Credential } from "@opencode-ai/core/credential"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
-import { ID, type Payload } from "@opencode-ai/schema/event"
-import { Form } from "@opencode-ai/core/form"
-import { Integration } from "@opencode-ai/core/integration"
-import { Environment } from "@opencode-ai/core/environment/index"
-import { EnvironmentUnavailable } from "@opencode-ai/core/environment/unavailable"
-import { Location } from "@opencode-ai/core/location"
-import { Mcp } from "@opencode-ai/core/mcp/index"
-import { McpClient } from "@opencode-ai/core/mcp/client"
-import { McpStdio } from "@opencode-ai/core/mcp/stdio"
-import { Permission } from "@opencode-ai/core/permission"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Session } from "@opencode-ai/core/session"
-import { State } from "@opencode-ai/core/state"
-import { McpTool } from "@opencode-ai/core/tool/mcp"
-import { Tool } from "@opencode-ai/core/tool"
+import { Document, Event, Info } from "@opencode/schema/config"
+import { ConfigMCP } from "@opencode/schema/config/mcp"
+import { McpEvent } from "@opencode/schema/mcp-event"
+import { Config } from "@opencode/core/config"
+import { ConfigMcpPlugin } from "@opencode/core/config/plugin/mcp"
+import { Credential } from "@opencode/core/credential"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { ID, type Payload } from "@opencode/schema/event"
+import { Form } from "@opencode/core/form"
+import { Integration } from "@opencode/core/integration"
+import { Environment } from "@opencode/core/environment/index"
+import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
+import { Location } from "@opencode/core/location"
+import { Mcp } from "@opencode/core/mcp/index"
+import { McpClient } from "@opencode/core/mcp/client"
+import { McpStdio } from "@opencode/core/mcp/stdio"
+import { Permission } from "@opencode/core/permission"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Session } from "@opencode/core/session"
+import { State } from "@opencode/core/state"
+import { McpTool } from "@opencode/core/tool/mcp"
+import { Tool } from "@opencode/core/tool"
 import {
   Context,
   Deferred,
@@ -55,7 +55,7 @@ import {
 import { TestClock } from "effect/testing"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/unstable/process/ChildProcessSpawner"
-import { Image } from "@opencode-ai/core/image"
+import { Image } from "@opencode/core/image"
 import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
@@ -906,14 +906,16 @@ for (const entry of [
   )
 }
 
-for (const query of ["", "?source=hello%20world&tag=a&tag=b"]) {
-  testEffect(Layer.empty).live(`retries an MCP initialization 404 with the original URL: ${query || "no query"}`, () =>
+for (const { status, query } of [400, 404].flatMap((status) =>
+  ["", "?source=hello%20world&tag=a&tag=b"].map((query) => ({ status, query })),
+)) {
+  testEffect(Layer.empty).live(`retries MCP initialization ${status} at the original URL: ${query || "no query"}`, () =>
     Effect.gen(function* () {
       const headers: Array<string | null> = []
       const server = yield* resourceServer({
         respond: (request) => {
           headers.push(request.headers.get("x-mcp-test"))
-          return new URL(request.url).searchParams.has("codemode") ? new Response(null, { status: 404 }) : undefined
+          return new URL(request.url).searchParams.has("codemode") ? new Response(null, { status }) : undefined
         },
       })
       const config = new ConfigMCP.Remote({
@@ -939,7 +941,7 @@ for (const query of ["", "?source=hello%20world&tag=a&tag=b"]) {
 
 for (const entry of [
   { name: "second 404", status: 404, query: "", codemode: undefined, attempts: 2 },
-  { name: "400", status: 400, query: "", codemode: undefined, attempts: 1 },
+  { name: "second 400", status: 400, query: "", codemode: undefined, attempts: 2 },
   { name: "401", status: 401, query: "", codemode: undefined, attempts: 1 },
   { name: "403", status: 403, query: "", codemode: undefined, attempts: 1 },
   { name: "500", status: 500, query: "", codemode: undefined, attempts: 1 },
@@ -947,6 +949,10 @@ for (const entry of [
   { name: "user codemode=false", status: 404, query: "?codemode=false", codemode: undefined, attempts: 1 },
   { name: "empty user codemode", status: 404, query: "?codemode=", codemode: undefined, attempts: 1 },
   { name: "direct tools", status: 404, query: "", codemode: false, attempts: 1 },
+  { name: "400 with user codemode=true", status: 400, query: "?codemode=true", codemode: undefined, attempts: 1 },
+  { name: "400 with user codemode=false", status: 400, query: "?codemode=false", codemode: undefined, attempts: 1 },
+  { name: "400 with empty user codemode", status: 400, query: "?codemode=", codemode: undefined, attempts: 1 },
+  { name: "400 with direct tools", status: 400, query: "", codemode: false, attempts: 1 },
 ]) {
   testEffect(Layer.empty).live(`does not retry MCP beyond the query fallback: ${entry.name}`, () =>
     Effect.gen(function* () {
@@ -970,23 +976,25 @@ for (const entry of [
   )
 }
 
-testEffect(Layer.empty).live("does not strip codemode for an MCP 404 after initialization", () =>
-  Effect.gen(function* () {
-    let expired = false
-    const server = yield* resourceServer({
-      respond: (request) => (expired && request.method === "POST" ? new Response(null, { status: 404 }) : undefined),
-    })
-    const config = new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false })
-    const connection = yield* connect("resources", config, import.meta.dir)
-    expired = true
-    expect(yield* connection.tools().pipe(Effect.flip)).toBeInstanceOf(Error)
+for (const status of [400, 404]) {
+  testEffect(Layer.empty).live(`does not strip codemode for an MCP ${status} after initialization`, () =>
+    Effect.gen(function* () {
+      let expired = false
+      const server = yield* resourceServer({
+        respond: (request) => (expired && request.method === "POST" ? new Response(null, { status }) : undefined),
+      })
+      const config = new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false })
+      const connection = yield* connect("resources", config, import.meta.dir)
+      expired = true
+      expect(yield* connection.tools().pipe(Effect.flip)).toBeInstanceOf(Error)
 
-    // The SDK tries to recover the expired session, but must keep the same URL.
-    expect(server.state.initializations).toBe(2)
-    expect(new Set(server.state.urls)).toEqual(new Set([server.url + "?codemode=false"]))
-    expect(server.state.toolLists).toBe(0)
-  }),
-)
+      // The SDK tries to recover an expired session on 404, but must keep the same URL.
+      expect(server.state.initializations).toBe(status === 404 ? 2 : 1)
+      expect(new Set(server.state.urls)).toEqual(new Set([server.url + "?codemode=false"]))
+      expect(server.state.toolLists).toBe(0)
+    }),
+  )
+}
 
 test("lists, reads, and reports MCP resource changes", async () => {
   await Effect.runPromise(

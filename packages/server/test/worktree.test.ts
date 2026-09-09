@@ -6,7 +6,7 @@ import { Effect } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { startServer } from "./fixture/server"
-import { OpenCode } from "@opencode-ai/client"
+import { OpenCode } from "@opencode/client"
 import { initRepo } from "../../core/test/fixture/git"
 
 it.live(

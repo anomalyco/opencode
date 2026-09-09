@@ -1,5 +1,8 @@
+import { Effect } from "effect"
+import { HostFunction, sync } from "../interpreter/host.js"
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
-import { CodeModeDate } from "../values.js"
+import { type Runner, toPrimitive } from "../interpreter/runner.js"
+import { Values } from "../values.js"
 import { coerceToNumber, coerceToString } from "./value.js"
 
 const dateSetterArguments = new Map<string, number>([
@@ -48,25 +51,41 @@ export const dateMethods = new Set([
   ...dateSetterArguments.keys(),
 ])
 
-export const dateStatics = new Set(["now", "parse", "UTC"])
-
-export const invokeDateStatic = (name: string, args: Array<unknown>, node: AstNode): number => {
-  switch (name) {
-    case "now":
-      return Date.now()
-    case "parse":
-      return Date.parse(coerceToString(args[0]))
-    case "UTC":
-      return Date.UTC(...(args.map((arg) => coerceToNumber(arg)) as Parameters<typeof Date.UTC>))
-    default:
-      throw new InterpreterRuntimeError(`Date.${name} is not available.`, node)
+const constructDate = <R>(runner: Runner<R>, args: Array<unknown>, node: AstNode) => {
+  if (args.length === 0) return Effect.succeed(new Values.Date(Date.now()))
+  if (args.length === 1) {
+    const arg = args[0]
+    if (arg instanceof Values.Date) return Effect.succeed(new Values.Date(arg.time))
+    return Effect.map(toPrimitive(runner, arg, "number", node), (value) =>
+      typeof value === "string"
+        ? new Values.Date(Date.parse(value))
+        : new Values.Date(new Date(coerceToNumber(value)).getTime()),
+    )
   }
+  const parts = args.map((arg) => coerceToNumber(arg))
+  return Effect.succeed(new Values.Date(new Date(...(parts as [number, number])).getTime()))
 }
+
+export const dateGlobal = <R>(runner: Runner<R>) =>
+  new HostFunction<R>({
+    name: "Date",
+    // ISO instead of the host's locale string: date strings are deterministic and must not leak the host timezone.
+    call: () => Effect.sync(() => new Date().toISOString()),
+    construct: (args, node) => constructDate(runner, args, node),
+    instanceOf: (value) => value instanceof Values.Date,
+    members: {
+      now: sync("Date.now", () => Date.now()),
+      parse: sync("Date.parse", (args) => Date.parse(coerceToString(args[0]))),
+      UTC: sync("Date.UTC", (args) =>
+        Date.UTC(...(args.map((arg) => coerceToNumber(arg)) as Parameters<typeof Date.UTC>)),
+      ),
+    },
+  })
 
 export const dateSetterArgumentCount = (name: string): number | undefined => dateSetterArguments.get(name)
 
 export const invokeDateMethod = (
-  value: CodeModeDate,
+  value: Values.Date,
   name: string,
   args: Array<number>,
   node: AstNode,
@@ -174,7 +193,7 @@ export const invokeDateMethod = (
   }
 }
 
-const updateDate = (value: CodeModeDate, time: number): number => {
+const updateDate = (value: Values.Date, time: number): number => {
   value.time = time
   return time
 }

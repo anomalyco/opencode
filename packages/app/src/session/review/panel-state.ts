@@ -3,7 +3,7 @@ import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX,
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN,
   type SessionReviewExpandMode,
-} from "@opencode-ai/session-ui/v2/session-review-v2"
+} from "@opencode/session-ui/v2/session-review-v2"
 import { createSignal } from "solid-js"
 import { Schema } from "effect"
 import type { Platform } from "@/runtime/platform/platform"

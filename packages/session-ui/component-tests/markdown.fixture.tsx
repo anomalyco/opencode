@@ -3,7 +3,7 @@ import { render } from "solid-js/web"
 import { Markdown } from "../src/components/markdown"
 import { preloadMarkdown } from "../src/components/markdown-cache"
 import { MarkdownProvider } from "../src/context/markdown"
-import { OpenCode } from "@opencode-ai/client/promise"
+import { OpenCode } from "@opencode/client/promise"
 import { readLocalImage } from "../../app/src/runtime/server/image"
 
 export {

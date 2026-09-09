@@ -1,7 +1,7 @@
 export * as EventLogger from "./event-logger.js"
 
 import { Effect, Layer } from "effect"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "./bus.js"
 
 const EVENT_TYPES = new Set(["agent.updated", "catalog.updated", "command.updated", "config.updated"])

@@ -1,7 +1,7 @@
-import type { SessionUserActions } from "@opencode-ai/session-ui/message"
-import { getFilename } from "@opencode-ai/util/path"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode-ai/ui/scroll-view"
+import type { SessionUserActions } from "@opencode/session-ui/message"
+import { getFilename } from "@opencode/util/path"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, on, onMount, type Accessor } from "solid-js"
@@ -20,7 +20,7 @@ import { useComposerCommands } from "@/composer/commands"
 import { useSessionCommands } from "../commands/use-session-commands"
 import type { SessionModel } from "../model"
 import type { SessionScreenLayout } from "../screen-layout"
-import { restorePromptModel, syncPromptModel, syncSessionModel } from "../session-model-helpers"
+import { syncPromptModel, syncSessionModel } from "../session-model-helpers"
 import type { SessionTimelineInteraction } from "../timeline/interaction"
 import { createSessionRevert } from "../revert"
 import { SessionComposerRegion } from "./session-composer-region"
@@ -62,14 +62,10 @@ export function createActiveSessionRegion(input: {
       },
     ),
   )
-  let restoredModelSession: string | undefined
   createEffect(() => {
     const id = input.session.identity.params.id
     if (!id || !prompt.ready() || !local.session.ready()) return
-    if (restoredModelSession !== id) {
-      restoredModelSession = id
-      if (restorePromptModel(local, prompt)) return
-    }
+    // Prompt model is a submission mirror. Local drafts and durable session state own selection.
     syncPromptModel(local, prompt)
   })
   createEffect(

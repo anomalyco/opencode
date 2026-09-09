@@ -6,6 +6,7 @@ import type { Platform } from "@/runtime/platform/platform"
 import { createComposerReady, createComposerState } from "@/composer/state"
 import { ServerScope } from "@/runtime/server/scope"
 import { createDraftStore } from "@/runtime/persistence/drafts"
+import { flushPersisted } from "@/runtime/persistence/persist"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 
 let read: ((value: string | null) => void) | undefined
@@ -39,7 +40,7 @@ describe("prompt persistence", () => {
     async (raw) => {
       const store = createDraftStore({
         get: async () => raw,
-        set: async () => undefined,
+        set: async () => [],
         remove: async () => undefined,
         putBlob: async () => "unused",
         getBlob: async () => null,
@@ -67,7 +68,10 @@ describe("prompt persistence", () => {
     const blobs = new Map<string, Blob>()
     const store = createDraftStore({
       get: async (key) => documents.get(key) ?? null,
-      set: async (key, value) => void documents.set(key, value),
+      set: async (key, value) => {
+        documents.set(key, value)
+        return []
+      },
       remove: async (key) => void documents.delete(key),
       putBlob: async (blob) => {
         blobs.set("composer-image", blob)
@@ -109,6 +113,7 @@ describe("prompt persistence", () => {
       },
     ])
     root.session.set([{ type: "text", content: "hello", start: 0, end: 5 }, ...root.session.current()])
+    flushPersisted()
     await Bun.sleep(0)
     expect(documents.get(key)).toContain("hello")
     expect(documents.get(key)).toContain('"blob":{"id":"composer-image"}')
@@ -168,7 +173,10 @@ describe("prompt persistence", () => {
     const documents = new Map<string, string>()
     const store = createDraftStore({
       get: async (key) => documents.get(key) ?? null,
-      set: async (key, value) => void documents.set(key, value),
+      set: async (key, value) => {
+        documents.set(key, value)
+        return []
+      },
       remove: async (key) => void documents.delete(key),
       putBlob: async () => "blob",
       getBlob: async () => null,
@@ -199,7 +207,10 @@ describe("prompt persistence", () => {
     const documents = new Map<string, string>()
     const store = createDraftStore({
       get: async (key) => documents.get(key) ?? null,
-      set: async (key, value) => void documents.set(key, value),
+      set: async (key, value) => {
+        documents.set(key, value)
+        return []
+      },
       remove: async (key) => void documents.delete(key),
       putBlob: async () => "blob",
       getBlob: async () => null,
@@ -231,7 +242,10 @@ test("moves image data URLs into blobs and hydrates object URLs", async () => {
   const blobs = new Map<string, Blob>()
   const store = createDraftStore({
     get: async (key) => documents.get(key) ?? null,
-    set: async (key, value) => void documents.set(key, value),
+    set: async (key, value) => {
+      documents.set(key, value)
+      return []
+    },
     remove: async (key) => void documents.delete(key),
     putBlob: async (blob) => {
       const id = String(blob.size)
@@ -253,7 +267,10 @@ test("does not let delayed blob migration overwrite a newer draft", async () => 
   const migration = Promise.withResolvers<void>()
   const store = createDraftStore({
     get: async () => null,
-    set: async (key, value) => void documents.set(key, value),
+    set: async (key, value) => {
+      documents.set(key, value)
+      return []
+    },
     remove: async () => undefined,
     putBlob: async () => {
       await migration.promise

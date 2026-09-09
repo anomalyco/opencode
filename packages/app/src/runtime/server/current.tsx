@@ -1,4 +1,4 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import { ServerConnection } from "./registry"
 import { useGlobal } from "./runtime"
 

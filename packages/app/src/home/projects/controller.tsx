@@ -8,13 +8,14 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { closeHomeProject, errorMessage, homeProjectDirectories } from "@/shell/layout/helpers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { showToast } from "@/shell/notifications/toast"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { createResource } from "solid-js"
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import type { HomeController } from "../model"
 import { useGlobal } from "@/runtime/server/runtime"
-import { SessionTransfer } from "@opencode-ai/schema/session-transfer"
+import { SessionTransfer } from "@opencode/schema/session-transfer"
+import { useSshAuthenticate } from "@/servers/ssh/authenticate"
 
 export const HomeServersSchema = Schema.Struct({
   collapsed: Persistence.record(Persistence.fallback(Schema.Boolean, () => false)),
@@ -28,6 +29,7 @@ export function createHomeProjectsController(home: HomeController) {
   const openSettings = useSettingsCommand()
   const serverManagement = useServerActionsController()
   const global = useGlobal()
+  const authenticate = useSshAuthenticate()
   const [_state, setState, _, ready] = persisted(Persist.global("home.servers"), HomeServersSchema, { collapsed: {} })
   const [state] = createResource(
     () => ready.promise ?? Promise.resolve(),
@@ -40,6 +42,15 @@ export function createHomeProjectsController(home: HomeController) {
 
   function canRevealProject(conn: ServerConnection.Any) {
     return platform.platform === "desktop" && !!platform.openPath && ServerConnection.local(conn)
+  }
+
+  function choose(conn: ServerConnection.Any) {
+    pickDirectory({
+      server: conn,
+      title: language.t("command.project.open"),
+      multiple: true,
+      onSelect: (result) => home.project.add(conn, homeProjectDirectories(result)),
+    })
   }
 
   return {
@@ -71,15 +82,25 @@ export function createHomeProjectsController(home: HomeController) {
           void dialog.show(() => <DialogServer mode="edit" server={conn} />)
         })
       },
-      focus: home.selection.focusServer,
+      authenticate: (conn: ServerConnection.Any) => authenticate(conn),
+      focus: (conn: ServerConnection.Any) => {
+        if (authenticate(conn, () => home.selection.focusServer(conn))) return
+        home.selection.focusServer(conn)
+      },
     },
     project: {
       list: home.project.list,
       recentlyClosed: home.project.recentlyClosed,
       homedir: home.project.homedir,
-      select: home.project.select,
+      select: (conn: ServerConnection.Any, directory: string) => {
+        if (authenticate(conn, () => home.project.select(conn, directory))) return
+        home.project.select(conn, directory)
+      },
       add: home.project.add,
-      openNewSession: home.project.openProjectNewSession,
+      openNewSession: (conn: ServerConnection.Any, directory: string) => {
+        if (authenticate(conn, () => home.project.openProjectNewSession(conn, directory))) return
+        home.project.openProjectNewSession(conn, directory)
+      },
       canImportSession: !!platform.openAttachmentPickerDialog,
       importSession: (conn: ServerConnection.Any, project: LocalProject) => {
         if (!platform.openAttachmentPickerDialog) return
@@ -125,13 +146,9 @@ export function createHomeProjectsController(home: HomeController) {
           .forEach((directory) => notification.project.markViewed(directory))
       },
       choose: (conn: ServerConnection.Any) => {
+        if (authenticate(conn, () => choose(conn))) return
         if (home.server.health(conn)?.healthy === false) return
-        pickDirectory({
-          server: conn,
-          title: language.t("command.project.open"),
-          multiple: true,
-          onSelect: (result) => home.project.add(conn, homeProjectDirectories(result)),
-        })
+        choose(conn)
       },
       close: (conn: ServerConnection.Any, directory: string) => {
         const next = closeHomeProject(

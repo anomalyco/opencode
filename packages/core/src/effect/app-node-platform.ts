@@ -1,7 +1,7 @@
-import { LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
+import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Socket } from "effect/unstable/socket"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { httpClient } from "@opencode/util/effect/app-node-platform"
 import { WebSocketConstructor } from "./websocket-constructor.js"
 
 export const requestExecutor = makeGlobalNode({

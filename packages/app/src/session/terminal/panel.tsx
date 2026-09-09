@@ -7,11 +7,11 @@ import { isSortable } from "@dnd-kit/solid/sortable"
 import { Accessibility, AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
 import { RestrictToHorizontalAxis } from "@dnd-kit/abstract/modifiers"
 import { RestrictToElement } from "@dnd-kit/dom/modifiers"
-import { Tabs } from "@opencode-ai/ui/tabs"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { Keybind } from "@opencode-ai/ui/keybind"
+import { Tabs } from "@opencode/ui/tabs"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Icon } from "@opencode/ui/icon"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { Keybind } from "@opencode/ui/keybind"
 
 import { SortableTerminalTab } from "@/session/terminal/tab"
 import { Terminal } from "@/session/terminal/terminal"
@@ -330,7 +330,7 @@ export function TerminalPanel(
                       <IconButton
                         icon={<Icon name="plus-small" size="large" />}
                         variant="ghost"
-                        onClick={() => terminal.new({ focus: true })}
+                        onClick={() => terminal.new()}
                         aria-label={language.t("command.terminal.new")}
                       />
                     </Tooltip>

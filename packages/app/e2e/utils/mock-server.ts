@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test"
-import type { JsonValue, OpenCodeEvent, SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { JsonValue, OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import { Duration, Effect, Layer } from "effect"
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
@@ -207,6 +207,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
       )
       .handleAll({
         health: () => Effect.succeed({ healthy: true, version: "2.0.0", pid: 1 }),
+        config: () => Effect.succeed([]),
         reference: () =>
           Effect.succeed({
             location: {

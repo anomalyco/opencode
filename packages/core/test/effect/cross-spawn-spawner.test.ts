@@ -4,8 +4,8 @@ import os from "node:os"
 import path from "node:path"
 import { Deferred, Effect, Exit, PlatformError, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { testEffect } from "../lib/effect"
 
 const live = LayerNode.compile(CrossSpawnSpawner.node)

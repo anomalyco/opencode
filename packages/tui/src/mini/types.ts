@@ -20,10 +20,10 @@ import type {
   PermissionRequest,
   ReferenceListOutput,
   SessionMessageAssistantTool,
-} from "@opencode-ai/client/promise"
+} from "@opencode/client/promise"
 import type { Config } from "../config"
 import type { CliRenderer } from "@opentui/core"
-import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
+import type { SessionInbox } from "@opencode/schema/session-inbox"
 
 export type RunFilePart = {
   type: "file"
@@ -402,6 +402,7 @@ export type RunTuiConfig = Pick<
 
 export type MiniSettings = {
   thinking: "show" | "hide"
+  tools: "show" | "hide"
   shell_output: "show" | "hide"
   turn_summary: "show" | "hide"
   footer: "show" | "hide"
@@ -410,9 +411,13 @@ export type MiniSettings = {
   mono: boolean
 }
 
-export type MiniSettingChange = {
-  [Key in keyof MiniSettings]: { key: Key; value: MiniSettings[Key] }
-}[keyof MiniSettings]
+export type MiniVerbosity = "quiet" | "default" | "everything"
+
+export type MiniSettingChange =
+  | {
+      [Key in keyof MiniSettings]: { key: Key; value: MiniSettings[Key] }
+    }[keyof MiniSettings]
+  | { key: "verbosity"; value: MiniVerbosity }
 
 // Lifecycle phase of a scrollback entry. "start" opens the entry, "progress"
 // appends content (coalesced in the footer queue), "final" closes it.

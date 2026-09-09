@@ -1,4 +1,4 @@
-import { V1Migration } from "@opencode-ai/core/database/v1-migration"
+import { V1Migration } from "@opencode/core/database/v1-migration"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Effect } from "effect"
 import { Api } from "../api"

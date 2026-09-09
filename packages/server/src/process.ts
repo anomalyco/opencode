@@ -1,11 +1,11 @@
 export * as ServerProcess from "./process"
 
 import { NodeHttpServer } from "@effect/platform-node"
-import { Bus } from "@opencode-ai/core/bus"
-import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
-import { InstallationEvent } from "@opencode-ai/schema/installation-event"
-import { hasPtyConnectTicketURL } from "@opencode-ai/protocol/groups/pty"
-import { hasPersistentPtyConnectTicketURL } from "@opencode-ai/protocol/groups/persistent-pty"
+import { Bus } from "@opencode/core/bus"
+import { SessionRestart } from "@opencode/core/session/execution/restart"
+import { InstallationEvent } from "@opencode/schema/installation-event"
+import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
+import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/persistent-pty"
 import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
 import {
   HttpMiddleware,

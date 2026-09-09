@@ -1,6 +1,6 @@
 export * as AISDK from "./aisdk.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { APICallError } from "@ai-sdk/provider"
 import type {
   JSONSchema7,
@@ -29,9 +29,9 @@ import {
   type LLMRequest,
   type ToolDefinition,
   type UsageInput,
-} from "@opencode-ai/ai"
-import { Auth, Endpoint, RequestExecutor, type AnyRoute } from "@opencode-ai/ai/route"
-import { ProviderShared } from "@opencode-ai/ai/protocols/shared"
+} from "@opencode/ai"
+import { Auth, Endpoint, RequestExecutor, type AnyRoute } from "@opencode/ai/route"
+import { ProviderShared } from "@opencode/ai/protocols/shared"
 import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream } from "effect"
 import { makeParser } from "effect/unstable/encoding/Sse"
 import type { ID, Info } from "./model.js"

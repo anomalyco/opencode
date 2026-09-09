@@ -1,17 +1,9 @@
+import { toProgram } from "../data.js"
+import { sync } from "../interpreter/host.js"
+import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+import { coercion, coerceToString } from "./value.js"
+
 export const numberMethods = new Set(["toFixed", "toPrecision", "toExponential", "toString", "valueOf"])
-
-export const numberConstants = new Set([
-  "MAX_SAFE_INTEGER",
-  "MIN_SAFE_INTEGER",
-  "MAX_VALUE",
-  "MIN_VALUE",
-  "EPSILON",
-  "NaN",
-  "POSITIVE_INFINITY",
-  "NEGATIVE_INFINITY",
-])
-
-export const numberStatics = new Set(["isInteger", "isFinite", "isNaN", "isSafeInteger", "parseInt", "parseFloat"])
 
 export const invokeNumberMethod = (value: number, name: string, args: Array<unknown>, node: AstNode): unknown => {
   const optNum = (index: number): number | undefined => {
@@ -47,32 +39,33 @@ export const invokeNumberMethod = (value: number, name: string, args: Array<unkn
     default:
       throw new InterpreterRuntimeError(`Number method '${name}' is not available.`, node)
   }
-  return boundedData(result, `Number.${name} result`)
+  return toProgram(result, `Number.${name} result`)
 }
 
-export const invokeNumberStatic = (name: string, args: Array<unknown>, node: AstNode): unknown => {
-  const value = args[0]
-  switch (name) {
-    case "isInteger":
-      return Number.isInteger(value)
-    case "isFinite":
-      return Number.isFinite(value)
-    case "isNaN":
-      return Number.isNaN(value)
-    case "isSafeInteger":
-      return Number.isSafeInteger(value)
-    case "parseInt": {
-      const radix = args[1]
-      if (radix !== undefined && typeof radix !== "number") {
-        throw new InterpreterRuntimeError("Number.parseInt expects a numeric radix.", node)
-      }
-      return parseInt(coerceToString(value), radix)
-    }
-    case "parseFloat":
-      return parseFloat(coerceToString(value))
-    default:
-      throw new InterpreterRuntimeError(`Number.${name} is not available.`, node)
+const parseIntStatic = sync("Number.parseInt", (args, node) => {
+  const radix = args[1]
+  if (radix !== undefined && typeof radix !== "number") {
+    throw new InterpreterRuntimeError("Number.parseInt expects a numeric radix.", node)
   }
-}
-import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
-import { boundedData, coerceToString } from "./value.js"
+  return parseInt(coerceToString(args[0]), radix)
+})
+
+export const numberGlobal = coercion("Number", {
+  instanceOf: () => false,
+  members: {
+    MAX_SAFE_INTEGER: Number.MAX_SAFE_INTEGER,
+    MIN_SAFE_INTEGER: Number.MIN_SAFE_INTEGER,
+    MAX_VALUE: Number.MAX_VALUE,
+    MIN_VALUE: Number.MIN_VALUE,
+    EPSILON: Number.EPSILON,
+    NaN: Number.NaN,
+    POSITIVE_INFINITY: Number.POSITIVE_INFINITY,
+    NEGATIVE_INFINITY: Number.NEGATIVE_INFINITY,
+    isInteger: sync("Number.isInteger", (args) => Number.isInteger(args[0])),
+    isFinite: sync("Number.isFinite", (args) => Number.isFinite(args[0])),
+    isNaN: sync("Number.isNaN", (args) => Number.isNaN(args[0])),
+    isSafeInteger: sync("Number.isSafeInteger", (args) => Number.isSafeInteger(args[0])),
+    parseInt: parseIntStatic,
+    parseFloat: sync("Number.parseFloat", (args) => parseFloat(coerceToString(args[0]))),
+  },
+})

@@ -154,8 +154,8 @@ test("worktree deletion sends the project location separately from the target", 
   const settings = page.getByTestId("settings-screen")
   await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
   await expect(settings.getByText(sandboxes[0], { exact: true })).toBeVisible()
-  await settings.getByRole("button", { name: 'Delete worktree "workspace-1"?', exact: true }).click()
-  const confirmation = page.getByRole("dialog", { name: "Delete worktree", exact: true })
+  await settings.getByRole("button", { name: "Delete “workspace-1”?", exact: true }).click()
+  const confirmation = page.getByRole("dialog", { name: "Delete “workspace-1”?", exact: true })
   const remove = confirmation.getByRole("button", { name: "Delete worktree", exact: true })
   await expect(remove).toBeEnabled()
   const deleting = page.waitForRequest(

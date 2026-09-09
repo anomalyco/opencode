@@ -2,14 +2,14 @@ export * as Session from "./session.js"
 export * from "./session/schema.js"
 
 import { Effect, Layer, Schema, Context, Stream } from "effect"
-import { LLMClient } from "@opencode-ai/ai"
-import { ListAnchor } from "@opencode-ai/schema/session"
+import { LLMClient } from "@opencode/ai"
+import { ListAnchor } from "@opencode/schema/session"
 import { and, desc, eq } from "drizzle-orm"
 import { Project } from "./project.js"
-import { Model } from "@opencode-ai/schema/model"
+import { Model } from "@opencode/schema/model"
 import { Location } from "./location.js"
 import { SessionMessage } from "./session/message.js"
-import { PromptInput } from "@opencode-ai/schema/prompt-input"
+import { PromptInput } from "@opencode/schema/prompt-input"
 import { Bus } from "./bus.js"
 import { Instance } from "./instance/service.js"
 import { Database } from "./database/database.js"
@@ -17,7 +17,7 @@ import { SessionProjector } from "./session/projector.js"
 import { SessionMessageTable } from "./session/sql.js"
 import { SessionSchema } from "./session/schema.js"
 import { RelativePath } from "./schema.js"
-import { Agent } from "@opencode-ai/schema/agent"
+import { Agent } from "@opencode/schema/agent"
 import { App } from "./app.js"
 import { Slug } from "./util/slug.js"
 import path from "path"
@@ -31,17 +31,14 @@ import {
   ForkEmptyError,
   InboxConflictError,
   MessageDecodeError,
-  MessageIncompleteError,
-  MessageNotAssistantError,
   MessageNotFoundError,
-  MessageToolIncompleteError,
   NotFoundError,
   PromptConflictError,
   SkillNotFoundError,
   SyntheticConflictError,
 } from "./session/error.js"
-import { Node } from "@opencode-ai/util/effect/app-node"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Node } from "@opencode/util/effect/app-node"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { SessionEvent } from "./session/event.js"
 import { SessionInbox } from "./session/inbox.js"
 import { InstructionState } from "./session/instruction-state.js"
@@ -57,8 +54,8 @@ import { SessionModelTransport } from "./session/model-transport.js"
 import { llmClient } from "./effect/app-node-platform.js"
 import { Snapshot } from "./snapshot.js"
 import { Session } from "./session/session.js"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import type { EventLog } from "@opencode-ai/schema/event-log"
+import { FSUtil } from "@opencode/util/fs-util"
+import type { EventLog } from "@opencode/schema/event-log"
 import { Job } from "./job.js"
 import type { Command } from "./command.js"
 import { SessionEnvironment } from "./session/environment.js"
@@ -101,10 +98,7 @@ export {
   CompactionConflictError,
   InboxConflictError,
   MessageDecodeError,
-  MessageIncompleteError,
-  MessageNotAssistantError,
   MessageNotFoundError,
-  MessageToolIncompleteError,
   NotFoundError,
   PromptConflictError,
   SkillNotFoundError,
@@ -136,9 +130,6 @@ export interface Interface {
     sessionID: SessionSchema.ID
     messageID: SessionMessage.ID
   }) => Effect.Effect<SessionMessage.Info | undefined>
-  readonly updateMessage: (
-    input: Parameters<Session.Handle["updateMessage"]>[0] & { readonly sessionID: SessionSchema.ID },
-  ) => ReturnType<Session.Handle["updateMessage"]>
   readonly context: (
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
@@ -357,7 +348,6 @@ const layer = Layer.effect(
         return yield* store.messages(input)
       }),
       message: (input) => sessions.forSession(input.sessionID).message(input.messageID),
-      updateMessage: (input) => sessions.forSession(input.sessionID).updateMessage(input),
       context: Effect.fn("Session.context")(function* (sessionID) {
         yield* result.get(sessionID)
         return yield* store.context(sessionID)

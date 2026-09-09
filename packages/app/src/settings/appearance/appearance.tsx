@@ -1,6 +1,6 @@
 import { Component } from "solid-js"
-import { Select } from "@opencode-ai/ui/select"
-import { TextInput } from "@opencode-ai/ui/text-input"
+import { Select } from "@opencode/ui/select"
+import { TextInput } from "@opencode/ui/text-input"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { SettingsList } from "@/settings/list"

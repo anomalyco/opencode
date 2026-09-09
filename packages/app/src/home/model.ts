@@ -4,7 +4,7 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
 import { toggleHomeProjectSelection } from "@/shell/layout/helpers"
 import { createEffect, createMemo, startTransition } from "solid-js"
-import type { SessionInfo } from "@opencode-ai/client/promise"
+import type { SessionInfo } from "@opencode/client/promise"
 
 export function createHomeController() {
   const layout = useLayout()
@@ -33,6 +33,14 @@ export function createHomeController() {
     if (list.some((conn) => ServerConnection.key(conn) === selection().server)) return
     const conn = list[0]
     if (conn) setSelection({ server: ServerConnection.key(conn) })
+  })
+  createEffect(() => {
+    const ctx = focusedServerCtx()
+    const id = selectedProject()?.id
+    if (!ctx || !id || ctx.sdk.connection.status() !== "connected") return
+    // Selecting a project is the demand for its worktree inventory: the session filter spans its worktrees.
+    const root = ctx.sync.data.project.find((project) => project.id === id)?.worktree
+    if (root) void ctx.sync.worktrees.load(root)
   })
 
   function setSelection(next: HomeProjectSelection) {

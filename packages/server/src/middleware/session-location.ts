@@ -1,9 +1,9 @@
-import { Instance } from "@opencode-ai/core/instance/service"
-import { Session } from "@opencode-ai/core/session"
+import { Instance } from "@opencode/core/instance/service"
+import { Session } from "@opencode/core/session"
 import { Effect, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
-import { InvalidRequestError, SessionNotFoundError } from "@opencode-ai/protocol/errors"
+import { InvalidRequestError, SessionNotFoundError } from "@opencode/protocol/errors"
 import { sessionInfo, type LocationServices } from "../location"
 
 export class SessionLocationMiddleware extends HttpApiMiddleware.Service<

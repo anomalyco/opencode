@@ -6,7 +6,7 @@ import {
   themeModes,
   type ResolvedTheme,
   type ContextName,
-} from "@opencode-ai/theme/tui"
+} from "@opencode/theme/tui"
 import {
   DEFAULT_THEMES,
   addTheme,
