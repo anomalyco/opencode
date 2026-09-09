@@ -20,6 +20,7 @@ import { webSocketConstructor } from "../effect/app-node-platform.js"
 
 const ROTATE_AFTER_MS = 55 * 60 * 1000
 const INBOUND_CAPACITY = 128
+const CONNECT_TIMEOUT = "10 seconds"
 const IDLE_TIMEOUT = "5 minutes"
 const events = Metric.counter("opencode_session_websocket_events_total", {
   description: "Session WebSocket lifecycle events",
@@ -167,7 +168,20 @@ export const makeLayer = (connector: WebSocketConnector) =>
         return yield* Effect.uninterruptibleMask((restore) =>
           Effect.gen(function* () {
             const connection = yield* restore(
-              connector.open(exchange.connect).pipe(Effect.withSpan("SessionModelTransport.connect")),
+              connector.open(exchange.connect).pipe(
+                Effect.timeoutOrElse({
+                  duration: CONNECT_TIMEOUT,
+                  orElse: () =>
+                    transportError("Timed out opening the Session WebSocket", {
+                      url: exchange.connect.url,
+                      operation: "request",
+                      code: "connect-timeout",
+                      phase: "connect",
+                      delivery: "not-sent",
+                    }),
+                }),
+                Effect.withSpan("SessionModelTransport.connect"),
+              ),
             )
             if (owner.closed) {
               yield* connection.close
@@ -305,6 +319,9 @@ export const makeLayer = (connector: WebSocketConnector) =>
                     }).pipe(
                       Effect.andThen(metric("connect_failure")),
                       Effect.andThen(metric("fallback")),
+                      // A network that refuses the upgrade would otherwise charge every step for a failed
+                      // connect; the Session stays on HTTP for the rest of this process.
+                      Effect.tap(() => Effect.sync(() => (owner.httpFallback = true))),
                       Effect.as(undefined),
                     ),
               ),

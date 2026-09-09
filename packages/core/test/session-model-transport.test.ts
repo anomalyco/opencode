@@ -526,6 +526,57 @@ describe("SessionModelTransport", () => {
     )
   })
 
+  test("keeps a Session on http after a failed connect", async () => {
+    let attempts = 0
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.sync(() => attempts++).pipe(
+          Effect.andThen(
+            Effect.fail(
+              new AIError({
+                reason: new TransportError({
+                  message: "upgrade rejected",
+                  transport: "websocket",
+                  operation: "request",
+                  phase: "connect",
+                  delivery: "not-sent",
+                }),
+              }),
+            ),
+          ),
+        ),
+    }
+
+    await run(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+        expect(yield* collect(executor, exchange("first"))).toEqual(["fallback:first"])
+        expect(yield* collect(executor, exchange("second"))).toEqual(["fallback:second"])
+        // One failed upgrade per Session, not one per step.
+        expect(attempts).toBe(1)
+      }),
+    )
+  })
+
+  test("times out a hanging connect and falls back to http", async () => {
+    const connector: WebSocketConnector = { open: () => Effect.never }
+
+    await runWithTestClock(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const running = yield* collect(transport.bind(session), exchange("slow")).pipe(
+          Effect.forkChild({ startImmediately: true }),
+        )
+        yield* Effect.yieldNow
+        yield* TestClock.adjust("10 seconds")
+        expect(yield* Fiber.join(running)).toEqual(["fallback:slow"])
+      }),
+    )
+  })
+
   test("times out an idle accepted request and poisons its socket", async () => {
     const started = Deferred.makeUnsafe<void>()
     const messages = queue<string | Uint8Array, AIError>()
