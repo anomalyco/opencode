@@ -1,7 +1,8 @@
 import { flatten, resolveTemplate, translator, type Flatten } from "@solid-primitives/i18n"
 import { createEffect, createMemo, createResource, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { Option, Schema, SchemaGetter } from "effect"
+import { createSimpleContext } from "@opencode/ui/context"
 import {
   I18nProvider,
   type UiI18n,
@@ -9,10 +10,11 @@ import {
   type UiI18nPluralLookupKey,
   type UiI18nPluralKey,
   type UiPluralCategory,
-} from "@opencode-ai/ui/context/i18n"
+} from "@opencode/ui/context/i18n"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { Persistence } from "@/runtime/persistence/schema"
 import en from "@/runtime/i18n/en"
-import { dict } from "@opencode-ai/ui/i18n/en"
+import { dict } from "@opencode/ui/i18n/en"
 import {
   createDesktopNativeBundle,
   detectDesktopNativeLocale,
@@ -54,6 +56,16 @@ function cookie(locale: Locale) {
 
 const LOCALES: readonly Locale[] = DESKTOP_NATIVE_LOCALES
 
+const LocaleSchema = Schema.Literals(DESKTOP_NATIVE_LOCALES)
+const StoredLocaleSchema = Schema.Struct({
+  locale: Schema.String.pipe(
+    Schema.decodeTo(LocaleSchema, {
+      decode: SchemaGetter.transform(normalizeLocale),
+      encode: SchemaGetter.transform((locale) => locale),
+    }),
+  ),
+})
+
 const INTL = DESKTOP_NATIVE_LOCALE_TAGS
 
 const base = flatten({ ...en, ...dict })
@@ -63,68 +75,68 @@ const merge = (app: Promise<Source>, ui: Promise<Source>) =>
   Promise.all([app, ui]).then(([a, b]) => ({ ...base, ...flatten({ ...a.dict, ...b.dict }) }) as Dictionary)
 
 const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
-  zh: () => merge(import("@/runtime/i18n/zh"), import("@opencode-ai/ui/i18n/zh")),
-  zht: () => merge(import("@/runtime/i18n/zht"), import("@opencode-ai/ui/i18n/zht")),
-  ko: () => merge(import("@/runtime/i18n/ko"), import("@opencode-ai/ui/i18n/ko")),
-  de: () => merge(import("@/runtime/i18n/de"), import("@opencode-ai/ui/i18n/de")),
-  es: () => merge(import("@/runtime/i18n/es"), import("@opencode-ai/ui/i18n/es")),
-  fr: () => merge(import("@/runtime/i18n/fr"), import("@opencode-ai/ui/i18n/fr")),
-  da: () => merge(import("@/runtime/i18n/da"), import("@opencode-ai/ui/i18n/da")),
-  ja: () => merge(import("@/runtime/i18n/ja"), import("@opencode-ai/ui/i18n/ja")),
-  pl: () => merge(import("@/runtime/i18n/pl"), import("@opencode-ai/ui/i18n/pl")),
-  ru: () => merge(import("@/runtime/i18n/ru"), import("@opencode-ai/ui/i18n/ru")),
-  uk: () => merge(import("@/runtime/i18n/uk"), import("@opencode-ai/ui/i18n/uk")),
-  ar: () => merge(import("@/runtime/i18n/ar"), import("@opencode-ai/ui/i18n/ar")),
-  he: () => merge(import("@/runtime/i18n/he"), import("@opencode-ai/ui/i18n/he")),
-  no: () => merge(import("@/runtime/i18n/no"), import("@opencode-ai/ui/i18n/no")),
-  br: () => merge(import("@/runtime/i18n/br"), import("@opencode-ai/ui/i18n/br")),
-  th: () => merge(import("@/runtime/i18n/th"), import("@opencode-ai/ui/i18n/th")),
-  bs: () => merge(import("@/runtime/i18n/bs"), import("@opencode-ai/ui/i18n/bs")),
-  tr: () => merge(import("@/runtime/i18n/tr"), import("@opencode-ai/ui/i18n/tr")),
-  hi: () => merge(import("@/runtime/i18n/hi"), import("@opencode-ai/ui/i18n/hi")),
-  nl: () => merge(import("@/runtime/i18n/nl"), import("@opencode-ai/ui/i18n/nl")),
-  id: () => merge(import("@/runtime/i18n/id"), import("@opencode-ai/ui/i18n/id")),
-  vi: () => merge(import("@/runtime/i18n/vi"), import("@opencode-ai/ui/i18n/vi")),
-  it: () => merge(import("@/runtime/i18n/it"), import("@opencode-ai/ui/i18n/it")),
-  ur: () => merge(import("@/runtime/i18n/ur"), import("@opencode-ai/ui/i18n/ur")),
-  pa: () => merge(import("@/runtime/i18n/pa"), import("@opencode-ai/ui/i18n/pa")),
-  az: () => merge(import("@/runtime/i18n/az"), import("@opencode-ai/ui/i18n/az")),
-  fi: () => merge(import("@/runtime/i18n/fi"), import("@opencode-ai/ui/i18n/fi")),
-  sv: () => merge(import("@/runtime/i18n/sv"), import("@opencode-ai/ui/i18n/sv")),
-  am: () => merge(import("@/runtime/i18n/am"), import("@opencode-ai/ui/i18n/am")),
-  bg: () => merge(import("@/runtime/i18n/bg"), import("@opencode-ai/ui/i18n/bg")),
-  bn: () => merge(import("@/runtime/i18n/bn"), import("@opencode-ai/ui/i18n/bn")),
-  ca: () => merge(import("@/runtime/i18n/ca"), import("@opencode-ai/ui/i18n/ca")),
-  cs: () => merge(import("@/runtime/i18n/cs"), import("@opencode-ai/ui/i18n/cs")),
-  dv: () => merge(import("@/runtime/i18n/dv"), import("@opencode-ai/ui/i18n/dv")),
-  dz: () => merge(import("@/runtime/i18n/dz"), import("@opencode-ai/ui/i18n/dz")),
-  el: () => merge(import("@/runtime/i18n/el"), import("@opencode-ai/ui/i18n/el")),
-  et: () => merge(import("@/runtime/i18n/et"), import("@opencode-ai/ui/i18n/et")),
-  fa: () => merge(import("@/runtime/i18n/fa"), import("@opencode-ai/ui/i18n/fa")),
-  fo: () => merge(import("@/runtime/i18n/fo"), import("@opencode-ai/ui/i18n/fo")),
-  hr: () => merge(import("@/runtime/i18n/hr"), import("@opencode-ai/ui/i18n/hr")),
-  hu: () => merge(import("@/runtime/i18n/hu"), import("@opencode-ai/ui/i18n/hu")),
-  hy: () => merge(import("@/runtime/i18n/hy"), import("@opencode-ai/ui/i18n/hy")),
-  is: () => merge(import("@/runtime/i18n/is"), import("@opencode-ai/ui/i18n/is")),
-  ka: () => merge(import("@/runtime/i18n/ka"), import("@opencode-ai/ui/i18n/ka")),
-  km: () => merge(import("@/runtime/i18n/km"), import("@opencode-ai/ui/i18n/km")),
-  lo: () => merge(import("@/runtime/i18n/lo"), import("@opencode-ai/ui/i18n/lo")),
-  lt: () => merge(import("@/runtime/i18n/lt"), import("@opencode-ai/ui/i18n/lt")),
-  lv: () => merge(import("@/runtime/i18n/lv"), import("@opencode-ai/ui/i18n/lv")),
-  mk: () => merge(import("@/runtime/i18n/mk"), import("@opencode-ai/ui/i18n/mk")),
-  mn: () => merge(import("@/runtime/i18n/mn"), import("@opencode-ai/ui/i18n/mn")),
-  ms: () => merge(import("@/runtime/i18n/ms"), import("@opencode-ai/ui/i18n/ms")),
-  my: () => merge(import("@/runtime/i18n/my"), import("@opencode-ai/ui/i18n/my")),
-  ne: () => merge(import("@/runtime/i18n/ne"), import("@opencode-ai/ui/i18n/ne")),
-  ro: () => merge(import("@/runtime/i18n/ro"), import("@opencode-ai/ui/i18n/ro")),
-  si: () => merge(import("@/runtime/i18n/si"), import("@opencode-ai/ui/i18n/si")),
-  sk: () => merge(import("@/runtime/i18n/sk"), import("@opencode-ai/ui/i18n/sk")),
-  sl: () => merge(import("@/runtime/i18n/sl"), import("@opencode-ai/ui/i18n/sl")),
-  sq: () => merge(import("@/runtime/i18n/sq"), import("@opencode-ai/ui/i18n/sq")),
-  sr: () => merge(import("@/runtime/i18n/sr"), import("@opencode-ai/ui/i18n/sr")),
-  tg: () => merge(import("@/runtime/i18n/tg"), import("@opencode-ai/ui/i18n/tg")),
-  tk: () => merge(import("@/runtime/i18n/tk"), import("@opencode-ai/ui/i18n/tk")),
-  uz: () => merge(import("@/runtime/i18n/uz"), import("@opencode-ai/ui/i18n/uz")),
+  zh: () => merge(import("@/runtime/i18n/zh"), import("@opencode/ui/i18n/zh")),
+  zht: () => merge(import("@/runtime/i18n/zht"), import("@opencode/ui/i18n/zht")),
+  ko: () => merge(import("@/runtime/i18n/ko"), import("@opencode/ui/i18n/ko")),
+  de: () => merge(import("@/runtime/i18n/de"), import("@opencode/ui/i18n/de")),
+  es: () => merge(import("@/runtime/i18n/es"), import("@opencode/ui/i18n/es")),
+  fr: () => merge(import("@/runtime/i18n/fr"), import("@opencode/ui/i18n/fr")),
+  da: () => merge(import("@/runtime/i18n/da"), import("@opencode/ui/i18n/da")),
+  ja: () => merge(import("@/runtime/i18n/ja"), import("@opencode/ui/i18n/ja")),
+  pl: () => merge(import("@/runtime/i18n/pl"), import("@opencode/ui/i18n/pl")),
+  ru: () => merge(import("@/runtime/i18n/ru"), import("@opencode/ui/i18n/ru")),
+  uk: () => merge(import("@/runtime/i18n/uk"), import("@opencode/ui/i18n/uk")),
+  ar: () => merge(import("@/runtime/i18n/ar"), import("@opencode/ui/i18n/ar")),
+  he: () => merge(import("@/runtime/i18n/he"), import("@opencode/ui/i18n/he")),
+  no: () => merge(import("@/runtime/i18n/no"), import("@opencode/ui/i18n/no")),
+  br: () => merge(import("@/runtime/i18n/br"), import("@opencode/ui/i18n/br")),
+  th: () => merge(import("@/runtime/i18n/th"), import("@opencode/ui/i18n/th")),
+  bs: () => merge(import("@/runtime/i18n/bs"), import("@opencode/ui/i18n/bs")),
+  tr: () => merge(import("@/runtime/i18n/tr"), import("@opencode/ui/i18n/tr")),
+  hi: () => merge(import("@/runtime/i18n/hi"), import("@opencode/ui/i18n/hi")),
+  nl: () => merge(import("@/runtime/i18n/nl"), import("@opencode/ui/i18n/nl")),
+  id: () => merge(import("@/runtime/i18n/id"), import("@opencode/ui/i18n/id")),
+  vi: () => merge(import("@/runtime/i18n/vi"), import("@opencode/ui/i18n/vi")),
+  it: () => merge(import("@/runtime/i18n/it"), import("@opencode/ui/i18n/it")),
+  ur: () => merge(import("@/runtime/i18n/ur"), import("@opencode/ui/i18n/ur")),
+  pa: () => merge(import("@/runtime/i18n/pa"), import("@opencode/ui/i18n/pa")),
+  az: () => merge(import("@/runtime/i18n/az"), import("@opencode/ui/i18n/az")),
+  fi: () => merge(import("@/runtime/i18n/fi"), import("@opencode/ui/i18n/fi")),
+  sv: () => merge(import("@/runtime/i18n/sv"), import("@opencode/ui/i18n/sv")),
+  am: () => merge(import("@/runtime/i18n/am"), import("@opencode/ui/i18n/am")),
+  bg: () => merge(import("@/runtime/i18n/bg"), import("@opencode/ui/i18n/bg")),
+  bn: () => merge(import("@/runtime/i18n/bn"), import("@opencode/ui/i18n/bn")),
+  ca: () => merge(import("@/runtime/i18n/ca"), import("@opencode/ui/i18n/ca")),
+  cs: () => merge(import("@/runtime/i18n/cs"), import("@opencode/ui/i18n/cs")),
+  dv: () => merge(import("@/runtime/i18n/dv"), import("@opencode/ui/i18n/dv")),
+  dz: () => merge(import("@/runtime/i18n/dz"), import("@opencode/ui/i18n/dz")),
+  el: () => merge(import("@/runtime/i18n/el"), import("@opencode/ui/i18n/el")),
+  et: () => merge(import("@/runtime/i18n/et"), import("@opencode/ui/i18n/et")),
+  fa: () => merge(import("@/runtime/i18n/fa"), import("@opencode/ui/i18n/fa")),
+  fo: () => merge(import("@/runtime/i18n/fo"), import("@opencode/ui/i18n/fo")),
+  hr: () => merge(import("@/runtime/i18n/hr"), import("@opencode/ui/i18n/hr")),
+  hu: () => merge(import("@/runtime/i18n/hu"), import("@opencode/ui/i18n/hu")),
+  hy: () => merge(import("@/runtime/i18n/hy"), import("@opencode/ui/i18n/hy")),
+  is: () => merge(import("@/runtime/i18n/is"), import("@opencode/ui/i18n/is")),
+  ka: () => merge(import("@/runtime/i18n/ka"), import("@opencode/ui/i18n/ka")),
+  km: () => merge(import("@/runtime/i18n/km"), import("@opencode/ui/i18n/km")),
+  lo: () => merge(import("@/runtime/i18n/lo"), import("@opencode/ui/i18n/lo")),
+  lt: () => merge(import("@/runtime/i18n/lt"), import("@opencode/ui/i18n/lt")),
+  lv: () => merge(import("@/runtime/i18n/lv"), import("@opencode/ui/i18n/lv")),
+  mk: () => merge(import("@/runtime/i18n/mk"), import("@opencode/ui/i18n/mk")),
+  mn: () => merge(import("@/runtime/i18n/mn"), import("@opencode/ui/i18n/mn")),
+  ms: () => merge(import("@/runtime/i18n/ms"), import("@opencode/ui/i18n/ms")),
+  my: () => merge(import("@/runtime/i18n/my"), import("@opencode/ui/i18n/my")),
+  ne: () => merge(import("@/runtime/i18n/ne"), import("@opencode/ui/i18n/ne")),
+  ro: () => merge(import("@/runtime/i18n/ro"), import("@opencode/ui/i18n/ro")),
+  si: () => merge(import("@/runtime/i18n/si"), import("@opencode/ui/i18n/si")),
+  sk: () => merge(import("@/runtime/i18n/sk"), import("@opencode/ui/i18n/sk")),
+  sl: () => merge(import("@/runtime/i18n/sl"), import("@opencode/ui/i18n/sl")),
+  sq: () => merge(import("@/runtime/i18n/sq"), import("@opencode/ui/i18n/sq")),
+  sr: () => merge(import("@/runtime/i18n/sr"), import("@opencode/ui/i18n/sr")),
+  tg: () => merge(import("@/runtime/i18n/tg"), import("@opencode/ui/i18n/tg")),
+  tk: () => merge(import("@/runtime/i18n/tk"), import("@opencode/ui/i18n/tk")),
+  uz: () => merge(import("@/runtime/i18n/uz"), import("@opencode/ui/i18n/uz")),
 }
 
 function loadDict(locale: Locale) {
@@ -148,17 +160,21 @@ function detectLocale(): Locale {
 }
 
 export function normalizeLocale(value: string): Locale {
-  return LOCALES.includes(value as Locale) ? (value as Locale) : "en"
+  return Option.getOrElse(Schema.decodeUnknownOption(LocaleSchema)(value), () => "en")
 }
+
+export const languageSchema = Persistence.struct({
+  locale: StoredLocaleSchema.fields.locale,
+})
 
 function readStoredLocale() {
   if (typeof localStorage !== "object") return
   try {
     const raw = localStorage.getItem("opencode.global.dat:language")
     if (!raw) return
-    const next = JSON.parse(raw) as { locale?: string }
-    if (typeof next?.locale !== "string") return
-    return normalizeLocale(next.locale)
+    const next = Schema.decodeUnknownOption(Schema.fromJsonString(StoredLocaleSchema))(raw)
+    if (Option.isNone(next)) return
+    return next.value.locale
   } catch {
     return
   }
@@ -182,14 +198,9 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
   gate: false,
   init: (props: { locale?: Locale; onNativeTranslations?: (bundle: DesktopNativeBundle) => void }) => {
     const initial = props.locale ?? readStoredLocale() ?? detectLocale()
-    const [store, setStore, _, ready] = persisted(
-      Persist.global("language"),
-      createStore({
-        locale: initial,
-      }),
-    )
+    const [store, setStore, _, ready] = persisted(Persist.global("language"), languageSchema, { locale: initial })
 
-    const locale = createMemo<Locale>(() => normalizeLocale(store.locale))
+    const locale = createMemo(() => store.locale)
     const intl = createMemo(() => INTL[locale()])
     const [layout, setLayout] = createStore({ direction: undefined as Direction | undefined })
     const direction = createMemo(() => layout.direction ?? localeDirection(locale()))

@@ -1,15 +1,18 @@
-import { Form } from "@opencode-ai/core/form"
+import { Form } from "@opencode/core/form"
+import { Instance } from "@opencode/core/instance/service"
+import { LocationServiceMap } from "@opencode/core/location-services"
+import { Session } from "@opencode/core/session"
 import {
   ConflictError,
   FormAlreadySettledError,
   FormInvalidAnswerError,
   FormNotFoundError,
   InvalidRequestError,
-} from "@opencode-ai/protocol/errors"
+} from "@opencode/protocol/errors"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { response } from "../location"
+import { requestRef, response, sessionInfo } from "../location"
 
 function missingForm(id: Form.ID) {
   return new FormNotFoundError({ id, message: `Form not found: ${id}` })
@@ -17,6 +20,9 @@ function missingForm(id: Form.ID) {
 
 export const FormHandler = HttpApiBuilder.group(Api, "server.form", (handlers) =>
   Effect.gen(function* () {
+    const locations = yield* LocationServiceMap.Service
+    const instances = yield* Instance.Service
+    const sessions = yield* Session.Service
     const requireOwnedForm = Effect.fnUntraced(function* (sessionID: Form.Info["sessionID"], formID: Form.ID) {
       const form = yield* Form.Service
       const info = yield* form.get(formID).pipe(Effect.catchTag("Form.NotFoundError", () => missingForm(formID)))
@@ -35,8 +41,12 @@ export const FormHandler = HttpApiBuilder.group(Api, "server.form", (handlers) =
       .handle(
         "session.form.list",
         Effect.fn(function* (ctx) {
-          const form = yield* Form.Service
-          const forms = yield* form.list({ sessionID: ctx.params.sessionID })
+          const session =
+            ctx.params.sessionID === "global" ? undefined : yield* sessionInfo(sessions, ctx.params.sessionID)
+          const read = Form.Service.use((form) => form.list({ sessionID: ctx.params.sessionID }))
+          const forms = yield* session
+            ? read.pipe(instances.provide(session))
+            : read.pipe(Effect.provide(locations.get(requestRef(ctx.request))))
           return { data: forms }
         }),
       )

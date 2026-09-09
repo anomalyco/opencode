@@ -1,6 +1,6 @@
 import { fromSchemaOpenApi3_0, fromSchemaOpenApi3_1 } from "effect/JsonSchema"
 import type { JsonSchema } from "../tool.js"
-import { isBlockedMember } from "../tool-runtime.js"
+import { isBlockedMember } from "../data.js"
 import type {
   Body,
   Document,
@@ -461,9 +461,7 @@ export const operationInput = (
   const fields = [...parameters.value, ...requestBody.value.fields]
 
   const conflicts = new Set(
-    [...Map.groupBy(fields, (field) => field.name)]
-      .filter(([, matches]) => new Set(matches.map((field) => field.location)).size > 1)
-      .map(([name]) => name),
+    [...Map.groupBy(fields, (field) => field.name)].filter(([, matches]) => matches.length > 1).map(([name]) => name),
   )
   const used = new Set<string>()
   return {

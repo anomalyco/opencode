@@ -3,37 +3,42 @@ import path from "path"
 import { describe, expect } from "bun:test"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { advance, drain } from "../lib/clock"
-import { Directory, Document, Event, Info } from "@opencode-ai/schema/config"
-import { Session } from "@opencode-ai/schema/session"
-import { SessionInbox } from "@opencode-ai/schema/session-inbox"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { Command } from "@opencode-ai/core/command"
-import { Config } from "@opencode-ai/core/config"
-import { ConfigCommandPlugin } from "@opencode-ai/core/config/plugin/command"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Bus } from "@opencode-ai/core/bus"
-import { Credential } from "@opencode-ai/core/credential"
-import { WellKnown } from "@opencode-ai/core/wellknown"
-import { Global } from "@opencode-ai/util/global"
-import { AppProcess } from "@opencode-ai/util/process"
-import { Location } from "@opencode-ai/core/location"
-import { MCP } from "@opencode-ai/core/mcp/index"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { ShellSelect } from "@opencode-ai/core/shell/select"
-import { Watcher } from "@opencode-ai/core/filesystem/watcher"
+import { Directory, Document, Event, Info } from "@opencode/schema/config"
+import { Session } from "@opencode/core/session"
+import { SessionExecution } from "@opencode/core/session/execution"
+import { Job } from "@opencode/core/job"
+import { Agent } from "@opencode/core/agent"
+import { SessionInbox } from "@opencode/schema/session-inbox"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Command } from "@opencode/core/command"
+import { Config } from "@opencode/core/config"
+import { ConfigCommandPlugin } from "@opencode/core/config/plugin/command"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Bus } from "@opencode/core/bus"
+import { Credential } from "@opencode/core/credential"
+import { WellKnown } from "@opencode/core/wellknown"
+import { Global } from "@opencode/util/global"
+import { AppProcess } from "@opencode/util/process"
+import { Location } from "@opencode/core/location"
+import { Mcp } from "@opencode/core/mcp/index"
+import { AbsolutePath } from "@opencode/core/schema"
+import { ShellSelect } from "@opencode/core/shell/select"
+import { Watcher } from "@opencode/core/filesystem/watcher"
 import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
 import { emptyConfigLayer, emptyMcpLayer, testLocationLayer } from "../fixture/mcp"
 import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
+import { tempGlobalLayer } from "../fixture/global"
+import { offlineModels } from "../fixture/models"
 import { testEffect } from "../lib/effect"
 import { host } from "../plugin/host"
 
 const shellLayer = Layer.succeed(
   ShellSelect.Service,
   ShellSelect.Service.of({
-    preferred: () => Effect.succeed("sh"),
+    resolve: () => Effect.succeed("sh"),
     transform: () => Effect.die("unused shell.transform"),
     reload: () => Effect.die("unused shell.reload"),
   }),
@@ -41,12 +46,25 @@ const shellLayer = Layer.succeed(
 
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Command.node, Bus.node, FSUtil.node, AppProcess.node, Location.node, ShellSelect.node]),
+    LayerNode.group([
+      Command.node,
+      Bus.node,
+      FSUtil.node,
+      AppProcess.node,
+      Location.node,
+      ShellSelect.node,
+      Session.node,
+      Job.node,
+      Agent.node,
+    ]),
     [
-      [MCP.node, emptyMcpLayer],
-      [Config.node, emptyConfigLayer],
-      [Location.node, testLocationLayer],
-      [ShellSelect.node, shellLayer],
+      Mcp.node.replace(emptyMcpLayer),
+      Config.node.replace(emptyConfigLayer),
+      Location.node.replace(testLocationLayer),
+      ShellSelect.node.replace(shellLayer),
+      Global.node.replace(tempGlobalLayer),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
+      offlineModels,
     ],
   ),
 )
@@ -54,10 +72,7 @@ const decode = Schema.decodeUnknownSync(Info)
 
 describe("ConfigCommandPlugin.Plugin", () => {
   it.live("loads inline and file-based commands in config order", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           yield* Effect.promise(async () => {
@@ -166,10 +181,7 @@ Review files`,
 
   for (const testCase of sourceCases()) {
     it.effect(`rebuilds commands when a source file is ${testCase.name}`, () =>
-      Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      ).pipe(
+      Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
         Effect.flatMap((tmp) =>
           Effect.gen(function* () {
             const directory = path.join(tmp.path, "commands")
@@ -212,10 +224,7 @@ Review files`,
   }
 
   it.effect("coalesces updates inside the debounce window into one rebuild", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const directory = path.join(tmp.path, "commands")
@@ -253,11 +262,33 @@ Review files`,
     ),
   )
 
+  it.effect("rebuilds on a config update published immediately after startup", () =>
+    Effect.gen(function* () {
+      const command = yield* Command.Service
+      const bus = yield* Bus.Service
+      let reloads = 0
+      // No directory entries, so startup has no filesystem hop that could hide a late subscription.
+      yield* ConfigCommandPlugin.Plugin.effect(
+        host({
+          command: {
+            list: () => Effect.die("unused command.list"),
+            transform: command.transform,
+            reload: () => command.reload().pipe(Effect.tap(() => Effect.sync(() => reloads++))),
+          },
+          event: { subscribe: () => bus.subscribe(Event.Updated) },
+        }),
+      )
+
+      // Published in the same fiber step as startup: the subscription must
+      // already be open when the plugin effect returns.
+      yield* bus.publish(Event.Updated, {})
+      yield* advance(() => reloads >= 1)
+      expect(reloads).toBe(1)
+    }).pipe(Effect.provide(Config.testLayer([]))),
+  )
+
   it.effect("ignores updates outside command source directories", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const directory = path.join(tmp.path, "commands")
@@ -352,17 +383,16 @@ describeNative("ConfigCommandPlugin native watcher", () => {
               ShellSelect.node,
             ]),
             [
-              [
-                Location.node,
+              Location.node.replace(
                 Layer.succeed(
                   Location.Service,
                   Location.Service.of(location({ directory: AbsolutePath.make(path.join(tmp, "project")) })),
                 ),
-              ],
-              [Global.node, Global.layerWith({ config: global, home: path.join(global, "home") })],
-              [ShellSelect.node, shellLayer],
-              [Credential.node, emptyCredentialNode],
-              [WellKnown.node, emptyWellknownNode],
+              ),
+              Global.node.replace(Global.layerWith({ config: global, home: path.join(global, "home") })),
+              ShellSelect.node.replace(shellLayer),
+              Credential.node.replace(emptyCredentialNode),
+              WellKnown.node.replace(emptyWellknownNode),
             ],
           ),
         ),
@@ -431,9 +461,7 @@ function sourceCases() {
     {
       name: "updated",
       prepare: (directory: string) =>
-        Effect.promise(() =>
-          fs.writeFile(path.join(directory, "review.md"), markdown("Review first", "Review first")),
-        ),
+        Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), markdown("Review first", "Review first"))),
       mutate: (directory: string) =>
         Effect.promise(async () => {
           const file = path.join(directory, "review.md")

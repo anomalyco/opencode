@@ -835,8 +835,8 @@ ${labels.map((label) => `  A --> B: ${label}`).join("\n")}`)
     expect(output).toMatchInlineSnapshot(`
       "╭───╮ alpha route label that is deliberately long
       │ A ├───┬──╮
-      ╰─┬─╯   │  │
-        │     │  │ gamma route label that is deliberately long
+      ╰─┬─╯   │  │ gamma route label that is deliberately long
+        │     │  │
         │     │  │ beta route label that is deliberately long
         │     │  │
         ▼     │  │
@@ -933,6 +933,34 @@ ${labels.map((label) => `  A --> B: ${label}`).join("\n")}`)
       │                       │
       ╰───────────────────────╯"
     `)
+  })
+
+  test("leaves frame gaps where external transitions cross nested composite boundaries", () => {
+    const drawing = createStateDiagramDrawing(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction LR
+  state Session {
+    [*] --> Open
+    state Open {
+      [*] --> Clean
+    }
+  }
+  [*] --> Session: hydrate`),
+    )
+    const hydrate = drawing.transitionPlans.find((plan) => plan.route.transition.label === "hydrate")!
+    const crossings = hydrate.cells.filter((cell) =>
+      [...drawing.layout.compositeBounds.values()].some((bounds) => {
+        const right = bounds.left + bounds.width - 1
+        const bottom = bounds.top + bounds.height - 1
+        return (
+          ((cell.x === bounds.left || cell.x === right) && cell.y >= bounds.top && cell.y <= bottom) ||
+          ((cell.y === bounds.top || cell.y === bottom) && cell.x >= bounds.left && cell.x <= right)
+        )
+      }),
+    )
+
+    expect(crossings).toHaveLength(2)
+    for (const cell of crossings) expect(drawing.grid.getCell(cell.x, cell.y)?.char).toBe("─")
   })
 
   test("keeps explicit choices visible in choice-only cycles", () => {
@@ -1179,7 +1207,7 @@ stateDiagram-v2
       "            ╭─ Authenticated ──────────────────╮
                   │                                  │ save
           login   │ ╭──────╮    open     ╭─────────╮ │ logout
-      ●───────────┼▶│ Idle ├────────────▶│ Editing ├─┼──────────▶◎
+      ●────────────▶│ Idle ├────────────▶│ Editing ├────────────▶◎
                   │ ╰──────╯             ╰─────────╯ │
                   │                                  │
                   ╰──────────────────────────────────╯"
@@ -1326,27 +1354,31 @@ stateDiagram-v2
     SecondInner --> [*]: second-out
   }
   FirstGroup --> SecondGroup: group-next
-  SecondGroup --> FirstGroup: group-back`
+    SecondGroup --> FirstGroup: group-back`
 
     for (const direction of ["LR", "TB"] as const) {
-      const lines = renderStateDiagram(source, { direction }).split("\n")
-      for (const title of ["FirstGroup", "SecondGroup"]) {
-        const top = lines.findIndex((line) => line.includes(title))
-        const left = lines[top]!.lastIndexOf("╭", lines[top]!.indexOf(title))
-        const right = lines[top]!.indexOf("╮", left)
-        const bottom = lines.findIndex((line, index) => index > top && line[left] === "╰" && line[right] === "╯")
+      const drawing = createStateDiagramDrawing(parseMermaidStateDiagram(source), { direction })
+      const output = drawing.grid.toString({ trimTop: true, trimBottom: true })
+      for (const id of ["FirstGroup", "SecondGroup"]) {
+        const bounds = drawing.layout.compositeBounds.get(id)!
+        const right = bounds.left + bounds.width - 1
+        const bottom = bounds.top + bounds.height - 1
+        const boundaryStyles = [
+          ...Array.from({ length: bounds.height - 2 }, (_, offset) => [
+            drawing.grid.getCell(bounds.left, bounds.top + offset + 1)?.style,
+            drawing.grid.getCell(right, bounds.top + offset + 1)?.style,
+          ]).flat(),
+          ...Array.from(
+            { length: bounds.width - 2 },
+            (_, offset) => drawing.grid.getCell(bounds.left + offset + 1, bottom)?.style,
+          ),
+        ]
 
-        expect(top).toBeGreaterThanOrEqual(0)
-        expect(left).toBeGreaterThanOrEqual(0)
-        expect(right).toBeGreaterThan(left)
-        expect(bottom).toBeGreaterThan(top)
+        expect(output.match(new RegExp(id, "g"))).toHaveLength(1)
         expect(
-          lines.slice(top + 1, bottom).every((line) => "│├┤┼".includes(line[left]!) && "│├┤┼".includes(line[right]!)),
-        ).toBe(true)
-        expect(
-          lines[bottom]!.slice(left + 1, right)
-            .split("")
-            .every((char) => "─┬┴┼".includes(char)),
+          boundaryStyles.every(
+            (style) => style === "composite" || style === "transition" || style?.startsWith("stateDepartureRamp"),
+          ),
         ).toBe(true)
       }
     }

@@ -6,11 +6,11 @@ import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import type { EventGroup } from "./groups/event.js"
 
 class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware>()(
-  "@opencode-ai/client/LocationMiddleware",
+  "@opencode/client/LocationMiddleware",
 ) {}
 
 class SessionLocationMiddleware extends HttpApiMiddleware.Service<SessionLocationMiddleware>()(
-  "@opencode-ai/client/SessionLocationMiddleware",
+  "@opencode/client/SessionLocationMiddleware",
   { error: [InvalidRequestError, SessionNotFoundError] },
 ) {}
 
@@ -53,8 +53,10 @@ export const groupNames = {
   "server.fs": "file",
   "server.command": "command",
   "server.skill": "skill",
+  "server.rpc": "rpc",
   "server.event": "event",
   "server.pty": "pty",
+  "server.experimental": "experimental",
   "server.shell": "shell",
   "server.mcp": "mcp",
   "server.reference": "reference",
@@ -65,5 +67,5 @@ export const groupNames = {
   "server.config": "config",
 } as const
 
-export const promiseOmitEndpoints = new Set(["pty.connect"])
-export const effectOmitEndpoints = new Set(["fs.read", "pty.connect"])
+export const promiseOmitEndpoints = new Set(["pty.connect", "persistentPty.connect"])
+export const effectOmitEndpoints = new Set(["fs.read", "pty.connect", "persistentPty.connect"])

@@ -11,6 +11,8 @@ import { LocationProvider } from "../../../src/context/location"
 import { RouteProvider, useRoute } from "../../../src/context/route"
 import { ThemeProvider } from "../../../src/context/theme"
 import { Composer } from "../../../src/routes/session/composer"
+import { DialogProvider } from "../../../src/ui/dialog"
+import { ToastProvider } from "../../../src/ui/toast"
 import { createApi, createEventStream, createFetch, directory, json } from "../../fixture/tui-client"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
@@ -31,6 +33,7 @@ async function renderComposer(
   const events = createEventStream()
   const interrupted: string[] = []
   const removed: string[] = []
+  const viewed: string[] = []
   const ready = Promise.withResolvers<void>()
   let closed = 0
   let dispatch!: ReturnType<typeof Keymap.use>["dispatch"]
@@ -53,6 +56,13 @@ async function renderComposer(
       })
     }
     const shellID = url.pathname.match(/^\/api\/shell\/([^/]+)$/)?.[1]
+    if (shellID && request.method === "GET") {
+      viewed.push(shellID)
+      return json({ location: { directory }, data: shells.find((shell) => shell.id === shellID) })
+    }
+    if (url.pathname.endsWith("/output")) {
+      return json({ location: { directory }, data: { output: "", cursor: 0, size: 0, truncated: false } })
+    }
     if (shellID && request.method === "DELETE") {
       removed.push(shellID)
       return new Response(null, { status: 204 })
@@ -93,14 +103,18 @@ async function renderComposer(
   const app = await testRender(
     () => (
       <TestTuiContexts directory={directory}>
-        <ConfigProvider config={createTuiResolvedConfig({ keybinds })}>
+        <ConfigProvider config={createTuiResolvedConfig({ keybinds, session: { terminal: false } })}>
           <Keymap.Provider>
             <ClientProvider api={createApi(calls.fetch)}>
-              <DataProvider>
+              <DataProvider directory={process.cwd()}>
                 <LocationProvider>
                   <RouteProvider initialRoute={{ type: "session", sessionID: "parent" }}>
                     <ThemeProvider mode="dark" source={{ discover: async () => ({}) }}>
-                      <Content />
+                      <ToastProvider>
+                        <DialogProvider>
+                          <Content />
+                        </DialogProvider>
+                      </ToastProvider>
                     </ThemeProvider>
                   </RouteProvider>
                 </LocationProvider>
@@ -119,6 +133,7 @@ async function renderComposer(
     app,
     interrupted,
     removed,
+    viewed,
     route: () => route.data,
     dispatch: (command: string) => dispatch(command),
     closed: () => closed,
@@ -154,15 +169,18 @@ test("disabled shell bindings have no component fallbacks", async () => {
   const composer = await renderComposer("shell", {
     "composer.shell.up": "none",
     "composer.shell.down": "none",
+    "composer.shell.select": "none",
     "composer.shell.kill": "none",
   })
   try {
     expect(composer.app.captureCharFrame()).toContain("bun test")
     composer.app.mockInput.pressArrow("up")
+    composer.app.mockInput.pressEnter()
     composer.app.mockInput.pressKey("d", { ctrl: true })
     await composer.app.renderOnce()
     expect(composer.closed()).toBe(0)
     expect(composer.removed).toEqual([])
+    expect(composer.viewed).toEqual([])
 
     composer.app.mockInput.pressArrow("down")
     composer.dispatch("composer.shell.kill")
@@ -182,6 +200,33 @@ test("configured composer bindings work with a focused textarea", async () => {
     composer.app.mockInput.pressKey("u", { ctrl: true })
     await wait(() => composer.removed.length === 1)
     expect(composer.removed).toEqual(["sh-a"])
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+test("ctrl+c closes the active composer", async () => {
+  const composer = await renderComposer("shell", {})
+
+  try {
+    composer.app.mockInput.pressKey("c", { ctrl: true })
+    await composer.app.waitFor(() => composer.closed() === 1)
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+test("shell output respects a configured binding with a focused textarea", async () => {
+  const composer = await renderComposer("shell", { "composer.shell.select": "ctrl+o" }, true)
+  try {
+    composer.app.mockInput.pressEnter()
+    await composer.app.renderOnce()
+    expect(composer.viewed).toEqual([])
+    composer.app.mockInput.pressKey("o", { ctrl: true })
+    await wait(() => composer.viewed.length > 0)
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).toContain("Shell output")
+    expect(composer.viewed).toEqual(["sh-a"])
   } finally {
     composer.app.renderer.destroy()
   }

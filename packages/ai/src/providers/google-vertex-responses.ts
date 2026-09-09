@@ -1,6 +1,7 @@
 import type { ProviderPackage } from "../provider-package.js"
-import { OpenAICompatibleResponses } from "../protocols/openai-compatible-responses.js"
-import type { RouteDefaultsInput } from "../route/client.js"
+import { OpenResponses } from "../protocols/open-responses.js"
+import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Endpoint } from "../route/endpoint.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
@@ -24,10 +25,14 @@ export interface Settings extends ProviderPackage.Settings {
   readonly providerOptions?: OpenResponsesProviderOptionsInput
 }
 
-const route = OpenAICompatibleResponses.route.with({
+const route = Route.make({
   id: "google-vertex-responses",
   provider: id,
-  providerOptions: { store: false },
+  providerMetadataKey: "vertex",
+  protocol: OpenResponses.protocol,
+  endpoint: Endpoint.path(OpenResponses.PATH),
+  transport: OpenResponses.httpTransport,
+  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
 export const routes = [route]

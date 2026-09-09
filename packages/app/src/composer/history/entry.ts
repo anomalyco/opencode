@@ -1,23 +1,11 @@
 import type { Prompt } from "@/composer/state"
 import type { SelectedLineRange } from "@/workspaces/files/model"
 import { clonePrompt } from "../prompt-parts"
+import type { PromptHistoryComment, PromptHistoryEntry } from "../schema"
+
+export type { PromptHistoryComment, PromptHistoryEntry } from "../schema"
 
 export const MAX_HISTORY = 100
-
-export type PromptHistoryComment = {
-  id: string
-  path: string
-  selection: SelectedLineRange
-  comment: string
-  time: number
-  origin?: "review" | "file"
-  preview?: string
-}
-
-export type PromptHistoryEntry = {
-  prompt: Prompt
-  comments: PromptHistoryComment[]
-}
 
 export type PromptHistoryStoredEntry = PromptHistoryEntry
 

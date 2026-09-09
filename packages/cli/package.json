@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/cli",
+  "name": "@opencode/cli",
   "version": "1.18.4",
   "type": "module",
   "license": "MIT",
@@ -11,6 +11,7 @@
     "bin"
   ],
   "exports": {
+    "./vite-host": "./dev/host.js",
     "./run": "./src/run/index.ts",
     "./server-process": "./src/server-process.ts"
   },
@@ -25,12 +26,13 @@
     "@agentclientprotocol/sdk": "1.2.1",
     "@clack/prompts": "1.0.0-alpha.1",
     "@effect/platform-node": "catalog:",
-    "@opencode-ai/client": "workspace:*",
-    "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/schema": "workspace:*",
-    "@opencode-ai/server": "workspace:*",
-    "@opencode-ai/tui": "workspace:*",
-    "@opencode-ai/util": "workspace:*",
+    "@opencode/client": "workspace:*",
+    "@opencode/plugin": "workspace:*",
+    "@opencode-ai/pty": "0.1.13",
+    "@opencode/schema": "workspace:*",
+    "@opencode/server": "workspace:*",
+    "@opencode/tui": "workspace:*",
+    "@opencode/util": "workspace:*",
     "@opentui/core": "catalog:",
     "@opentui/solid": "catalog:",
     "@parcel/watcher": "2.5.1",
@@ -47,8 +49,8 @@
     "ws": "8.21.0"
   },
   "devDependencies": {
-    "@opencode-ai/script": "workspace:*",
-    "@opencode-ai/protocol": "workspace:*",
+    "@opencode/script": "workspace:*",
+    "@opencode/protocol": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:",
@@ -73,6 +75,7 @@
     "@parcel/watcher-linux-x64-glibc": "2.5.1",
     "@parcel/watcher-win32-arm64": "2.5.1",
     "@parcel/watcher-win32-x64": "2.5.1",
+    "solid-refresh": "0.6.3",
     "vite": "catalog:",
     "vite-plugin-solid": "catalog:"
   }

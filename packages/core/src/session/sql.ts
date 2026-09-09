@@ -4,16 +4,16 @@ import { directoryColumn, pathColumn } from "../database/path.js"
 import { ProjectTable } from "../project/sql.js"
 import type { SessionMessage } from "./message.js"
 import type { SessionInbox } from "./inbox.js"
-import type { FileDiff } from "@opencode-ai/schema/file-diff"
-import { PermissionV1 } from "../v1/permission.js"
-import { Project } from "../project.js"
+import type { FileDiff } from "@opencode/schema/file-diff"
+import type { PermissionV1 } from "@opencode/schema/permission-v1"
+import type { Project } from "@opencode/schema/project"
 import type { SessionSchema } from "./schema.js"
-import { Workspace } from "../workspace.js"
+import type { Workspace } from "@opencode/schema/workspace"
 import { Timestamps } from "../database/schema.sql.js"
-import type { Instruction } from "@opencode-ai/schema/instruction"
-import type { Session } from "@opencode-ai/schema/session"
-import type { CompactionPayload, MovePayload, SyntheticPayload, UserPayload } from "@opencode-ai/schema/session-inbox"
-import type { RevertV1 } from "@opencode-ai/schema/session-revert"
+import type { Instruction } from "@opencode/schema/instruction"
+import type { Session } from "@opencode/schema/session"
+import type { CompactionPayload, MovePayload, SyntheticPayload, UserPayload } from "@opencode/schema/session-inbox"
+import type { RevertV1 } from "@opencode/schema/session-revert"
 import type { Schema } from "effect"
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
@@ -41,7 +41,7 @@ export const SessionTable = sqliteTable(
     summary_deletions: integer(),
     summary_files: integer(),
     summary_diffs: text({ mode: "json" }).$type<FileDiff.LegacyInfo[]>(),
-    metadata: text({ mode: "json" }).$type<Record<string, unknown>>(),
+    metadata: text({ mode: "json" }).$type<Session.Metadata>(),
     cost: real().notNull().default(0),
     tokens_input: integer().notNull().default(0),
     tokens_output: integer().notNull().default(0),

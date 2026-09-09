@@ -49,7 +49,9 @@ export type NoteConnectorRampStyle = `noteConnectorRamp${1 | 2 | 3}`
 export type StateDepartureRampStyle = `stateDepartureRamp${1 | 2 | 3}`
 export type BaseStateCellStyle =
   | "state"
+  | "stateBorder"
   | "composite"
+  | "compositeLabel"
   | "transition"
   | "label"
   | "noteBorder"

@@ -1,6 +1,6 @@
-import type { CatalogApi } from "@opencode-ai/client/effect/api"
-import { Model } from "@opencode-ai/schema/model"
-import { Provider } from "@opencode-ai/schema/provider"
+import type { CatalogApi } from "@opencode/client/effect/api"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import type { Effect, Types } from "effect"
 import type { Transform } from "./registration.js"
 
@@ -9,7 +9,7 @@ export interface CatalogProviderRecord {
   readonly models: ReadonlyMap<string, Types.DeepMutable<Model.Info>>
 }
 
-export interface CatalogDraft {
+export interface CatalogEditor {
   readonly provider: {
     list(): readonly CatalogProviderRecord[]
     get(providerID: string): CatalogProviderRecord | undefined
@@ -28,6 +28,6 @@ export interface CatalogDraft {
 }
 
 export interface CatalogDomain extends CatalogApi<unknown> {
-  readonly transform: Transform<CatalogDraft>
+  readonly transform: Transform<CatalogEditor>
   readonly reload: () => Effect.Effect<void>
 }

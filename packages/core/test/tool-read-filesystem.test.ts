@@ -1,12 +1,12 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Environment } from "@opencode-ai/core/environment/index"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { ReadToolFileSystem } from "@opencode-ai/core/tool/read-filesystem"
-import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
-import { LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Environment } from "@opencode/core/environment/index"
+import { AbsolutePath } from "@opencode/core/schema"
+import { ReadToolFileSystem } from "@opencode/core/tool/read-filesystem"
+import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
+import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Effect, FileSystem } from "effect"
 import { ChildProcessSpawner } from "effect/unstable/process"
 import { testEffect } from "./lib/effect"
@@ -249,6 +249,21 @@ describe("ReadToolFileSystem", () => {
       yield* files.writeFileString(file, `${"a".repeat(300 * 1024)}\nsecond\n`)
 
       const result = yield* ReadToolFileSystem.read(environment, absolute(file), "large.txt", {
+        offset: 2,
+        limit: 1,
+      })
+
+      expect(result).toMatchObject({ type: "text-page", content: "second", offset: 2, truncated: false })
+    }),
+  )
+
+  it.effect("reads after a newline at the first chunk boundary", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = path.join(directory, "boundary.txt")
+      yield* files.writeFileString(file, `${"a".repeat(256 * 1024 - 1)}\nsecond\n`)
+
+      const result = yield* ReadToolFileSystem.read(environment, absolute(file), "boundary.txt", {
         offset: 2,
         limit: 1,
       })

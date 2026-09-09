@@ -1,13 +1,13 @@
 export * as GrepTool from "./grep.js"
 
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
-import { ToolFailure } from "@opencode-ai/ai"
+import type { Context } from "@opencode/plugin/effect/plugin"
+import { ToolFailure } from "@opencode/ai"
 import { Effect, Schema } from "effect"
 import path from "path"
 import { Environment } from "../../environment/index.js"
 import { FileSystem } from "../../filesystem.js"
 import { Location } from "../../location.js"
-import { LocationMutation } from "../../location-mutation.js"
+import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
 import { Ripgrep } from "../../ripgrep.js"
 import { RelativePath } from "../../schema.js"
@@ -18,13 +18,19 @@ export const Input = Schema.Struct({
   pattern: FileSystem.GrepInput.fields.pattern
     .check(Schema.isMinLength(1, { message: "Pattern must not be empty" }))
     .annotate({
-      description: "Regular expression to search for in file contents (ripgrep syntax)",
+      description: "Regular expression or literal text to match in file contents.",
     }),
   path: Schema.optionalKey(RelativePath).annotate({
     description: "File or directory to search. Defaults to the current working directory.",
   }),
   include: FileSystem.GrepInput.fields.include.annotate({
     description: 'Glob pattern to filter files (for example, "*.js" or "*.{ts,tsx}")',
+  }),
+  literal: FileSystem.GrepInput.fields.literal.annotate({
+    description: "Treat `pattern` as exact text instead of a regular expression (default: false).",
+  }),
+  caseSensitive: FileSystem.GrepInput.fields.caseSensitive.annotate({
+    description: "Use case-sensitive matching (default: true).",
   }),
   limit: FileSystem.GrepInput.fields.limit.annotate({
     description: `Maximum number of matching lines to return (default: ${FileSystem.DEFAULT_SEARCH_LIMIT})`,
@@ -57,33 +63,27 @@ export const toModelContent = (matches: EncodedOutput, truncated = false) => {
 /** Grep leaf that defaults its filesystem root to the active Location. */
 export const Plugin = {
   id: "opencode.tool.grep",
-  effect: Effect.fn("GrepTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("GrepTool.Plugin")(function* (ctx: Context) {
     const environment = yield* Environment.Service
     const ripgrep = yield* Ripgrep.Service
     const location = yield* Location.Service
-    const mutation = yield* LocationMutation.Service
+    const access = yield* FileAccess.Service
     const permission = yield* Permission.Service
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false },
           description:
-            "Search file contents using regular expressions. Use it to locate specific code, symbols, or text patterns, and narrow searches with `path` or `include`. Returns matching file paths, line numbers, and line previews.",
+            "Search file contents using ripgrep's regular expression syntax or literal text matching. Use it to locate specific code, symbols, or text patterns, and narrow searches with `path` or `include`. Returns matching file paths, line numbers, and line previews.",
           input: Input,
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
               const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
-              const target = yield* mutation.resolve({ path: input.path ?? "." })
-              if (target.externalDirectory)
-                yield* permission.assert({
-                  ...LocationMutation.externalDirectoryPermission(target.externalDirectory),
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source,
-                })
+              const target = yield* access.resolve({ path: input.path ?? "." })
+              yield* access.authorizeExternal([target], context)
               yield* permission.assert({
                 action: name,
                 resources: [input.pattern],
@@ -92,6 +92,8 @@ export const Plugin = {
                   root: ".",
                   path: input.path,
                   include: input.include,
+                  literal: input.literal,
+                  caseSensitive: input.caseSensitive,
                   limit: input.limit,
                 },
                 sessionID: context.sessionID,
@@ -112,6 +114,8 @@ export const Plugin = {
                   pattern: input.pattern,
                   file: type === "file" ? path.basename(root) : undefined,
                   include: input.include,
+                  literal: input.literal,
+                  caseSensitive: input.caseSensitive,
                   limit: limit + 1,
                 })
                 .pipe(

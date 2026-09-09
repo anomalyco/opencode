@@ -1,18 +1,16 @@
 import { Effect, Schema } from "effect"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { ProviderID, type CacheHint, type ModelID } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
-import * as OpenAICompatibleProfiles from "./openai-compatible-profile.js"
-import * as OpenAIChat from "../protocols/openai-chat.js"
+import { OpenAIChat } from "../protocols/openai-chat.js"
 import { newBreakpoints, ttlBucket } from "../protocols/utils/cache.js"
-import { isRecord, ProviderShared } from "../protocols/shared.js"
+import { isRecord } from "../protocols/shared.js"
 
-export const profile = OpenAICompatibleProfiles.profiles.openrouter
-export const id = ProviderID.make(profile.provider)
+export const id = ProviderID.make("openrouter")
+const baseURL = "https://openrouter.ai/api/v1"
 const ADAPTER = "openrouter"
 
 type OpenRouterString<Known extends string> = Known | (string & {})
@@ -115,12 +113,10 @@ export const protocol = Protocol.make({
               reasoning_details: reasoningDetails,
             }
           })
-          const cacheKey = ProviderShared.clampPromptCacheKey(request.promptCacheKey)
           return {
             ...body,
             messages,
             ...bodyOptions(request.providerOptions),
-            ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
           } as OpenRouterBody
         }),
       ),
@@ -165,19 +161,20 @@ const bodyOptions = (input: unknown) => {
 
 export const route = Route.make({
   id: ADAPTER,
-  provider: profile.provider,
+  provider: id,
+  providerMetadataKey: "openrouter",
   protocol,
-  endpoint: Endpoint.path("/chat/completions", { baseURL: profile.baseURL }),
-  framing: Framing.sse,
+  endpoint: Endpoint.path("/chat/completions", { baseURL }),
+  framing: OpenAIChat.framing,
 })
 
 export const routes = [route]
 
 const configuredRoute = (input: LanguageModelOptions) => {
-  const { apiKey: _, auth: _auth, baseURL, ...rest } = input
+  const { apiKey: _, auth: _auth, baseURL: endpoint, ...rest } = input
   return route.with({
     ...rest,
-    endpoint: { baseURL: baseURL ?? profile.baseURL },
+    endpoint: { baseURL: endpoint ?? baseURL },
     auth: AuthOptions.bearer(input, "OPENROUTER_API_KEY"),
   })
 }

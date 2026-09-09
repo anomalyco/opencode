@@ -1,6 +1,6 @@
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
-import { isBlockedMember, type SafeObject } from "../tool-runtime.js"
-import { CodeModeRegExp } from "../values.js"
+import { isBlockedMember, type SafeObject } from "../data.js"
+import { Values } from "../values.js"
 import { coerceToNumber, coerceToString } from "./value.js"
 
 type MatchValue = Array<unknown> & {
@@ -40,7 +40,7 @@ export const escapeRegexHint =
 export const toHostRegex = (arg: unknown, method: string, node: AstNode, extraFlags = ""): RegExp => {
   // Native parity: an undefined pattern behaves as an empty pattern.
   if (arg === undefined) return new RegExp("", extraFlags)
-  if (arg instanceof CodeModeRegExp) return arg.regex
+  if (arg instanceof Values.RegExp) return arg.regex
   if (typeof arg === "string") {
     try {
       return new RegExp(arg, extraFlags)
@@ -80,7 +80,7 @@ export const invokeRegExpStatic = (name: string, args: Array<unknown>, node: Ast
 }
 
 export const invokeRegExpMethod = (
-  value: CodeModeRegExp,
+  value: Values.RegExp,
   name: string,
   args: Array<unknown>,
   node: AstNode,

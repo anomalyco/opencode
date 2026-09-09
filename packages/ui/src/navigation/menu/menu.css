@@ -51,11 +51,13 @@
 
   box-sizing: border-box;
   display: flex;
+  flex-shrink: 0;
   flex-direction: row;
   align-items: center;
   gap: 8px;
   height: 28px;
   padding: 0 12px;
+  padding-inline-end: 6px;
   background: transparent;
   border-radius: 4px;
   outline: none;
@@ -175,7 +177,6 @@
 
   font-size: 11px;
   font-weight: 530;
-  line-height: 100%;
   letter-spacing: 0.05px;
   color: var(--v2-text-text-faint);
   user-select: none;

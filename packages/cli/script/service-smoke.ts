@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 
 import { NodeFileSystem } from "@effect/platform-node"
-import { Service } from "@opencode-ai/client/effect/service"
-import { ServiceStatus } from "@opencode-ai/protocol/groups/health"
+import { Service } from "@opencode/client/effect/service"
+import { ServiceStatus } from "@opencode/protocol/groups/health"
 import { Effect, Schema } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"
@@ -93,7 +93,11 @@ try {
 }
 
 const output = await Promise.all(errors)
-await fs.rm(root, { recursive: true, force: true })
+// Windows can retain directory handles briefly after the service processes exit.
+await fs.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch((cause: unknown) => {
+  console.error("Failed to remove service smoke-test directory", cause)
+  failure ??= cause
+})
 if (failure)
   throw new Error(output.filter(Boolean).join("\n") || "Compiled service lifecycle smoke test failed", {
     cause: failure,

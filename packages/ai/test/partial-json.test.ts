@@ -18,6 +18,21 @@ describe("partial JSON", () => {
     expect(() => parse('"hello', ~Allow.STR)).toThrow(PartialJSON)
   })
 
+  test("repairs invalid escapes and raw control characters", () => {
+    expect(parse('{"path":"A\\H","text":"first\tsecond"}')).toEqual({
+      path: "A\\H",
+      text: "first\tsecond",
+    })
+  })
+
+  test("preserves prototype keys in partial objects", () => {
+    const object = parse('{"__proto__":{"safe":true}') as Record<string, unknown>
+
+    expect(Object.hasOwn(object, "__proto__")).toBe(true)
+    expect(Object.getPrototypeOf(object)).toBe(Object.prototype)
+    expect(object.__proto__).toEqual({ safe: true })
+  })
+
   test("controls partial collection values independently", () => {
     expect(parse('["', Allow.ARR)).toEqual([])
     expect(parse('["', Allow.ARR | Allow.STR)).toEqual([""])

@@ -1,15 +1,10 @@
 import { Effect } from "effect"
-import {
-  type AstNode,
-  AsyncIteratorSymbol,
-  InterpreterRuntimeError,
-  IteratorSymbol,
-  IteratorSymbols,
-} from "../interpreter/model.js"
-import { containsOpaqueReference } from "../interpreter/references.js"
-import { isBlockedMember } from "../tool-runtime.js"
-import { isCodeModeValue, CodeModePromise } from "../values.js"
-import { boundedData, coerceToString } from "./value.js"
+import { type AstNode, AsyncIteratorSymbol, InterpreterRuntimeError, IteratorSymbol } from "../interpreter/model.js"
+import { containsOpaqueReference, rejectCircularInsertion } from "../interpreter/references.js"
+import { isBlockedMember } from "../data.js"
+import { Values } from "../values.js"
+import { toProgram } from "../data.js"
+import { coerceToString } from "./value.js"
 import { preserveConsumerError, type SyncIteratorRunner } from "../interpreter/iterator.js"
 
 export const objectMethodsPreservingIdentity = new Set(["assign", "values", "entries", "fromEntries"])
@@ -20,8 +15,8 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
   const requireObject = (): Record<string, unknown> => {
     const input = args[0]
     if (Array.isArray(input)) return input as unknown as Record<string, unknown>
-    if (isCodeModeValue(input)) return {}
-    if (input instanceof CodeModePromise) {
+    if (Values.isValue(input)) return {}
+    if (input instanceof Values.Promise) {
       throw new InterpreterRuntimeError(
         `Object.${name} received an un-awaited Promise; await it before inspecting the result.`,
         node,
@@ -36,10 +31,6 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
       throw new InterpreterRuntimeError(`Object.${name} expects a data object or array.`, node, "InvalidDataValue")
     }
     return input as Record<string, unknown>
-  }
-  const guardedSet = (out: Record<string, unknown>, key: string, item: unknown): void => {
-    if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
-    out[key] = item
   }
   switch (name) {
     case "keys":
@@ -60,18 +51,33 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
       return Object.is(args[0], args[1])
     case "assign": {
       const target = args[0]
-      if (target === null || typeof target !== "object" || Array.isArray(target) || isCodeModeValue(target)) {
+      if (target === null || typeof target !== "object" || Array.isArray(target) || Values.isValue(target)) {
         throw new InterpreterRuntimeError("Object.assign expects a data object target.", node)
       }
       const out = target as Record<string, unknown>
+      const seen = new Set<object>()
+      const guardedSet = (key: PropertyKey, item: unknown): void => {
+        if (typeof key === "string" && isBlockedMember(key))
+          throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
+        rejectCircularInsertion(out, item, "Object.assign result", node, seen)
+        if (!Reflect.set(out, key, item))
+          throw new InterpreterRuntimeError(`Object.assign could not assign property '${String(key)}'.`, node).as(
+            "TypeError",
+          )
+      }
       for (const source of args.slice(1)) {
-        if (source === null || source === undefined || isCodeModeValue(source)) continue
+        if (source === null || source === undefined || Values.isValue(source)) continue
         if (typeof source !== "object" || Array.isArray(source)) {
           throw new InterpreterRuntimeError("Object.assign expects data objects.", node)
         }
-        for (const [key, item] of Object.entries(source)) guardedSet(out, key, item)
-        for (const symbol of IteratorSymbols) {
-          if (Object.hasOwn(source, symbol)) Reflect.set(out, symbol, Reflect.get(source, symbol))
+        for (const key of Reflect.ownKeys(source)) {
+          if (typeof key === "string") {
+            if (Object.prototype.propertyIsEnumerable.call(source, key)) guardedSet(key, Reflect.get(source, key))
+            continue
+          }
+          if (key !== AsyncIteratorSymbol && key !== IteratorSymbol) continue
+          if (!Object.prototype.propertyIsEnumerable.call(source, key)) continue
+          guardedSet(key, Reflect.get(source, key))
         }
       }
       return out
@@ -102,7 +108,7 @@ export const invokeObjectFromEntries = <R>(
           if (
             step.value === null ||
             typeof step.value !== "object" ||
-            isCodeModeValue(step.value) ||
+            Values.isValue(step.value) ||
             containsOpaqueReference(step.value)
           ) {
             throw new InterpreterRuntimeError("Object.fromEntries expects [key, value] entry objects.", node).as(
@@ -110,8 +116,8 @@ export const invokeObjectFromEntries = <R>(
             )
           }
           const entry = step.value as Record<string, unknown>
-          boundedData(entry[0], "Object.fromEntries key")
-          boundedData(entry[1], "Object.fromEntries value")
+          toProgram(entry[0], "Object.fromEntries key")
+          toProgram(entry[1], "Object.fromEntries value")
           const key = coerceToString(entry[0])
           if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
           out[key] = entry[1]

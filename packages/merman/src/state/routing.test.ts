@@ -234,6 +234,91 @@ describe("createStateTransitionRenderPlans", () => {
     ])
   })
 
+  test("anchors choice labels to their distinct outgoing branches", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction TB
+  [*] --> Pending
+  Pending --> Decision: review
+  state Decision <<choice>>
+  Decision --> Approved: accept
+  Decision --> Rejected: reject
+  Rejected --> Pending: retry
+  Approved --> [*]: complete`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+    const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30)
+    const accepted = plans.find((plan) => plan.route.transition.label === "accept")!
+    const rejected = plans.find((plan) => plan.route.transition.label === "reject")!
+
+    expect(rejected.label!.x).toBeGreaterThanOrEqual(accepted.label!.x + diagramTextWidth("accept") + 1)
+    expect(rejected.label!.x + diagramTextWidth("reject")).toBeLessThanOrEqual(rejected.route.to.centerX)
+  })
+
+  test("keeps crowded loop and forward labels below their source state", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction TB
+  [*] --> Listening
+  Listening --> Listening: heartbeat
+  Listening --> Listening: refresh token
+  Listening --> Connected: client connected
+  Connected --> Connected: received message
+  Connected --> Listening: disconnected
+  Connected --> [*]: shutdown`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+    const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30)
+
+    for (const label of ["heartbeat", "refresh token", "client connected", "received message", "shutdown"]) {
+      const plan = plans.find((candidate) => candidate.route.transition.label === label)!
+      expect(plan.label!.y, label).toBeGreaterThanOrEqual(plan.route.from.top + plan.route.from.height)
+      expect(plan.label!.y, label).toBeLessThanOrEqual(Math.max(...plan.path.map(([, y]) => y)))
+    }
+
+    const crowded = plans.filter((plan) =>
+      ["heartbeat", "refresh token", "client connected", "disconnected"].includes(plan.route.transition.label),
+    )
+    for (const [index, plan] of crowded.entries()) {
+      for (const other of crowded.slice(index + 1)) {
+        expect(Math.abs(plan.label!.y - other.label!.y)).toBeGreaterThan(1)
+      }
+    }
+  })
+
+  test("separates nested feedback labels without moving them outside their routes", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction TB
+  state Session {
+    [*] --> Open
+    state Open {
+      [*] --> Clean
+      Clean --> Dirty: edit
+      Dirty --> Clean: save
+      Dirty --> [*]
+    }
+    Open --> Closing: request close
+    Closing --> Open: cancel
+    Closing --> [*]: closed
+    note right of Dirty: unsaved changes
+  }
+  [*] --> Session: hydrate
+  Session --> [*]: release`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+    const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30, { noteBounds: layout.noteBounds })
+    const crowded = plans.filter((plan) => ["edit", "save", "cancel"].includes(plan.route.transition.label))
+
+    for (const [index, plan] of crowded.entries()) {
+      expect(plan.label!.y).toBeGreaterThanOrEqual(Math.min(...plan.path.map(([, y]) => y)))
+      expect(plan.label!.y).toBeLessThanOrEqual(Math.max(...plan.path.map(([, y]) => y)))
+      for (const other of crowded.slice(index + 1)) {
+        expect(Math.abs(plan.label!.y - other.label!.y)).toBeGreaterThan(1)
+      }
+    }
+  })
+
   test("keeps vertical branch routes out of unrelated state bounds", () => {
     const diagram = prepareVisibleStateDiagram(
       parseMermaidStateDiagram(`stateDiagram-v2

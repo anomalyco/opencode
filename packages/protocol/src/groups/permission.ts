@@ -1,9 +1,9 @@
-import { Agent } from "@opencode-ai/schema/agent"
-import { Location } from "@opencode-ai/schema/location"
-import { Permission } from "@opencode-ai/schema/permission"
-import { PermissionSaved } from "@opencode-ai/schema/permission-saved"
-import { Project } from "@opencode-ai/schema/project"
-import { Session } from "@opencode-ai/schema/session"
+import { Agent } from "@opencode/schema/agent"
+import { Location } from "@opencode/schema/location"
+import { Permission } from "@opencode/schema/permission"
+import { PermissionSaved } from "@opencode/schema/permission-saved"
+import { Project } from "@opencode/schema/project"
+import { Session } from "@opencode/schema/session"
 import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { PermissionNotFoundError, SessionNotFoundError } from "../errors.js"
@@ -90,15 +90,13 @@ export const makePermissionGroup = <
         params: { sessionID: Session.ID },
         success: Schema.Struct({ data: Schema.Array(Permission.Request) }),
         error: SessionNotFoundError,
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "v2.session.permission.list",
-            summary: "List session permission requests",
-            description: "Retrieve pending permission requests owned by a session.",
-          }),
-        ),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.permission.list",
+          summary: "List session permission requests",
+          description: "Retrieve pending permission requests owned by a session.",
+        }),
+      ),
     )
     .add(
       HttpApiEndpoint.get("session.permission.get", "/api/session/:sessionID/permission/:requestID", {

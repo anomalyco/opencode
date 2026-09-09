@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Skill } from "@opencode-ai/schema/skill"
+import { Skill } from "@opencode/schema/skill"
 import type { Prompt } from "@/composer/state"
 import { buildPromptRequest } from "./request"
 

@@ -1,5 +1,5 @@
-import { Service, type Endpoint, type EnsureOptions } from "@opencode-ai/client/effect/service"
-import { ClientError, isUnauthorizedError, OpenCode } from "@opencode-ai/client/promise"
+import { Service, type Endpoint, type EnsureOptions } from "@opencode/client/effect/service"
+import { ClientError, isUnauthorizedError, OpenCode } from "@opencode/client/promise"
 import { OPENCODE_VERSION } from "../version"
 import { Effect, Redacted } from "effect"
 import { Env } from "../env"
@@ -56,11 +56,20 @@ function managedService(options: EnsureOptions) {
     reconnect: () => Service.ensure(reconnectOptions),
     restart: () =>
       Effect.gen(function* () {
-        yield* Service.stop(options)
+        yield* Service.stop({ file: options.file, pty: "handoff" })
         yield* Service.ensure(reconnectOptions)
       }),
   }
 }
+
+export const shutdownPersistentPty = Effect.fn("cli.server-connection.shutdown-persistent-pty")(function* (
+  options: EnsureOptions,
+) {
+  const endpoint = yield* Service.discover({ ...options, version: undefined })
+  if (!endpoint) return
+  const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
+  yield* Effect.tryPromise(() => client.experimental.persistentPty.shutdown())
+})
 
 const resolveManaged = Effect.fnUntraced(function* (options: EnsureOptions, mismatch: NonNullable<Args["mismatch"]>) {
   if (mismatch === "replace") return yield* Service.ensure(options)

@@ -39,6 +39,7 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(HttpApiEndpoint.get("reference", "/api/reference", { success: Json }))
+  .add(HttpApiEndpoint.get("config", "/api/config", { success: Json }))
   .add(HttpApiEndpoint.get("agent", "/api/agent", { success: Json }))
   .add(HttpApiEndpoint.get("provider", "/api/provider", { success: Json }))
   .add(HttpApiEndpoint.get("model", "/api/model", { success: Json }))
@@ -71,27 +72,23 @@ const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("projectList", "/api/project", { success: Json }))
   .add(HttpApiEndpoint.get("projectCurrent", "/api/project/current", { success: Json }))
   .add(
-    HttpApiEndpoint.get("worktreeList", "/api/worktree/:projectID", {
-      params: { projectID: Schema.String },
+    HttpApiEndpoint.get("worktreeList", "/api/worktree", {
       success: Json,
     }),
   )
   .add(
-    HttpApiEndpoint.post("worktreeCreate", "/api/worktree/:projectID", {
-      params: { projectID: Schema.String },
+    HttpApiEndpoint.post("worktreeCreate", "/api/worktree", {
       payload: JsonPayload,
       success: Json,
     }),
   )
   .add(
-    HttpApiEndpoint.delete("worktreeRemove", "/api/worktree/:projectID", {
-      params: { projectID: Schema.String },
+    HttpApiEndpoint.delete("worktreeRemove", "/api/worktree", {
       success: NoContent,
     }),
   )
   .add(
-    HttpApiEndpoint.post("worktreeRefresh", "/api/worktree/:projectID/refresh", {
-      params: { projectID: Schema.String },
+    HttpApiEndpoint.post("worktreeRefresh", "/api/worktree/refresh", {
       success: NoContent,
     }),
   )
@@ -100,6 +97,7 @@ const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("formRequests", "/api/form/request", { success: Json }))
   .add(HttpApiEndpoint.get("vcs", "/api/vcs", { success: Json }))
   .add(HttpApiEndpoint.get("vcsStatus", "/api/vcs/status", { success: Json }))
+  .add(HttpApiEndpoint.get("vcsBranches", "/api/vcs/branches", { success: Json }))
   .add(HttpApiEndpoint.get("vcsDiff", "/api/vcs/diff", { success: Json }))
   .add(HttpApiEndpoint.get("fsList", "/api/fs/list", { query: Query, success: Json }))
   .add(

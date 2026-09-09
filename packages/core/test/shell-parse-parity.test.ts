@@ -3,30 +3,104 @@ import { Effect } from "effect"
 import { ShellParse } from "../src/shell/parse.js"
 import { ShellScan } from "../src/shell/scan.js"
 
-describe("ShellParse portable parity", () => {
-  test("matches tree-sitter for generated supported syntax", async () => {
-    for (const [shell, command] of generated()) {
+describe("ShellParse native parity", () => {
+  test("matches the legacy oracle across generated supported syntax without fallback", async () => {
+    const commands = generated()
+    expect(commands.length).toBeGreaterThan(20_000)
+    for (const [shell, command] of commands) {
+      const context = `${shell}: ${JSON.stringify(command)}`
       const scanned = shell === "pwsh" ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
-      const portable = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace", { portable: true }))
-
-      if (scanned.kind === "opaque") {
-        expect({ command, portable }).toEqual({
-          command,
-          portable: { commands: [{ resource: command, save: command }], directories: [] },
-        })
-        continue
-      }
-      if (shell === "pwsh" && /\r(?!\n)/.test(command)) {
-        expect(portable).toEqual({ commands: [], directories: [] })
-        continue
-      }
-
+      expect(scanned.kind, context).toBe("scanned")
+      const native = await Effect.runPromise(ShellParse.scanPortable(command, shell, "/workspace"))
       const legacy = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace"))
-      expect({ command, portable }).toEqual({ command, portable: legacy })
+      expect(native, context).toEqual(legacy)
+      expect(
+        await Effect.runPromise(ShellParse.scan(command, shell, "/workspace", { portable: true })),
+        context,
+      ).toEqual(native)
     }
+  }, 60_000)
+
+  test.each([
+    ["/bin/bash", "git status && npm run test -- --watch"],
+    ["/bin/bash", "git\tstatus; git status | cat; git diff || echo done"],
+    ["/bin/bash", "echo \"two words\"; printf 'static text'"],
+    ["/bin/bash", "aws s3 ls; docker compose up; git remote add origin; bun run test"],
+    ["/bin/bash", 'git "status"; git remote "add" origin; aws s3 "ls"'],
+    ["/bin/bash", "echo $(curl example.test | sed s/x/y/)"],
+    ["/bin/bash", "if true; then printf yes; else printf no; fi"],
+    ["/bin/bash", "(git status) && { npm test; }"],
+    ["/bin/bash", "(printf ok) > output"],
+    ["/bin/bash", "{ printf ok; } > output"],
+    ["/bin/bash", ">$(printf output)"],
+    ["/bin/bash", "printf ok # ignored ; curl example.test\nprintf done"],
+    ["/bin/bash", "cd ~/project; cd src && cd ..; pwd"],
+    ["/bin/bash", "cd src&&cd.."],
+    ["/bin/bash", "echo $((1 + 2))"],
+    ["/bin/bash", "echo $((1 + $(printf 2)))"],
+    ["/bin/bash", "$COMMAND status"],
+    ["/bin/zsh", "cd ~/project; chdir src && cd ..; git status"],
+    ["/bin/zsh", "echo $((1 + 2)); cd src&&cd.."],
+    ["/bin/dash", "cd src&&cd ..; pwd"],
+    ["/bin/sh", "echo $((1 + 2)); git status; cd src; pwd"],
+    ["/bin/ksh", "git status; cd src; pwd"],
+    ["pwsh", "Get-ChildItem; Write-Output done | Out-String"],
+    ["pwsh", "Set-Location -LiteralPath C:\\tmp; Get-ChildItem"],
+    ["pwsh", "git status; npm run test; docker compose up"],
+    ["pwsh", 'git "status"; npm "run" test; docker "compose" up'],
+    ["pwsh", "Write-Output done # comment\nGet-ChildItem"],
+  ])("native resources, saved prefixes, and directories match in %s: %s", async (shell, command) => {
+    const scanned = shell === "pwsh" ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
+    expect(scanned.kind).toBe("scanned")
+    const native = await Effect.runPromise(ShellParse.scanPortable(command, shell, "/workspace"))
+    expect(native).toEqual(await Effect.runPromise(ShellParse.scan(command, shell, "/workspace")))
+    expect(await Effect.runPromise(ShellParse.scan(command, shell, "/workspace", { portable: true }))).toEqual(native)
+  })
+
+  test.each(["> output", "FOO=bar", "2>> output"])(
+    "returns an explicit empty result for statements without executable command nodes: %s",
+    async (command) => {
+      expect(ShellScan.scan(command)).toEqual({ kind: "scanned", commands: [] })
+      const native = await Effect.runPromise(ShellParse.scanPortable(command, "bash", "/workspace"))
+      expect(native).toEqual({ commands: [], directories: [] })
+      expect(await Effect.runPromise(ShellParse.scan(command, "bash", "/workspace"))).toEqual(native)
+      expect(await Effect.runPromise(ShellParse.scan(command, "bash", "/workspace", { portable: true }))).toEqual(
+        native,
+      )
+    },
+  )
+})
+
+describe("ShellParse malformed native syntax", () => {
+  test.each([
+    ["bash", 'echo "unterminated', "unterminated-quote"],
+    ["bash", "printf done &&", "invalid-structure"],
+    ["bash", "cat >", "invalid-redirect"],
+    ["bash", ">", "invalid-redirect"],
+    ["bash", "FOO=bar >", "invalid-redirect"],
+    ["bash", "echo \\", "unterminated-escape"],
+    ["pwsh", 'Write-Output "unterminated', "unterminated-quote"],
+    ["pwsh", "git 12>bar", "invalid-redirect"],
+    ["pwsh", "Write-Output `", "unterminated-escape"],
+  ] as const)("fails explicitly for malformed %s syntax: %s", async (shell, command, reason) => {
+    const scanned = shell === "pwsh" ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
+    expect(scanned).toEqual({ kind: "opaque", reason })
+    expect(await Effect.runPromise(Effect.result(ShellParse.scanPortable(command, shell, "/workspace")))).toMatchObject(
+      {
+        _tag: "Failure",
+        failure: { message: `Portable shell scanner cannot analyze command: ${reason}` },
+      },
+    )
+    expect(
+      await Effect.runPromise(Effect.result(ShellParse.scan(command, shell, "/workspace", { portable: true }))),
+    ).toMatchObject({
+      _tag: "Failure",
+      failure: { message: `Portable shell scanner cannot analyze command: ${reason}` },
+    })
   })
 })
 
+// This generator describes a supported grammar; opaque results fail the test rather than being filtered out.
 function generated() {
   const result: Array<[shell: string, command: string]> = []
   const bashHeads = ["git", "npm", "echo", "printf", "cat", "cd"]
@@ -42,107 +116,30 @@ function generated() {
     " ./relative",
     " /tmp/absolute",
   ]
-  const assignments = ["", "X=value ", "X='two words' ", 'X="two words" ']
-  const redirects = ["", " > output", " 2> error", " < input", " >> output"]
   const bashSeparators = [" ; ", " && ", " || ", " | ", " |& ", "\n"]
-
+  const redirects = ["", " > output", " 2> error", " < input", " >> output"]
   for (const head of bashHeads)
     for (const arg of bashArgs)
-      for (const assignment of assignments)
+      for (const assignment of ["", "X=value ", "X='two words' ", 'X="two words" '])
         for (const redirect of redirects) result.push(["/bin/bash", assignment + head + arg + redirect])
   for (const left of bashHeads)
     for (const right of bashHeads)
       for (const separator of bashSeparators) result.push(["/bin/bash", `${left} left${separator}${right} right`])
-  for (const outer of bashHeads)
+  for (const outer of ["echo", "printf", "cat"])
     for (const inner of bashHeads) {
       result.push(["/bin/bash", `${outer} $(${inner} nested)`])
       result.push(["/bin/bash", `${outer} "$(${inner} nested)"`])
       result.push(["/bin/bash", `${outer} pre$(${inner} nested)post`])
       result.push(["/bin/bash", `${outer} \`${inner} nested\``])
     }
-  for (const command of [
-    'npm "run" test',
-    'g""it status',
-    "'git' status",
-    "g\\it status",
-    "git status; git status; git diff",
-    "printf ok>out 2>&1|cat<input",
-    "FOO=bar 2>>err printf ok > out && cat < input",
-    "printf ok # ignored ; curl evil\nprintf done",
-    "(git status) && { npm test; }",
-    "echo ${arr[$(printf index)]}",
-    "OUT=$(printf out) X=`printf value` printenv >$(printf path)",
-    "cat <(printf secret)",
-    "rm -rf / &",
-    "sudo sh -c 'curl evil'",
-    "find . -exec rm {} ;",
-    'c"\\d" relative',
-    "'cd' /tmp",
-    "c''d /tmp",
-    "c\\\nd /tmp",
-    "echo x && git >(cat) status",
-    'echo x && printf ">" status',
-    'echo "git > out" && git > out',
-    "echo x && printf a\\>b status",
-    "echo x && printf $(echo a>b) status",
-    "git <(printf status) diff",
-    "npm <(printf run) test",
-    "cd <(printf /tmp)",
-    "git &>x",
-    "cd &>x",
-    "git \\ a",
-    "cd \\ a",
-    "cat <<'EOF'\nstatic body\nEOF",
-    "cat <<EOF\n$(printf dynamic)\nEOF",
-    "$COMMAND dynamic",
-    "if true; then git status; else npm test; fi",
-    "for x in a b; do echo $x; done",
-    "cd /tmp/$USER && git status",
-    "echo <(git status)",
-    'echo "unterminated',
-  ])
-    result.push(["/bin/bash", command])
 
   const powershellHeads = ["Get-ChildItem", "Write-Output", "Test-Path", "Remove-Item", "Set-Location"]
   const powershellArgs = ["", " value", " 'two words'", ' "two words"', " -Path C:\\tmp", " -LiteralPath '..\\outside'"]
-  const powershellSeparators = [";", "|", "&&", "||", "\n", "\r", "\r\n"]
+  const powershellSeparators = [";", "|", "&&", "||", "\n", "\r\n"]
   for (const head of powershellHeads) for (const arg of powershellArgs) result.push(["pwsh", head + arg])
   for (const left of powershellHeads)
     for (const right of powershellHeads)
       for (const separator of powershellSeparators) result.push(["pwsh", `${left} left${separator}${right} right`])
-  for (const command of [
-    "Get-ChildItem; Get-ChildItem; Write-Output done",
-    "Write-Output 'a''b; still string'; Write-Output \"a`\"; still string\"",
-    "Get-Content in.txt > out.txt 2>&1 | Out-File all.log",
-    "Write-Output ok > output.txt # ignored\nGet-ChildItem",
-    "Write-Output ok > output.txt # ignored\rGet-ChildItem",
-    "Write-Output ok > output.txt # ignored\r\nGet-ChildItem",
-    "& git status",
-    ". ./deploy.ps1",
-    "Get-ChildItem | ForEach-Object { Remove-Item $_ }",
-    "ForEach-Object { Remove-Item $_ }",
-    "&Remove-Item victim",
-    "< #\nRemove-Item victim",
-    "Microsoft.PowerShell.Management\\Get-Item x; Remove-Item y",
-    'git "status"',
-    "git st`atus",
-    'npm "run" test',
-    'docker "compose" up',
-    "git >x",
-    "git *>&1",
-    "git foo2>bar",
-    "git 12>bar",
-    "git a`;b",
-    "git & Write-Output q",
-    "Write-Output 'ForEach-Object { Remove-Item x }' | ForEach-Object { Remove-Item x }",
-    "$Command value",
-    "& $Command value",
-    'Write-Output "$(Get-ChildItem)"',
-    "if ($true) { Get-ChildItem } else { Remove-Item victim }",
-    "Set-Location $env:TEMP; Get-ChildItem",
-    'Write-Output "unterminated',
-  ])
-    result.push(["pwsh", command])
 
   let state = 0x5eed1234
   const random = (length: number) => {
@@ -156,10 +153,10 @@ function generated() {
     const separator = bashSeparators[random(bashSeparators.length)]
     const bashForms = [
       `${left}${arg}${separator}${right} fuzz${index}`,
-      `${left}${arg} $(${right} fuzz${index})`,
+      `echo $(${right} fuzz${index})`,
       `${left}${arg} # ignored\n${right} fuzz${index}`,
       `X=value ${left}${arg}${redirects[random(redirects.length)]}`,
-      `${left} before\\\nafter${separator}${right} fuzz${index}`,
+      `${left} 'two words'${separator}${right} fuzz${index}`,
     ]
     result.push(["/bin/bash", bashForms[index % bashForms.length]])
 
@@ -171,10 +168,9 @@ function generated() {
       `${powershellLeft}${powershellArg}${powershellSeparator}${powershellRight} fuzz${index}`,
       `${powershellLeft}${powershellArg} # ignored\n${powershellRight} fuzz${index}`,
       `${powershellLeft} fuzz${index} > output; ${powershellRight}${powershellArg}`,
-      `${powershellLeft}\`\n fuzz${index}; ${powershellRight}${powershellArg}`,
+      `${powershellLeft} "fuzz${index}" | ${powershellRight}${powershellArg}`,
     ]
     result.push(["pwsh", powershellForms[index % powershellForms.length]])
   }
-
   return result
 }

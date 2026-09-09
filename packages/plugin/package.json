@@ -1,41 +1,50 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/plugin",
+  "name": "@opencode/plugin",
   "version": "1.18.15",
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "test": "bun test --timeout 5000",
+    "test": "bun test --only-failures",
     "typecheck": "tsgo --noEmit",
     "build": "tsc -p tsconfig.build.json"
   },
   "exports": {
     ".": "./src/promise/index.ts",
     "./effect": "./src/effect/index.ts",
+    "./host": "./src/host.ts",
     "./tui": "./src/tui/index.ts",
     "./*": "./src/*.ts"
+  },
+  "imports": {
+    "#plugin-source": {
+      "bun": "./src/source.bun.ts",
+      "node": "./src/source.node.ts",
+      "default": "./src/source.node.ts"
+    }
   },
   "files": [
     "dist"
   ],
   "dependencies": {
     "@ai-sdk/provider": "3.0.8",
-    "@opencode-ai/ai": "workspace:*",
-    "@opencode-ai/client": "workspace:*",
-    "@opencode-ai/protocol": "workspace:*",
-    "@opencode-ai/schema": "workspace:*",
+    "@opencode/ai": "workspace:*",
+    "@opencode/client": "workspace:*",
+    "@opencode/protocol": "workspace:*",
+    "@opencode/schema": "workspace:*",
+    "@opencode/util": "workspace:*",
     "@standard-schema/spec": "catalog:",
     "effect": "catalog:",
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@opencode-ai/theme": "workspace:*",
-    "@opentui/core": ">=0.5.8",
-    "@opentui/solid": ">=0.5.8",
+    "@opencode/theme": "workspace:*",
+    "@opentui/core": ">=0.5.10",
+    "@opentui/solid": ">=0.5.10",
     "solid-js": ">=1.9.0"
   },
   "peerDependenciesMeta": {
-    "@opencode-ai/theme": {
+    "@opencode/theme": {
       "optional": true
     },
     "@opentui/core": {
@@ -49,11 +58,12 @@
     }
   },
   "devDependencies": {
-    "@opencode-ai/theme": "workspace:*",
+    "@opencode/theme": "workspace:*",
     "@opentui/core": "catalog:",
     "@opentui/solid": "catalog:",
     "@tsconfig/bun": "catalog:",
     "@tsconfig/node22": "catalog:",
+    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "solid-js": "catalog:",
     "typescript": "catalog:",

@@ -1,14 +1,14 @@
 import { describe, expect } from "bun:test"
 import os from "os"
 import { Effect, Layer } from "effect"
-import * as TestClock from "effect/testing/TestClock"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { Location } from "@opencode-ai/core/location"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Global } from "@opencode-ai/util/global"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { InstructionBuiltIns } from "@opencode-ai/core/instructions/builtins"
-import { SessionSchema } from "@opencode-ai/core/session/schema"
+import { TestClock } from "effect/testing"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Location } from "@opencode/core/location"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
+import { AbsolutePath } from "@opencode/core/schema"
+import { InstructionBuiltIns } from "@opencode/core/instructions/builtins"
+import { SessionSchema } from "@opencode/core/session/schema"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import { readInitial, readUpdate } from "../lib/instructions"
@@ -30,8 +30,8 @@ const locationLayer = Layer.succeed(
 )
 const it = testEffect(
   AppNodeBuilder.build(InstructionBuiltIns.node, [
-    [Location.node, locationLayer],
-    [Global.node, Global.layerWith({ config: temporary, tmp: temporary })],
+    Location.node.replace(locationLayer),
+    Global.node.replace(Global.layerWith({ config: temporary, tmp: temporary })),
   ]),
 )
 

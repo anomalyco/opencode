@@ -1,17 +1,19 @@
 export * as PluginHooks from "./hooks.js"
 
-import type { AISDKHooks } from "@opencode-ai/plugin/effect/aisdk"
-import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
-import type { ShellHooks } from "@opencode-ai/plugin/effect/shell"
-import type { ToolFailures, ToolHooks } from "@opencode-ai/plugin/effect/tool"
-import type { ModelHookOptions } from "@opencode-ai/plugin/effect/registration"
+import type { AISDKHooks } from "@opencode/plugin/effect/aisdk"
+import type { SessionHooks } from "@opencode/plugin/effect/session"
+import type { ShellHooks } from "@opencode/plugin/effect/shell"
+import type { ToolFailures, ToolHooks } from "@opencode/plugin/effect/tool"
+import type { ModelHookOptions } from "@opencode/plugin/effect/registration"
+import type { PermissionHooks } from "@opencode/plugin/effect/permission"
 import { Context, Effect, Layer, Scope } from "effect"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { State } from "../state.js"
 
 export interface Domains {
   readonly aisdk: AISDKHooks
   readonly session: SessionHooks
+  readonly permission: PermissionHooks
   readonly shell: ShellHooks
   readonly tool: ToolHooks
 }
@@ -22,6 +24,7 @@ type NoFailures<Spec> = { readonly [Name in keyof Spec]: never }
 interface Failures extends Record<keyof Domains, unknown> {
   readonly aisdk: NoFailures<AISDKHooks>
   readonly session: NoFailures<SessionHooks>
+  readonly permission: NoFailures<PermissionHooks>
   readonly shell: NoFailures<ShellHooks>
   readonly tool: ToolFailures
 }

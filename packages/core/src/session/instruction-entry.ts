@@ -2,9 +2,9 @@ export * as InstructionEntry from "./instruction-entry.js"
 
 import { and, asc, eq, isNotNull, isNull, ne, or } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
-import { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
+import { InstructionEntry } from "@opencode/schema/instruction-entry"
 import { Database } from "../database/database.js"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Instructions } from "../instructions/index.js"
 import { SessionSchema } from "./schema.js"
 import { InstructionEntryTable } from "./sql.js"
@@ -131,11 +131,7 @@ const layer = Layer.effect(
       return (yield* rows(sessionID, false)).map((row) => ({ key: row.key, value: row.value }))
     })
 
-    const put = Effect.fn("InstructionEntry.put")(function* (input: {
-      readonly sessionID: SessionSchema.ID
-      readonly key: Key
-      readonly value: Schema.Json
-    }) {
+    const put = Effect.fn("InstructionEntry.put")(function* (input: Parameters<Interface["put"]>[0]) {
       const actualBytes = Buffer.byteLength(JSON.stringify(input.value), "utf8")
       if (actualBytes > MaxValueBytes)
         yield* new ValueTooLargeError({
@@ -159,10 +155,7 @@ const layer = Layer.effect(
         .pipe(Effect.orDie)
     })
 
-    const remove = Effect.fn("InstructionEntry.remove")(function* (input: {
-      readonly sessionID: SessionSchema.ID
-      readonly key: Key
-    }) {
+    const remove = Effect.fn("InstructionEntry.remove")(function* (input: Parameters<Interface["remove"]>[0]) {
       yield* db
         .update(InstructionEntryTable)
         .set({ value: null, removed: true, time_updated: Date.now() })

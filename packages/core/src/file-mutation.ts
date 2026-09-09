@@ -1,17 +1,15 @@
 export * as FileMutation from "./file-mutation.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer } from "effect"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Bom } from "@opencode-ai/util/bom"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Bom } from "@opencode/util/bom"
 import { Environment } from "./environment/index.js"
 import type { Files } from "./environment/index.js"
+import type { FileAccess } from "./file-access.js"
 
-export interface Target {
-  readonly absolute: string
-  readonly resource: string
-}
+export type Target = Pick<FileAccess.Target, "absolute" | "resource">
 
 export interface WriteInput {
   readonly target: Target
@@ -62,9 +60,8 @@ export const syncTextBom = Effect.fn("FileMutation.syncTextBom")(function* (
 const transactionLocks = KeyedMutex.makeUnsafe<string>()
 
 /**
- * Serialize file changes by absolute target. Conditional writes compare and
- * write under the same process-local lock so cooperating OpenCode mutations do
- * not overwrite changes made from the same stale content.
+ * Mutation locking is process-local and serializes cooperating OpenCode
+ * changes; external writes can still race.
  */
 const layer = Layer.effect(
   Service,
@@ -129,7 +126,6 @@ export const node = makeLocationNode({ service: Service, layer, deps: [Environme
 /**
  * Deferred until the corresponding integrations exist.
  */
-// TODO: Add formatter integration after formatter runtime exists.
 // TODO: Publish watcher/file-edit events after watcher integration exists.
 // TODO: Add snapshots / undo after snapshot design exists.
 // TODO: Notify LSP and collect diagnostics after LSP runtime exists.

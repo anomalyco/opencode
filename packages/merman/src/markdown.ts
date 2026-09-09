@@ -12,6 +12,7 @@ import {
   type StyledText,
 } from "@opentui/core"
 import { MermaidSyntaxError } from "./diagnostics.js"
+import type { OpenCodeDiagramPalette } from "./palette.js"
 import { DiagramCanvasSizeError } from "./core/canvas.js"
 import { detectMermaidDiagram } from "./detect.js"
 import { drawFlowchartDiagramGrid } from "./flowchart/drawing.js"
@@ -55,18 +56,7 @@ export interface MermaidMarkdownRendererOptions {
   layoutMaxWidth?: number
   /** Gantt-specific terminal rendering options. */
   gantt?: Omit<GanttDiagramRenderOptions, "layoutMaxWidth">
-  colors?: {
-    text?: ColorInput
-    primary?: ColorInput
-    secondary?: ColorInput
-    muted?: ColorInput
-    warning?: ColorInput
-    background?: ColorInput
-    request?: ColorInput
-    response?: ColorInput
-    note?: ColorInput
-    noteBackground?: ColorInput
-  }
+  colors?: Partial<Record<keyof OpenCodeDiagramPalette, ColorInput>>
 }
 
 function color(value: ColorInput | undefined): RGBA | undefined {
@@ -140,14 +130,16 @@ function prepareDiagram(
         text: renderGridStyledText(
           grid,
           resolveFlowchartStyleColors({
-            node: color(colors.primary),
-            nodeBorder: color(colors.muted),
-            database: color(colors.primary),
-            databaseBorder: color(colors.muted),
-            edge: color(colors.secondary),
+            node: color(colors.boxText ?? colors.primary),
+            nodeBorder: color(colors.boxBorder ?? colors.muted),
+            database: color(colors.boxText ?? colors.primary),
+            databaseBorder: color(colors.boxBorder ?? colors.muted),
+            edge: color(colors.line ?? colors.secondary),
             label: color(colors.text),
-            group: color(colors.muted),
+            group: color(colors.group ?? colors.muted),
+            groupLabel: color(colors.groupText ?? colors.group ?? colors.muted),
           }),
+          { label: color(colors.labelBackground) },
         ),
         height: size.height,
       }
@@ -225,17 +217,20 @@ function prepareDiagram(
         text: renderStateGridStyledText(
           grid,
           resolveStateStyleColors({
-            state: color(colors.primary),
-            composite: color(colors.muted),
-            transition: color(colors.secondary),
+            state: color(colors.boxText ?? colors.primary),
+            stateBorder: color(colors.boxBorder ?? colors.primary),
+            composite: color(colors.group ?? colors.muted),
+            compositeLabel: color(colors.groupText ?? colors.group ?? colors.muted),
+            transition: color(colors.line ?? colors.secondary),
             label: color(colors.text),
-            noteBorder: color(colors.warning),
-            noteText: color(colors.warning),
-            noteConnector: color(colors.muted),
-            start: color(colors.muted),
-            end: color(colors.muted),
-            choice: color(colors.secondary),
+            noteBorder: color(colors.noteBorder ?? colors.warning),
+            noteText: color(colors.noteText ?? colors.warning),
+            noteConnector: color(colors.noteConnector ?? colors.muted),
+            start: color(colors.marker ?? colors.muted),
+            end: color(colors.marker ?? colors.muted),
+            choice: color(colors.marker ?? colors.secondary),
           }),
+          { label: color(colors.labelBackground) },
         ),
         height: size.height,
       }
@@ -293,10 +288,30 @@ export function createMermaidCodeBlockRenderer(
     } catch (error) {
       if (error instanceof MermaidSyntaxError) {
         const previous = key ? lastGood.get(key) : undefined
-        if (!previous || previous.kind !== kind) return undefined
-        const diagram = new StaticDiagramRenderable(ctx, previous)
-        claimLastGood(key!, previous, diagram, lastGood)
-        return diagram
+        if (previous?.kind === kind) {
+          const diagram = new StaticDiagramRenderable(ctx, previous)
+          claimLastGood(key!, previous, diagram, lastGood)
+          return diagram
+        }
+
+        const lines = token.text.split("\n")
+        if (error.lineNumber <= 2 || lines.slice(error.lineNumber).some((line) => line.trim())) return undefined
+
+        try {
+          const prepared = prepareDiagram(
+            kind,
+            lines.slice(0, error.lineNumber - 1).join("\n"),
+            options,
+            layoutMaxWidth,
+          )
+          if (!prepared.height) return undefined
+          const diagram = new StaticDiagramRenderable(ctx, prepared)
+          if (key) claimLastGood(key, prepared, diagram, lastGood)
+          return diagram
+        } catch (error) {
+          if (error instanceof MermaidSyntaxError || error instanceof DiagramCanvasSizeError) return undefined
+          throw error
+        }
       }
       if (error instanceof DiagramCanvasSizeError) return undefined
       throw error

@@ -1,3 +1,5 @@
+import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+
 export const stringMethods = new Set([
   "toLowerCase",
   "toUpperCase",
@@ -46,4 +48,3 @@ export const invokeStringStatic = (name: string, args: Array<unknown>, node: Ast
       throw new InterpreterRuntimeError(`String.${name} is not available.`, node)
   }
 }
-import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"

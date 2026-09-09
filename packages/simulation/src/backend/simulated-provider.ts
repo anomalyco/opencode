@@ -1,6 +1,6 @@
-import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
-import { Tool } from "@opencode-ai/core/tool"
-import { Plugin } from "@opencode-ai/plugin/effect"
+import { SdkPlugins } from "@opencode/core/plugin/sdk"
+import { Tool } from "@opencode/core/tool"
+import { Plugin } from "@opencode/plugin/effect"
 import { createHash } from "node:crypto"
 import {
   Cause,

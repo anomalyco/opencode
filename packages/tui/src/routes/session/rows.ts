@@ -1,4 +1,4 @@
-import type { SessionInboxEnqueued, SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
+import type { SessionInboxEnqueued, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
 import { createEffect, on, onCleanup, type Accessor } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useConfig } from "../../config"
@@ -171,8 +171,18 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
   const appendPart = (ref: PartRef, part: AppendPart) =>
     setRows(
       produce((draft) => {
-        if (hasPart(draft, ref)) return
-        append(draft, ref, part, queuedStart(draft))
+        if (!hasPart(draft, ref)) {
+          append(draft, ref, part, queuedStart(draft))
+          return
+        }
+        if (part.type !== "reasoning" || part.time?.completed === undefined) return
+        const row = draft.find(
+          (row) =>
+            row.type === "group" &&
+            row.kind === "reasoning" &&
+            row.refs.some((item) => item.messageID === ref.messageID && item.partID === ref.partID),
+        )
+        if (row?.type === "group" && row.kind === "reasoning") row.completed = true
       }),
     )
 
@@ -250,7 +260,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       if (event.data.sessionID === sessionID() && event.data.text.trim())
         appendPart(
           { messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` },
-          { type: "reasoning" },
+          { type: "reasoning", time: { completed: event.created } },
         )
     }),
     data.on("session.tool.input.started", (event) => {
@@ -344,13 +354,41 @@ export function cacheReuseDrop(previous: CacheUsage | undefined, current: CacheU
   return drop > 0 ? drop : undefined
 }
 
-export function turnDuration(message: SessionMessageAssistant, messages: SessionMessageInfo[]) {
+export function turnDuration(message: SessionMessageAssistant, messages: SessionMessageInfo[], position?: number) {
   if (message.time.completed === undefined) return 0
-  const index = messages.findIndex((item) => item.id === message.id)
-  const input = messages
-    .slice(0, index === -1 ? messages.length : index)
-    .findLast((item) => item.type === "user" || item.type === "synthetic")
+  const index = position ?? messages.findIndex((item) => item.id === message.id)
+  const input = messages[inputIndex(messages, index === -1 ? messages.length : index)]
   return Math.max(0, message.time.completed - (input?.time.created ?? message.time.created))
+}
+
+export function turnTokensPerSecond(
+  message: SessionMessageAssistant,
+  messages: SessionMessageInfo[],
+  position?: number,
+) {
+  const index = position ?? messages.findIndex((item) => item.id === message.id)
+  const end = index === -1 ? messages.length : index + 1
+  const start = inputIndex(messages, end)
+  const steps = messages
+    .slice(start + 1, end)
+    .filter((item): item is SessionMessageAssistant => item.type === "assistant")
+  const durations = steps.flatMap((step) =>
+    step.time.streamed === undefined ? [] : [Math.max(0, step.time.streamed - step.time.created)],
+  )
+  if (steps.length === 0 || durations.length !== steps.length) return
+  const output = steps.reduce((total, step) => total + (step.tokens?.output ?? 0), 0)
+  const duration = durations.reduce((total, value) => total + value, 0)
+  if (output <= 0 || duration <= 0) return
+  return output / (duration / 1_000)
+}
+
+function inputIndex(messages: SessionMessageInfo[], end: number) {
+  // Reading a sliced prefix subscribes every footer to unrelated historical messages.
+  for (let index = end - 1; index >= 0; index--) {
+    const message = messages[index]
+    if (message.type === "user" || message.type === "synthetic") return index
+  }
+  return -1
 }
 
 function hasTokenUsage(
@@ -372,6 +410,11 @@ export function messageBoundaryIDs(rows: SessionRow[], messages: SessionMessageI
     seen.add(id)
     return id
   })
+}
+
+export function sessionRowID(row: SessionRow, boundaryID?: string) {
+  if (boundaryID) return boundaryID
+  if (row.type === "part") return `session-part:${row.ref.messageID}:${row.ref.partID}`
 }
 
 function rowBoundaryMessageID(row: SessionRow, messages: Map<string, SessionMessageInfo>) {
@@ -404,17 +447,26 @@ export function resolvePart(message: SessionMessageAssistant, partID: string) {
   return message.content.filter((part) => part.type === match[1])[ordinal]
 }
 
-type AppendPart = { type: "text" } | { type: "reasoning" } | { type: "tool"; name: string }
+type AppendPart =
+  | { type: "text" }
+  | { type: "reasoning"; time?: { completed?: number } }
+  | { type: "tool"; name: string }
 
 function append(rows: SessionRow[], ref: PartRef, part: AppendPart, index = rows.length) {
   if (part.type === "reasoning") {
     const previous = rows[index - 1]
     if (previous?.type === "group" && previous.kind === "reasoning") {
       previous.refs.push(ref)
+      previous.completed &&= part.time?.completed !== undefined
       return
     }
     completePrevious(rows, index)
-    rows.splice(index, 0, { type: "group", kind: "reasoning", refs: [ref], completed: false })
+    rows.splice(index, 0, {
+      type: "group",
+      kind: "reasoning",
+      refs: [ref],
+      completed: part.time?.completed !== undefined,
+    })
     return
   }
   if (part.type === "tool" && exploration(part.name)) {

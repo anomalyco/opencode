@@ -1,14 +1,14 @@
-import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { SessionTransfer } from "@opencode-ai/schema/session-transfer"
-import { SessionInbox } from "@opencode-ai/schema/session-inbox"
-import { PromptInput } from "@opencode-ai/schema/prompt-input"
-import { Session } from "@opencode-ai/schema/session"
-import { SessionStats } from "@opencode-ai/schema/session-stats"
-import { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
-import { Project } from "@opencode-ai/schema/project"
-import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
-import { Event } from "@opencode-ai/schema/event"
-import { Workspace } from "@opencode-ai/schema/workspace"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { SessionTransfer } from "@opencode/schema/session-transfer"
+import { SessionInbox } from "@opencode/schema/session-inbox"
+import { PromptInput } from "@opencode/schema/prompt-input"
+import { Session } from "@opencode/schema/session"
+import { SessionStats } from "@opencode/schema/session-stats"
+import { InstructionEntry } from "@opencode/schema/instruction-entry"
+import { Project } from "@opencode/schema/project"
+import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath, statics } from "@opencode/schema/schema"
+import { Event } from "@opencode/schema/event"
+import { Workspace } from "@opencode/schema/workspace"
 import { Context, Effect, Encoding, Result, Schema, SchemaGetter, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
@@ -24,12 +24,12 @@ import {
   SkillNotFoundError,
   UnknownError,
 } from "../errors.js"
-import { Agent } from "@opencode-ai/schema/agent"
-import { Skill } from "@opencode-ai/schema/skill"
-import { Model } from "@opencode-ai/schema/model"
-import { Location } from "@opencode-ai/schema/location"
-import { SessionEvent } from "@opencode-ai/schema/session-event"
-import { EventLog } from "@opencode-ai/schema/event-log"
+import { Agent } from "@opencode/schema/agent"
+import { Skill } from "@opencode/schema/skill"
+import { Model } from "@opencode/schema/model"
+import { Location } from "@opencode/schema/location"
+import { SessionEvent } from "@opencode/schema/session-event"
+import { EventLog } from "@opencode/schema/event-log"
 
 const ParentIDFilter = Schema.Union([
   Session.ID,
@@ -174,6 +174,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           agent: Agent.ID.pipe(Schema.optional),
           model: Model.Ref.pipe(Schema.optional),
           location: Location.Ref.pipe(Schema.optional),
+          metadata: Session.Metadata.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: Session.Info }),
       }).annotateMerge(
@@ -191,12 +192,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           location: Location.Ref.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: Session.Info }),
-        error: ConflictError,
+        error: [ConflictError, SessionNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "v2.session.import",
           summary: "Import session",
-          description: "Import a projected session transcript at the requested location.",
+          description:
+            "Import a projected session transcript at the requested location. If parentID is supplied, the parent session must already exist; import parents before children.",
         }),
       ),
     )
@@ -244,15 +246,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         params: { sessionID: Session.ID },
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "v2.session.remove",
-            summary: "Delete session",
-            description: "Delete a session and its child sessions.",
-          }),
-        ),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.remove",
+          summary: "Delete session",
+          description: "Delete a session and its child sessions.",
+        }),
+      ),
     )
     .add(
       HttpApiEndpoint.post("session.fork", "/api/session/:sessionID/fork", {

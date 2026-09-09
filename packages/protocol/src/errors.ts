@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Skill } from "@opencode-ai/schema/skill"
+import { Skill } from "@opencode/schema/skill"
 
 export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>()(
   "InvalidRequestError",
@@ -9,6 +9,26 @@ export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>
     field: Schema.optional(Schema.String),
   },
   { httpApiStatus: 400 },
+) {}
+
+export class RpcError extends Schema.TaggedError<RpcError>()(
+  "RpcError",
+  {
+    type: Schema.String,
+    message: Schema.String,
+    data: Schema.optional(Schema.Unknown),
+  },
+  { httpApiStatus: 400 },
+) {}
+
+export class RpcInternalError extends Schema.TaggedError<RpcInternalError>()(
+  "RpcInternalError",
+  {
+    type: Schema.Literals(["rpc.internal", "rpc.invalid_output"]),
+    message: Schema.String,
+    data: Schema.optional(Schema.Unknown),
+  },
+  { httpApiStatus: 500 },
 ) {}
 
 export class UnauthorizedError extends Schema.TaggedError<UnauthorizedError>()(
@@ -57,6 +77,15 @@ export class ProviderNotFoundError extends Schema.TaggedError<ProviderNotFoundEr
   "ProviderNotFoundError",
   {
     providerID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class ProjectNotFoundError extends Schema.TaggedError<ProjectNotFoundError>()(
+  "ProjectNotFoundError",
+  {
+    projectID: Schema.String,
     message: Schema.String,
   },
   { httpApiStatus: 404 },

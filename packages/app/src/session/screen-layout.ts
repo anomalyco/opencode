@@ -8,10 +8,11 @@ import type { SessionModel } from "./model"
 import { sessionPanelLayout } from "./session-panel-layout"
 import { clampSessionPanelWidth, sessionPanelWidthMax } from "./session-panel-width"
 
-export function createSessionScreenLayout(session: SessionModel, serverScope: string) {
+export function createSessionScreenLayout(session: SessionModel) {
   const layout = useLayout()
   const settings = useSettings()
   const size = createSizing()
+  const view = session.layout.view
   const reviewOpen = createMemo(() => session.isDesktop() && session.layout.view().reviewPanel.opened())
   const reviewPanelOpen = createMemo(() => reviewOpen() && !!session.identity.params.id)
   const terminalOpen = createMemo(() => session.layout.view().terminal.opened())
@@ -42,7 +43,7 @@ export function createSessionScreenLayout(session: SessionModel, serverScope: st
   const splitReview = createMemo(() => reviewPanelOpen() && layout.review.diffStyle() === "split")
   const resizedWidth = createMemo(() =>
     clampSessionPanelWidth({
-      width: layout.session.width(),
+      width: view().reviewPanel.width(),
       available: available(),
       split: splitReview(),
     }),
@@ -72,7 +73,7 @@ export function createSessionScreenLayout(session: SessionModel, serverScope: st
   }, panelLayout().stacked)
   const sideRegionOpen = createMemo(() => reviewPanelOpen() || fileTreeOpen())
   const terminalPane = createMemo(() =>
-    Math.min(layout.terminal.height(), typeof window === "undefined" ? 600 : window.innerHeight * 0.6),
+    Math.min(view().terminal.height(), typeof window === "undefined" ? 600 : window.innerHeight * 0.6),
   )
   const terminalPaneHeight = createMemo(() => `${terminalPane()}px`)
   const sideHeight = createMemo(() => rowSize.height)
@@ -92,7 +93,6 @@ export function createSessionScreenLayout(session: SessionModel, serverScope: st
     centered: createMemo(() => session.isDesktop()),
     files: { open: fileTreeOpen },
     panel: {
-      key: createMemo(() => (session.identity.params.id ? `${serverScope}\0${session.identity.params.id}` : undefined)),
       max: panelMax,
       ref: (element: HTMLDivElement) => {
         row = element

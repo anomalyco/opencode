@@ -1,8 +1,8 @@
 export * as VariantPlugin from "./variant.js"
 
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Model } from "../model.js"
+import { define } from "@opencode/plugin/effect/plugin"
+import { Model } from "@opencode/schema/model"
 import { Provider } from "../provider.js"
 
 export const Plugin = define({

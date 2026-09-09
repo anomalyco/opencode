@@ -1,8 +1,50 @@
 import { describe, expect, test } from "bun:test"
 import type { McpServer, SessionConfigOption } from "@agentclientprotocol/sdk"
-import { makeACPFixture, makeSession, secondModel } from "./service-fixture"
+import { makeACPFixture, makeSession, secondModel, testModel } from "./service-fixture"
+import { flattenSelectOptions, requireSelectOption } from "./subprocess"
 
 describe("acp service directory behavior", () => {
+  test("does not cache an available model before plugin activation settles", async () => {
+    const requested = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    let ready = false
+    await using fixture = makeACPFixture({
+      fetch(request) {
+        requested.resolve()
+        if (request.path === "/api/plugin/await-activation") {
+          return release.promise.then(() => {
+            ready = true
+            return new Response(null, { status: 204 })
+          })
+        }
+        if (!ready && request.path === "/api/model") {
+          return Response.json({ data: [{ ...testModel, providerID: "ambient" }] })
+        }
+        if (!ready && request.path === "/api/model/default") {
+          return Response.json({ data: { ...testModel, providerID: "ambient" } })
+        }
+        if (request.path === "/api/session" && request.method === "POST") {
+          return Response.json({ data: { ...makeSession("ses_ready"), model: undefined } })
+        }
+        return undefined
+      },
+    })
+    const pending = fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
+    try {
+      await requested.promise
+      expect(fixture.requests.map((request) => request.path)).toEqual(["/api/plugin/await-activation"])
+      expect(fixture.requests[0]?.query["location[directory]"]).toBe("/workspace")
+      release.resolve()
+      expect(currentValue(await pending, "model")).toBe("test/test-model")
+      expect(
+        fixture.requests.find((request) => request.path === "/api/session" && request.method === "POST")?.body,
+      ).toMatchObject({ model: { providerID: "test", id: "test-model" } })
+    } finally {
+      release.resolve()
+      await pending.catch(() => {})
+    }
+  })
+
   test("creates sessions from a catalog shared by concurrent callers in the same cwd", async () => {
     let created = 0
     await using fixture = makeACPFixture({
@@ -26,12 +68,20 @@ describe("acp service directory behavior", () => {
     expect(currentValue(first[0], "model")).toBe("test/test-model")
     expect(currentValue(first[0], "mode")).toBe("build")
     expect(
-      ["/api/model", "/api/model/default", "/api/agent", "/api/command", "/api/skill"].map((path) =>
+      [
+        "/api/plugin/await-activation",
+        "/api/model",
+        "/api/model/default",
+        "/api/agent",
+        "/api/command",
+        "/api/skill",
+      ].map((path) =>
         fixture.requests
           .filter((request) => request.path === path)
           .map((request) => request.query["location[directory]"]),
       ),
     ).toEqual([
+      ["/workspace", "/other"],
       ["/workspace", "/other"],
       ["/workspace", "/other"],
       ["/workspace", "/other"],
@@ -71,6 +121,41 @@ describe("acp service directory behavior", () => {
       ["review", "verify"],
     ])
   })
+
+  test.each(["empty", "missing the default"])(
+    "retries when the model list is %s but the default is ready",
+    async (initial) => {
+      await using fixture = makeACPFixture({
+        fetch(request, context) {
+          if (
+            request.path === "/api/model" &&
+            context.requests.filter((request) => request.path === "/api/model").length === 1
+          ) {
+            return Response.json({
+              location: {
+                directory: "/workspace",
+                project: { id: "global", directory: "/workspace", canonical: "/workspace" },
+              },
+              data: initial === "empty" ? [] : [secondModel],
+            })
+          }
+          if (request.method === "POST" && request.path === "/api/session") {
+            return Response.json({ data: makeSession("ses_ready") })
+          }
+          return undefined
+        },
+      })
+
+      const session = await fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
+      const model = requireSelectOption(session.configOptions, "model")
+      const choices = flattenSelectOptions(model).map((option) => option.value)
+
+      expect(choices).toContain("test/second-model")
+      expect(choices).toContain("test/test-model")
+      expect(model.currentValue).toBe("test/test-model")
+      expect(fixture.requests.filter((request) => request.path === "/api/model")).toHaveLength(2)
+    },
+  )
 
   test("does not cache a failed catalog load", async () => {
     let modelCalls = 0

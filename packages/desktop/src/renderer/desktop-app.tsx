@@ -13,10 +13,11 @@ import {
   useLanguage,
   useTabs,
   useWslServers,
+  useSsh,
   type LayoutRoute,
   type UpdaterPlatform,
-} from "@opencode-ai/app/desktop"
-import { useTheme } from "@opencode-ai/ui/theme/context"
+} from "@opencode/app/desktop"
+import { useTheme } from "@opencode/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createResource, lazy, Show, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -30,6 +31,7 @@ import { LoadingSplash } from "./startup/splash"
 import { getLastActiveUrl } from "./window/route-storage"
 import { DesktopMemoryRouter } from "./window/router"
 import { availableStartupServer, readyWslConnections } from "./wsl/connections"
+import { createSshConnections } from "./ssh/connections"
 
 const MigrationStatus = lazy(() => import("./migration-status").then((module) => ({ default: module.MigrationStatus })))
 
@@ -85,9 +87,11 @@ function DesktopWindow(props: {
 
   function ReadyApp() {
     const wslServers = useWslServers()
+    const ssh = useSsh()
+    const sshConnections = createSshConnections(props.api.sshServers)
     const language = useLanguage()
     const ready = createMemo(
-      () => !defaultServer.loading && !sidecar.loading && !locale.loading && !wslServers.isLoading,
+      () => !defaultServer.loading && !sidecar.loading && !locale.loading && !wslServers.isLoading && !ssh.loading,
     )
     const servers = createMemo(() => {
       const data = initializationData(sidecar)
@@ -102,6 +106,7 @@ function DesktopWindow(props: {
         })
       }
       list.push(...readyWslConnections(wslServers.data, language.t("wsl.server.label")))
+      list.push(...sshConnections({ servers: ssh.servers }, language.t("ssh.label")))
       return list
     })
     const effectiveDefaultServer = createMemo(() =>
@@ -141,7 +146,10 @@ function DesktopWindow(props: {
       <AppBaseProviders
         locale={locale.latest}
         onNativeTranslations={(bundle) => void props.api.setNativeTranslations(bundle).catch(() => undefined)}
-        onThemeApplied={() => void props.api.themeReady()}
+        onThemeApplied={(mode, scheme) => {
+          void props.api.setTitlebar({ mode, scheme })
+          void props.api.themeReady()
+        }}
       >
         <Show when={true}>{(_) => <ReadyApp />}</Show>
       </AppBaseProviders>

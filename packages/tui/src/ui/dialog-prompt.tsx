@@ -1,13 +1,15 @@
 import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
-import { useDialog } from "./dialog"
+import { useDialog, type DialogSize } from "./dialog"
 import { Show, createEffect, createSignal, onMount, type JSX } from "solid-js"
 import { Spinner } from "../component/spinner"
 import { useConfig } from "../config"
+import { useRenderer } from "@opentui/solid"
 
 export type DialogPromptProps = {
   title: string
+  size?: DialogSize
   description?: () => JSX.Element
   placeholder?: string
   value?: string
@@ -19,6 +21,7 @@ export type DialogPromptProps = {
 
 export function DialogPrompt(props: DialogPromptProps) {
   const dialog = useDialog()
+  const renderer = useRenderer()
   const theme = useTheme("elevated")
   const shortcuts = Keymap.useShortcuts()
   const config = useConfig().data
@@ -46,8 +49,28 @@ export function DialogPrompt(props: DialogPromptProps) {
     ],
   }))
 
+  Keymap.createLayer(() => ({
+    mode: "modal",
+    enabled: props.onCancel !== undefined,
+    priority: 1,
+    commands: [
+      {
+        bind: "escape",
+        title: "Back",
+        group: "Dialog",
+        run: () => {
+          if (renderer.getSelection()) {
+            renderer.clearSelection()
+            return
+          }
+          if (!props.busy) props.onCancel?.()
+        },
+      },
+    ],
+  }))
+
   onMount(() => {
-    dialog.setSize("medium")
+    dialog.setSize(props.size ?? "medium")
     setTimeout(() => {
       if (!textarea || textarea.isDestroyed) return
       if (props.busy) return
@@ -78,7 +101,12 @@ export function DialogPrompt(props: DialogPromptProps) {
         <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
           {props.title}
         </text>
-        <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
+        <text
+          fg={theme.text.subdued}
+          onMouseUp={() => {
+            if (!props.busy) (props.onCancel ?? dialog.clear)()
+          }}
+        >
           esc
         </text>
       </box>
@@ -100,11 +128,11 @@ export function DialogPrompt(props: DialogPromptProps) {
           cursorStyle={config.cursor}
         />
         <Show when={props.busy}>
-          <Spinner color={theme.text.subdued}>{props.busyText ?? "Working..."}</Spinner>
+          <Spinner color={theme.text.subdued}>{props.busyText ?? "Working…"}</Spinner>
         </Show>
       </box>
       <box paddingBottom={1} gap={1} flexDirection="row">
-        <Show when={!props.busy} fallback={<text fg={theme.text.subdued}>processing...</text>}>
+        <Show when={!props.busy} fallback={<text fg={theme.text.subdued}>processing…</text>}>
           <Show when={shortcuts.get("dialog.prompt.submit")}>
             <text fg={theme.text.default}>
               {shortcuts.get("dialog.prompt.submit")} <span style={{ fg: theme.text.subdued }}>submit</span>

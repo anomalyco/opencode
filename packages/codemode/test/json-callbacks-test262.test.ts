@@ -236,7 +236,7 @@ describe("CodeMode JSON callback boundaries", () => {
         },
         "stringify",
         [Object.fromEntries([["constructor", 1]])],
-        { type: "CallExpression" },
+        { type: "CallExpression", start: 0, end: 0 },
       ),
     ).toThrow("blocked property 'constructor'")
   })

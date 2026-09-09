@@ -1,6 +1,6 @@
 import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect"
 import type { Diagnostic } from "../codemode.js"
-import type { SafeObject } from "../tool-runtime.js"
+import type { SafeObject } from "../data.js"
 import {
   type AstNode,
   CodeModeFunction,
@@ -14,25 +14,25 @@ import { caughtErrorValue, normalizeError } from "./errors.js"
 import { applyCollectionCallback, isSupportedCallback, type CallbackRunner, type SupportedCallback } from "./methods.js"
 import { typeofValue } from "./references.js"
 import { createAggregateErrorValue } from "../stdlib/value.js"
-import { CodeModePromise } from "../values.js"
+import { Values } from "../values.js"
 import type { SyncIteratorRunner } from "./iterator.js"
 
 // Observation only controls rejection reporting; program completion interrupts all promise work.
 export class PromiseRuntime<R> {
-  private readonly active = new Set<CodeModePromise>()
-  private readonly ids = new WeakMap<CodeModePromise, number>()
-  private readonly observed = new WeakSet<CodeModePromise>()
+  private readonly active = new Set<Values.Promise>()
+  private readonly ids = new WeakMap<Values.Promise, number>()
+  private readonly observed = new WeakSet<Values.Promise>()
   private readonly failures = new Map<number, Diagnostic>()
   private nextID = 0
 
   constructor(private readonly scope: Scope.Scope) {}
 
-  create(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<CodeModePromise, never, R> {
+  create(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<Values.Promise, never, R> {
     return Effect.suspend(() => {
       // Allocate before forking so reruns get distinct IDs and diagnostics retain creation order.
       const id = this.nextID++
       return Effect.map(Effect.forkIn(effect, this.scope, { startImmediately: true }), (fiber) => {
-        const promise = new CodeModePromise(fiber)
+        const promise = new Values.Promise(fiber)
         this.active.add(promise)
         this.ids.set(promise, id)
         fiber.addObserver((exit) => {
@@ -53,14 +53,14 @@ export class PromiseRuntime<R> {
   }
 
   // Observation must be recorded when responsibility transfers, before the consumer fiber runs.
-  markObserved(promise: CodeModePromise): void {
+  markObserved(promise: Values.Promise): void {
     this.observed.add(promise)
     const id = this.ids.get(promise)
     this.ids.delete(promise)
     if (id !== undefined) this.failures.delete(id)
   }
 
-  await(promise: CodeModePromise): Effect.Effect<Exit.Exit<unknown, unknown>> {
+  await(promise: Values.Promise): Effect.Effect<Exit.Exit<unknown, unknown>> {
     return Fiber.await(promise.fiber)
   }
 
@@ -91,10 +91,10 @@ export const resolvePromiseValue = <R>(
   runner: CallbackRunner<R>,
   value: unknown,
   node: AstNode,
-  own?: { promise?: CodeModePromise },
+  own?: { promise?: Values.Promise },
 ): Effect.Effect<unknown, unknown, R> => {
   if (own?.promise !== undefined && value === own.promise) return Effect.fail(selfResolutionError(node))
-  if (value instanceof CodeModePromise) return runner.settlePromise(value)
+  if (value instanceof Values.Promise) return runner.settlePromise(value)
   if (value === null || typeof value !== "object" || !Object.hasOwn(value, "then")) return Effect.succeed(value)
   const then = (value as SafeObject).then
   if (typeofValue(then) !== "function") return Effect.succeed(value)
@@ -123,9 +123,9 @@ export const resolvePromise = <R>(
   promises: PromiseRuntime<R>,
   value: unknown,
   node: AstNode,
-): Effect.Effect<CodeModePromise, never, R> => {
-  if (value instanceof CodeModePromise) return Effect.succeed(value)
-  const box: { promise?: CodeModePromise } = {}
+): Effect.Effect<Values.Promise, never, R> => {
+  if (value instanceof Values.Promise) return Effect.succeed(value)
+  const box: { promise?: Values.Promise } = {}
   return Effect.map(promises.create(resolvePromiseValue(runner, value, node, box)), (promise) => {
     box.promise = promise
     return promise
@@ -155,7 +155,7 @@ export const invokePromiseMethod = <R>(
           node,
         ).as("TypeError")
       }
-      const items: Array<CodeModePromise> = []
+      const items: Array<Values.Promise> = []
       while (true) {
         const step = yield* cursor.next
         if (step.done) break
@@ -227,7 +227,7 @@ export const invokePromiseInstanceMethod = <R>(
   ref: PromiseInstanceMethodReference,
   args: Array<unknown>,
   node: AstNode,
-): Effect.Effect<CodeModePromise, never, R> => {
+): Effect.Effect<Values.Promise, never, R> => {
   const method = `Promise.prototype.${ref.name}`
   promises.markObserved(ref.promise)
   if (ref.name === "finally") {
@@ -243,7 +243,7 @@ export const constructPromise = <R>(
   promises: PromiseRuntime<R>,
   executor: unknown,
   node: AstNode,
-): Effect.Effect<CodeModePromise, unknown, R> => {
+): Effect.Effect<Values.Promise, unknown, R> => {
   if (!(executor instanceof CodeModeFunction)) {
     throw new InterpreterRuntimeError(
       "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... })).",
@@ -252,7 +252,7 @@ export const constructPromise = <R>(
   }
   return Effect.gen(function* () {
     const deferred = Deferred.makeUnsafe<unknown, unknown>()
-    const box: { promise?: CodeModePromise } = {}
+    const box: { promise?: Values.Promise } = {}
     const promise = yield* promises.create(
       Effect.flatMap(Deferred.await(deferred), (value) => resolvePromiseValue(runner, value, node, box)),
     )
@@ -294,7 +294,7 @@ const reactionHandler = (value: unknown, method: string, node: AstNode): Support
 // Teardown bypasses handlers; settled reactions yield once so handlers never run inline.
 const reactionExit = <R>(
   promises: PromiseRuntime<R>,
-  source: CodeModePromise,
+  source: Values.Promise,
 ): Effect.Effect<Exit.Exit<unknown, unknown>, unknown, R> =>
   Effect.gen(function* () {
     const exit = yield* promises.await(source)
@@ -306,13 +306,13 @@ const reactionExit = <R>(
 const chainReaction = <R>(
   runner: CallbackRunner<R>,
   promises: PromiseRuntime<R>,
-  source: CodeModePromise,
+  source: Values.Promise,
   onFulfilled: SupportedCallback | undefined,
   onRejected: SupportedCallback | undefined,
   method: string,
   node: AstNode,
-): Effect.Effect<CodeModePromise, never, R> => {
-  const box: { promise?: CodeModePromise } = {}
+): Effect.Effect<Values.Promise, never, R> => {
+  const box: { promise?: Values.Promise } = {}
   const body = Effect.gen(function* () {
     const exit = yield* reactionExit(promises, source)
     const handler = Exit.isSuccess(exit) ? onFulfilled : onRejected
@@ -330,11 +330,11 @@ const chainReaction = <R>(
 const chainFinally = <R>(
   runner: CallbackRunner<R>,
   promises: PromiseRuntime<R>,
-  source: CodeModePromise,
+  source: Values.Promise,
   cleanup: SupportedCallback | undefined,
   method: string,
   node: AstNode,
-): Effect.Effect<CodeModePromise, never, R> =>
+): Effect.Effect<Values.Promise, never, R> =>
   promises.create(
     Effect.gen(function* () {
       const exit = yield* reactionExit(promises, source)

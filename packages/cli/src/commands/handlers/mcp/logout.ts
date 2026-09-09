@@ -1,9 +1,9 @@
 import { EOL } from "node:os"
 import { Effect } from "effect"
-import { OpenCode } from "@opencode-ai/client"
+import { OpenCode } from "@opencode/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
-import { Service } from "@opencode-ai/client/effect/service"
+import { Service } from "@opencode/client/effect/service"
 import { ServiceConfig } from "../../../services/service-config"
 import { resolveIntegration } from "./resolve"
 

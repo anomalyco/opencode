@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Exit, Fiber } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
-import { Form } from "@opencode-ai/core/form"
-import { SessionSchema } from "@opencode-ai/core/session/schema"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { Form } from "@opencode/core/form"
+import { SessionSchema } from "@opencode/core/session/schema"
 import { testEffect } from "./lib/effect"
 
 const forms = AppNodeBuilder.build(LayerNode.group([Bus.node, Form.node]))
@@ -19,6 +19,17 @@ const input = {
 } satisfies Form.CreateInput
 
 describe("Form", () => {
+  it.effect("validates absolute URI formats without restricting schemes", () =>
+    Effect.sync(() => {
+      const fields = [{ key: "uri", type: "string", format: "uri" }] satisfies ReadonlyArray<Form.Field>
+
+      expect(Form.validateAnswer(fields, { uri: "https://example.com/path" })).toBeUndefined()
+      expect(Form.validateAnswer(fields, { uri: "mailto:user@example.com" })).toBeUndefined()
+      expect(Form.validateAnswer(fields, { uri: "relative/path" })).toBe("Expected URI for form field: uri")
+      expect(Form.validateAnswer(fields, { uri: "://invalid" })).toBe("Expected URI for form field: uri")
+    }),
+  )
+
   it.effect("returns a terminal cancelled state from ask", () =>
     Effect.gen(function* () {
       const service = yield* Form.Service

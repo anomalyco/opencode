@@ -1,57 +1,90 @@
 {
   "$schema": "https://v2-8-13.turborepo.dev/schema.json",
+  "globalDependencies": [
+    "patches/**",
+    "bunfig.toml",
+    ".npmrc",
+    ".github/actions/setup-bun/**",
+    ".github/workflows/test.yml"
+  ],
   "globalEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "tasks": {
     "typecheck": {},
-    "@opencode-ai/enterprise#typecheck": {
-      "dependsOn": ["@opencode-ai/core#typecheck"]
+    "test:components": {
+      "outputs": [],
+      "cache": false
     },
-    "@opencode-ai/sdk#typecheck": {
-      "dependsOn": ["@opencode-ai/core#typecheck"]
+    "@opencode/enterprise#typecheck": {
+      "dependsOn": ["@opencode/core#typecheck"]
     },
-    "@opencode-ai/server#typecheck": {
-      "dependsOn": ["@opencode-ai/core#typecheck"]
+    "@opencode/sdk#typecheck": {
+      "dependsOn": ["@opencode/core#typecheck"]
     },
-    "@opencode-ai/simulation#typecheck": {
-      "dependsOn": ["@opencode-ai/core#typecheck"]
+    "@opencode/server#typecheck": {
+      "dependsOn": ["@opencode/core#typecheck"]
     },
-    "@opencode-ai/tui#typecheck": {
-      "dependsOn": ["@opencode-ai/core#typecheck"]
+    "@opencode/simulation#typecheck": {
+      "dependsOn": ["@opencode/core#typecheck"]
+    },
+    "@opencode/tui#typecheck": {
+      "dependsOn": ["@opencode/core#typecheck"]
     },
     "build": {
       "dependsOn": [],
       "outputs": ["dist/**"]
     },
-    "@opencode-ai/codemode#test": {
+    "@opencode/ai#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/core#test": {
+    "@opencode/codemode#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/function#test": {
-      "outputs": []
-    },
-    "@opencode-ai/cli#test": {
+    "@opencode/core#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/tui#test": {
+    "@opencode/function#test": {
+      "outputs": []
+    },
+    "@opencode/desktop#test": {
+      "outputs": [],
+      "cache": false
+    },
+    "@opencode/httpapi-codegen#test": {
+      "outputs": []
+    },
+    "@opencode/server#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/app#test": {
+    "@opencode/cli#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/ui#test": {
+    "@opencode/tui#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/session-ui#test": {
+    "@opencode/latex#test": {
       "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@opencode/app#test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@opencode/ui#test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@opencode/session-ui#test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@opencode/sdk#verify:package": {
       "outputs": []
     }
   }

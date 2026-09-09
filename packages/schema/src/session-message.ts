@@ -1,6 +1,7 @@
 export * as SessionMessage from "./session-message.js"
 
 import { Schema } from "effect"
+import { SessionProviderContext } from "./session-provider-context.js"
 import { optional } from "./schema.js"
 import { Content } from "./tool.js"
 import { Location } from "./location.js"
@@ -195,6 +196,11 @@ export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning,
 )
 export type AssistantContent = AssistantText | AssistantReasoning | AssistantTool
 
+export const AssistantContentEncoded = Schema.toEncoded(AssistantContent).annotate({
+  identifier: "Session.Message.AssistantContent.Encoded",
+})
+export type AssistantContentEncoded = typeof AssistantContentEncoded.Type
+
 export interface AssistantRetry extends Schema.Schema.Type<typeof AssistantRetry> {}
 export const AssistantRetry = Schema.Struct({
   attempt: PositiveInt,
@@ -223,6 +229,8 @@ export const Assistant = Schema.Struct({
   retry: AssistantRetry.pipe(optional),
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
+    /** When the provider response body ended, before tool settlement. */
+    streamed: DateTimeUtcFromMillis.pipe(optional),
     completed: DateTimeUtcFromMillis.pipe(optional),
   }),
 }).annotate({ identifier: "Session.Message.Assistant" })
@@ -243,8 +251,11 @@ export const CompactionCompleted = Schema.Struct({
   ...CompactionBase,
   status: Schema.tag("completed"),
   reason: Schema.Literals(["auto", "manual"]),
+  model: Model.Ref.pipe(optional),
+  providerState: ProviderState.pipe(optional),
   summary: Schema.String,
   recent: Schema.String,
+  providerContext: SessionProviderContext.Info.pipe(optional),
 }).annotate({ identifier: "Session.Message.Compaction.Completed" })
 
 export interface CompactionFailed extends Schema.Schema.Type<typeof CompactionFailed> {}

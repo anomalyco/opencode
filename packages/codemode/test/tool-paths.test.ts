@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { CodeMode, Tool } from "../src/index.js"
+import { CodeMode, Namespace, Tool } from "../src/index.js"
 
 const echo = (description: string, result: string) =>
   Tool.make({
@@ -29,7 +29,7 @@ describe("dotted tool names", () => {
     const catalog = runtime.catalog()
     expect(catalog).toHaveLength(1)
     expect(catalog[0]?.path).toBe("api.issues.list")
-    expect(catalog[0]?.signature).toStartWith("tools.api.issues.list(input:")
+    expect(catalog[0]?.signature).toStartWith("tools.api.issues.list(")
   })
 
   test("the advertised dotted path is executable", async () => {
@@ -138,9 +138,15 @@ describe("tool input diagnostics", () => {
   })
 
   test("a wrong argument count keeps the existing error without a stale-signature hint", async () => {
-    const diagnostic = await failure(runtime, `return await tools.notes.echo()`)
+    const diagnostic = await failure(runtime, `return await tools.notes.echo({}, {})`)
     expect(diagnostic.kind).toBe("InvalidToolInput")
     expect(diagnostic.suggestions).toBeUndefined()
+  })
+
+  test("an empty-input tool advertises () and runs with zero arguments", async () => {
+    const empty = CodeMode.make({ tools: { ping: echo("Ping", "pong") } })
+    expect(empty.catalog()[0]?.signature).toBe("tools.ping(): Promise<string>")
+    expect(await value(empty, `return await tools.ping()`)).toBe("pong")
   })
 })
 
@@ -174,6 +180,48 @@ describe("blocked member names on tool paths", () => {
     const diagnostic = await failure(runtime, `const x = {}; return x.constructor`)
     expect(diagnostic.message).toContain("constructor")
     expect(Object.keys(Object.prototype)).toEqual([])
+  })
+})
+
+describe("namespace metadata", () => {
+  const tools = {
+    api: Namespace.make({
+      description: "Manage the workspace",
+      tools: {
+        users: Namespace.make({
+          description: "Directory and account administration",
+          tools: { list: echo("List users", "users") },
+        }),
+        status: echo("Read service status", "ok"),
+      },
+    }),
+    plain: { read: echo("Read plain data", "plain") },
+  }
+  const runtime = CodeMode.make({ tools })
+
+  test("the wrapper does not add a segment to callable paths", async () => {
+    expect(runtime.catalog().map((tool) => tool.path)).toEqual(["api.status", "api.users.list", "plain.read"])
+    expect(await value(runtime, `return await tools.api.users.list({})`)).toBe("users")
+  })
+
+  test("search matches descriptions from every enclosing namespace", async () => {
+    const workspace = await value(runtime, `return search({ query: "workspace" })`)
+    expect((workspace as { items: Array<{ path: string }> }).items.map((item) => item.path)).toEqual([
+      "tools.api.status",
+      "tools.api.users.list",
+    ])
+
+    const directory = await value(runtime, `return search({ query: "account administration" })`)
+    expect((directory as { items: Array<{ path: string }> }).items.map((item) => item.path)).toEqual([
+      "tools.api.users.list",
+    ])
+  })
+
+  test("a namespace description is optional", async () => {
+    const optional = CodeMode.make({
+      tools: { api: Namespace.make({ tools: { read: echo("Read data", "read") } }) },
+    })
+    expect(await value(optional, `return await tools.api.read({})`)).toBe("read")
   })
 })
 

@@ -1,9 +1,9 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import { currentSession } from "../utils/mock-server"
 import { installSseTransport } from "../utils/sse-transport"
 
-const serverA = "http://127.0.0.1:4096"
+const serverA = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 const serverB = "http://127.0.0.1:4097"
 const sessionA = session("ses_server_a", "C:/server-a", "Server A session")
 const sessionB = session("ses_server_b", "/home/server-b", "Server B session")
@@ -12,17 +12,17 @@ test("closing the active server's last tab opens the remaining server tab", asyn
   const requests: string[] = []
   await mockServers(page, requests)
   await page.addInitScript(
-    ({ serverB, sessionA, sessionB }) => {
+    ({ serverA, serverB, sessionA, sessionB }) => {
       localStorage.setItem("opencode.global.dat:server", JSON.stringify({ list: [serverB] }))
       localStorage.setItem(
         "opencode.window.browser.dat:tabs",
         JSON.stringify([
-          { type: "session", server: "http://127.0.0.1:4096", sessionId: sessionA },
+          { type: "session", server: serverA, sessionId: sessionA },
           { type: "session", server: serverB, sessionId: sessionB },
         ]),
       )
     },
-    { serverB, sessionA: sessionA.id, sessionB: sessionB.id },
+    { serverA, serverB, sessionA: sessionA.id, sessionB: sessionB.id },
   )
 
   const hrefA = `/server/${base64Encode(serverA)}/session/${sessionA.id}`
@@ -55,7 +55,7 @@ function session(id: string, directory: string, title: string) {
 async function mockServers(page: Page, requests: string[]) {
   await installSseTransport(page, { server: serverA })
   await installSseTransport(page, { server: serverB })
-  await page.route("**/*", async (route) => {
+  await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url())
     if (url.origin !== serverA && url.origin !== serverB) return route.fallback()
     requests.push(url.toString())
@@ -86,7 +86,12 @@ async function mockServers(page: Page, requests: string[]) {
       }
       return json(route, url.pathname === "/api/project" ? [project] : { id: project.id, directory: current.directory })
     }
-    if (url.pathname === "/api/location") return json(route, { directory: current.directory })
+    if (url.pathname === "/api/location")
+      return json(route, {
+        directory: current.directory,
+        project: { id: current.projectID, directory: current.directory, canonical: current.directory },
+      })
+    if (url.pathname === "/api/worktree") return json(route, [{ directory: current.directory }])
     if (url.pathname === "/api/vcs")
       return json(route, {
         location: { directory: current.directory },

@@ -1,5 +1,5 @@
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
-import { CodeModeDate } from "../values.js"
+import { Values } from "../values.js"
 import { coerceToNumber, coerceToString } from "./value.js"
 
 const dateSetterArguments = new Map<string, number>([
@@ -66,7 +66,7 @@ export const invokeDateStatic = (name: string, args: Array<unknown>, node: AstNo
 export const dateSetterArgumentCount = (name: string): number | undefined => dateSetterArguments.get(name)
 
 export const invokeDateMethod = (
-  value: CodeModeDate,
+  value: Values.Date,
   name: string,
   args: Array<number>,
   node: AstNode,
@@ -174,7 +174,7 @@ export const invokeDateMethod = (
   }
 }
 
-const updateDate = (value: CodeModeDate, time: number): number => {
+const updateDate = (value: Values.Date, time: number): number => {
   value.time = time
   return time
 }

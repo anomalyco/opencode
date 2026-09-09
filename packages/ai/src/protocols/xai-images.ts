@@ -2,14 +2,7 @@ import { Effect, Encoding, Schema } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { GeneratedImage, ImageModel, ImageResponse, type ImageRequestFor, type ImageRoute } from "../image.js"
 import { Auth, type Definition as AuthDefinition } from "../route/auth.js"
-import {
-  InvalidProviderOutputReason,
-  AIError,
-  Usage,
-  mergeHttpOptions,
-  mergeJsonRecords,
-  type HttpOptions,
-} from "../schema/index.js"
+import { Usage, mergeHttpOptions, mergeJsonRecords, type HttpOptions } from "../schema/index.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 import { ImageInputs } from "./utils/image-input.js"
 
@@ -94,13 +87,6 @@ const nativeOptions = (options: XAIImageOptions | undefined) => {
   }
 }
 
-const invalidOutput = (message: string) =>
-  new AIError({
-    module: ADAPTER,
-    method: "generate",
-    reason: new InvalidProviderOutputReason({ message, route: ADAPTER }),
-  })
-
 const applyQuery = (url: string, query: Record<string, string> | undefined) => {
   if (!query) return url
   const next = new URL(url)
@@ -120,7 +106,7 @@ export const model = (input: ModelInput) => {
         return undefined
       })
       if (imageReferences.some((image) => image === undefined))
-        return yield* ImageInputs.invalid(ADAPTER, "xAI Images accepts image URLs, data URLs, bytes, and file IDs")
+        return yield* ImageInputs.invalid("xAI Images accepts image URLs, data URLs, bytes, and file IDs")
       const requestBody = mergeJsonRecords(
         {
           model: request.model.id,
@@ -149,17 +135,17 @@ export const model = (input: ModelInput) => {
           HttpClientRequest.bodyText(text, "application/json"),
         ),
       )
-      const payload = yield* response.json.pipe(
-        Effect.mapError(() => invalidOutput("Failed to read the xAI Images response")),
-      )
-      const decoded = yield* Schema.decodeUnknownEffect(XAIImageResponse)(payload).pipe(
-        Effect.mapError(() => invalidOutput("xAI Images returned an invalid response")),
+      const output = yield* ProviderShared.imageResponse(ADAPTER, "xAI Images", response)
+      const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(XAIImageResponse))(output.body).pipe(
+        Effect.mapError((cause) => output.invalid("xAI Images returned an invalid response", cause)),
       )
       const images = yield* Effect.forEach(decoded.data, (item, index) => {
         const mediaType = item.mime_type ?? "application/octet-stream"
         if (item.b64_json)
           return Effect.fromResult(Encoding.decodeBase64(item.b64_json)).pipe(
-            Effect.mapError(() => invalidOutput(`xAI Images result ${index} contains invalid base64 data`)),
+            Effect.mapError((cause) =>
+              output.invalid(`xAI Images result ${index} contains invalid base64 data`, cause),
+            ),
             Effect.map(
               (data) =>
                 new GeneratedImage({
@@ -183,9 +169,9 @@ export const model = (input: ModelInput) => {
                   : { xai: { revisedPrompt: item.revised_prompt } },
             }),
           )
-        return Effect.fail(invalidOutput(`xAI Images result ${index} has neither image data nor a URL`))
+        return Effect.fail(output.invalid(`xAI Images result ${index} has neither image data nor a URL`))
       })
-      if (images.length === 0) return yield* invalidOutput("xAI Images returned no images")
+      if (images.length === 0) return yield* output.invalid("xAI Images returned no images")
       const usage = ProviderShared.isRecord(decoded.usage) ? decoded.usage : undefined
       return new ImageResponse({
         images,

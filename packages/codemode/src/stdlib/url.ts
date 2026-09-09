@@ -1,3 +1,8 @@
+import { type AstNode, InterpreterRuntimeError, UriFunction } from "../interpreter/model.js"
+import { Values } from "../values.js"
+import { toProgram } from "../data.js"
+import { coerceToString } from "./value.js"
+
 export const urlProperties = new Set([
   "href",
   "origin",
@@ -42,7 +47,7 @@ export const urlSearchParamsMethods = new Set([
   "toString",
 ])
 
-export const uriArgument = (value: unknown, label: string): string => coerceToString(boundedData(value, label))
+export const uriArgument = (value: unknown, label: string): string => coerceToString(toProgram(value, label))
 
 export const invokeUriFunction = (ref: UriFunction, args: Array<unknown>, node: AstNode): string => {
   const value = uriArgument(args[0], `${ref.name} input`)
@@ -66,7 +71,7 @@ export const invokeUriFunction = (ref: UriFunction, args: Array<unknown>, node: 
 }
 
 export const urlArgument = (value: unknown, label: string): string =>
-  value instanceof CodeModeURL ? value.url.href : uriArgument(value, label)
+  value instanceof Values.URL ? value.url.href : uriArgument(value, label)
 
 export const invokeURLStatic = (name: string, args: Array<unknown>, node: AstNode): unknown => {
   if (!urlStatics.has(name)) throw new InterpreterRuntimeError(`URL.${name} is not available.`, node)
@@ -75,16 +80,13 @@ export const invokeURLStatic = (name: string, args: Array<unknown>, node: AstNod
   const base = args[1] === undefined ? undefined : urlArgument(args[1], `URL.${name} base`)
   try {
     const url = new URL(input, base)
-    return name === "canParse" ? true : new CodeModeURL(url)
+    return name === "canParse" ? true : new Values.URL(url)
   } catch {
     return name === "canParse" ? false : null
   }
 }
 
-export const invokeURLMethod = (value: CodeModeURL, name: string, node: AstNode): string => {
+export const invokeURLMethod = (value: Values.URL, name: string, node: AstNode): string => {
   if (name === "toString" || name === "toJSON") return value.url.href
   throw new InterpreterRuntimeError(`URL method '${name}' is not available.`, node)
 }
-import { type AstNode, InterpreterRuntimeError, UriFunction } from "../interpreter/model.js"
-import { CodeModeURL } from "../values.js"
-import { boundedData, coerceToString } from "./value.js"

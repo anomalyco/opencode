@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
-import { Agent } from "@opencode-ai/schema/agent"
-import { Config } from "@opencode-ai/schema/config"
-import { Model } from "@opencode-ai/schema/model"
-import { Prompt } from "@opencode-ai/schema/prompt"
-import { Session } from "@opencode-ai/schema/session"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
+import { Agent } from "@opencode/schema/agent"
+import { Config } from "@opencode/schema/config"
+import { Model } from "@opencode/schema/model"
+import { Prompt } from "@opencode/schema/prompt"
+import { Session } from "@opencode/schema/session"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Vcs } from "@opencode/schema/vcs"
 
 const Client = await import("../src/effect")
 
@@ -14,6 +15,7 @@ test("effect entrypoint exposes canonical Schema contracts", () => {
   expect(Client.Config).toBe(Config)
   expect(Client.Model).toBe(Model)
   expect(Client.Session).toBe(Session)
+  expect(Client.Vcs.Base).toBe(Vcs.Base)
 })
 
 test("generated Effect API names canonical and composed outputs", async () => {

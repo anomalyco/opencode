@@ -1,21 +1,21 @@
 import { expect } from "bun:test"
-import { LanguageModel } from "@opencode-ai/ai"
-import { OpenAIChat } from "@opencode-ai/ai/protocols"
-import { TestLLM } from "@opencode-ai/ai/testing"
-import { AISDK } from "@opencode-ai/core/aisdk"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Generate } from "@opencode-ai/core/generate"
-import { Integration } from "@opencode-ai/core/integration"
-import { ModelResolver } from "@opencode-ai/core/model-resolver"
-import { ID, Info, Ref } from "@opencode-ai/core/model"
-import { Provider } from "@opencode-ai/core/provider"
-import { Npm } from "@opencode-ai/util/npm"
+import { LanguageModel } from "@opencode/ai"
+import { OpenAIChat } from "@opencode/ai/protocols"
+import { TestLLM } from "@opencode/ai/testing"
+import { AISDK } from "@opencode/core/aisdk"
+import { Catalog } from "@opencode/core/catalog"
+import { Generate } from "@opencode/core/generate"
+import { Integration } from "@opencode/core/integration"
+import { ModelResolver } from "@opencode/core/model-resolver"
+import { ID, Info, Ref } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
+import { Npm } from "@opencode/util/npm"
 import { Effect, Layer } from "effect"
 import { testEffect } from "./lib/effect"
 
 const selected = Info.make({
   ...Info.default(Provider.ID.make("test-provider"), ID.make("gemini")),
-  package: Provider.aisdk("@ai-sdk/mistral"),
+  package: Provider.aisdk("@ai-sdk/cohere"),
 })
 const runtime = LanguageModel.make({ id: "gemini", provider: "test-provider", route: OpenAIChat.route })
 
@@ -38,6 +38,7 @@ const integrations = Layer.mock(Integration.Service, {
     active: () => Effect.undefined,
     resolve: () => Effect.die("unused"),
     key: () => Effect.die("unused"),
+    activate: () => Effect.die("unused"),
     update: () => Effect.die("unused"),
     remove: () => Effect.die("unused"),
   },
@@ -64,7 +65,7 @@ const aisdk = Layer.mock(AISDK.Service, {
   },
   model: () => Effect.succeed(runtime),
 })
-const client = TestLLM.clientLayer.pipe(Layer.provide(TestLLM.layer({ fallback: TestLLM.text("OK", "generate") })))
+const client = TestLLM.testLayer({ fallback: TestLLM.text("OK", "generate") })
 
 const resolver = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk)))
 const it = testEffect(Generate.layer.pipe(Layer.provide(Layer.merge(resolver, client))))

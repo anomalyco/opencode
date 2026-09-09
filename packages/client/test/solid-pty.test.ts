@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { OpenCode } from "../src/promise"
-import { createPtyClient } from "../src/solid"
+import { createPersistentPtyClient, createPtyClient } from "../src/solid"
 
 describe("createPtyClient", () => {
   test("mints an authenticated ticket before opening the terminal socket", async () => {
@@ -64,5 +64,38 @@ describe("createPtyClient", () => {
 
     await expect(pty.connect({ ptyID: "pty_1", location: { directory: "/repo" } })).rejects.toThrow()
     expect(opened).toBe(false)
+  })
+})
+
+describe("createPersistentPtyClient", () => {
+  test("mints an authenticated ticket before opening the persistent terminal socket", async () => {
+    let request: Request | undefined
+    let socketURL: URL | undefined
+    const socket = { binaryType: "blob" } as unknown as WebSocket
+    const api = OpenCode.make({
+      baseUrl: "https://server.example/base",
+      headers: { Authorization: "Basic credential" },
+      fetch: async (input, init) => {
+        request = input instanceof Request ? input : new Request(input, init)
+        return Response.json({ data: { ticket: "persistent-ticket", expires_in: 60 } })
+      },
+    })
+    const pty = createPersistentPtyClient(api, {
+      url: "https://server.example/base",
+      openSocket(url) {
+        socketURL = url
+        return socket
+      },
+    })
+
+    expect(await pty.connect({ ptyID: "pty_1", cursor: 42, attachmentID: "attachment_1", takeover: true })).toBe(socket)
+    expect(request?.method).toBe("POST")
+    expect(request?.url).toBe("https://server.example/api/experimental/persistent-pty/pty_1/connect-token")
+    expect(request?.headers.get("authorization")).toBe("Basic credential")
+    expect(request?.headers.get("x-opencode-ticket")).toBe("1")
+    expect(socketURL?.toString()).toBe(
+      "wss://server.example/api/experimental/persistent-pty/pty_1/connect?ticket=persistent-ticket&cursor=42&attachment_id=attachment_1&takeover=true&input_protocol=1",
+    )
+    expect(socket.binaryType).toBe("arraybuffer")
   })
 })

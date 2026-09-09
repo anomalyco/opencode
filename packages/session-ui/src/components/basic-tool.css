@@ -59,7 +59,7 @@
     flex: 0 1 auto;
     min-width: 0;
     max-width: 100%;
-    font-size: 14px;
+    font-size: 13px;
   }
 
   [data-slot="basic-tool-tool-info-structured"] {
@@ -84,10 +84,10 @@
   [data-slot="basic-tool-tool-title"] {
     flex-shrink: 0;
     font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-size: 13px;
     font-style: normal;
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-compact);
     letter-spacing: var(--letter-spacing-normal);
     color: var(--v2-text-text-base);
 
@@ -109,10 +109,10 @@
     white-space: nowrap;
     font-family: var(--font-family-sans);
     font-variant-numeric: tabular-nums;
-    font-size: 14px;
+    font-size: 13px;
     font-style: normal;
     font-weight: var(--font-weight-regular);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-compact);
     letter-spacing: var(--letter-spacing-normal);
     color: var(--v2-text-text-muted);
 
@@ -155,10 +155,10 @@
     white-space: nowrap;
     font-family: var(--font-family-sans);
     font-variant-numeric: tabular-nums;
-    font-size: 14px;
+    font-size: 13px;
     font-style: normal;
     font-weight: var(--font-weight-regular);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-compact);
     letter-spacing: var(--letter-spacing-normal);
     color: var(--v2-text-text-muted);
   }
@@ -172,6 +172,10 @@
 
 [data-component="collapsible"].tool-collapsible[data-compact="true"] > [data-slot="collapsible-trigger"] {
   height: 28px;
+
+  [data-slot="collapsible-arrow"] {
+    width: 16px;
+  }
 
   [data-component="tool-trigger"],
   [data-slot="basic-tool-tool-info-main"] {
@@ -228,6 +232,7 @@
     flex: 1 1 auto;
     min-width: 0;
     align-items: center;
+    gap: 8px;
   }
 
   [data-component="task-tool-spinner"] {
@@ -246,22 +251,43 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 0;
+    overflow: hidden;
     flex-shrink: 0;
     color: var(--v2-text-text-faint);
-    margin-left: auto;
+    margin-inline-start: 0;
     opacity: 0;
+    transform: translateX(-4px);
     transition:
+      width 0.15s ease,
+      margin-inline-start 0.15s ease,
       opacity 0.15s ease,
-      color 0.15s ease;
+      color 0.15s ease,
+      transform 0.15s ease;
+
+    :dir(rtl) & {
+      transform: translateX(4px);
+    }
+
+    @media (hover: none) {
+      width: 16px;
+      margin-inline-start: 2px;
+      opacity: 1;
+      transform: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
   }
 
   [data-component="task-tool-title"] {
     flex-shrink: 0;
     font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-size: 13px;
     font-style: normal;
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-compact);
     letter-spacing: var(--letter-spacing-normal);
     text-transform: capitalize;
     color: var(--task-agent-color-fallback, var(--text-strong));
@@ -277,26 +303,17 @@
     background: color-mix(in srgb, var(--background-stronger) 88%, transparent);
 
     [data-component="task-tool-action"] {
+      width: 16px;
+      margin-inline-start: 2px;
       opacity: 1;
+      transform: none;
     }
   }
 }
 
 [data-component="collapsible"].tool-collapsible:not([data-rail="false"]) {
   > [data-slot="collapsible-content"] {
-    position: relative;
-    margin-inline-start: 12px;
-    padding-inline-start: 16px;
-
-    &::before {
-      content: "";
-      position: absolute;
-      inset-inline-start: 0;
-      top: 0;
-      bottom: 12px;
-      width: 0.5px;
-      background-color: var(--v2-border-border-muted, rgba(0, 0, 0, 0.08));
-    }
+    padding-inline-start: 12px;
   }
 }
 
@@ -312,8 +329,9 @@
 
     [data-component="task-tool-surface"] {
       padding: 8px 12px;
+      gap: 0;
       border-radius: 8px;
-      background: var(--v2-background-bg-layer-01);
+      background: var(--v2-background-bg-layer-02);
     }
 
     [data-component="task-tool-spinner"],
@@ -364,7 +382,7 @@
       background: transparent;
 
       [data-component="task-tool-surface"] {
-        background: var(--v2-background-bg-layer-01);
+        background: var(--v2-background-bg-layer-02);
       }
     }
   }
@@ -403,11 +421,15 @@
   }
 
   .webfetch-link-icon {
-    display: none;
+    display: inline-flex;
     width: 16px;
     height: 16px;
     flex-shrink: 0;
     color: var(--v2-icon-icon-accent, var(--v2-text-text-accent));
+
+    @media (hover: hover) {
+      display: none;
+    }
   }
 
   &:hover {

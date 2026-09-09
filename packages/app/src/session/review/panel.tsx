@@ -1,13 +1,13 @@
 import { createMemo, createResource, createSignal, Show, type JSX } from "solid-js"
-import type { FileDiffInfo } from "@opencode-ai/client/promise"
+import type { FileDiffInfo } from "@opencode/client/promise"
 import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX,
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN,
   SessionReviewV2,
   SessionReviewV2Sidebar,
-} from "@opencode-ai/session-ui/v2/session-review-v2"
-import { SessionReviewFilePreviewV2 } from "@opencode-ai/session-ui/v2/session-review-file-preview-v2"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
+} from "@opencode/session-ui/v2/session-review-v2"
+import { SessionReviewFilePreviewV2 } from "@opencode/session-ui/v2/session-review-file-preview-v2"
+import { DiffChanges } from "@opencode/ui/diff-changes"
 import type {
   SessionReviewComment,
   SessionReviewCommentActions,
@@ -16,8 +16,9 @@ import type {
   SessionReviewDiffStyle,
   SessionReviewFocus,
   SessionReviewLineComment,
-} from "@opencode-ai/session-ui/session-review"
+} from "@opencode/session-ui/session-review"
 import FileTreeV2 from "@/session/files/file-tree-v2"
+import { sortFileTreeV2Paths } from "@/session/files/file-tree-v2-model"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServerSDK } from "@/runtime/server/client"
@@ -83,6 +84,9 @@ export function ReviewPanelView(
     ),
   )
   const searching = createMemo(() => props.state.filter().trim().length > 0)
+  const navigationFiles = createMemo(() =>
+    searching() || props.fileList === "flat" ? filteredFiles() : sortFileTreeV2Paths(filteredFiles()),
+  )
   const kinds = createMemo(() => reviewDiffKinds(diffs()))
   // Changes-only trees omit "M" — every row is already a change; A/D stay visible.
   const treeKinds = createMemo(() => new Map([...kinds()].filter(([, kind]) => kind !== "mix")))
@@ -93,7 +97,7 @@ export function ReviewPanelView(
     if (focus && diffs().some((diff) => diff.file === focus.file)) return focus.file
     const active = props.activeFile
     if (searching()) return active
-    const files = filteredFiles()
+    const files = navigationFiles()
     if (active && files.includes(active)) return active
     return files[0]
   })
@@ -141,7 +145,7 @@ export function ReviewPanelView(
         />
       }
       activeFile={activeDiff()}
-      files={filteredFiles()}
+      files={navigationFiles()}
       onSelectFile={props.onSelectFile}
       diffStyle={props.diffStyle}
       onDiffStyleChange={props.onDiffStyleChange}

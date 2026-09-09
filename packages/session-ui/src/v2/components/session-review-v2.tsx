@@ -1,13 +1,13 @@
-import { useI18n } from "@opencode-ai/ui/context/i18n"
-import { SegmentedControlItem, SegmentedControl } from "@opencode-ai/ui/segmented-control"
-import { TextInput } from "@opencode-ai/ui/text-input"
-import { Keybind } from "@opencode-ai/ui/keybind"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { useI18n } from "@opencode/ui/context/i18n"
+import { SegmentedControlItem, SegmentedControl } from "@opencode/ui/segmented-control"
+import { TextInput } from "@opencode/ui/text-input"
+import { Keybind } from "@opencode/ui/keybind"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Tooltip } from "@opencode/ui/tooltip"
 import type { SessionReviewDiffStyle } from "../../components/session-review"
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
+import { ResizeHandle } from "@opencode/ui/resize-handle"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { useLocale } from "@kobalte/core/i18n"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Show, createEffect, createMemo, createSignal, type JSX } from "solid-js"
@@ -124,6 +124,7 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
           <ScrollView
             data-slot="session-review-v2-sidebar-tree"
             class="group/file-tree-v2"
+            orientation="both"
             thumbVisibility="scroll"
             viewportRef={props.viewportRef}
           >
@@ -152,7 +153,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
   const locale = useLocale()
 
   createEffect(() => {
-    getWorkerPool(props.diffStyle)
+    getWorkerPool()
   })
 
   const fileIndex = () => {

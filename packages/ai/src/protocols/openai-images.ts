@@ -9,14 +9,7 @@ import {
   type ImageRoute,
 } from "../image.js"
 import { Auth, type Definition as AuthDefinition } from "../route/auth.js"
-import {
-  InvalidProviderOutputReason,
-  AIError,
-  Usage,
-  mergeHttpOptions,
-  mergeJsonRecords,
-  type HttpOptions,
-} from "../schema/index.js"
+import { Usage, mergeHttpOptions, mergeJsonRecords, type HttpOptions } from "../schema/index.js"
 import { ProviderShared } from "./shared.js"
 import { ImageInputs } from "./utils/image-input.js"
 import { OpenAIImage } from "./utils/openai-image.js"
@@ -84,13 +77,6 @@ const nativeOptions = (options: OpenAIImageOptions | undefined) => {
   }
 }
 
-const invalidOutput = (message: string) =>
-  new AIError({
-    module: ADAPTER,
-    method: "generate",
-    reason: new InvalidProviderOutputReason({ message, route: ADAPTER }),
-  })
-
 const applyQuery = (url: string, query: Record<string, string> | undefined) => {
   if (!query) return url
   const next = new URL(url)
@@ -104,12 +90,12 @@ export const model = (input: ModelInput) => {
     generate: Effect.fn("OpenAIImages.generate")(function* (request: ImageRequestFor<OpenAIImageOptions>, execute) {
       const mask = request.options?.mask
       if (mask !== undefined && (request.images?.length ?? 0) === 0)
-        return yield* ImageInputs.invalid(ADAPTER, "An OpenAI image mask requires at least one input image")
+        return yield* ImageInputs.invalid("An OpenAI image mask requires at least one input image")
       const http = mergeHttpOptions(request.model.http, request.http)
       const sourceImages = request.images ?? []
       const multipartImages = yield* Effect.forEach(sourceImages, (image) => {
         if (image.type === "bytes") return Effect.succeed({ data: image.data, mediaType: image.mediaType })
-        if (image.type === "url") return ImageInputs.decodeDataUrl(image.url, ADAPTER)
+        if (image.type === "url") return ImageInputs.decodeDataUrl(image.url)
         return Effect.undefined
       })
       const multipartMask =
@@ -118,7 +104,7 @@ export const model = (input: ModelInput) => {
           : mask.type === "bytes"
             ? { data: mask.data, mediaType: mask.mediaType }
             : mask.type === "url"
-              ? yield* ImageInputs.decodeDataUrl(mask.url, ADAPTER)
+              ? yield* ImageInputs.decodeDataUrl(mask.url)
               : undefined
       const useMultipart =
         sourceImages.length > 0 &&
@@ -161,7 +147,7 @@ export const model = (input: ModelInput) => {
         return undefined
       })
       if (references.some((image) => image === undefined))
-        return yield* ImageInputs.invalid(ADAPTER, "OpenAI Images accepts image URLs, data URLs, bytes, and file IDs")
+        return yield* ImageInputs.invalid("OpenAI Images accepts image URLs, data URLs, bytes, and file IDs")
       const maskReference =
         mask === undefined
           ? undefined
@@ -173,7 +159,7 @@ export const model = (input: ModelInput) => {
                 ? { file_id: mask.id }
                 : undefined
       if (mask !== undefined && maskReference === undefined)
-        return yield* ImageInputs.invalid(ADAPTER, "OpenAI Images accepts masks as URLs, data URLs, bytes, or file IDs")
+        return yield* ImageInputs.invalid("OpenAI Images accepts masks as URLs, data URLs, bytes, or file IDs")
       const requestBody = mergeJsonRecords(
         {
           model: request.model.id,
@@ -209,11 +195,9 @@ const parseResponse = Effect.fn("OpenAIImages.parseResponse")(function* (
   options: OpenAIImageOptions | undefined,
   overlay: Record<string, unknown> | undefined,
 ) {
-  const payload = yield* response.json.pipe(
-    Effect.mapError(() => invalidOutput("Failed to read the OpenAI Images response")),
-  )
-  const decoded = yield* Schema.decodeUnknownEffect(OpenAIImageResponse)(payload).pipe(
-    Effect.mapError(() => invalidOutput("OpenAI Images returned an invalid response")),
+  const output = yield* ProviderShared.imageResponse(ADAPTER, "OpenAI Images", response)
+  const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(OpenAIImageResponse))(output.body).pipe(
+    Effect.mapError((cause) => output.invalid("OpenAI Images returned an invalid response", cause)),
   )
   const requestBody = mergeJsonRecords(nativeOptions(options), overlay)
   const format =
@@ -221,7 +205,7 @@ const parseResponse = Effect.fn("OpenAIImages.parseResponse")(function* (
   const images = yield* Effect.forEach(decoded.data, (item, index) => {
     if (item.b64_json)
       return Effect.fromResult(Encoding.decodeBase64(item.b64_json)).pipe(
-        Effect.mapError(() => invalidOutput(`OpenAI Images result ${index} contains invalid base64 data`)),
+        Effect.mapError((cause) => output.invalid(`OpenAI Images result ${index} contains invalid base64 data`, cause)),
         Effect.map(
           (data) =>
             new GeneratedImage({
@@ -241,9 +225,9 @@ const parseResponse = Effect.fn("OpenAIImages.parseResponse")(function* (
             item.revised_prompt === undefined ? undefined : { openai: { revisedPrompt: item.revised_prompt } },
         }),
       )
-    return Effect.fail(invalidOutput(`OpenAI Images result ${index} has neither image data nor a URL`))
+    return Effect.fail(output.invalid(`OpenAI Images result ${index} has neither image data nor a URL`))
   })
-  if (images.length === 0) return yield* invalidOutput("OpenAI Images returned no images")
+  if (images.length === 0) return yield* output.invalid("OpenAI Images returned no images")
   return new ImageResponse({
     images,
     usage:
