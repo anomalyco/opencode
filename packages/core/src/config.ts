@@ -44,6 +44,13 @@ export class Info extends Schema.Class<Info>("Config.Info")({
     .annotate({
       description: "Automatically update or notify when a new version is available",
     }),
+  plugin_autoupdate: Schema.Boolean.pipe(Schema.optional).annotate({
+    description: "Automatically update npm plugins to newer versions at startup",
+  }),
+  plugin_update_source: Schema.String.pipe(Schema.optional).annotate({
+    description:
+      "URL of a JSON manifest mapping plugin package names to their latest version, e.g. {\"acme-plugin\":\"2.0.0\"}. Checked before the npm registry, which is used as a fallback",
+  }),
   share: Schema.Literals(["manual", "auto", "disabled"]).pipe(Schema.optional).annotate({
     description: "Control whether sessions may be shared manually, automatically, or not at all",
   }),
