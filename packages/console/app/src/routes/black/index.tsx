@@ -103,9 +103,6 @@ export default function Black() {
                       <button type="button" onClick={() => cancel()} data-slot="cancel">
                         {i18n.t("common.cancel")}
                       </button>
-                      <a href={`/black/subscribe/${plan().id}`} data-slot="continue">
-                        {i18n.t("black.action.continue")}
-                      </a>
                     </div>
                   </div>
                 </div>
