@@ -118,8 +118,8 @@ const source = {
   "ui.messagePart.context.thought.other": "Thoughts",
   "ui.messagePart.context.match.one": "({{count}} match)",
   "ui.messagePart.context.match.other": "({{count}} matches)",
-  "ui.messagePart.tools.used.one": "{{count}} used {{tools}}",
-  "ui.messagePart.tools.used.other": "{{count}} used {{tools}}",
+  "ui.messagePart.tools.used.one": "Used {{count}} {{tools}}",
+  "ui.messagePart.tools.used.other": "Used {{count}} {{tools}}",
 
   "ui.list.loading": "Loading",
   "ui.list.empty": "No results",

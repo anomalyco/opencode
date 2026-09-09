@@ -612,14 +612,25 @@
     min-width: 0;
   }
 
-  [data-slot="context-tool-group-prefix"] {
+  [data-slot="context-tool-group-usage"] {
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
     color: var(--v2-text-text-muted);
     font-family: var(--v2-font-family-sans);
     font-size: 13px;
     font-weight: 440;
     line-height: var(--line-height-compact);
     letter-spacing: -0.04px;
+  }
+
+  [data-slot="context-tool-group-count"] {
+    color: var(--v2-text-text-base);
+  }
+
+  [data-slot="context-tool-group-prefix"] {
+    flex-shrink: 0;
   }
 
   [data-slot="basic-tool-tool-title"] {

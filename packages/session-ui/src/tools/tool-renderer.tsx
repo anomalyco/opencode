@@ -536,13 +536,25 @@ export function CurrentContextToolGroup(props: {
     const thoughts = props.parts.filter((part) => part.type === "reasoning").length
     if (!names() && !thoughts) {
       const title = i18n.t("ui.messagePart.context.details")
-      return { text: title, title, before: "", after: "" }
+      return { text: title, title, before: "", count: "", between: "", after: "" }
     }
     const title = names() || i18n.plural("ui.messagePart.context.thought", thoughts)
     const count = props.parts.filter((part) => part.type === "tool" || part.type === "shell").length || thoughts
     const text = i18n.plural("ui.messagePart.tools.used", count, { tools: title })
     const index = text.indexOf(title)
-    return { text, title, before: text.slice(0, index).trim(), after: text.slice(index + title.length).trim() }
+    const before = text.slice(0, index).trim()
+    const countText = String(count)
+    const countIndex = before.indexOf(countText)
+    const after = text.slice(index + title.length).trim()
+    if (countIndex === -1) return { text, title, before, count: "", between: "", after }
+    return {
+      text,
+      title,
+      before: before.slice(0, countIndex).trim(),
+      count: countText,
+      between: before.slice(countIndex + countText.length).trim(),
+      after,
+    }
   })
   const items = createMemo(() =>
     props.parts.reduce<(SessionMessageAssistantTool[] | Exclude<ContextGroupPart, SessionMessageAssistantTool>)[]>(
@@ -607,8 +619,18 @@ export function CurrentContextToolGroup(props: {
         trigger={
           <div data-component="context-tool-group-trigger" aria-label={label().text}>
             <span data-slot="context-tool-group-title">
-              <Show when={label().before}>
-                {(before) => <span data-slot="context-tool-group-prefix">{before()}</span>}
+              <Show when={label().before || label().count || label().between}>
+                <span data-slot="context-tool-group-usage">
+                  <Show when={label().before}>
+                    {(before) => <span data-slot="context-tool-group-prefix">{before()}</span>}
+                  </Show>
+                  <Show when={label().count}>
+                    {(count) => <span data-slot="context-tool-group-count">{count()}</span>}
+                  </Show>
+                  <Show when={label().between}>
+                    {(between) => <span data-slot="context-tool-group-prefix">{between()}</span>}
+                  </Show>
+                </span>
               </Show>
               <span data-slot="basic-tool-tool-title">{label().title}</span>
               <Show when={label().after}>

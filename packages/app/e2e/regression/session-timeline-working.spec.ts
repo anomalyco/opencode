@@ -181,7 +181,7 @@ for (const grouped of [false, true]) {
       await expect(working).toHaveCount(0)
       return
     }
-    const trigger = group.getByRole("button", { name: "2 used Shell", exact: true, includeHidden: true })
+    const trigger = group.getByRole("button", { name: "Used 2 Shell", exact: true, includeHidden: true })
     await expect(trigger).toHaveAttribute("aria-expanded", "false")
     await expect(working).toBeVisible()
     await trigger.click()
