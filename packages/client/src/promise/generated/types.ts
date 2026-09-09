@@ -1369,6 +1369,7 @@ export type ProviderInfo = {
   activation: "auto" | "enabled" | "disabled"
   package: string
   compaction?: ProviderCompaction
+  websocket?: boolean
   settings?: { [x: string]: any }
   headers?: { [x: string]: string }
   body?: { [x: string]: any }
@@ -1849,6 +1850,7 @@ export type ModelInfo = {
   compatibility?: ModelCompatibility
   package?: string
   compaction?: ProviderCompaction
+  websocket?: boolean
   settings?: { [x: string]: any }
   headers?: { [x: string]: string }
   body?: { [x: string]: any }
@@ -2025,6 +2027,7 @@ export type ConfigEntry =
         providers?: {
           [x: string]: {
             compaction?: ProviderCompaction
+            websocket?: boolean
             canonical?: string
             name?: string
             env?: Array<string>
@@ -2035,6 +2038,7 @@ export type ConfigEntry =
             models?: {
               [x: string]: {
                 compaction?: ProviderCompaction
+                websocket?: boolean
                 modelID?: string
                 family?: string
                 name?: string

@@ -27,8 +27,8 @@ const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
 
-// Enabled by default where the route supports it. `OPENCODE_OPENAI_RESPONSES_WEBSOCKET=false` opts a provider out;
-// the experimental name from the opt-in period is still honored.
+// Enabled by default where the route supports it. `providers.<id>.websocket: false` or
+// `OPENCODE_OPENAI_RESPONSES_WEBSOCKET=false` opts out; the experimental name from the opt-in period is still honored.
 const responsesWebSocket = (providerID: string) => {
   const suffix = `${providerID.replace(/[^a-zA-Z0-9]+/g, "_").toUpperCase()}_RESPONSES_WEBSOCKET`
   return Config.boolean(`OPENCODE_${suffix}`).pipe(
@@ -372,7 +372,7 @@ export const layer = Layer.effect(
         (yield* hooks.has("session", "http.request", resolved.ref.providerID)) ||
         (yield* hooks.has("session", "http.response", resolved.ref.providerID))
       const webSocket =
-        resolved.capabilities.responsesWebsockets === true
+        resolved.capabilities.responsesWebsockets === true && resolved.websocket !== false
           ? yield* responsesWebSocket(resolved.ref.providerID).pipe(Effect.orDie)
           : false
       const http = hasHttpHooks

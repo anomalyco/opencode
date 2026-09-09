@@ -241,49 +241,54 @@ describe("OpenAIPlugin", () => {
         id: "deployment-responses",
         provider: Provider.ID.azure,
       })
-      const model = SessionRunnerModel.resolved(route.model({ id: "gpt-5.5" }), {
-        capabilities: { tools: true, input: ["text"], output: ["text"], responsesWebsockets: true },
-        cost: [],
-        limit: { context: 200_000, output: 32_000 },
-      })
-      const program = Effect.gen(function* () {
-        const requests = yield* SessionModelRequest.Service
-        return yield* requests.prepare({
-          kind: "primary",
-          scope: {
-            session: Session.Info.make({
-              id: sessionID,
-              projectID: Project.ID.global,
-              cost: Money.USD.zero,
-              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-              time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
-              location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
-            }),
-            agentID,
-            model,
-            tools: { definitions: [], execute: () => Effect.die("unused tool execution") },
-          },
-          transcript: { system: [], messages: [] },
-          webSocket: "session",
+      const resolved = (websocket?: boolean) =>
+        SessionRunnerModel.resolved(route.model({ id: "gpt-5.5" }), {
+          capabilities: { tools: true, input: ["text"], output: ["text"], responsesWebsockets: true },
+          cost: [],
+          limit: { context: 200_000, output: 32_000 },
+          websocket,
         })
-      }).pipe(
-        Effect.provide(SessionModelRequest.layer),
-        Effect.provideService(SessionModelTransport.Service, transport),
-      )
+      const program = (model: SessionRunnerModel.Resolved) =>
+        Effect.gen(function* () {
+          const requests = yield* SessionModelRequest.Service
+          return yield* requests.prepare({
+            kind: "primary",
+            scope: {
+              session: Session.Info.make({
+                id: sessionID,
+                projectID: Project.ID.global,
+                cost: Money.USD.zero,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+                location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+              }),
+              agentID,
+              model,
+              tools: { definitions: [], execute: () => Effect.die("unused tool execution") },
+            },
+            transcript: { system: [], messages: [] },
+            webSocket: "session",
+          })
+        }).pipe(
+          Effect.provide(SessionModelRequest.layer),
+          Effect.provideService(SessionModelTransport.Service, transport),
+        )
 
-      const withEnv = (env: Record<string, string>) =>
-        program.pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env }))))
+      const withEnv = (env: Record<string, string>, model = resolved()) =>
+        program(model).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env }))))
 
       const prepared = yield* withEnv({})
       const otherProvider = yield* withEnv({ OPENCODE_OPENAI_RESPONSES_WEBSOCKET: "false" })
       const optedOut = yield* withEnv({ OPENCODE_AZURE_RESPONSES_WEBSOCKET: "false" })
       const legacyOptOut = yield* withEnv({ OPENCODE_EXPERIMENTAL_AZURE_RESPONSES_WEBSOCKET: "false" })
+      const configuredOff = yield* withEnv({}, resolved(false))
 
       expect(prepared.options.webSocket).toBe(executor)
       expect(prepared.options.http).toBeUndefined()
       expect(otherProvider.options.webSocket).toBe(executor)
       expect(optedOut.options.webSocket).toBeUndefined()
       expect(legacyOptOut.options.webSocket).toBeUndefined()
+      expect(configuredOff.options.webSocket).toBeUndefined()
     }),
   )
 })

@@ -107,6 +107,7 @@ export const Info = Schema.Struct({
   compatibility: Compatibility.pipe(optional),
   package: Provider.Package.pipe(optional),
   compaction: Provider.Compaction.pipe(optional),
+  websocket: Schema.Boolean.pipe(optional),
   ...Provider.Overlays,
   capabilities: Capabilities,
   variants: Schema.Array(Variant),

@@ -85,6 +85,8 @@ export interface Resolved {
   readonly limit: Info["limit"]
   /** Model policy overrides the provider policy; omitted means local compaction. */
   readonly compaction?: Info["compaction"]
+  /** Model policy overrides the provider policy; omitted means the WebSocket transport is used where supported. */
+  readonly websocket?: Info["websocket"]
 }
 
 export interface Interface {
@@ -321,6 +323,7 @@ export const layer = Layer.effect(
         cost: selected.cost,
         limit: selected.limit,
         compaction: selected.compaction,
+        websocket: selected.websocket,
       }
     })
     return Service.of({

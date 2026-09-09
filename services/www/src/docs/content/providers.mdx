@@ -119,7 +119,20 @@ The connection is transparent. When the provider closes the socket, the next ste
 be opened at all, the session continues over HTTP. Plugins that register `http.request` or `http.response` hooks for a
 provider keep it on HTTP so the hooks observe every request.
 
-Set `OPENCODE_<PROVIDER>_RESPONSES_WEBSOCKET=false` to keep a provider on HTTP, for example
+Set `websocket: false` on a provider or model to keep it on HTTP:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "websocket": false,
+    },
+  },
+}
+```
+
+The environment variable `OPENCODE_<PROVIDER>_RESPONSES_WEBSOCKET=false` does the same for one process, for example
 `OPENCODE_OPENAI_RESPONSES_WEBSOCKET=false`.
 
 ## Endpoint
