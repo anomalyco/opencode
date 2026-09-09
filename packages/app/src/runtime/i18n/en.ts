@@ -769,7 +769,8 @@ export const dict = {
   "session.queue.steerTooltip": "Send without interrupting",
   "session.queue.remove": "Remove",
   "session.queue.reorder": "Reorder queued prompt",
-  "session.queue.attachments": "+ attachments",
+  "session.queue.attachments.one": "Plus {{count}} attachment",
+  "session.queue.attachments.other": "Plus {{count}} attachments",
   "session.timeline.working": "Working",
   "session.timeline.notice.finished": "{{actor}} finished",
   "session.timeline.notice.failed": "{{actor}} failed",
@@ -896,6 +897,7 @@ export const dict = {
 
   "session.browser.address": "Browser address",
   "session.browser.replaced": "Browser control moved to another desktop window.",
+  "session.browser.suspended": "Browser suspended. Interact with this session to reconnect.",
   "session.browser.address.placeholder": "Enter URL",
 
   "titlebar.update": "Update",
@@ -1124,7 +1126,7 @@ export const dict = {
   "settings.general.row.uiFont.description": "Customise the font used throughout the interface",
   "settings.general.row.showFileTree.title": "File tree",
   "settings.general.row.showFileTree.description": "Show the file tree panel in sessions",
-  "settings.general.row.browserPane.title": "Browser pane",
+  "settings.general.row.browserPane.title": "Browser",
   "settings.general.row.browserPane.description": "Allow agents to open and control an in-app development browser.",
   "settings.general.row.showNavigation.title": "Navigation controls",
   "settings.general.row.showNavigation.description": "Show the back and forward buttons in the desktop title bar",

@@ -536,6 +536,7 @@ export function createTimelineVirtualizer(input: Input) {
           </button>
         </div>
         <ScrollView
+          data-slot="session-timeline-scroll"
           viewportRef={bindListRoot}
           onWheel={handleListWheel}
           onTouchStart={handleListTouchStart}

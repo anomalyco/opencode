@@ -51,6 +51,10 @@ describe("provider package entrypoints", () => {
       import("@opencode/ai/providers/zai-coding-plan/chat"),
       import("@opencode/ai/providers/zai-coding-plan/messages"),
       import("@opencode/ai/providers/zai-coding-plan/responses"),
+      import("@opencode/ai/providers/alibaba"),
+      import("@opencode/ai/providers/alibaba/chat"),
+      import("@opencode/ai/providers/alibaba/messages"),
+      import("@opencode/ai/providers/alibaba/responses"),
     ])
 
     for (const module of modules) expect(module.model).toBeFunction()
@@ -59,6 +63,34 @@ describe("provider package entrypoints", () => {
     expect(modules[12].model).toBe(modules[13].model)
     expect(modules[19].model).toBe(modules[21].model)
     expect(modules[19].model).not.toBe(modules[20].model)
+  })
+
+  test("maps Alibaba API entrypoints onto explicit regional routes", async () => {
+    const modules = await Promise.all([
+      import("@opencode/ai/providers/alibaba"),
+      import("@opencode/ai/providers/alibaba/chat"),
+      import("@opencode/ai/providers/alibaba/messages"),
+      import("@opencode/ai/providers/alibaba/responses"),
+    ])
+    expect(modules[0].model).toBe(modules[1].model)
+    const settings = {
+      region: "eu-central-1",
+      workspaceID: "llm-fixture",
+      apiKey: "fixture",
+      headers: { "x-test": "fixture" },
+      body: { extension: true },
+    }
+    const routes = ["alibaba-chat", "alibaba-chat", "alibaba-messages", "alibaba-responses"]
+    modules.forEach((module, index) => {
+      const model = module.model("qwen3.8-max", settings)
+      expect(model.provider).toBe("alibaba")
+      expect(model.route.id).toBe(routes[index])
+      expect(model.route.endpoint.baseURL).toBe(
+        `https://llm-fixture.eu-central-1.maas.aliyuncs.com/${index === 2 ? "apps/anthropic/v1" : "compatible-mode/v1"}`,
+      )
+      expect(model.route.defaults.headers).toEqual(settings.headers)
+      expect(model.route.defaults.http?.body).toEqual(settings.body)
+    })
   })
 
   test("maps Moonshot API entrypoints onto provider-owned routes", async () => {

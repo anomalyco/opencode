@@ -93,7 +93,8 @@ const it = testEffect(
 test("compaction prompt preserves detailed work state and relevant files", () => {
   const prompt = SessionCompaction.buildPrompt(false)
 
-  expect(prompt).toContain("## Work State\n### Completed")
+  expect(prompt).toContain("## Work State")
+  expect(prompt).toContain("### Completed")
   expect(prompt).toContain("### Active")
   expect(prompt).toContain("### Blocked")
   expect(prompt).toContain("## Relevant Files")
@@ -134,8 +135,15 @@ test("compaction prompt requires the checkpoint headings in order", () => {
     "### Blocked",
     "## Next Move",
     "## Relevant Files",
-    "## Additional Context",
+    "## Important Context",
   ])
+})
+
+test("compaction update prompt rewrites legacy checkpoints only when asked", () => {
+  const rewrite = "The existing checkpoint was written with an earlier format"
+  expect(SessionCompaction.buildPrompt(true, true)).toContain(rewrite)
+  expect(SessionCompaction.buildPrompt(true)).not.toContain(rewrite)
+  expect(SessionCompaction.buildPrompt(false, true)).not.toContain(rewrite)
 })
 
 test("compaction prompts prohibit task execution", () => {

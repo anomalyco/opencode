@@ -1,4 +1,4 @@
-import { parse } from "acorn"
+import { parse, type Program } from "acorn"
 import { Cause, Effect, Scope } from "effect"
 // #transpile: conditional import — full typescript on node/bun, an identity
 // pass-through on workerd (the compiler is ~11 MiB and can't init there).
@@ -7,9 +7,9 @@ import type { DataValue, Diagnostic, ResolvedExecutionLimits, Result } from "../
 import { toData } from "../data.js"
 import { ToolRuntime } from "../tool-runtime.js"
 import { normalizeError } from "./errors.js"
-import { InterpreterRuntimeError, isRecord, type ProgramNode } from "./model.js"
+import { InterpreterRuntimeError } from "./model.js"
 import { PromiseRuntime } from "./promises.js"
-import { Interpreter } from "./runtime.js"
+import { Runtime } from "./runtime.js"
 
 export const executeProgram = <R>(
   code: string,
@@ -39,8 +39,7 @@ export const executeProgram = <R>(
         Effect.gen(function* () {
           const program = parseProgram(code)
           const promises = new PromiseRuntime<R>(scope)
-          const interpreter = new Interpreter<R>(tools.execute, tools.search, tools.keys, promises, logs)
-          const value = yield* interpreter.run(program)
+          const value = yield* new Runtime<R>(tools.execute, tools.search, tools.keys, promises, logs).run(program)
           const result = toData(value, "Execution result", "result") as DataValue
           returned = { value: result, promises }
           const warnings = yield* promises.interrupt()
@@ -107,7 +106,7 @@ export const executeProgram = <R>(
   })
 }
 
-const parseProgram = (code: string): ProgramNode => {
+const parseProgram = (code: string): Program => {
   const transpiled = transpile(`async function __codemode__() {\n${code}\n}`)
 
   if (transpiled.error !== undefined) {
@@ -117,19 +116,13 @@ const parseProgram = (code: string): ProgramNode => {
   const bodyStart = transpiled.outputText.indexOf("{") + 1
   const bodyEnd = transpiled.outputText.lastIndexOf("}")
   const executableCode = transpiled.outputText.slice(bodyStart, bodyEnd)
-  const parsed = parse(executableCode, {
+  return parse(executableCode, {
     ecmaVersion: "latest",
     sourceType: "script",
     allowReturnOutsideFunction: true,
     allowAwaitOutsideFunction: true,
     locations: true,
-  }) as unknown
-
-  if (!isRecord(parsed) || parsed.type !== "Program" || !Array.isArray(parsed.body)) {
-    throw new InterpreterRuntimeError("Failed to parse script as a Program node.")
-  }
-
-  return parsed as ProgramNode
+  })
 }
 
 const utf8ByteLength = (value: string): number => new TextEncoder().encode(value).byteLength

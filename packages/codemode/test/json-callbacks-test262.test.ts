@@ -233,10 +233,11 @@ describe("CodeMode JSON callback boundaries", () => {
           invokeFunction: () => Effect.die("unused"),
           invokeCallable: () => Effect.die("unused"),
           settlePromise: () => Effect.die("unused"),
+          syncIterator: () => Effect.die("unused"),
         },
         "stringify",
         [Object.fromEntries([["constructor", 1]])],
-        { type: "CallExpression" },
+        { type: "CallExpression", start: 0, end: 0 },
       ),
     ).toThrow("blocked property 'constructor'")
   })

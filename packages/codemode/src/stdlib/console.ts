@@ -1,13 +1,29 @@
 import { toData, toProgram } from "../data.js"
+import { HostNamespace, sync } from "../interpreter/host.js"
 import { containsOpaqueReference, containsRuntimeReference, isRuntimeReference } from "../interpreter/references.js"
 import { Values } from "../values.js"
 import { coerceToString } from "./value.js"
 
-export const consoleMethods = new Set(["log", "info", "debug", "warn", "error", "dir", "table"])
+const consoleMethods = ["log", "info", "debug", "warn", "error", "dir", "table"]
+
+/** Captured console: every method appends one formatted line to `logs`. */
+export const consoleGlobal = (logs: Array<string>) =>
+  new HostNamespace(
+    "console",
+    Object.fromEntries(
+      consoleMethods.map((name) => [
+        name,
+        sync(`console.${name}`, (args) => {
+          logs.push(formatConsoleMessage(name, args))
+          return undefined
+        }),
+      ]),
+    ),
+  )
 
 const MAX_CONSOLE_DEPTH = 32
 
-export const formatConsoleMessage = (name: string, args: Array<unknown>): string => {
+const formatConsoleMessage = (name: string, args: Array<unknown>): string => {
   if (name === "dir") return args.length === 0 ? "undefined" : formatConsoleArgument(args[0])
   if (name === "table") return formatConsoleTable(args[0], args[1])
   const prefix = name === "warn" ? "[warn] " : name === "error" ? "[error] " : name === "debug" ? "[debug] " : ""

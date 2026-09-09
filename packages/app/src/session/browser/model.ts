@@ -27,7 +27,7 @@ export function createSessionBrowser(session: SessionModel) {
       !server.health?.incompatible &&
       session.isDesktop(),
   )
-  const attached = () => attachment()?.registration !== undefined
+  const attached = () => !!(attachment()?.registration || attachment()?.browser)
   const browserTabs = createMemo(
     () =>
       attachment()?.browser?.tabs.filter((tab) => session.layout.tabs().all().includes(sessionBrowserTab(tab.id))) ??
@@ -123,6 +123,7 @@ export function createSessionBrowser(session: SessionModel) {
       browserTabs().find((tab) => tab.id === attachment()?.browser?.focusedTabID) ??
       browserTabs()[0],
     error: () => local.error ?? attachment()?.error,
+    suspended: () => attachment()?.suspended ?? false,
     registration: () => attachment()?.registration,
     close: (tabID: Browser.TabID) => session.layout.tabs().close(sessionBrowserTab(tabID)),
     open,

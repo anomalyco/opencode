@@ -61,6 +61,8 @@ export function SessionScreen(props: { session: SessionModel }) {
   const [store, setStore] = createStore({
     deferRender: false,
     bottomTerminalCached: false,
+    sideWidthMotion: false,
+    timelineScrollbarHidden: false,
     sideHeightMotion: false,
     sideRegionPresent: false,
     sideReviewPresent: false,
@@ -109,6 +111,16 @@ export function SessionScreen(props: { session: SessionModel }) {
     sideMotion().animateRegion ||
     sideMotion().animateTerminal ||
     bottomTerminalPresence.animate()
+  const trackSideWidthMotion = (event: TransitionEvent) => {
+    if (event.currentTarget !== event.target || event.propertyName !== "width") return
+    setStore("sideWidthMotion", event.type === "transitionrun")
+  }
+  const hideTimelineScrollbar = () => setStore("timelineScrollbarHidden", true)
+  const revealTimelineScrollbar = (event: Event) => {
+    if (!store.timelineScrollbarHidden || store.sideWidthMotion) return
+    if (!(event.target instanceof Element) || !event.target.closest('[data-slot="session-timeline-scroll"]')) return
+    setStore("timelineScrollbarHidden", false)
+  }
   createEffect(() => {
     if (sideTerminalVisible()) setStore("sideTerminalPresent", true)
     if (bottomTerminalVisible()) setStore("bottomTerminalCached", true)
@@ -296,6 +308,8 @@ export function SessionScreen(props: { session: SessionModel }) {
               class="absolute end-3 top-0 z-30 flex items-center"
               classList={{ "h-[51px]": sideTerminalVisible(), "h-12": !sideTerminalVisible() }}
               data-slot="session-review-toggle"
+              onPointerDown={hideTimelineScrollbar}
+              onClick={hideTimelineScrollbar}
             >
               <SessionReviewToggle />
             </div>
@@ -303,11 +317,20 @@ export function SessionScreen(props: { session: SessionModel }) {
           <div
             classList={{
               "@container relative z-10 min-w-0 shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
-              "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
+              "duration-[240ms] ease-[cubic-bezier(0.4,0,0.2,1)] will-change-[width] motion-reduce:transition-none":
                 !screen.size.active() && sidePresence.animate(),
               "transition-none": screen.size.active() || !sidePresence.animate(),
             }}
             data-slot="session-chat-panel"
+            data-width-animating={store.sideWidthMotion}
+            data-scrollbar-hidden={store.timelineScrollbarHidden || store.sideWidthMotion}
+            onPointerMove={revealTimelineScrollbar}
+            onPointerDown={revealTimelineScrollbar}
+            onWheel={revealTimelineScrollbar}
+            onKeyDown={revealTimelineScrollbar}
+            onTransitionRun={trackSideWidthMotion}
+            onTransitionEnd={trackSideWidthMotion}
+            onTransitionCancel={trackSideWidthMotion}
             style={{
               width: screen.panel.width(),
             }}
@@ -342,7 +365,7 @@ export function SessionScreen(props: { session: SessionModel }) {
               data-opened={sidePresence.animate() ? sidePresence.show() : undefined}
               onAnimationEnd={(event) => {
                 if (event.currentTarget !== event.target) return
-                if (event.animationName !== "terminal-panel-presence-in" || !sideVisible()) return
+                if (event.animationName !== "side-region-presence-in" || !sideVisible()) return
                 setStore("sideHeightMotion", true)
               }}
               classList={{
@@ -353,8 +376,8 @@ export function SessionScreen(props: { session: SessionModel }) {
             >
               <div
                 data-slot="session-side-panel-content"
-                class="absolute inset-y-0 start-0 h-full"
-                style={{ width: screen.side.contentWidth() }}
+                class="absolute inset-y-0 start-0 size-full"
+                style={{ "--session-side-content-width": screen.side.contentWidth() }}
               >
                 <div
                   data-slot="session-side-region"
@@ -363,7 +386,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                     "will-change-[height]": !screen.size.active() && store.sideHeightMotion && paneAnimating(),
                     "transition-none": screen.size.active() || !store.sideHeightMotion || !paneAnimating(),
                   }}
-                  style={{ height: screen.side.region.height() }}
+                  style={{ height: sideVisible() ? screen.side.region.height() : "100%" }}
                 >
                   <Show when={store.sideRegionPresent}>
                     <div
@@ -383,7 +406,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                     </div>
                   </Show>
                 </div>
-                <div class="absolute inset-x-0 bottom-0 flex flex-col">
+                <div class="absolute start-0 bottom-0 flex flex-col" style={{ width: screen.side.contentWidth() }}>
                   <div
                     data-slot="session-side-panel-gap"
                     classList={{

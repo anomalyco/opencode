@@ -1,28 +1,27 @@
 import { Effect } from "effect"
-import type { CallbackRunner } from "../interpreter/methods.js"
-import { applyCollectionCallback } from "../interpreter/methods.js"
+import { HostFunction, HostNamespace } from "../interpreter/host.js"
+import { applyCollectionCallback, type Runner } from "../interpreter/runner.js"
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
 import { typeofValue } from "../interpreter/references.js"
 import { fromData, type SafeObject, toData, toProgram } from "../data.js"
 import { Values } from "../values.js"
 
-export const jsonStatics = new Set(["parse", "stringify"])
-export type JsonMethodName = "parse" | "stringify"
-
 export const invokeJsonMethod = <R>(
-  runner: CallbackRunner<R>,
-  name: JsonMethodName,
+  runner: Runner<R>,
+  name: "parse" | "stringify",
   args: Array<unknown>,
   node: AstNode,
 ): Effect.Effect<unknown, unknown, R> => {
   return name === "parse" ? parse(runner, args, node) : stringify(runner, args, node)
 }
 
-const parse = <R>(
-  runner: CallbackRunner<R>,
-  args: Array<unknown>,
-  node: AstNode,
-): Effect.Effect<unknown, unknown, R> => {
+export const jsonGlobal = <R>(runner: Runner<R>) =>
+  new HostNamespace("JSON", {
+    parse: new HostFunction<R>({ name: "JSON.parse", call: (args, node) => parse(runner, args, node) }),
+    stringify: new HostFunction<R>({ name: "JSON.stringify", call: (args, node) => stringify(runner, args, node) }),
+  })
+
+const parse = <R>(runner: Runner<R>, args: Array<unknown>, node: AstNode): Effect.Effect<unknown, unknown, R> => {
   const text = args[0]
   if (typeof text !== "string") throw new InterpreterRuntimeError("JSON.parse expects a string.", node)
 
@@ -63,11 +62,7 @@ const parse = <R>(
   return visit(root, "")
 }
 
-const stringify = <R>(
-  runner: CallbackRunner<R>,
-  args: Array<unknown>,
-  node: AstNode,
-): Effect.Effect<unknown, unknown, R> => {
+const stringify = <R>(runner: Runner<R>, args: Array<unknown>, node: AstNode): Effect.Effect<unknown, unknown, R> => {
   const space = args[2]
   const indent = typeof space === "number" || typeof space === "string" ? space : undefined
   const replacer = args[1]

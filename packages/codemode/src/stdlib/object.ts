@@ -1,93 +1,70 @@
 import { Effect } from "effect"
+import { isBlockedMember, toProgram } from "../data.js"
+import { HostFunction, sync, syncCall } from "../interpreter/host.js"
 import { type AstNode, AsyncIteratorSymbol, InterpreterRuntimeError, IteratorSymbol } from "../interpreter/model.js"
-import { containsOpaqueReference, rejectCircularInsertion } from "../interpreter/references.js"
-import { isBlockedMember } from "../data.js"
+import { containsOpaqueReference, rejectCircularInsertion, typeofValue } from "../interpreter/references.js"
+import { preserveConsumerError, type Runner } from "../interpreter/runner.js"
+import { ToolReference } from "../tool-runtime.js"
 import { Values } from "../values.js"
-import { toProgram } from "../data.js"
+import { groupBy } from "./collections.js"
 import { coerceToString } from "./value.js"
-import { preserveConsumerError, type SyncIteratorRunner } from "../interpreter/iterator.js"
 
-export const objectMethodsPreservingIdentity = new Set(["assign", "values", "entries", "fromEntries"])
-
-export const objectStatics = new Set(["keys", "values", "entries", "hasOwn", "is", "assign", "fromEntries", "groupBy"])
-
-export const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): unknown => {
-  const requireObject = (): Record<string, unknown> => {
-    const input = args[0]
-    if (Array.isArray(input)) return input as unknown as Record<string, unknown>
-    if (Values.isValue(input)) return {}
-    if (input instanceof Values.Promise) {
-      throw new InterpreterRuntimeError(
-        `Object.${name} received an un-awaited Promise; await it before inspecting the result.`,
-        node,
-        "InvalidDataValue",
-      )
-    }
-    if (input === null || typeof input !== "object") {
-      throw new InterpreterRuntimeError(`Object.${name} expects a data object or array.`, node, "InvalidDataValue")
-    }
-    const prototype = Object.getPrototypeOf(input)
-    if (prototype !== null && prototype !== Object.prototype) {
-      throw new InterpreterRuntimeError(`Object.${name} expects a data object or array.`, node, "InvalidDataValue")
-    }
-    return input as Record<string, unknown>
+const requireObject = (name: string, input: unknown, node: AstNode): Record<string, unknown> => {
+  if (Array.isArray(input)) return input as unknown as Record<string, unknown>
+  if (Values.isValue(input)) return {}
+  if (input instanceof Values.Promise) {
+    throw new InterpreterRuntimeError(
+      `Object.${name} received an un-awaited Promise; await it before inspecting the result.`,
+      node,
+      "InvalidDataValue",
+    )
   }
-  switch (name) {
-    case "keys":
-      return Object.keys(requireObject())
-    case "values":
-      return Object.values(requireObject())
-    case "entries":
-      return Object.entries(requireObject()).map(([key, item]) => [key, item])
-    case "hasOwn":
-      return Object.hasOwn(
-        requireObject(),
-        args[1] === AsyncIteratorSymbol || args[1] === IteratorSymbol ? args[1] : String(args[1]),
-      )
-    case "is":
-      if (containsOpaqueReference(args[0]) || containsOpaqueReference(args[1])) {
-        throw new InterpreterRuntimeError("Object.is requires data values.", node, "InvalidDataValue")
-      }
-      return Object.is(args[0], args[1])
-    case "assign": {
-      const target = args[0]
-      if (target === null || typeof target !== "object" || Array.isArray(target) || Values.isValue(target)) {
-        throw new InterpreterRuntimeError("Object.assign expects a data object target.", node)
-      }
-      const out = target as Record<string, unknown>
-      const seen = new Set<object>()
-      const guardedSet = (key: PropertyKey, item: unknown): void => {
-        if (typeof key === "string" && isBlockedMember(key))
-          throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
-        rejectCircularInsertion(out, item, "Object.assign result", node, seen)
-        if (!Reflect.set(out, key, item))
-          throw new InterpreterRuntimeError(`Object.assign could not assign property '${String(key)}'.`, node).as(
-            "TypeError",
-          )
-      }
-      for (const source of args.slice(1)) {
-        if (source === null || source === undefined || Values.isValue(source)) continue
-        if (typeof source !== "object" || Array.isArray(source)) {
-          throw new InterpreterRuntimeError("Object.assign expects data objects.", node)
-        }
-        for (const key of Reflect.ownKeys(source)) {
-          if (typeof key === "string") {
-            if (Object.prototype.propertyIsEnumerable.call(source, key)) guardedSet(key, Reflect.get(source, key))
-            continue
-          }
-          if (key !== AsyncIteratorSymbol && key !== IteratorSymbol) continue
-          if (!Object.prototype.propertyIsEnumerable.call(source, key)) continue
-          guardedSet(key, Reflect.get(source, key))
-        }
-      }
-      return out
-    }
+  if (input === null || typeof input !== "object") {
+    throw new InterpreterRuntimeError(`Object.${name} expects a data object or array.`, node, "InvalidDataValue")
   }
-  throw new InterpreterRuntimeError(`Object.${name} is not available.`, node)
+  const prototype = Object.getPrototypeOf(input)
+  if (prototype !== null && prototype !== Object.prototype) {
+    throw new InterpreterRuntimeError(`Object.${name} expects a data object or array.`, node, "InvalidDataValue")
+  }
+  return input as Record<string, unknown>
 }
 
-export const invokeObjectFromEntries = <R>(
-  runner: SyncIteratorRunner<R>,
+export const objectAssign = (args: Array<unknown>, node: AstNode): unknown => {
+  const target = args[0]
+  if (target === null || typeof target !== "object" || Array.isArray(target) || Values.isValue(target)) {
+    throw new InterpreterRuntimeError("Object.assign expects a data object target.", node)
+  }
+  const out = target as Record<string, unknown>
+  const seen = new Set<object>()
+  const guardedSet = (key: PropertyKey, item: unknown): void => {
+    if (typeof key === "string" && isBlockedMember(key))
+      throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
+    rejectCircularInsertion(out, item, "Object.assign result", node, seen)
+    if (!Reflect.set(out, key, item))
+      throw new InterpreterRuntimeError(`Object.assign could not assign property '${String(key)}'.`, node).as(
+        "TypeError",
+      )
+  }
+  for (const source of args.slice(1)) {
+    if (source === null || source === undefined || Values.isValue(source)) continue
+    if (typeof source !== "object" || Array.isArray(source)) {
+      throw new InterpreterRuntimeError("Object.assign expects data objects.", node)
+    }
+    for (const key of Reflect.ownKeys(source)) {
+      if (typeof key === "string") {
+        if (Object.prototype.propertyIsEnumerable.call(source, key)) guardedSet(key, Reflect.get(source, key))
+        continue
+      }
+      if (key !== AsyncIteratorSymbol && key !== IteratorSymbol) continue
+      if (!Object.prototype.propertyIsEnumerable.call(source, key)) continue
+      guardedSet(key, Reflect.get(source, key))
+    }
+  }
+  return out
+}
+
+const objectFromEntries = <R>(
+  runner: Runner<R>,
   source: unknown,
   node: AstNode,
 ): Effect.Effect<Record<string, unknown>, unknown, R> => {
@@ -126,3 +103,75 @@ export const invokeObjectFromEntries = <R>(
     }
   })
 }
+
+const constructObject = (args: Array<unknown>, node: AstNode): unknown => {
+  const first = args[0]
+  if (first === null || first === undefined) return {}
+  if (typeof first === "object") return first
+  throw new InterpreterRuntimeError(
+    `Object(${typeof first}) wrapper objects are not supported; use the primitive value directly.`,
+    node,
+  )
+}
+
+// Tool references are not data; only Object.keys(tools) reads them, for tool names.
+const rejectTools = (name: string, args: Array<unknown>, node: AstNode): void => {
+  if (!(args[0] instanceof ToolReference)) return
+  throw new InterpreterRuntimeError(
+    `Object.${name}(...) cannot read tool references: they are not plain data. Use Object.keys(tools) for names, or search({ query }) for signatures.`,
+    node,
+    "InvalidDataValue",
+  )
+}
+
+const objectStatic = (name: string, impl: (args: Array<unknown>, node: AstNode) => unknown) =>
+  sync(`Object.${name}`, (args, node) => {
+    rejectTools(name, args, node)
+    return impl(args, node)
+  })
+
+// Object constructs identically with or without new, like JS. Only `keys` copies its result into the
+// program; `values`, `entries`, `assign`, and `fromEntries` hand back the program's own values.
+export const objectGlobal = <R>(runner: Runner<R>, toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>) =>
+  new HostFunction<R>({
+    name: "Object",
+    call: syncCall(constructObject),
+    construct: syncCall(constructObject),
+    instanceOf: (value) => value !== null && (typeof value === "object" || typeofValue(value) === "function"),
+    members: {
+      keys: sync("Object.keys", (args, node) =>
+        toProgram(
+          args[0] instanceof ToolReference
+            ? [...toolKeys(args[0].path)]
+            : Object.keys(requireObject("keys", args[0], node)),
+          "Object.keys result",
+        ),
+      ),
+      values: objectStatic("values", (args, node) => Object.values(requireObject("values", args[0], node))),
+      entries: objectStatic("entries", (args, node) =>
+        Object.entries(requireObject("entries", args[0], node)).map(([key, item]) => [key, item]),
+      ),
+      hasOwn: objectStatic("hasOwn", (args, node) =>
+        Object.hasOwn(
+          requireObject("hasOwn", args[0], node),
+          args[1] === AsyncIteratorSymbol || args[1] === IteratorSymbol ? args[1] : String(args[1]),
+        ),
+      ),
+      is: objectStatic("is", (args, node) => {
+        if (containsOpaqueReference(args[0]) || containsOpaqueReference(args[1])) {
+          throw new InterpreterRuntimeError("Object.is requires data values.", node, "InvalidDataValue")
+        }
+        return Object.is(args[0], args[1])
+      }),
+      assign: objectStatic("assign", objectAssign),
+      fromEntries: new HostFunction<R>({
+        name: "Object.fromEntries",
+        call: (args, node) =>
+          Effect.suspend(() => {
+            rejectTools("fromEntries", args, node)
+            return objectFromEntries(runner, args[0], node)
+          }),
+      }),
+      groupBy: groupBy(runner, "Object"),
+    },
+  })

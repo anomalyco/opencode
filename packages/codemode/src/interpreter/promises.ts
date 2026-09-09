@@ -6,16 +6,21 @@ import {
   CodeModeFunction,
   InterpreterRuntimeError,
   ProgramThrow,
-  PromiseCapabilityFunction,
   PromiseInstanceMethodReference,
-  PromiseMethodReference,
 } from "./model.js"
+import { HostFunction, requiresNew, sync } from "./host.js"
 import { caughtErrorValue, normalizeError } from "./errors.js"
-import { applyCollectionCallback, isSupportedCallback, type CallbackRunner, type SupportedCallback } from "./methods.js"
 import { typeofValue } from "./references.js"
 import { createAggregateErrorValue } from "../stdlib/value.js"
 import { Values } from "../values.js"
-import type { SyncIteratorRunner } from "./iterator.js"
+import { applyCollectionCallback, isSupportedCallback, type Runner, type SupportedCallback } from "./runner.js"
+
+// A `resolve`/`reject` handed to an executor or thenable: calling it settles the capability.
+const capability = (name: string, settle: (value: unknown) => void) =>
+  sync(name, (args) => {
+    settle(args[0])
+    return undefined
+  })
 
 // Observation only controls rejection reporting; program completion interrupts all promise work.
 export class PromiseRuntime<R> {
@@ -88,7 +93,7 @@ export const selfResolutionError = (node?: AstNode): InterpreterRuntimeError =>
   new InterpreterRuntimeError("Chaining cycle detected: a promise cannot resolve with itself.", node).as("TypeError")
 
 export const resolvePromiseValue = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   value: unknown,
   node: AstNode,
   own?: { promise?: Values.Promise },
@@ -103,12 +108,8 @@ export const resolvePromiseValue = <R>(
     // Promise resolution invokes a thenable's method in a later job.
     yield* Effect.yieldNow
     const deferred = Deferred.makeUnsafe<unknown, unknown>()
-    const resolve = new PromiseCapabilityFunction((result) => {
-      Deferred.doneUnsafe(deferred, Exit.succeed(result))
-    })
-    const reject = new PromiseCapabilityFunction((reason) => {
-      Deferred.doneUnsafe(deferred, Exit.fail(new ProgramThrow(reason)))
-    })
+    const resolve = capability("resolve", (result) => Deferred.doneUnsafe(deferred, Exit.succeed(result)))
+    const reject = capability("reject", (reason) => Deferred.doneUnsafe(deferred, Exit.fail(new ProgramThrow(reason))))
     const executed = yield* Effect.exit(runner.invokeCallable(then, [resolve, reject], node))
     if (!Exit.isSuccess(executed)) {
       if (Cause.hasInterruptsOnly(executed.cause)) return yield* Effect.failCause(executed.cause)
@@ -119,7 +120,7 @@ export const resolvePromiseValue = <R>(
 }
 
 export const resolvePromise = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   promises: PromiseRuntime<R>,
   value: unknown,
   node: AstNode,
@@ -132,17 +133,19 @@ export const resolvePromise = <R>(
   })
 }
 
-export const invokePromiseMethod = <R>(
-  runner: CallbackRunner<R> & SyncIteratorRunner<R>,
+const promiseStatics = ["all", "allSettled", "race", "any", "resolve", "reject"] as const
+
+const invokePromiseMethod = <R>(
+  runner: Runner<R>,
   promises: PromiseRuntime<R>,
-  ref: PromiseMethodReference,
+  name: (typeof promiseStatics)[number],
   args: Array<unknown>,
   node: AstNode,
 ): Effect.Effect<unknown, unknown, R> => {
-  if (ref.name === "resolve") {
+  if (name === "resolve") {
     return resolvePromise(runner, promises, args[0], node)
   }
-  if (ref.name === "reject") {
+  if (name === "reject") {
     return promises.create(Effect.fail(new ProgramThrow(args[0])))
   }
 
@@ -150,10 +153,9 @@ export const invokePromiseMethod = <R>(
     Effect.gen(function* () {
       const cursor = yield* runner.syncIterator(args[0], node)
       if (cursor === undefined) {
-        throw new InterpreterRuntimeError(
-          `Promise.${ref.name} expects an array or other synchronous iterable.`,
-          node,
-        ).as("TypeError")
+        throw new InterpreterRuntimeError(`Promise.${name} expects an array or other synchronous iterable.`, node).as(
+          "TypeError",
+        )
       }
       const items: Array<Values.Promise> = []
       while (true) {
@@ -164,7 +166,7 @@ export const invokePromiseMethod = <R>(
         items.push(item)
       }
 
-      if (ref.name === "all") {
+      if (name === "all") {
         return yield* settleAfterTurn(
           Effect.all(
             items.map((item) => Effect.flatten(promises.await(item))),
@@ -172,7 +174,7 @@ export const invokePromiseMethod = <R>(
           ),
         )
       }
-      if (ref.name === "allSettled") {
+      if (name === "allSettled") {
         const outcomes: Array<unknown> = []
         for (const item of items) {
           const exit = yield* promises.await(item)
@@ -191,7 +193,7 @@ export const invokePromiseMethod = <R>(
         yield* Effect.yieldNow
         return outcomes
       }
-      if (ref.name === "race") {
+      if (name === "race") {
         if (items.length === 0) {
           throw new InterpreterRuntimeError(
             "Promise.race([]) would never settle; provide at least one promise or value.",
@@ -222,7 +224,7 @@ export const invokePromiseMethod = <R>(
 }
 
 export const invokePromiseInstanceMethod = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   promises: PromiseRuntime<R>,
   ref: PromiseInstanceMethodReference,
   args: Array<unknown>,
@@ -238,8 +240,8 @@ export const invokePromiseInstanceMethod = <R>(
   return chainReaction(runner, promises, ref.promise, onFulfilled, onRejected, method, node)
 }
 
-export const constructPromise = <R>(
-  runner: CallbackRunner<R>,
+const constructPromise = <R>(
+  runner: Runner<R>,
   promises: PromiseRuntime<R>,
   executor: unknown,
   node: AstNode,
@@ -257,12 +259,8 @@ export const constructPromise = <R>(
       Effect.flatMap(Deferred.await(deferred), (value) => resolvePromiseValue(runner, value, node, box)),
     )
     box.promise = promise
-    const resolve = new PromiseCapabilityFunction((value) => {
-      Deferred.doneUnsafe(deferred, Exit.succeed(value))
-    })
-    const reject = new PromiseCapabilityFunction((value) => {
-      Deferred.doneUnsafe(deferred, Exit.fail(new ProgramThrow(value)))
-    })
+    const resolve = capability("resolve", (value) => Deferred.doneUnsafe(deferred, Exit.succeed(value)))
+    const reject = capability("reject", (value) => Deferred.doneUnsafe(deferred, Exit.fail(new ProgramThrow(value))))
     const executed = yield* Effect.exit(runner.invokeFunction(executor, [resolve, reject]))
     if (!Exit.isSuccess(executed)) {
       if (Cause.hasInterruptsOnly(executed.cause)) return yield* Effect.failCause(executed.cause)
@@ -304,7 +302,7 @@ const reactionExit = <R>(
   })
 
 const chainReaction = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   promises: PromiseRuntime<R>,
   source: Values.Promise,
   onFulfilled: SupportedCallback | undefined,
@@ -328,7 +326,7 @@ const chainReaction = <R>(
 }
 
 const chainFinally = <R>(
-  runner: CallbackRunner<R>,
+  runner: Runner<R>,
   promises: PromiseRuntime<R>,
   source: Values.Promise,
   cleanup: SupportedCallback | undefined,
@@ -351,3 +349,32 @@ const chainFinally = <R>(
       return yield* exit
     }),
   )
+
+export const promiseGlobal = <R>(runner: Runner<R>, promises: PromiseRuntime<R>) => {
+  // Combinators are not callbacks: `[p].map(Promise.resolve)` must ask for an arrow function.
+  const statics = new Map<string, HostFunction<R>>(
+    promiseStatics.map((name) => [
+      name,
+      new HostFunction<R>({
+        name: `Promise.${name}`,
+        call: (args, node) => invokePromiseMethod(runner, promises, name, args, node),
+        callback: false,
+      }),
+    ]),
+  )
+  return new HostFunction<R>({
+    name: "Promise",
+    call: requiresNew("Promise"),
+    construct: (args, node) => constructPromise(runner, promises, args[0], node),
+    instanceOf: (value) => value instanceof Values.Promise,
+    // Unknown statics fail loudly so a missing await cannot hide behind `undefined`.
+    members: (key, node) => {
+      const method = typeof key === "string" ? statics.get(key) : undefined
+      if (method !== undefined) return method
+      throw new InterpreterRuntimeError(
+        `Promise.${String(key)} is not available. Available: Promise.all, Promise.allSettled, Promise.race, Promise.any, Promise.resolve, and Promise.reject; consume promises with await.`,
+        node,
+      )
+    },
+  })
+}

@@ -1,47 +1,28 @@
+import { ToolReference } from "../tool-runtime.js"
+import { Values } from "../values.js"
+import { HostFunction, HostNamespace } from "./host.js"
 import {
   type AstNode,
   AsyncIteratorSymbol,
   CodeModeFunction,
   CodeModeGenerator,
-  CoercionFunction,
-  ErrorConstructorReference,
-  GlobalMethodReference,
-  GlobalNamespace,
   GeneratorMethodReference,
   InterpreterRuntimeError,
   IntrinsicReference,
   IteratorSymbol,
-  JsonMethodReference,
-  PromiseCapabilityFunction,
   PromiseInstanceMethodReference,
-  PromiseMethodReference,
-  PromiseNamespace,
-  SearchFunction,
-  SymbolNamespace,
-  UriFunction,
 } from "./model.js"
-import { ToolReference } from "../tool-runtime.js"
-import { Values } from "../values.js"
 
 export const isRuntimeReference = (value: unknown): boolean =>
+  value instanceof HostFunction ||
+  value instanceof HostNamespace ||
   value instanceof CodeModeFunction ||
   value instanceof CodeModeGenerator ||
   value instanceof GeneratorMethodReference ||
   value instanceof ToolReference ||
   value instanceof IntrinsicReference ||
-  value instanceof GlobalNamespace ||
-  value instanceof GlobalMethodReference ||
-  value instanceof JsonMethodReference ||
-  value instanceof PromiseNamespace ||
-  value instanceof PromiseMethodReference ||
   value instanceof PromiseInstanceMethodReference ||
   value instanceof Values.Promise ||
-  value instanceof CoercionFunction ||
-  value instanceof UriFunction ||
-  value instanceof SearchFunction ||
-  value instanceof PromiseCapabilityFunction ||
-  value instanceof ErrorConstructorReference ||
-  value instanceof SymbolNamespace ||
   Values.isValue(value)
 
 function* childValues(value: object): Generator {
@@ -77,8 +58,7 @@ const find = (
 
 const never = () => false
 
-export const containsRuntimeReference = (value: unknown): boolean =>
-  find(value, isRuntimeReference, never, new Set())
+export const containsRuntimeReference = (value: unknown): boolean => find(value, isRuntimeReference, never, new Set())
 
 // CodeMode values are data here, not opaque interpreter references.
 export const containsOpaqueReference = (value: unknown): boolean =>
@@ -99,24 +79,15 @@ export const rejectCircularInsertion = (
 
 export const typeofValue = (value: unknown): string => {
   if (
+    value instanceof HostFunction ||
     value instanceof CodeModeFunction ||
     value instanceof GeneratorMethodReference ||
-    value instanceof CoercionFunction ||
     value instanceof IntrinsicReference ||
-    value instanceof GlobalMethodReference ||
-    value instanceof JsonMethodReference ||
-    value instanceof PromiseMethodReference ||
-    value instanceof PromiseInstanceMethodReference ||
-    value instanceof PromiseNamespace ||
-    value instanceof PromiseCapabilityFunction ||
-    value instanceof ErrorConstructorReference ||
-    value instanceof SymbolNamespace
-  )
+    value instanceof PromiseInstanceMethodReference
+  ) {
     return "function"
-  if (value instanceof UriFunction || value instanceof SearchFunction) return "function"
-  if (value instanceof ToolReference) return value.path.length > 0 ? "function" : "object"
-  if (value instanceof GlobalNamespace) {
-    return value.name === "Math" || value.name === "JSON" || value.name === "console" ? "object" : "function"
   }
+  if (value instanceof HostNamespace) return "object"
+  if (value instanceof ToolReference) return value.path.length > 0 ? "function" : "object"
   return typeof value
 }
