@@ -25,22 +25,13 @@ const error = async (code: string) => {
   return result.error
 }
 
-const supportedConstructors = async () => {
-  const failure = await error(`return new Number(1)`)
-  const match = failure.message.match(/Supported constructors: (.+)\. \(line/)
-  if (match === null) throw new Error(`no constructor list in: ${failure.message}`)
-  return match[1].split(", ")
-}
-
 describe("new on a non-constructible callee", () => {
   test("built-in functions without construction point at the plain call", async () => {
     // Number is a real constructor in JS, so the message must not claim otherwise.
     const failure = await error(`return new Number(42)`)
     expect(failure.kind).toBe("ExecutionFailure")
-    expect(failure.message).toStartWith(
-      "new Number(...) is not supported; call Number(...) without new instead. Supported constructors: Object, Array, ",
-    )
-    expect(failure.suggestions).toEqual([expect.stringContaining("Supported constructors: ")])
+    expect(failure.message).toStartWith("new Number(...) is not supported; call Number(...) without new instead.")
+    expect(failure.suggestions).toBeUndefined()
     expect((await error(`return new String("a")`)).message).toStartWith("new String(...) is not supported")
     expect((await error(`return new Math.abs(1)`)).message).toStartWith(
       "new Math.abs(...) is not supported; call Math.abs(...) without new instead.",
@@ -80,35 +71,5 @@ describe("new on a non-constructible callee", () => {
     const failure = await error(`class A {}; return new A()`)
     expect(failure.kind).toBe("UnsupportedSyntax")
     expect(failure.message).toStartWith("Syntax 'ClassDeclaration' is not supported.")
-  })
-})
-
-describe("supported constructor list", () => {
-  test("every listed constructor constructs", async () => {
-    const constructors = await supportedConstructors()
-    expect(constructors).toEqual([
-      "Object",
-      "Array",
-      "Promise",
-      "Date",
-      "RegExp",
-      "Map",
-      "Set",
-      "URL",
-      "URLSearchParams",
-      "Error",
-      "TypeError",
-      "RangeError",
-      "SyntaxError",
-      "ReferenceError",
-      "EvalError",
-      "URIError",
-      "AggregateError",
-    ])
-    for (const name of constructors) {
-      const argument =
-        name === "Promise" ? "() => {}" : name === "AggregateError" ? "[]" : name === "URL" ? '"https://a.b/"' : ""
-      expect(await value(`return typeof new ${name}(${argument})`)).toBe("object")
-    }
   })
 })

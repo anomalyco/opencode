@@ -200,8 +200,6 @@ const promiseResolutionNode: AstNode = { type: "PromiseResolution", start: 0, en
 /** One program execution: the tool bridge, promise scheduler, captured logs, and the global scope built once. */
 export class Runtime<R> {
   readonly runner: Runner<R>
-  /** Global names that `new` accepts, in declaration order, for diagnostics. */
-  readonly constructors: ReadonlyArray<string>
   private readonly root: Frame<R>
 
   constructor(
@@ -220,11 +218,7 @@ export class Runtime<R> {
       settlePromise: (promise) => this.root.settlePromise(promise),
       syncIterator: (value, node) => this.root.syncIterator(value, node),
     }
-    const bindings = globals(this)
-    for (const [name, value] of bindings) globalScope.set(name, { mutable: false, value })
-    this.constructors = bindings.flatMap(([name, value]) =>
-      value instanceof HostFunction && value.construct !== undefined ? [name] : [],
-    )
+    for (const [name, value] of globals(this)) globalScope.set(name, { mutable: false, value })
   }
 
   run(program: Program): Effect.Effect<unknown, unknown, R> {
@@ -1275,14 +1269,13 @@ class Frame<R> {
         // unsupported syntax. Built-ins like Number are real constructors in JS, so do not claim
         // otherwise; say `new` is unsupported for them and point at the plain call.
         const name = calleeDescription(node.callee)
-        const hint = `Supported constructors: ${self.runtime.constructors.join(", ")}.`
         const message =
           callee instanceof CodeModeFunction
             ? `${name} cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead.`
             : callee instanceof HostFunction
               ? `new ${name}(...) is not supported; call ${name}(...) without new instead.`
               : `${name} is not a constructor.`
-        throw new InterpreterRuntimeError(`${message} ${hint}`, node, "ExecutionFailure", [hint]).as("TypeError")
+        throw new InterpreterRuntimeError(message, node).as("TypeError")
       }
       const args = yield* self.evaluateCallArguments(node.arguments)
       return yield* construct(args, node)
