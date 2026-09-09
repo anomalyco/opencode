@@ -10,12 +10,26 @@ import { Heap } from "@/cli/heap"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Effect } from "effect"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
+import { Global } from "@opencode-ai/core/global"
+import { appendFileSync } from "fs"
+import path from "path"
 
 Heap.start()
 
-const onUnhandledRejection = (_error: unknown) => {}
+// The file logger batches writes, so a crash can exit the process before the batch is flushed.
+// Write to the same file synchronously instead, otherwise the failure leaves no trace at all.
+const logCrash = (message: string, error: unknown) => {
+  try {
+    appendFileSync(
+      path.join(Global.Path.log, "opencode.log"),
+      `timestamp=${new Date().toISOString()} level=ERROR message=${message} error=${JSON.stringify(String(error))}\n`,
+    )
+  } catch {}
+}
 
-const onUncaughtException = (_error: Error) => {}
+const onUnhandledRejection = (error: unknown) => logCrash("worker.unhandledRejection", error)
+
+const onUncaughtException = (error: Error) => logCrash("worker.uncaughtException", error)
 
 process.on("unhandledRejection", onUnhandledRejection)
 process.on("uncaughtException", onUncaughtException)
