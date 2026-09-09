@@ -85,6 +85,7 @@ Den nåværende listen over modeller inkluderer:
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
+- **Omen Alpha**
 
 Listen over modeller kan endres etter hvert som vi tester og legger til nye.
 
@@ -92,23 +93,54 @@ Listen over modeller kan endres etter hvert som vi tester og legger til nye.
 
 ## Hvor kan jeg bruke det?
 
-OpenCode Go er utviklet for bruk med [OpenCode](https://opencode.ai) og andre populære kodeagenter som genererer lignende typer forespørsler.
+OpenCode Go er utviklet for [OpenCode](https://opencode.ai) og andre kodeagenter
+som sender lignende typer forespørsler. Trafikken overvåkes for misbruk som
+forringer opplevelsen for andre brukere.
 
-Trafikken overvåkes for misbruk som forringer opplevelsen for andre brukere.
+Klienten din skal:
 
-For å sikre at kontoen din ikke blir flagget, må du sørge for at verktøyet du bruker,
+1. Sende typisk trafikk fra en kodeagent.
+2. Identifisere seg med sin egen user agent, for eksempel `my-coding-agent/1.0`, i stedet
+   for et generisk navn på et SDK eller HTTP-bibliotek.
+3. Sende en stabil sesjons-ID i `x-opencode-session` for hver samtale, slik at vi kan optimalisere ruting og
+   promptbufring.
 
-1\. ikke genererer misbrukstrafikk  
-2\. identifiserer seg korrekt (ingen generiske User-Agent-identifikatorer)  
-3\. inkluderer `x-opencode-session`-headeren, slik at vi kan optimalisere promptbufring
+### Validerte klienter
+
+I tillegg til OpenCode er følgende klienter validert for å fungere riktig
+med OpenCode Go. Vi garanterer imidlertid ikke at de vil fortsette å fungere i fremtiden.
+
+| Klient            | Sesjonsstøtte                                                                                                                                                                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Hermes**        | Bygg som inneholder [PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864), sender headeren i primære og sekundære OpenCode-forespørsler. Rettelsen ble slått sammen etter v0.21.0; den versjonen inneholder den ikke alene.           |
+| **Claude Code**   | Go gjenkjenner den innebygde sesjonsheaderen. En wrapper for en egendefinert header er ikke nødvendig.                                                                                                                                                 |
+| **Codex**         | Go gjenkjenner den innebygde sesjonsheaderen. Noen versjoner og proxyoppsett utelater den fortsatt; behold sesjonsheaderen når forespørsler videresendes.                                                                                              |
+| **ZCode**         | Go gjenkjenner den innebygde sesjonsheaderen. Vår [forespørsel om `x-opencode-session`](https://github.com/zai-org/feedback/issues/492) er fortsatt åpen, men det er ikke lenger nødvendig å sende akkurat denne headeren.                             |
+| **Pi**            | Gjeldende bygg sender sesjonsinformasjon for OpenCode. Oppdater eldre installasjoner.                                                                                                                                                                  |
+| **jcode**         | Oppdater til **v0.81.6 eller nyere**, som inneholder [rettelsen for sesjonsheaderen](https://github.com/1jehuang/jcode/issues/1167).                                                                                                                   |
+| **Kilo Code CLI** | Bygg som inneholder [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752), gjenoppretter OpenCode-sesjonsheadere. Denne rettelsen dekker CLI-en, ikke VS Code-utvidelsen. Se [issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723). |
+
+### Kjente problematiske klienter
+
+Disse klientene mangler sesjonsstøtte eller har ufullstendig støtte i versjonene vi
+undersøkte. De lenkede rapportene følger rettelser og midlertidige løsninger.
+
+| Klient                  | Status og oppfølging                                                                                                                                                                                                                                             |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DeepSeek Harness**    | Sesjonsinformasjon mottas på noen modellbaner, men mangler på andre. Vi gjenkjenner den innebygde headeren; det gjenstående arbeidet er å sende den gjennom alle adaptere. [Discussion #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495). |
+| **GitHub Copilot Chat** | Automatisk støtte for sesjonsheaderen er etterspurt i [VS Code issue #334186](https://github.com/microsoft/vscode/issues/334186).                                                                                                                                |
+| **Kimi Code**           | Automatisk støtte for sesjonsheaderen er etterspurt i [issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506).                                                                                                                                        |
+| **MiMo Code**           | [Issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) har en foreslått rettelse i [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327), som ennå ikke er slått sammen.                                                                     |
 
 ## Bruksgrenser
 
-OpenCode Go inkluderer følgende grenser:
+OpenCode Go inkluderer følgende basisgrenser:
 
 - **5-timers grense** — $12 i bruk
 - **Ukentlig grense** — $30 i bruk
 - **Månedlig grense** — $60 i bruk
+
+Den effektive bruken varierer etter modell; se tabellen nedenfor.
 
 Grensene er definert i dollarverdi. Dette betyr at ditt faktiske antall forespørsler avhenger av modellen du bruker. Billigere modeller som MiMo-V2.5 tillater flere forespørsler, mens dyrere modeller som GLM-5.2 tillater færre.
 
@@ -142,8 +174,9 @@ Tabellen nedenfor gir et estimert antall forespørsler basert på typiske bruksm
 | DeepSeek V4 Flash Vision Exp | 3,800                    | 9,450                | 18,900                 |
 | Hy4 preview                  | 1,350                    | 3,380                | 6,770                  |
 | Hy3                          | 4,300                    | 10,750               | 21,500                 |
+| Omen Alpha                   | 11,600                   | 29,000               | 57,900                 |
 
-Estimatene er basert på observerte forespørselsmønstre:
+Estimatene bruker følgende antall tokens per forespørsel; faktisk bruk varierer.
 
 - Grok 4.6 — 390 input, 32 500 bufret, 120 output-tokens per forespørsel
 - GLM-5.3-Flash — 1 000 input, 55 000 bufret, 200 output-tokens per forespørsel
@@ -168,6 +201,7 @@ Estimatene er basert på observerte forespørselsmønstre:
 - Hy3 — 830 input, 71 500 bufret, 295 output-tokens per forespørsel
 - MiMo-V2.5 — 830 input, 71 500 bufret, 295 output-tokens per forespørsel
 - MiMo-V2.5-Pro — 790 input, 86 000 bufret, 305 output-tokens per forespørsel
+- Omen Alpha — 300 input-, 40 000 bufrede, 100 output-tokens per forespørsel
 
 Estimatene er også basert på følgende priser per 1M tokens og den månedlige bruken som er inkludert med hver modell:
 
@@ -207,6 +241,7 @@ Estimatene er også basert på følgende priser per 1M tokens og den månedlige 
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15  |
 | Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | $30  |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60  |
+| Omen Alpha                              | $0.20  | $0.66  | $0.04       | -            | $100 |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak-tidene er 01:00-04:00 og 06:00-10:00 UTC fra mandag til fredag; alle andre tider, inkludert helger, er Off-Peak. [Les mer](https://api-docs.deepseek.com/quick_start/pricing/).
 
@@ -232,7 +267,7 @@ etter at du har nådd bruksgrensene dine, i stedet for å blokkere forespørsler
 
 ### Hvorfor noen modeller har lavere bruk
 
-Med Go betaler du $10/måned, og vi har som mål å gi deg seks ganger så mye bruk.
+Med Go betaler du $10/måned, og for de fleste modeller har vi som mål å gi deg seks ganger så mye bruk.
 
 For de fleste modeller får vi dette til gjennom volumrabatter og reservert GPU-kapasitet. Deretter gir vi disse besparelsene videre til deg gjennom 6x-multiplikatoren.
 
@@ -275,6 +310,7 @@ Du kan også få tilgang til Go-modeller gjennom følgende API-endepunkter.
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Omen Alpha                   | omen-alpha                   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 [Modell-ID-en](/docs/config/#models) i din OpenCode-konfigurasjon
 bruker formatet `opencode-go/<model-id>`. For eksempel, for Kimi K3, vil du
@@ -322,12 +358,13 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash Vision Exp | Brukes ikke   | 0 dager         |
 | Hy4 preview                  | Brukes ikke   | 0 dager         |
 | Hy3                          | Brukes ikke   | 0 dager         |
+| Omen Alpha                   | Brukes ikke   | 0 dager         |
 
 - **Grok 4.6:** ZDR deaktiverer viktige API-funksjoner som er avhengige av lagrede data, inkludert den tilstandsbaserte Responses API, Files and Collections og Batch API. [Les mer](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Logger for overvåking av misbruk genereres for all bruk av API-funksjoner og oppbevares i opptil 30 dager. [Les mer](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
 - **Muse Spark 1.3 Contributor:** Kraftig rabatterte tokenpriser i bytte mot tillatelse til å bruke ledetekstene og fullføringene dine til å trene fremtidige Meta-modeller. Tilgjengeligheten er begrenset til regioner som er tillatt i henhold til [retningslinjene for geografisk bruk](https://ai.developer.meta.com/legal/geographic-use-policy) fra Meta. [Les mer](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Muse Spark 1.2 Contributor:** Kraftig rabatterte tokenpriser i bytte mot tillatelse til å bruke ledetekstene og fullføringene dine til å trene fremtidige Meta-modeller. Tilgjengeligheten er begrenset til regioner som er tillatt i henhold til [retningslinjene for geografisk bruk](https://ai.developer.meta.com/legal/geographic-use-policy) fra Meta. [Les mer](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
-- **DeepSeek V4 Flash:** ZDR-avtalen fornyes månedlig. Den gjeldende avtalen er gyldig til og med 31. august 2026.
+- **DeepSeek V4 Flash:** ZDR-avtalen fornyes månedlig. Den gjeldende avtalen er gyldig til og med 30. september 2026.
 
 ---
 
