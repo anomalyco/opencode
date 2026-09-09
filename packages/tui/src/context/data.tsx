@@ -71,6 +71,14 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       location: {},
     })
 
+    // Atomic location-slice write: creates the key if missing, merges if present.
+    // Single setStore call — no check-then-act race. Solid `setStore` invokes the
+    // updater with the current value at the last path segment (undefined when the
+    // key is missing) and `prev ?? {}` creates the object without a separate guard.
+    function setLocationSlice(key: string, slice: keyof LocationData, data: unknown) {
+      setStore("location", key, (prev) => ({ ...(prev ?? {}), [slice]: data }))
+    }
+
     const sdk = useSDK()
     const events = useEvent()
     const [defaultLocation, setDefaultLocation] = createSignal<LocationRef>({
@@ -468,6 +476,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         async refresh(ref?: LocationRef) {
           const response = await sdk.client.v2.location.get({ location: locationQuery(ref) }, { throwOnError: true })
           const location = response.data
+          if (!location) return // location services not ready yet (issue #40002)
           const key = locationKey(location)
           if (!store.location[key]) setStore("location", key, {})
           if (!ref) setDefaultLocation({ directory: location.directory, workspaceID: location.workspaceID })
@@ -478,8 +487,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           async refresh(ref?: LocationRef) {
             const result = await sdk.client.v2.agent.list({ location: locationQuery(ref) }, { throwOnError: true })
-            const key = locationKey(result.data.location)
-            setStore("location", key, "agent", result.data.data)
+            const location = result.data.location
+            if (!location) return
+            const key = locationKey(location)
+            if (ref?.workspaceID && key !== locationKey(ref)) return
+            setLocationSlice(key, "agent", result.data.data)
           },
         },
         command: {
@@ -488,8 +500,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           async refresh(ref?: LocationRef) {
             const result = await sdk.client.v2.command.list({ location: locationQuery(ref) }, { throwOnError: true })
-            const key = locationKey(result.data.location)
-            setStore("location", key, "command", result.data.data)
+            const location = result.data.location
+            if (!location) return
+            const key = locationKey(location)
+            if (ref?.workspaceID && key !== locationKey(ref)) return
+            setLocationSlice(key, "command", result.data.data)
           },
         },
         integration: {
@@ -501,8 +516,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               { location: locationQuery(ref) },
               { throwOnError: true },
             )
-            const key = locationKey(result.data.location)
-            setStore("location", key, "integration", result.data.data)
+            const location = result.data.location
+            if (!location) return
+            const key = locationKey(location)
+            if (ref?.workspaceID && key !== locationKey(ref)) return
+            setLocationSlice(key, "integration", result.data.data)
           },
         },
         model: {
@@ -511,8 +529,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           async refresh(ref?: LocationRef) {
             const result = await sdk.client.v2.model.list({ location: locationQuery(ref) }, { throwOnError: true })
-            const key = locationKey(result.data.location)
-            setStore("location", key, "model", result.data.data)
+            const location = result.data.location
+            if (!location) return
+            const key = locationKey(location)
+            if (ref?.workspaceID && key !== locationKey(ref)) return
+            setLocationSlice(key, "model", result.data.data)
           },
         },
         provider: {
@@ -521,8 +542,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           async refresh(ref?: LocationRef) {
             const result = await sdk.client.v2.provider.list({ location: locationQuery(ref) }, { throwOnError: true })
-            const key = locationKey(result.data.location)
-            setStore("location", key, "provider", result.data.data)
+            const location = result.data.location
+            if (!location) return
+            const key = locationKey(location)
+            if (ref?.workspaceID && key !== locationKey(ref)) return
+            setLocationSlice(key, "provider", result.data.data)
           },
         },
         reference: {
@@ -531,8 +555,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           async refresh(ref?: LocationRef) {
             const result = await sdk.client.v2.reference.list({ location: locationQuery(ref) }, { throwOnError: true })
-            const key = locationKey(result.data.location)
-            setStore("location", key, "reference", result.data.data)
+            const location = result.data.location
+            if (!location) return
+            const key = locationKey(location)
+            if (ref?.workspaceID && key !== locationKey(ref)) return
+            setLocationSlice(key, "reference", result.data.data)
           },
         },
         skill: {
@@ -541,8 +568,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           async refresh(ref?: LocationRef) {
             const result = await sdk.client.v2.skill.list({ location: locationQuery(ref) }, { throwOnError: true })
-            const key = locationKey(result.data.location)
-            setStore("location", key, "skill", result.data.data)
+            const location = result.data.location
+            if (!location) return
+            const key = locationKey(location)
+            if (ref?.workspaceID && key !== locationKey(ref)) return
+            setLocationSlice(key, "skill", result.data.data)
           },
         },
       },
