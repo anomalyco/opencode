@@ -1023,7 +1023,8 @@ export async function handler(
       modelInfo.costPeak && isPeakPricing(new Date())
         ? modelInfo.costPeak
         : modelInfo.cost200K &&
-            inputTokens + (cacheReadTokens ?? 0) + (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0) > 200_000
+            inputTokens + (cacheReadTokens ?? 0) + (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0) >
+              modelInfo.cost200K.threshold
           ? modelInfo.cost200K
           : modelInfo.cost
 

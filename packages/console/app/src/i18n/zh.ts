@@ -59,6 +59,7 @@ export const dict = {
   "common.cancel": "取消",
   "common.creating": "正在创建...",
   "common.create": "创建",
+  "common.contactUs": "联系我们",
 
   "common.videoUnsupported": "您的浏览器不支持 video 标签。",
   "common.figure": "图 {{n}}.",
@@ -218,6 +219,9 @@ export const dict = {
   "zen.faq.q8": "我可以在其他编程代理中使用 Zen 吗？",
   "zen.faq.a8":
     "虽然 Zen 与 OpenCode 配合效果极佳，但您可以在任何代理中使用 Zen。请按照您首选编程代理中的设置说明进行操作。",
+  "zen.faq.q9": "我可以退款吗？",
+  "zen.faq.a9":
+    "如果扣款发生在过去 14 天内，并且您尚未使用该次购买的任何额度，您可能符合退款条件。请{{contact}}申请退款。",
 
   "zen.cta.start": "开始使用 Zen",
   "zen.pricing.title": "充值 $20 (即用即付)",
@@ -349,6 +353,9 @@ export const dict = {
   "go.faq.q9": "免费模型和 Go 之间的区别是什么？",
   "go.faq.a9":
     "免费模型包含 Big Pickle 加上当时可用的促销模型，每天有 200 次请求的配额。Go 提供精选模型阵容，并在滚动窗口（5 小时、每周和每月）内执行更高的请求配额，大致相当于每 5 小时 $12、每周 $30 和每月 $60 的基础额度；具体额度可能因模型而异（实际请求计数因模型和使用情况而异）。",
+  "go.faq.q10": "我可以退款吗？",
+  "go.faq.a10":
+    "如果扣款发生在过去 14 天内，并且您在该计费周期内尚未使用任何 Go 额度，您可能符合退款条件。请{{contact}}申请退款。",
 
   "zen.api.error.rateLimitExceeded": "超出速率限制。请稍后重试。",
   "zen.api.error.modelNotSupported": "不支持模型 {{model}}",
