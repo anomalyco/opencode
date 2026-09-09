@@ -417,7 +417,7 @@ export function make(input: {
 
     if (params.configId === "model") {
       const selected = yield* parseSelectedModel(snapshot, params.value)
-      const variant = selected.variant ?? selectVariant(snapshot, selected.model)
+      const variant = selectModelVariant(snapshot, current, selected)
       const state = yield* session
         .setVariant(params.sessionId, Directory.variants(snapshot, selected.model) ? variant : undefined)
         .pipe(Effect.andThen(session.setModel(params.sessionId, selected.model)))
@@ -480,12 +480,7 @@ export function make(input: {
     const snapshot = yield* configSnapshot(current)
     const selected = yield* parseSelectedModel(snapshot, params.modelId)
     const state = yield* session
-      .setVariant(
-        params.sessionId,
-        Directory.variants(snapshot, selected.model)
-          ? (selected.variant ?? selectVariant(snapshot, selected.model))
-          : undefined,
-      )
+      .setVariant(params.sessionId, selectModelVariant(snapshot, current, selected))
       .pipe(Effect.andThen(session.setModel(params.sessionId, selected.model)))
     yield* sendConfigOptionUpdate(
       input.connection,
@@ -917,6 +912,18 @@ function selectVariant(snapshot: Directory.Snapshot, model: Directory.DefaultMod
   if (!variants) return
   if (variants.default) return "default"
   return Object.keys(variants)[0]
+}
+
+function selectModelVariant(
+  snapshot: Directory.Snapshot,
+  current: ACPSession.Info,
+  selected: { model: Directory.DefaultModel; variant?: string },
+) {
+  const variants = Directory.variants(snapshot, selected.model)
+  if (!variants) return
+  if (selected.variant) return selected.variant
+  if (sameModel(selected.model, current.model) && current.variant && current.variant in variants) return current.variant
+  return selectVariant(snapshot, selected.model)
 }
 
 function configOptions(snapshot: Directory.Snapshot, session: ConfigState) {

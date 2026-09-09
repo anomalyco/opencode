@@ -970,6 +970,27 @@ describe("ACP service sessions", () => {
     expect(select({ configOptions: update.configOptions }, "effort")?.currentValue).toBe("low")
   })
 
+  it("preserves restored effort when legacy clients synchronize the same model", async () => {
+    const { service, updates } = makeService([], {
+      get: () =>
+        Promise.resolve({
+          data: {
+            id: "ses_loaded",
+            agent: "build",
+            model: { providerID: "test", id: "test-model", variant: "high" },
+          },
+        }),
+    })
+    await Effect.runPromise(service.resumeSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }))
+
+    await Effect.runPromise(service.setSessionModel({ sessionId: "ses_loaded", modelId: "test/test-model" }))
+
+    const update = updates.findLast((item) => item.update.sessionUpdate === "config_option_update")?.update
+    expect(update?.sessionUpdate).toBe("config_option_update")
+    if (update?.sessionUpdate !== "config_option_update") throw new Error("missing config option update")
+    expect(select({ configOptions: update.configOptions }, "effort")?.currentValue).toBe("high")
+  })
+
   it("switches effort and returns the updated effort current value", async () => {
     const { service } = makeService()
     const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
