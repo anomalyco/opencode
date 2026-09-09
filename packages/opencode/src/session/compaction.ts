@@ -14,7 +14,7 @@ import { NotFoundError } from "@/storage/storage"
 
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { isOverflow as overflow, usable } from "./overflow"
+import { isOverflow as overflow, usable, compactionConfig } from "./overflow"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -114,7 +114,7 @@ function completedCompactions(messages: SessionV1.WithParts[]) {
 
 function preserveRecentBudget(input: { cfg: ConfigV1.Info; model: Provider.Model }) {
   return (
-    input.cfg.compaction?.preserve_recent_tokens ??
+    compactionConfig(input).preserve_recent_tokens ??
     Math.min(MAX_PRESERVE_RECENT_TOKENS, Math.max(MIN_PRESERVE_RECENT_TOKENS, Math.floor(usable(input) * 0.25)))
   )
 }
@@ -225,7 +225,7 @@ const layer = Layer.effect(
       cfg: ConfigV1.Info
       model: Provider.Model
     }) {
-      const limit = input.cfg.compaction?.tail_turns
+      const limit = compactionConfig(input).tail_turns
       if (limit !== undefined && limit <= 0) return { head: input.messages, tail_start_id: undefined }
       const budget = preserveRecentBudget({ cfg: input.cfg, model: input.model })
       const all = turns(input.messages)
