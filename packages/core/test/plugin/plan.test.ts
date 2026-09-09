@@ -118,6 +118,7 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
 })
 
 const request = (agent: Agent.ID, messages: Array<Message>): SessionContext => ({
+  kind: "primary",
   sessionID,
   agent,
   model: { id: Model.ID.make("test-model"), providerID: Provider.ID.make("test") },
