@@ -267,6 +267,27 @@ describe("server session", () => {
     expect(store.data.message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
   })
 
+  test("keeps a valid page size when refreshing an empty current message page", async () => {
+    const requests: unknown[] = []
+    const messageApi = {
+      list: async (input: unknown) => {
+        requests.push(input)
+        return { data: [], cursor: { previous: null, next: null } }
+      },
+    } as unknown as MessageApi
+    const sessionApi = { get: async () => session("root") } as unknown as SessionApi
+    const store = createServerSession({} as OpencodeClient, sessionApi, messageApi)
+    store.remember(session("root"))
+
+    await store.sync("root")
+    await store.sync("root", { force: true })
+
+    expect(requests).toEqual([
+      { sessionID: "root", limit: 20, order: "desc" },
+      { sessionID: "root", limit: 20, order: "desc" },
+    ])
+  })
+
   test("extends a current page to include the user for split assistant turns", async () => {
     const user = { id: "msg_1_user", type: "user", text: "hello", time: { created: 1 } } as const
     const assistant = (id: string, created: number) => ({

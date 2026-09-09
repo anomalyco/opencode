@@ -842,7 +842,7 @@ export function createServerSession(
         resolve(sessionID, options),
         cached && !options?.force
           ? Promise.resolve()
-          : loadMessages(sessionID, options?.messageLimit ?? meta.limit[sessionID] ?? initialMessagePageSize),
+          : loadMessages(sessionID, options?.messageLimit || meta.limit[sessionID] || initialMessagePageSize),
       ])
     })
   }
