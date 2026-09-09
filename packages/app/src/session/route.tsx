@@ -14,7 +14,6 @@ import { useNotification } from "@/shell/notifications/notification"
 import { ComposerPersistenceProvider } from "@/composer/persistence"
 import { useData, useServer } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
-import { TerminalProvider } from "@/session/terminal/context"
 import { useSettingsCommand } from "@/settings/command"
 import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
 import { useTabs, type PendingSession } from "@/shell/tabs/tabs"
@@ -167,15 +166,13 @@ function TargetSessionPage() {
   return (
     // These providers select their scoped state reactively and retain bounded caches,
     // so keep their owners alive while navigating between workspaces on this server.
-    <TerminalProvider>
-      <FileProvider>
-        <ComposerPersistenceProvider>
-          <CommentsProvider>
-            <SessionPage />
-          </CommentsProvider>
-        </ComposerPersistenceProvider>
-      </FileProvider>
-    </TerminalProvider>
+    <FileProvider>
+      <ComposerPersistenceProvider>
+        <CommentsProvider>
+          <SessionPage />
+        </CommentsProvider>
+      </ComposerPersistenceProvider>
+    </FileProvider>
   )
 }
 

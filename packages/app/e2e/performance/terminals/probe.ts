@@ -1,5 +1,5 @@
 import { Terminal } from "ghostty-web"
-import { SerializeAddon } from "../../../src/session/terminal/serialize"
+import { SerializeAddon } from "@opencode/plugin-terminal-desktop/serialize"
 
 export type TerminalProbe = {
   term?: Terminal

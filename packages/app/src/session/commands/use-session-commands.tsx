@@ -7,7 +7,6 @@ import { useLayout } from "@/shell/state/layout"
 import { useComposerState } from "@/composer/persistence"
 import { useServerSDK } from "@/runtime/server/client"
 import { useSettings } from "@/settings/model"
-import { useTerminal } from "@/session/terminal/context"
 import { showToast } from "@/shell/notifications/toast"
 import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -49,7 +48,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const prompt = useComposerState()
   const serverSDK = useServerSDK()
   const settings = useSettings()
-  const terminal = useTerminal()
   const platform = usePlatform()
   const layout = useLayout()
   const openDialog = async <T,>(load: () => Promise<T>, show: (value: T) => void) => {
@@ -91,7 +89,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const fileCommand = withCategory(language.t("command.category.file"))
   const contextCommand = withCategory(language.t("command.category.context"))
   const viewCommand = withCategory(language.t("command.category.view"))
-  const terminalCommand = withCategory(language.t("command.category.terminal"))
   const mcpCommand = withCategory(language.t("command.category.mcp"))
   const permissionsCommand = withCategory(language.t("command.category.permissions"))
 
@@ -183,20 +180,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }
 
     addSelectionToContext(path, selectionFromLines(range))
-  }
-
-  const openTerminal = () => {
-    actions.session.layout.view().terminal.open()
-    if (terminal.all().length > 0) terminal.new()
-    if (terminal.all().length === 0) terminal.requestFocus()
-  }
-
-  const closeTerminal = () => {
-    const id = terminal.active()
-    if (!id) return
-    const last = terminal.all().length === 1
-    void terminal.close(id)
-    if (last) actions.session.layout.view().terminal.close()
   }
 
   const chooseMcp = () => {
@@ -337,21 +320,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const viewCmds = () => [
     viewCommand({
-      id: "terminal.toggle",
-      title: language.t("command.terminal.toggle"),
-      keybind: "ctrl+`",
-      slash: "terminal",
-      onSelect: () => {
-        if (actions.session.layout.view().terminal.opened()) {
-          terminal.cancelFocus()
-          actions.session.layout.view().terminal.close()
-          return
-        }
-        actions.session.layout.view().terminal.open()
-        terminal.requestFocus(terminal.active())
-      },
-    }),
-    viewCommand({
       id: "review.toggle",
       title: language.t("command.review.toggle"),
       keybind: "mod+shift+r",
@@ -372,24 +340,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.input.focus"),
       keybind: "ctrl+l",
       onSelect: focusInput,
-    }),
-  ]
-
-  const terminalCmds = () => [
-    terminalCommand({
-      id: "terminal.close",
-      title: language.t("terminal.close"),
-      keybind: "mod+w",
-      hidden: true,
-      when: (event) => event.target instanceof Element && !!event.target.closest('[data-component="terminal"]'),
-      onSelect: closeTerminal,
-    }),
-    terminalCommand({
-      id: "terminal.new",
-      title: language.t("command.terminal.new"),
-      description: language.t("command.terminal.new.description"),
-      keybind: "ctrl+alt+t",
-      onSelect: openTerminal,
     }),
   ]
 
@@ -441,7 +391,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     ...fileCmds(),
     ...contextCmds(),
     ...viewCmds(),
-    ...terminalCmds(),
     ...messageCmds(),
     ...mcpCmds(),
     ...permissionsCmds(),

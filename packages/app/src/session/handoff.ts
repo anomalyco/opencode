@@ -10,7 +10,6 @@ const MAX = 40
 
 const store = {
   session: new Map<string, HandoffSession>(),
-  terminal: new Map<string, string[]>(),
 }
 const [messages, setMessages] = createStore<Record<string, SessionMessageUser | undefined>>({})
 const messageOrder = new Map<string, true>()
@@ -51,9 +50,3 @@ export const clearSessionMessageHandoff = (key: string, messageID: string) => {
   messageOrder.delete(key)
   setMessages(key, undefined)
 }
-
-export const setTerminalHandoff = (key: string, value: string[]) => {
-  touch(store.terminal, key, value)
-}
-
-export const getTerminalHandoff = (key: string) => store.terminal.get(key)

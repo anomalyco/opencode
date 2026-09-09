@@ -13,17 +13,14 @@ import { Icon } from "@opencode/ui/icon"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Keybind } from "@opencode/ui/keybind"
 
-import { SortableTerminalTab } from "@/session/terminal/tab"
-import { Terminal } from "@/session/terminal/terminal"
-import { useCommand } from "@/shell/commands/command"
-import { useLanguage } from "@/runtime/i18n/language"
-import { useTerminal, type LocalPTY } from "@/session/terminal/context"
-import { useWorkspaceLocation } from "@/workspaces/location"
-import { terminalTabLabel } from "@/session/terminal/terminal-label"
-import { createSizing, focusTerminalById } from "@/session/helpers"
-import { getTerminalHandoff, setTerminalHandoff } from "@/session/handoff"
-import { useSessionLayout } from "@/session/session-layout"
-import { TerminalSurface } from "./surface"
+import { SortableTerminalTab } from "./tab"
+import { TerminalView } from "./terminal"
+import { usePlugin, type AuxiliaryPresentation } from "@opencode/plugin/desktop"
+import { useTerminal, type LocalPTY } from "./context"
+import { terminalTabLabel } from "./terminal-label"
+import { createSizing } from "@opencode/ui/resize-state"
+import { focusTerminalById } from "./helpers"
+import { AuxiliaryPanel } from "@opencode/ui/auxiliary-panel"
 
 const MAX_CACHED_TERMINAL_WORKSPACES = 20
 
@@ -36,29 +33,18 @@ type CachedTerminalSurface = {
   focus: boolean
 }
 
-export function TerminalPanel(
-  props: {
-    stacked?: boolean
-    fill?: boolean
-    framed?: boolean
-    present?: boolean
-    contentHeight?: string
-    embedded?: boolean
-    animate?: boolean
-    reserveReviewToggle?: boolean
-  } = {},
-) {
+export function TerminalPanel(props: AuxiliaryPresentation) {
   const terminal = useTerminal()
-  const sdk = useWorkspaceLocation()
-  const language = useLanguage()
-  const command = useCommand()
-  const { workspaceKey, view } = useSessionLayout()
+  const ctx = usePlugin()
+  const language = ctx.i18n
+  const workspaceKey = terminal.workspaceKey
+  const view = terminal.view
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
-  const opened = createMemo(() => view().terminal.opened())
+  const opened = createMemo(() => view().auxiliary.opened())
   const size = createSizing()
-  const height = createMemo(() => view().terminal.height())
-  const close = () => view().terminal.close()
+  const height = createMemo(() => view().auxiliary.height())
+  const close = () => view().auxiliary.close()
   let root: HTMLElement | undefined
   let tabList: HTMLDivElement | undefined
 
@@ -85,7 +71,7 @@ export function TerminalPanel(
     () => props.contentHeight ?? (isDesktop() ? (stacked() ? `${pane()}px` : "100%") : `${pane()}px`),
   )
   const present = createMemo(() => opened() || !!props.present)
-  const newTerminalKeybind = createMemo(() => command.keybindParts("terminal.new"))
+  const newTerminalKeybind = createMemo(() => ctx.commands.keys("terminal.new"))
 
   onMount(() => {
     if (typeof window === "undefined") return
@@ -109,9 +95,11 @@ export function TerminalPanel(
     }
 
     const workspace = workspaceKey()
-    if (!terminal.ready() || terminal.all().length !== 0 || store.autoCreated === workspace) return
-    terminal.new()
+    if (!terminal.ready() || store.autoCreated === workspace) return
+    // Adopt restored terminals before observing exits or closes. Otherwise the
+    // last restored terminal can be replaced while its dock is still closing.
     setStore("autoCreated", workspace)
+    if (terminal.all().length === 0) terminal.new()
   })
 
   createEffect(
@@ -147,27 +135,27 @@ export function TerminalPanel(
   })
 
   createEffect(() => {
-    const dir = sdk().directory
+    const dir = terminal.directory()
     if (!dir) return
     if (!terminal.ready()) return
     language.locale()
 
-    setTerminalHandoff(
+    terminal.setHandoff(
       workspaceKey(),
       terminal.all().map((pty) =>
         terminalTabLabel({
           title: pty.title,
           titleNumber: pty.titleNumber,
-          t: language.t as (key: string, vars?: Record<string, string | number | boolean>) => string,
+          t: language.t,
         }),
       ),
     )
   })
 
   const handoff = createMemo(() => {
-    const dir = sdk().directory
+    const dir = terminal.directory()
     if (!dir) return []
-    return getTerminalHandoff(workspaceKey()) ?? []
+    return terminal.handoff(workspaceKey())
   })
 
   const all = terminal.all
@@ -222,7 +210,9 @@ export function TerminalPanel(
   }
 
   return (
-    <TerminalSurface
+    <AuxiliaryPanel
+      id="terminal-panel"
+      data-component="terminal-panel"
       ref={(element) => {
         root = element
       }}
@@ -242,7 +232,7 @@ export function TerminalPanel(
       onResizeStart={size.start}
       onResize={(next) => {
         size.touch()
-        view().terminal.resize(next)
+        view().auxiliary.resize(next)
       }}
       onCollapse={close}
     >
@@ -252,7 +242,7 @@ export function TerminalPanel(
           <div class="flex flex-col h-full pointer-events-none">
             <div
               class="h-10 flex items-center gap-2 px-2 border-b border-border-weaker-base bg-v2-background-bg-base overflow-hidden"
-              classList={{ "pe-12": props.reserveReviewToggle }}
+              classList={{ "pe-12": props.reserveActions }}
             >
               <For each={handoff()}>
                 {(title) => (
@@ -262,7 +252,7 @@ export function TerminalPanel(
                 )}
               </For>
               <div class="flex-1" />
-              <div class="text-text-weak pr-2">
+              <div class="text-text-weak pe-2">
                 {language.t("common.loading")}
                 {language.t("common.loading.ellipsis")}
               </div>
@@ -338,7 +328,7 @@ export function TerminalPanel(
                 </Tabs.List>
               </Tabs>
               {/* Reserve outside the scroll viewport so overflowing tabs cannot cover the toggle. */}
-              <Show when={props.reserveReviewToggle}>
+              <Show when={props.reserveActions}>
                 <div class="w-12 shrink-0" aria-hidden />
               </Show>
             </div>
@@ -353,7 +343,8 @@ export function TerminalPanel(
                         !present() || surface.workspace !== workspaceKey() || surface.pty.id !== terminal.active(),
                     }}
                   >
-                    <Terminal
+                    <TerminalView
+                      connection={surface.ops}
                       pty={surface.pty}
                       autoFocus={terminal.focusRequested(surface.pty.id)}
                       onAutoFocus={() => {
@@ -376,6 +367,6 @@ export function TerminalPanel(
           </div>
         </DragDropProvider>
       </Show>
-    </TerminalSurface>
+    </AuxiliaryPanel>
   )
 }

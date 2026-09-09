@@ -17,6 +17,7 @@ const MobilePanelDrawer = lazy(async () => {
 
 export function SessionMobileViewTabs(props: {
   current: string
+  auxiliary?: JSX.Element
   items: readonly { id: string; title: string; menu?: boolean }[]
   onSelect(value: string): void
   details?: (close: () => void) => JSX.Element
@@ -40,9 +41,7 @@ export function SessionMobileViewTabs(props: {
               </Tabs.Trigger>
             )}
           </For>
-          <Tabs.Trigger value="terminal" onClick={() => props.onSelect("terminal")}>
-            {language.t("terminal.title")}
-          </Tabs.Trigger>
+          {props.auxiliary}
         </Tabs.List>
       </Tabs>
       <Menu appearance="standard" modal={false} placement="bottom-end" gutter={4}>

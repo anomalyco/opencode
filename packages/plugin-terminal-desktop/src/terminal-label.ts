@@ -1,9 +1,9 @@
-import { isDefaultTitle } from "@/session/terminal/title"
+import { isDefaultTitle } from "./title"
 
 export const terminalTabLabel = (input: {
   title?: string
   titleNumber?: number
-  t: (key: string, vars?: Record<string, string | number | boolean>) => string
+  t: (key: string, vars?: Record<string, string | number>) => string
 }) => {
   const title = input.title ?? ""
   const number = input.titleNumber ?? 0

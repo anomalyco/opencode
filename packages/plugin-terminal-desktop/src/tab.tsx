@@ -4,14 +4,14 @@ import { createStore } from "solid-js/store"
 import { useSortable } from "@dnd-kit/solid/sortable"
 import { Tabs } from "@opencode/ui/tabs"
 import { Menu } from "@opencode/ui/menu"
-import { isDefaultTitle } from "@/session/terminal/title"
-import { useTerminal, type LocalPTY } from "@/session/terminal/context"
-import { useLanguage } from "@/runtime/i18n/language"
-import { focusTerminalById } from "@/session/helpers"
+import { isDefaultTitle } from "./title"
+import { useTerminal, type LocalPTY } from "./context"
+import { usePlugin } from "@opencode/plugin/desktop"
+import { focusTerminalById } from "./helpers"
 
 export function SortableTerminalTab(props: { terminal: LocalPTY; index: number; onClose?: () => void }): JSX.Element {
   const terminal = useTerminal()
-  const language = useLanguage()
+  const language = usePlugin().i18n
   const sortable = useSortable({
     get id() {
       return props.terminal.id
@@ -135,6 +135,7 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; index: number; 
             hideCloseButton
           >
             <span
+              dir="auto"
               class="truncate"
               data-slot="terminal-tab-title"
               onDblClick={edit}
@@ -146,6 +147,8 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; index: number; 
           <Show when={store.editing}>
             <div class="absolute inset-0 flex items-center bg-v2-background-bg-layer-01 z-10 pointer-events-auto rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-muted)] px-2">
               <input
+                dir="auto"
+                aria-label={language.t("common.rename")}
                 ref={input}
                 type="text"
                 value={store.title}

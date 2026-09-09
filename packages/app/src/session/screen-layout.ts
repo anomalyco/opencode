@@ -8,14 +8,14 @@ import type { SessionModel } from "./model"
 import { sessionPanelLayout } from "./session-panel-layout"
 import { clampSessionPanelWidth, sessionPanelWidthMax } from "./session-panel-width"
 
-export function createSessionScreenLayout(session: SessionModel) {
+export function createSessionScreenLayout(session: SessionModel, auxiliary: () => boolean) {
   const layout = useLayout()
   const settings = useSettings()
   const size = createSizing()
   const view = session.layout.view
   const reviewOpen = createMemo(() => session.isDesktop() && session.layout.view().reviewPanel.opened())
   const reviewPanelOpen = createMemo(() => reviewOpen() && !!session.identity.params.id)
-  const terminalOpen = createMemo(() => session.layout.view().terminal.opened())
+  const terminalOpen = createMemo(() => auxiliary() && session.layout.view().terminal.opened())
   const sideTerminal = createMemo(() => session.isDesktop() && settings.general.terminalPlacement() === "side")
   const bottomTerminal = createMemo(() => session.isDesktop() && settings.general.terminalPlacement() === "bottom")
   const sideTerminalOpen = createMemo(() => terminalOpen() && sideTerminal())

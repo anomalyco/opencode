@@ -22,7 +22,7 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ReviewPanelView } from "@opencode/plugin-review-desktop/review/panel"
 import { createReviewPanelState } from "@opencode/plugin-review-desktop/review/panel-state"
-import { TerminalSurface } from "@/session/terminal/surface"
+import { AuxiliaryPanel } from "@opencode/ui/auxiliary-panel"
 import type { WebSearchRequestModel } from "./requests/websearch"
 
 const modelReady = Object.assign(() => true, { promise: undefined }) satisfies ModelSelection["ready"]
@@ -294,7 +294,9 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
 
 function SessionTerminalPreview(props: { terminal: NonNullable<SessionPreviewProps["terminal"]> }) {
   return (
-    <TerminalSurface
+    <AuxiliaryPanel
+      id="terminal-panel"
+      data-component="terminal-panel"
       label={props.terminal.title}
       opened
       desktop
@@ -314,7 +316,7 @@ function SessionTerminalPreview(props: { terminal: NonNullable<SessionPreviewPro
       <pre dir="ltr" class="min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-12-regular text-text-base">
         {props.terminal.lines.join("\n")}
       </pre>
-    </TerminalSurface>
+    </AuxiliaryPanel>
   )
 }
 

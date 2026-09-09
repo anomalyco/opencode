@@ -19,7 +19,6 @@ import { ComposerDropzone } from "@/composer/dropzone"
 import type { SessionModel } from "@/session/model"
 import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
 import { SessionPanelFrame } from "@/session/session-frame"
-import { TerminalPanel } from "@/session/terminal/panel"
 import { useUsageExceededDialogs } from "./usage-exceeded-dialogs"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionScreenLayout } from "./screen-layout"
@@ -53,7 +52,8 @@ export function SessionScreen(props: { session: SessionModel }) {
     tabs: session.layout.tabs,
     open: () => session.layout.view().reviewPanel.open(),
   })
-  const screen = createSessionScreenLayout(session)
+  const Auxiliary = extensions.auxiliary
+  const screen = createSessionScreenLayout(session, extensions.hasAuxiliary)
   const timeline = createSessionTimelineInteraction(session)
   const timelineSearch = createTimelineSearchController({
     sessionID: session.identity.sessionID,
@@ -142,7 +142,7 @@ export function SessionScreen(props: { session: SessionModel }) {
   })
   const summary = createSessionSummary(session)
   const mobileView = createMemo(() => {
-    if (screen.terminal.open()) return "terminal"
+    if (screen.terminal.open()) return "auxiliary"
     if (store.mobileTab === "session") return store.mobileTab
     const selected = extensions.panels().find((panel) => panel.key === session.tabs.activeTab())
     return selected?.props.group ?? selected?.key ?? store.mobileTab
@@ -174,6 +174,7 @@ export function SessionScreen(props: { session: SessionModel }) {
     <Show when={session.identity.sessionKey()} keyed>
       {(_key) => (
         <SessionMobileViewTabs
+          auxiliary={extensions.mobileActions()}
           items={mobileItems()}
           current={mobileView()}
           onDetailsOpenChange={summary.setOpen}
@@ -216,10 +217,6 @@ export function SessionScreen(props: { session: SessionModel }) {
               : undefined
           }
           onSelect={(view) => {
-            if (view === "terminal") {
-              session.layout.view().terminal.open()
-              return
-            }
             setStore("mobileTab", view)
             const panel = extensions.panels().find((panel) => (panel.props.group ?? panel.key) === view)
             if (panel) {
@@ -250,12 +247,12 @@ export function SessionScreen(props: { session: SessionModel }) {
       </Show>
       <div class="relative flex-1 min-h-0 overflow-hidden">
         <Show when={!isDesktop() && store.mobileTerminalCached}>
-          <div class="absolute inset-0" classList={{ invisible: mobileView() !== "terminal" }}>
-            <TerminalPanel fill embedded present contentHeight="100%" />
+          <div class="absolute inset-0" classList={{ invisible: mobileView() !== "auxiliary" }}>
+            <Auxiliary fill embedded present contentHeight="100%" />
           </div>
         </Show>
         <Switch>
-          <Match when={!isDesktop() && mobileView() === "terminal"}>
+          <Match when={!isDesktop() && mobileView() === "auxiliary"}>
             <></>
           </Match>
           <Match when={!isDesktop() && mobileItems().some((item) => item.id === mobileView())}>
@@ -457,13 +454,13 @@ export function SessionScreen(props: { session: SessionModel }) {
                         class="absolute inset-0 rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
                       >
                         <div data-slot="side-terminal-panel-clip" class="size-full overflow-clip rounded-[10px]">
-                          <TerminalPanel
+                          <Auxiliary
                             fill
                             framed={false}
                             present={store.sideTerminalPresent}
                             animate={sidePresence.animate() || sideMotion().animateTerminal}
                             contentHeight={screen.side.terminal.contentHeight()}
-                            reserveReviewToggle={!screen.side.region.open()}
+                            reserveActions={!screen.side.region.open()}
                           />
                         </div>
                       </div>
@@ -502,7 +499,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                 />
               </div>
             </Show>
-            <TerminalPanel
+            <Auxiliary
               stacked={isDesktop()}
               present={store.bottomTerminalCached}
               animate={bottomTerminalPresence.animate()}

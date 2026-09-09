@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeAll, afterEach, spyOn } from "bun:test"
 import { Terminal, Ghostty } from "ghostty-web"
-import { SerializeAddon } from "./serialize"
+import { SerializeAddon } from "@opencode/plugin-terminal-desktop/serialize"
 
 let ghostty: Ghostty
 beforeAll(async () => {

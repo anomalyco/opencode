@@ -28,6 +28,7 @@ test("keeps terminal visibility per tab and the PTY alive across tab switches", 
   const terminal = page.locator('[data-component="terminal"]')
   const terminalPanel = page.locator('[data-component="terminal-panel"]')
   await expect(terminal).toBeVisible()
+  await expect(terminalPanel.locator('[data-slot="tabs-list"]')).toHaveCSS("padding-inline-start", "12px")
   await expect(terminalPanel).toHaveAttribute("data-size-animated", "true")
   await expect(terminalPanel).toHaveCSS("height", "300px")
   await expect.poll(() => connections.length).toBe(1)
@@ -62,6 +63,54 @@ test("keeps terminal visibility per tab and the PTY alive across tab switches", 
 })
 
 type Probed = HTMLElement & { __e2eProbe?: string }
+
+for (const direction of ["ltr", "rtl"] as const) {
+  test(`mobile terminal navigation, rename, restore, and close in ${direction}`, async ({ page }) => {
+    const connections = await setup(page)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto(sessionHref(sessionA))
+    await expectSessionTitle(page, titleA)
+    await page.evaluate((direction) => {
+      document.documentElement.dir = direction
+    }, direction)
+    const navigation = page.locator('[data-slot="session-mobile-view-tabs"]')
+    await navigation.getByRole("tab", { name: "Terminal", exact: true }).click()
+    const terminal = page.locator(`#terminal-wrapper-${ptyID} [data-component="terminal"]`)
+    const panel = page.getByRole("region", { name: "Terminal", exact: true })
+    await expect(terminal.locator("textarea")).toBeFocused()
+    await expect(terminal).toHaveCSS("direction", "ltr")
+    await expect.poll(() => connections.length).toBe(1)
+    await writeProbe(page)
+    await panel
+      .getByRole("tab", { name: "Terminal 1", exact: true })
+      .locator('[data-slot="terminal-tab-title"]')
+      .dblclick()
+    const name = "بناء build-42"
+    await panel.getByRole("textbox", { name: "Rename", exact: true }).fill(name)
+    await panel.getByRole("textbox", { name: "Rename", exact: true }).press("Enter")
+    await expect(panel.getByRole("tab", { name, exact: true })).toBeVisible()
+    await navigation.getByRole("tab", { name: "Session", exact: true }).click()
+    await expect(terminal).toBeHidden()
+    await navigation.getByRole("tab", { name: "Terminal", exact: true }).click()
+    await expect(terminal).toBeVisible()
+    expect(await readProbe(page)).toBe(PROBE)
+    expect(connections.length).toBe(1)
+    await page.reload()
+    await expectSessionTitle(page, titleA)
+    await expect(panel.getByRole("tab", { name, exact: true })).toBeVisible()
+    await expect.poll(() => connections.length).toBe(2)
+    await terminal.click()
+    await expect(terminal.locator("textarea")).toBeFocused()
+    const removed = page.waitForResponse(
+      (response) =>
+        response.request().method() === "DELETE" && new URL(response.url()).pathname === `/api/pty/${ptyID}`,
+    )
+    await page.keyboard.press("Control+w")
+    expect((await removed).status()).toBe(204)
+    await expect(terminal).toHaveCount(0)
+    await expect(navigation.getByRole("tab", { name: "Session", exact: true })).toHaveAttribute("aria-selected", "true")
+  })
+}
 
 async function switchTab(page: Page, title: string) {
   await page.locator("[data-titlebar-tab-slot]", { hasText: title }).click()
@@ -110,11 +159,13 @@ async function setup(page: Page) {
     }),
   )
   await page.route(`**/api/pty/${ptyID}*`, (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ location: ptyLocation(), data: ptyInfo() }),
-    }),
+    route.request().method() === "DELETE"
+      ? route.fulfill({ status: 204 })
+      : route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ location: ptyLocation(), data: ptyInfo() }),
+        }),
   )
   await page.route(`**/api/pty/${ptyID}/connect-token*`, (route) => {
     expect(route.request().headers()["x-opencode-ticket"]).toBe("1")
@@ -130,6 +181,7 @@ async function setup(page: Page) {
   const connections: string[] = []
   await page.routeWebSocket(new RegExp(`/api/pty/${ptyID}/connect`), (ws) => {
     connections.push(ws.url())
+    ws.send("Terminal fixture ready\r\n")
   })
 
   await page.addInitScript(

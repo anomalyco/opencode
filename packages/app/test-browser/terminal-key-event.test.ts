@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { terminalKeyInput } from "./terminal-key-event"
+import { terminalKeyInput } from "@opencode/plugin-terminal-desktop/terminal-key-event"
 
 describe("terminalKeyInput", () => {
   test("maps Command+Delete to the terminal line-clear control code", () => {

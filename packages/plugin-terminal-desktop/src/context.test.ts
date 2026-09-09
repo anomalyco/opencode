@@ -1,31 +1,12 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test"
-import { ServerScope } from "@/runtime/server/scope"
-import { base64Encode } from "@opencode/util/encode"
-import { Persist } from "@/runtime/persistence/storage"
-import { Persistence } from "@/runtime/persistence/schema"
-import type { Platform } from "@/runtime/platform/platform"
+import { describe, expect, test } from "bun:test"
+import { Persistence } from "@opencode/plugin/desktop/persistence"
 import { Schema } from "effect"
+import { getWorkspaceTerminalCacheKey, TerminalState } from "./context"
 
-let getWorkspaceTerminalCacheKey: typeof import("./context").getWorkspaceTerminalCacheKey
-let clearWorkspaceTerminals: typeof import("./context").clearWorkspaceTerminals
-let decodeTerminalState: (value: unknown) => unknown
-let roundTripTerminalState: (value: unknown) => unknown
-
-beforeAll(async () => {
-  mock.module("@solidjs/router", () => ({
-    useNavigate: () => () => undefined,
-    useParams: () => ({}),
-    useLocation: () => ({}),
-    useSearchParams: () => [{}, () => undefined],
-  }))
-  const mod = await import("./context")
-  getWorkspaceTerminalCacheKey = mod.getWorkspaceTerminalCacheKey
-  clearWorkspaceTerminals = mod.clearWorkspaceTerminals
-  const schema = Persistence.withInitial(mod.TerminalState, { all: [] })
-  decodeTerminalState = Schema.decodeUnknownSync(schema)
-  roundTripTerminalState = (value) =>
-    Schema.decodeUnknownSync(schema)(Schema.encodeSync(schema)(Schema.decodeUnknownSync(schema)(value)))
-})
+const schema = Persistence.withInitial(TerminalState, { all: [] })
+const decodeTerminalState = Schema.decodeUnknownSync(schema)
+const roundTripTerminalState = (value: unknown) =>
+  Schema.decodeUnknownSync(schema)(Schema.encodeSync(schema)(Schema.decodeUnknownSync(schema)(value)))
 
 describe("getWorkspaceTerminalCacheKey", () => {
   test("uses workspace-only directory cache key", () => {
@@ -33,31 +14,7 @@ describe("getWorkspaceTerminalCacheKey", () => {
   })
 
   test("can include a server scope", () => {
-    expect(String(getWorkspaceTerminalCacheKey("/repo", "ssh:debian" as ServerScope))).toBe(
-      "ssh:debian\u0000/repo\u0000__workspace__",
-    )
-  })
-
-  test("clears the current workspace terminal store", () => {
-    const removed: { storage?: string; key: string }[] = []
-    const platform: Platform = {
-      platform: "desktop",
-      windowID: "window",
-      openExternal: () => undefined,
-      restart: async () => undefined,
-      notify: async () => undefined,
-      openDirectoryPickerDialog: async () => null,
-      storage: (storage) => ({
-        getItem: () => null,
-        setItem: () => undefined,
-        removeItem: (key) => void removed.push({ storage, key }),
-      }),
-    }
-
-    clearWorkspaceTerminals("C:/repo", platform)
-
-    const target = Persist.workspace(base64Encode("C:/repo"), "terminal")
-    expect(removed).toEqual([{ storage: target.storage, key: target.key }])
+    expect(String(getWorkspaceTerminalCacheKey("/repo", "ssh:debian"))).toBe("ssh:debian\u0000/repo\u0000__workspace__")
   })
 })
 

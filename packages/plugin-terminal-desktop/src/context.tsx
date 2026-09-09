@@ -1,14 +1,10 @@
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode/ui/context"
 import { batch, createEffect, createMemo, createRoot, on, onCleanup } from "solid-js"
-import { useWorkspaceLocation, type LocationContext } from "@/workspaces/location"
-import type { Platform } from "@/runtime/platform/platform"
-import { useServerSDK } from "@/runtime/server/client"
+import type { Context, Server, SlotMap } from "@opencode/plugin/desktop"
 import { base64Encode } from "@opencode/util/encode"
 import { defaultTitle, titleNumber } from "./title"
-import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
-import { ScopedKey, ServerScope } from "@/runtime/server/scope"
-import { Persistence } from "@/runtime/persistence/schema"
+import { Persistence } from "@opencode/plugin/desktop/persistence"
 import { Schema, SchemaGetter } from "effect"
 
 const PTY = Persistence.struct({
@@ -54,8 +50,8 @@ export const TerminalState = State.pipe(
   }),
 )
 
-export function getWorkspaceTerminalCacheKey(dir: string, scope: ServerScope = ServerScope.local) {
-  return ScopedKey.from(scope, dir, WORKSPACE_KEY)
+export function getWorkspaceTerminalCacheKey(dir: string, serverID = "local") {
+  return [serverID, dir, WORKSPACE_KEY].join("\0")
 }
 
 type TerminalSession = ReturnType<typeof createWorkspaceTerminalSession>
@@ -64,8 +60,6 @@ type TerminalCacheEntry = {
   value: TerminalSession
   dispose: VoidFunction
 }
-
-const caches = new Set<Map<string, TerminalCacheEntry>>()
 
 const trimTerminal = (pty: LocalPTY) => {
   if (!pty.buffer && pty.cursor === undefined && pty.scrollY === undefined) return pty
@@ -77,31 +71,15 @@ const trimTerminal = (pty: LocalPTY) => {
   }
 }
 
-function terminalPersistTarget(scope: ServerScope, dir: string) {
-  return Persist.serverWorkspace(scope, dir, "terminal")
-}
+function createWorkspaceTerminalSession(ctx: Context, server: Server, directory: string) {
+  const location = { directory }
 
-export function clearWorkspaceTerminals(dir: string, platform?: Platform, scope: ServerScope = ServerScope.local) {
-  const storageDir = base64Encode(dir)
-  const key = getWorkspaceTerminalCacheKey(storageDir, scope)
-  for (const cache of caches) {
-    const entry = cache.get(key)
-    entry?.value.clear()
-  }
-
-  const target = terminalPersistTarget(scope, storageDir)
-  void removePersisted({ storage: target.storage, key: target.key }, platform)
-}
-
-function createWorkspaceTerminalSession(
-  sdk: LocationContext,
-  serverSDK: ReturnType<typeof useServerSDK>,
-  dir: string,
-  scope: ServerScope,
-) {
-  const location = { directory: sdk.directory }
-
-  const [store, setStore, _, ready] = persisted(terminalPersistTarget(scope, dir), TerminalState, { all: [] })
+  const [store, setStore, ready] = ctx.storage.persist(
+    "terminals",
+    TerminalState,
+    { all: [] },
+    { scope: { serverID: server.id, directory }, legacyKey: "terminal" },
+  )
   const [ui, setUi] = createStore({
     focus: undefined as { request: number; id?: string; pending: boolean } | undefined,
   })
@@ -174,7 +152,8 @@ function createWorkspaceTerminalSession(
     })
   }
 
-  const unsub = sdk.event.on("pty.exited", (event) => {
+  const unsub = server.data.on("pty.exited", (event) => {
+    if (event.location?.directory !== directory) return
     removeExited(event.data.id)
   })
   onCleanup(unsub)
@@ -186,7 +165,7 @@ function createWorkspaceTerminalSession(
       setStore("all", index, (item) => ({ ...item, ...pty }))
     }
     const doUpdate = async () => {
-      await serverSDK.api.pty.update({
+      await server.client.pty.update({
         ptyID: pty.id,
         location,
         title: pty.title,
@@ -206,7 +185,7 @@ function createWorkspaceTerminalSession(
     const index = store.all.findIndex((x) => x.id === id)
     const pty = store.all[index]
     if (!pty) return
-    const data = await serverSDK.api.pty
+    const data = await server.client.pty
       .create({ location, title: pty.title })
       .then((result) => result.data)
       .catch((error: unknown) => {
@@ -235,6 +214,9 @@ function createWorkspaceTerminalSession(
   }
 
   return {
+    key: getWorkspaceTerminalCacheKey(base64Encode(directory), server.id),
+    server,
+    location,
     ready,
     all: createMemo(() => store.all),
     active: createMemo(() => store.active),
@@ -249,7 +231,7 @@ function createWorkspaceTerminalSession(
       const focusRequest = requestFocus(undefined, true)
 
       const doCreate = async () => {
-        return serverSDK.api.pty.create({ location, title: defaultTitle(nextNumber) }).then((result) => result.data)
+        return server.client.pty.create({ location, title: defaultTitle(nextNumber) }).then((result) => result.data)
       }
       doCreate()
         .then((data) => {
@@ -293,21 +275,6 @@ function createWorkspaceTerminalSession(
     },
     async clone(id: string) {
       await clone(id)
-    },
-    bind() {
-      return {
-        trim(id: string) {
-          const index = store.all.findIndex((x) => x.id === id)
-          if (index === -1) return
-          setStore("all", index, (pty) => trimTerminal(pty))
-        },
-        update(pty: Partial<LocalPTY> & { id: string }) {
-          update(pty)
-        },
-        async clone(id: string) {
-          await clone(id)
-        },
-      }
     },
     open(id: string) {
       setStore("active", id)
@@ -353,7 +320,7 @@ function createWorkspaceTerminalSession(
         })
       }
 
-      await serverSDK.api.pty.remove({ ptyID: id, location }).catch((error: unknown) => {
+      await server.client.pty.remove({ ptyID: id, location }).catch((error: unknown) => {
         console.error("Failed to close terminal", error)
       })
     },
@@ -370,73 +337,87 @@ function createWorkspaceTerminalSession(
   }
 }
 
-export const { use: useTerminal, provider: TerminalProvider } = createSimpleContext({
-  name: "Terminal",
-  gate: false,
-  init: () => {
-    const sdk = useWorkspaceLocation()
-    const serverSDK = useServerSDK()
-    const cache = new Map<string, TerminalCacheEntry>()
-    const scope = () => serverSDK.scope
-    const directory = createMemo(() => base64Encode(sdk().directory))
-
-    caches.add(cache)
-    onCleanup(() => caches.delete(cache))
-
-    const disposeAll = () => {
-      for (const entry of cache.values()) {
-        entry.dispose()
-      }
-      cache.clear()
-    }
-
-    onCleanup(disposeAll)
-
-    const prune = () => {
-      while (cache.size > MAX_TERMINAL_SESSIONS) {
-        const first = cache.keys().next().value
-        if (!first) return
-        const entry = cache.get(first)
-        entry?.dispose()
-        cache.delete(first)
-      }
-    }
-
-    const loadWorkspace = (dir: string, serverScope: ServerScope) => {
-      // Terminals are workspace-scoped so tabs persist while switching sessions in the same directory.
-      const key = getWorkspaceTerminalCacheKey(dir, serverScope)
+export function createTerminalRuntime(ctx: Context) {
+  const cache = new Map<string, TerminalCacheEntry>()
+  const [handoff, updateHandoff] = ctx.storage.memory("handoff", {
+    initial: { titles: {} as Record<string, string[]> },
+  })
+  onCleanup(() => {
+    cache.forEach((entry) => entry.dispose())
+    cache.clear()
+  })
+  ctx.workspaces.onRemoved(({ serverID, directory }) => {
+    const key = getWorkspaceTerminalCacheKey(base64Encode(directory), serverID)
+    const entry = cache.get(key)
+    entry?.value.clear()
+    entry?.dispose()
+    cache.delete(key)
+    updateHandoff((draft) => {
+      delete draft.titles[key]
+    })
+    ctx.storage.remove("terminals", { scope: { serverID, directory }, legacyKey: "terminal" })
+  })
+  return {
+    workspace(server: Server, directory: string) {
+      const key = getWorkspaceTerminalCacheKey(base64Encode(directory), server.id)
       const existing = cache.get(key)
       if (existing) {
         cache.delete(key)
         cache.set(key, existing)
         return existing.value
       }
-
       const entry = createRoot((dispose) => ({
-        value: createWorkspaceTerminalSession(sdk(), serverSDK, dir, serverScope),
+        value: createWorkspaceTerminalSession(ctx, server, directory),
         dispose,
       }))
-
       cache.set(key, entry)
-      prune()
+      Array.from(cache)
+        .filter(([, entry]) => entry.value.server.id === server.id)
+        .slice(0, -MAX_TERMINAL_SESSIONS)
+        .forEach(([key, entry]) => {
+          entry.dispose()
+          cache.delete(key)
+        })
       return entry.value
-    }
+    },
+    handoff: (key: string) => handoff.titles[key] ?? [],
+    setHandoff(key: string, titles: string[]) {
+      updateHandoff((draft) => {
+        delete draft.titles[key]
+        draft.titles[key] = titles
+        Object.keys(draft.titles)
+          .slice(0, -40)
+          .forEach((key) => {
+            delete draft.titles[key]
+          })
+      })
+    },
+  }
+}
 
-    const workspace = createMemo(() => loadWorkspace(directory(), scope()))
-
+export const { use: useTerminal, provider: TerminalProvider } = createSimpleContext({
+  name: "TerminalExtension",
+  gate: false,
+  init: (props: { runtime: ReturnType<typeof createTerminalRuntime>; input: SlotMap["session.auxiliary"] }) => {
+    const workspace = createMemo(() =>
+      props.runtime.workspace(props.input.session.server, props.input.services.files.directory),
+    )
     createEffect(
       on(
-        () => ({ dir: directory(), scope: scope() }),
-        (next, prev) => {
-          if (!prev?.dir) return
-          if (next.dir === prev.dir && next.scope === prev.scope) return
-          loadWorkspace(prev.dir, prev.scope).trimAll()
+        workspace,
+        (next, previous) => {
+          if (previous && previous !== next) previous.trimAll()
         },
         { defer: true },
       ),
     )
-
     return {
+      workspaceKey: () => workspace().key,
+      directory: () => workspace().location.directory,
+      view: () => props.input.services.view,
+      presentation: () => props.input.presentation,
+      handoff: props.runtime.handoff,
+      setHandoff: props.runtime.setHandoff,
       ready: () => workspace().ready(),
       all: () => workspace().all(),
       active: () => workspace().active(),

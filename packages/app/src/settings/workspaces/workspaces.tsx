@@ -23,8 +23,7 @@ import { pathKey } from "@/workspaces/path-key"
 import { SettingsList } from "@/settings/list"
 import { InlineServerSelect } from "@/settings/server-select"
 import { useTabs } from "@/shell/tabs/tabs"
-import { usePlatform } from "@/runtime/platform/platform"
-import { clearWorkspaceTerminals } from "@/session/terminal/context"
+import { useOptionalDesktopExtensions } from "@/extensions/provider"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { Project } from "@/runtime/server/types"
 import {
@@ -56,7 +55,7 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string; resetProj
   const serverSDK = useServerSDK()
   const data = useData()
   const tabs = useTabs()
-  const platform = usePlatform()
+  const extensions = useOptionalDesktopExtensions()
   const [store, setStore] = createStore({
     project: "all",
     transaction: undefined as "confirm" | "running" | undefined,
@@ -236,7 +235,7 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string; resetProj
           worktree: undefined,
         })
       })
-      clearWorkspaceTerminals(workspace.directory, platform, context.sdk.scope)
+      extensions?.workspaceRemoved({ serverID: context.server, directory: workspace.directory })
       await projectQuery.refetch()
     } finally {
       setStore("deleting", (items) => items.filter((item) => item !== key))

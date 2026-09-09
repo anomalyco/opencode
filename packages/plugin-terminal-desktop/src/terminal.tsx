@@ -3,23 +3,17 @@ import { useTheme } from "@opencode/ui/theme/context"
 import { resolveThemeVariant } from "@opencode/ui/theme/resolve"
 import { resolveThemeVariantV2 } from "@opencode/ui/theme/v2/resolve"
 import type { HexColor, ResolvedV2Theme } from "@opencode/ui/theme/types"
-import { showToast } from "@/shell/notifications/toast"
-import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
+import type { FitAddon, Ghostty, Terminal } from "ghostty-web"
 import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
-import { SerializeAddon } from "@/session/terminal/serialize"
-import { matchKeybind, parseKeybind } from "@/shell/commands/command"
-import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
-import { useWorkspaceLocation } from "@/workspaces/location"
-import { useServerSDK } from "@/runtime/server/client"
-import { terminalFontFamily, useSettings } from "@/settings/model"
-import type { LocalPTY } from "@/session/terminal/context"
-import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/session/terminal/runtime-adapters"
-import { terminalKeyInput } from "@/session/terminal/terminal-key-event"
-import { terminalWriter } from "@/session/terminal/writer"
+import { SerializeAddon } from "./serialize"
+import { usePlugin, type Server } from "@opencode/plugin/desktop"
+import { createPtyClient } from "@opencode/client/solid"
+import type { LocalPTY } from "./context"
+import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "./runtime-adapters"
+import { terminalKeyInput } from "./terminal-key-event"
+import { terminalWriter } from "./writer"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
-const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
 // Serialization on unmount is a synchronous O(rows x cols) walk on the main thread and the
 // result is written to localStorage or desktop state for every terminal in the workspace.
 // Persisting the most recent 2k scrollback rows keeps restore fidelity for the history users
@@ -27,6 +21,7 @@ const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
 // terminal keeps its full 10k scrollback while mounted.
 const persistedScrollbackRows = 2_000
 export interface TerminalProps extends ComponentProps<"div"> {
+  connection: { server: Server; location: { directory: string } }
   pty: LocalPTY
   autoFocus?: boolean
   onAutoFocus?: () => void
@@ -36,16 +31,18 @@ export interface TerminalProps extends ComponentProps<"div"> {
   onConnectError?: (error: unknown) => void
 }
 
-let shared: Promise<{ mod: typeof import("ghostty-web"); ghostty: Ghostty }> | undefined
+async function createGhosttyRuntime() {
+  const mod = await import("ghostty-web")
+  return { mod, ghostty: await mod.Ghostty.load() }
+}
+let shared: ReturnType<typeof createGhosttyRuntime> | undefined
 
 const loadGhostty = () => {
   if (shared) return shared
-  shared = import("ghostty-web")
-    .then(async (mod) => ({ mod, ghostty: await mod.Ghostty.load() }))
-    .catch((err) => {
-      shared = undefined
-      throw err
-    })
+  shared = createGhosttyRuntime().catch((err) => {
+    shared = undefined
+    throw err
+  })
   return shared
 }
 
@@ -91,7 +88,7 @@ const resolveV2Token = (tokens: ResolvedV2Theme, key: string) => {
 
 const useTerminalUiBindings = (input: {
   container: HTMLDivElement
-  term: Term
+  term: Terminal
   cleanups: VoidFunction[]
   handlePointerDown: () => void
   handleLinkClick: (event: MouseEvent) => void
@@ -149,7 +146,7 @@ const useTerminalUiBindings = (input: {
 }
 
 const persistTerminal = (input: {
-  term: Term | undefined
+  term: Terminal | undefined
   addon: SerializeAddon | undefined
   cursor: number
   id: string
@@ -175,18 +172,18 @@ const persistTerminal = (input: {
   })
 }
 
-export const Terminal = (props: TerminalProps) => {
-  const platform = usePlatform()
-  const sdk = useWorkspaceLocation()
-  const serverSDK = useServerSDK()
-  const settings = useSettings()
+export const TerminalView = (props: TerminalProps) => {
+  const ctx = usePlugin()
+  const platform = ctx.platform
+  const server = props.connection.server
   const theme = useTheme()
-  const language = useLanguage()
+  const language = ctx.i18n
   // Intentional mount-time capture: the imperative xterm/WebSocket lifecycle needs stable values, and Terminal remounts when the SDK scope changes.
-  const directory = sdk().directory
+  const directory = props.connection.location.directory
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, [
     "pty",
+    "connection",
     "class",
     "classList",
     "autoFocus",
@@ -208,7 +205,7 @@ export const Terminal = (props: TerminalProps) => {
       : undefined
   const scrollY = typeof local.pty.scrollY === "number" ? local.pty.scrollY : undefined
   let ws: WebSocket | undefined
-  let term: Term | undefined
+  let term: Terminal | undefined
   let _ghostty: Ghostty
   let serializeAddon: SerializeAddon
   let fitAddon: FitAddon
@@ -249,7 +246,7 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   const pushSize = async (cols: number, rows: number) => {
-    return serverSDK.api.pty
+    return server.client.pty
       .update({
         ptyID: id,
         location: { directory },
@@ -335,7 +332,7 @@ export const Terminal = (props: TerminalProps) => {
   })
 
   createEffect(() => {
-    const font = terminalFontFamily(settings.appearance.terminalFont())
+    const font = ctx.fonts.console()
     if (!term) return
     setOptionIfSupported(term, "fontFamily", font)
     scheduleFit()
@@ -399,7 +396,7 @@ export const Terminal = (props: TerminalProps) => {
         cols: restoreSize?.cols,
         rows: restoreSize?.rows,
         fontSize: 14,
-        fontFamily: terminalFontFamily(settings.appearance.terminalFont()),
+        fontFamily: ctx.fonts.console(),
         allowTransparency: false,
         convertEol: false,
         theme: terminalColors(),
@@ -435,10 +432,7 @@ export const Terminal = (props: TerminalProps) => {
         }
 
         // allow for toggle terminal keybinds in parent
-        const config = settings.keybinds.get(TOGGLE_TERMINAL_ID) ?? DEFAULT_TOGGLE_TERMINAL_KEYBIND
-        const keybinds = parseKeybind(config)
-
-        return matchKeybind(keybinds, event)
+        return ctx.commands.matches(TOGGLE_TERMINAL_ID, event)
       })
 
       const fit = new mod.FitAddon()
@@ -541,7 +535,7 @@ export const Terminal = (props: TerminalProps) => {
       }
 
       const gone = async () => {
-        return serverSDK.api.pty
+        return server.client.pty
           .get({ ptyID: id, location: { directory } })
           .then((result) => result.data.status === "exited")
           .catch((err) => {
@@ -574,7 +568,7 @@ export const Terminal = (props: TerminalProps) => {
         if (disposed) return
         drop?.()
 
-        const socket = await serverSDK.pty
+        const socket = await createPtyClient(server.client, { url: server.url })
           .connect({
             ptyID: id,
             location: { directory },
@@ -665,10 +659,10 @@ export const Terminal = (props: TerminalProps) => {
 
     void run().catch((err) => {
       if (disposed) return
-      showToast({
+      ctx.ui.toast.show({
         variant: "error",
         title: language.t("terminal.connectionLost.title"),
-        description: err instanceof Error ? err.message : language.t("terminal.connectionLost.description"),
+        message: err instanceof Error ? err.message : language.t("terminal.connectionLost.description"),
       })
       local.onConnectError?.(err)
     })
