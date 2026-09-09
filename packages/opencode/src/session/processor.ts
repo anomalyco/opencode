@@ -457,6 +457,36 @@ const layer = Layer.effect(
             ctx.assistantMessage.finish = value.reason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
+
+            const isKnownFinishReason = 
+              value.reason == 'stop' 
+              || value.reason == 'tool-calls' 
+              || value.reason == 'length' 
+              || value.reason == 'error' 
+              || value.reason == 'content-filter'
+
+            const finishReasonMessage = isKnownFinishReason ? 
+              `Stream ended with a known finish reason "${value.reason}"` 
+              : `Stream ended with an unrecognized finish reason "${value.reason}".`
+
+            const output = {
+              ok: isKnownFinishReason,
+              message: finishReasonMessage
+            }
+            yield* plugin.trigger(
+              "finish.chunk",
+              {
+                finishReason: value.reason,
+                cost: usage.cost,
+                tokens: usage.tokens
+              },
+              output
+            )
+            yield* Effect.logDebug(`Got output from finish.chunk: ${JSON.stringify(output, null, 4)}`)
+            if (output.ok === false) {
+              throw new Error(`Error: ${output.message}`)
+            }
+            
             yield* session.updatePart({
               id: PartID.ascending(),
               reason: value.reason,
