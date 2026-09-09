@@ -59,6 +59,8 @@ export const Info = Schema.Struct({
   activation: Activation,
   package: Package,
   compaction: Compaction.pipe(optional),
+  /** Session WebSocket policy for routes that support it; omitted means enabled. */
+  websocket: Schema.Boolean.pipe(optional),
   ...Overlays,
 })
   .annotate({ identifier: "Provider.Info" })

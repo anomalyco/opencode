@@ -6,7 +6,7 @@ import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { Content } from "@opencode/schema/tool"
-import { Cause, Config, Context, Effect, Layer, Result, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Result, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
@@ -26,9 +26,6 @@ const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
 const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
-
-const responsesWebSocketFlag = (providerID: string) =>
-  `OPENCODE_EXPERIMENTAL_${providerID.replace(/[^a-zA-Z0-9]+/g, "_").toUpperCase()}_RESPONSES_WEBSOCKET`
 
 /** Failures a prepared execution can surface: infrastructure errors plus user declines resurfaced from the defect tunnel. */
 export type ExecuteError = Tool.Error | Permission.DeclinedError | QuestionTool.CancelledError
@@ -364,13 +361,6 @@ export const layer = Layer.effect(
       const hasHttpHooks =
         (yield* hooks.has("session", "http.request", resolved.ref.providerID)) ||
         (yield* hooks.has("session", "http.response", resolved.ref.providerID))
-      const webSocket =
-        resolved.capabilities.responsesWebsockets === true
-          ? yield* Config.boolean(responsesWebSocketFlag(resolved.ref.providerID)).pipe(
-              Config.withDefault(false),
-              Effect.orDie,
-            )
-          : false
       const http = hasHttpHooks
         ? httpMiddleware(hooks, {
             sessionID: session.id,
@@ -379,9 +369,13 @@ export const layer = Layer.effect(
             kind: input.kind,
           })
         : undefined
+      // HTTP hooks must observe every request, so they keep the provider on HTTP.
       const options: StreamOptions = {
         ...(http ? { http } : {}),
-        ...(input.webSocket === "session" && webSocket && !hasHttpHooks
+        ...(input.webSocket === "session" &&
+        !hasHttpHooks &&
+        resolved.capabilities.responsesWebsockets === true &&
+        resolved.websocket
           ? { webSocket: transport.bind(session.id) }
           : {}),
       }

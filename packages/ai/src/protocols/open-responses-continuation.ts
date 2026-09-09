@@ -153,6 +153,15 @@ export const driver = (input: DriverInput): WebSocketChannelDriver => {
           const rejection = code(event)
           if (rejection === "previous_response_not_found") return rejected(observation, "retry-full")
           if (rejection === "websocket_connection_limit_reached") return rejected(observation, "rotate-and-retry-full")
+          // Only the continuation distinguishes an incremental send from a full one, so an unclassified
+          // invalid request there is retried full; Codex reports a stale previous_response_id that way, with
+          // no code. Classified failures such as context overflow keep their runner-owned recovery.
+          if (
+            create.mode === "incremental" &&
+            observation.error.reason._tag === "InvalidRequest" &&
+            observation.error.reason.classification === undefined
+          )
+            return rejected(observation, "retry-full")
         }
         if (observation.type !== "completed") return observation
         // A trigger installs a different context window. Clear the append baseline, retaining the socket.

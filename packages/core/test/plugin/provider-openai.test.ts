@@ -164,11 +164,7 @@ describe("OpenAIPlugin", () => {
       expect(eligible.enabled).toBe(true)
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5-pro"))).enabled).toBe(false)
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.4-pro"))).enabled).toBe(false)
-      expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.4"))).limit).toEqual({
-        context: 400_000,
-        input: 272_000,
-        output: 64_000,
-      })
+      expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.4"))).enabled).toBe(false)
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.6"))).enabled).toBe(false)
       const gpt56 = required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.6-sol")))
       expect(gpt56.enabled).toBe(true)
@@ -218,7 +214,7 @@ describe("OpenAIPlugin", () => {
     }),
   )
 
-  it.effect("selects Azure WebSocket from capability and the Azure flag only", () =>
+  it.effect("selects Azure WebSocket from capability unless the policy disables it", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
       yield* credentials.create({
@@ -239,54 +235,44 @@ describe("OpenAIPlugin", () => {
         id: "deployment-responses",
         provider: Provider.ID.azure,
       })
-      const model = SessionRunnerModel.resolved(route.model({ id: "gpt-5.5" }), {
-        capabilities: { tools: true, input: ["text"], output: ["text"], responsesWebsockets: true },
-        cost: [],
-        limit: { context: 200_000, output: 32_000 },
-      })
-      const program = Effect.gen(function* () {
-        const requests = yield* SessionModelRequest.Service
-        return yield* requests.prepare({
-          kind: "primary",
-          scope: {
-            session: Session.Info.make({
-              id: sessionID,
-              projectID: Project.ID.global,
-              cost: Money.USD.zero,
-              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-              time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
-              location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
-            }),
-            agentID,
-            model,
-            tools: { definitions: [], execute: () => Effect.die("unused tool execution") },
-          },
-          transcript: { system: [], messages: [] },
-          webSocket: "session",
-        })
-      }).pipe(
-        Effect.provide(SessionModelRequest.layer),
-        Effect.provideService(SessionModelTransport.Service, transport),
-      )
+      const prepare = (websocket?: boolean) =>
+        Effect.gen(function* () {
+          const model = SessionRunnerModel.resolved(route.model({ id: "gpt-5.5" }), {
+            capabilities: { tools: true, input: ["text"], output: ["text"], responsesWebsockets: true },
+            cost: [],
+            limit: { context: 200_000, output: 32_000 },
+            websocket,
+          })
+          const requests = yield* SessionModelRequest.Service
+          return yield* requests.prepare({
+            kind: "primary",
+            scope: {
+              session: Session.Info.make({
+                id: sessionID,
+                projectID: Project.ID.global,
+                cost: Money.USD.zero,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+                location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+              }),
+              agentID,
+              model,
+              tools: { definitions: [], execute: () => Effect.die("unused tool execution") },
+            },
+            transcript: { system: [], messages: [] },
+            webSocket: "session",
+          })
+        }).pipe(
+          Effect.provide(SessionModelRequest.layer),
+          Effect.provideService(SessionModelTransport.Service, transport),
+        )
 
-      const prepared = yield* program.pipe(
-        Effect.provide(
-          ConfigProvider.layer(
-            ConfigProvider.fromEnv({ env: { OPENCODE_EXPERIMENTAL_AZURE_RESPONSES_WEBSOCKET: "true" } }),
-          ),
-        ),
-      )
-      const otherProvider = yield* program.pipe(
-        Effect.provide(
-          ConfigProvider.layer(
-            ConfigProvider.fromEnv({ env: { OPENCODE_EXPERIMENTAL_OPENAI_RESPONSES_WEBSOCKET: "true" } }),
-          ),
-        ),
-      )
+      const prepared = yield* prepare()
+      const disabled = yield* prepare(false)
 
       expect(prepared.options.webSocket).toBe(executor)
       expect(prepared.options.http).toBeUndefined()
-      expect(otherProvider.options.webSocket).toBeUndefined()
+      expect(disabled.options.webSocket).toBeUndefined()
     }),
   )
 })

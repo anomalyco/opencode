@@ -390,12 +390,7 @@ export const layer = Layer.effect(
         },
       }),
     })
-    const failed = Effect.fnUntraced(function* (input: {
-      readonly sessionID: SessionSchema.ID
-      readonly reason: SessionMessage.Compaction["reason"]
-      readonly error: SessionError.Error
-      readonly inputID?: SessionMessage.ID
-    }) {
+    const failed = Effect.fnUntraced(function* (input: SessionEvent.Compaction.Failed["data"]) {
       yield* bus.publish(SessionEvent.Compaction.Failed, input)
       return { status: "failed" as const, error: input.error }
     })
@@ -511,11 +506,12 @@ export const layer = Layer.effect(
               )
             }),
           )
-          if (result.usage)
+          const usage = result.usage ? SessionUsage.record(result.usage, context.model.cost) : undefined
+          if (usage)
             yield* bus.publish(SessionEvent.UsageRecorded, {
               sessionID: context.session.id,
               source: "compaction" as const,
-              ...SessionUsage.record(result.usage, context.model.cost),
+              ...usage,
             })
           yield* bus.publish(SessionEvent.Compaction.Ended, {
             sessionID: context.session.id,
@@ -524,6 +520,7 @@ export const layer = Layer.effect(
             text: "",
             recent: "",
             providerContext: SessionProviderContext.encode(provenance, result.replacement),
+            ...usage,
           })
           return { status: "completed" as const }
         }),
@@ -671,6 +668,7 @@ export const layer = Layer.effect(
           reason: input.reason,
           error,
           inputID: input.inputID,
+          ...usage,
         })
       }
       yield* bus.publish(SessionEvent.Compaction.Ended, {
@@ -680,6 +678,7 @@ export const layer = Layer.effect(
         providerState,
         text: summary,
         recent: history.recent,
+        ...usage,
       })
       return { status: "completed" as const }
     })
