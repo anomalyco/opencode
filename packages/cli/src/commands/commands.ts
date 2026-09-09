@@ -268,28 +268,6 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         json: Flag.boolean("json").pipe(Flag.withDescription("Output statistics as JSON"), Flag.withDefault(false)),
       },
     }),
-    Spec.make("export", {
-      description: "Export session data as JSON",
-      params: {
-        ...ServerParams,
-        session: Argument.string("session").pipe(Argument.withDescription("Session ID to export"), Argument.optional),
-        sanitize: Flag.boolean("sanitize").pipe(
-          Flag.withDescription("Redact sensitive transcript and file data"),
-          Flag.withDefault(false),
-        ),
-      },
-    }),
-    Spec.make("import", {
-      description: "Import session data from a JSON file or URL",
-      params: {
-        ...ServerParams,
-        file: Argument.string("file").pipe(Argument.withDescription("JSON file or URL to import")),
-        directory: Flag.string("directory").pipe(
-          Flag.withDescription("Directory in which to import the session"),
-          Flag.optional,
-        ),
-      },
-    }),
     Spec.make("mini", {
       description: "Start the minimal interactive interface",
       params: {
@@ -392,6 +370,31 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           params: {
             ...ServerParams,
             sessionID: Argument.string("sessionID").pipe(Argument.withDescription("Session ID to delete")),
+          },
+        }),
+        Spec.make("export", {
+          description: "Export session data as JSON",
+          params: {
+            ...ServerParams,
+            session: Argument.string("session").pipe(
+              Argument.withDescription("Session ID to export"),
+              Argument.optional,
+            ),
+            sanitize: Flag.boolean("sanitize").pipe(
+              Flag.withDescription("Redact sensitive transcript and file data"),
+              Flag.withDefault(false),
+            ),
+          },
+        }),
+        Spec.make("import", {
+          description: "Import session data from a JSON file or URL",
+          params: {
+            ...ServerParams,
+            file: Argument.string("file").pipe(Argument.withDescription("JSON file or URL to import")),
+            directory: Flag.string("directory").pipe(
+              Flag.withDescription("Directory in which to import the session"),
+              Flag.optional,
+            ),
           },
         }),
       ],

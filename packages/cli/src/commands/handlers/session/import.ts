@@ -5,13 +5,13 @@ import { SessionTransfer } from "@opencode/schema/session-transfer"
 import { Effect, Option, Schema } from "effect"
 import { EOL } from "node:os"
 import path from "node:path"
-import { Commands } from "../commands"
-import { Runtime } from "../../framework/runtime"
-import { ServerConnection } from "../../services/server-connection"
+import { Commands } from "../../commands"
+import { Runtime } from "../../../framework/runtime"
+import { ServerConnection } from "../../../services/server-connection"
 
 export default Runtime.handler(
-  Commands.commands.import,
-  Effect.fn("cli.import")(function* (input) {
+  Commands.commands.session.commands.import,
+  Effect.fn("cli.session.import")(function* (input) {
     const text = yield* Effect.tryPromise({
       try: () =>
         input.file.startsWith("http://") || input.file.startsWith("https://")
