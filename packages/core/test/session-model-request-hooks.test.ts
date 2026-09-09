@@ -64,7 +64,7 @@ describe("SessionModelRequest HTTP hooks", () => {
           system: [],
           messages: [],
         })
-        const http = "options" in prepared ? prepared.options.http : undefined
+        const http = prepared.options.http
         if (!http) throw new Error(`Expected HTTP middleware for ${kind}`)
         yield* http(HttpClientRequest.post("https://example.test/v1/chat/completions"), (request) =>
           Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}", { status: 200 }))),

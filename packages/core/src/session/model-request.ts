@@ -11,7 +11,7 @@ import {
   SystemPart,
 } from "@opencode/ai"
 import type { StreamOptions } from "@opencode/ai/route"
-import type { SessionRequest, SessionRequestKind } from "@opencode/plugin/effect/session"
+import type { SessionContext, SessionRequest, SessionRequestKind, SessionTitle } from "@opencode/plugin/effect/session"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { Content } from "@opencode/schema/tool"
@@ -40,7 +40,9 @@ const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
 /** Tool errors, plus the user declining a permission or dismissing a question. */
 export type ExecuteError = Tool.Error | Permission.DeclinedError | QuestionTool.CancelledError
 
-export interface Prepared {
+export interface Prepared<Event = SessionRequest> {
+  /** The hook event after every hook ran, including any output slots a hook set. */
+  readonly event: Event
   readonly request: LLMRequest
   readonly options: StreamOptions
   readonly retry: (event: PluginHooks.Domains["session"]["retry"]) => Effect.Effect<void>
@@ -176,11 +178,11 @@ type Definitions = PluginHooks.Domains["session"]["context"]["tools"]
 
 /** Builds the model request for each session flow. Each entry runs its own plugin hook. */
 export interface Interface {
-  readonly primary: (input: Input) => Effect.Effect<Prepared>
-  readonly compaction: (input: Input) => Effect.Effect<Prepared>
-  readonly generate: (input: Input) => Effect.Effect<Prepared>
-  /** Runs `session.title` instead of `session.context`; no agent or tools. A hook may supply the title outright. */
-  readonly title: (input: Input) => Effect.Effect<Prepared | { readonly title: string }>
+  readonly primary: (input: Input) => Effect.Effect<Prepared<SessionContext>>
+  readonly compaction: (input: Input) => Effect.Effect<Prepared<SessionContext>>
+  readonly generate: (input: Input) => Effect.Effect<Prepared<SessionContext>>
+  /** Runs `session.title` instead of `session.context`; no agent or tools. */
+  readonly title: (input: Input) => Effect.Effect<Prepared<SessionTitle>>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionModelRequest") {}
@@ -353,10 +355,7 @@ export const layer = Layer.effect(
       primary: (input) => prepare("primary", input, context(input.agent)),
       generate: (input) => prepare("generate", input, context(input.agent)),
       compaction: (input) => prepare("compaction", input, context(input.agent)),
-      title: (input) =>
-        prepare("title", input, (draft) => hooks.trigger("session", "title", draft)).pipe(
-          Effect.map((p) => (p.event.result === undefined ? p : { title: p.event.result })),
-        ),
+      title: (input) => prepare("title", input, (draft) => hooks.trigger("session", "title", draft)),
     })
   }),
 )
