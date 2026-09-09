@@ -111,7 +111,7 @@ export class InterpreterRuntimeError extends Error {
 
 // Orient the agent rather than enumerate JavaScript; interpreter-support.md is the full matrix.
 export const supportedSyntaxMessage =
-  "Programs run a JavaScript subset for calling tools: plain and async functions, data literals, destructuring, standard control flow, await/Promise, and common built-ins (Array, Object, Math, JSON, Date, RegExp, Map, Set, URL). Classes, this, getters/setters, tagged templates, BigInt, and custom Symbols are unavailable; use plain functions and data objects instead."
+  "This is a restricted JavaScript-like language. Supported: plain and async functions, data literals, destructuring, standard control flow, await and Promise, and built-ins such as Array, Object, Math, JSON, Date, RegExp, Map, Set, and URL. Unsupported: classes, this, getters/setters, tagged templates, BigInt, and custom Symbols. Use plain functions and data objects instead."
 
 export const unsupportedSyntax = (kind: string, node: AstNode): InterpreterRuntimeError =>
   new InterpreterRuntimeError(
