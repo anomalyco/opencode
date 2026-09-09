@@ -17,6 +17,7 @@ import { IconMiniMax, IconMiMo, IconZai, IconAlibaba, IconDeepSeek } from "~/com
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { LocaleLinks } from "~/component/locale-links"
+import { goUsageLimits } from "~/lib/language"
 
 const checkLoggedIn = query(async () => {
   "use server"
@@ -201,7 +202,7 @@ export default function Home() {
           </section>
 
           <section data-component="comparison">
-            <LimitsGraph href={language.route("/docs/go/#usage-limits")} />
+            <LimitsGraph href={goUsageLimits(language.locale())} />
           </section>
 
           <section data-component="problem">

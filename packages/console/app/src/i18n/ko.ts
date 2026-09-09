@@ -271,7 +271,7 @@ export const dict = {
   "go.graph.label": "5시간당 요청 수",
   "go.graph.period": "사용량",
   "go.graph.model": "모델",
-  "go.graph.requests": "예상 요청 수 / 5시간",
+  "go.graph.requests": "예상 요청 횟수 / 5시간",
   "go.graph.allowance": "월간 사용량",
   "go.graph.new": "신규",
   "go.graph.scale": "요청 수는 비선형 눈금으로 표시됩니다",

@@ -288,7 +288,7 @@ export const dict = {
   "go.graph.showLess": "Afficher moins de modèles",
   "go.graph.limitedRegions": "régions limitées",
   "go.graph.limitedTime": "durée limitée",
-  "go.graph.usageLimits": "Limites d'utilisation",
+  "go.graph.usageLimits": "Limites d’utilisation",
   "go.graph.aria": "Requêtes par 5h : {{free}} vs {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
