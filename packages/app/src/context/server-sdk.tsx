@@ -159,8 +159,7 @@ function currentDeltaFragment(event: CurrentDelta) {
   return event.type === "session.compaction.delta" ? event.data.text : event.data.delta
 }
 
-export function resumeStreamAfterPageShow(event: PageTransitionEvent, start: () => unknown) {
-  if (!event.persisted) return
+export function resumeStreamAfterPageShow(start: () => unknown) {
   start()
 }
 
@@ -324,7 +323,10 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
 
   onMount(() => {
     makeEventListener(window, "pagehide", stop)
-    makeEventListener(window, "pageshow", (event) => resumeStreamAfterPageShow(event, start))
+    makeEventListener(window, "pageshow", () => resumeStreamAfterPageShow(start))
+    makeEventListener(document, "visibilitychange", () => {
+      if (document.visibilityState === "visible") start()
+    })
   })
 
   onCleanup(() => {
