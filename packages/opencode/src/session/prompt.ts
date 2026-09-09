@@ -56,6 +56,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { DSH } from "./dsh"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -114,6 +115,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const status = yield* SessionStatus.Service
+    const dsh = yield* DSH.Service
     const sessions = yield* Session.Service
     const agents = yield* Agent.Service
     const provider = yield* Provider.Service
@@ -1052,6 +1054,7 @@ const layer = Layer.effect(
     const prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error> = Effect.fn(
       "SessionPrompt.prompt",
     )(function* (input: PromptInput) {
+      if (yield* dsh.selected(input.sessionID)) return yield* dsh.prompt(input)
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       yield* revert.cleanup(session)
       const message = yield* createUserMessage(input)
@@ -1343,17 +1346,20 @@ const layer = Layer.effect(
     const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
       input: LoopInput,
     ) {
+      if (yield* dsh.selected(input.sessionID)) throw new Error("DSH backend: native loop resume is unsupported; send a follow-up prompt.")
       return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
     })
 
     const shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError> = Effect.fn(
       "SessionPrompt.shell",
     )(function* (input: ShellInput) {
+      if (yield* dsh.selected(input.sessionID)) throw new Error("DSH backend: OpenCode shell mode is unsupported; ask DSH to run the command.")
       const ready = yield* Latch.make()
       return yield* state.startShell(input.sessionID, lastAssistant(input.sessionID), shellImpl(input, ready), ready)
     })
 
     const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
+      if (yield* dsh.selected(input.sessionID)) throw new Error("DSH backend: custom OpenCode commands are unsupported; send a prompt.")
       yield* Effect.logInfo("command", {
         "session.id": input.sessionID,
         command: input.command,
@@ -1599,6 +1605,7 @@ export const node = LayerNode.make({
   service: Service,
   layer: layer,
   deps: [
+    DSH.node,
     SessionStatus.node,
     Session.node,
     Agent.node,

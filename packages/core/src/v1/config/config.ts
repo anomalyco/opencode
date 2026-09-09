@@ -5,6 +5,7 @@ import { NonNegativeInt, PositiveInt, type DeepMutable } from "../../schema"
 import { ConfigExperimental } from "../../config/experimental"
 import { ConfigReference } from "../../config/reference"
 import { ConfigAgentV1 } from "./agent"
+import { ConfigBackendV1 } from "./backend"
 import { ConfigAttachmentV1 } from "./attachment"
 import { ConfigCommandV1 } from "./command"
 import { ConfigFormatterV1 } from "./formatter"
@@ -30,6 +31,9 @@ const LogLevelRef = Schema.Literals(["DEBUG", "INFO", "WARN", "ERROR"]).annotate
 })
 
 export const Info = Schema.Struct({
+  backend: Schema.optional(ConfigBackendV1.Info).annotate({
+    description: "Agent execution backend. Omission preserves native OpenCode execution.",
+  }),
   $schema: Schema.optional(Schema.String).annotate({
     description: "JSON schema reference for configuration validation",
   }),

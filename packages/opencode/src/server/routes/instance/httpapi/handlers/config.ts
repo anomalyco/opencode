@@ -1,5 +1,6 @@
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
+import { DSHModel } from "@/session/dsh-model"
 import * as InstanceState from "@/effect/instance-state"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -22,6 +23,11 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
     })
 
     const providers = Effect.fn("ConfigHttpApi.providers")(function* () {
+      const config = yield* configSvc.get()
+      if (config.backend?.type === "dsh") {
+        const provider = DSHModel.provider(config.backend)
+        return { providers: [provider], default: { dsh: DSHModel.defaultModel(config.backend) } }
+      }
       const providers = yield* providerSvc.list()
       return {
         providers: Object.values(providers).map(Provider.toPublicInfo),

@@ -114,6 +114,8 @@ Learn more about [agents](https://opencode.ai/docs/agents).
 
 ### Documentation
 
+For the optional DeepSeek Harness execution backend in this checkout, see [DSH backend setup and behavior](DSH_BACKEND.md).
+
 For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
 
 ### Contributing
