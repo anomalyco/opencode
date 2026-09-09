@@ -11,6 +11,7 @@ import {
   Message,
   type ContentPart,
 } from "@opencode/ai"
+import type { SessionCompactionResult } from "@opencode/plugin/effect/session"
 import { SessionError } from "@opencode/schema/session-error"
 import { Context, Effect, Layer, Stream } from "effect"
 import { Bus } from "../bus.js"
@@ -402,16 +403,51 @@ export const layer = Layer.effect(
             recent,
             inputID: input.inputID,
           })
-    const supplied = (input: ExecuteInput, result: { summary: string; recent?: string }, recent: string) =>
-      bus
-        .publish(SessionEvent.Compaction.Ended, {
-          sessionID: input.context.session.id,
+    const supplied = Effect.fn("SessionCompaction.supplied")(function* (
+      input: ExecuteInput,
+      result: SessionCompactionResult,
+      recent: string,
+    ) {
+      const context = input.context
+      const provenance = SessionProviderContext.provenance(context.model)
+      if (result.replacement && !provenance)
+        return yield* failed({
+          sessionID: context.session.id,
           reason: input.reason,
-          model: input.context.model.ref,
+          inputID: input.inputID,
+          error: {
+            type: "provider.unsupported-operation",
+            message: "Provider compaction requires a stable, configured endpoint",
+          },
+        })
+      const usage = result.tokens
+        ? { tokens: result.tokens, cost: result.cost ?? SessionUsage.calculateCost(context.model.cost, result.tokens) }
+        : undefined
+      if (usage)
+        yield* bus.publish(SessionEvent.UsageRecorded, {
+          sessionID: context.session.id,
+          source: "compaction",
+          ...usage,
+        })
+      yield* bus.publish(
+        SessionEvent.Compaction.Ended,
+        {
+          sessionID: context.session.id,
+          reason: input.reason,
+          model: context.model.ref,
+          providerState: result.providerState,
+          providerContext:
+            result.replacement && provenance
+              ? SessionProviderContext.encode(provenance, result.replacement)
+              : undefined,
           text: result.summary,
           recent: result.recent ?? recent,
-        })
-        .pipe(Effect.as({ status: "completed" as const }))
+          ...usage,
+        },
+        { metadata: result.metadata },
+      )
+      return { status: "completed" as const }
+    })
     // Manual controls settle through the inbox; only automatic work needs a durable interruption record.
     const interrupted = (input: ExecuteInput) =>
       input.reason === "auto"

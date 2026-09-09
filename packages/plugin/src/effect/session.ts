@@ -2,11 +2,13 @@ import type { SessionApi } from "@opencode/client/effect/api"
 import type { GenerationOptionsFields, Message, SystemPart } from "@opencode/ai"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
+import type { Money } from "@opencode/schema/money"
 import type { PromptInput } from "@opencode/schema/prompt-input"
 import type { Session } from "@opencode/schema/session"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 import type { SessionError } from "@opencode/schema/session-error"
 import type { SessionMessage } from "@opencode/schema/session-message"
+import type { TokenUsage } from "@opencode/schema/token-usage"
 import type { JsonSchema, Types } from "effect"
 import type { ModelHooks } from "./registration.js"
 
@@ -35,9 +37,23 @@ export interface SessionContext extends SessionRequest {
   tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>
 }
 
+/** A completed compaction message without its identity. */
+export interface SessionCompactionResult {
+  summary: string
+  /** Transcript tail kept verbatim after the summary. Defaults to the tail OpenCode would retain. */
+  recent?: string
+  /** Provider-native replacement for the compacted transcript, sent in place of the summary. */
+  replacement?: Array<Message>
+  providerState?: SessionMessage.ProviderState
+  metadata?: Record<string, unknown>
+  /** Usage of the compaction request itself. `cost` defaults to the model's rate for `tokens`. */
+  tokens?: TokenUsage.Info
+  cost?: Money.USD
+}
+
 export interface SessionCompaction extends SessionContext {
-  /** Set to use this summary and skip the model request. `recent` defaults to the retained tail. */
-  result?: { summary: string; recent?: string }
+  /** Set to record this compaction and skip the model request. */
+  result?: SessionCompactionResult
 }
 
 export interface SessionGenerate extends SessionContext {}

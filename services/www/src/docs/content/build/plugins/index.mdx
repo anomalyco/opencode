@@ -1204,7 +1204,9 @@ kind of request a session issues has its own hook, so a plugin can treat the age
 differently:
 
 - `context` runs for the agent loop, including tool-driven continuations.
-- `compaction` runs for checkpoint summaries. Set `result` to supply the summary yourself and skip the model call.
+- `compaction` runs for checkpoint summaries. Set `result` to record the compaction yourself and skip the model
+  call; it takes the same fields as a completed compaction message, so a plugin can write its own summary or install a
+  provider-native `replacement` transcript.
 - `generate` runs for transient `ctx.session.generate` calls.
 - `title` runs for title generation. It has no `agent` or `tools`. Set `result` to supply the title yourself.
 
@@ -1331,7 +1333,7 @@ import type { SessionPrompt } from "@opencode/plugin/promise/session"
 interface SessionHooks {
   prompt: SessionPrompt
   context: SessionContextHook
-  compaction: SessionContextHook & { result?: { summary: string; recent?: string } }
+  compaction: SessionContextHook & { result?: SessionCompactionResult }
   generate: SessionContextHook
   title: SessionRequestHook & { result?: string }
   "model.request": SessionModelRequestHook
@@ -1372,6 +1374,16 @@ interface SessionRequestHook {
 interface SessionContextHook extends SessionRequestHook {
   readonly agent: string
   tools: Record<string, { description: string; input: JsonSchema }>
+}
+
+interface SessionCompactionResult {
+  summary: string
+  recent?: string
+  replacement?: Message[]
+  providerState?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+  tokens?: TokenUsage
+  cost?: number
 }
 
 interface SessionHookContext {

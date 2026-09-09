@@ -406,17 +406,31 @@ it.live("compaction hooks replace provider compaction with their own summary", (
     yield* fixture.prompt("Original user")
     yield* fixture.hooks.register("session", "compaction", (event) =>
       Effect.sync(() => {
-        event.result = { summary: "## Objective\n- hooked summary", recent: "kept tail" }
+        event.result = {
+          summary: "",
+          recent: "kept tail",
+          replacement: [Message.assistant("plugin checkpoint")],
+          providerState: { responseId: "plugin" },
+          metadata: { plugin: "custom" },
+          tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
+        }
       }),
     )
     expect(yield* fixture.compact).toEqual({ status: "completed" })
     expect(fixture.state.calls).toBe(0)
-    expect((yield* fixture.load).messages.at(-1)).toMatchObject({
+    const last = (yield* fixture.load).messages.at(-1)
+    expect(last).toMatchObject({
       type: "compaction",
       status: "completed",
-      summary: "## Objective\n- hooked summary",
+      summary: "",
       recent: "kept tail",
+      providerState: { responseId: "plugin" },
+      metadata: { plugin: "custom" },
+      tokens: { input: 10, output: 5 },
     })
+    if (last?.type !== "compaction" || last.status !== "completed" || !last.providerContext)
+      return yield* Effect.die("Missing plugin checkpoint")
+    expect(SessionProviderContext.decode(last.providerContext)).toEqual([Message.assistant("plugin checkpoint")])
   }),
 )
 
