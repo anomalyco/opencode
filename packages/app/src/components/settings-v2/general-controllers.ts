@@ -22,27 +22,42 @@ import { createSoundPreviewController, type ShellOption } from "./general-contro
 export { createShellOptions, createSoundPreviewController } from "./general-controller-behavior"
 export type { ShellOption, ShellSelectOption } from "./general-controller-behavior"
 
-export function createPermissionScopeController(sessionID: Accessor<string | undefined>) {
+export function createPermissionScopeController(
+  sessionID: Accessor<string | undefined>,
+  fallbackDirectory?: Accessor<string | undefined>,
+) {
   const permission = usePermission()
   const serverSync = useServerSync()
+  // AUTO_ACCEPT_DIRECTORY_FALLBACK_002: resolve the scope directory from the
+  // session lineage when a session exists, otherwise fall back to the active
+  // route directory (new-session/draft views) so the toggle stays usable.
   const directory = createMemo(() => {
     const id = sessionID()
-    if (!id) return undefined
-    return serverSync().session.lineage.peek(id)?.session.directory
+    if (id) {
+      const dir = serverSync().session.lineage.peek(id)?.session.directory
+      if (dir) return dir
+    }
+    return fallbackDirectory?.()
   })
 
   return {
     accepting: createMemo(() => {
-      const id = sessionID()
       const dir = directory()
-      if (!id || !dir) return false
+      if (!dir) return false
+      const id = sessionID()
+      if (!id) return permission.isAutoAcceptingDirectory(dir)
       return permission.isAutoAccepting(id, dir)
     }),
     enabled: createMemo(() => !!directory()),
     set: (checked: boolean) => {
-      const id = sessionID()
       const dir = directory()
-      if (!id || !dir) return
+      if (!dir) return
+      const id = sessionID()
+      if (!id) {
+        if (permission.isAutoAcceptingDirectory(dir) === checked) return
+        permission.toggleAutoAcceptDirectory(dir)
+        return
+      }
       if (checked) return permission.enableAutoAccept(id, dir)
       permission.disableAutoAccept(id, dir)
     },

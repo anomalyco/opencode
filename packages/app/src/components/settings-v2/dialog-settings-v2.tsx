@@ -34,6 +34,9 @@ export const DialogSettings: Component<{
       return draft?.type === "draft" ? draft.directory : undefined
     }
     if (route.type === "session") return serverSync().session.get(route.sessionId)?.directory
+    // AUTO_ACCEPT_DIRECTORY_FALLBACK_002: on home, scope to the selected
+    // project when the user picked one; bare home has nothing to scope to.
+    if (route.type === "home") return layout.home.selection().directory
     return undefined
   })
 
@@ -94,7 +97,7 @@ export const DialogSettings: Component<{
           </div>
         </TabsV2.List>
         <TabsV2.Content value="general" class="settings-v2-panel">
-          <SettingsGeneralV2 sessionID={props.sessionID} />
+          <SettingsGeneralV2 sessionID={props.sessionID} directory={directory()} />
         </TabsV2.Content>
         <TabsV2.Content value="shortcuts" class="settings-v2-panel">
           <SettingsKeybinds v2 />

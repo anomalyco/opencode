@@ -142,6 +142,41 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
     ])
 })
 
+test("auto-accept toggle stays enabled on a new-session draft", async ({ page }) => {
+  const permissionRequests: string[] = []
+  await mockServers(page, permissionRequests)
+  await configureServers(page, [{ type: "draft", server: serverB, draftID: "draft-1", directory: directoryB }])
+
+  await page.goto("/new-session?draftId=draft-1")
+  // Wait for server-backed controls: the page command registrations
+  // (including settings.open) mount with this tree, so the keypress below
+  // must not race them.
+  await expect(page.getByRole("button", { name: "Server B Model" })).toBeVisible()
+  await page.keyboard.press("Control+,")
+
+  const dialog = page.locator(".settings-v2-dialog")
+  const autoAccept = dialog.locator('[data-action="settings-auto-accept-permissions"]')
+  await expect(autoAccept).toBeVisible()
+  await expect(autoAccept.getByRole("switch")).toBeEnabled()
+  await autoAccept.locator('[data-slot="switch-control"]').click()
+  await expect(autoAccept.getByRole("switch")).toBeChecked()
+})
+
+test("auto-accept toggle stays disabled on home with no project selected", async ({ page }) => {
+  const permissionRequests: string[] = []
+  await mockServers(page, permissionRequests)
+  await configureServers(page)
+
+  await page.goto("/")
+  await page.keyboard.press("Control+,")
+
+  const dialog = page.locator(".settings-v2-dialog")
+  const autoAccept = dialog.locator('[data-action="settings-auto-accept-permissions"]')
+  await expect(autoAccept).toBeVisible()
+  // No directory context on bare home: nothing to scope the flag to.
+  await expect(autoAccept.getByRole("switch")).toBeDisabled()
+})
+
 type PermissionResponse = {
   origin: string
   directory?: string
@@ -150,7 +185,10 @@ type PermissionResponse = {
   body: unknown
 }
 
-async function configureServers(page: Page, tabs: { type: "session"; server: string; sessionId: string }[] = []) {
+async function configureServers(
+  page: Page,
+  tabs: ({ type: "session"; server: string; sessionId: string } | { type: "draft"; server: string; draftID: string; directory: string })[] = [],
+) {
   await page.addInitScript(
     ({ serverB, tabs }) => {
       localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
