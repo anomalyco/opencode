@@ -117,6 +117,7 @@ type RuntimeState = {
   plugins_by_id: Map<string, PluginEntry>
   pending: Map<string, ConfigPlugin.Origin>
   dispose_timeout_ms: number
+  update?: { enabled?: boolean; source?: string }
 }
 
 const DISPOSE_TIMEOUT_MS = 5000
@@ -673,10 +674,15 @@ function applyInitialPluginEnabledState(state: RuntimeState, config: TuiConfig.R
   }
 }
 
-async function resolveExternalPlugins(list: ConfigPlugin.Origin[], wait: () => Promise<void>) {
+async function resolveExternalPlugins(
+  list: ConfigPlugin.Origin[],
+  wait: () => Promise<void>,
+  update?: { enabled?: boolean; source?: string },
+) {
   return PluginLoader.loadExternal({
     items: list,
     kind: "tui",
+    update,
     wait: async () => {
       await wait().catch(() => {})
     },
@@ -856,7 +862,7 @@ async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
     state.pending.delete(spec)
     return true
   }
-  const ready = await resolveExternalPlugins([cfg], () => TuiConfig.waitForDependencies()).catch((error) => {
+  const ready = await resolveExternalPlugins([cfg], () => TuiConfig.waitForDependencies(), state.update).catch((error) => {
     fail("failed to add tui plugin", { path: next, error })
     return [] as PluginLoad[]
   })
@@ -1068,6 +1074,10 @@ async function load(input: {
     plugins_by_id: new Map(),
     pending: new Map(),
     dispose_timeout_ms: input.disposeTimeoutMs ?? DISPOSE_TIMEOUT_MS,
+    update: {
+      enabled: config.plugin_autoupdate,
+      source: config.plugin_update_source,
+    },
   }
   runtime = next
   next.view.update({
@@ -1103,7 +1113,10 @@ async function load(input: {
       })
     }
 
-    const ready = await resolveExternalPlugins(records, () => TuiConfig.waitForDependencies())
+    const ready = await resolveExternalPlugins(records, () => TuiConfig.waitForDependencies(), {
+      enabled: config.plugin_autoupdate,
+      source: config.plugin_update_source,
+    })
     await addExternalPluginEntries(next, ready)
 
     applyInitialPluginEnabledState(next, config)

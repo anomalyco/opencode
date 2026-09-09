@@ -86,6 +86,7 @@ export namespace PluginLoader {
   export async function resolve(
     plan: Plan,
     kind: PluginKind,
+    update?: UpdateConfig,
   ): Promise<
     | { ok: true; value: Resolved }
     | { ok: false; stage: "missing"; value: Missing }
@@ -94,7 +95,9 @@ export namespace PluginLoader {
     // First make sure the plugin exists locally, installing npm plugins on demand.
     let target = ""
     try {
-      await maybeUpdate(plan.spec)
+      // Refresh npm plugins before resolving so the freshly installed version is
+      // the one that gets imported below.
+      await PluginUpdate.update(plan.spec, update?.source, update?.enabled)
       target = await resolvePluginTarget(plan.spec)
     } catch (error) {
       return { ok: false, stage: "install", error }
@@ -151,6 +154,7 @@ export namespace PluginLoader {
     candidate: Candidate,
     kind: PluginKind,
     retry: boolean,
+    update: UpdateConfig | undefined,
     finish: ((load: Loaded, origin: ConfigPlugin.Origin, retry: boolean) => Promise<R | undefined>) | undefined,
     missing: ((value: Missing, origin: ConfigPlugin.Origin, retry: boolean) => Promise<R | undefined>) | undefined,
     report: Report | undefined,
@@ -163,7 +167,7 @@ export namespace PluginLoader {
 
     report?.start?.(candidate, retry)
 
-    const resolved = await resolve(plan, kind)
+    const resolved = await resolve(plan, kind, update)
     if (!resolved.ok) {
       if (resolved.stage === "missing") {
         // Missing entrypoints are handled separately so callers can still inspect package metadata,
@@ -192,9 +196,15 @@ export namespace PluginLoader {
     return { value, retry: false }
   }
 
+  type UpdateConfig = {
+    enabled?: boolean
+    source?: string
+  }
+
   type Input<R> = {
     items: ConfigPlugin.Origin[]
     kind: PluginKind
+    update?: UpdateConfig
     wait?: () => Promise<void>
     finish?: (load: Loaded, origin: ConfigPlugin.Origin, retry: boolean) => Promise<R | undefined>
     missing?: (value: Missing, origin: ConfigPlugin.Origin, retry: boolean) => Promise<R | undefined>
@@ -210,7 +220,7 @@ export namespace PluginLoader {
     const candidates = input.items.map((origin) => ({ origin, plan: plan(origin.spec) }))
     const list: Array<Promise<AttemptResult<R>>> = []
     for (const candidate of candidates) {
-      list.push(attempt(candidate, input.kind, false, input.finish, input.missing, input.report))
+      list.push(attempt(candidate, input.kind, false, input.update, input.finish, input.missing, input.report))
     }
     const out = await Promise.all(list)
     if (input.wait) {
@@ -226,7 +236,7 @@ export namespace PluginLoader {
         if (!candidate || pluginSource(candidate.plan.spec) !== "file") continue
         deps ??= input.wait()
         await deps
-        out[i] = await attempt(candidate, input.kind, true, input.finish, input.missing, input.report)
+        out[i] = await attempt(candidate, input.kind, true, input.update, input.finish, input.missing, input.report)
       }
     }
 
@@ -235,11 +245,4 @@ export namespace PluginLoader {
     for (const item of out) if (item.value !== undefined) ready.push(item.value)
     return ready
   }
-}
-
-async function maybeUpdate(spec: string) {
-  const { Config } = await import("@/config/config")
-  const { AppRuntime } = await import("@/effect/app-runtime")
-  const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal())).catch(() => undefined)
-  await PluginUpdate.update(spec, config?.plugin_update_source, config?.plugin_autoupdate)
 }

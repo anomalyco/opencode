@@ -64,7 +64,7 @@ describe("shouldCheck", () => {
       // Lock free by design: every caller must get an answer rather than block,
       // and at least one of them is the one that refreshed the window.
       expect(results.every((r) => typeof r === "boolean")).toBe(true)
-      expect(results.filter((r) => r === true).length).toBeGreaterThanOrEqual(1)
+      expect(results.filter((r) => r).length).toBeGreaterThanOrEqual(1)
     })
   })
 })

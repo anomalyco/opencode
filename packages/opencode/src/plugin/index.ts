@@ -187,6 +187,10 @@ const layer = Layer.effect(
           PluginLoader.loadExternal({
             items: plugins,
             kind: "server",
+            update: {
+              enabled: cfg.plugin_autoupdate,
+              source: cfg.plugin_update_source,
+            },
             report: {
               start(candidate) {},
               missing(candidate, _retry, message) {},

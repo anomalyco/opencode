@@ -64,6 +64,13 @@ export const Info = Schema.Struct({
   keybinds: Schema.optional(TuiKeybind.KeybindOverrides),
   plugin: Schema.optional(Schema.Array(PluginSpec)),
   plugin_enabled: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
+  plugin_autoupdate: Schema.optional(Schema.Boolean).annotate({
+    description: "Automatically update npm plugins to newer versions at startup",
+  }),
+  plugin_update_source: Schema.optional(Schema.String).annotate({
+    description:
+      "URL of a JSON manifest mapping plugin package names to their latest version, e.g. {\"acme-plugin\":\"2.0.0\"}. Checked before the npm registry, which is used as a fallback",
+  }),
   leader_timeout: Schema.optional(LeaderTimeout),
   attention: Schema.optional(Attention),
   prompt: Schema.optional(Prompt),
