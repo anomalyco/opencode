@@ -12,7 +12,7 @@ import type { CommandContext } from "@opentui/keymap"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import { registerOpencodeSpinner } from "../register-spinner"
 import path from "path"
-import { fileURLToPath } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import { useLocal } from "../../context/local"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { tint, useTheme } from "../../context/theme"
@@ -1248,7 +1248,7 @@ export function Prompt(props: PromptProps) {
       type: "file" as const,
       mime: file.mime,
       filename: file.filename,
-      url: `data:${file.mime};base64,${file.content}`,
+      url: file.filepath ? pathToFileURL(file.filepath).href : `data:${file.mime};base64,${file.content}`,
       source: {
         type: "file",
         path: file.filepath ?? file.filename ?? "",
