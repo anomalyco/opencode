@@ -377,9 +377,11 @@ export function SessionSidePanel(props: {
                                         ariaControls={activeTab() === tab ? browserTabPanelID : undefined}
                                       >
                                         <div class="flex items-center gap-1.5">
-                                          <Icon name="window-cursor" size="small" />
+                                          <Icon name="globe" size="small" />
                                           <span class="max-w-40 truncate">
-                                            {item().title || language.t("session.tab.browser")}
+                                            {!item().url || item().url === "about:blank"
+                                              ? language.t("session.tab.browser")
+                                              : item().title || item().url}
                                           </span>
                                         </div>
                                       </SortableTab>
@@ -489,7 +491,7 @@ export function SessionSidePanel(props: {
                                         }
                                       >
                                         <div class="flex items-center gap-2">
-                                          <Icon name="open-file" size="small" />
+                                          <Icon name="file-tree" size="small" />
                                           <span>{language.t("command.file.open")}</span>
                                         </div>
                                       </Menu.Item>
@@ -503,7 +505,7 @@ export function SessionSidePanel(props: {
                                         }
                                       >
                                         <div class="flex items-center gap-2">
-                                          <Icon name="window-cursor" size="small" />
+                                          <Icon name="globe" size="small" />
                                           <span>{language.t("session.tab.browser")}</span>
                                         </div>
                                       </Menu.Item>

@@ -57,7 +57,13 @@ export function createBrowserPage(
   const contents = view.webContents
   const detachNetwork = options.network?.attach(contents)
   contents.on("before-input-event", (event, input) => {
-    if (input.type !== "keyDown" || input.alt || !(process.platform === "darwin" ? input.meta : input.control)) return
+    if (input.type !== "keyDown") return
+    if (input.key === "F5" && !input.meta && !input.control && !input.alt && !input.shift) {
+      event.preventDefault()
+      contents.reload()
+      return
+    }
+    if (input.alt || !(process.platform === "darwin" ? input.meta : input.control)) return
     const step =
       input.key === "=" || input.key === "+" || input.code === "NumpadAdd"
         ? 0.5

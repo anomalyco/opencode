@@ -107,6 +107,7 @@ export const dict = {
   "command.session.new": "New session",
   "command.file.open": "Open file",
   "command.browser.open": "Open browser",
+  "command.browser.reload": "Reload browser page",
   "command.tab.close": "Close tab",
   "command.tab.reopenClosed": "Reopen closed tab",
   "command.context.addSelection": "Add selection to context",
@@ -895,7 +896,7 @@ export const dict = {
 
   "session.browser.address": "Browser address",
   "session.browser.replaced": "Browser control moved to another desktop window.",
-  "session.browser.address.placeholder": "Enter a URL",
+  "session.browser.address.placeholder": "Enter URL",
 
   "titlebar.update": "Update",
   "titlebar.tabs": "Tabs",
