@@ -63,6 +63,39 @@ function unquoteGitPath(input: string) {
   return Buffer.from(bytes).toString()
 }
 
+// Bound on the worktree-diff snapshot stored per user message and republished
+// on every message.updated event. Uncapped, long sessions grew this to tens of
+// MB per event and GBs per session (one 17 MB snapshot x ~1000 events).
+// MESSAGE_UPDATED_SLIM_EVENTS_004
+export const MAX_SUMMARY_DIFF_BYTES = 256 * 1024
+export const MAX_SUMMARY_FILE_PATCH_BYTES = 64 * 1024
+
+// Pure: keep whole-file patches in order within the budgets; always keeps at
+// least the first file (capped). Counts (additions/deletions) stay truthful
+// totals — only the stored patch text is bounded. Revert recomputes fresh
+// diffs, so the stored copy is display-only.
+export function truncateDiffs(
+  diffs: Snapshot.FileDiff[],
+  totalBudget: number = MAX_SUMMARY_DIFF_BYTES,
+  fileBudget: number = MAX_SUMMARY_FILE_PATCH_BYTES,
+): Snapshot.FileDiff[] {
+  const out: Snapshot.FileDiff[] = []
+  let used = 0
+  for (const item of diffs) {
+    const patch = item.patch ?? ""
+    const capped =
+      patch.length > fileBudget
+        ? patch.slice(0, fileBudget) + `\n...[diff truncated: omitted ${patch.length - fileBudget} chars]`
+        : patch
+    if (out.length > 0 && used + capped.length > totalBudget) break
+    const finalPatch = capped.slice(0, totalBudget)
+    out.push({ ...item, patch: finalPatch })
+    used += finalPatch.length
+    if (used >= totalBudget) break
+  }
+  return out
+}
+
 export interface Interface {
   readonly summarize: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<void>
   readonly diff: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Snapshot.FileDiff[]>
@@ -121,9 +154,15 @@ const layer = Layer.effect(
       )
       const target = messages.find((m) => m.info.id === input.messageID)
       if (!target || target.info.role !== "user") return
-      const msgDiffs = yield* computeDiff({ messages })
+      const msgDiffs = truncateDiffs(yield* computeDiff({ messages }))
       target.info.summary = { ...target.info.summary, diffs: msgDiffs }
       yield* sessions.updateMessage(target.info)
+      // The update above just published another full snapshot: retire the
+      // older ones for this message so the event log cannot grow without
+      // bound. Maintenance only — never fail the summarize itself.
+      yield* sessions
+        .pruneMessageEvents({ sessionID: input.sessionID, messageID: target.info.id })
+        .pipe(Effect.catchCause((cause) => Effect.logWarning("summary prune failed", { cause })))
     })
 
     const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {

@@ -27,6 +27,7 @@ import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
 import type { SQL } from "drizzle-orm"
 import { PartTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { EventTable } from "@opencode-ai/core/event/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { MessageV2 } from "./message-v2"
 import type { InstanceContext } from "../project/instance-context"
@@ -450,6 +451,7 @@ export interface Interface {
   readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
   readonly updateMessage: <T extends SessionV1.Info>(msg: T) => Effect.Effect<T>
   readonly removeMessage: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<MessageID>
+  readonly pruneMessageEvents: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<number>
   readonly removePart: (input: { sessionID: SessionID; messageID: MessageID; partID: PartID }) => Effect.Effect<PartID>
   readonly getPart: (input: {
     sessionID: SessionID
@@ -861,6 +863,36 @@ const layer: Layer.Layer<
       return input.messageID
     })
 
+    const pruneMessageEvents = Effect.fn("Session.pruneMessageEvents")(function* (input: {
+      sessionID: SessionID
+      messageID: MessageID
+    }) {
+      // Keep only the newest message.updated snapshot per message: older ones
+      // are fully superseded (each event carries complete message state).
+      // Called by summarize(), the main producer of fat snapshots.
+      // MESSAGE_UPDATED_SLIM_EVENTS_004
+      const rows = yield* db
+        .select({ id: EventTable.id, seq: EventTable.seq, data: EventTable.data })
+        .from(EventTable)
+        .where(and(eq(EventTable.aggregate_id, input.sessionID), like(EventTable.type, "message.updated%")))
+        .all()
+        .pipe(Effect.orDie)
+      const mine = rows
+        .filter((row) => (row.data as { info?: { id?: unknown } } | null)?.info?.id === input.messageID)
+        .sort((a, b) => b.seq - a.seq)
+      const stale = mine.slice(1).map((row) => row.id)
+      if (stale.length === 0) return 0
+      // NOTE: the Effect client's run() resolves without a driver result
+      // (no changes count), so report the targeted count; callers that need
+      // certainty re-read (tests poll the table).
+      yield* db
+        .delete(EventTable)
+        .where(and(eq(EventTable.aggregate_id, input.sessionID), inArray(EventTable.id, stale)))
+        .run()
+        .pipe(Effect.orDie)
+      return stale.length
+    })
+
     const removePart = Effect.fn("Session.removePart")(function* (input: {
       sessionID: SessionID
       messageID: MessageID
@@ -926,6 +958,7 @@ const layer: Layer.Layer<
       remove,
       updateMessage,
       removeMessage,
+      pruneMessageEvents,
       removePart,
       updatePart,
       getPart,
