@@ -1015,7 +1015,7 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/message`,
-            query: { limit: input["limit"], order: input["order"], cursor: input["cursor"] },
+            query: { limit: input["limit"], order: input["order"], cursor: input["cursor"], type: input["type"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 404, 500],
             empty: false,
