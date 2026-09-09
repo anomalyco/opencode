@@ -43,41 +43,38 @@ export async function proxyInference(
   if (!key || key === "public") return undefined
 
   // Routing only; the destination owns authentication and revocation after cutover.
-  const native = go && /^oc_sk_[0-9a-f]{12}_[A-Za-z0-9_-]{32}$/.test(key)
-  const workspace = native
-    ? undefined
-    : await Database.use((tx) =>
-        tx
-          .select({
-            id: WorkspaceTable.id,
-            migratedAt: WorkspaceTable.migrated_at,
-            provider: ProviderTable.provider,
-          })
-          .from(KeyTable)
-          .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, KeyTable.workspaceID))
-          .leftJoin(
-            ProviderTable,
-            !go && generation?.provider
-              ? and(
-                  eq(ProviderTable.workspaceID, KeyTable.workspaceID),
-                  eq(ProviderTable.provider, generation.provider),
-                  isNull(ProviderTable.timeDeleted),
-                  sql`length(${ProviderTable.credentials}) > 0`,
-                )
-              : sql`false`,
-          )
-          .where(eq(KeyTable.key, key))
-          .limit(1)
-          .then((rows) => rows[0]),
+  const workspace = await Database.use((tx) =>
+    tx
+      .select({
+        id: WorkspaceTable.id,
+        migratedAt: WorkspaceTable.migrated_at,
+        provider: ProviderTable.provider,
+      })
+      .from(KeyTable)
+      .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, KeyTable.workspaceID))
+      .leftJoin(
+        ProviderTable,
+        !go && generation?.provider
+          ? and(
+              eq(ProviderTable.workspaceID, KeyTable.workspaceID),
+              eq(ProviderTable.provider, generation.provider),
+              isNull(ProviderTable.timeDeleted),
+              sql`length(${ProviderTable.credentials}) > 0`,
+            )
+          : sql`false`,
       )
-  if (!native && !workspace?.migratedAt) return undefined
-  const model = workspace?.provider ? generation?.model : undefined
-  if (workspace?.provider && !model) throw new Error("Legacy BYOK model mapping is unavailable")
+      .where(eq(KeyTable.key, key))
+      .limit(1)
+      .then((rows) => rows[0]),
+  )
+  if (!workspace?.migratedAt) return undefined
+  const model = workspace.provider ? generation?.model : undefined
+  if (workspace.provider && !model) throw new Error("Legacy BYOK model mapping is unavailable")
 
   const destination = new URL(Resource.ConsoleMigration.inferenceUrl)
   // Imported connections must use this same workspace/provider-derived ID.
   const target = model
-    ? `/custom/conn_${workspace!.id.slice(4)}_${workspace!.provider}${
+    ? `/custom/conn_${workspace.id.slice(4)}_${workspace.provider}${
         path.startsWith("/google/")
           ? `/models/${encodeURIComponent(model)}${url.pathname.slice(url.pathname.lastIndexOf(":"))}`
           : url.pathname.slice("/zen/v1".length)
