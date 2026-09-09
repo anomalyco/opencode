@@ -386,7 +386,7 @@ test("separates blocking and already-backgrounded work into two rows", async ({ 
   const used = page
     .locator('[data-timeline-part-ids="call_backgrounded,call_shell_backgrounded,call_blocking"]')
     .locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
-  await expect(used).toHaveAccessibleName("Used 3 Agent, Shell")
+  await expect(used).toHaveText(/^Used\s*3\s*Agent, Shell$/)
   await expect(used).toHaveAttribute("aria-expanded", "false")
   await used.click()
   await expect(used).toHaveAttribute("aria-expanded", "true")
