@@ -16,6 +16,36 @@ let target: FindHost | undefined
 let current: FindHost | undefined
 let installed = false
 
+// Lets non-file find surfaces (e.g. the session timeline) join the shared
+// mod+f / mod+g routing so only one find bar is active at a time.
+export function registerFindHost(host: FindHost) {
+  installShortcuts()
+  hosts.add(host)
+  if (!target) target = host
+  return () => {
+    hosts.delete(host)
+    if (current === host) {
+      current = undefined
+      clearHighlightFind()
+    }
+    if (target === host) target = undefined
+  }
+}
+
+export function activateFindHost(host: FindHost) {
+  if (current && current !== host) current.close()
+  current = host
+  target = host
+}
+
+export function targetFindHost(host: FindHost) {
+  target = host
+}
+
+export function anyFindHostOpen() {
+  return !!current?.isOpen()
+}
+
 function isEditable(node: unknown): boolean {
   if (!(node instanceof HTMLElement)) return false
   if (node.closest("[data-prevent-autofocus]")) return true
