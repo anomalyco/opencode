@@ -77,7 +77,6 @@ export const rejectCircularInsertion = (
   }
 }
 
-/** Names a value for diagnostics: what the program actually passed where data was expected. */
 export const describeValue = (value: unknown): string => {
   if (value === null) return "null"
   if (Array.isArray(value)) return "an array"
