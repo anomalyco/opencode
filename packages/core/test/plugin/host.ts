@@ -1,6 +1,7 @@
 import { Plugin } from "@opencode/plugin/effect"
 import type { IntegrationMethod } from "@opencode/plugin/effect/integration"
 import { Agent } from "@opencode/core/agent"
+import { Bus } from "@opencode/core/bus"
 import { Catalog } from "@opencode/core/catalog"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
@@ -10,6 +11,7 @@ import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { WebSearch } from "@opencode/core/websearch"
+import { EventManifest } from "@opencode/schema/event-manifest"
 import { Effect, Stream } from "effect"
 
 type Overrides = Partial<Omit<Plugin.Context, "options" | "session">> & {
@@ -423,6 +425,14 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
           },
         }),
       ),
+  }
+}
+
+/** Delivers real Bus events to a plugin under test; `host()` otherwise leaves `ctx.event` empty. */
+export function eventHost(bus: Bus.Interface): Plugin.Context["event"] {
+  return {
+    subscribe: () =>
+      bus.subscribe().pipe(Stream.filter((event): event is EventManifest.ServerEvent => EventManifest.isServer(event))),
   }
 }
 
