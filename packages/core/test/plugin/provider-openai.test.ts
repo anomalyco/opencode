@@ -177,7 +177,9 @@ describe("OpenAIPlugin", () => {
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-6-astra"))).enabled).toBe(true)
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.10"))).enabled).toBe(true)
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5"))).enabled).toBe(false)
-      expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"))).enabled).toBe(false)
+      expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"))).enabled).toBe(
+        false,
+      )
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-4.99"))).enabled).toBe(false)
     }),
   )
@@ -218,7 +220,7 @@ describe("OpenAIPlugin", () => {
     }),
   )
 
-  it.effect("selects Azure WebSocket from capability and the Azure flag only", () =>
+  it.effect("selects Azure WebSocket from capability and honors the Azure opt-out only", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
       yield* credentials.create({
@@ -269,24 +271,19 @@ describe("OpenAIPlugin", () => {
         Effect.provideService(SessionModelTransport.Service, transport),
       )
 
-      const prepared = yield* program.pipe(
-        Effect.provide(
-          ConfigProvider.layer(
-            ConfigProvider.fromEnv({ env: { OPENCODE_EXPERIMENTAL_AZURE_RESPONSES_WEBSOCKET: "true" } }),
-          ),
-        ),
-      )
-      const otherProvider = yield* program.pipe(
-        Effect.provide(
-          ConfigProvider.layer(
-            ConfigProvider.fromEnv({ env: { OPENCODE_EXPERIMENTAL_OPENAI_RESPONSES_WEBSOCKET: "true" } }),
-          ),
-        ),
-      )
+      const withEnv = (env: Record<string, string>) =>
+        program.pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env }))))
+
+      const prepared = yield* withEnv({})
+      const otherProvider = yield* withEnv({ OPENCODE_OPENAI_RESPONSES_WEBSOCKET: "false" })
+      const optedOut = yield* withEnv({ OPENCODE_AZURE_RESPONSES_WEBSOCKET: "false" })
+      const legacyOptOut = yield* withEnv({ OPENCODE_EXPERIMENTAL_AZURE_RESPONSES_WEBSOCKET: "false" })
 
       expect(prepared.options.webSocket).toBe(executor)
       expect(prepared.options.http).toBeUndefined()
-      expect(otherProvider.options.webSocket).toBeUndefined()
+      expect(otherProvider.options.webSocket).toBe(executor)
+      expect(optedOut.options.webSocket).toBeUndefined()
+      expect(legacyOptOut.options.webSocket).toBeUndefined()
     }),
   )
 })

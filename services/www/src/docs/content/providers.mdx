@@ -108,6 +108,20 @@ Your identity needs the **Cognitive Services OpenAI User** role for Azure OpenAI
 role for other Foundry models. If a request fails because the token belongs to another tenant, sign in again with
 `az login --tenant TENANT_ID`.
 
+## WebSocket transport
+
+OpenAI, Azure, and xAI Responses models keep one WebSocket connection open per session and send each step over it
+instead of opening a new HTTP request. Consecutive steps only transmit what changed since the previous response,
+which shortens time to first token and reduces upload volume on long sessions. Provider compaction runs over the same
+connection.
+
+The connection is transparent. When the provider closes the socket, the next step reconnects; when a connection cannot
+be opened at all, the session continues over HTTP. Plugins that register `http.request` or `http.response` hooks for a
+provider keep it on HTTP so the hooks observe every request.
+
+Set `OPENCODE_<PROVIDER>_RESPONSES_WEBSOCKET=false` to keep a provider on HTTP, for example
+`OPENCODE_OPENAI_RESPONSES_WEBSOCKET=false`.
+
 ## Endpoint
 
 Override `settings.baseURL` to send an existing provider through a proxy or compatible endpoint. Its existing package,
