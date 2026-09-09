@@ -607,7 +607,7 @@
   [data-slot="context-tool-group-title"] {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 0;
     flex-shrink: 1;
     min-width: 0;
   }
@@ -616,13 +616,18 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 0;
     color: var(--v2-text-text-muted);
     font-family: var(--v2-font-family-sans);
     font-size: 13px;
     font-weight: 440;
     line-height: var(--line-height-compact);
     letter-spacing: -0.04px;
+
+    & > [data-slot="context-tool-group-prefix"],
+    & > [data-slot="context-tool-group-count"] {
+      white-space: pre;
+    }
   }
 
   [data-slot="context-tool-group-count"] {

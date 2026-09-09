@@ -622,13 +622,13 @@ export function CurrentContextToolGroup(props: {
               <Show when={label().before || label().count || label().between}>
                 <span data-slot="context-tool-group-usage">
                   <Show when={label().before}>
-                    {(before) => <span data-slot="context-tool-group-prefix">{before()}</span>}
+                    {(before) => <span data-slot="context-tool-group-prefix">{before()} </span>}
                   </Show>
                   <Show when={label().count}>
-                    {(count) => <span data-slot="context-tool-group-count">{count()}</span>}
+                    {(count) => <span data-slot="context-tool-group-count">{count()} </span>}
                   </Show>
                   <Show when={label().between}>
-                    {(between) => <span data-slot="context-tool-group-prefix">{between()}</span>}
+                    {(between) => <span data-slot="context-tool-group-prefix">{between()} </span>}
                   </Show>
                 </span>
               </Show>
