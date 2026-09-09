@@ -31,7 +31,7 @@ import {
 } from "@agentclientprotocol/sdk"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import type { AssistantMessage, Message, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Message, OpencodeClient, Session, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
 import * as ACPError from "./error"
 import { buildConfigOptions, parseModelSelection } from "./config-option"
@@ -210,7 +210,7 @@ export function make(input: {
 
   const loadSession = Effect.fn("ACP.loadSession")(function* (params: LoadSessionRequest) {
     const snapshot = yield* directorySnapshot(params.cwd)
-    yield* request(
+    const backing = yield* request(
       () => input.sdk.session.get({ directory: params.cwd, sessionID: params.sessionId }, { throwOnError: true }),
       "session",
     )
@@ -218,15 +218,18 @@ export function make(input: {
       () => input.sdk.session.messages({ directory: params.cwd, sessionID: params.sessionId }, { throwOnError: true }),
       "session",
     )
-    const restored = restoreFromMessages(messages.map((item) => item.info))
-    const model = restored.model ?? selectDefaultModel(snapshot)
+    const restored = restoreSession(
+      snapshot,
+      backing,
+      messages.map((item) => item.info),
+    )
     const state = yield* session.load({
       id: params.sessionId,
       cwd: params.cwd,
       mcpServers: params.mcpServers,
-      model,
-      variant: restored.variant ?? selectVariant(snapshot, model),
-      modeId: restored.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
+      model: restored.model,
+      variant: restored.variant,
+      modeId: restored.modeId,
     })
     sessionSnapshots.set(state.id, snapshot)
 
@@ -236,7 +239,7 @@ export function make(input: {
 
     return {
       configOptions: configOptions(snapshot, {
-        model: state.model ?? model,
+        model: state.model ?? restored.model,
         variant: state.variant,
         modeId: state.modeId,
       }),
@@ -291,7 +294,7 @@ export function make(input: {
 
   const resumeSession = Effect.fn("ACP.resumeSession")(function* (params: ResumeSessionRequest) {
     const snapshot = yield* directorySnapshot(params.cwd)
-    yield* request(
+    const backing = yield* request(
       () => input.sdk.session.get({ directory: params.cwd, sessionID: params.sessionId }, { throwOnError: true }),
       "session",
     )
@@ -303,15 +306,18 @@ export function make(input: {
         ),
       "session",
     )
-    const restored = restoreFromMessages(messages.map((item) => item.info))
-    const model = restored.model ?? selectDefaultModel(snapshot)
+    const restored = restoreSession(
+      snapshot,
+      backing,
+      messages.map((item) => item.info),
+    )
     const state = yield* session.load({
       id: params.sessionId,
       cwd: params.cwd,
       mcpServers: params.mcpServers ?? [],
-      model,
-      variant: restored.variant ?? selectVariant(snapshot, model),
-      modeId: restored.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
+      model: restored.model,
+      variant: restored.variant,
+      modeId: restored.modeId,
     })
     sessionSnapshots.set(state.id, snapshot)
 
@@ -320,7 +326,7 @@ export function make(input: {
 
     return {
       configOptions: configOptions(snapshot, {
-        model: state.model ?? model,
+        model: state.model ?? restored.model,
         variant: state.variant,
         modeId: state.modeId,
       }),
@@ -371,15 +377,18 @@ export function make(input: {
         input.sdk.session.messages({ directory: params.cwd, sessionID: forked.id, limit: 20 }, { throwOnError: true }),
       "session",
     )
-    const restored = restoreFromMessages(messages.map((item) => item.info))
-    const model = restored.model ?? selectDefaultModel(snapshot)
+    const restored = restoreSession(
+      snapshot,
+      forked,
+      messages.map((item) => item.info),
+    )
     const state = yield* session.load({
       id: forked.id,
       cwd: params.cwd,
       mcpServers: params.mcpServers ?? [],
-      model,
-      variant: restored.variant ?? selectVariant(snapshot, model),
-      modeId: restored.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
+      model: restored.model,
+      variant: restored.variant,
+      modeId: restored.modeId,
     })
     sessionSnapshots.set(state.id, snapshot)
 
@@ -390,7 +399,7 @@ export function make(input: {
     return {
       sessionId: state.id,
       configOptions: configOptions(snapshot, {
-        model: state.model ?? model,
+        model: state.model ?? restored.model,
         variant: state.variant,
         modeId: state.modeId,
       }),
@@ -412,12 +421,14 @@ export function make(input: {
       const state = yield* session
         .setVariant(params.sessionId, Directory.variants(snapshot, selected.model) ? variant : undefined)
         .pipe(Effect.andThen(session.setModel(params.sessionId, selected.model)))
+      const options = configOptions(snapshot, {
+        model: state.model ?? selected.model,
+        variant: state.variant,
+        modeId: state.modeId,
+      })
+      yield* sendConfigOptionUpdate(input.connection, params.sessionId, options)
       return {
-        configOptions: configOptions(snapshot, {
-          model: state.model ?? selected.model,
-          variant: state.variant,
-          modeId: state.modeId,
-        }),
+        configOptions: options,
       }
     }
 
@@ -468,7 +479,7 @@ export function make(input: {
     const current = yield* session.get(params.sessionId)
     const snapshot = yield* configSnapshot(current)
     const selected = yield* parseSelectedModel(snapshot, params.modelId)
-    yield* session
+    const state = yield* session
       .setVariant(
         params.sessionId,
         Directory.variants(snapshot, selected.model)
@@ -476,6 +487,15 @@ export function make(input: {
           : undefined,
       )
       .pipe(Effect.andThen(session.setModel(params.sessionId, selected.model)))
+    yield* sendConfigOptionUpdate(
+      input.connection,
+      params.sessionId,
+      configOptions(snapshot, {
+        model: state.model ?? selected.model,
+        variant: state.variant,
+        modeId: state.modeId,
+      }),
+    )
     return {}
   })
 
@@ -909,6 +929,25 @@ function configOptions(snapshot: Directory.Snapshot, session: ConfigState) {
   })
 }
 
+function sendConfigOptionUpdate(
+  connection: ServiceConnection | undefined,
+  sessionId: string,
+  options: ReturnType<typeof configOptions>,
+) {
+  if (!connection) return Effect.void
+  return Effect.tryPromise({
+    try: () =>
+      connection.sessionUpdate({
+        sessionId,
+        update: {
+          sessionUpdate: "config_option_update",
+          configOptions: options,
+        },
+      }),
+    catch: () => undefined,
+  }).pipe(Effect.ignore)
+}
+
 function parseSelectedModel(snapshot: Directory.Snapshot, modelId: string) {
   const selected = parseModelSelection(modelId, Object.values(snapshot.providers))
   const provider = snapshot.providers[ProviderV2.ID.make(selected.model.providerID)]
@@ -1032,6 +1071,50 @@ function stableStringify(value: unknown): string {
     .toSorted(([a], [b]) => a.localeCompare(b))
     .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`)
     .join(",")}}`
+}
+
+function restoreSession(
+  snapshot: Directory.Snapshot,
+  backing: Pick<Session, "agent" | "model">,
+  messages: MessageInfo[],
+) {
+  const history = restoreFromMessages(messages)
+  const durable = backing.model
+    ? {
+        providerID: ProviderV2.ID.make(backing.model.providerID),
+        modelID: ModelV2.ID.make(backing.model.id),
+      }
+    : undefined
+  const model =
+    durable && hasModel(snapshot, durable)
+      ? durable
+      : history.model && hasModel(snapshot, history.model)
+        ? history.model
+        : selectDefaultModel(snapshot)
+  const variants = Directory.variants(snapshot, model)
+  const variant = variants
+    ? ([
+        sameModel(model, durable) ? backing.model?.variant : undefined,
+        sameModel(model, history.model) ? history.variant : undefined,
+      ].find((item) => item && item in variants) ?? selectVariant(snapshot, model))
+    : undefined
+  const modeId = [backing.agent, history.modeId].find(
+    (item) => item && snapshot.availableModes.some((mode) => mode.id === item),
+  )
+
+  return {
+    model,
+    variant,
+    modeId: modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
+  }
+}
+
+function hasModel(snapshot: Directory.Snapshot, model: Directory.DefaultModel) {
+  return Boolean(snapshot.providers[model.providerID]?.models[model.modelID])
+}
+
+function sameModel(left: Directory.DefaultModel, right: Directory.DefaultModel | undefined) {
+  return left.providerID === right?.providerID && left.modelID === right.modelID
 }
 
 function restoreFromMessages(messages: readonly MessageInfo[]) {

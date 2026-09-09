@@ -194,6 +194,20 @@ describe("ACP service sessions", () => {
     messages: readonly { info: unknown; parts: readonly unknown[] }[] = [],
     options?: {
       abort?: (input: { sessionID: string }) => Promise<{ data: boolean }>
+      get?: () => Promise<{
+        data: {
+          id: string
+          agent?: string
+          model?: { id: string; providerID: string; variant?: string }
+        }
+      }>
+      fork?: (input: { sessionID: string }) => Promise<{
+        data: {
+          id: string
+          agent?: string
+          model?: { id: string; providerID: string; variant?: string }
+        }
+      }>
       prompt?: (input: unknown) => Promise<{ data: { info: ReturnType<typeof assistantInfo> } }>
       sessionUpdate?: (update: SessionNotification) => Promise<void>
     },
@@ -243,7 +257,7 @@ describe("ACP service sessions", () => {
       },
       session: {
         create: () => Promise.resolve({ data: { id: "ses_new" } }),
-        get: () => Promise.resolve({ data: { id: "ses_loaded" } }),
+        get: options?.get ?? (() => Promise.resolve({ data: { id: "ses_loaded" } })),
         list: (input: { directory?: string }) =>
           Promise.resolve({
             data: input.directory ? sessions.filter((session) => session.directory === input.directory) : sessions,
@@ -292,7 +306,7 @@ describe("ACP service sessions", () => {
           }),
         fork: (input: { sessionID: string }) => {
           forks.push(input.sessionID)
-          return Promise.resolve({ data: { id: `fork_${input.sessionID}` } })
+          return options?.fork?.(input) ?? Promise.resolve({ data: { id: `fork_${input.sessionID}` } })
         },
       },
       mcp: {
@@ -378,6 +392,82 @@ describe("ACP service sessions", () => {
     expect(result.configOptions?.find((option) => option.id === "mode")?.currentValue).toBe("plan")
   })
 
+  it("restores durable model variant and mode before message history", async () => {
+    const { service } = makeService(
+      [
+        {
+          info: {
+            role: "assistant",
+            providerID: "test",
+            modelID: "second-model",
+            variant: "medium",
+            mode: "build",
+          },
+          parts: [],
+        },
+      ],
+      {
+        get: () =>
+          Promise.resolve({
+            data: {
+              id: "ses_loaded",
+              agent: "plan",
+              model: { providerID: "test", id: "test-model", variant: "high" },
+            },
+          }),
+      },
+    )
+
+    const loaded = await Effect.runPromise(
+      service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }),
+    )
+    const resumed = await Effect.runPromise(
+      service.resumeSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }),
+    )
+
+    expect(select(loaded, "model")?.currentValue).toBe("test/test-model")
+    expect(select(loaded, "effort")?.currentValue).toBe("high")
+    expect(select(loaded, "mode")?.currentValue).toBe("plan")
+    expect(select(resumed, "model")?.currentValue).toBe("test/test-model")
+    expect(select(resumed, "effort")?.currentValue).toBe("high")
+    expect(select(resumed, "mode")?.currentValue).toBe("plan")
+  })
+
+  it("falls back from stale durable state to valid message state", async () => {
+    const { service } = makeService(
+      [
+        {
+          info: {
+            role: "assistant",
+            providerID: "test",
+            modelID: "second-model",
+            variant: "medium",
+            mode: "plan",
+          },
+          parts: [],
+        },
+      ],
+      {
+        get: () =>
+          Promise.resolve({
+            data: {
+              id: "ses_loaded",
+              agent: "missing",
+              model: { providerID: "missing", id: "missing", variant: "missing" },
+            },
+          }),
+      },
+    )
+
+    const loaded = await Effect.runPromise(
+      service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }),
+    )
+
+    expect(select(loaded, "model")?.currentValue).toBe("test/second-model")
+    expect(select(loaded, "effort")?.currentValue).toBe("medium")
+    expect(select(loaded, "mode")?.currentValue).toBe("plan")
+  })
+
   it("replays loaded session transcript chunks", async () => {
     const { service, updates } = makeService([
       {
@@ -414,6 +504,47 @@ describe("ACP service sessions", () => {
         sessionUpdate: "agent_message_chunk",
         messageId: "msg_assistant",
         content: { type: "text", text: "hi there" },
+      },
+    ])
+  })
+
+  it("replays reasoning parts as separate ACP thought messages", async () => {
+    const { service, updates } = makeService([
+      {
+        info: { id: "msg_assistant", sessionID: "ses_loaded", role: "assistant" },
+        parts: [
+          {
+            id: "part_first",
+            sessionID: "ses_loaded",
+            messageID: "msg_assistant",
+            type: "reasoning",
+            text: "First",
+            time: { start: 1, end: 2 },
+          },
+          {
+            id: "part_second",
+            sessionID: "ses_loaded",
+            messageID: "msg_assistant",
+            type: "reasoning",
+            text: "Second",
+            time: { start: 3, end: 4 },
+          },
+        ],
+      },
+    ])
+
+    await Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }))
+
+    expect(updates.map((item) => item.update).filter((item) => item.sessionUpdate === "agent_thought_chunk")).toEqual([
+      {
+        sessionUpdate: "agent_thought_chunk",
+        messageId: "part_first",
+        content: { type: "text", text: "First" },
+      },
+      {
+        sessionUpdate: "agent_thought_chunk",
+        messageId: "part_second",
+        content: { type: "text", text: "Second" },
       },
     ])
   })
@@ -557,6 +688,41 @@ describe("ACP service sessions", () => {
     expect(select(forked, "effort")?.currentValue).toBe("medium")
     expect(select(updated, "effort")?.currentValue).toBe("low")
     expect(forks).toEqual(["ses_parent"])
+  })
+
+  it("restores fork state from the durable fork before message history", async () => {
+    const { service } = makeService(
+      [
+        {
+          info: {
+            role: "assistant",
+            providerID: "test",
+            modelID: "test-model",
+            variant: "default",
+            mode: "build",
+          },
+          parts: [],
+        },
+      ],
+      {
+        fork: (input) =>
+          Promise.resolve({
+            data: {
+              id: `fork_${input.sessionID}`,
+              agent: "plan",
+              model: { providerID: "test", id: "second-model", variant: "medium" },
+            },
+          }),
+      },
+    )
+
+    const forked = await Effect.runPromise(
+      service.forkSession({ cwd: "/workspace", sessionId: "ses_parent", mcpServers: [] }),
+    )
+
+    expect(select(forked, "model")?.currentValue).toBe("test/second-model")
+    expect(select(forked, "effort")?.currentValue).toBe("medium")
+    expect(select(forked, "mode")?.currentValue).toBe("plan")
   })
 
   it("restores model variant and mode from the latest user message", async () => {
@@ -772,7 +938,7 @@ describe("ACP service sessions", () => {
   })
 
   it("switches model and returns updated model and effort options", async () => {
-    const { service } = makeService()
+    const { service, updates } = makeService()
     const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
     const updated = await Effect.runPromise(
       service.setSessionConfigOption({
@@ -785,6 +951,23 @@ describe("ACP service sessions", () => {
     expect(select(updated, "model")?.currentValue).toBe("test/second-model")
     expect(select(updated, "effort")?.currentValue).toBe("low")
     expect(flattenSelectOptions(select(updated, "effort")).map((option) => option.value)).toEqual(["low", "medium"])
+    expect(updates.findLast((item) => item.update.sessionUpdate === "config_option_update")?.update).toEqual({
+      sessionUpdate: "config_option_update",
+      configOptions: updated.configOptions,
+    })
+  })
+
+  it("publishes updated model-dependent options for legacy model changes", async () => {
+    const { service, updates } = makeService()
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    await Effect.runPromise(service.setSessionModel({ sessionId: session.sessionId, modelId: "test/second-model" }))
+
+    const update = updates.findLast((item) => item.update.sessionUpdate === "config_option_update")?.update
+    expect(update?.sessionUpdate).toBe("config_option_update")
+    if (update?.sessionUpdate !== "config_option_update") throw new Error("missing config option update")
+    expect(select({ configOptions: update.configOptions }, "model")?.currentValue).toBe("test/second-model")
+    expect(select({ configOptions: update.configOptions }, "effort")?.currentValue).toBe("low")
   })
 
   it("switches effort and returns the updated effort current value", async () => {
@@ -1360,7 +1543,12 @@ function categories(result: NewSessionResponse | LoadSessionResponse) {
 }
 
 function select(
-  result: SetSessionConfigOptionResponse | ResumeSessionResponse | NewSessionResponse | ForkSessionResponse,
+  result:
+    | SetSessionConfigOptionResponse
+    | ResumeSessionResponse
+    | LoadSessionResponse
+    | NewSessionResponse
+    | ForkSessionResponse,
   id: string,
 ) {
   return result.configOptions?.find(
