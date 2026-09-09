@@ -9,7 +9,7 @@ import { ToolRuntime } from "../tool-runtime.js"
 import { normalizeError } from "./errors.js"
 import { InterpreterRuntimeError } from "./model.js"
 import { PromiseRuntime } from "./promises.js"
-import { Interpreter } from "./runtime.js"
+import { Runtime } from "./runtime.js"
 
 export const executeProgram = <R>(
   code: string,
@@ -39,8 +39,7 @@ export const executeProgram = <R>(
         Effect.gen(function* () {
           const program = parseProgram(code)
           const promises = new PromiseRuntime<R>(scope)
-          const interpreter = new Interpreter<R>(tools.execute, tools.search, tools.keys, promises, logs)
-          const value = yield* interpreter.run(program)
+          const value = yield* new Runtime<R>(tools.execute, tools.search, tools.keys, promises, logs).run(program)
           const result = toData(value, "Execution result", "result") as DataValue
           returned = { value: result, promises }
           const warnings = yield* promises.interrupt()
