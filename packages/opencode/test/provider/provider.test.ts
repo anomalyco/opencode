@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test"
-import { mkdir, unlink } from "fs/promises"
+import { mkdir, readFile, unlink, writeFile } from "fs/promises"
 import path from "path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -376,6 +376,46 @@ it.instance(
     expect(model.modelID).toBeDefined()
   }),
   { config: { provider: {} } },
+)
+
+it.instance(
+  "defaultModel skips a recent entry whose provider is connected but not configured for this project",
+  Effect.gen(function* () {
+    yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
+    yield* setProcessEnv("OPENAI_API_KEY", "test-openai-key")
+
+    // Global.Path.state is the real state directory unless XDG_STATE_HOME is
+    // redirected, so preserve whatever is already there instead of deleting it.
+    const modelFile = path.join(Global.Path.state, "model.json")
+    const previous = yield* Effect.promise(() => readFile(modelFile, "utf8").catch(() => undefined))
+    yield* Effect.promise(() =>
+      writeFile(
+        modelFile,
+        JSON.stringify({
+          recent: [
+            // openai is connected (env var above) but is NOT in this project's
+            // `provider` config below.
+            { providerID: "openai", modelID: "gpt-5" },
+            // A non-default anthropic model on purpose, so a pass proves the
+            // answer came from THIS entry and not from the last-resort sort().
+            { providerID: "anthropic", modelID: "claude-haiku-4-5" },
+          ],
+        }),
+      ),
+    )
+
+    const model = yield* Provider.use.defaultModel().pipe(
+      Effect.ensuring(
+        Effect.promise(() =>
+          (previous === undefined ? unlink(modelFile) : writeFile(modelFile, previous)).catch(() => undefined),
+        ),
+      ),
+    )
+
+    expect(String(model.providerID)).toBe("anthropic")
+    expect(String(model.modelID)).toBe("claude-haiku-4-5")
+  }),
+  { config: { provider: { anthropic: {} } } },
 )
 
 it.instance(

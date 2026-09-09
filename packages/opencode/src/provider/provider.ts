@@ -2022,14 +2022,21 @@ const layer = Layer.effect(
         }),
         Effect.catch(() => Effect.succeed([] as { providerID: ProviderV2.ID; modelID: ModelV2.ID }[])),
       )
+      const configured = Object.keys(cfg.provider ?? {})
       for (const entry of recent) {
+        // The recent-model list lives in Global.Path.state and is shared by every
+        // project that has ever run opencode on this machine. A provider can be
+        // "connected" here purely through a stray env var or a stored credential
+        // while never appearing in THIS project's `provider` config — and the
+        // last-resort branch below already refuses exactly that case. Applying the
+        // same allow-list here makes the function consistent with itself.
+        if (configured.length > 0 && !configured.includes(entry.providerID)) continue
         const provider = s.providers[entry.providerID]
         if (!provider) continue
         if (!provider.models[entry.modelID]) continue
         return { providerID: entry.providerID, modelID: entry.modelID }
       }
 
-      const configured = Object.keys(cfg.provider ?? {})
       const provider = Object.values(s.providers).find((p) => configured.length === 0 || configured.includes(p.id))
       if (!provider) return yield* new NoProvidersError()
       const [model] = sort(Object.values(provider.models))
