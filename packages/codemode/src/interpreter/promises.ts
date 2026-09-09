@@ -6,16 +6,28 @@ import {
   CodeModeFunction,
   InterpreterRuntimeError,
   ProgramThrow,
-  PromiseCapabilityFunction,
   PromiseInstanceMethodReference,
-  PromiseMethodReference,
 } from "./model.js"
+import { sync } from "./host.js"
+import type { PromiseMethodName } from "../stdlib/promise.js"
 import { caughtErrorValue, normalizeError } from "./errors.js"
-import { applyCollectionCallback, isSupportedCallback, type CallbackRunner, type SupportedCallback } from "./methods.js"
 import { typeofValue } from "./references.js"
 import { createAggregateErrorValue } from "../stdlib/value.js"
 import { Values } from "../values.js"
-import type { SyncIteratorRunner } from "./iterator.js"
+import {
+  applyCollectionCallback,
+  type CallbackRunner,
+  isSupportedCallback,
+  type SupportedCallback,
+  type SyncIteratorRunner,
+} from "./runner.js"
+
+// A `resolve`/`reject` handed to an executor or thenable: calling it settles the capability.
+const capability = (name: string, settle: (value: unknown) => void) =>
+  sync(name, (args) => {
+    settle(args[0])
+    return undefined
+  })
 
 // Observation only controls rejection reporting; program completion interrupts all promise work.
 export class PromiseRuntime<R> {
@@ -103,12 +115,8 @@ export const resolvePromiseValue = <R>(
     // Promise resolution invokes a thenable's method in a later job.
     yield* Effect.yieldNow
     const deferred = Deferred.makeUnsafe<unknown, unknown>()
-    const resolve = new PromiseCapabilityFunction((result) => {
-      Deferred.doneUnsafe(deferred, Exit.succeed(result))
-    })
-    const reject = new PromiseCapabilityFunction((reason) => {
-      Deferred.doneUnsafe(deferred, Exit.fail(new ProgramThrow(reason)))
-    })
+    const resolve = capability("resolve", (result) => Deferred.doneUnsafe(deferred, Exit.succeed(result)))
+    const reject = capability("reject", (reason) => Deferred.doneUnsafe(deferred, Exit.fail(new ProgramThrow(reason))))
     const executed = yield* Effect.exit(runner.invokeCallable(then, [resolve, reject], node))
     if (!Exit.isSuccess(executed)) {
       if (Cause.hasInterruptsOnly(executed.cause)) return yield* Effect.failCause(executed.cause)
@@ -135,14 +143,14 @@ export const resolvePromise = <R>(
 export const invokePromiseMethod = <R>(
   runner: CallbackRunner<R> & SyncIteratorRunner<R>,
   promises: PromiseRuntime<R>,
-  ref: PromiseMethodReference,
+  name: PromiseMethodName,
   args: Array<unknown>,
   node: AstNode,
 ): Effect.Effect<unknown, unknown, R> => {
-  if (ref.name === "resolve") {
+  if (name === "resolve") {
     return resolvePromise(runner, promises, args[0], node)
   }
-  if (ref.name === "reject") {
+  if (name === "reject") {
     return promises.create(Effect.fail(new ProgramThrow(args[0])))
   }
 
@@ -150,10 +158,9 @@ export const invokePromiseMethod = <R>(
     Effect.gen(function* () {
       const cursor = yield* runner.syncIterator(args[0], node)
       if (cursor === undefined) {
-        throw new InterpreterRuntimeError(
-          `Promise.${ref.name} expects an array or other synchronous iterable.`,
-          node,
-        ).as("TypeError")
+        throw new InterpreterRuntimeError(`Promise.${name} expects an array or other synchronous iterable.`, node).as(
+          "TypeError",
+        )
       }
       const items: Array<Values.Promise> = []
       while (true) {
@@ -164,7 +171,7 @@ export const invokePromiseMethod = <R>(
         items.push(item)
       }
 
-      if (ref.name === "all") {
+      if (name === "all") {
         return yield* settleAfterTurn(
           Effect.all(
             items.map((item) => Effect.flatten(promises.await(item))),
@@ -172,7 +179,7 @@ export const invokePromiseMethod = <R>(
           ),
         )
       }
-      if (ref.name === "allSettled") {
+      if (name === "allSettled") {
         const outcomes: Array<unknown> = []
         for (const item of items) {
           const exit = yield* promises.await(item)
@@ -191,7 +198,7 @@ export const invokePromiseMethod = <R>(
         yield* Effect.yieldNow
         return outcomes
       }
-      if (ref.name === "race") {
+      if (name === "race") {
         if (items.length === 0) {
           throw new InterpreterRuntimeError(
             "Promise.race([]) would never settle; provide at least one promise or value.",
@@ -257,12 +264,8 @@ export const constructPromise = <R>(
       Effect.flatMap(Deferred.await(deferred), (value) => resolvePromiseValue(runner, value, node, box)),
     )
     box.promise = promise
-    const resolve = new PromiseCapabilityFunction((value) => {
-      Deferred.doneUnsafe(deferred, Exit.succeed(value))
-    })
-    const reject = new PromiseCapabilityFunction((value) => {
-      Deferred.doneUnsafe(deferred, Exit.fail(new ProgramThrow(value)))
-    })
+    const resolve = capability("resolve", (value) => Deferred.doneUnsafe(deferred, Exit.succeed(value)))
+    const reject = capability("reject", (value) => Deferred.doneUnsafe(deferred, Exit.fail(new ProgramThrow(value))))
     const executed = yield* Effect.exit(runner.invokeFunction(executor, [resolve, reject]))
     if (!Exit.isSuccess(executed)) {
       if (Cause.hasInterruptsOnly(executed.cause)) return yield* Effect.failCause(executed.cause)

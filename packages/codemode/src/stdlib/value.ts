@@ -1,4 +1,5 @@
-import { type AstNode, CoercionFunction, InterpreterRuntimeError } from "../interpreter/model.js"
+import { type HostFunction, sync, type SyncOptions } from "../interpreter/host.js"
+import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
 import { type SafeObject, toProgram } from "../data.js"
 import { Values } from "../values.js"
 
@@ -12,8 +13,6 @@ export const errorConstructors = new Set([
   "URIError",
   "AggregateError",
 ])
-
-export const valueConstructors = new Set(["Date", "RegExp", "Map", "Set", "URL", "URLSearchParams"])
 
 export const compoundOperators = new Set(["+=", "-=", "*=", "/=", "%=", "**=", "&=", "|=", "^=", "<<=", ">>=", ">>>="])
 
@@ -69,37 +68,43 @@ export const coerceToNumber = (value: unknown): number => {
   return value !== null && typeof value === "object" ? Number.NaN : Number(value)
 }
 
-export const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node: AstNode): unknown => {
+type Coercion = "Number" | "String" | "Boolean" | "parseInt" | "parseFloat" | "isFinite" | "isNaN"
+
+const coerce = (name: Coercion, args: Array<unknown>, node: AstNode): unknown => {
   // Native: Number() is 0 and String() is "", unlike their undefined-argument forms; the
   // other coercers match native through the undefined-argument path below.
   if (args.length === 0) {
-    if (ref.name === "Number") return 0
-    if (ref.name === "String") return ""
+    if (name === "Number") return 0
+    if (name === "String") return ""
   }
   const raw = args[0]
   // Error values are plain SafeObjects; the toProgram path below would strip their brand.
-  if (ref.name === "String" && errorBrandName(raw) !== undefined) return coerceToString(raw)
+  if (name === "String" && errorBrandName(raw) !== undefined) return coerceToString(raw)
   if (Values.isValue(raw)) {
-    if (ref.name === "Boolean") return true
-    if (ref.name === "Number") return coerceToNumber(raw)
-    if (ref.name === "String") return coerceToString(raw)
-    if (ref.name === "isFinite") return Number.isFinite(coerceToNumber(raw))
-    if (ref.name === "isNaN") return Number.isNaN(coerceToNumber(raw))
-    if (ref.name === "parseInt") return parseInt(coerceToString(raw))
+    if (name === "Boolean") return true
+    if (name === "Number") return coerceToNumber(raw)
+    if (name === "String") return coerceToString(raw)
+    if (name === "isFinite") return Number.isFinite(coerceToNumber(raw))
+    if (name === "isNaN") return Number.isNaN(coerceToNumber(raw))
+    if (name === "parseInt") return parseInt(coerceToString(raw))
     return parseFloat(coerceToString(raw))
   }
-  const value = toProgram(raw, `${ref.name} input`)
-  if (ref.name === "Number") return coerceToNumber(value)
-  if (ref.name === "Boolean") return Boolean(value)
-  if (ref.name === "isFinite") return Number.isFinite(coerceToNumber(value))
-  if (ref.name === "isNaN") return Number.isNaN(coerceToNumber(value))
-  if (ref.name === "parseInt") {
+  const value = toProgram(raw, `${name} input`)
+  if (name === "Number") return coerceToNumber(value)
+  if (name === "Boolean") return Boolean(value)
+  if (name === "isFinite") return Number.isFinite(coerceToNumber(value))
+  if (name === "isNaN") return Number.isNaN(coerceToNumber(value))
+  if (name === "parseInt") {
     const radix = args[1]
     if (radix !== undefined && typeof radix !== "number") {
       throw new InterpreterRuntimeError("parseInt expects a numeric radix.", node)
     }
     return parseInt(coerceToString(value), radix)
   }
-  if (ref.name === "parseFloat") return parseFloat(coerceToString(value))
+  if (name === "parseFloat") return parseFloat(coerceToString(value))
   return coerceToString(value)
 }
+
+/** A global coercion function such as `Number` or `parseInt`. */
+export const coercion = (name: Coercion, options: SyncOptions = {}): HostFunction =>
+  sync(name, (args, node) => toProgram(coerce(name, args, node), `${name} result`), options)

@@ -65,19 +65,9 @@ export class ComputedValue {
   constructor(readonly value: unknown) {}
 }
 
-export class PromiseNamespace {}
-
-export class SymbolNamespace {}
-
 export const AsyncIteratorSymbol: unique symbol = Symbol("codemode.async-iterator")
 export const IteratorSymbol: unique symbol = Symbol("codemode.iterator")
 export const IteratorSymbols = [AsyncIteratorSymbol, IteratorSymbol] as const
-
-export type PromiseMethodName = "all" | "allSettled" | "race" | "any" | "resolve" | "reject"
-
-export class PromiseMethodReference {
-  constructor(readonly name: PromiseMethodName) {}
-}
 
 export type PromiseInstanceMethodName = "then" | "catch" | "finally"
 
@@ -88,58 +78,12 @@ export class PromiseInstanceMethodReference {
   ) {}
 }
 
-export class PromiseCapabilityFunction {
-  constructor(readonly settle: (value: unknown) => void) {}
-}
-
-export type GlobalNamespaceName =
-  | "Object"
-  | "Math"
-  | "JSON"
-  | "Array"
-  | "console"
-  | "Date"
-  | "RegExp"
-  | "Map"
-  | "Set"
-  | "URL"
-  | "URLSearchParams"
-
-export class GlobalNamespace {
-  constructor(readonly name: GlobalNamespaceName) {}
-}
-
-export class GlobalMethodReference {
-  constructor(
-    readonly namespace: Exclude<GlobalNamespaceName, "JSON"> | "Number" | "String",
-    readonly name: string,
-  ) {}
-}
-
-export class JsonMethodReference {
-  constructor(readonly name: "parse" | "stringify") {}
-}
-
-export class CoercionFunction {
-  constructor(readonly name: "Number" | "String" | "Boolean" | "parseInt" | "parseFloat" | "isFinite" | "isNaN") {}
-}
-
-export class UriFunction {
-  constructor(readonly name: "encodeURI" | "encodeURIComponent" | "decodeURI" | "decodeURIComponent") {}
-}
-
-export class SearchFunction {}
-
 export class ProgramThrow {
   constructor(readonly value: unknown) {}
 }
 
 export class GeneratorReturn {
   constructor(readonly value: unknown) {}
-}
-
-export class ErrorConstructorReference {
-  constructor(readonly name: string) {}
 }
 
 export const OptionalShortCircuit: unique symbol = Symbol("codemode.optional-short-circuit")

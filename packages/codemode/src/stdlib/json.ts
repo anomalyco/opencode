@@ -1,22 +1,25 @@
 import { Effect } from "effect"
-import type { CallbackRunner } from "../interpreter/methods.js"
-import { applyCollectionCallback } from "../interpreter/methods.js"
+import { HostFunction, HostNamespace } from "../interpreter/host.js"
+import { applyCollectionCallback, type CallbackRunner } from "../interpreter/runner.js"
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
 import { typeofValue } from "../interpreter/references.js"
 import { fromData, type SafeObject, toData, toProgram } from "../data.js"
 import { Values } from "../values.js"
 
-export const jsonStatics = new Set(["parse", "stringify"])
-export type JsonMethodName = "parse" | "stringify"
-
 export const invokeJsonMethod = <R>(
   runner: CallbackRunner<R>,
-  name: JsonMethodName,
+  name: "parse" | "stringify",
   args: Array<unknown>,
   node: AstNode,
 ): Effect.Effect<unknown, unknown, R> => {
   return name === "parse" ? parse(runner, args, node) : stringify(runner, args, node)
 }
+
+export const jsonGlobal = <R>(runner: CallbackRunner<R>) =>
+  new HostNamespace("JSON", {
+    parse: new HostFunction<R>({ name: "JSON.parse", call: (args, node) => parse(runner, args, node) }),
+    stringify: new HostFunction<R>({ name: "JSON.stringify", call: (args, node) => stringify(runner, args, node) }),
+  })
 
 const parse = <R>(
   runner: CallbackRunner<R>,

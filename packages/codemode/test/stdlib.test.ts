@@ -18,7 +18,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
 import { AsyncIteratorSymbol, IteratorSymbol } from "../src/interpreter/model.js"
-import { invokeObjectMethod } from "../src/stdlib/object.js"
+import { objectAssign } from "../src/stdlib/object.js"
 
 // Standard-library value types: Date, RegExp, Map, Set. Programs use them as ordinary JS;
 // intra-CodeMode checkpoints (Object.* helpers, spread, coercion inputs) preserve the live
@@ -720,6 +720,16 @@ describe("Set", () => {
 })
 
 describe("stdlib integration", () => {
+  test("new dispatches on the constructor value, not its name", async () => {
+    expect(await value(`const D = Date; return new D(0) instanceof Date`)).toBe(true)
+    expect(await value(`const make = (C) => new C([["a", 1]]); return make(Map).get("a")`)).toBe(1)
+    expect(await value(`const t = { M: Map }; return new t.M() instanceof Map`)).toBe(true)
+    const shadowed = await error(`const Date = 5; return new Date()`)
+    expect(shadowed.kind).toBe("UnsupportedSyntax")
+    const fn = await error(`const f = () => 1; return new f()`)
+    expect(fn.kind).toBe("UnsupportedSyntax")
+  })
+
   test("Object.is uses SameValue semantics", async () => {
     expect(
       await value(`
@@ -835,7 +845,7 @@ describe("stdlib integration", () => {
         return target
       },
     })
-    expect(invokeObjectMethod("assign", [target, source], { type: "CallExpression", start: 0, end: 0 })).toBe(target)
+    expect(objectAssign([target, source], { type: "CallExpression", start: 0, end: 0 })).toBe(target)
     expect(reads).toEqual([])
     expect(Object.hasOwn(target, IteratorSymbol)).toBe(false)
   })
@@ -849,9 +859,7 @@ describe("stdlib integration", () => {
         return target
       },
     })
-    expect(invokeObjectMethod("assign", [target, { nested }], { type: "CallExpression", start: 0, end: 0 })).toBe(
-      target,
-    )
+    expect(objectAssign([target, { nested }], { type: "CallExpression", start: 0, end: 0 })).toBe(target)
     expect(reads).toEqual([])
     expect(target).toEqual({ nested })
   })
@@ -859,9 +867,9 @@ describe("stdlib integration", () => {
   test("Object.assign rejects cycles through supported symbols on nested arrays", () => {
     const target = {}
     const nested = Object.defineProperty([], IteratorSymbol, { enumerable: true, value: target })
-    expect(() =>
-      invokeObjectMethod("assign", [target, { nested }], { type: "CallExpression", start: 0, end: 0 }),
-    ).toThrow("Object.assign result contains a circular value.")
+    expect(() => objectAssign([target, { nested }], { type: "CallExpression", start: 0, end: 0 })).toThrow(
+      "Object.assign result contains a circular value.",
+    )
     expect(Object.hasOwn(target, "nested")).toBe(false)
   })
 
@@ -878,9 +886,9 @@ describe("stdlib integration", () => {
         },
       },
     })
-    expect(() =>
-      invokeObjectMethod("assign", [target, { nested }], { type: "CallExpression", start: 0, end: 0 }),
-    ).toThrow("Object.assign result contains a circular value.")
+    expect(() => objectAssign([target, { nested }], { type: "CallExpression", start: 0, end: 0 })).toThrow(
+      "Object.assign result contains a circular value.",
+    )
     expect(reads).toEqual([])
   })
 
@@ -901,7 +909,7 @@ describe("stdlib integration", () => {
         },
       },
     )
-    expect(() => invokeObjectMethod("assign", [target, source], { type: "CallExpression", start: 0, end: 0 })).toThrow(
+    expect(() => objectAssign([target, source], { type: "CallExpression", start: 0, end: 0 })).toThrow(
       "Object.assign could not assign property",
     )
     expect(Reflect.get(target, IteratorSymbol)).toBe(previous)
@@ -990,7 +998,7 @@ describe("stdlib integration", () => {
     })
     const target = {}
     expect(
-      invokeObjectMethod("assign", [target, { left: shared, right: shared }], {
+      objectAssign([target, { left: shared, right: shared }], {
         type: "CallExpression",
         start: 0,
         end: 0,

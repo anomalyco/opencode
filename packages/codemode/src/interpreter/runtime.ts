@@ -49,103 +49,38 @@ import {
   type Binding,
   CodeModeFunction,
   CodeModeGenerator,
-  CoercionFunction,
   ComputedValue,
-  ErrorConstructorReference,
-  GlobalMethodReference,
-  GlobalNamespace,
   GeneratorMethodReference,
   GeneratorReturn,
   type GeneratorRequestKind,
-  type GlobalNamespaceName,
   IntrinsicReference,
   InterpreterRuntimeError,
   isRecord,
   IteratorSymbol,
   IteratorSymbols,
-  JsonMethodReference,
   type MemberReference,
   OptionalShortCircuit,
-  PromiseCapabilityFunction,
   PromiseInstanceMethodReference,
-  PromiseMethodReference,
-  type PromiseMethodName,
-  PromiseNamespace,
   ProgramThrow,
-  SearchFunction,
-  SymbolNamespace,
   type StatementResult,
   unsupportedSyntax,
-  UriFunction,
 } from "./model.js"
-import { caughtErrorValue, constructAggregateErrorValue, constructErrorValue } from "./errors.js"
-import {
-  arrayStatics,
-  type CallbackRunner,
-  invokeArrayFrom,
-  invokeGlobalMethod,
-  invokeGroupBy,
-  invokeIntrinsic,
-  toPrimitive,
-} from "./methods.js"
-import { preserveConsumerError, type SyncIteratorRunner } from "./iterator.js"
-import {
-  constructPromise,
-  invokePromiseInstanceMethod,
-  invokePromiseMethod,
-  PromiseRuntime,
-  resolvePromise,
-  resolvePromiseValue,
-} from "./promises.js"
+import { caughtErrorValue } from "./errors.js"
+import { globals } from "./globals.js"
+import { HostFunction, HostNamespace } from "./host.js"
+import { invokeIntrinsic } from "./methods.js"
+import { preserveConsumerError, type Runner } from "./runner.js"
+import { invokePromiseInstanceMethod, PromiseRuntime, resolvePromise, resolvePromiseValue } from "./promises.js"
 import { containsOpaqueReference, isRuntimeReference, rejectCircularInsertion, typeofValue } from "./references.js"
 import { ScopeStack } from "./scope.js"
-import { arrayMethods, mapMethods, mapStatics, setMethods } from "../stdlib/collections.js"
-import { consoleMethods, formatConsoleMessage } from "../stdlib/console.js"
-import { dateMethods, dateStatics } from "../stdlib/date.js"
-import { invokeJsonMethod, jsonStatics, type JsonMethodName } from "../stdlib/json.js"
-import { invokeMathSumPrecise, mathConstants, mathMethods } from "../stdlib/math.js"
-import { numberConstants, numberMethods, numberStatics } from "../stdlib/number.js"
-import { invokeObjectFromEntries, objectMethodsPreservingIdentity, objectStatics } from "../stdlib/object.js"
-import { promiseStatics } from "../stdlib/promise.js"
-import {
-  escapeRegexHint,
-  regexpMethods,
-  regexpProperties,
-  regexpStatics,
-  regexFailureReason,
-} from "../stdlib/regexp.js"
-import { stringMethods, stringStatics } from "../stdlib/string.js"
-import {
-  urlMethods,
-  urlProperties,
-  urlSearchParamsMethods,
-  urlStatics,
-  urlWritableProperties,
-  invokeUriFunction,
-  uriArgument,
-  urlArgument,
-} from "../stdlib/url.js"
-import {
-  coerceToNumber,
-  coerceToString,
-  compoundOperators,
-  errorBrandName,
-  errorConstructors,
-  invokeCoercion,
-  valueConstructors,
-} from "../stdlib/value.js"
+import { arrayMethods, mapMethods, setMethods } from "../stdlib/collections.js"
+import { dateMethods } from "../stdlib/date.js"
+import { numberMethods } from "../stdlib/number.js"
+import { constructRegExp, regexpMethods, regexpProperties } from "../stdlib/regexp.js"
+import { stringMethods } from "../stdlib/string.js"
+import { uriArgument, urlMethods, urlProperties, urlSearchParamsMethods, urlWritableProperties } from "../stdlib/url.js"
+import { coerceToNumber, coerceToString, compoundOperators } from "../stdlib/value.js"
 import { Values } from "../values.js"
-
-const globalStaticMembers: Partial<Record<GlobalNamespaceName, Set<string>>> = {
-  Object: objectStatics,
-  Math: mathMethods,
-  Array: arrayStatics,
-  console: consoleMethods,
-  Date: dateStatics,
-  RegExp: regexpStatics,
-  Map: mapStatics,
-  URL: urlStatics,
-}
 
 const MAX_ARRAY_LENGTH = 4_294_967_295
 
@@ -173,34 +108,7 @@ const calleeDescription = (callee: Expression | Super | undefined): string => {
 }
 
 const instanceofValue = (lhs: unknown, rhs: unknown, node: AstNode): boolean => {
-  if (rhs instanceof ErrorConstructorReference) {
-    const brand = errorBrandName(lhs)
-    return brand !== undefined && (rhs.name === "Error" || brand === rhs.name)
-  }
-  if (rhs instanceof GlobalNamespace) {
-    switch (rhs.name) {
-      case "Date":
-        return lhs instanceof Values.Date
-      case "RegExp":
-        return lhs instanceof Values.RegExp
-      case "Map":
-        return lhs instanceof Values.Map
-      case "Set":
-        return lhs instanceof Values.Set
-      case "URL":
-        return lhs instanceof Values.URL
-      case "URLSearchParams":
-        return lhs instanceof Values.URLSearchParams
-      case "Array":
-        return Array.isArray(lhs)
-      case "Object":
-        return lhs !== null && (typeof lhs === "object" || typeofValue(lhs) === "function")
-    }
-  }
-  if (rhs instanceof PromiseNamespace) return lhs instanceof Values.Promise
-  if (rhs instanceof CoercionFunction && (rhs.name === "Number" || rhs.name === "String" || rhs.name === "Boolean")) {
-    return false
-  }
+  if (rhs instanceof HostFunction && rhs.instanceOf !== undefined) return rhs.instanceOf(lhs)
   throw new InterpreterRuntimeError(
     "The right-hand side of 'instanceof' must be a supported constructor: Error (or a specific error type like TypeError), Date, RegExp, Map, Set, URL, URLSearchParams, Array, Object, or Promise.",
     node,
@@ -254,20 +162,14 @@ type CustomIterator = {
 
 type OpaqueMemberReference =
   | ToolReference
-  | PromiseMethodReference
   | PromiseInstanceMethodReference
   | IntrinsicReference
-  | GlobalMethodReference
-  | JsonMethodReference
   | GeneratorMethodReference
 
 const isOpaqueMemberReference = (value: unknown): value is OpaqueMemberReference =>
   value instanceof ToolReference ||
-  value instanceof PromiseMethodReference ||
   value instanceof PromiseInstanceMethodReference ||
   value instanceof IntrinsicReference ||
-  value instanceof GlobalMethodReference ||
-  value instanceof JsonMethodReference ||
   value instanceof GeneratorMethodReference
 
 const copyIteratorSymbols = (source: object, target: object, consumed?: ReadonlySet<PropertyKey>): void => {
@@ -307,7 +209,7 @@ export class Interpreter<R> {
   private readonly promises: PromiseRuntime<R>
   private generatorState?: GeneratorState
   private generatorAsync = false
-  private readonly runner: CallbackRunner<R> & SyncIteratorRunner<R> = {
+  private readonly runner: Runner<R> = {
     invokeFunction: (fn, args) => this.invokeFunction(fn, args),
     invokeCallable: (callable, args, node) => this.invokeCallable(callable, args, node),
     settlePromise: (promise) => this.settlePromise(promise),
@@ -328,38 +230,8 @@ export class Interpreter<R> {
     this.toolKeys = toolKeys
     this.logs = logs
     this.promises = promises
-    globalScope.set("tools", { mutable: false, value: new ToolReference([]) })
-    globalScope.set("search", { mutable: false, value: new SearchFunction() })
-    globalScope.set("Promise", { mutable: false, value: new PromiseNamespace() })
-    globalScope.set("Symbol", { mutable: false, value: new SymbolNamespace() })
-    globalScope.set("undefined", { mutable: false, value: undefined })
-    globalScope.set("Object", { mutable: false, value: new GlobalNamespace("Object") })
-    globalScope.set("Math", { mutable: false, value: new GlobalNamespace("Math") })
-    globalScope.set("JSON", { mutable: false, value: new GlobalNamespace("JSON") })
-    globalScope.set("Number", { mutable: false, value: new CoercionFunction("Number") })
-    globalScope.set("String", { mutable: false, value: new CoercionFunction("String") })
-    globalScope.set("Boolean", { mutable: false, value: new CoercionFunction("Boolean") })
-    globalScope.set("Array", { mutable: false, value: new GlobalNamespace("Array") })
-    globalScope.set("console", { mutable: false, value: new GlobalNamespace("console") })
-    globalScope.set("parseInt", { mutable: false, value: new CoercionFunction("parseInt") })
-    globalScope.set("parseFloat", { mutable: false, value: new CoercionFunction("parseFloat") })
-    globalScope.set("isFinite", { mutable: false, value: new CoercionFunction("isFinite") })
-    globalScope.set("isNaN", { mutable: false, value: new CoercionFunction("isNaN") })
-    globalScope.set("Date", { mutable: false, value: new GlobalNamespace("Date") })
-    globalScope.set("RegExp", { mutable: false, value: new GlobalNamespace("RegExp") })
-    globalScope.set("Map", { mutable: false, value: new GlobalNamespace("Map") })
-    globalScope.set("Set", { mutable: false, value: new GlobalNamespace("Set") })
-    globalScope.set("URL", { mutable: false, value: new GlobalNamespace("URL") })
-    globalScope.set("URLSearchParams", { mutable: false, value: new GlobalNamespace("URLSearchParams") })
-    globalScope.set("encodeURI", { mutable: false, value: new UriFunction("encodeURI") })
-    globalScope.set("encodeURIComponent", { mutable: false, value: new UriFunction("encodeURIComponent") })
-    globalScope.set("decodeURI", { mutable: false, value: new UriFunction("decodeURI") })
-    globalScope.set("decodeURIComponent", { mutable: false, value: new UriFunction("decodeURIComponent") })
-    for (const name of errorConstructors) {
-      globalScope.set(name, { mutable: false, value: new ErrorConstructorReference(name) })
-    }
-    globalScope.set("NaN", { mutable: false, value: NaN })
-    globalScope.set("Infinity", { mutable: false, value: Infinity })
+    const host = { runner: this.runner, promises, search: invokeSearch, toolKeys, logs }
+    for (const [name, value] of globals(host)) globalScope.set(name, { mutable: false, value })
   }
 
   run(program: Program): Effect.Effect<unknown, unknown, R> {
@@ -1327,7 +1199,7 @@ export class Interpreter<R> {
     switch (node.type) {
       case "Literal": {
         const regex = node.regex
-        if (regex) return Effect.sync(() => this.constructRegExp([regex.pattern, regex.flags], node))
+        if (regex) return Effect.sync(() => constructRegExp([regex.pattern, regex.flags], node))
         return Effect.sync(() => toProgram(node.value, "Literal"))
       }
       case "Identifier":
@@ -1385,254 +1257,14 @@ export class Interpreter<R> {
   }
 
   private evaluateNewExpression(node: NewExpression): Effect.Effect<unknown, unknown, R> {
-    const callee = node.callee
-    if (callee.type !== "Identifier") {
-      throw unsupportedSyntax("NewExpression", node)
-    }
-    const name = callee.name
-    const argNodes = node.arguments
-    const self = this
-    if (name === "Promise") {
-      return Effect.flatMap(this.evaluateCallArguments(argNodes), (args) =>
-        constructPromise(self.runner, self.promises, args[0], node),
-      )
-    }
-    if (errorConstructors.has(name)) {
-      return Effect.flatMap(this.evaluateCallArguments(argNodes), (args) =>
-        name === "AggregateError"
-          ? constructAggregateErrorValue(self.runner, args, node)
-          : Effect.succeed(constructErrorValue(name, args)),
-      )
-    }
-    // Array and Object construct identically with or without new, like JS.
-    if (name === "Array") {
-      return Effect.map(this.evaluateCallArguments(argNodes), (args) => self.constructArray(args, node))
-    }
-    if (name === "Object") {
-      return Effect.map(this.evaluateCallArguments(argNodes), (args) => self.constructObject(args, node))
-    }
-    if (valueConstructors.has(name)) {
-      return Effect.gen(function* () {
-        const args = yield* self.evaluateCallArguments(argNodes)
-        switch (name) {
-          case "Date":
-            return yield* self.constructDate(args, node)
-          case "RegExp":
-            return self.constructRegExp(args, node)
-          case "Map":
-            return yield* self.constructMap(args[0], node)
-          case "Set":
-            return yield* self.constructSet(args[0], node)
-          case "URL":
-            return self.constructURL(args, node)
-          default:
-            return yield* self.constructURLSearchParams(args[0], node)
-        }
-      })
-    }
-    throw unsupportedSyntax("NewExpression", node)
-  }
-
-  private constructArray(args: Array<unknown>, node: AstNode): Array<unknown> {
-    if (args.length !== 1) return [...args]
-    const first = args[0]
-    if (typeof first !== "number") return [first]
-    if (!Number.isInteger(first) || first < 0 || first > 4294967295) {
-      throw new InterpreterRuntimeError("Invalid array length.", node).as("RangeError")
-    }
-    // Sparse like JS: Array(3) has holes, and combinator loops already skip them.
-    return new Array(first)
-  }
-
-  private constructObject(args: Array<unknown>, node: AstNode): unknown {
-    const first = args[0]
-    if (first === null || first === undefined) return {}
-    if (typeof first === "object") return first
-    throw new InterpreterRuntimeError(
-      `Object(${typeof first}) wrapper objects are not supported; use the primitive value directly.`,
-      node,
-    )
-  }
-
-  private constructDate(args: Array<unknown>, node: AstNode): Effect.Effect<Values.Date, unknown, R> {
-    if (args.length === 0) return Effect.succeed(new Values.Date(Date.now()))
-    if (args.length === 1) {
-      const arg = args[0]
-      if (arg instanceof Values.Date) return Effect.succeed(new Values.Date(arg.time))
-      return Effect.map(toPrimitive(this.runner, arg, "number", node), (value) =>
-        typeof value === "string"
-          ? new Values.Date(Date.parse(value))
-          : new Values.Date(new Date(coerceToNumber(value)).getTime()),
-      )
-    }
-    const parts = args.map((arg) => coerceToNumber(arg))
-    return Effect.succeed(new Values.Date(new Date(...(parts as [number, number])).getTime()))
-  }
-
-  private constructRegExp(args: Array<unknown>, node: AstNode): Values.RegExp {
-    const first = args[0]
-    const pattern =
-      first instanceof Values.RegExp ? first.regex.source : first === undefined ? "" : coerceToString(first)
-    const flagsArg = args[1]
-    if (flagsArg !== undefined && typeof flagsArg !== "string") {
-      throw new InterpreterRuntimeError(
-        `RegExp flags must be a string of flag characters (e.g. "g", "gi"), not ${flagsArg === null ? "null" : typeof flagsArg}.`,
-        node,
-      ).as("SyntaxError")
-    }
-    const flags = flagsArg ?? (first instanceof Values.RegExp ? first.regex.flags : "")
-    try {
-      return new Values.RegExp(pattern, flags)
-    } catch (error) {
-      const reason = regexFailureReason(error)
-      throw new InterpreterRuntimeError(
-        /flag/i.test(reason)
-          ? `new RegExp(...) received invalid flags ${JSON.stringify(flags)} (${reason}). Valid flags are d, g, i, m, s, u, v, and y.`
-          : `new RegExp(...) received ${JSON.stringify(pattern)}, which is not a valid regular expression pattern (${reason}). ${escapeRegexHint}`,
-        node,
-      ).as("SyntaxError")
-    }
-  }
-
-  private constructMap(init: unknown, node: AstNode): Effect.Effect<Values.Map, unknown, R> {
-    const target = new Values.Map()
-    if (init === undefined || init === null) return Effect.succeed(target)
     const self = this
     return Effect.gen(function* () {
-      const cursor = yield* self.syncIterator(init, node)
-      if (cursor === undefined) {
-        throw new InterpreterRuntimeError(
-          "new Map(...) expects an iterable of [key, value] pairs or no argument.",
-          node,
-        ).as("TypeError")
-      }
-      while (true) {
-        const step = yield* cursor.next
-        if (step.done) return target
-        yield* preserveConsumerError(
-          cursor,
-          Effect.sync(() => {
-            if (!isRecord(step.value) || isRuntimeReference(step.value)) {
-              throw new InterpreterRuntimeError("new Map(...) expects [key, value] pairs as entry objects.", node).as(
-                "TypeError",
-              )
-            }
-            target.map.set(step.value[0], step.value[1])
-          }),
-        )
-      }
-    })
-  }
-
-  private constructSet(init: unknown, node: AstNode): Effect.Effect<Values.Set, unknown, R> {
-    const target = new Values.Set()
-    if (init === undefined || init === null) return Effect.succeed(target)
-    const self = this
-    return Effect.gen(function* () {
-      const cursor = yield* self.syncIterator(init, node)
-      if (cursor === undefined) {
-        throw new InterpreterRuntimeError("new Set(...) expects a synchronous iterable or no argument.", node).as(
-          "TypeError",
-        )
-      }
-      while (true) {
-        const step = yield* cursor.next
-        if (step.done) return target
-        target.set.add(step.value)
-      }
-    })
-  }
-
-  private constructURL(args: Array<unknown>, node: AstNode): Values.URL {
-    if (args.length === 0) {
-      throw new InterpreterRuntimeError("new URL(...) requires a URL string and an optional base URL.", node).as(
-        "TypeError",
-      )
-    }
-    const input = urlArgument(args[0], "new URL input")
-    const base = args[1] === undefined ? undefined : urlArgument(args[1], "new URL base")
-    try {
-      return new Values.URL(new URL(input, base))
-    } catch {
-      throw new InterpreterRuntimeError(
-        `new URL(...) received an invalid URL${base === undefined ? "" : " or base URL"}.`,
-        node,
-      ).as("TypeError")
-    }
-  }
-
-  private constructURLSearchParams(init: unknown, node: AstNode): Effect.Effect<Values.URLSearchParams, unknown, R> {
-    if (init === undefined) return Effect.succeed(new Values.URLSearchParams(new URLSearchParams()))
-    if (init instanceof Values.URLSearchParams) {
-      return Effect.succeed(new Values.URLSearchParams(new URLSearchParams(init.params)))
-    }
-    if (typeof init === "string") return Effect.succeed(new Values.URLSearchParams(new URLSearchParams(init)))
-    if (init === null || typeof init === "number" || typeof init === "boolean") {
-      return Effect.succeed(new Values.URLSearchParams(new URLSearchParams(coerceToString(init))))
-    }
-    const self = this
-    return Effect.gen(function* () {
-      const cursor = yield* self.syncIterator(init, node)
-      if (cursor !== undefined) {
-        const entries: Array<Array<string>> = []
-        while (true) {
-          const step = yield* cursor.next
-          if (step.done) {
-            if (entries.some((entry) => entry.length !== 2)) {
-              throw new InterpreterRuntimeError(
-                "new URLSearchParams(...) expects iterable [name, value] pairs.",
-                node,
-              ).as("TypeError")
-            }
-            return new Values.URLSearchParams(
-              new URLSearchParams(entries.map((entry): [string, string] => [entry[0] ?? "", entry[1] ?? ""])),
-            )
-          }
-          entries.push(yield* preserveConsumerError(cursor, self.readURLSearchParamsPair(step.value, node)))
-        }
-      }
-      if (isRuntimeReference(init)) {
-        throw new InterpreterRuntimeError(
-          "new URLSearchParams(...) expects a query string, data object, or synchronous iterable pairs.",
-          node,
-        ).as("TypeError")
-      }
-      if (Values.isValue(init)) return new Values.URLSearchParams(new URLSearchParams())
-      const data = toProgram(init, "new URLSearchParams input")
-      if (data === null || typeof data !== "object") {
-        throw new InterpreterRuntimeError(
-          "new URLSearchParams(...) expects a query string, data object, iterable pairs, or URLSearchParams.",
-          node,
-        ).as("TypeError")
-      }
-      return new Values.URLSearchParams(
-        new URLSearchParams(
-          Object.fromEntries(Object.entries(data).map(([key, value]) => [key, coerceToString(value)])),
-        ),
-      )
-    })
-  }
-
-  private readURLSearchParamsPair(value: unknown, node: AstNode): Effect.Effect<Array<string>, unknown, R> {
-    const self = this
-    return Effect.gen(function* () {
-      const cursor = yield* self.syncIterator(value, node)
-      if (cursor === undefined) {
-        throw new InterpreterRuntimeError("new URLSearchParams(...) expects iterable [name, value] pairs.", node).as(
-          "TypeError",
-        )
-      }
-      const items: Array<string> = []
-      while (true) {
-        const step = yield* cursor.next
-        if (step.done) return items
-        items.push(
-          yield* preserveConsumerError(
-            cursor,
-            Effect.sync(() => uriArgument(step.value, "URLSearchParams pair value")),
-          ),
-        )
-      }
+      const callee = yield* self.evaluateExpression(node.callee)
+      // Globals are built with this interpreter's R; `instanceof` cannot recover the type argument.
+      const construct = callee instanceof HostFunction ? (callee as HostFunction<R>).construct : undefined
+      if (construct === undefined) throw unsupportedSyntax("NewExpression", node)
+      const args = yield* self.evaluateCallArguments(node.arguments)
+      return yield* construct(args, node)
     })
   }
 
@@ -1906,12 +1538,6 @@ export class Interpreter<R> {
         }
         return yield* self.createToolCallPromise(callable.path, args)
       }
-      if (callable instanceof PromiseMethodReference) {
-        return yield* invokePromiseMethod(self.runner, self.promises, callable, args, node)
-      }
-      if (callable instanceof PromiseInstanceMethodReference) {
-        return yield* invokePromiseInstanceMethod(self.runner, self.promises, callable, args, node)
-      }
       if (callable instanceof CodeModeFunction) {
         return yield* self.invokeFunction(callable, args)
       }
@@ -1923,71 +1549,10 @@ export class Interpreter<R> {
       if (callable instanceof IntrinsicReference) {
         return yield* invokeIntrinsic(self.runner, callable, args, node)
       }
-      if (callable instanceof GlobalMethodReference) {
-        if (callable.namespace === "console") return self.invokeConsole(callable.name, args, node)
-        if (callable.namespace === "Object" && args[0] instanceof ToolReference) {
-          return self.invokeObjectMethodOnTools(callable.name, args[0], node)
-        }
-        if (callable.namespace === "Object" && objectMethodsPreservingIdentity.has(callable.name)) {
-          if (callable.name === "fromEntries") return yield* invokeObjectFromEntries(self.runner, args[0], node)
-          return invokeGlobalMethod(callable, args, node)
-        }
-        if (callable.namespace === "Array" && callable.name === "from") {
-          return yield* invokeArrayFrom(self.runner, args, node)
-        }
-        if ((callable.namespace === "Object" || callable.namespace === "Map") && callable.name === "groupBy") {
-          return yield* invokeGroupBy(self.runner, callable.namespace, args, node)
-        }
-        if (callable.namespace === "Math" && callable.name === "sumPrecise") {
-          return yield* invokeMathSumPrecise(self.runner, args[0], node)
-        }
-        if (callable.namespace === "Array" && callable.name === "of") {
-          return invokeGlobalMethod(callable, args, node)
-        }
-        return toProgram(invokeGlobalMethod(callable, args, node), `${callable.namespace}.${callable.name} result`)
+      if (callable instanceof PromiseInstanceMethodReference) {
+        return yield* invokePromiseInstanceMethod(self.runner, self.promises, callable, args, node)
       }
-      if (callable instanceof JsonMethodReference) {
-        return yield* invokeJsonMethod(self.runner, callable.name, args, node)
-      }
-      if (callable instanceof CoercionFunction) {
-        return toProgram(invokeCoercion(callable, args, node), `${callable.name} result`)
-      }
-      if (callable instanceof UriFunction) {
-        return invokeUriFunction(callable, args, node)
-      }
-      if (callable instanceof SearchFunction) {
-        return yield* self.invokeSearch(args)
-      }
-      if (callable instanceof ErrorConstructorReference) {
-        if (callable.name === "AggregateError") return yield* constructAggregateErrorValue(self.runner, args, node)
-        return constructErrorValue(callable.name, args)
-      }
-      if (callable instanceof GlobalNamespace) {
-        // Real JS permits calling Array, Object, Date, and RegExp without new.
-        if (callable.name === "Array") return self.constructArray(args, node)
-        if (callable.name === "Object") return self.constructObject(args, node)
-        // ISO instead of the host's locale string: CodeMode date strings are
-        // deterministic and must not leak the host timezone.
-        if (callable.name === "Date") return new Date().toISOString()
-        if (callable.name === "RegExp") return self.constructRegExp(args, node)
-        if (typeofValue(callable) === "function") {
-          throw new InterpreterRuntimeError(`Constructor ${callable.name} requires 'new'.`, node).as("TypeError")
-        }
-        throw new InterpreterRuntimeError(`${callable.name} is not a function.`, node).as("TypeError")
-      }
-      if (callable instanceof PromiseNamespace) {
-        throw new InterpreterRuntimeError("Constructor Promise requires 'new'.", node).as("TypeError")
-      }
-      if (callable instanceof SymbolNamespace) {
-        throw new InterpreterRuntimeError(
-          "Symbol is not callable; only Symbol.asyncIterator and Symbol.iterator are available.",
-          node,
-        ).as("TypeError")
-      }
-      if (callable instanceof PromiseCapabilityFunction) {
-        callable.settle(args[0])
-        return undefined
-      }
+      if (callable instanceof HostFunction) return yield* (callable as HostFunction<R>).call(args, node)
       if (callable === undefined || callable === null) {
         throw new InterpreterRuntimeError(`${calleeDescription(callee)} is not a function.`, callee ?? node).as(
           "TypeError",
@@ -1995,23 +1560,6 @@ export class Interpreter<R> {
       }
       throw new InterpreterRuntimeError("Only tools are callable here.", callee ?? node)
     })
-  }
-
-  private invokeObjectMethodOnTools(name: string, ref: ToolReference, node: AstNode): unknown {
-    if (name === "keys") {
-      return toProgram(this.enumerableKeys(ref)!, "Object.keys result")
-    }
-    throw new InterpreterRuntimeError(
-      `Object.${name}(...) cannot read tool references: they are not plain data. Use Object.keys(tools) for names, or search({ query }) for signatures.`,
-      node,
-      "InvalidDataValue",
-    )
-  }
-
-  private invokeConsole(name: string, args: Array<unknown>, node: AstNode): undefined {
-    if (!consoleMethods.has(name)) throw new InterpreterRuntimeError(`console.${name} is not available.`, node)
-    this.logs.push(formatConsoleMessage(name, args))
-    return undefined
   }
 
   private evaluateCallArguments(
@@ -2445,11 +1993,8 @@ export class Interpreter<R> {
   ): Effect.Effect<
     | MemberReference
     | ToolReference
-    | PromiseMethodReference
     | PromiseInstanceMethodReference
     | IntrinsicReference
-    | GlobalMethodReference
-    | JsonMethodReference
     | GeneratorMethodReference
     | ComputedValue
     | typeof OptionalShortCircuit
@@ -2480,39 +2025,12 @@ export class Interpreter<R> {
         return new ToolReference([...objectValue.path, key])
       }
 
-      if (objectValue instanceof PromiseNamespace) {
-        if (typeof key === "string" && promiseStatics.has(key as PromiseMethodName)) {
-          return new PromiseMethodReference(key as PromiseMethodName)
-        }
-        throw new InterpreterRuntimeError(
-          `Promise.${String(key)} is not available. Available: Promise.all, Promise.allSettled, Promise.race, Promise.any, Promise.resolve, and Promise.reject; consume promises with await.`,
-          propertyNode,
-        )
-      }
-
-      if (objectValue instanceof SymbolNamespace) {
-        if (key === "asyncIterator") return new ComputedValue(AsyncIteratorSymbol)
-        if (key === "iterator") return new ComputedValue(IteratorSymbol)
-        return new ComputedValue(undefined)
-      }
-
-      if (objectValue instanceof GlobalNamespace) {
+      if (objectValue instanceof HostFunction || objectValue instanceof HostNamespace) {
         if (typeof key === "string" && isBlockedMember(key)) {
           throw new InterpreterRuntimeError(`${objectValue.name}.${key} is not available.`, propertyNode)
         }
-        if (typeof key !== "string") return new ComputedValue(undefined)
-        if (objectValue.name === "Math" && mathConstants.has(key)) {
-          return new ComputedValue((Math as unknown as Record<string, number>)[key])
-        }
-        if (objectValue.name === "JSON") {
-          if (jsonStatics.has(key)) return new JsonMethodReference(key as JsonMethodName)
-          return new ComputedValue(undefined)
-        }
-        if (globalStaticMembers[objectValue.name]?.has(key)) {
-          return new GlobalMethodReference(objectValue.name, key)
-        }
         // Unknown static members read as undefined so feature detection works like native JS.
-        return new ComputedValue(undefined)
+        return new ComputedValue(objectValue.member(key, propertyNode))
       }
 
       if (typeof objectValue === "string") {
@@ -2525,23 +2043,6 @@ export class Interpreter<R> {
 
       if (typeof objectValue === "number") {
         if (typeof key === "string" && numberMethods.has(key)) return new IntrinsicReference(objectValue, key)
-        return new ComputedValue(undefined)
-      }
-
-      if (objectValue instanceof CoercionFunction) {
-        if (typeof key === "string" && isBlockedMember(key)) {
-          throw new InterpreterRuntimeError(`${objectValue.name}.${key} is not available.`, propertyNode)
-        }
-        if (typeof key !== "string") return new ComputedValue(undefined)
-        if (objectValue.name === "Number" && numberConstants.has(key)) {
-          return new ComputedValue((Number as unknown as Record<string, number>)[key])
-        }
-        if (objectValue.name === "Number" && numberStatics.has(key)) {
-          return new GlobalMethodReference("Number", key)
-        }
-        if (objectValue.name === "String" && stringStatics.has(key)) {
-          return new GlobalMethodReference("String", key)
-        }
         return new ComputedValue(undefined)
       }
 
