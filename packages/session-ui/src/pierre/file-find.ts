@@ -53,6 +53,8 @@ function isEditable(node: unknown): boolean {
   return /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(node.tagName)
 }
 
+const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+
 function hostForNode(node: unknown) {
   if (!(node instanceof Node)) return
   for (const host of hosts) {
@@ -72,7 +74,9 @@ function installShortcuts() {
       if (event.defaultPrevented) return
       if (isEditable(event.target)) return
 
-      const mod = event.metaKey || event.ctrlKey
+      // Platform convention: Cmd on macOS, Ctrl elsewhere. Plain Ctrl+F
+      // keeps its native cursor-forward behavior on macOS.
+      const mod = IS_MAC ? event.metaKey : event.ctrlKey
       if (!mod) return
 
       const key = event.key.toLowerCase()

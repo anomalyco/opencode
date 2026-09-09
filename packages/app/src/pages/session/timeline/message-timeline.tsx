@@ -81,6 +81,8 @@ import { createTimelineFind } from "./find"
 import { FileSearchBar } from "@opencode-ai/session-ui/file-search"
 import { makeEventListener } from "@solid-primitives/event-listener"
 
+const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+
 const emptyMessages: MessageType[] = []
 const emptyParts: PartType[] = []
 const emptyTools: ToolPart[] = []
@@ -524,12 +526,15 @@ export function MessageTimeline(props: {
 
   // The global find-host shortcuts ignore editable targets, so mod+f / mod+g
   // are handled here as well to work while the composer is focused. File tab
-  // find claims the keys first via defaultPrevented.
+  // find claims the keys first via defaultPrevented. Mod follows the platform
+  // convention: Cmd on macOS, Ctrl elsewhere — plain Ctrl+F keeps its native
+  // cursor-forward behavior on macOS.
   createEffect(() => {
     if (typeof window === "undefined") return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
-      if (!(event.metaKey || event.ctrlKey) || event.altKey) return
+      const mod = IS_MAC ? event.metaKey : event.ctrlKey
+      if (!mod || event.altKey) return
       const key = event.key.toLowerCase()
       if (key === "f") {
         if (event.shiftKey) return
