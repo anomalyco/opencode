@@ -378,23 +378,6 @@ Top-level `compaction.auto: false` disables new automatic compaction without
 discarding installed checkpoints. See the [compaction guide](/compaction) for
 budgeting and overflow recovery.
 
-Providers whose routes support it (OpenAI, Azure, and xAI Responses) keep one
-WebSocket connection open per session. `websocket: false` on a provider or model
-keeps it on HTTP instead; a model policy overrides the provider policy:
-
-```jsonc
-{
-  "providers": {
-    "openai": {
-      "websocket": false,
-      "models": {
-        "gpt-5.5": { "websocket": true },
-      },
-    },
-  },
-}
-```
-
 ### Session warming
 
 Keep recently active model sessions warm with periodic transient requests.
@@ -555,4 +538,7 @@ headers, and model variants.
 }
 ```
 
-See the [providers guide](/providers) for credentials, custom endpoints, provider packages, and model configuration.
+`websocket: false` on a provider or model keeps it on HTTP instead of the
+session WebSocket; a model policy overrides the provider policy.
+
+See the [providers guide](/providers) for credentials, custom endpoints, provider packages, the WebSocket transport, and model configuration.

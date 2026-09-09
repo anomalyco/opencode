@@ -308,23 +308,22 @@ export const makeLayer = (connector: WebSocketConnector) =>
         const channel = owner.channel
           ? owner.channel
           : yield* open(owner, exchange, key).pipe(
-              Effect.catch((error) =>
-                error.reason._tag === "Transport" && error.reason.code === "owner-closed"
-                  ? Effect.fail(error)
-                  : Effect.logWarning("session websocket connect failed; using http", {
-                      sessionTransport: "websocket",
-                      phase: "connect",
-                      delivery: "not-sent",
-                      code: error.reason._tag === "Transport" ? error.reason.code : error.reason._tag,
-                    }).pipe(
-                      Effect.andThen(metric("connect_failure")),
-                      Effect.andThen(metric("fallback")),
-                      // A network that refuses the upgrade would otherwise charge every step for a failed
-                      // connect; the Session stays on HTTP for the rest of this process.
-                      Effect.tap(() => Effect.sync(() => (owner.httpFallback = true))),
-                      Effect.as(undefined),
-                    ),
-              ),
+              Effect.catch((error) => {
+                if (error.reason._tag === "Transport" && error.reason.code === "owner-closed") return Effect.fail(error)
+                // Any connect failure, transient or not, pins the Session to HTTP until restart or move:
+                // a network that refuses the upgrade would otherwise charge every step for a failed connect.
+                owner.httpFallback = true
+                return Effect.logWarning("session websocket connect failed; using http", {
+                  sessionTransport: "websocket",
+                  phase: "connect",
+                  delivery: "not-sent",
+                  code: error.reason._tag === "Transport" ? error.reason.code : error.reason._tag,
+                }).pipe(
+                  Effect.andThen(metric("connect_failure")),
+                  Effect.andThen(metric("fallback")),
+                  Effect.as(undefined),
+                )
+              }),
             )
         if (!channel) return fallback(exchange)
 

@@ -177,9 +177,7 @@ describe("OpenAIPlugin", () => {
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-6-astra"))).enabled).toBe(true)
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.10"))).enabled).toBe(true)
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5"))).enabled).toBe(false)
-      expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"))).enabled).toBe(
-        false,
-      )
+      expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"))).enabled).toBe(false)
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-4.99"))).enabled).toBe(false)
     }),
   )
@@ -220,7 +218,7 @@ describe("OpenAIPlugin", () => {
     }),
   )
 
-  it.effect("selects Azure WebSocket from capability and honors the Azure opt-out only", () =>
+  it.effect("selects Azure WebSocket from capability unless the policy disables it", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
       yield* credentials.create({
@@ -241,15 +239,14 @@ describe("OpenAIPlugin", () => {
         id: "deployment-responses",
         provider: Provider.ID.azure,
       })
-      const resolved = (websocket?: boolean) =>
-        SessionRunnerModel.resolved(route.model({ id: "gpt-5.5" }), {
-          capabilities: { tools: true, input: ["text"], output: ["text"], responsesWebsockets: true },
-          cost: [],
-          limit: { context: 200_000, output: 32_000 },
-          websocket,
-        })
-      const program = (model: SessionRunnerModel.Resolved) =>
+      const prepare = (websocket?: boolean) =>
         Effect.gen(function* () {
+          const model = SessionRunnerModel.resolved(route.model({ id: "gpt-5.5" }), {
+            capabilities: { tools: true, input: ["text"], output: ["text"], responsesWebsockets: true },
+            cost: [],
+            limit: { context: 200_000, output: 32_000 },
+            websocket,
+          })
           const requests = yield* SessionModelRequest.Service
           return yield* requests.prepare({
             kind: "primary",
@@ -274,21 +271,12 @@ describe("OpenAIPlugin", () => {
           Effect.provideService(SessionModelTransport.Service, transport),
         )
 
-      const withEnv = (env: Record<string, string>, model = resolved()) =>
-        program(model).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env }))))
-
-      const prepared = yield* withEnv({})
-      const otherProvider = yield* withEnv({ OPENCODE_OPENAI_RESPONSES_WEBSOCKET: "false" })
-      const optedOut = yield* withEnv({ OPENCODE_AZURE_RESPONSES_WEBSOCKET: "false" })
-      const legacyOptOut = yield* withEnv({ OPENCODE_EXPERIMENTAL_AZURE_RESPONSES_WEBSOCKET: "false" })
-      const configuredOff = yield* withEnv({}, resolved(false))
+      const prepared = yield* prepare()
+      const disabled = yield* prepare(false)
 
       expect(prepared.options.webSocket).toBe(executor)
       expect(prepared.options.http).toBeUndefined()
-      expect(otherProvider.options.webSocket).toBe(executor)
-      expect(optedOut.options.webSocket).toBeUndefined()
-      expect(legacyOptOut.options.webSocket).toBeUndefined()
-      expect(configuredOff.options.webSocket).toBeUndefined()
+      expect(disabled.options.webSocket).toBeUndefined()
     }),
   )
 })

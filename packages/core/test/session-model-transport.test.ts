@@ -526,40 +526,6 @@ describe("SessionModelTransport", () => {
     )
   })
 
-  test("keeps a Session on http after a failed connect", async () => {
-    let attempts = 0
-    const connector: WebSocketConnector = {
-      open: () =>
-        Effect.sync(() => attempts++).pipe(
-          Effect.andThen(
-            Effect.fail(
-              new AIError({
-                reason: new TransportError({
-                  message: "upgrade rejected",
-                  transport: "websocket",
-                  operation: "request",
-                  phase: "connect",
-                  delivery: "not-sent",
-                }),
-              }),
-            ),
-          ),
-        ),
-    }
-
-    await run(
-      connector,
-      Effect.gen(function* () {
-        const transport = yield* SessionModelTransport.Service
-        const executor = transport.bind(session)
-        expect(yield* collect(executor, exchange("first"))).toEqual(["fallback:first"])
-        expect(yield* collect(executor, exchange("second"))).toEqual(["fallback:second"])
-        // One failed upgrade per Session, not one per step.
-        expect(attempts).toBe(1)
-      }),
-    )
-  })
-
   test("times out a hanging connect and falls back to http", async () => {
     const connector: WebSocketConnector = { open: () => Effect.never }
 
@@ -680,25 +646,31 @@ describe("SessionModelTransport", () => {
     )
   })
 
-  test("falls back once when connection setup fails before send", async () => {
+  test("falls back when connection setup fails and keeps the Session on HTTP", async () => {
+    let attempts = 0
     let fallbacks = 0
-    const connector: WebSocketConnector = { open: () => Effect.fail(error("upgrade rejected", "not-sent")) }
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.sync(() => attempts++).pipe(Effect.andThen(Effect.fail(error("upgrade rejected", "not-sent")))),
+    }
 
     await run(
       connector,
       Effect.gen(function* () {
         const transport = yield* SessionModelTransport.Service
-        const result = yield* collect(
-          transport.bind(session),
-          exchange("first", {
+        const executor = transport.bind(session)
+        const item = (id: string) =>
+          exchange(id, {
             fallback: () => {
               fallbacks++
               return Stream.make("http")
             },
-          }),
-        )
-        expect(result).toEqual(["http"])
-        expect(fallbacks).toBe(1)
+          })
+        expect(yield* collect(executor, item("first"))).toEqual(["http"])
+        expect(yield* collect(executor, item("second"))).toEqual(["http"])
+        // One failed upgrade per Session, not one per step.
+        expect(attempts).toBe(1)
+        expect(fallbacks).toBe(2)
       }),
     )
   })

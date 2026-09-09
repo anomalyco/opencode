@@ -73,7 +73,7 @@ export const resolved = (
   cost: options.cost,
   limit: options.limit,
   compaction: options.compaction,
-  websocket: options.websocket,
+  websocket: options.websocket ?? true,
 })
 
 const layer = Layer.effect(
