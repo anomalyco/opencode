@@ -22,10 +22,6 @@ export class ToolRuntimeError extends Error {
   }
 }
 
-const blockedMemberNames = new Set(["__proto__", "constructor", "prototype"])
-
-export const isBlockedMember = (name: string): boolean => blockedMemberNames.has(name)
-
 /**
  * Brings a host-produced runtime value into the program: runtime values pass through, their host
  * counterparts (Date, RegExp, Map, Set, URL, URLSearchParams) are wrapped, and objects become
@@ -118,10 +114,7 @@ const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Se
     if (mode === "program") {
       for (const [key, item] of Object.entries(value)) {
         if (Object.hasOwn(copied, key)) continue
-        if (isBlockedMember(key)) {
-          throw new ToolRuntimeError("InvalidDataValue", `${label} contains blocked property '${key}'.`)
-        }
-        Reflect.set(copied, key, copy(item, label, mode, depth + 1, seen))
+        define(copied, key, copy(item, label, mode, depth + 1, seen))
       }
     }
     seen.delete(value)
@@ -135,13 +128,16 @@ const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Se
 
   const copied: SafeObject = plain ? (Object.create(null) as SafeObject) : {}
   for (const [key, item] of Object.entries(value)) {
-    if (isBlockedMember(key)) {
-      throw new ToolRuntimeError("InvalidDataValue", `${label} contains blocked property '${key}'.`)
-    }
     const next = copy(item, label, mode, depth + 1, seen)
     if (next === undefined && mode === "json") continue
-    copied[key] = next
+    define(copied, key, next)
   }
   seen.delete(value)
   return copied
+}
+
+// Own data property regardless of the target's prototype, so a "__proto__" key on a host object or
+// array never reaches the Object.prototype setter.
+const define = (target: object, key: string, value: unknown): void => {
+  Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true })
 }

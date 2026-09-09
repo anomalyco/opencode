@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { isBlockedMember, type SafeObject } from "../data.js"
+import type { SafeObject } from "../data.js"
 import { HostFunction, requiresNew } from "../interpreter/host.js"
 import { type AstNode, InterpreterRuntimeError, isRecord } from "../interpreter/model.js"
 import { describeValue, isRuntimeReference } from "../interpreter/references.js"
@@ -124,12 +124,6 @@ export const groupBy = <R>(runner: Runner<R>, namespace: "Map" | "Object") =>
             cursor,
             Effect.flatMap(apply([item, index]), (value) => coerceGroupByPropertyKey(runner, value, node)),
           )
-          if (isBlockedMember(key)) {
-            return yield* preserveConsumerError(
-              cursor,
-              Effect.fail(new InterpreterRuntimeError(`Property '${key}' is not available.`, node)),
-            )
-          }
           const group = result[key]
           if (group === undefined) result[key] = [item]
           else (group as Array<unknown>).push(item)

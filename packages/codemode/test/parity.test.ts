@@ -265,9 +265,11 @@ describe("property deletion", () => {
     expect((await error(`return delete tools.example`)).kind).toBe("InvalidDataValue")
   })
 
-  test("keeps blocked property names unavailable", async () => {
-    expect((await error(`const object = {}; return delete object.__proto__`)).kind).toBe("ExecutionFailure")
-    expect((await error(`const values = []; return delete values["constructor"]`)).kind).toBe("ExecutionFailure")
+  test("prototype-named keys delete like any own data key", async () => {
+    expect(
+      await value(`const object = { __proto__: 1, a: 2 }; delete object.__proto__; return Object.keys(object)`),
+    ).toEqual(["a"])
+    expect(await value(`const values = [1]; delete values["constructor"]; return values`)).toEqual([1])
   })
 })
 
@@ -906,10 +908,12 @@ describe("coercion parity: unknown static members read as undefined", () => {
     )
   })
 
-  test("blocked members still throw instead of reading as undefined", async () => {
-    const err = await error(`return Math.constructor`)
-    expect(err.message).toContain("not available")
-    const coercionErr = await error(`return Number.constructor`)
-    expect(coercionErr.message).toContain("Number.constructor is not available")
+  test("prototype-named members on globals read as undefined like other unknown statics", async () => {
+    expect(await value(`return [Math.constructor, Number.constructor, Object.prototype, Array.__proto__]`)).toEqual([
+      null,
+      null,
+      null,
+      null,
+    ])
   })
 })

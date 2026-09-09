@@ -176,10 +176,31 @@ describe("blocked member names on tool paths", () => {
     expect(await value(poisoned, `return await tools.ns.real({})`)).toBe("real")
   })
 
-  test("blocked member access on data values stays blocked", async () => {
-    const diagnostic = await failure(runtime, `const x = {}; return x.constructor`)
-    expect(diagnostic.message).toContain("constructor")
+  test("prototype machinery is unreachable through data values", async () => {
+    expect(
+      await value(
+        runtime,
+        `
+        const object = {}
+        const array = []
+        object.__proto__ = { polluted: true }
+        return [
+          object.constructor, array.constructor, "".constructor, Math.constructor,
+          object.__proto__.polluted, ({}).polluted, array.__proto__, Object().__proto__, new Object().constructor,
+          typeof ({}).constructor, typeof [].__proto__,
+        ]
+      `,
+      ),
+    ).toEqual([null, null, null, null, true, null, null, null, null, "undefined", "undefined"])
+    expect((await failure(runtime, `return (() => 1).constructor`)).message).toContain(
+      "Cannot read properties of a function",
+    )
+    const escape = await failure(runtime, `return ({}).constructor.constructor("return 1")()`)
+    expect(escape.message).toContain("Cannot access a property on a non-object value")
+    const poisoned = await failure(runtime, `const o = {}; o.__proto__.constructor("return 1")`)
+    expect(poisoned.message).toContain("Cannot access a property on a non-object value")
     expect(Object.keys(Object.prototype)).toEqual([])
+    expect(Object.keys(Array.prototype)).toEqual([])
   })
 })
 

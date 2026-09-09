@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { isBlockedMember, type SafeObject, toProgram } from "../data.js"
+import { type SafeObject, toProgram } from "../data.js"
 import { dateSetterArgumentCount, invokeDateMethod } from "../stdlib/date.js"
 import { invokeNumberMethod } from "../stdlib/number.js"
 import { invokeRegExpMethod, matchToValue, toHostRegex } from "../stdlib/regexp.js"
@@ -280,7 +280,7 @@ const invokeStringReplacer = <R>(
     if (hasGroups) {
       const safeGroups: SafeObject = Object.create(null) as SafeObject
       for (const [key, group] of Object.entries(groups)) {
-        if (!isBlockedMember(key)) safeGroups[key] = group
+        safeGroups[key] = group
       }
       callbackArgs[callbackArgs.length - 1] = safeGroups
     }

@@ -41,7 +41,7 @@ import type {
   YieldExpression,
 } from "acorn"
 import { Cause, Deferred, Effect, Exit } from "effect"
-import { isBlockedMember, ToolRuntimeError, type SafeObject, toProgram } from "../data.js"
+import { ToolRuntimeError, type SafeObject, toProgram } from "../data.js"
 import { ToolReference } from "../tool-runtime.js"
 import {
   type AstNode,
@@ -1042,7 +1042,7 @@ class Frame<R> {
           if (property.type === "RestElement") {
             const rest: SafeObject = Object.create(null) as SafeObject
             for (const [key, item] of Object.entries(value as SafeObject)) {
-              if (!consumed.has(key) && !isBlockedMember(key)) rest[key] = item
+              if (!consumed.has(key)) rest[key] = item
             }
             copyIteratorSymbols(value, rest, consumed)
             yield* self.declarePattern(property.argument, rest, mutable, property, initialize)
@@ -1050,9 +1050,6 @@ class Frame<R> {
           }
 
           const key = yield* self.destructuringPropertyKey(property)
-          if (isBlockedMember(String(key))) {
-            throw new InterpreterRuntimeError(`Property '${String(key)}' is not available.`, property)
-          }
           consumed.add(typeof key === "symbol" ? key : String(key))
           yield* self.declarePattern(
             property.value,
@@ -1109,16 +1106,13 @@ class Frame<R> {
           if (property.type === "RestElement") {
             const rest: SafeObject = Object.create(null) as SafeObject
             for (const [key, item] of Object.entries(source)) {
-              if (!consumed.has(key) && !isBlockedMember(key)) rest[key] = item
+              if (!consumed.has(key)) rest[key] = item
             }
             copyIteratorSymbols(source, rest, consumed)
             yield* self.assignPattern(property.argument, rest, property)
             continue
           }
           const key = yield* self.destructuringPropertyKey(property)
-          if (isBlockedMember(String(key))) {
-            throw new InterpreterRuntimeError(`Property '${String(key)}' is not available.`, property)
-          }
           consumed.add(typeof key === "symbol" ? key : String(key))
           yield* self.assignPattern(property.value, self.destructuringPropertyValue(source, key), property)
         }
@@ -1908,10 +1902,7 @@ class Frame<R> {
               "InvalidDataValue",
             )
           }
-          for (const [key, value] of Object.entries(spread)) {
-            if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available.`, property)
-            objectValue[key] = value
-          }
+          for (const [key, value] of Object.entries(spread)) objectValue[key] = value
           copyIteratorSymbols(spread, objectValue)
           continue
         }
@@ -1934,9 +1925,6 @@ class Frame<R> {
           throw new InterpreterRuntimeError("Unsupported object property key shape.", keyNode)
         }
 
-        if (isBlockedMember(String(key))) {
-          throw new InterpreterRuntimeError(`Property '${String(key)}' is not available.`, keyNode)
-        }
         Reflect.set(objectValue, key, yield* self.evaluateExpression(property.value))
       }
 
@@ -2051,9 +2039,6 @@ class Frame<R> {
       }
 
       if (objectValue instanceof HostFunction || objectValue instanceof HostNamespace) {
-        if (typeof key === "string" && isBlockedMember(key)) {
-          throw new InterpreterRuntimeError(`${objectValue.name}.${key} is not available.`, propertyNode)
-        }
         // Unknown static members read as undefined so feature detection works like native JS.
         return new ComputedValue(objectValue.member(key, propertyNode))
       }
@@ -2144,10 +2129,6 @@ class Frame<R> {
 
       if (typeof objectValue !== "object" || objectValue === null) {
         throw new InterpreterRuntimeError("Cannot access a property on a non-object value.", objectNode)
-      }
-
-      if (typeof key === "string" && isBlockedMember(key)) {
-        throw new InterpreterRuntimeError(`Property '${key}' is not available.`, propertyNode)
       }
 
       if (Array.isArray(objectValue)) {

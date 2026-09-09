@@ -1,6 +1,6 @@
 import { sync, syncCall } from "../interpreter/host.js"
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
-import { isBlockedMember, type SafeObject } from "../data.js"
+import type { SafeObject } from "../data.js"
 import { Values } from "../values.js"
 import { coerceToNumber, coerceToString } from "./value.js"
 
@@ -62,7 +62,7 @@ export const matchToValue = (match: RegExpMatchArray): Array<unknown> => {
   if (match.groups) {
     const groups: SafeObject = Object.create(null) as SafeObject
     for (const [key, group] of Object.entries(match.groups)) {
-      if (!isBlockedMember(key)) groups[key] = group
+      groups[key] = group
     }
     result.groups = groups
   }
@@ -148,7 +148,7 @@ const indicesToValue = (indices: RegExpIndicesArray): IndicesValue => {
   if (indices.groups) {
     const groups: SafeObject = Object.create(null) as SafeObject
     for (const [key, range] of Object.entries(indices.groups)) {
-      if (!isBlockedMember(key)) groups[key] = range === undefined ? undefined : [...range]
+      groups[key] = range === undefined ? undefined : [...range]
     }
     result.groups = groups
     return result

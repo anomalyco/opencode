@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { isBlockedMember, toProgram } from "../data.js"
+import { toProgram } from "../data.js"
 import { HostFunction, sync, syncCall } from "../interpreter/host.js"
 import { type AstNode, AsyncIteratorSymbol, InterpreterRuntimeError, IteratorSymbol } from "../interpreter/model.js"
 import {
@@ -36,8 +36,6 @@ export const objectAssign = (args: Array<unknown>, node: AstNode): unknown => {
   const out = target as Record<string, unknown>
   const seen = new Set<object>()
   const guardedSet = (key: PropertyKey, item: unknown): void => {
-    if (typeof key === "string" && isBlockedMember(key))
-      throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
     rejectCircularInsertion(out, item, "Object.assign result", node, seen)
     if (!Reflect.set(out, key, item))
       throw new InterpreterRuntimeError(`Object.assign could not assign property '${String(key)}'.`, node).as(
@@ -95,7 +93,6 @@ const objectFromEntries = <R>(
           toProgram(entry[0], "Object.fromEntries key")
           toProgram(entry[1], "Object.fromEntries value")
           const key = coerceToString(entry[0])
-          if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
           out[key] = entry[1]
         }),
       )
@@ -105,7 +102,7 @@ const objectFromEntries = <R>(
 
 const constructObject = (args: Array<unknown>, node: AstNode): unknown => {
   const first = args[0]
-  if (first === null || first === undefined) return {}
+  if (first === null || first === undefined) return Object.create(null)
   if (typeof first === "object") return first
   throw new InterpreterRuntimeError(
     `Object(${typeof first}) wrapper objects are not supported; use the primitive value directly.`,
