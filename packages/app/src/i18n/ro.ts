@@ -785,6 +785,8 @@ export const dict = {
   "session.header.reveal.finder": "Afișează în Finder",
   "session.header.reveal.fileExplorer": "Afișează în Explorer de fișiere",
   "session.header.reveal.containingFolder": "Deschide folderul conținător",
+  "session.file.openInApp": "Deschide în {{app}}",
+
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

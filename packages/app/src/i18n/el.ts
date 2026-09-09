@@ -788,6 +788,8 @@ export const dict = {
   "session.header.reveal.finder": "Αποκάλυψη σε Finder",
   "session.header.reveal.fileExplorer": "Αποκάλυψη στην Εξερεύνηση αρχείων",
   "session.header.reveal.containingFolder": "Άνοιγμα που περιέχει φάκελο",
+  "session.file.openInApp": "Άνοιγμα σε {{app}}",
+
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

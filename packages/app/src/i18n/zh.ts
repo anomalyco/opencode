@@ -1158,6 +1158,8 @@ export const dict = {
   "session.header.reveal.finder": "在访达中显示",
   "session.header.reveal.fileExplorer": "在文件资源管理器中显示",
   "session.header.reveal.containingFolder": "打开所在文件夹",
+  "session.file.openInApp": "在 {{app}} 中打开",
+
   "session.header.open.fileManager": "文件管理器",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",

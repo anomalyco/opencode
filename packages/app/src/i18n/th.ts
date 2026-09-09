@@ -1167,6 +1167,8 @@ export const dict = {
   "session.header.reveal.finder": "แสดงใน Finder",
   "session.header.reveal.fileExplorer": "แสดงใน File Explorer",
   "session.header.reveal.containingFolder": "เปิดโฟลเดอร์ที่มีรายการนี้",
+  "session.file.openInApp": "เปิดใน {{app}}",
+
   "session.header.open.fileManager": "File Manager",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",

@@ -780,6 +780,8 @@ export const dict = {
   "session.header.reveal.finder": "Avdúka í Finder",
   "session.header.reveal.fileExplorer": "Avdúka í File Explorer",
   "session.header.reveal.containingFolder": "Opna innihaldandi mappu",
+  "session.file.openInApp": "Opna í {{app}}",
+
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

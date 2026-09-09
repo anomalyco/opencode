@@ -14,6 +14,7 @@ import {
 import { Dynamic } from "solid-js/web"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
+import { FileContextMenu } from "@/components/file-context-menu"
 import { pathToFileUrl, withFileDragImage, type Kind } from "@/components/file-tree"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
 import {
@@ -240,29 +241,31 @@ export default function FileTreeV2(props: {
                     <Show
                       when={row().node.type === "directory"}
                       fallback={
-                        <FileTreeNodeV2
-                          node={row().node}
-                          level={row().level}
-                          active={active()}
-                          draggable={draggable()}
-                          kinds={props.kinds}
-                          as="button"
-                          type="button"
-                          class="relative"
-                          onFocus={() => setFocused(row().node.path)}
-                          onBlur={() => setFocused(undefined)}
-                          onClick={() => selectFile(row().node, props.onFileClick)}
-                          onDblClick={() => selectFile(row().node, props.onFileDoubleClick)}
-                        >
-                          <GuideLines level={row().level} />
-                          <Show when={row().level > 0}>
-                            <div class="w-4 shrink-0" />
-                          </Show>
-                          <span class="filetree-iconpair size-4">
-                            <FileIcon node={row().node} class="size-4 filetree-icon filetree-icon--color" />
-                            <FileIcon node={row().node} class="size-4 filetree-icon filetree-icon--mono" mono />
-                          </span>
-                        </FileTreeNodeV2>
+                        <FileContextMenu path={row().node.originalPath}>
+                          <FileTreeNodeV2
+                            node={row().node}
+                            level={row().level}
+                            active={active()}
+                            draggable={draggable()}
+                            kinds={props.kinds}
+                            as="button"
+                            type="button"
+                            class="relative"
+                            onFocus={() => setFocused(row().node.path)}
+                            onBlur={() => setFocused(undefined)}
+                            onClick={() => selectFile(row().node, props.onFileClick)}
+                            onDblClick={() => selectFile(row().node, props.onFileDoubleClick)}
+                          >
+                            <GuideLines level={row().level} />
+                            <Show when={row().level > 0}>
+                              <div class="w-4 shrink-0" />
+                            </Show>
+                            <span class="filetree-iconpair size-4">
+                              <FileIcon node={row().node} class="size-4 filetree-icon filetree-icon--color" />
+                              <FileIcon node={row().node} class="size-4 filetree-icon filetree-icon--mono" mono />
+                            </span>
+                          </FileTreeNodeV2>
+                        </FileContextMenu>
                       }
                     >
                       <FileTreeNodeV2
