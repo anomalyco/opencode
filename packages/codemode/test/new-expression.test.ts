@@ -33,14 +33,24 @@ const supportedConstructors = async () => {
 }
 
 describe("new on a non-constructible callee", () => {
-  test("built-in functions without construction report a TypeError naming the callee", async () => {
+  test("built-in functions without construction point at the plain call", async () => {
+    // Number is a real constructor in JS, so the message must not claim otherwise.
     const failure = await error(`return new Number(42)`)
     expect(failure.kind).toBe("ExecutionFailure")
-    expect(failure.message).toStartWith("Number is not a constructor. Supported constructors: Object, Array, ")
+    expect(failure.message).toStartWith(
+      "new Number(...) is not supported; call Number(...) without new instead. Supported constructors: Object, Array, ",
+    )
     expect(failure.suggestions).toEqual([expect.stringContaining("Supported constructors: ")])
-    expect((await error(`return new Math.abs(1)`)).message).toStartWith("Math.abs is not a constructor.")
+    expect((await error(`return new String("a")`)).message).toStartWith("new String(...) is not supported")
+    expect((await error(`return new Math.abs(1)`)).message).toStartWith(
+      "new Math.abs(...) is not supported; call Math.abs(...) without new instead.",
+    )
+  })
+
+  test("non-callable values are not constructors", async () => {
     expect((await error(`return new tools.echo()`)).message).toStartWith("tools.echo is not a constructor.")
     expect((await error(`return new (1)()`)).message).toStartWith("The called value is not a constructor.")
+    expect((await error(`const Date = 5; return new Date()`)).message).toStartWith("Date is not a constructor.")
   })
 
   test("user-defined functions explain the documented gap", async () => {

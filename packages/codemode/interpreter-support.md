@@ -139,8 +139,9 @@ ultimate source of truth.
 - [x] `await` for CodeMode promises and callable thenables; a plain value passes through unchanged, though every
       `await` still defers its continuation one reaction turn.
 - [x] `new` for Array, Object, Error types, Date, RegExp, Map, Set, URL, URLSearchParams, and Promise. `new` on any
-      other value throws a catchable `TypeError` that names the callee and lists the supported constructors; a
-      user-defined function reports the constructor gap below instead of `X is not a constructor`.
+      other value throws a catchable `TypeError` that names the callee and lists the supported constructors: other
+      built-in functions such as `Number` say `new` is unsupported and point at the plain call, user-defined functions
+      report the constructor gap below, and non-callable values are not constructors.
 - [x] Arithmetic operators: `+`, `-`, `*`, `/`, `%`, and `**`.
 - [x] Equality and ordering: `==`, `!=`, `===`, `!==`, `<`, `<=`, `>`, and `>=`.
 - [x] Bitwise operators: `&`, `|`, `^`, `~`, `<<`, `>>`, and `>>>`.

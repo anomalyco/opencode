@@ -1272,13 +1272,16 @@ class Frame<R> {
       const construct = callee instanceof HostFunction ? (callee as HostFunction<R>).construct : undefined
       if (construct === undefined) {
         // `new` itself is supported, so a non-constructible callee is a TypeError like JS rather than
-        // unsupported syntax. User functions are a documented gap; everything else is not a constructor.
+        // unsupported syntax. Built-ins like Number are real constructors in JS, so do not claim
+        // otherwise; say `new` is unsupported for them and point at the plain call.
         const name = calleeDescription(node.callee)
         const hint = `Supported constructors: ${self.runtime.constructors.join(", ")}.`
         const message =
           callee instanceof CodeModeFunction
             ? `${name} cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead.`
-            : `${name} is not a constructor.`
+            : callee instanceof HostFunction
+              ? `new ${name}(...) is not supported; call ${name}(...) without new instead.`
+              : `${name} is not a constructor.`
         throw new InterpreterRuntimeError(`${message} ${hint}`, node, "ExecutionFailure", [hint]).as("TypeError")
       }
       const args = yield* self.evaluateCallArguments(node.arguments)

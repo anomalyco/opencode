@@ -57,7 +57,7 @@ describe("Number and Math", () => {
   test("Number valueOf does not enable boxed numbers", async () => {
     const failure = await error(`return new Number(42)`)
     expect(failure.kind).toBe("ExecutionFailure")
-    expect(failure.message).toContain("Number is not a constructor.")
+    expect(failure.message).toContain("new Number(...) is not supported; call Number(...) without new instead.")
   })
 })
 
