@@ -162,6 +162,11 @@ const layer = Layer.effectDiscard(
                 const ending = detectLineEnding(source.text)
                 const oldString = convertToLineEnding(input.oldString, ending)
                 const newString = convertToLineEnding(input.newString, ending)
+                if (oldString === newString) {
+                  return yield* new ToolFailure({
+                    message: "No changes to apply: oldString and newString are identical.",
+                  })
+                }
                 const replacements = countOccurrences(source.text, oldString)
                 if (replacements === 0) {
                   return yield* new ToolFailure({
