@@ -65,7 +65,6 @@ export interface Interface {
       }
     | undefined
   >
-  /** Outbound request preparation, one entry per Session flow. */
   readonly request: SessionModelRequest.Interface
 }
 

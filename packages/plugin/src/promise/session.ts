@@ -34,7 +34,6 @@ export interface SessionContext extends SessionRequest {
   tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>
 }
 
-/** Title generation is not an agent conversation and exposes no agent or tools. */
 export interface SessionTitle extends SessionRequest {
   /** Set to use this title and skip the model request. */
   result?: string

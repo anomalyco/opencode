@@ -41,7 +41,6 @@ const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
 export type ExecuteError = Tool.Error | Permission.DeclinedError | QuestionTool.CancelledError
 
 export interface Prepared<Event = SessionRequest> {
-  /** The hook event after every hook ran, including any output slots a hook set. */
   readonly event: Event
   readonly request: LLMRequest
   readonly options: StreamOptions
@@ -181,7 +180,6 @@ export interface Interface {
   readonly primary: (input: Input) => Effect.Effect<Prepared<SessionContext>>
   readonly compaction: (input: Input) => Effect.Effect<Prepared<SessionContext>>
   readonly generate: (input: Input) => Effect.Effect<Prepared<SessionContext>>
-  /** Runs `session.title` instead of `session.context`; no agent or tools. */
   readonly title: (input: Input) => Effect.Effect<Prepared<SessionTitle>>
 }
 
@@ -193,8 +191,6 @@ export const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const transport = yield* SessionModelTransport.Service
     const app = yield* App.Metadata
-
-    // `shape` runs the flow's plugin hook. Hooks mutate `tools` in place, so it is passed separately.
     const prepare = Effect.fn("SessionModelRequest.prepare")(function* <
       S extends SessionRequest & { tools?: Definitions },
     >(kind: SessionRequestKind, input: Input, shape: (draft: SessionRequest, tools: Definitions) => Effect.Effect<S>) {
@@ -284,8 +280,6 @@ export const layer = Layer.effect(
           new Error("Provider context is incompatible with the route selected by model request hooks"),
         )
 
-      // Hooks see each HTTP exchange as web Request/Response values. WebSockets bypass this,
-      // so registering an HTTP hook forces HTTP.
       const hasHttpHooks =
         (yield* hooks.has("session", "http.request", model.ref.providerID)) ||
         (yield* hooks.has("session", "http.response", model.ref.providerID))
