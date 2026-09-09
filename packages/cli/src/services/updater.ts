@@ -1,5 +1,5 @@
-import { Global } from "@opencode-ai/util/global"
-import { AppProcess } from "@opencode-ai/util/process"
+import { Global } from "@opencode/util/global"
+import { AppProcess } from "@opencode/util/process"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../version"
 import { Context, Duration, Effect, FileSystem, Layer, Ref, Schedule } from "effect"
 import { ChildProcess } from "effect/unstable/process"
@@ -19,6 +19,9 @@ export interface Interface {
   readonly method: () => Effect.Effect<Method | undefined>
   readonly latest: () => Effect.Effect<string, Error>
   readonly upgrade: (method: Method, version: string) => Effect.Effect<void, Error>
+  readonly removal: (method: Method) =>
+    | { readonly command: ReadonlyArray<string>; readonly run: Effect.Effect<void, Error> }
+    | undefined
 }
 
 export const pollUpdates = Effect.fnUntraced(function* (input: {
@@ -64,6 +67,8 @@ const make = Effect.gen(function* () {
     const manifest: { name: string; bin?: Record<string, string> } = yield* fs
       .readFileString(path.join(directory, "package.json"))
       .pipe(Effect.flatMap((text) => Effect.try(() => JSON.parse(text))))
+    // Source invocations run inside Bun or Node, which may themselves be npm packages.
+    if (!/^@opencode(?:-ai)?\/cli(?:-node)?$/.test(manifest.name)) return
     if (Object.values(manifest.bin ?? {}).some((bin) => path.resolve(directory, bin) === executable))
       return manifest.name
   }).pipe(Effect.orElseSucceed(() => undefined))
@@ -119,13 +124,33 @@ const make = Effect.gen(function* () {
     return results.find((result) => result.result.stdout.includes(installedPackage))?.check.method
   })
 
+  const removal = (method: Method) => {
+    if (method === "curl" || !installedPackage) return undefined
+    const commands = {
+      npm: ["npm", "uninstall", "--global", installedPackage],
+      pnpm: ["pnpm", "remove", "--global", installedPackage],
+      bun: ["bun", "remove", "--global", installedPackage],
+      yarn: ["yarn", "global", "remove", installedPackage],
+    }
+    const command = commands[method]
+    return {
+      command,
+      run: exec(command, "5 minutes").pipe(
+        Effect.flatMap((result) =>
+          result.code === 0
+            ? Effect.void
+            : Effect.fail(new Error(result.stderr.trim() || `Failed to uninstall with ${method}`)),
+        ),
+      ),
+    }
+  }
+
   const release = Effect.fnUntraced(function* () {
     const response = yield* Effect.tryPromise({
       try: (signal) =>
         fetch(
-          `https://update.opencode.ai/api/${encodeURIComponent(channel)}/${encodeURIComponent(OPENCODE_ARTIFACT)}/npm`,
+          `https://opencode.ai/update/api/${encodeURIComponent(channel)}/${encodeURIComponent(OPENCODE_ARTIFACT)}/npm?current=${encodeURIComponent(OPENCODE_VERSION)}`,
           {
-            headers: { "User-Agent": `opencode/${OPENCODE_VERSION}` },
             signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
           },
         ),
@@ -264,7 +289,7 @@ const make = Effect.gen(function* () {
     Effect.catch((error) => Effect.logWarning("update check failed", { error }).pipe(Effect.as(undefined))),
   )
 
-  return Service.of({ run, check, apply, method, latest, upgrade })
+  return Service.of({ run, check, apply, method, latest, upgrade, removal })
 })
 
 export const layer = Layer.effect(Service, make)

@@ -1,8 +1,8 @@
 export * as ConfigMcpPlugin from "./mcp.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Document, type Entry } from "@opencode-ai/schema/config"
-import type { ServerConfig } from "@opencode-ai/schema/mcp"
+import { define } from "@opencode/plugin/effect/plugin"
+import { Document, type Entry } from "@opencode/schema/config"
+import type { ServerConfig } from "@opencode/schema/mcp"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config.js"
 import { Mcp } from "../../mcp/index.js"

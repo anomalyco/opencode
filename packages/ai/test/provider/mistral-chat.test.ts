@@ -19,7 +19,7 @@ const chunk = (delta: object, finishReason: string | null = null, usage?: object
 
 describe("Mistral Chat", () => {
   test("exposes native provider and protocol identities", async () => {
-    const entrypoint = await import("@opencode-ai/ai/providers/mistral")
+    const entrypoint = await import("@opencode/ai/providers/mistral")
 
     expect(Mistral.id).toBe("mistral")
     expect(MistralChat.protocol.id).toBe("mistral-chat")
@@ -600,13 +600,28 @@ describe("Mistral Chat", () => {
         ["stop", "stop"],
         ["model_length", "length"],
         ["tool_calls", "tool-calls"],
-        ["error", "error"],
         ["future_reason", "unknown"],
       ] as const) {
         const response = yield* LLMClient.generate(request).pipe(
           Effect.provide(fixedResponse(sseEvents(chunk({}, raw)))),
         )
         expect(response.finishReason).toEqual({ normalized, raw })
+      }
+
+      for (const [raw, tag] of [
+        ["error", "UnknownProvider"],
+        ["network_error", "ProviderInternal"],
+      ] as const) {
+        const event = { ...chunk({}, raw), diagnostics: { trace: "failure" } }
+        const error = yield* LLMClient.generate(request).pipe(
+          Effect.provide(fixedResponse(sseEvents(event))),
+          Effect.flip,
+        )
+        expect(error).toMatchObject({
+          _tag: "AI.Error",
+          reason: { _tag: tag, body: JSON.stringify(event), http: { status: 200 } },
+          message: `Mistral Chat stopped with ${raw}`,
+        })
       }
 
       const truncated = yield* LLMClient.generate(request).pipe(

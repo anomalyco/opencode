@@ -1,4 +1,4 @@
-import { Image } from "@opencode-ai/core/image"
+import { Image } from "@opencode/core/image"
 import { Effect, Layer } from "effect"
 
 /** Passthrough resizer for tests that build Tool.node without a Location. */

@@ -1,4 +1,4 @@
-import { Project } from "@opencode-ai/schema/project"
+import { Project } from "@opencode/schema/project"
 import { Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
@@ -29,7 +29,7 @@ export const ProjectGroup = HttpApiGroup.make("server.project")
       OpenApi.annotations({
         identifier: "v2.project.update",
         summary: "Update project",
-        description: "Update project display metadata and workspace commands.",
+        description: "Update the project canonical directory, display metadata, and workspace commands.",
       }),
     ),
   )

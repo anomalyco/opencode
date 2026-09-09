@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { timelinePresets } from "@opencode-ai/session-ui/timeline/detail"
+import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { Persistence } from "@/runtime/persistence/schema"
 import {
   settingsSchema,
@@ -67,6 +67,7 @@ describe("settings schema", () => {
         mobileDiffWrap: true,
         terminalPlacement: "side",
         followUpBehavior: "steer",
+        experimentalBrowser: false,
       },
       appearance: {
         fontSize: 14,
@@ -128,6 +129,12 @@ describe("settings schema", () => {
     expect(settings.notifications).toEqual({ agent: false, permissions: true, errors: true })
     expect(settings.sounds).toMatchObject({ agent: "custom", agentEnabled: false, permissions: "staplebops-02" })
     expect(decode(encode(settings))).toEqual(settings)
+  })
+
+  test("browser attachment is opt-in and preserves an explicit choice", () => {
+    expect(decode({}).general.experimentalBrowser).toBe(false)
+    expect(decode({ general: { experimentalBrowser: true } }).general.experimentalBrowser).toBe(true)
+    expect(decode({ general: { experimentalBrowser: false } }).general.experimentalBrowser).toBe(false)
   })
 
   test.each([undefined, null, false, 7, "invalid", []].map((invalid) => [invalid]))(

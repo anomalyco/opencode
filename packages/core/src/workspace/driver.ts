@@ -1,7 +1,7 @@
 export * as WorkspaceDriver from "./driver.js"
 
-import { Workspace } from "@opencode-ai/schema/workspace"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { Workspace } from "@opencode/schema/workspace"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import type { Scope } from "effect"
 import type { EnvironmentDriver } from "../environment/driver.js"

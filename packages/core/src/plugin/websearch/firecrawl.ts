@@ -1,6 +1,6 @@
 export * as WebSearchFirecrawl from "./firecrawl.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Effect, Option, Schema, Scope } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { App } from "../../app.js"

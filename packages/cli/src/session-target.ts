@@ -1,5 +1,5 @@
-import type { LocationGetOutput, ModelRef, OpenCodeClient, SessionInfo } from "@opencode-ai/client/promise"
-import { Model } from "@opencode-ai/schema/model"
+import type { LocationGetOutput, ModelRef, OpenCodeClient, SessionInfo } from "@opencode/client/promise"
+import { Model } from "@opencode/schema/model"
 
 const SESSION_PAGE_LIMIT = 50
 

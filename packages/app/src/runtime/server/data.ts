@@ -1,7 +1,8 @@
-import type { Data } from "@opencode-ai/client/solid"
-import type { SessionInfo } from "@opencode-ai/client/promise"
+import type { Data } from "@opencode/client/solid"
+import type { SessionInfo } from "@opencode/client/promise"
 import { onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
+import { uuid } from "@/runtime/persistence/uuid"
 
 type SessionMutation = { readonly id: string; readonly type: "remove"; readonly sessionID: string }
 
@@ -35,7 +36,7 @@ export function createSessionMutations(remove: (sessionID: string) => Promise<vo
       return removed.size === 0 ? [...sessions] : sessions.filter((session) => !removed.has(session.id))
     },
     remove(sessionID: string) {
-      const mutation = { id: crypto.randomUUID(), type: "remove" as const, sessionID }
+      const mutation = { id: uuid(), type: "remove" as const, sessionID }
       setStore("session", (current) => [...current, mutation])
       return Promise.resolve()
         .then(() => remove(sessionID))

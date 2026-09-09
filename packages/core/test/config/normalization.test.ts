@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Duration, Schema } from "effect"
 import { FastCheck } from "effect/testing"
-import { ConfigNormalize } from "@opencode-ai/core/config/normalize"
-import { Info } from "@opencode-ai/schema/config"
+import { ConfigNormalize } from "@opencode/core/config/normalize"
+import { Info } from "@opencode/schema/config"
 
 const options = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
 

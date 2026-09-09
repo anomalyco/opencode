@@ -7,10 +7,10 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { ProviderID, type ModelID, type LLMRequest } from "../schema/index.js"
-import { profiles } from "./openai-compatible-profile.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("groq")
+const baseURL = "https://api.groq.com/openai/v1"
 
 export type ProviderOptions = Pick<OpenAIProviderOptionsInput, "reasoningEffort"> & {
   /** Controls visible reasoning on GPT-OSS; other models always use parsed reasoning. */
@@ -73,15 +73,15 @@ export const route = Route.make({
   provider: id,
   providerMetadataKey: "openai",
   protocol,
-  endpoint: Endpoint.path("/chat/completions", { baseURL: profiles.groq.baseURL }),
+  endpoint: Endpoint.path("/chat/completions", { baseURL }),
   framing: OpenAIChat.framing,
 })
 
 export const configure = (input: LanguageModelOptions = {}) => {
-  const { apiKey: _apiKey, auth: _auth, baseURL, ...defaults } = input
+  const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const configured = route.with({
     ...defaults,
-    endpoint: { baseURL: baseURL ?? profiles.groq.baseURL },
+    endpoint: { baseURL: endpoint ?? baseURL },
     auth: AuthOptions.bearer(input, "GROQ_API_KEY"),
   })
   return {

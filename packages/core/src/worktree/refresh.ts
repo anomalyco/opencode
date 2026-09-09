@@ -1,7 +1,7 @@
 export * as WorktreeRefresh from "./refresh.js"
 
 import { Effect, Layer } from "effect"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Location } from "../location.js"
 import { Plugin } from "../plugin.js"
 import { PluginSupervisor } from "../plugin/supervisor.js"

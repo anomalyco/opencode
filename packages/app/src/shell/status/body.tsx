@@ -1,5 +1,5 @@
-import { Switch } from "@opencode-ai/ui/switch"
-import { Tabs } from "@opencode-ai/ui/tabs"
+import { Switch } from "@opencode/ui/switch"
+import { Tabs } from "@opencode/ui/tabs"
 import { createMemo, createResource, For, Index, type JSXElement, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useMcpToggle } from "@/providers/connect/mcp"

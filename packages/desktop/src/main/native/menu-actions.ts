@@ -1,5 +1,5 @@
 import { BrowserWindow } from "electron"
-import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
+import type { DesktopMenuAction } from "@opencode/app/desktop-menu"
 import { setZoomFactor } from "../windows"
 
 export type DesktopMenuActionHandlers = Partial<{

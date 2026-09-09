@@ -1,7 +1,7 @@
 export * as Config from "."
 
 import { createBindingLookup } from "@opentui/keymap/extras"
-import { Vcs } from "@opencode-ai/schema/vcs"
+import { Vcs } from "@opencode/schema/vcs"
 import { Schema } from "effect"
 import { createContext, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
@@ -190,6 +190,9 @@ export const Info = Schema.Struct({
     Schema.Struct({
       thinking: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide model reasoning",
+      }),
+      tools: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
+        description: "Show or hide tool calls and the assistant text that precedes them",
       }),
       shell_output: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide raw shell tool output",

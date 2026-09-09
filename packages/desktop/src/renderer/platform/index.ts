@@ -3,7 +3,7 @@ import {
   ServerConnection,
   type Platform,
   type UpdaterPlatform,
-} from "@opencode-ai/app/desktop"
+} from "@opencode/app/desktop"
 import type { ElectronAPI } from "../api-types"
 import { setPinchZoomEnabled, webviewZoom } from "../window/zoom"
 import { windowFullscreen } from "../window/fullscreen"
@@ -31,6 +31,35 @@ export function createDesktopPlatform(
     windowID: windowState.id,
     ...createDesktopFiles(api, os, ACCEPTED_FILE_EXTENSIONS),
     ...createDesktopStorage(api),
+    browserPane: {
+      register(target, onEvent) {
+        const bindingID = crypto.randomUUID()
+        let closed = false
+        const dispose = api.browserPane.onEvent((value) => {
+          if (!closed && value.bindingID === bindingID) onEvent(value.event)
+        })
+        const ready = api.browserPane.request({ type: "register", bindingID, target })
+        // Failures reach the owner through the closed-state event; keep the bare promise handled.
+        void ready.catch(() => undefined)
+        return {
+          setLayout(layout) {
+            if (!closed)
+              void ready
+                .then(() =>
+                  api.browserPane.send({ type: "layout", bindingID, ...(layout === undefined ? {} : { layout }) }),
+                )
+                .catch(() => undefined)
+          },
+          command: (command) => ready.then(() => api.browserPane.request({ type: "command", bindingID, command })),
+          close() {
+            if (closed) return
+            closed = true
+            dispose()
+            void ready.then(() => api.browserPane.request({ type: "close", bindingID })).catch(() => undefined)
+          },
+        }
+      },
+    },
     updater,
     exportDebugLogs: () => api.exportDebugLogs(),
     setForceFocus: (enabled) => api.setForceFocus(enabled),
@@ -50,6 +79,7 @@ export function createDesktopPlatform(
       await api.setDefaultServerUrl(url)
     },
     wslServers: os === "windows" ? api.wslServers : undefined,
+    sshServers: api.sshServers,
     webviewZoom,
     windowFullscreen,
     getPinchZoomEnabled: () => api.getPinchZoomEnabled(),

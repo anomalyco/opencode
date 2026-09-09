@@ -200,6 +200,9 @@ ultimate source of truth.
 ## Objects and properties
 
 - [x] Own-field reads and writes on plain data objects.
+- [x] `new` dispatches on the evaluated constructor value, so aliases (`const D = Date; new D()`), constructors held in
+      objects, and constructors passed as arguments work, while a shadowed name (`const Date = 5; new Date()`) does
+      not construct.
 - [x] `Object()` and `new Object()` return `{}` for nullish arguments and pass objects through unchanged;
       primitive wrapper objects (`Object(1)`) are rejected explicitly.
 - [x] Computed property names and object spread.

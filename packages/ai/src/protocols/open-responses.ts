@@ -1,5 +1,5 @@
 import { Effect, Option, Schema } from "effect"
-import type { Content } from "@opencode-ai/schema/tool"
+import type { Content } from "@opencode/schema/tool"
 import { HttpTransport } from "../route/transport/index.js"
 import { Protocol } from "../route/protocol.js"
 import {
@@ -408,6 +408,9 @@ export type NormalizedEvent = Event & { readonly item?: OutputItem | null }
 export interface ProviderAdapter {
   readonly id: string
   readonly name: string
+  readonly nativeTool?: (
+    native: NonNullable<ToolDefinition["native"]>,
+  ) => Effect.Effect<{ readonly type: string }, AIError>
   readonly lowerMedia?: (input: {
     readonly part: MediaPart
     readonly media: ProviderShared.NormalizedMedia
@@ -819,11 +822,13 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
       projected.tools.length === 0
         ? undefined
         : yield* Effect.forEach(projected.tools, (tool) =>
-            lowerTool(
-              adapter.name,
-              tool,
-              ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
-            ),
+            tool.native !== undefined && adapter.nativeTool
+              ? adapter.nativeTool(tool.native)
+              : lowerTool(
+                  adapter.name,
+                  tool,
+                  ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
+                ),
           ),
     tool_choice:
       allowedToolChoice(request) ??

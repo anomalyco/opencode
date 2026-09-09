@@ -1,1 +1,1 @@
-export { Rpc } from "@opencode-ai/schema/rpc"
+export { Rpc } from "@opencode/schema/rpc"

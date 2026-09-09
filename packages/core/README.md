@@ -1,3 +1,3 @@
-# @opencode-ai/core
+# @opencode/core
 
 Core runtime services for OpenCode.
