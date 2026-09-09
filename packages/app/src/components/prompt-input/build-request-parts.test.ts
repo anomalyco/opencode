@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Prompt } from "@/context/prompt"
+import { filePartFromFileURL } from "./attachments"
 import { buildRequestParts } from "./build-request-parts"
 
 describe("buildRequestParts", () => {
@@ -256,6 +257,75 @@ describe("buildRequestParts", () => {
       // Should be a normal Unix path
       expect(filePart.url).toBe("file:///home/user/project/src/app.ts")
     }
+  })
+
+  test("preserves decoded paths and canonical URLs from desktop file drops", () => {
+    const attachment = filePartFromFileURL("file:///home/carole/Bureau/%3F%3F%3F.png")
+    if (!attachment) throw new Error("Expected a file attachment")
+
+    const result = buildRequestParts({
+      prompt: [attachment],
+      context: [],
+      images: [],
+      text: attachment.content,
+      messageID: "msg_drop_1",
+      sessionID: "ses_drop_1",
+      sessionDirectory: "/repo",
+    })
+
+    expect(result.requestParts.find((part) => part.type === "file")).toMatchObject({
+      url: "file:///home/carole/Bureau/%3F%3F%3F.png",
+      source: {
+        type: "file",
+        path: "/home/carole/Bureau/???.png",
+        text: { value: "@/home/carole/Bureau/???.png" },
+      },
+    })
+  })
+
+  test("resolves relative paths from sidebar file-tree drags against sessionDirectory", () => {
+    const attachment = filePartFromFileURL("file:packages/app/src/foo.ts")
+    if (!attachment) throw new Error("Expected a file attachment")
+
+    const result = buildRequestParts({
+      prompt: [attachment],
+      context: [],
+      images: [],
+      text: attachment.content,
+      messageID: "msg_drop_2",
+      sessionID: "ses_drop_2",
+      sessionDirectory: "/repo",
+    })
+
+    expect(result.requestParts.find((part) => part.type === "file")).toMatchObject({
+      url: "file:///repo/packages/app/src/foo.ts",
+      source: {
+        type: "file",
+        path: "/repo/packages/app/src/foo.ts",
+        text: { value: "@packages/app/src/foo.ts" },
+      },
+    })
+  })
+
+  test("keeps reserved characters in relative file-tree drag paths", () => {
+    expect(filePartFromFileURL("file:packages/app/??.ts")).toEqual({
+      type: "file",
+      path: "packages/app/??.ts",
+      content: "@packages/app/??.ts",
+      start: 0,
+      end: 0,
+    })
+  })
+
+  test("parses single-slash file URLs with case-insensitive schemes", () => {
+    expect(filePartFromFileURL("FILE:/tmp/file%3F.txt")).toEqual({
+      type: "file",
+      path: "/tmp/file?.txt",
+      url: "file:///tmp/file%3F.txt",
+      content: "@/tmp/file?.txt",
+      start: 0,
+      end: 0,
+    })
   })
 
   test("handles macOS paths correctly", () => {
