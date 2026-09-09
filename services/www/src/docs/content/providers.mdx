@@ -110,7 +110,7 @@ role for other Foundry models. If a request fails because the token belongs to a
 
 ## WebSocket transport
 
-OpenAI, Azure, and xAI Responses models keep one WebSocket connection open per session and send each step over it
+OpenAI and supported Azure Responses models keep one WebSocket connection open per session and send each step over it
 instead of opening a new HTTP request. While the request prefix is unchanged, consecutive steps only transmit what was
 added since the previous response, which cuts upload volume on long sessions. Provider compaction runs over the same
 connection.
@@ -119,7 +119,8 @@ The connection is transparent. When the provider closes the socket, the next ste
 be opened at all, the session continues over HTTP. Plugins that register `http.request` or `http.response` hooks for a
 provider keep it on HTTP so the hooks observe every request.
 
-Set `websocket: false` on a provider or model to keep it on HTTP; a model policy overrides the provider policy:
+WebSockets are opt-in per built-in provider. Set `websocket: true` to enable a supported provider or model, or `false`
+to disable a built-in opt-in; a model policy overrides the provider policy:
 
 ```jsonc title="opencode.jsonc"
 {

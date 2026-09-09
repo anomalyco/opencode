@@ -488,13 +488,14 @@ describe("AzurePlugin", () => {
 
         yield* addPlugin()
 
-        expect(
-          required(yield* catalog.model.get(Provider.ID.azure, models.responses)).capabilities.responsesWebsockets,
-        ).toBe(true)
-        for (const modelID of [models.chat, models.preview, models.deploymentURL, models.gateway, models.nonAzure])
-          expect(
-            required(yield* catalog.model.get(Provider.ID.azure, modelID)).capabilities.responsesWebsockets,
-          ).toBeUndefined()
+        const responses = required(yield* catalog.model.get(Provider.ID.azure, models.responses))
+        expect(responses.capabilities.responsesWebsockets).toBe(true)
+        expect(responses.websocket).toBe(true)
+        for (const modelID of [models.chat, models.preview, models.deploymentURL, models.gateway, models.nonAzure]) {
+          const model = required(yield* catalog.model.get(Provider.ID.azure, modelID))
+          expect(model.capabilities.responsesWebsockets).toBeUndefined()
+          expect(model.websocket).toBeUndefined()
+        }
       }),
     ),
   )

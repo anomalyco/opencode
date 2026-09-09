@@ -257,6 +257,7 @@ export const OpenAIPlugin = define({
       for (const model of item.models.values()) {
         evt.model.update(item.provider.id, model.id, (draft) => {
           draft.capabilities.responsesWebsockets = true
+          draft.websocket = true
         })
       }
       if (!chatgpt) return
