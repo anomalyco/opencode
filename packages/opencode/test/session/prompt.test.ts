@@ -52,7 +52,7 @@ import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Format } from "../../src/format"
 import { TestInstance } from "../fixture/fixture"
 import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
-import { reply, TestLLMServer } from "../lib/llm-server"
+import { httpError, reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -498,6 +498,100 @@ noLLMServer.instance(
       expect(result.info.id).toBe(assistantID)
     }),
   { config: cfg },
+)
+
+it.instance("loop gives up after repeated auto-compaction instead of looping forever", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    // When what exceeds the provider's window is the SYSTEM PROMPT plus the tool
+    // definitions — not the conversation — compaction can never fix it: it only
+    // trims history. Every compaction "succeeds" (the request really is smaller)
+    // and the very next real turn overflows again, forever.
+    const isCompactionRequest = (hit: { body: Record<string, unknown> }) =>
+      JSON.stringify(hit.body).includes("anchored summary")
+    // The background title() call also hits the mock once and is not a real turn.
+    const isTitleRequest = (hit: { body: Record<string, unknown> }) =>
+      JSON.stringify(hit.body).includes("Generate a title for this conversation")
+    // A real, successful turn that is nevertheless oversized: high token usage
+    // keeps isOverflow() true even though the model answered normally.
+    const oversizedTurn = () =>
+      reply().text("Task completed. No further steps needed.").usage({ input: 95_000, output: 40 }).stop()
+
+    const user = yield* sessions.updateMessage({
+      id: MessageID.ascending(),
+      role: "user",
+      sessionID: chat.id,
+      agent: "build",
+      model: ref,
+      time: { created: Date.now() },
+    })
+    yield* sessions.updatePart({
+      id: PartID.ascending(),
+      messageID: user.id,
+      sessionID: chat.id,
+      type: "text",
+      text: "say one word",
+    })
+    // Pre-seed an ALREADY-FINISHED oversized assistant reply, so the loop's very
+    // first decision can only come from the preventive isOverflow() check.
+    yield* sessions.updateMessage({
+      id: MessageID.ascending(),
+      parentID: user.id,
+      role: "assistant",
+      sessionID: chat.id,
+      mode: "build",
+      agent: "build",
+      path: { cwd: "/", root: "/" },
+      cost: 0,
+      tokens: { input: 95_000, output: 40, reasoning: 0, cache: { read: 0, write: 0 } },
+      modelID: ref.modelID,
+      providerID: ref.providerID,
+      time: { created: Date.now(), completed: Date.now() },
+      finish: "stop",
+    })
+    // Without a NEWER user message the loop's "nothing left to do" exit fires
+    // first and the preventive check is never reached.
+    const followUp = yield* sessions.updateMessage({
+      id: MessageID.ascending(),
+      role: "user",
+      sessionID: chat.id,
+      agent: "build",
+      model: ref,
+      time: { created: Date.now() },
+    })
+    yield* sessions.updatePart({
+      id: PartID.ascending(),
+      messageID: followUp.id,
+      sessionID: chat.id,
+      type: "text",
+      text: "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
+    })
+
+    // Queue more oversized turns than the cap allows: what is measured is how
+    // many the loop TRIES, not whether the queue happens to run out.
+    const many = <A>(n: number, make: () => A) => Array.from({ length: n }, make)
+    yield* llm.pushMatch((hit) => !isCompactionRequest(hit), ...many(8, oversizedTurn))
+    yield* llm.pushMatch(isCompactionRequest, ...many(8, () => reply().text("summary").stop()))
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    const hits = yield* llm.hits
+    const realTurnHits = hits.filter((hit) => !isCompactionRequest(hit) && !isTitleRequest(hit))
+
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.info.error?.name).toBe("ContextOverflowError")
+      expect(result.info.finish).toBe("error")
+    }
+    // Bounded, not infinite. Without the cap the loop runs past every queued
+    // oversized reply and ends on the mock's default zero-usage response — a
+    // benign "stop" with no error, which is the worse outcome: the session quietly
+    // stops doing what it was asked instead of saying why it cannot.
+    expect(realTurnHits.length).toBeLessThanOrEqual(5)
+  }),
 )
 
 it.instance("loop exits without an LLM request for interrupted orphan tool calls", () =>

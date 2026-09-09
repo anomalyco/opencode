@@ -79,6 +79,13 @@ IMPORTANT:
 - Complete all necessary research and tool calls BEFORE calling this tool
 - This tool provides your final answer - no further actions are taken after calling it`
 
+// Compaction can only shrink the CONVERSATION. When what exceeds the provider's
+// window is the fixed overhead — system prompt plus tool definitions — every
+// compaction "succeeds" (the request really is smaller) and the very next turn
+// overflows again, forever. Cap consecutive compactions so the session reports
+// the real problem instead of looping until someone kills it.
+const MAX_CONSECUTIVE_COMPACTIONS = 3
+
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
 function mcpResourceBase64Size(value: string) {
@@ -1078,11 +1085,46 @@ const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
+    // The breaker's outcome: surface the real problem on the assistant message
+    // instead of continuing to compact. Compaction cannot shrink the system
+    // prompt or the tool set, so repeating it can never help here — the useful
+    // answer is which knob the user has to turn.
+    const giveUpOnCompaction = Effect.fn("SessionPrompt.giveUpOnCompaction")(function* (input: {
+      sessionID: SessionID
+      lastUser: SessionV1.User
+      model: { providerID: ProviderV2.ID; id: ModelV2.ID }
+      ctx: { directory: string; worktree: string }
+    }) {
+      const error = new SessionV1.ContextOverflowError({
+        message: `Compaction failed to bring the request under the provider's limit after ${MAX_CONSECUTIVE_COMPACTIONS} attempts in a row. The system prompt or the tool set alone likely exceeds it, and compaction cannot reduce either — reduce the active tools/agents, or use a model with a larger context window.`,
+      }).toObject()
+      const message: SessionV1.Assistant = {
+        id: MessageID.ascending(),
+        parentID: input.lastUser.id,
+        role: "assistant",
+        mode: input.lastUser.agent,
+        agent: input.lastUser.agent,
+        variant: input.lastUser.model.variant,
+        path: { cwd: input.ctx.directory, root: input.ctx.worktree },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: input.model.id,
+        providerID: input.model.providerID,
+        time: { created: Date.now(), completed: Date.now() },
+        sessionID: input.sessionID,
+        error,
+        finish: "error",
+      }
+      yield* sessions.updateMessage(message)
+      yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error })
+    })
+
     const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
       function* (sessionID: SessionID) {
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        let consecutiveCompactions = 0
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1158,14 +1200,26 @@ const layer = Layer.effect(
             continue
           }
 
-          if (
-            lastFinished &&
+          const stillOverflowing =
+            lastFinished !== undefined &&
             lastFinished.summary !== true &&
             (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
-          ) {
+
+          if (stillOverflowing) {
+            consecutiveCompactions++
+            if (consecutiveCompactions > MAX_CONSECUTIVE_COMPACTIONS) {
+              yield* giveUpOnCompaction({ sessionID, lastUser, model, ctx })
+              break
+            }
             yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
             continue
           }
+
+          // A finished turn that no longer overflows means compaction did its job:
+          // the streak is over. Resetting anywhere else — e.g. on any completed
+          // turn — would defeat the cap in exactly the case it exists for, where
+          // every turn "succeeds" and every turn is still too large.
+          if (lastFinished !== undefined && lastFinished.summary !== true) consecutiveCompactions = 0
 
           const agent = yield* agents.get(lastUser.agent)
           if (!agent) {
@@ -1318,6 +1372,11 @@ const layer = Layer.effect(
 
             if (result === "stop") return "break" as const
             if (result === "compact") {
+              consecutiveCompactions++
+              if (consecutiveCompactions > MAX_CONSECUTIVE_COMPACTIONS) {
+                yield* giveUpOnCompaction({ sessionID, lastUser, model, ctx })
+                return "break" as const
+              }
               yield* compaction.create({
                 sessionID,
                 agent: lastUser.agent,
@@ -1325,6 +1384,7 @@ const layer = Layer.effect(
                 auto: true,
                 overflow: !handle.message.finish,
               })
+              return "continue" as const
             }
             return "continue" as const
           }).pipe(
