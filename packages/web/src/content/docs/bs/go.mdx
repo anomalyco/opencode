@@ -85,18 +85,62 @@ Trenutna lista modela uključuje:
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
+- **Omen Alpha**
 
 Lista modela se može mijenjati dok testiramo i dodajemo nove.
 
 ---
 
+## Gdje ga mogu koristiti?
+
+OpenCode Go je osmišljen za [OpenCode](https://opencode.ai) i druge agente za programiranje
+koji šalju slične vrste zahtjeva. Saobraćaj se nadzire radi otkrivanja zloupotrebe koja
+drugim korisnicima narušava iskustvo.
+
+Vaš klijent treba:
+
+1. Slati tipičan saobraćaj agenta za programiranje.
+2. Identifikovati se vlastitim user agentom, kao što je `my-coding-agent/1.0`, a ne
+   generičkim nazivom SDK-a ili HTTP biblioteke.
+3. Slati stabilan ID sesije u zaglavlju `x-opencode-session` za svaki razgovor kako bismo mogli optimizovati usmjeravanje i
+   keširanje promptova.
+
+### Provjereni klijenti
+
+Pored OpenCode-a, potvrđeno je da sljedeći klijenti ispravno rade
+s OpenCode Go. Ipak, ne garantiramo da će nastaviti raditi i u budućnosti.
+
+| Klijent           | Podrška za sesije                                                                                                                                                                                                                                          |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hermes**        | Buildovi koji sadrže [PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864) šalju zaglavlje u glavnim i pomoćnim OpenCode zahtjevima. Ispravka je spojena nakon verzije v0.21.0; samo to izdanje je ne sadrži.                             |
+| **Claude Code**   | Go prepoznaje njegovo izvorno zaglavlje sesije. Wrapper za prilagođeno zaglavlje nije potreban.                                                                                                                                                            |
+| **Codex**         | Go prepoznaje njegovo izvorno zaglavlje sesije. Neke verzije i proxy konfiguracije ga i dalje izostavljaju; sačuvajte zaglavlje sesije pri prosljeđivanju zahtjeva.                                                                                        |
+| **ZCode**         | Go prepoznaje njegovo izvorno zaglavlje sesije. Naš [zahtjev za `x-opencode-session`](https://github.com/zai-org/feedback/issues/492) i dalje je otvoren, ali slanje tog konkretnog zaglavlja više nije potrebno.                                          |
+| **Pi**            | Trenutni buildovi šalju informacije o sesiji za OpenCode. Ažurirajte starije instalacije.                                                                                                                                                                  |
+| **jcode**         | Ažurirajte na **v0.81.6 ili noviju**, koja uključuje [ispravku zaglavlja sesije](https://github.com/1jehuang/jcode/issues/1167).                                                                                                                           |
+| **Kilo Code CLI** | Buildovi koji sadrže [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) vraćaju OpenCode zaglavlja sesije. Ova ispravka obuhvata CLI, ali ne i VS Code ekstenziju. Pogledajte [issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723). |
+
+### Poznati problematični klijenti
+
+Ovim klijentima nedostaje podrška za sesije ili je ona nepotpuna u verzijama koje smo
+istražili. Povezani izvještaji prate ispravke i zaobilazna rješenja.
+
+| Klijent                 | Status i praćenje                                                                                                                                                                                                                                     |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DeepSeek Harness**    | Informacije o sesiji stižu za neke putanje modela, ali nedostaju za druge. Prepoznajemo njegovo izvorno zaglavlje; preostaje da se ono šalje kroz sve adaptere. [Discussion #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495). |
+| **GitHub Copilot Chat** | Automatska podrška za zaglavlje sesije zatražena je u [VS Code issue #334186](https://github.com/microsoft/vscode/issues/334186).                                                                                                                     |
+| **Kimi Code**           | Automatska podrška za zaglavlje sesije zatražena je u [issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506).                                                                                                                             |
+| **MiMo Code**           | [Issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) ima predloženu ispravku u [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327), koji još nije spojen.                                                                     |
+
 ## Ograničenja upotrebe
 
-OpenCode Go uključuje sljedeća ograničenja:
+OpenCode Go uključuje sljedeća osnovna ograničenja:
 
 - **Ograničenje od 5 sati** — $12 potrošnje
 - **Sedmično ograničenje** — $30 potrošnje
 - **Mjesečno ograničenje** — $60 potrošnje
+
+Efektivna potrošnja razlikuje se po modelu; pogledajte tabelu ispod.
 
 Ograničenja su definisana u dolarskoj vrijednosti. To znači da vaš stvarni broj zahtjeva zavisi od modela koji koristite. Jeftiniji modeli poput MiMo-V2.5 omogućavaju više zahtjeva, dok skuplji modeli poput GLM-5.2 omogućavaju manje.
 
@@ -130,8 +174,9 @@ Tabela ispod pruža procijenjeni broj zahtjeva na osnovu tipičnih obrazaca kori
 | DeepSeek V4 Flash Vision Exp | 3,800              | 9,450             | 18,900            |
 | Hy4 preview                  | 1,350              | 3,380             | 6,770             |
 | Hy3                          | 4,300              | 10,750            | 21,500            |
+| Omen Alpha                   | 11,600             | 29,000            | 57,900            |
 
-Procjene se zasnivaju na zapaženim obrascima zahtjeva:
+Procjene koriste sljedeći broj tokena po zahtjevu; stvarna potrošnja varira.
 
 - Grok 4.6 — 390 ulaznih, 32,500 keširanih, 120 izlaznih tokena po zahtjevu
 - GLM-5.3-Flash — 1,000 ulaznih (input), 55,000 keširanih, 200 izlaznih (output) tokena po zahtjevu
@@ -156,6 +201,7 @@ Procjene se zasnivaju na zapaženim obrascima zahtjeva:
 - Hy3 — 830 ulaznih, 71,500 keširanih, 295 izlaznih tokena po zahtjevu
 - MiMo-V2.5 — 830 ulaznih, 71,500 keširanih, 295 izlaznih tokena po zahtjevu
 - MiMo-V2.5-Pro — 790 ulaznih, 86,000 keširanih, 305 izlaznih tokena po zahtjevu
+- Omen Alpha — 300 ulaznih, 40.000 keširanih, 100 izlaznih tokena po zahtjevu
 
 Procjene se također zasnivaju na sljedećim cijenama po 1M tokena i mjesečnoj potrošnji uključenoj uz svaki model:
 
@@ -195,6 +241,7 @@ Procjene se također zasnivaju na sljedećim cijenama po 1M tokena i mjesečnoj 
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15       |
 | Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | $30       |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60       |
+| Omen Alpha                              | $0.20  | $0.66  | $0.04       | -            | $100      |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak sati su 01:00-04:00 i 06:00-10:00 UTC od ponedjeljka do petka; svi ostali sati, uključujući vikende, su Off-Peak. [Saznajte više](https://api-docs.deepseek.com/quick_start/pricing/).
 
@@ -220,7 +267,7 @@ nakon što dostignete ograničenja upotrebe umjesto blokiranja zahtjeva.
 
 ### Zašto neki modeli imaju manju uključenu potrošnju
 
-Uz Go plaćate $10 mjesečno, a cilj nam je omogućiti vam potrošnju šest puta veću od tog iznosa.
+Uz Go plaćate $10 mjesečno, a za većinu modela cilj nam je omogućiti vam potrošnju šest puta veću od tog iznosa.
 
 Za većinu modela to postižemo količinskim popustima i rezervisanim GPU kapacitetom. Tu uštedu zatim prenosimo na vas primjenom faktora šest.
 
@@ -263,6 +310,7 @@ Također možete pristupiti Go modelima putem sljedećih API endpointa.
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Omen Alpha                   | omen-alpha                   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 [Model id](/docs/config/#models) u vašoj OpenCode konfiguraciji
 koristi format `opencode-go/<model-id>`. Na primjer, za Kimi K3, koristili biste
@@ -310,12 +358,13 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash Vision Exp | Ne koristi se     | 0 dana               |
 | Hy4 preview                  | Ne koristi se     | 0 dana               |
 | Hy3                          | Ne koristi se     | 0 dana               |
+| Omen Alpha                   | Ne koristi se     | 0 dana               |
 
 - **Grok 4.6:** ZDR onemogućava važne API funkcije koje zavise od pohranjenih podataka, uključujući Responses API s očuvanjem stanja, Files and Collections i Batch API. [Saznajte više](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Zapisi o nadzoru zloupotrebe generišu se za svako korištenje API funkcija i čuvaju do 30 dana. [Saznajte više](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
 - **Muse Spark 1.3 Contributor:** Znatno snižene cijene tokena u zamjenu za dopuštenje da se vaši promptovi i odgovori modela koriste za treniranje budućih Meta modela. Dostupnost je ograničena na regije dopuštene [Pravilima geografskog korištenja](https://ai.developer.meta.com/legal/geographic-use-policy) kompanije Meta. [Saznajte više](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Muse Spark 1.2 Contributor:** Znatno snižene cijene tokena u zamjenu za dopuštenje da se vaši promptovi i odgovori modela koriste za treniranje budućih Meta modela. Dostupnost je ograničena na regije dopuštene [Pravilima geografskog korištenja](https://ai.developer.meta.com/legal/geographic-use-policy) kompanije Meta. [Saznajte više](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
-- **DeepSeek V4 Flash:** ZDR sporazum obnavlja se mjesečno. Trenutni sporazum važi do 31. augusta 2026.
+- **DeepSeek V4 Flash:** ZDR sporazum obnavlja se mjesečno. Trenutni sporazum važi do 30. septembra 2026.
 
 ---
 

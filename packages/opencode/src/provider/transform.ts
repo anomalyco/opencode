@@ -706,17 +706,29 @@ function anthropicBindsThinking(apiId: string) {
 const ANTHROPIC_BLOCK_BINDING = { prefixMismatchBehavior: "drop_block" }
 
 function anthropicBlockBinding(model: Provider.Model, options: { [x: string]: any }) {
+  const sdk = sdkKey(model.api.npm)
+  const key = sdk === "bedrock" ? "reasoningConfig" : sdk === "anthropic" ? "thinking" : undefined
+  // Consume the OpenCode-only opt-out even on models outside the default scope.
+  if (key && options[key]?.blockBinding === false) {
+    const result = { ...options, [key]: { ...options[key] } }
+    delete result[key].blockBinding
+    if (Object.keys(result[key]).length === 0) delete result[key]
+    return result
+  }
+
   if (!anthropicBindsThinking(model.api.id)) return options
   switch (model.api.npm) {
     case "@ai-sdk/anthropic":
     case "@ai-sdk/google-vertex/anthropic": {
       const thinking = options.thinking ?? { type: "adaptive" }
       if (thinking.type !== "adaptive" && thinking.type !== "enabled") return options
+      if (thinking.blockBinding !== undefined) return options
       return { ...options, thinking: { ...thinking, blockBinding: ANTHROPIC_BLOCK_BINDING } }
     }
     case "@ai-sdk/amazon-bedrock": {
       const reasoningConfig = options.reasoningConfig ?? { type: "adaptive" }
       if (reasoningConfig.type !== "adaptive" && reasoningConfig.type !== "enabled") return options
+      if (reasoningConfig.blockBinding !== undefined) return options
       return { ...options, reasoningConfig: { ...reasoningConfig, blockBinding: ANTHROPIC_BLOCK_BINDING } }
     }
   }
@@ -1812,11 +1824,14 @@ function reasoningEffort(model: Provider.Model, effort: string) {
     case "ai-gateway-provider":
     case "merge-gateway-ai-sdk-provider":
       return { reasoningEffort: effort }
+    case "gitlab-ai-provider":
+      if (model.family?.startsWith("gpt")) return { reasoningEffort: effort }
+      if (model.family?.startsWith("claude")) return { thinking: { type: "adaptive", effort } }
+      return
     case "@ai-sdk/cohere":
     case "@ai-sdk/perplexity":
     case "@ai-sdk/vercel":
     case "@ai-sdk/alibaba":
-    case "gitlab-ai-provider":
       return
   }
 }
