@@ -19,6 +19,9 @@ export interface Interface {
   readonly method: () => Effect.Effect<Method | undefined>
   readonly latest: () => Effect.Effect<string, Error>
   readonly upgrade: (method: Method, version: string) => Effect.Effect<void, Error>
+  readonly removal: (method: Method) =>
+    | { readonly command: ReadonlyArray<string>; readonly run: Effect.Effect<void, Error> }
+    | undefined
 }
 
 export const pollUpdates = Effect.fnUntraced(function* (input: {
@@ -64,6 +67,8 @@ const make = Effect.gen(function* () {
     const manifest: { name: string; bin?: Record<string, string> } = yield* fs
       .readFileString(path.join(directory, "package.json"))
       .pipe(Effect.flatMap((text) => Effect.try(() => JSON.parse(text))))
+    // Source invocations run inside Bun or Node, which may themselves be npm packages.
+    if (!/^@opencode(?:-ai)?\/cli(?:-node)?$/.test(manifest.name)) return
     if (Object.values(manifest.bin ?? {}).some((bin) => path.resolve(directory, bin) === executable))
       return manifest.name
   }).pipe(Effect.orElseSucceed(() => undefined))
@@ -118,6 +123,27 @@ const make = Effect.gen(function* () {
     )
     return results.find((result) => result.result.stdout.includes(installedPackage))?.check.method
   })
+
+  const removal = (method: Method) => {
+    if (method === "curl" || !installedPackage) return undefined
+    const commands = {
+      npm: ["npm", "uninstall", "--global", installedPackage],
+      pnpm: ["pnpm", "remove", "--global", installedPackage],
+      bun: ["bun", "remove", "--global", installedPackage],
+      yarn: ["yarn", "global", "remove", installedPackage],
+    }
+    const command = commands[method]
+    return {
+      command,
+      run: exec(command, "5 minutes").pipe(
+        Effect.flatMap((result) =>
+          result.code === 0
+            ? Effect.void
+            : Effect.fail(new Error(result.stderr.trim() || `Failed to uninstall with ${method}`)),
+        ),
+      ),
+    }
+  }
 
   const release = Effect.fnUntraced(function* () {
     const response = yield* Effect.tryPromise({
@@ -263,7 +289,7 @@ const make = Effect.gen(function* () {
     Effect.catch((error) => Effect.logWarning("update check failed", { error }).pipe(Effect.as(undefined))),
   )
 
-  return Service.of({ run, check, apply, method, latest, upgrade })
+  return Service.of({ run, check, apply, method, latest, upgrade, removal })
 })
 
 export const layer = Layer.effect(Service, make)
