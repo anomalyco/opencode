@@ -9,6 +9,7 @@ import { Token } from "@/util/token"
 import { SessionProcessor } from "./processor"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
+import { Skill } from "@/skill"
 import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/storage"
 
@@ -194,6 +195,7 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const session = yield* Session.Service
     const agents = yield* Agent.Service
+    const skill = yield* Skill.Service
     const plugin = yield* Plugin.Service
     const processors = yield* SessionProcessor.Service
     const provider = yield* Provider.Service
@@ -360,6 +362,8 @@ const layer = Layer.effect(
         ? yield* provider.getModel(agent.model.providerID, agent.model.modelID).pipe(Effect.orDie)
         : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID).pipe(Effect.orDie)
       const cfg = yield* config.get()
+      const sessionAgent = yield* agents.get(userMessage.agent)
+      const sessionSkills = sessionAgent ? yield* skill.available(sessionAgent) : []
       const history = compactionPart && messages.at(-1)?.info.id === input.parentID ? messages.slice(0, -1) : messages
       const prior = completedCompactions(history)
       const hidden = new Set(prior.flatMap((item) => [item.userIndex, item.assistantIndex]))
@@ -378,17 +382,21 @@ const layer = Layer.effect(
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
       const conversation = msgs.map(serialize).filter(Boolean).join("\n\n")
-      const nextPrompt =
-        compacting.prompt ??
-        [
-          buildPrompt({
-            previousSummary,
-            context: [conversation],
-          }),
-          ...compacting.context,
-        ]
-          .filter(Boolean)
-          .join("\n\n")
+      const skillsBlock = sessionSkills.length
+        ? [
+            "<session_skills>",
+            "These skills were available to the coding agent during this session. In the summary's Important Details section, include exactly one bullet listing these skill names (comma-separated) so later turns know they exist and can load them with the skill tool:",
+            Skill.fmt(sessionSkills, { verbose: false }),
+            "</session_skills>",
+          ].join("\n")
+        : undefined
+      const nextPrompt = [
+        compacting.prompt ?? buildPrompt({ previousSummary, context: [conversation] }),
+        ...compacting.context,
+        skillsBlock,
+      ]
+        .filter(Boolean)
+        .join("\n\n")
       const ctx = yield* InstanceState.context
       const msg: SessionV1.Assistant = {
         id: MessageID.ascending(),
@@ -528,7 +536,10 @@ const layer = Layer.effect(
               (input.overflow
                 ? "The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.\n\n"
                 : "") +
-              "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."
+              "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed." +
+              (sessionSkills.length
+                ? `\n\nThese skills are still available — load one with the skill tool when the task matches: ${sessionSkills.map((item) => item.name).join(", ")}.`
+                : "")
             yield* session.updatePart({
               id: PartID.ascending(),
               messageID: continueMsg.id,
@@ -597,6 +608,7 @@ export const node = LayerNode.make({
     Config.node,
     Session.node,
     Agent.node,
+    Skill.node,
     Plugin.node,
     SessionProcessor.node,
     Provider.node,
