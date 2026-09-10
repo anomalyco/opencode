@@ -529,6 +529,21 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.textVerbosity).toBeUndefined()
   })
 
+  test("openai gpt-5 models with custom gateway baseURL omit textVerbosity", () => {
+    const model = {
+      ...createGpt5Model("gpt-5.6-luna"),
+      id: "experientiallabs/gpt-5.6-luna",
+      providerID: "experientiallabs",
+      api: {
+        id: "gpt-5.6-luna",
+        url: "https://api.experientiallabs.ai/v1",
+        npm: "@ai-sdk/openai",
+      },
+    }
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+
   test("azure chat completions omit Responses-only reasoning options after variants merge", async () => {
     const model = {
       ...createGpt5Model("gpt-5.4"),

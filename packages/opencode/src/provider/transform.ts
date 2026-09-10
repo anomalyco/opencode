@@ -1354,12 +1354,14 @@ export function options(input: {
     }
 
     // Generic OpenAI-compatible APIs do not necessarily support OpenAI's verbosity parameter.
-    // Only enable the default for integrations known to implement it.
+    // Only enable the default for integrations known to implement it when using the standard official endpoint.
     if (
       input.model.api.id.includes("gpt-5.") &&
       !input.model.api.id.includes("codex") &&
       !input.model.api.id.includes("-chat") &&
-      (input.model.api.npm === "@ai-sdk/openai" || input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle")
+      (input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle" ||
+        (input.model.api.npm === "@ai-sdk/openai" &&
+          (!input.model.api.url || input.model.api.url.includes("api.openai.com"))))
     ) {
       result["textVerbosity"] = "low"
     }

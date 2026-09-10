@@ -318,29 +318,45 @@ const layer = Layer.effect(
   }),
 )
 
+const MAX_SKILL_FORMAT_CHARS = 300_000
+
 export function fmt(list: Info[], opts: { verbose: boolean }) {
   const described = list.filter((skill) => skill.description !== undefined)
   if (described.length === 0) return "No skills are currently available."
+  const sorted = described.toSorted((a, b) => a.name.localeCompare(b.name))
   if (opts.verbose) {
-    return [
-      "<available_skills>",
-      ...described
-        .toSorted((a, b) => a.name.localeCompare(b.name))
-        .flatMap((skill) => [
-          "  <skill>",
-          `    <name>${skill.name}</name>`,
-          `    <description>${skill.description}</description>`,
-          `    <location>${escapeHtml(skill.location)}</location>`,
-          "  </skill>",
-        ]),
-      "</available_skills>",
-    ].join("\n")
+    const lines: string[] = ["<available_skills>"]
+    let totalChars = 0
+    let omittedCount = 0
+
+    for (const skill of sorted) {
+      const entry = [
+        "  <skill>",
+        `    <name>${skill.name}</name>`,
+        `    <description>${skill.description}</description>`,
+        `    <location>${escapeHtml(skill.location)}</location>`,
+        "  </skill>",
+      ].join("\n")
+
+      if (totalChars + entry.length > MAX_SKILL_FORMAT_CHARS) {
+        omittedCount++
+        continue
+      }
+
+      lines.push(entry)
+      totalChars += entry.length
+    }
+
+    if (omittedCount > 0) {
+      lines.push(`  <!-- ${omittedCount} additional skills omitted to fit system prompt budget. -->`)
+    }
+    lines.push("</available_skills>")
+    return lines.join("\n")
   }
 
   return [
     "## Available Skills",
-    ...described
-      .toSorted((a, b) => a.name.localeCompare(b.name))
+    ...sorted
       .map((skill) => `- **${skill.name}**: ${skill.description}`),
   ].join("\n")
 }
