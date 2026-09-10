@@ -1316,7 +1316,23 @@ const layer = Layer.effect(
               }
             }
 
-            if (result === "stop") return "break" as const
+            if (result === "stop") {
+              // A stop (denied tool or errored turn) ends only the turn of the
+              // user message this iteration answered. Prompts submitted while
+              // the run is active persist their user message immediately and
+              // every waiter of the run resolves with its final message, so
+              // breaking out here hands those queued prompts the stopped
+              // turn's message — often a tool call with no text at all. Keep
+              // looping while a newer user message is already waiting; the
+              // exit check at the top of the loop terminates the run once the
+              // newest user message has been answered.
+              const msgsNow = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
+                Effect.provideService(Database.Service, database),
+              )
+              const newestUser = MessageV2.latest(msgsNow).user
+              if (newestUser && newestUser.id !== lastUser.id) return "continue" as const
+              return "break" as const
+            }
             if (result === "compact") {
               yield* compaction.create({
                 sessionID,

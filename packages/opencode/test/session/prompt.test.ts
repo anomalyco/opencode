@@ -1496,6 +1496,78 @@ it.instance("prompt submitted during an active run is included in the next LLM i
   }),
 )
 
+it.instance("queued prompt gets a text reply when the active turn stops on a rejected question", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const question = yield* Question.Service
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+
+    yield* llm.tool("question", {
+      questions: [
+        {
+          question: "Pick one",
+          header: "Pick",
+          options: [
+            { label: "A", description: "first" },
+            { label: "B", description: "second" },
+          ],
+        },
+      ],
+    })
+    yield* llm.text("second reply")
+
+    const a = yield* prompt
+      .prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        parts: [{ type: "text", text: "first" }],
+      })
+      .pipe(Effect.forkChild)
+
+    const requestID = yield* pollWithTimeout(
+      question.list().pipe(Effect.map((items) => items[0]?.id)),
+      "timed out waiting for pending question",
+    )
+
+    const id = MessageID.ascending()
+    const b = yield* prompt
+      .prompt({
+        sessionID: chat.id,
+        messageID: id,
+        agent: "build",
+        model: ref,
+        parts: [{ type: "text", text: "second" }],
+      })
+      .pipe(Effect.forkChild)
+
+    yield* pollWithTimeout(
+      sessions
+        .messages({ sessionID: chat.id })
+        .pipe(Effect.map((msgs) => (msgs.some((msg) => msg.info.role === "user" && msg.info.id === id) ? true : undefined))),
+      "timed out waiting for second prompt to save",
+    )
+
+    yield* question.reject(requestID)
+
+    const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
+    expect(Exit.isSuccess(ea)).toBe(true)
+    expect(Exit.isSuccess(eb)).toBe(true)
+    if (!Exit.isSuccess(eb)) throw new Error("queued prompt failed")
+    // The queued prompt must resolve with its own answered message, never the
+    // stopped turn's tool-only message (no text parts).
+    if (eb.value.info.role !== "assistant") throw new Error("expected assistant message")
+    expect(eb.value.info.parentID).toBe(id)
+    expect(eb.value.parts.some((part) => part.type === "text" && part.text === "second reply")).toBe(true)
+    expect(yield* llm.calls).toBe(2)
+  }),
+)
+
 it.instance("assertNotBusy fails with BusyError when loop running", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
