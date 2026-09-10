@@ -181,6 +181,8 @@ import type {
   PermissionGetOutput,
   PermissionReplyInput,
   PermissionReplyOutput,
+  PermissionRulesInput,
+  PermissionRulesOutput,
   FileListInput,
   FileListOutput,
   FileFindInput,
@@ -395,6 +397,7 @@ const EndpointSessionCreate = (raw: RawClient["server.session"]) => (input?: Ses
         model: input?.["model"],
         location: input?.["location"],
         metadata: input?.["metadata"],
+        permissions: input?.["permissions"],
       },
     }).pipe(
       Effect.mapError(mapClientError),
@@ -1145,6 +1148,14 @@ const EndpointPermissionReply = (raw: RawClient["server.permission"]) => (input:
     }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointPermissionRules = (raw: RawClient["server.permission"]) => (input: PermissionRulesInput) =>
+  preserveEffect<PermissionRulesOutput>()(
+    raw["session.permission.rules"]({
+      params: { sessionID: input["sessionID"] },
+      payload: { permissions: input["permissions"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const adaptGroupPermission = (raw: RawClient["server.permission"]) => ({
   request: { list: EndpointPermissionRequestList(raw) },
   saved: { list: EndpointPermissionSavedList(raw), remove: EndpointPermissionSavedRemove(raw) },
@@ -1152,6 +1163,7 @@ const adaptGroupPermission = (raw: RawClient["server.permission"]) => ({
   list: EndpointPermissionList(raw),
   get: EndpointPermissionGet(raw),
   reply: EndpointPermissionReply(raw),
+  rules: EndpointPermissionRules(raw),
 })
 
 const EndpointFileList = (raw: RawClient["server.fs"]) => (input?: FileListInput) =>
