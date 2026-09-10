@@ -1366,10 +1366,10 @@ export function options(input: {
     // Only enable the default for integrations known to implement it when using the standard official endpoint.
     if (
       input.model.api.id.includes("gpt-5.") &&
-        !input.model.api.id.includes("codex") &&
-        !input.model.api.id.includes("-chat") &&
-        (input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle" ||
-          (input.model.api.npm === "@ai-sdk/openai" &&
+      !input.model.api.id.includes("codex") &&
+      !input.model.api.id.includes("-chat") &&
+      (input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle" ||
+        (input.model.api.npm === "@ai-sdk/openai" &&
           isOfficialOpenAIEndpoint(input.model.api.url)))
     ) {
       result["textVerbosity"] = "low"
