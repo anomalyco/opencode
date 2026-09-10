@@ -2,7 +2,7 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { Schema, SchemaGetter } from "effect"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { useLocation } from "@solidjs/router"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -14,7 +14,7 @@ import { decode64 } from "@/runtime/persistence/base64"
 import { same } from "@/runtime/persistence/equality"
 import { createScrollPersistence, type SessionScroll } from "./scroll"
 import { createPathHelpers } from "@/workspaces/files/path"
-import type { ProjectAvatarVariant } from "@opencode-ai/ui/project-avatar"
+import type { ProjectAvatarVariant } from "@opencode/ui/project-avatar"
 import { SessionStateKey } from "@/runtime/server/scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
 import { requireServerKey } from "@/shell/routes/session"
@@ -165,7 +165,7 @@ export const layoutSchema = Persistence.struct({
   sessionView: Persistence.record(Persistence.fallback(sessionViewSchema, () => ({ scroll: {} }))),
   home: Persistence.struct({
     selection: Persistence.struct({
-      server: TabStorage.ServerKey,
+      server: Schema.optional(TabStorage.ServerKey),
       directory: Schema.optional(Schema.String),
     }),
   }),
@@ -223,7 +223,7 @@ export const layoutPersistence = Persistence.migrate(
   ),
 )
 
-export function initialLayout(server: ServerConnection.Key): typeof layoutSchema.Type {
+export function initialLayout(server?: ServerConnection.Key): typeof layoutSchema.Type {
   return {
     sidebar: { opened: false, width: DEFAULT_SIDEBAR_WIDTH, workspaces: {}, workspacesDefault: false },
     terminal: { height: DEFAULT_TERMINAL_HEIGHT, opened: false },
@@ -233,7 +233,7 @@ export function initialLayout(server: ServerConnection.Key): typeof layoutSchema
     mobileSidebar: { opened: false },
     sessionTabs: {},
     sessionView: {},
-    home: { selection: { server } },
+    home: { selection: server ? { server } : {} },
   }
 }
 
@@ -247,7 +247,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const [store, setStore, _, ready] = persisted(
       { ...Persist.global("layout"), previousKey: "layout.v6" },
       layoutPersistence,
-      initialLayout(ServerConnection.key(servers.list[0])),
+      initialLayout(servers.list[0] ? ServerConnection.key(servers.list[0]) : undefined),
     )
     const [ephemeral, setEphemeral] = createStore({
       reviewPanelSource: "other" as ReviewPanelSource,

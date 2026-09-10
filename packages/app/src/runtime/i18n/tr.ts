@@ -151,6 +151,7 @@ export const dict = {
   "command.language.set": "Dil kullan: {{language}}",
 
   "command.session.new": "Yeni oturum",
+  "command.session.import": "Oturumu içe aktar",
   "command.file.open": "Dosya aç",
   "command.tab.close": "Sekmeyi kapat",
   "command.tab.reopenClosed": "Kapatılan sekmeyi yeniden aç",

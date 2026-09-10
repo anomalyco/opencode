@@ -1,10 +1,10 @@
 export * as PtyTicket from "./ticket.js"
 
-import type { Workspace } from "@opencode-ai/schema/workspace"
-import { PtyTicket } from "@opencode-ai/schema/pty-ticket"
+import type { Workspace } from "@opencode/schema/workspace"
+import { PtyTicket } from "@opencode/schema/pty-ticket"
 import { PtyID } from "./schema.js"
 import { Cache, Context, Duration, Effect, Layer } from "effect"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
 
 const DEFAULT_TTL = Duration.seconds(60)
 const CAPACITY = 10_000

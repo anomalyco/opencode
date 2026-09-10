@@ -146,6 +146,7 @@ export const dict = {
   "command.language.set": "Bruk språk: {{language}}",
 
   "command.session.new": "Ny sesjon",
+  "command.session.import": "Importer sesjon",
   "command.file.open": "Åpne fil",
   "command.tab.close": "Lukk fane",
   "command.context.addSelection": "Legg til markering i kontekst",

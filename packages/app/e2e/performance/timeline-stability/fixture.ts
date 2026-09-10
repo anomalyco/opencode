@@ -1,4 +1,4 @@
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import type {
   JsonValue,
   OpenCodeEvent,
@@ -8,10 +8,10 @@ import type {
   SessionMessageUser,
   SessionStatus,
   SessionStructuredError,
-} from "@opencode-ai/client/promise"
-import { EventManifest } from "@opencode-ai/schema/event-manifest"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
-import type { TimelineDetail } from "@opencode-ai/session-ui/timeline/detail"
+} from "@opencode/client/promise"
+import { EventManifest } from "@opencode/schema/event-manifest"
+import { SessionMessage } from "@opencode/schema/session-message"
+import type { TimelineDetail } from "@opencode/session-ui/timeline/detail"
 import { expect, type Page } from "@playwright/test"
 import { Schema } from "effect"
 import { mockOpenCodeServer } from "../../utils/mock-server"

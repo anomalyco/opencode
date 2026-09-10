@@ -60,3 +60,10 @@ describe("electron vite publicDir", () => {
     expect(existsSync(join(resolved, "oc-theme-preload.js"))).toBe(true)
   })
 })
+
+test("renders before loading optional telemetry", async () => {
+  const source = await Bun.file(join(dir, "index.tsx")).text()
+  expect(source.indexOf("render(() =>")).toBeGreaterThan(-1)
+  expect(source.indexOf("render(() =>")).toBeLessThan(source.indexOf("initializeSentry(version)"))
+  expect(source).not.toContain("await initializeSentry")
+})

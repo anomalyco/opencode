@@ -1,6 +1,6 @@
 export * as Integration from "./integration.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import {
   Cause,
   Clock,
@@ -17,12 +17,12 @@ import {
   SynchronizedRef,
   Types,
 } from "effect"
-import { Integration } from "@opencode-ai/schema/integration"
+import { Integration } from "@opencode/schema/integration"
 import { Credential } from "./credential.js"
 import { State } from "./state.js"
 import { Bus } from "./bus.js"
 import { IntegrationConnection } from "./integration/connection.js"
-import { AppProcess } from "@opencode-ai/util/process"
+import { AppProcess } from "@opencode/util/process"
 import { ChildProcess } from "effect/unstable/process"
 import { Form } from "./form.js"
 
@@ -115,7 +115,7 @@ export class AuthorizationError extends Schema.TaggedError<AuthorizationError>()
 
 export type Error = CodeRequiredError | AuthorizationError
 
-export { Event } from "@opencode-ai/schema/integration"
+export { Event } from "@opencode/schema/integration"
 
 export const Ref = Integration.Ref
 export type Ref = Integration.Ref

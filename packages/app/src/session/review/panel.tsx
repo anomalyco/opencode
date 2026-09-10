@@ -1,13 +1,13 @@
 import { createMemo, createResource, createSignal, Show, type JSX } from "solid-js"
-import type { FileDiffInfo } from "@opencode-ai/client/promise"
+import type { FileDiffInfo } from "@opencode/client/promise"
 import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX,
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN,
   SessionReviewV2,
   SessionReviewV2Sidebar,
-} from "@opencode-ai/session-ui/v2/session-review-v2"
-import { SessionReviewFilePreviewV2 } from "@opencode-ai/session-ui/v2/session-review-file-preview-v2"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
+} from "@opencode/session-ui/v2/session-review-v2"
+import { SessionReviewFilePreviewV2 } from "@opencode/session-ui/v2/session-review-file-preview-v2"
+import { DiffChanges } from "@opencode/ui/diff-changes"
 import type {
   SessionReviewComment,
   SessionReviewCommentActions,
@@ -16,7 +16,7 @@ import type {
   SessionReviewDiffStyle,
   SessionReviewFocus,
   SessionReviewLineComment,
-} from "@opencode-ai/session-ui/session-review"
+} from "@opencode/session-ui/session-review"
 import FileTreeV2 from "@/session/files/file-tree-v2"
 import { sortFileTreeV2Paths } from "@/session/files/file-tree-v2-model"
 import { useLanguage } from "@/runtime/i18n/language"

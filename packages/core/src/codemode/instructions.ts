@@ -1,6 +1,6 @@
 export * as CodeModeInstructions from "./instructions.js"
 
-import { searchSignature, toolExpression } from "@opencode-ai/codemode"
+import { searchSignature, toolExpression } from "@opencode/codemode"
 import { Effect, Schema } from "effect"
 import { Instructions } from "../instructions/index.js"
 import { CodeModeCatalog } from "./catalog.js"
@@ -8,11 +8,11 @@ import { CodeModeCatalog } from "./catalog.js"
 // prettier-ignore
 const prompt = (hasMoreTools: boolean) => `The Code Mode tool catalog below is ${hasMoreTools ? "partial" : "complete"}.
 
-${hasMoreTools ? "The Code Mode catalog and `search` results are" : "This catalog is"} the complete set of tools available within Code Mode. Tools presented elsewhere are not available in this runtime.${hasMoreTools ? `
+${hasMoreTools ? "The Code Mode catalog and `search` results are" : "This catalog is"} the complete set of tools callable inside \`execute\`. It does not affect tools exposed directly outside Code Mode.${hasMoreTools ? `
 
 ## Search
 
-Use \`search\` to discover exact paths and signatures for additional tools:
+Call \`search(...)\` to discover exact paths and signatures for additional tools:
 
 - ${searchSignature}` : ""}
 

@@ -1,45 +1,55 @@
 import { expect } from "bun:test"
-import { LLMClient, LLMEvent, LLMResponse, LanguageModel, ToolDefinition, type LLMRequest } from "@opencode-ai/ai"
-import { OpenAIChat } from "@opencode-ai/ai/protocols"
-import type { StreamOptions } from "@opencode-ai/ai/route"
-import { Agent } from "@opencode-ai/core/agent"
-import { Database } from "@opencode-ai/core/database/database"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
-import { EventTable } from "@opencode-ai/core/event/sql"
-import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
-import { Instance } from "@opencode-ai/core/instance/service"
-import { Instructions } from "@opencode-ai/core/instructions/index"
-import { InstructionBuiltIns } from "@opencode-ai/core/instructions/builtins"
-import { Location } from "@opencode-ai/core/location"
-import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
-import { ID } from "@opencode-ai/core/model"
-import { Project } from "@opencode-ai/core/project"
-import { Provider } from "@opencode-ai/core/provider"
-import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionContext } from "@opencode-ai/core/session/context"
-import { SessionGenerate } from "@opencode-ai/core/session/generate"
-import { InstructionState } from "@opencode-ai/core/session/instruction-state"
-import { SessionMessage } from "@opencode-ai/core/session/message"
-import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
-import { SessionSchema } from "@opencode-ai/core/session/schema"
+import {
+  LLMClient,
+  LLMEvent,
+  LLMResponse,
+  LanguageModel,
+  Message,
+  SystemPart,
+  ToolDefinition,
+  type LLMRequest,
+} from "@opencode/ai"
+import { OpenAIChat } from "@opencode/ai/protocols"
+import type { StreamOptions } from "@opencode/ai/route"
+import { Agent } from "@opencode/core/agent"
+import { Database } from "@opencode/core/database/database"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { llmClient } from "@opencode/core/effect/app-node-platform"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { EventTable } from "@opencode/core/event/sql"
+import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
+import { Instance } from "@opencode/core/instance/service"
+import { Instructions } from "@opencode/core/instructions/index"
+import { InstructionBuiltIns } from "@opencode/core/instructions/builtins"
+import { Location } from "@opencode/core/location"
+import { McpInstructions } from "@opencode/core/mcp/instructions"
+import { ID } from "@opencode/core/model"
+import { Project } from "@opencode/core/project"
+import { Provider } from "@opencode/core/provider"
+import { ReferenceInstructions } from "@opencode/core/reference/instructions"
+import { AbsolutePath } from "@opencode/core/schema"
+import { SessionEvent } from "@opencode/core/session/event"
+import { SessionContext } from "@opencode/core/session/context"
+import { SessionGenerate } from "@opencode/core/session/generate"
+import { InstructionState } from "@opencode/core/session/instruction-state"
+import { SessionMessage } from "@opencode/core/session/message"
+import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionRunnerModel } from "@opencode/core/session/runner/model"
+import { SessionSchema } from "@opencode/core/session/schema"
 import {
   InstructionBlobTable,
   InstructionStateTable,
   SessionMessageTable,
   SessionInboxTable,
   SessionTable,
-} from "@opencode-ai/core/session/sql"
-import { SessionStore } from "@opencode-ai/core/session/store"
-import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
-import { Tool } from "@opencode-ai/core/tool"
+} from "@opencode/core/session/sql"
+import { SessionStore } from "@opencode/core/session/store"
+import { SkillInstructions } from "@opencode/core/skill/instructions"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
+import { Tool } from "@opencode/core/tool"
 import { asc, eq } from "drizzle-orm"
 import { Effect, Layer, Schema, Stream } from "effect"
 import { testEffect } from "./lib/effect"
@@ -113,7 +123,7 @@ const tools = Layer.mock(Tool.Service, {
             type: "tool",
             name: "captured.lookup",
             description: "Captured Code Mode catalog",
-            signature: "tools.captured.lookup(input: {}): Promise<string>",
+            signature: "tools.captured.lookup(): Promise<string>",
           },
         ],
       },
@@ -134,6 +144,7 @@ const it = testEffect(
       Agent.node,
       InstructionBuiltIns.node,
       SessionContext.node,
+      PluginHooks.node,
       llmClient,
     ]),
     [
@@ -327,7 +338,7 @@ it.effect(
       )
       expect(instructionUpdates).toHaveLength(1)
       expect(instructionUpdates?.[0]).toContain("Changed context")
-      expect(instructionUpdates?.[0]).toContain("tools.captured.lookup(input: {}): Promise<string>")
+      expect(instructionUpdates?.[0]).toContain("tools.captured.lookup(): Promise<string>")
       expect(userTexts(requests[0])).toEqual(["Existing durable context", "Summarize privately"])
       expect(
         requests[0]?.messages.flatMap((message) =>
@@ -340,6 +351,43 @@ it.effect(
       expect(requests[0]?.toolChoice).toBeUndefined()
       expect(options[0]?.webSocket).toBeUndefined()
       expect(yield* durableState(db, sessionID)).toEqual(before)
+    }),
+  { timeout: 15_000 },
+)
+
+it.effect(
+  "runs generate hooks instead of context hooks",
+  () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      instruction = "Initial context"
+      const { db, bus, instructions, session, instances } = yield* setup
+      yield* InstructionState.prepare(db, bus, instructions, sessionID)
+      const hooks = yield* PluginHooks.Service
+      let contexts = 0
+      yield* hooks.register("session", "context", () => Effect.sync(() => contexts++))
+      yield* hooks.register("session", "generate", (event) =>
+        Effect.sync(() => {
+          expect(event.sessionID).toBe(sessionID)
+          expect(event.agent).toBe(Agent.ID.make("build"))
+          expect(Object.keys(event.tools)).toEqual(["lookup"])
+          event.system.push(SystemPart.make("Answer briefly."))
+          event.messages = [Message.user("[redacted]")]
+          event.options.maxTokens = 32
+          event.options.reasoningEffort = "low"
+        }),
+      )
+
+      yield* SessionGenerate.generate({ session, prompt: "Summarize privately" }).pipe(
+        Effect.provideService(Instance.Service, instances),
+      )
+
+      expect(contexts).toBe(0)
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.system.map((part) => part.text)).toContain("Answer briefly.")
+      expect(userTexts(requests[0])).toEqual(["[redacted]"])
+      expect(requests[0]?.generation).toEqual(expect.objectContaining({ maxTokens: 32 }))
+      expect(requests[0]?.providerOptions).toEqual({ reasoningEffort: "low" })
     }),
   { timeout: 15_000 },
 )

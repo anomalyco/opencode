@@ -6,7 +6,7 @@ import type {
   OpenCodeClient,
   ProviderListOutput,
   SkillListOutput,
-} from "@opencode-ai/client/promise"
+} from "@opencode/client/promise"
 import type { RunAgent, RunCommand, RunProvider, RunReference } from "./types"
 
 type CurrentAgent = AgentListOutput["data"][number]

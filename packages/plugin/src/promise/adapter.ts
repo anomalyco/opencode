@@ -1,6 +1,6 @@
-import { Tool } from "@opencode-ai/schema/tool"
-import type { Rpc } from "@opencode-ai/schema/rpc"
-import type { RpcCallOptions, RpcEventPayload } from "@opencode-ai/client/promise/api"
+import { Tool } from "@opencode/schema/tool"
+import type { Rpc } from "@opencode/schema/rpc"
+import type { RpcCallOptions, RpcEventPayload } from "@opencode/client/promise/api"
 import { Effect, Schema, SchemaAST, Stream } from "effect"
 import type { Scope } from "effect"
 import { HttpApiEndpoint, HttpApiSchema } from "effect/unstable/httpapi"
@@ -26,6 +26,7 @@ interface CompiledEndpoint {
 }
 
 const compiledEndpoints = new WeakMap<object, CompiledEndpoint>()
+const JsonInput = Schema.fromJsonString(Schema.Unknown)
 
 interface HostRpcCallContext {
   readonly error: (type: string, message: string, data?: unknown) => unknown
@@ -217,7 +218,7 @@ export function fromPromise(plugin: Plugin) {
     effect: (host) =>
       Effect.gen(function* () {
         const [{ ClientApi }, { OpenCodeEvent }] = yield* Effect.promise(() =>
-          Promise.all([import("@opencode-ai/protocol/client"), import("@opencode-ai/protocol/groups/event")]),
+          Promise.all([import("@opencode/protocol/client"), import("@opencode/protocol/groups/event")]),
         )
         const AgentEndpoints = ClientApi.groups["server.agent"].endpoints
         const CommandEndpoints = ClientApi.groups["server.command"].endpoints
@@ -234,6 +235,7 @@ export function fromPromise(plugin: Plugin) {
         const SkillEndpoints = ClientApi.groups["server.skill"].endpoints
         const VcsEndpoints = ClientApi.groups["server.vcs"].endpoints
         const WebSearchEndpoints = ClientApi.groups["server.websearch"].endpoints
+        const WorktreeEndpoints = ClientApi.groups["server.worktree"].endpoints
         const context = yield* Effect.context<Scope.Scope>()
         const streams = yield* makeStreams()
 
@@ -262,7 +264,11 @@ export function fromPromise(plugin: Plugin) {
           const compiled = compileEndpoint(endpoint)
           return ((input?: unknown) =>
             Effect.gen(function* () {
-              const decoded = yield* Effect.forEach(compiled.decode, (decode) => decode(input ?? {}))
+              // Match the generated Promise client, whose request body crosses JSON before endpoint decoding.
+              const normalized = yield* Schema.encodeUnknownEffect(JsonInput)(input ?? {}).pipe(
+                Effect.flatMap(Schema.decodeUnknownEffect(JsonInput)),
+              )
+              const decoded = yield* Effect.forEach(compiled.decode, (decode) => decode(normalized))
               const result = yield* method(Object.assign({}, ...decoded) as never)
               if (compiled.noContent) return undefined
               return yield* compiled.encode(result)
@@ -536,6 +542,27 @@ export function fromPromise(plugin: Plugin) {
                     default: editor.default,
                   })
                 }),
+              ),
+          },
+          worktree: {
+            list: adaptApiMethod(WorktreeEndpoints["worktree.list"], host.worktree.list),
+            create: adaptApiMethod(WorktreeEndpoints["worktree.create"], host.worktree.create),
+            remove: adaptApiMethod(WorktreeEndpoints["worktree.remove"], host.worktree.remove),
+            refresh: adaptApiMethod(WorktreeEndpoints["worktree.refresh"], host.worktree.refresh),
+            reload: () => run(host.worktree.reload()),
+            transform: (callback) =>
+              register(
+                host.worktree.transform((editor) =>
+                  callback({
+                    add: (definition) =>
+                      editor.add({
+                        id: definition.id,
+                        create: (input) => attempt((signal) => definition.create(input, { signal })),
+                        remove: (input) => attempt((signal) => definition.remove(input, { signal })),
+                        list: (directory) => attempt((signal) => definition.list(directory, { signal })),
+                      }),
+                  }),
+                ),
               ),
           },
           session: {

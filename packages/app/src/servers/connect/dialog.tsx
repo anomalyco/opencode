@@ -1,8 +1,8 @@
-import { Button } from "@opencode-ai/ui/button"
-import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/dialog"
-import { Divider } from "@opencode-ai/ui/divider"
-import { TextInput } from "@opencode-ai/ui/text-input"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Button } from "@opencode/ui/button"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
+import { Divider } from "@opencode/ui/divider"
+import { TextInput } from "@opencode/ui/text-input"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
 import { type Component, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -16,6 +16,8 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { normalizeServerUrl, ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useCheckServerHealth } from "@/runtime/server/health"
+import { usePlatform } from "@/runtime/platform/platform"
+import { isMixedContent } from "./browser"
 import "@/settings/settings.css"
 
 type FormMode = "list" | "add" | "edit"
@@ -81,11 +83,14 @@ export const DialogServer: Component<{
               invalid={!!form.state.error()}
               disabled={form.state.busy()}
               autofocus
+              aria-describedby={form.state.error() ? "dialog-server-error" : undefined}
               onInput={(event) => form.change.value(event.currentTarget.value)}
               onKeyDown={keyDown}
             />
             <Show when={form.state.error()}>
-              <span class="settings-server-dialog-error">{form.state.error()}</span>
+              <span id="dialog-server-error" class="settings-server-dialog-error" role="alert">
+                {form.state.error()}
+              </span>
             </Show>
           </div>
           <div class="flex w-full min-w-0 flex-col gap-2">
@@ -129,6 +134,7 @@ export const DialogServer: Component<{
 }
 
 function createFormController(options: { onSelect?: () => void } = {}) {
+  const platform = usePlatform()
   const server = useServers()
   const tabs = useTabs()
   const global = useGlobal()
@@ -201,7 +207,14 @@ function createFormController(options: { onSelect?: () => void } = {}) {
       }
       const result = await checkServerHealth(connection.http)
       if (!result.healthy) {
-        setStore("error", language.t("dialog.server.add.error"))
+        setStore(
+          "error",
+          language.t(
+            platform.platform === "web" && isMixedContent(location.href, normalized)
+              ? "server.connect.mixedContent"
+              : "dialog.server.add.error",
+          ),
+        )
         return
       }
       if (original?.type === "http") {

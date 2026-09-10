@@ -24,6 +24,7 @@ import {
   ToolResultValue,
   TransportError,
   UnknownProviderError,
+  UnsupportedOperationError,
   Usage,
 } from "../src/schema/index.js"
 import { ProviderShared } from "../src/protocols/shared.js"
@@ -276,6 +277,12 @@ test("AI errors serialize diagnostics only on their typed reason", () => {
 test("AI error reasons are tagged Errors with required messages", () => {
   const reasons = [
     new InvalidRequestError({ message: "Invalid request" }),
+    new UnsupportedOperationError({
+      message: "Unsupported operation",
+      operation: "compact",
+      provider: model.provider,
+      route: "fake-route",
+    }),
     new NoRouteError({
       message: "No route",
       route: RouteID.make("missing"),
@@ -293,6 +300,7 @@ test("AI error reasons are tagged Errors with required messages", () => {
   ]
   expect(reasons.map((reason) => reason._tag)).toEqual([
     "InvalidRequest",
+    "UnsupportedOperation",
     "NoRoute",
     "Authentication",
     "RateLimit",

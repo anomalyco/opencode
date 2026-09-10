@@ -22,7 +22,7 @@ import type {
   SessionMessageAssistantTool,
   SessionMessageInfo,
   SessionMessageUser,
-} from "@opencode-ai/client/promise"
+} from "@opencode/client/promise"
 import { Locale } from "../util/locale"
 import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
 import { toolImageCommits, userImageCommits } from "./stream-v2.image"

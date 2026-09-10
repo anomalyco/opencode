@@ -134,6 +134,7 @@ export const dict = {
   "command.language.cycle": "Växla språk",
   "command.language.set": "Använd språk: {{language}}",
   "command.session.new": "Ny session",
+  "command.session.import": "Importera session",
   "command.file.open": "Öppna filen",
   "command.tab.close": "Stäng fliken",
   "command.tab.reopenClosed": "Öppna stängd flik igen",

@@ -1,17 +1,17 @@
 import { describe, expect } from "bun:test"
-import { Money } from "@opencode-ai/schema/money"
-import { Document, Info, type Entry } from "@opencode-ai/schema/config"
+import { Money } from "@opencode/schema/money"
+import { Document, Info, type Entry } from "@opencode/schema/config"
 import { Effect, Schema } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Config } from "@opencode-ai/core/config"
-import { ConfigProviderPlugin } from "@opencode-ai/core/config/plugin/provider"
-import { ConfigNormalize } from "@opencode-ai/core/config/normalize"
-import { Integration } from "@opencode-ai/core/integration"
-import { Model } from "@opencode-ai/core/model"
-import { ModelResolver } from "@opencode-ai/core/model-resolver"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { Provider } from "@opencode-ai/core/provider"
+import { Catalog } from "@opencode/core/catalog"
+import { Config } from "@opencode/core/config"
+import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
+import { ConfigNormalize } from "@opencode/core/config/normalize"
+import { Integration } from "@opencode/core/integration"
+import { Model } from "@opencode/core/model"
+import { ModelResolver } from "@opencode/core/model-resolver"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { Provider } from "@opencode/core/provider"
 import { withEnv } from "../fixture/env"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
@@ -32,6 +32,81 @@ function required<T>(value: T | undefined): T {
 const decode = Schema.decodeUnknownSync(Info)
 
 describe("ConfigProviderPlugin.Plugin", () => {
+  it.effect("inherits provider compaction policy with model overrides and rejects unsupported routes", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "@opencode/ai/providers/openai/responses",
+                compaction: { mode: "provider", threshold: 120_000 },
+                models: {
+                  native: {},
+                  reset: { compaction: { mode: "provider" } },
+                  threshold: { compaction: { mode: "provider", threshold: 90_000 } },
+                  local: { compaction: { mode: "local" }, package: "@opencode/ai/providers/openai/chat" },
+                  unsupported: { package: "@opencode/ai/providers/openai/chat" },
+                },
+              },
+              default: { package: "@opencode/ai/providers/openai/chat", models: { chat: {} } },
+            },
+          }),
+        }),
+      ])
+      const native = required(yield* catalog.model.get(Provider.ID.make("custom"), Model.ID.make("native")))
+      const local = required(yield* catalog.model.get(Provider.ID.make("custom"), Model.ID.make("local")))
+      const unsupported = required(yield* catalog.model.get(Provider.ID.make("custom"), Model.ID.make("unsupported")))
+      const defaultModel = required(yield* catalog.model.get(Provider.ID.make("default"), Model.ID.make("chat")))
+      expect(native.compaction).toEqual({ mode: "provider", threshold: 120_000 })
+      expect((yield* catalog.model.get(Provider.ID.make("custom"), Model.ID.make("reset")))?.compaction).toEqual({
+        mode: "provider",
+      })
+      expect((yield* catalog.model.get(Provider.ID.make("custom"), Model.ID.make("threshold")))?.compaction).toEqual({
+        mode: "provider",
+        threshold: 90_000,
+      })
+      expect(local.compaction).toEqual({ mode: "local" })
+      expect(defaultModel.compaction).toBeUndefined()
+      yield* ModelResolver.fromCatalogModel(native)
+      yield* ModelResolver.fromCatalogModel(local)
+      yield* ModelResolver.fromCatalogModel(defaultModel)
+      expect(yield* ModelResolver.fromCatalogModel(unsupported).pipe(Effect.flip)).toMatchObject({
+        _tag: "SessionRunnerModel.UnsupportedCompactionError",
+        message: "Provider compaction is not supported by custom/unsupported (openai-chat)",
+      })
+    }),
+  )
+
+  it.effect("inherits the provider websocket policy with model overrides", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "@opencode/ai/providers/openai/responses",
+                websocket: false,
+                models: { inherited: {}, override: { websocket: true } },
+              },
+              default: { package: "@opencode/ai/providers/openai/responses", models: { untouched: {} } },
+            },
+          }),
+        }),
+      ])
+      const inherited = required(yield* catalog.model.get(Provider.ID.make("custom"), Model.ID.make("inherited")))
+      const override = required(yield* catalog.model.get(Provider.ID.make("custom"), Model.ID.make("override")))
+      const untouched = required(yield* catalog.model.get(Provider.ID.make("default"), Model.ID.make("untouched")))
+      expect(inherited.websocket).toBe(false)
+      expect(override.websocket).toBe(true)
+      expect(untouched.websocket).toBeUndefined()
+    }),
+  )
+
   it.effect("adds key auth for custom providers without env credentials", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service

@@ -4,7 +4,7 @@ import { app, BrowserWindow, MessageChannelMain } from "electron"
 import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/unstable/rpc"
 import { DesktopRpcs } from "../shared/ipc-rpc"
-import { IpcTransportPort } from "../shared/ipc-transport"
+import { DragCancelEvent, IpcTransportPort } from "../shared/ipc-transport"
 import { DesktopFiles, openExternalURL } from "./files"
 import { appHandlers } from "./ipc-handlers/app"
 import { eventHandlers } from "./ipc-handlers/events"
@@ -14,17 +14,18 @@ import { storageHandlers } from "./ipc-handlers/storage"
 import { updaterHandlers } from "./ipc-handlers/updater"
 import { windowHandlers } from "./ipc-handlers/window"
 import { wslHandlers } from "./ipc-handlers/wsl"
+import { sshHandlers } from "./ipc-handlers/ssh"
+import { Ssh } from "./ssh/service"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
 import { ApplicationLifecycle } from "./lifecycle"
 import { showCliInstaller } from "./native/install-cli"
 import { createMenu, sendMenuCommand } from "./native/menu"
 import { DesktopCli } from "./service/desktop-cli"
-import { DesktopStorage } from "./storage"
 import { Updater } from "./updater"
 import { getLastFocusedWindow } from "./windows"
 import { Wsl } from "./wsl/start"
 
-const services = Layer.mergeAll(DesktopFiles.layer, DesktopStorage.layer, Wsl.layer)
+const services = Layer.mergeAll(DesktopFiles.layer, Wsl.layer, Ssh.layer)
 const handlers = Layer.mergeAll(
   appHandlers,
   storageHandlers,
@@ -33,6 +34,7 @@ const handlers = Layer.mergeAll(
   menuHandlers,
   updaterHandlers,
   wslHandlers,
+  sshHandlers,
   eventHandlers,
 )
 export const layer = RpcServer.layer(DesktopRpcs, { disableFatalDefects: true }).pipe(
@@ -59,6 +61,10 @@ export const registerIpcHandlers = Effect.gen(function* () {
     relaunch: lifecycle.relaunch,
   }
   const wire = (_event: Electron.Event, win: BrowserWindow) => {
+    win.webContents.on("before-input-event", (_event, input) => {
+      if (input.type !== "keyDown" || input.key !== "Escape") return
+      win.webContents.send(DragCancelEvent)
+    })
     win.webContents.on("did-finish-load", () => {
       if (win.isDestroyed() || win.webContents.isDestroyed()) return
       const channel = new MessageChannelMain()

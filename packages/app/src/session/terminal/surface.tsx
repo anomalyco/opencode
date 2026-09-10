@@ -1,4 +1,4 @@
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
+import { ResizeHandle } from "@opencode/ui/resize-handle"
 import type { ParentProps } from "solid-js"
 
 export function TerminalSurface(

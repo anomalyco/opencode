@@ -9,6 +9,8 @@ import {
   AIError,
   InvalidProviderOutputError,
   LLMEvent,
+  ProviderInternalError,
+  UnknownProviderError,
   Usage,
   type FinishReasonDetails,
   type LLMRequest,
@@ -414,10 +416,11 @@ export const fromRequest = Effect.fn("MistralChat.fromRequest")(function* (reque
         tool: (name) => ({ type: "function" as const, function: { name } }),
       })
     : undefined
+  const flattened = ProviderShared.flattenToolRequest(request)
   return {
     model: request.model.id,
-    messages: yield* lowerMessages(request),
-    tools: request.tools.length > 0 ? request.tools.map(lowerTool) : undefined,
+    messages: yield* lowerMessages(flattened.request),
+    tools: flattened.tools.length > 0 ? flattened.tools.map(lowerTool) : undefined,
     tool_choice: toolChoice,
     stream: true as const,
     max_tokens: request.generation?.maxTokens,
@@ -698,6 +701,16 @@ const step = Effect.fn("MistralChat.step")(function* (state: ParserState, event:
   const finishReason = {
     normalized: mapFinishReason(choice.finish_reason),
     raw: choice.finish_reason,
+  }
+  if (finishReason.normalized === "error") {
+    const details = {
+      message: `Mistral Chat stopped with ${finishReason.raw}`,
+      body: ProviderShared.encodeJson(event),
+    }
+    return yield* new AIError({
+      reason:
+        finishReason.raw === "network_error" ? new ProviderInternalError(details) : new UnknownProviderError(details),
+    })
   }
   const incomplete = finishReason.normalized === "length" || finishReason.normalized === "content-filter"
   if (!incomplete && Object.keys(withTools.pendingTools).length > 0)

@@ -134,6 +134,7 @@ export const dict = {
   "command.language.cycle": "Γλώσσα κύκλου",
   "command.language.set": "Γλώσσα χρήσης: {{language}}",
   "command.session.new": "Νέα συνεδρία",
+  "command.session.import": "Εισαγωγή συνεδρίας",
   "command.file.open": "Άνοιγμα αρχείου",
   "command.tab.close": "Κλείσιμο καρτέλας",
   "command.tab.reopenClosed": "Άνοιγμα ξανά κλειστής καρτέλας",

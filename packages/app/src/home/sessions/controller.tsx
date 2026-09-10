@@ -1,7 +1,7 @@
-import type { SessionInfo } from "@opencode-ai/client/promise"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Button } from "@opencode-ai/ui/button"
-import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode-ai/ui/dialog"
+import type { SessionInfo } from "@opencode/client/promise"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { Button } from "@opencode/ui/button"
+import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
 import { skipToken, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { DateTime } from "luxon"
 import { type Accessor, createEffect, createMemo, type JSX, startTransition, untrack } from "solid-js"
@@ -21,12 +21,13 @@ import { errorMessage } from "@/shell/layout/helpers"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { removedSessionIDs } from "@/session/session-domain"
 import { pathKey } from "@/workspaces/path-key"
-import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/session/commands/export"
+import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
+import { usePlatform } from "@/runtime/platform/platform"
 import { sessionLabel, sessionTitle } from "@/session/title"
 import { showToast } from "@/shell/notifications/toast"
 import { archiveHomeSession } from "./archive"
 import type { HomeController } from "../model"
-import { buildHomeSessionRecords, type HomeSessionRecord } from "./records"
+import { buildHomeSessionRecords, homeProjectForSession, type HomeSessionRecord } from "./records"
 
 export type { HomeSessionRecord } from "./records"
 
@@ -45,6 +46,7 @@ export function createHomeSessionsController(home: HomeController) {
   const command = useCommand()
   const dialog = useDialog()
   const language = useLanguage()
+  const platform = usePlatform()
   const queryClient = useQueryClient()
   const projectDirectories = createMemo(() => {
     const selected = home.selection.value().directory
@@ -172,7 +174,7 @@ export function createHomeSessionsController(home: HomeController) {
     try {
       const data = await fetchSessionExport({ sessionID: session.id, api: ctx.sdk.api })
       const filename = sessionExportFilename(data.info)
-      downloadSessionExport(filename, data)
+      if (!(await saveSessionExport(filename, data, platform))) return
       showToast({
         variant: "success",
         icon: "circle-check",
@@ -268,14 +270,7 @@ export function createHomeSessionsController(home: HomeController) {
       },
       create: home.project.openNewSession,
       open: (session: SessionInfo, options?: OpenSessionOptions) => {
-        const directoryKey = pathKey(session.location.directory)
-        const project = home.project
-          .list()
-          .find(
-            (item) =>
-              pathKey(item.worktree) === directoryKey ||
-              item.sandboxes?.some((sandbox) => pathKey(sandbox) === directoryKey),
-          )
+        const project = homeProjectForSession(session, home.project.list())
         const conn = home.server.focused()
         if (!conn) return
         const connKey = ServerConnection.key(conn)
@@ -316,8 +311,10 @@ export function createHomeSessionsController(home: HomeController) {
         dialog.show(() => <DeleteDialog server={server} session={session} />),
     },
     tab: {
-      isOpen: (record: HomeSessionRecord) =>
-        sessionHasOpenTab(tabs.store, home.selection.value().server, record.session),
+      isOpen: (record: HomeSessionRecord) => {
+        const server = home.selection.value().server
+        return !!server && sessionHasOpenTab(tabs.store, server, record.session)
+      },
     },
   }
 }

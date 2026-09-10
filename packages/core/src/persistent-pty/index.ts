@@ -3,12 +3,12 @@ export * as PersistentPty from "./index.js"
 import os from "node:os"
 import path from "node:path"
 import { Context, Effect, Layer, Schema } from "effect"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Added, Handoff, PersistentPty, ReadLines, Removed, type ReadResult } from "@opencode-ai/schema/persistent-pty"
-import { Session } from "@opencode-ai/schema/session"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { Added, Handoff, PersistentPty, ReadLines, Removed, type ReadResult } from "@opencode/schema/persistent-pty"
+import { Session } from "@opencode/schema/session"
 import { Bus } from "../bus.js"
-import { Pty } from "@opencode-ai/schema/pty"
-import { Global } from "@opencode-ai/util/global"
+import { Pty } from "@opencode/schema/pty"
+import { Global } from "@opencode/util/global"
 import { ShellSelect } from "../shell/select.js"
 import {
   makeDaemonTransport,
@@ -21,7 +21,7 @@ import {
 import { resolveBinary } from "#persistent-pty-binary"
 
 export type { Role, StreamEvent } from "./daemon.js"
-export { Handoff } from "@opencode-ai/schema/persistent-pty"
+export { Handoff } from "@opencode/schema/persistent-pty"
 
 export const Options = Schema.Struct({ handoff: Schema.optional(Handoff) })
 export type Options = typeof Options.Type

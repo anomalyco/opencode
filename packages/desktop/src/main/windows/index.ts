@@ -5,7 +5,8 @@ import { Effect, FileSystem, Path } from "effect"
 import { openExternalURL } from "../files"
 import { scoped } from "../native/logging"
 import { DesktopPaths } from "../paths"
-import { forgetStore, getStore } from "../storage/store"
+import { DesktopStorage } from "../storage"
+import { getStore } from "../storage/store"
 import { WINDOW_IDS_KEY } from "../storage/keys"
 import { windowIDArgument } from "../../shared/window-bootstrap"
 import {
@@ -77,6 +78,7 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   const paths = yield* DesktopPaths.resolve
+  const storage = yield* DesktopStorage.Service
   const runFork = Effect.runForkWith(yield* Effect.context())
   const wireWindowRecovery = yield* makeWindowRecovery
 
@@ -141,14 +143,12 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
     win.on("session-end", () => registry.setQuitting())
     win.on("closed", () => {
       if (!registry.closed(id)) return
-      const data = windowDataFile(id)
       runFork(
         Effect.gen(function* () {
+          yield* Effect.try(() => storage.state.clear(windowDataFile(id)))
           yield* fs.remove(path.join(app.getPath("userData"), windowStateFile(id)), { force: true })
-          yield* fs.remove(path.join(app.getPath("userData"), data), { force: true })
         }).pipe(
-          Effect.tap(() => Effect.sync(() => forgetStore(data))),
-          Effect.catch((error) => scoped("window", Effect.logError("failed to clean window files", { id, error }))),
+          Effect.catch((error) => scoped("window", Effect.logError("failed to clean window state", { id, error }))),
         ),
       )
     })
@@ -161,7 +161,8 @@ function windowStateFile(id: string) {
   return `window-state-${safeWindowID(id)}.json`
 }
 
-// Mirrors windowStorage() in packages/app/src/utils/persist.ts.
+// Mirrors windowStorage() in packages/app/src/runtime/persistence/storage.ts; it is the state
+// namespace the renderer persists this window's tabs under.
 function windowDataFile(id: string) {
   return `opencode.window.${safeWindowID(id)}.dat`
 }

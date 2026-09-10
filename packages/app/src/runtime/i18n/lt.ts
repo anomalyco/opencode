@@ -137,6 +137,7 @@ export const dict = {
   "command.language.cycle": "Perjungti kalbą",
   "command.language.set": "Naudokite kalbą: {{language}}",
   "command.session.new": "Naujas seansas",
+  "command.session.import": "Importuoti seansą",
   "command.file.open": "Atidaryti failą",
   "command.tab.close": "Uždaryti skirtuką",
   "command.tab.reopenClosed": "Iš naujo atidaryti uždarytą skirtuką",

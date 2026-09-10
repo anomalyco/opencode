@@ -1,6 +1,6 @@
-import type { AgentListOutput, ModelListOutput, ProviderListOutput } from "@opencode-ai/client/promise"
+import type { AgentListOutput, ModelListOutput, ProviderListOutput } from "@opencode/client/promise"
 import type { Agent, Project, Provider, ProviderListResponse } from "@/runtime/server/types"
-import type { Project as CurrentProject } from "@opencode-ai/client/promise"
+import type { Project as CurrentProject } from "@opencode/client/promise"
 import { unwrap } from "solid-js/store"
 export { pathKey as directoryKey, type PathKey as DirectoryKey } from "@/workspaces/path-key"
 
@@ -135,5 +135,14 @@ export function normalizeProjectInfo(project: Project | CurrentProject): Project
     ...project,
     worktree,
     worktrees: "worktrees" in project ? project.worktrees : [{ directory: worktree }],
+  }
+}
+
+export function updateProjectInfo(project: Project, update: CurrentProject): Project {
+  return {
+    ...project,
+    ...update,
+    worktree: update.canonical,
+    worktrees: project.worktrees,
   }
 }

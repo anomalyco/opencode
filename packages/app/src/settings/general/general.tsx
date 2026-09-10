@@ -1,9 +1,9 @@
 import { Component, Show, createMemo, createResource } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
-import { Button } from "@opencode-ai/ui/button"
-import { Select } from "@opencode-ai/ui/select"
-import { Switch } from "@opencode-ai/ui/switch"
-import { TextInput } from "@opencode-ai/ui/text-input"
+import { Button } from "@opencode/ui/button"
+import { Select } from "@opencode/ui/select"
+import { Switch } from "@opencode/ui/switch"
+import { TextInput } from "@opencode/ui/text-input"
 import { TimelineDetailControl } from "@/settings/timeline-detail"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -347,20 +347,6 @@ export const SettingsGeneral: Component<{
             </Switch>
           </div>
         </SettingsRow>
-
-        <Show when={import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
-          <SettingsRow
-            title={language.t("settings.general.row.showProjectIcon.title")}
-            description={language.t("settings.general.row.showProjectIcon.description")}
-          >
-            <div data-action="settings-show-project-icon">
-              <Switch
-                checked={settings.general.showProjectIcon()}
-                onChange={(checked) => settings.general.setShowProjectIcon(checked)}
-              />
-            </div>
-          </SettingsRow>
-        </Show>
 
         <Show when={mobile() && import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
           <SettingsRow

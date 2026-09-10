@@ -1,13 +1,13 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Credential } from "@opencode-ai/core/credential"
-import { Integration } from "@opencode-ai/core/integration"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { XAIPlugin } from "@opencode-ai/core/plugin/provider/xai"
-import { Model } from "@opencode-ai/core/model"
-import { Provider } from "@opencode-ai/core/provider"
+import { Catalog } from "@opencode/core/catalog"
+import { Credential } from "@opencode/core/credential"
+import { Integration } from "@opencode/core/integration"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { XAIPlugin } from "@opencode/core/plugin/provider/xai"
+import { Model } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -69,7 +69,7 @@ describe("XAIPlugin", () => {
     }),
   )
 
-  it.effect("marks xAI deployments as Responses WebSocket capable", () =>
+  it.effect("enables xAI Responses WebSockets", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const providerID = Provider.ID.make("xai")
@@ -82,9 +82,9 @@ describe("XAIPlugin", () => {
 
       yield* addPlugin()
 
-      expect((yield* catalog.model.get(providerID, Model.ID.make("grok-4.6")))?.capabilities.responsesWebsockets).toBe(
-        true,
-      )
+      const model = yield* catalog.model.get(providerID, Model.ID.make("grok-4.6"))
+      expect(model?.capabilities.responsesWebsockets).toBe(true)
+      expect(model?.websocket).toBe(true)
     }),
   )
 })

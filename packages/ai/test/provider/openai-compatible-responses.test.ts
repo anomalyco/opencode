@@ -91,7 +91,7 @@ describe("Open Responses-compatible route", () => {
       expect(prepared.body.input).toEqual([
         { role: "user", content: [{ type: "input_text", text: "Before." }] },
         { role: "developer", content: "Operator update." },
-        { type: "message", role: "assistant", content: [{ type: "output_text", text: "After." }] },
+        { type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: "After." }] },
       ])
     }),
   )
@@ -171,6 +171,66 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("flattens tool namespaces", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model(
+        "example-model",
+      )
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          tools: [
+            {
+              type: "namespace",
+              name: "acme",
+              tools: [
+                {
+                  type: "namespace",
+                  name: "billing",
+                  tools: [ToolDefinition.make({ name: "lookup", description: "Lookup billing", inputSchema: {} })],
+                },
+                ToolDefinition.make({ name: "users", description: "Lookup users", inputSchema: {} }),
+              ],
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "function",
+          name: "acme_billing_lookup",
+          description: "Lookup billing",
+          parameters: {},
+          strict: false,
+        },
+        { type: "function", name: "acme_users", description: "Lookup users", parameters: {}, strict: false },
+      ])
+    }),
+  )
+
+  it.effect("flattens tool namespaces in history", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model(
+        "example-model",
+      )
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant({ type: "tool-call", id: "call_1", name: "lookup", namespace: "crm", input: {} }),
+            Message.tool({ id: "call_1", name: "lookup", namespace: "crm", result: "done", resultType: "text" }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { type: "function_call", call_id: "call_1", name: "crm_lookup", namespace: undefined, arguments: "{}" },
+        { type: "function_call_output", call_id: "call_1", output: "done" },
+      ])
+    }),
+  )
+
   it.effect("lowers canonical parallel tool control", () =>
     Effect.gen(function* () {
       const model = configure({
@@ -239,23 +299,27 @@ describe("Open Responses-compatible route", () => {
           type: "message",
           id: "history_1",
           role: "assistant",
+          status: "completed",
           content: [{ type: "output_text", text: "Kept." }],
         },
         {
           type: "message",
           id: `history_${"a".repeat(64)}`,
           role: "assistant",
+          status: "completed",
           content: [{ type: "output_text", text: "Long." }],
         },
         {
           type: "message",
           id: "provider_value/with+symbols",
           role: "assistant",
+          status: "completed",
           content: [{ type: "output_text", text: "Opaque." }],
         },
         {
           type: "message",
           role: "assistant",
+          status: "completed",
           content: [
             { type: "output_text", text: "No suffix." },
             { type: "output_text", text: "No prefix." },
@@ -796,6 +860,7 @@ describe("Open Responses-compatible route", () => {
           type: "message",
           id: "msg_refusal",
           role: "assistant",
+          status: "completed",
           content: [{ type: "output_text", text: "I can't help with that." }],
         },
       ])

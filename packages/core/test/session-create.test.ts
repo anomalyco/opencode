@@ -3,38 +3,39 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { DateTime, Effect, Layer, Stream } from "effect"
-import { Money } from "@opencode-ai/schema/money"
-import { Shell } from "@opencode-ai/schema/shell"
-import { Skill } from "@opencode-ai/schema/skill"
-import { Agent } from "@opencode-ai/core/agent"
+import { TestClock } from "effect/testing"
+import { Money } from "@opencode/schema/money"
+import { Shell } from "@opencode/schema/shell"
+import { Skill } from "@opencode/schema/skill"
+import { Agent } from "@opencode/core/agent"
 import { asc, eq } from "drizzle-orm"
-import { Database } from "@opencode-ai/core/database/database"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Hash } from "@opencode-ai/util/hash"
-import { Bus } from "@opencode-ai/core/bus"
-import { EventTable } from "@opencode-ai/core/event/sql"
-import { Instructions } from "@opencode-ai/core/instructions/index"
-import { Location } from "@opencode-ai/core/location"
-import { Model } from "@opencode-ai/core/model"
-import { Project } from "@opencode-ai/core/project"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { Provider } from "@opencode-ai/core/provider"
-import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
-import { Session } from "@opencode-ai/core/session"
-import { SessionMessage } from "@opencode-ai/core/session/message"
-import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
-import { SessionInbox } from "@opencode-ai/core/session/inbox"
-import { InstructionEntry } from "@opencode-ai/core/session/instruction-entry"
-import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionTable } from "@opencode-ai/core/session/sql"
-import { SessionStore } from "@opencode-ai/core/session/store"
-import { SessionTransfer } from "@opencode-ai/core/session/transfer"
-import { Workspace } from "@opencode-ai/core/workspace"
+import { Database } from "@opencode/core/database/database"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Hash } from "@opencode/util/hash"
+import { Bus } from "@opencode/core/bus"
+import { EventTable } from "@opencode/core/event/sql"
+import { Instructions } from "@opencode/core/instructions/index"
+import { Location } from "@opencode/core/location"
+import { Model } from "@opencode/core/model"
+import { Project } from "@opencode/core/project"
+import { ProjectTable } from "@opencode/core/project/sql"
+import { Provider } from "@opencode/core/provider"
+import { AbsolutePath, RelativePath } from "@opencode/core/schema"
+import { Session } from "@opencode/core/session"
+import { SessionMessage } from "@opencode/core/session/message"
+import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionInbox } from "@opencode/core/session/inbox"
+import { InstructionEntry } from "@opencode/core/session/instruction-entry"
+import { SessionEvent } from "@opencode/core/session/event"
+import { SessionTable } from "@opencode/core/session/sql"
+import { SessionStore } from "@opencode/core/session/store"
+import { SessionTransfer } from "@opencode/core/session/transfer"
+import { Workspace } from "@opencode/core/workspace"
 import { Expected } from "./lib/session-message"
 import { testEffect } from "./lib/effect"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { offlineModels } from "./fixture/models"
 import { promptLocationNode } from "./fixture/prompt-location"
 import { globalProjectNode } from "./lib/project"
@@ -1242,6 +1243,7 @@ describe("SessionTransfer", () => {
       const runningCompactionID = SessionMessage.ID.create()
       const completedCompactionID = SessionMessage.ID.create()
       const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
+      const providerState = { responseId: "summary-response" }
 
       yield* transfer.import({
         data: {
@@ -1261,20 +1263,7 @@ describe("SessionTransfer", () => {
               type: "assistant",
               agent: Agent.ID.make("build"),
               model,
-              content: [
-                { type: "text", text: "Read the file" },
-                {
-                  type: "tool",
-                  id: "call_transfer_read",
-                  name: "read",
-                  state: {
-                    status: "completed",
-                    input: { filePath: "/project/README.md" },
-                    content: [{ type: "text", text: "File contents" }],
-                  },
-                  time: { created: DateTime.makeUnsafe(3), completed: DateTime.makeUnsafe(4) },
-                },
-              ],
+              content: [],
               time: { created: DateTime.makeUnsafe(3), completed: DateTime.makeUnsafe(4) },
             },
             {
@@ -1309,6 +1298,8 @@ describe("SessionTransfer", () => {
               type: "compaction",
               status: "completed",
               reason: "manual",
+              model,
+              providerState,
               summary: "summary",
               recent: "recent",
               time: { created: DateTime.makeUnsafe(9) },
@@ -1325,14 +1316,11 @@ describe("SessionTransfer", () => {
         completedCompactionID,
       ])
       expect(yield* Bus.latestSequence(db, sessionID)).toBe(4)
-      const data = yield* transfer.export({ sessionID })
-      const copy = yield* transfer.import({ data, location })
-      const copied = yield* session.messages({ sessionID: copy.id, order: "asc" })
-      expect(copy.id).not.toBe(sessionID)
-      expect(copied).toHaveLength(data.messages.length)
-      expect(new Set(copied.map((message) => message.id)).size).toBe(copied.length)
-      expect(copied.every((message) => !data.messages.some((source) => source.id === message.id))).toBe(true)
-      expect(copied.map(({ id, ...message }) => message)).toEqual(data.messages.map(({ id, ...message }) => message))
+      expect((yield* transfer.export({ sessionID })).messages.at(-1)).toMatchObject({ model, providerState })
+      expect((yield* transfer.export({ sessionID, sanitize: true })).messages.at(-1)).toMatchObject({
+        model,
+        providerState: { redacted: `compaction-provider-state:${completedCompactionID}` },
+      })
     }),
   )
 
@@ -1346,6 +1334,7 @@ describe("SessionTransfer", () => {
       const sessionID = Session.ID.create()
       const sourceMessageID = SessionMessage.ID.create()
       const errorMessageID = SessionMessage.ID.create()
+      yield* TestClock.setTime(1_000)
 
       const imported = yield* transfer.import({
         data: {
@@ -1354,6 +1343,7 @@ describe("SessionTransfer", () => {
             id: sessionID,
             time: {
               ...template.time,
+              updated: DateTime.makeUnsafe(100),
               idle: DateTime.makeUnsafe(200),
               viewed: DateTime.makeUnsafe(150),
             },
@@ -1387,7 +1377,11 @@ describe("SessionTransfer", () => {
       const messages = yield* session.messages({ sessionID, order: "asc" })
 
       expect(imported).toMatchObject({ id: sessionID, title: "Exported", location, metadata: { channel: "C123" } })
-      expect(imported.time).toMatchObject({ idle: DateTime.makeUnsafe(200), viewed: DateTime.makeUnsafe(150) })
+      expect(imported.time).toMatchObject({
+        updated: DateTime.makeUnsafe(1_000),
+        idle: DateTime.makeUnsafe(200),
+        viewed: DateTime.makeUnsafe(150),
+      })
       expect(messages).toMatchObject([
         { id: sourceMessageID, ...Expected.user("Imported message") },
         { id: errorMessageID, type: "compaction", error: { type: "test_error", message: "Original error" } },
@@ -1443,8 +1437,6 @@ describe("SessionTransfer", () => {
       expect(first.id).not.toBe(original.id)
       expect(first).toEqual({ ...original, id: first.id })
       expect(yield* session.get(existing.id)).toEqual(data.info)
-      expect(yield* session.messages({ sessionID: existing.id, order: "asc" })).toEqual([...data.messages])
-      expect(yield* Bus.latestSequence(db, imported.id)).toBe(1)
 
       yield* session.prompt({ sessionID: imported.id, text: "Continue copy", resume: false })
       yield* SessionInbox.promote(db, bus, imported.id, "steer")
@@ -1453,15 +1445,6 @@ describe("SessionTransfer", () => {
         Expected.user("Continue copy"),
       ])
       expect(yield* session.messages({ sessionID: existing.id, order: "asc" })).toEqual([...data.messages])
-
-      const repeated = yield* transfer.import({ data, location: destination })
-      expect(repeated.id).not.toBe(existing.id)
-      expect(repeated.id).not.toBe(imported.id)
-      const repeatedMessages = yield* session.messages({ sessionID: repeated.id, order: "asc" })
-      expect(repeatedMessages).toHaveLength(1)
-      expect(repeatedMessages[0]?.id).toBeDefined()
-      expect(repeatedMessages[0]?.id).not.toBe(first.id)
-      expect(repeatedMessages[0]?.id).not.toBe(original.id)
     }),
   )
 

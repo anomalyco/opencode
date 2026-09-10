@@ -1,12 +1,12 @@
 export * as SessionContext from "./context.js"
 
-import { Model } from "@opencode-ai/schema/model"
+import { Model } from "@opencode/schema/model"
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "../agent.js"
 import { Catalog } from "../catalog.js"
 import { CodeModeInstructions } from "../codemode/instructions.js"
 import { Database } from "../database/database.js"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Instructions } from "../instructions/index.js"
 import { InstructionBuiltIns } from "../instructions/builtins.js"
@@ -18,6 +18,7 @@ import { SkillInstructions } from "../skill/instructions.js"
 import { Tool } from "../tool.js"
 import { AgentNotFoundError } from "./error.js"
 import { SessionHistory } from "./history.js"
+import { SessionProviderContext } from "./provider-context.js"
 import { InstructionEntry } from "./instruction-entry.js"
 import { SessionMessage } from "./message.js"
 import { SessionModelRequest } from "./model-request.js"
@@ -64,7 +65,7 @@ export interface Interface {
       }
     | undefined
   >
-  readonly prepare: SessionModelRequest.Interface["prepare"]
+  readonly request: SessionModelRequest.Interface
 }
 
 /** Location-scoped model-context loader for durable Session Steps. */
@@ -83,7 +84,7 @@ const layer = Layer.effect(
     const mcpInstructions = yield* McpInstructions.Service
     const mcpTools = yield* McpTool.Service
     const models = yield* SessionRunnerModel.Service
-    const modelRequests = yield* SessionModelRequest.Service
+    const request = yield* SessionModelRequest.Service
     const referenceInstructions = yield* ReferenceInstructions.Service
     const skillInstructions = yield* SkillInstructions.Service
     const store = yield* SessionStore.Service
@@ -156,7 +157,12 @@ const layer = Layer.effect(
 
     const load = Effect.fn("SessionContext.load")(function* (selection: Selection) {
       const model = yield* resolveModel(selection.session)
-      const history = yield* SessionHistory.entriesForRunner(db, selection.session.id, selection.instructions)
+      const history = yield* SessionHistory.entriesForRunner(
+        db,
+        selection.session.id,
+        selection.instructions,
+        SessionProviderContext.provenance(model) ?? "local",
+      )
       return {
         session: selection.session,
         agent: selection.agent,
@@ -167,7 +173,7 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ select, load, resolveModel, selectTitle, prepare: modelRequests.prepare })
+    return Service.of({ select, load, resolveModel, selectTitle, request })
   }),
 )
 

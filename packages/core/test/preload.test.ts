@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import os from "os"
 import path from "path"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 
 describe("Core test environment", () => {
+  test("disables public npm security audits", () => {
+    expect(process.env.NPM_CONFIG_AUDIT).toBe("false")
+  })
+
   test("isolates global home and XDG roots", () => {
     const home = process.env.OPENCODE_TEST_HOME
     expect(home).toBeDefined()

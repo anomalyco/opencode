@@ -16,6 +16,11 @@ test("status drawer dismisses and reopens after button, backdrop, Escape, and dr
     await more.click()
     await page.getByRole("menuitem", { name: "Status", exact: true }).click()
     await expect(drawer.getByRole("tab", { name: "MCP", exact: true })).toBeVisible()
+    // Corvu starts opening after paint; the transition flag is also absent
+    // before that callback. Wait for the open position before dismissing.
+    await expect
+      .poll(() => drawer.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m42))
+      .toBe(0)
     await expect(drawer).not.toHaveAttribute("data-transitioning")
     if (dismissal === "button") await drawer.getByRole("button", { name: "Close", exact: true }).click()
     if (dismissal === "backdrop") await overlay.click({ position: { x: 10, y: 10 } })

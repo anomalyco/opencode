@@ -1,6 +1,6 @@
 export * as SessionGenerate from "./generate.js"
 
-import { LLMClient, Message, type AIError } from "@opencode-ai/ai"
+import { LLMClient, Message, type AIError } from "@opencode/ai"
 import { Effect } from "effect"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
@@ -9,6 +9,7 @@ import type { Instructions } from "../instructions/index.js"
 import { SessionContext } from "./context.js"
 import type { AgentNotFoundError } from "./error.js"
 import { SessionHistory } from "./history.js"
+import { SessionProviderContext } from "./provider-context.js"
 import { SessionModelRequest } from "./model-request.js"
 import type { SessionRunnerModel } from "./runner/model.js"
 import type { SessionSchema } from "./schema.js"
@@ -29,7 +30,12 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
     const context = yield* SessionContext.Service
     const selection = yield* context.select(input.session.id)
     const model = yield* context.resolveModel(selection.session)
-    const history = yield* SessionHistory.preview(database.db, selection.session.id, selection.instructions)
+    const history = yield* SessionHistory.preview(
+      database.db,
+      selection.session.id,
+      selection.instructions,
+      SessionProviderContext.provenance(model) ?? "local",
+    )
     const transcript = SessionModelRequest.baseTranscript({
       agent: selection.agent.info,
       model,
@@ -37,16 +43,17 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       initial: history.initial,
       messages: history.messages,
     })
-    const prepared = yield* context.prepare({
-      scope: { session: selection.session, agentID: selection.agent.id, model, tools: selection.tools },
-      transcript: {
-        system: transcript.system,
-        messages: [
-          ...transcript.messages,
-          ...(history.instructionUpdate ? [Message.system(history.instructionUpdate)] : []),
-          Message.user(input.prompt),
-        ],
-      },
+    const prepared = yield* context.request.generate({
+      session: selection.session,
+      agent: selection.agent.id,
+      model,
+      tools: selection.tools,
+      system: transcript.system,
+      messages: [
+        ...transcript.messages,
+        ...(history.instructionUpdate ? [Message.system(history.instructionUpdate)] : []),
+        Message.user(input.prompt),
+      ],
     })
     yield* Effect.logInfo("sending session generation request", {
       sessionID: selection.session.id,

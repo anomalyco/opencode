@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
-import { CodeModeCatalog } from "@opencode-ai/core/codemode/catalog"
-import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { Location } from "@opencode-ai/core/location"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Tool } from "@opencode-ai/core/tool"
+import { CodeModeCatalog } from "@opencode/core/codemode/catalog"
+import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Location } from "@opencode/core/location"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Tool } from "@opencode/core/tool"
 import { Effect, Schema } from "effect"
 import { it } from "../lib/effect"
 import { readInitial, readUpdate } from "../lib/instructions"
@@ -47,7 +47,7 @@ describe("CodeModeInstructions", () => {
     Effect.gen(function* () {
       const initialized = yield* readInitial(CodeModeInstructions.make({ tools: [echo] }))
       expect(initialized.text).toContain(
-        "This catalog is the complete set of tools available within Code Mode. Tools presented elsewhere are not available in this runtime.",
+        "This catalog is the complete set of tools callable inside `execute`. It does not affect tools exposed directly outside Code Mode.",
       )
       expect(initialized.text).toContain("## Available tools")
       expect(initialized.text).not.toContain("## Search")

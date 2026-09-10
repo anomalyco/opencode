@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { timelinePresets } from "@opencode-ai/session-ui/timeline/detail"
+import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import {
   assistantID,
   assistantMessage,
@@ -134,7 +134,7 @@ for (const name of ["read", "shell", "subagent"] as const) {
     await expect(trigger).toHaveAttribute("aria-expanded", "false")
     await expect(working).toBeInViewport()
     if (name !== "read") {
-      const hint = page.locator('[data-component="session-background-hint"]')
+      const hint = page.getByRole("button", { name: /move running work to the background/i })
       await expect(hint).toBeInViewport()
       await expect(page.locator('[data-component="session-background-hint-row"]')).toHaveCSS("height", "24px")
       await page.screenshot({ path: testInfo.outputPath(`working-grouped-${name}.png`) })

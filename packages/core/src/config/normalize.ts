@@ -1,22 +1,22 @@
 export * as ConfigNormalize from "./normalize.js"
 
 import { isDeepStrictEqual } from "node:util"
-import { isRecord } from "@opencode-ai/ai/utils/record"
+import { isRecord } from "@opencode/ai/utils/record"
 import { Option, Schema } from "effect"
-import { Info } from "@opencode-ai/schema/config"
-import { ConfigAgent } from "@opencode-ai/schema/config/agent"
-import { ConfigCommand } from "@opencode-ai/schema/config/command"
-import { ConfigCompaction } from "@opencode-ai/schema/config/compaction"
-import { ConfigFormatter } from "@opencode-ai/schema/config/formatter"
-import { ConfigLSP } from "@opencode-ai/schema/config/lsp"
-import { ConfigMedia } from "@opencode-ai/schema/config/media"
-import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
-import { ConfigPlugin } from "@opencode-ai/schema/config/plugin"
-import { ConfigPolicy } from "@opencode-ai/schema/config/policy"
-import { ConfigProvider } from "@opencode-ai/schema/config/provider"
-import { ConfigReference } from "@opencode-ai/schema/config/reference"
-import { ConfigExperimental } from "@opencode-ai/schema/config/experimental"
-import { Permission } from "@opencode-ai/schema/permission"
+import { Info } from "@opencode/schema/config"
+import { ConfigAgent } from "@opencode/schema/config/agent"
+import { ConfigCommand } from "@opencode/schema/config/command"
+import { ConfigCompaction } from "@opencode/schema/config/compaction"
+import { ConfigFormatter } from "@opencode/schema/config/formatter"
+import { ConfigLSP } from "@opencode/schema/config/lsp"
+import { ConfigMedia } from "@opencode/schema/config/media"
+import { ConfigMCP } from "@opencode/schema/config/mcp"
+import { ConfigPlugin } from "@opencode/schema/config/plugin"
+import { ConfigPolicy } from "@opencode/schema/config/policy"
+import { ConfigProvider } from "@opencode/schema/config/provider"
+import { ConfigReference } from "@opencode/schema/config/reference"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
+import { Permission } from "@opencode/schema/permission"
 import { ConfigAgentV1 } from "../v1/config/agent.js"
 import { ConfigAttachmentV1 } from "../v1/config/attachment.js"
 import { ConfigCommandV1 } from "../v1/config/command.js"
@@ -73,6 +73,9 @@ export function normalize(input: unknown): Result {
   const legacyUpdate = own(input, "autoupdate")
     ? decodeValue(ConfigV1.Info.fields.autoupdate, input.autoupdate, ["autoupdate"], diagnostics)
     : undefined
+  const nativeUpdate = own(input, "update")
+    ? decodeEncoded(Info.fields.update, input.update, ["update"], diagnostics)
+    : undefined
   const legacyShare = own(input, "autoshare")
     ? decodeValue(Schema.Boolean, input.autoshare, ["autoshare"], diagnostics) === true
       ? "auto"
@@ -86,7 +89,10 @@ export function normalize(input: unknown): Result {
     if (migrated !== undefined) encoded.media = canonical(ConfigMedia.Info, migrated)
   }
   if (legacySnapshots !== undefined) encoded.snapshots = legacySnapshots
-  if (legacyUpdate !== undefined) encoded.update = ConfigMigrateV1.migrate({ autoupdate: legacyUpdate }).update
+  const migratedUpdate =
+    legacyUpdate === undefined ? undefined : ConfigMigrateV1.migrate({ autoupdate: legacyUpdate }).update
+  const update = prefer(migratedUpdate, nativeUpdate, ["update"], diagnostics)
+  if (update !== undefined) encoded.update = update
   if (legacyShare !== undefined) encoded.share = legacyShare
 
   const legacyReferences = decodeMap(input.reference, ConfigReference.Entry, ["reference"], diagnostics, decodeEncoded)
@@ -196,7 +202,6 @@ export function normalize(input: unknown): Result {
     shell: Info.fields.shell,
     model: Info.fields.model,
     default_agent: Info.fields.default_agent,
-    update: Info.fields.update,
     share: Info.fields.share,
     enterprise: Info.fields.enterprise,
     username: Info.fields.username,
@@ -204,6 +209,7 @@ export function normalize(input: unknown): Result {
     media: Info.fields.media,
     tool_output: Info.fields.tool_output,
     websearch: Info.fields.websearch,
+    worktree: Info.fields.worktree,
     warming: Info.fields.warming,
   }
   Object.entries(nativeAtomic).forEach(([key, schema]) => {

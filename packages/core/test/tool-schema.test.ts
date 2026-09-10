@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { z } from "zod"
-import { Agent } from "@opencode-ai/schema/agent"
-import { Session } from "@opencode-ai/schema/session"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
-import type { Info } from "@opencode-ai/schema/tool"
+import { Agent } from "@opencode/schema/agent"
+import { Session } from "@opencode/schema/session"
+import { SessionMessage } from "@opencode/schema/session-message"
+import type { Info } from "@opencode/schema/tool"
 import { Tool } from "../src/tool"
 import { definition, execute } from "../src/tool/runtime"
 
@@ -27,6 +27,7 @@ test("tools are structural values", async () => {
   const tool: Info = config
 
   expect(definition(tool)).toEqual({
+    type: "tool",
     name: "foreign",
     description: "Foreign tool",
     inputSchema: {
@@ -142,6 +143,7 @@ test("portable schemas validate and describe typed tools", async () => {
   }
 
   expect(definition(tool)).toEqual({
+    type: "tool",
     name: "portable",
     description: "Portable tool",
     inputSchema: { type: "object", properties: { count: { type: "string" } } },
@@ -161,6 +163,7 @@ test("Zod schemas validate, transform, and describe typed tools", async () => {
   }
 
   expect(definition(tool)).toEqual({
+    type: "tool",
     name: "zod",
     description: "Zod tool",
     inputSchema: {
@@ -317,6 +320,7 @@ test("raw JSON schemas validate and decode tool input", async () => {
   }
 
   expect(definition(tool)).toEqual({
+    type: "tool",
     name: "raw",
     description: "Raw tool",
     inputSchema: input,
@@ -400,6 +404,7 @@ test("missing external input schemas fall back to an empty schema", () => {
   } as unknown as Info
 
   expect(definition(tool)).toEqual({
+    type: "tool",
     name: "external",
     description: "External tool",
     inputSchema: {},

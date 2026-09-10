@@ -1,14 +1,14 @@
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Global } from "@opencode-ai/util/global"
-import { run } from "@opencode-ai/tui"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Global } from "@opencode/util/global"
+import { run } from "@opencode/tui"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Config } from "../../config"
-import { Context, Effect, FileSystem, Option, Queue } from "effect"
+import { Context, Effect, Fiber, FileSystem, Option, Queue } from "effect"
 import { ServerConnection } from "../../services/server-connection"
 import { Updater } from "../../services/updater"
 import { UpdatePreflight } from "../../services/update-preflight"
-import { Npm } from "@opencode-ai/util/npm"
+import { Npm } from "@opencode/util/npm"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "../../version"
 import { Env } from "../../env"
 
@@ -47,7 +47,7 @@ export default Runtime.handler(Commands, (input) =>
       ),
     )
     const updater = yield* Updater.Service
-    if (!server.service) yield* updater.check().pipe(Effect.forkScoped)
+    const update = yield* updater.run().pipe(Effect.forkScoped)
     preflight.loading()
     const config = yield* Config.Service
     const npm = yield* Npm.Service
@@ -83,11 +83,18 @@ export default Runtime.handler(Commands, (input) =>
         get: () => runPromise(config.get()),
         update: (update) => runPromise(config.update(update)),
       },
-      updater: service
-        ? {
-            apply: (version) => runPromise(updater.apply(version)),
-          }
-        : undefined,
+      updater: {
+        remote: requestedServer !== undefined,
+        subscribe: (notify, signal) =>
+          runPromise(
+            Fiber.join(update).pipe(
+              Effect.flatMap((result) => (result === undefined ? Effect.void : Effect.sync(() => notify(result)))),
+            ),
+            { signal },
+          ),
+        check: (signal) => runPromise(Fiber.join(update).pipe(Effect.flatMap(() => updater.check())), { signal }),
+        apply: (version) => runPromise(updater.apply(version)),
+      },
       packages: {
         prepare: (spec, install = true) => runPromise(install ? npm.add(spec) : npm.resolve(spec)),
       },

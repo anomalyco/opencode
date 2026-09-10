@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { ServerOptions } from "@opencode-ai/server/options"
+import { ServerOptions } from "@opencode/server/options"
 import { Option, Schema } from "effect"
 
 const decode = Schema.decodeUnknownOption(ServerOptions)

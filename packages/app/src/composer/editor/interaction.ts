@@ -1,6 +1,6 @@
 import { createEffect, type Accessor } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { useFilteredList } from "@opencode-ai/ui/hooks"
+import { useFilteredList } from "@opencode/ui/hooks"
 import { createComposerAttachments, type ComposerAttachmentConfig } from "../attachments/attachments"
 import { createComposerEditorActions, type ComposerStateStoreInput } from "./actions"
 import type {
@@ -37,6 +37,7 @@ export type ComposerEditorView = {
   agent?: ComposerSelectControl
   variant?: ComposerSelectControl
   submit: {
+    available?: Accessor<boolean>
     stopping: Accessor<boolean>
     working?: Accessor<boolean>
     queue?: ComposerQueue
@@ -145,7 +146,7 @@ export function createComposerEditor(input: {
       return
     }
     if (command.type === "mention.add") {
-      if (command.item.mention) draft.addMention(command.item.mention)
+      if (command.item.mention) draft.addMention(command.item.mention, command.range)
       return
     }
     if (command.type === "popover.filter") {
@@ -333,6 +334,7 @@ export function createComposerEditor(input: {
       draft.removeAttachment(id)
     },
     canSubmit() {
+      if (input.view.submit.available?.() === false) return false
       if (input.view.draftOnly) return false
       const persisted = draft.state
       if (state.mode === "shell") {
@@ -365,6 +367,7 @@ export function createComposerEditor(input: {
       dispatch({ type: "mode.shell" })
     },
     submit(options?: { alternate?: boolean }) {
+      if (input.view.submit.available?.() === false) return
       if (input.view.draftOnly) return
       input.view.submit.onSubmit(options)
       dispatch({ type: "popover.close" })

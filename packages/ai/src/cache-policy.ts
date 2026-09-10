@@ -11,7 +11,7 @@
 // Manual `cache: CacheHint` placements on individual parts are preserved and
 // count against the four-breakpoint budget; auto only fills remaining slots.
 import { CacheHint, type CachePolicy, type CachePolicyObject } from "./schema/options.js"
-import { LLMRequest, Message, ToolDefinition, type ContentPart } from "./schema/messages.js"
+import { LLMRequest, Message, ToolDefinition, type ContentPart, type ToolEntry } from "./schema/messages.js"
 
 const AUTO: CachePolicyObject = {
   tools: true,
@@ -50,17 +50,23 @@ interface Budget {
   remaining: number
 }
 
-const markLastTool = (
-  tools: ReadonlyArray<ToolDefinition>,
-  hint: CacheHint,
-  budget: Budget,
-): ReadonlyArray<ToolDefinition> => {
-  if (tools.length === 0) return tools
-  const last = tools.length - 1
-  if (tools[last]!.cache || budget.remaining === 0) return tools
+const markLastTool = (tools: ReadonlyArray<ToolEntry>, hint: CacheHint, budget: Budget): ReadonlyArray<ToolEntry> => {
+  const target = tools.at(-1)
+  if (target === undefined) return tools
+  if (target.type === "namespace") {
+    const nested = markLastTool(target.tools, hint, budget)
+    return nested === target.tools ? tools : [...tools.slice(0, -1), { ...target, tools: nested }]
+  }
+  if (target.cache || budget.remaining === 0) return tools
   budget.remaining -= 1
-  return tools.map((tool, i) => (i === last ? new ToolDefinition({ ...tool, cache: hint }) : tool))
+  return [...tools.slice(0, -1), new ToolDefinition({ ...target, cache: hint })]
 }
+
+const countToolHints = (tools: ReadonlyArray<ToolEntry>): number =>
+  tools.reduce(
+    (count, tool) => count + (tool.type === "tool" ? (tool.cache === undefined ? 0 : 1) : countToolHints(tool.tools)),
+    0,
+  )
 
 const markSystemBoundaries = (system: LLMRequest["system"], hint: CacheHint, budget: Budget): LLMRequest["system"] => {
   if (system.length === 0) return system
@@ -122,7 +128,7 @@ const markMessages = (
 }
 
 const countHints = (request: LLMRequest) =>
-  request.tools.reduce((count, tool) => count + (tool.cache === undefined ? 0 : 1), 0) +
+  countToolHints(request.tools) +
   request.system.reduce((count, part) => count + (part.cache === undefined ? 0 : 1), 0) +
   request.messages.reduce(
     (count, message) =>

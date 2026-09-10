@@ -1,6 +1,7 @@
 import { $ } from "bun"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { prepareDevElectron } from "./dev-electron"
 import { downloadCliToResources, windowsify } from "./utils"
 
 type ServerSource = { type: "build" } | { type: "download"; version: string }
@@ -23,6 +24,7 @@ async function prepareDesktop() {
     $`bun run install-electron`,
     $`bun ./scripts/copy-icons.ts ${process.env.OPENCODE_CHANNEL ?? "dev"}`,
   ])
+  if (process.platform === "darwin") process.env.ELECTRON_EXEC_PATH = await prepareDevElectron()
 }
 
 function selectOptions(): DevOptions {

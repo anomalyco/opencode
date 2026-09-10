@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { LLM, LLMRequest, Message } from "../../src/index.js"
+import { LLM, LLMRequest, Message, ToolDefinition } from "../../src/index.js"
 import { LLMClient, Route } from "../../src/route/client.js"
 import { Auth } from "../../src/route/auth.js"
 import { Endpoint } from "../../src/route/endpoint.js"
@@ -130,16 +130,27 @@ for (const model of [
           }),
         ],
       })
-      for (const candidate of [
-        LLMRequest.update(request, {
-          tools: [
-            { name: "unsupported", description: "Generation only", inputSchema: {}, native: { unsupported: {} } },
-          ],
-        }),
-        LLMRequest.update(request, { providerOptions: { contextManagement: "invalid-generation-option" } }),
-      ]) {
+      for (const [candidate, tag] of [
+        [
+          LLMRequest.update(request, {
+            tools: [
+              ToolDefinition.make({
+                name: "unsupported",
+                description: "Generation only",
+                inputSchema: {},
+                native: { unsupported: {} },
+              }),
+            ],
+          }),
+          "InvalidRequest",
+        ],
+        [
+          LLMRequest.update(request, { providerOptions: { contextManagement: "invalid-generation-option" } }),
+          model.provider === "xai" ? "UnsupportedOperation" : "InvalidRequest",
+        ],
+      ] as const) {
         const error = yield* LLMClient.generate(candidate).pipe(Effect.flip)
-        expect(error.reason._tag).toBe("InvalidRequest")
+        expect(error.reason._tag).toBe(tag)
         const response = yield* LLMClient.compact(candidate)
         expect(response.replacement[0]?.content[0]?.type).toBe("compaction")
       }
@@ -361,8 +372,9 @@ testEffect(fixedResponse("must not execute")).effect("xAI rejects automatic comp
       { providerOptions: { contextManagement: [{ type: "compaction" }] } },
     )
     const error = yield* LLMClient.generate(request).pipe(Effect.flip)
-    expect(error.reason._tag).toBe("InvalidRequest")
+    expect(error.reason._tag).toBe("UnsupportedOperation")
     expect(error.message).toContain("LLMClient.compact")
+    if (error.reason._tag === "UnsupportedOperation") expect(error.reason.operation).toBe("in-band-compaction")
   }),
 )
 
@@ -428,7 +440,9 @@ for (const model of [
       Effect.gen(function* () {
         // @ts-expect-error Untyped callers must still receive the runtime capability error.
         const error = yield* LLMClient.compact(LLM.request({ model, prompt: "hello" })).pipe(Effect.flip)
-        expect(error.reason._tag).toBe("InvalidRequest")
+        expect(error.reason._tag).toBe("UnsupportedOperation")
+        expect(error.message).toContain("does not support explicit compaction")
+        if (error.reason._tag === "UnsupportedOperation") expect(error.reason.operation).toBe("compact")
       }),
   )
 }

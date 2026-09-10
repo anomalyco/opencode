@@ -1,4 +1,4 @@
-import type { SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { SessionMessageInfo } from "@opencode/client/promise"
 import { fixture } from "./session-timeline-stress.fixture"
 
 export const exchanges = 200

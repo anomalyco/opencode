@@ -1,13 +1,13 @@
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
-import path from "path"
 import { useTuiPaths } from "../../context/runtime"
 import { errorMessage } from "../../util/error"
 import { useDialog } from "../../ui/dialog"
 import { useClient } from "../../context/client"
 import { useToast } from "../../ui/toast"
-import { DialogMoveSession, type MoveSessionSelection } from "../dialog-move-session"
+import { DialogWorkspaces, type WorkspaceSelection } from "../dialog-workspaces"
 import { useData } from "../../context/data"
 import { useLocation } from "../../context/location"
+import { useRoute } from "../../context/route"
 
 export function usePromptMove(input: { projectID: () => string | undefined; sessionID: () => string | undefined }) {
   const dialog = useDialog()
@@ -15,11 +15,12 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   const toast = useToast()
   const data = useData()
   const currentLocation = useLocation()
+  const route = useRoute()
   const paths = useTuiPaths()
   const [creating, setCreating] = createSignal(false)
   const [creatingDots, setCreatingDots] = createSignal(3)
   const [progress, setProgress] = createSignal<string>()
-  const [destination, setDestination] = createSignal<MoveSessionSelection>()
+  const [destination, setDestination] = createSignal<WorkspaceSelection>()
 
   function homeLocation() {
     const location = currentLocation.ref ?? data.location.default()
@@ -38,10 +39,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       const project = data.location.info(location)?.project
       if (!project) throw new Error("Unable to determine current project")
       const result = await client.api.worktree.create({
-        projectID: project.id,
-        strategy: "git",
-        from: project.canonical,
-        directory: path.join(paths.worktree, project.id.slice(0, 6)),
+        location: { directory: location.directory, workspace: location.workspaceID },
         name,
       })
       const directory = result.directory
@@ -72,8 +70,9 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     const sessionID = input.sessionID()
     const session = sessionID ? await resolveSession(sessionID) : undefined
     dialog.replace(() => (
-      <DialogMoveSession
+      <DialogWorkspaces
         projectID={projectID}
+        location={session?.location ?? homeLocation()}
         current={
           destination() ??
           (session
@@ -90,19 +89,18 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
         }
         onCurrentChange={setDestination}
         onSelect={(selection) => {
-          const sessionID = input.sessionID()
-          if (!sessionID) {
+          if (!input.sessionID() && selection.type === "new") {
             setDestination(selection)
             dialog.clear()
             return
           }
-          void moveExistingSession(sessionID, selection)
+          void selectWorkspace(selection)
         }}
       />
     ))
   }
 
-  async function moveExistingSession(sessionID: string, selection: MoveSessionSelection) {
+  async function selectWorkspace(selection: WorkspaceSelection) {
     dialog.clear()
     const directory = selection.type === "new" ? await create(selection.name) : selection.directory
     if (!directory) {
@@ -110,17 +108,8 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       dialog.clear()
       return
     }
-    setProgress("Moving session")
-    try {
-      await client.api.session.move({ sessionID, directory })
-      dialog.clear()
-    } catch (error) {
-      toast.error(error)
-      dialog.clear()
-    } finally {
-      setProgress(undefined)
-      setCreating(false)
-    }
+    finishSubmit()
+    route.navigate({ type: "home", location: { directory } })
   }
 
   async function resolveProjectID() {

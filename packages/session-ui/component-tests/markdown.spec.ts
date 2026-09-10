@@ -130,13 +130,14 @@ story("mounts cached completed Markdown with sanitized HTML and decorations", as
   await expect(markdown.getByRole("heading")).toHaveText("Completed response")
   await expect(markdown.locator("script, [onerror], [href^='javascript:']")).toHaveCount(0)
   await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveText("src/file.ts")
+  expect(await resolvedColor(page, "--v2-text-text-code-path")).toBe("rgb(44, 71, 200)")
   await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveCSS(
     "color",
     await resolvedColor(page, "--v2-text-text-code-path"),
   )
   await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveCSS(
     "background-color",
-    await resolvedColor(page, "--v2-background-bg-code-path"),
+    "rgba(0, 0, 0, 0)",
   )
   await expect(markdown.getByRole("link", { name: "https://example.com/docs" })).toHaveAttribute("target", "_blank")
   await expect(markdown.getByRole("link", { name: "https://example.com/docs" })).toHaveAttribute(

@@ -1,4 +1,4 @@
-import type { SessionInboxInfo, SessionMessageInfo, SessionMessageUser } from "@opencode-ai/client/promise"
+import type { SessionInboxInfo, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
 
 export function applyTimelineMessageHandoff(messages: SessionMessageInfo[], handoff?: SessionMessageUser) {
   if (!handoff) return messages

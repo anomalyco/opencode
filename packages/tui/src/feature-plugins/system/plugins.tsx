@@ -1,5 +1,5 @@
-import type { PluginInfo } from "@opencode-ai/client"
-import { Plugin } from "@opencode-ai/plugin/tui"
+import type { PluginInfo } from "@opencode/client"
+import { Plugin } from "@opencode/plugin/tui"
 import path from "path"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { DialogErrorDetails } from "../../component/dialog-error-details"
@@ -79,7 +79,9 @@ export function PluginsDialog(props: {
       ...serverEntries.sort((a, b) => label(a, props.context).localeCompare(label(b, props.context))),
     ]
   })
-  const visibleEntries = createMemo(() => entries().filter((entry) => showInternal() || !entry.internal))
+  const visibleEntries = createMemo(() =>
+    entries().filter((entry) => showInternal() || !entry.internal || status(entry) === "failed"),
+  )
   createEffect(() => {
     if (visibleEntries().some((entry) => entry.key === focused())) return
     const first = visibleEntries().find((entry) => entry.runtime === "tui") ?? visibleEntries()[0]
@@ -286,9 +288,7 @@ function source(plugin: PluginInfo, context: Plugin.Context) {
 function isLocal(entry: Entry) {
   if (entry.runtime === "server") return entry.plugin.source.type === "local"
   const target = entry.target
-  return (
-    target.startsWith("file://") || target.startsWith("./") || target.startsWith("../") || path.isAbsolute(target)
-  )
+  return target.startsWith("file://") || target.startsWith("./") || target.startsWith("../") || path.isAbsolute(target)
 }
 
 function status(entry: Entry) {

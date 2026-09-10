@@ -1,9 +1,9 @@
 import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { Effect, Latch } from "effect"
-import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
-import { OpenCode, type SessionInfo } from "@opencode-ai/client"
-import { Global } from "@opencode-ai/util/global"
+import { Service, type Endpoint } from "@opencode/client/effect/service"
+import { OpenCode, type SessionInfo } from "@opencode/client"
+import { Global } from "@opencode/util/global"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { LogProvider, useLog, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
@@ -64,7 +64,6 @@ import { DialogStatus } from "./component/dialog-status"
 import { DialogConfig } from "./component/dialog-config"
 import { DialogDebug } from "./component/dialog-debug"
 import { DialogPair, type DialogPairCredentials } from "./component/dialog-pair"
-import { DialogUpdate } from "./component/dialog-update"
 import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
@@ -81,13 +80,14 @@ import { PromptHistoryProvider } from "./prompt/history"
 import { FrecencyProvider } from "./prompt/frecency"
 import { PromptStashProvider } from "./prompt/stash"
 import { Toast, ToastProvider, useToast } from "./ui/toast"
-import { isFallbackTitle } from "@opencode-ai/util/session-title-fallback"
+import { isFallbackTitle } from "@opencode/util/session-title-fallback"
 import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
 import { newSessionLocation } from "./config/new-session-location"
+import { UpdateNotificationProvider, useUpdateNotification, type UpdateSource } from "./context/update-notification"
 import { PluginProvider, usePlugin, type PackageSource } from "./plugin/context"
 import { localPluginDirectories } from "./plugin/discovery"
 import { PluginRoute, Slot } from "./plugin/render"
@@ -100,6 +100,7 @@ import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
 import { StorageProvider, useStorage } from "./context/storage"
 import { SessionTerminalsProvider } from "./context/session-terminals"
+import { PanelProvider, usePanel } from "./context/panel"
 import { SessionFrame } from "./component/session-frame"
 import { createTuiClipboard } from "./clipboard"
 
@@ -154,6 +155,7 @@ const appBindingCommands = [
   "provider.connect",
   "opencode.settings",
   "opencode.status",
+  "opencode.update",
   "server.pair",
   "service.restart",
   "opencode.debug",
@@ -185,9 +187,7 @@ export type TuiInput = {
   }
   args: Args
   config: Config.Interface
-  updater?: {
-    apply: (version: string) => Promise<void>
-  }
+  updater?: UpdateSource
   packages: PackageSource
   environment?: Readonly<Record<string, string>>
   terminalHandoff?: () => Promise<
@@ -220,9 +220,6 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const service = managed
     ? {
         reconnect: async (signal: AbortSignal) => {
-          // Give the server a chance to respawn itself before starting client-side recovery.
-          await new Promise((resolve) => setTimeout(resolve, 50))
-          if (signal.aborted) throw signal.reason ?? new Error("Server reconnect cancelled")
           const endpoint = await managed.reconnect(signal)
           const next = { baseUrl: endpoint.url, headers: Service.headers(endpoint) }
           return { api: OpenCode.make(next), url: endpoint.url }
@@ -254,7 +251,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
           )
         }
         if (process.env.OPENCODE_DRIVE) {
-          const { Drive } = yield* Effect.promise(() => import("@opencode-ai/simulation/frontend"))
+          const { Drive } = yield* Effect.promise(() => import("@opencode/simulation/frontend"))
           return yield* Drive.create(options, input.app.version)
         }
         return yield* Effect.acquireRelease(
@@ -399,22 +396,27 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                     <PromptRefProvider>
                                                                       <EditorContextProvider>
                                                                         <AttentionProvider>
-                                                                          <PluginProvider
-                                                                            packages={input.packages}
-                                                                            directories={pluginDirectories}
+                                                                          <UpdateNotificationProvider
+                                                                            updater={input.updater}
                                                                           >
-                                                                            <App
-                                                                              updater={input.updater}
-                                                                              pair={
-                                                                                input.server.endpoint.auth
-                                                                                  ? input.server.endpoint.auth
-                                                                                  : {
-                                                                                      username: "opencode",
-                                                                                      password: "",
-                                                                                    }
-                                                                              }
-                                                                            />
-                                                                          </PluginProvider>
+                                                                            <PanelProvider>
+                                                                              <PluginProvider
+                                                                                packages={input.packages}
+                                                                                directories={pluginDirectories}
+                                                                              >
+                                                                                <App
+                                                                                  pair={
+                                                                                    input.server.endpoint.auth
+                                                                                      ? input.server.endpoint.auth
+                                                                                      : {
+                                                                                          username: "opencode",
+                                                                                          password: "",
+                                                                                        }
+                                                                                  }
+                                                                                />
+                                                                              </PluginProvider>
+                                                                            </PanelProvider>
+                                                                          </UpdateNotificationProvider>
                                                                         </AttentionProvider>
                                                                       </EditorContextProvider>
                                                                     </PromptRefProvider>
@@ -464,7 +466,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
 })
 
-function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"] }) {
+function App(props: { pair?: DialogPairCredentials }) {
   const log = useLog({ component: "app" })
   const app = useTuiApp()
   const startup = useTuiStartup()
@@ -476,10 +478,12 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
   const dialog = useDialog()
   const local = useLocal()
   const sessionTabs = useSessionTabs()
+  const panels = usePanel()
   const keymap = Keymap.use()
   const event = useEvent()
   const client = useClient()
   const toast = useToast()
+  const updater = useUpdateNotification()
   const theme = useTheme()
   const { mode, supports, setMode, locked, lock, unlock } = useThemes()
   const data = useData()
@@ -503,10 +507,6 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
   const [layout, updateLayout] = useStorage().store<{ verticalTabsWidth?: number }>("layout", {
     initial: { verticalTabsWidth: SESSION_SIDEBAR_WIDTH },
   })
-  const [updateNotifications, markUpdateNotification] = useStorage().store<{ versions: string[] }>(
-    "update-notifications",
-    { initial: { versions: [] } },
-  )
   const tabsResize = createPaneResize({
     value: () => layout.verticalTabsWidth ?? SESSION_SIDEBAR_WIDTH,
     defaultValue: () => SESSION_SIDEBAR_WIDTH,
@@ -579,9 +579,22 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
   const terminalTitleEnabled = () => config.data.terminal?.title ?? true
   const pasteSummaryEnabled = () => config.data.prompt?.paste !== "full"
   const tabsVertical = () =>
-    config.data.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width, tabsResize.preferredSize())
-  const tabsVisible = () => sessionTabs.enabled() && sessionTabs.tabs().length > 0 && route.data.type !== "plugin"
+    config.data.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width, tabsResize.size())
+  const tabsAvailable = () => sessionTabs.enabled() && sessionTabs.tabs().length > 0 && route.data.type !== "plugin"
+  const fullscreenPanel = () =>
+    route.data.type === "session" &&
+    panels.current()?.sessionID === route.data.sessionID &&
+    panels.presentation() === "fullscreen"
+  const tabsVisible = () => tabsAvailable() && !fullscreenPanel()
   const verticalTabsVisible = () => tabsVisible() && tabsVertical()
+
+  // Measure the prospective split layout, even while full-screen hides the tabs.
+  createEffect(() => panels.setWidth(dimensions().width - (tabsAvailable() && tabsVertical() ? tabsResize.size() : 0)))
+  createEffect(() => {
+    const current = panels.current()
+    if (!current || (route.data.type === "session" && route.data.sessionID === current.sessionID)) return
+    panels.close()
+  })
 
   createEffect(() => {
     renderer.useMouse = config.data.mouse
@@ -709,6 +722,7 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
         slash: { name: "new", aliases: ["clear"] },
         run: () => {
           const model = local.model.current()
+          const agent = local.agent.current()
           const current =
             route.data.type === "session"
               ? (data.session.get(route.data.sessionID)?.location ?? location.ref)
@@ -722,6 +736,7 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
               location.error?.location,
             ),
           })
+          if (agent) local.agent.set(agent.id)
           if (model) local.model.set(model)
           dialog.clear()
         },
@@ -806,7 +821,6 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
         title: "Switch model",
         suggested: true,
         category: "Agent",
-        // Bias /mo toward /models over /move without changing global fuzzy scoring.
         slash: { name: "models", aliases: ["mo"] },
         run: () => {
           dialog.replace(() => <DialogModel />)
@@ -942,6 +956,17 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
         },
         category: "System",
       },
+      ...(updater.open
+        ? [
+            {
+              name: "opencode.update",
+              title: "Update OpenCode",
+              slash: { name: "update", aliases: ["upgrade"] },
+              run: () => updater.open?.("manual"),
+              category: "System",
+            },
+          ]
+        : []),
       {
         name: "server.pair",
         title: "Pair device",
@@ -1213,19 +1238,6 @@ function App(props: { pair?: DialogPairCredentials; updater?: TuiInput["updater"
       variant: evt.data.variant,
       duration: evt.data.duration,
     })
-  })
-
-  event.on("installation.update-available", (evt) => {
-    const updater = props.updater
-    const restart = client.restart
-    if (!updater || !restart) return
-    const version = evt.data.version
-    if (updateNotifications.versions.includes(version)) return
-    void markUpdateNotification((draft) => {
-      draft.versions = [...draft.versions, version].slice(-100)
-    }).catch((error) => log.error("failed to persist update notification", { error }))
-    dialog.replace(() => <DialogUpdate version={version} install={() => updater.apply(version)} restart={restart} />)
-    dialog.setCentered(true)
   })
 
   event.on("tui.session.select", (evt, { workspace }) => {

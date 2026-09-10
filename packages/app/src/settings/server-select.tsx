@@ -1,5 +1,5 @@
 import { Show, createMemo, type Component } from "solid-js"
-import { Select } from "@opencode-ai/ui/select"
+import { Select } from "@opencode/ui/select"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, serverName } from "@/runtime/server/registry"
 

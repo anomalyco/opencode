@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/console-function",
+  "name": "@opencode/console-function",
   "version": "1.18.15",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
@@ -16,8 +16,8 @@
     "@typescript/native-preview": "catalog:"
   },
   "dependencies": {
-    "@opencode-ai/console-core": "workspace:*",
-    "@opencode-ai/console-resource": "workspace:*",
+    "@opencode/console-core": "workspace:*",
+    "@opencode/console-resource": "workspace:*",
     "@openauthjs/openauth": "0.0.0-20250322224806",
     "zod": "catalog:"
   }

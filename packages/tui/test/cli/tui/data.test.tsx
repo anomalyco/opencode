@@ -1,10 +1,10 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
-import type { OpenCodeEvent } from "@opencode-ai/client"
-import { SessionMessage } from "@opencode-ai/core/session/message"
-import { Bus } from "@opencode-ai/core/bus"
-import { Event } from "@opencode-ai/schema/event"
+import type { OpenCodeEvent } from "@opencode/client"
+import { SessionMessage } from "@opencode/core/session/message"
+import { Bus } from "@opencode/core/bus"
+import { Event } from "@opencode/schema/event"
 import { Expected } from "../../../../core/test/lib/session-message"
 import { createEffect, onMount, type ParentProps } from "solid-js"
 import { ConfigProvider } from "../../../src/config"
@@ -15,6 +15,8 @@ import { LocationProvider, useLocation } from "../../../src/context/location"
 import { RouteProvider } from "../../../src/context/route"
 import { ThemeProvider } from "../../../src/context/theme"
 import { Composer } from "../../../src/routes/session/composer"
+import { DialogProvider } from "../../../src/ui/dialog"
+import { ToastProvider } from "../../../src/ui/toast"
 import { createSessionRows, type SessionRow } from "../../../src/routes/session/rows"
 import { createApi, createEventStream, createFetch, directory, json, worktree } from "../../fixture/tui-client"
 import { emptyThemeSource } from "../../fixture/fixture"
@@ -1577,6 +1579,89 @@ test("tracks session status from active sessions and execution events", async ()
   }
 })
 
+test.each(["before", "between", "after"])("shows compaction admitted %s steers in execution order", async (order) => {
+  const events = createEventStream()
+  const sessionID = "session-compaction-priority"
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+    return undefined
+  }, events)
+  let rows: SessionRow[] = []
+  let client: ReturnType<typeof useClient> | undefined
+  function Probe() {
+    client = useClient()
+    rows = createSessionRows(() => sessionID)
+    return <box />
+  }
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+  const admissions =
+    order === "before" ? ["compact", "a", "b"] : order === "between" ? ["a", "compact", "b"] : ["a", "b", "compact"]
+  try {
+    await wait(() => client?.connection.status() === "connected")
+    admissions.forEach((id, index) =>
+      emitEvent(events, {
+        id: `evt_admit_${id}`,
+        created: index + 1,
+        type: "session.inbox.enqueued",
+        durable: durable(sessionID, index + 1),
+        data: {
+          sessionID,
+          inboxID: id,
+          item:
+            id === "compact"
+              ? { type: "compaction", payload: {}, delivery: "steer" }
+              : { type: "user", payload: { text: `STEER_${id.toUpperCase()}` }, delivery: "steer" },
+        },
+      }),
+    )
+    await wait(() => rows.length === 3)
+    expect(rows).toEqual([
+      { type: "compaction-queued", inboxID: "compact" },
+      { type: "message", messageID: "a" },
+      { type: "message", messageID: "b" },
+    ])
+    emitEvent(events, {
+      id: "evt_compaction_started",
+      created: 4,
+      type: "session.compaction.started",
+      durable: durable(sessionID, 4),
+      data: { sessionID, reason: "manual", recent: "", inputID: "compact" },
+    })
+    await wait(() => rows[0]?.type === "message")
+    expect(rows).toEqual(["compact", "a", "b"].map((messageID) => ({ type: "message", messageID })))
+    emitEvent(events, {
+      id: "evt_compaction_ended",
+      created: 5,
+      type: "session.compaction.ended",
+      durable: durable(sessionID, 5),
+      data: { sessionID, reason: "manual", text: "## Objective\n- Checkpoint", recent: "" },
+    })
+    for (const [index, id] of ["a", "b"].entries()) {
+      emitEvent(events, {
+        id: `evt_deliver_${id}`,
+        created: index + 6,
+        type: "session.inbox.delivered",
+        durable: durable(sessionID, index + 6),
+        data: { sessionID, inboxID: id },
+      })
+    }
+    await app.renderOnce()
+    expect(rows).toEqual(["compact", "a", "b"].map((messageID) => ({ type: "message", messageID })))
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("restores queued compaction from durable pending input", async () => {
   const events = createEventStream()
   const sessionID = "session-compaction-queued"
@@ -2020,7 +2105,11 @@ test("keeps shell state scoped to location", async () => {
       <RouteProvider initialRoute={{ type: "session", sessionID: "ses_shared" }}>
         <Keymap.Provider>
           <ThemeProvider mode="dark" source={emptyThemeSource}>
-            <Composer sessionID="ses_shared" open={true} defaultTab="shell" />
+            <ToastProvider>
+              <DialogProvider>
+                <Composer sessionID="ses_shared" open={true} defaultTab="shell" />
+              </DialogProvider>
+            </ToastProvider>
           </ThemeProvider>
         </Keymap.Provider>
       </RouteProvider>

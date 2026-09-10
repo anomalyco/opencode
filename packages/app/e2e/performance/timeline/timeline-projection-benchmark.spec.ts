@@ -1,5 +1,5 @@
 import { createServer, type ServerResponse } from "node:http"
-import type { OpenCodeEvent } from "@opencode-ai/client/promise"
+import type { OpenCodeEvent } from "@opencode/client/promise"
 import { benchmark, benchmarkDiagnostics, expect } from "../benchmark"
 import {
   buildInitialStreamEvent,

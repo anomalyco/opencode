@@ -50,11 +50,11 @@ for (const mode of ["hidden", "compact", "full"] as const) {
       if (following === "tool") {
         const group = timeline.locator('[data-component="collapsed-tool-group"]')
         const trigger = group.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
-        await expect(trigger).toHaveText(/^Used\s*1 Skill$/)
+        await expect(trigger).toHaveText(/^Used\s*1\s*Skill$/)
         await expect(trigger).toHaveAttribute("aria-expanded", "false")
         await expect(
           group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-        ).toHaveText("1 Skill")
+        ).toHaveText("Skill")
         await expect(timeline.getByText("Inspecting stability", { exact: true })).toBeHidden()
         await trigger.click()
         await expect(trigger).toHaveAttribute("aria-expanded", "true")
@@ -67,7 +67,10 @@ for (const mode of ["hidden", "compact", "full"] as const) {
       await expect(part).toHaveCount(mode === "hidden" ? 0 : 1)
       if (mode === "hidden") return
       const thought = part.locator('[data-slot="collapsible-trigger"]')
-      await expect(thought.locator('[data-slot="basic-tool-tool-title"]')).toContainText("Thought")
+      const thoughtTitle = thought.locator('[data-slot="basic-tool-tool-title"]')
+      await expect(thoughtTitle).toContainText("Thought")
+      await expect(thoughtTitle).toHaveCSS("font-size", "13px")
+      await expect(thoughtTitle).toHaveCSS("line-height", "16px")
       await expect(thought.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText("7s")
       await expect(thought).toHaveAttribute("aria-expanded", String(mode === "full"))
       await expect(thought).not.toContainText("Inspecting stability")

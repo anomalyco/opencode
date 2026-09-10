@@ -1,10 +1,10 @@
 import { Show, createMemo } from "solid-js"
-import { Button } from "@opencode-ai/ui/button"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Keybind } from "@opencode-ai/ui/keybind"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Button } from "@opencode/ui/button"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { Icon } from "@opencode/ui/icon"
+import { Keybind } from "@opencode/ui/keybind"
+import { ProviderIcon } from "@opencode/ui/provider-icon"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { ComposerEditor } from "./editor/editor"
 import { ModelSelectorPopover } from "@/providers/models/select-dialog"
 import { DialogSelectModelUnpaid } from "@/providers/models/unpaid"
@@ -26,7 +26,8 @@ export function Composer(props: { class?: string; model: ComposerModel; borderUn
         modelControlsVisible={!props.model.model.loading}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
-        alternateKeybind={[formatKeybind("mod", language.t), formatKeybind("enter", language.t)]}
+        alternateKeybind={[formatKeybind("mod", language.t), "↵"]}
+        exitShellKeybind={[formatKeybind("esc", language.t)]}
         modelControl={
           <ComposerModelControl
             loading={props.model.model.loading}

@@ -120,6 +120,7 @@ export const Viewed = Event.durable({
 })
 export type Viewed = typeof Viewed.Type
 
+// Replay-only: older releases allowed replacing completed assistant content.
 export const MessageContentUpdated = Event.durable({
   type: "session.message.content.updated",
   ...options,
@@ -233,7 +234,7 @@ export namespace Execution {
   export const Interrupted = Event.durable({
     type: "session.execution.interrupted",
     ...options,
-    schema: { ...Base, reason: Schema.Literals(["user", "shutdown", "superseded"]) },
+    schema: { ...Base, reason: Schema.Literals(["user", "shutdown", "superseded", "inactivity"]) },
   })
   export type Interrupted = typeof Interrupted.Type
 }
@@ -585,8 +586,15 @@ export namespace Compaction {
     schema: {
       ...Base,
       reason: Started.data.fields.reason,
+      model: SessionMessage.CompactionCompleted.fields.model,
+      providerState: SessionMessage.CompactionCompleted.fields.providerState,
+      providerContext: SessionMessage.CompactionCompleted.fields.providerContext,
       text: Schema.String,
       recent: Schema.String,
+      // Repeats the internal `session.usage.recorded` figures: that event never reaches clients, and it
+      // stays the accounting source for session totals and stats.
+      cost: SessionMessage.CompactionCompleted.fields.cost,
+      tokens: SessionMessage.CompactionCompleted.fields.tokens,
     },
   })
   export type Ended = typeof Ended.Type
@@ -599,6 +607,8 @@ export namespace Compaction {
       reason: Started.data.fields.reason,
       error: SessionError.Error,
       inputID: SessionMessage.ID.pipe(optional),
+      cost: SessionMessage.CompactionFailed.fields.cost,
+      tokens: SessionMessage.CompactionFailed.fields.tokens,
     },
   })
   export type Failed = typeof Failed.Type
@@ -666,13 +676,13 @@ export const Definitions = Event.inventory(
   RevertEvent.Staged,
   RevertEvent.Cleared,
   RevertEvent.Committed,
-  MessageContentUpdated,
 )
 
-// UsageRecorded is durable but internal: excluded from Definitions so it never reaches the public manifest.
+// Internal and replay-only events are excluded from the public manifest.
 export const DurableDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "durable"),
   UsageRecorded,
+  MessageContentUpdated,
 )
 export const EphemeralDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "ephemeral"),

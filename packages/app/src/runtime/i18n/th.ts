@@ -145,6 +145,7 @@ export const dict = {
   "command.language.set": "ใช้ภาษา: {{language}}",
 
   "command.session.new": "เซสชันใหม่",
+  "command.session.import": "นำเข้าเซสชัน",
   "command.file.open": "เปิดไฟล์",
   "command.tab.close": "ปิดแท็บ",
   "command.tab.reopenClosed": "เปิดแท็บที่ปิดไปอีกครั้ง",

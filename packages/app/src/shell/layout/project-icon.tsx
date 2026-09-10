@@ -1,4 +1,4 @@
-import { ProjectAvatar, type ProjectAvatarProps } from "@opencode-ai/ui/project-avatar"
+import { ProjectAvatar, type ProjectAvatarProps } from "@opencode/ui/project-avatar"
 import { splitProps } from "solid-js"
 import { displayName, getProjectAvatarSource } from "@/shell/layout/helpers"
 import { getProjectAvatarVariant, type LocalProject } from "@/shell/state/layout"
