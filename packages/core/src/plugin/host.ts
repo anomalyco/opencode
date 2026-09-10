@@ -509,6 +509,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
           title: input?.title,
           agent: input?.agent,
           model: input?.model,
+          metadata: input?.metadata,
           location:
             input?.location ?? Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
         }),
