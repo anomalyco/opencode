@@ -26,10 +26,6 @@ export interface Options {
   readonly enabled?: (url: string) => boolean
   readonly url?: (url: string) => string
   readonly headers?: (headers: Headers.Headers) => Headers.Headers
-  /**
-   * Shapes the fields sent next to `previous_response_id` on an incremental step, or returns undefined to send
-   * that step in full. The provider keeps omitted fields from the response it continues.
-   */
   readonly continuation?: OpenResponsesContinuation.Shape
 }
 

@@ -1,12 +1,18 @@
 import { describe, expect } from "bun:test"
-import { Effect, Stream } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { LLM, LLMEvent, Message } from "../../src/index.js"
 import { XAI } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
 import * as ProviderShared from "../../src/protocols/shared.js"
 import { XAIResponses } from "../../src/protocols/xai-responses.js"
-import { LLMClient, WebSocketTransport, type ChannelCheckpoint, type WebSocketChannelDriver } from "../../src/route.js"
+import {
+  LLMClient,
+  RequestExecutor,
+  WebSocketTransport,
+  type ChannelCheckpoint,
+  type WebSocketChannelDriver,
+} from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
@@ -207,7 +213,16 @@ describe("xAI Responses route", () => {
           Effect.succeed({ sendText: () => Effect.void, messages: Stream.make(envelope), close: Effect.void }),
       })
       const error = yield* LLMClient.generate(LLM.request({ model, prompt: "Hello" }), { webSocket }).pipe(
-        Effect.provide(fixedResponse("", { status: 500 })),
+        Effect.provide(
+          LLMClient.layer.pipe(
+            Layer.provide(
+              Layer.succeed(
+                RequestExecutor.Service,
+                RequestExecutor.Service.of({ execute: () => Effect.die("unexpected HTTP request") }),
+              ),
+            ),
+          ),
+        ),
         Effect.flip,
       )
 

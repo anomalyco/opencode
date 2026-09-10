@@ -4,7 +4,6 @@ import { Endpoint } from "../route/endpoint.js"
 import { HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponsesChannel } from "../protocols/open-responses-channel.js"
-import type { OpenResponsesContinuation } from "../protocols/open-responses-continuation.js"
 import { XAIResponses } from "../protocols/xai-responses.js"
 import { XAIImages } from "../protocols/xai-images.js"
 import type { OpenAIOptionsInput } from "./openai-options.js"
@@ -31,12 +30,6 @@ export type { XAIImageOptions } from "../protocols/xai-images.js"
 
 const RESPONSES_WEBSOCKET_ROTATE_AFTER_MS = 24 * 60 * 1000
 
-// xAI continues a chain only from stored responses: with `store: false` (the route default) `previous_response_id`
-// fails with "Response with id=… not found", so those steps are sent in full over the reused connection. It also
-// rejects `instructions` next to `previous_response_id` and keeps the instructions of the response it continues.
-const continuation: OpenResponsesContinuation.Shape = ({ instructions: _instructions, ...request }) =>
-  request.store === false ? undefined : request
-
 const responsesRoute = Route.make({
   compact: { endpoint: XAIResponses.compact },
   id: "openai-responses",
@@ -48,7 +41,10 @@ const responsesRoute = Route.make({
     id: "openai-responses",
     name: "xAI Responses",
     rotateAfterMs: RESPONSES_WEBSOCKET_ROTATE_AFTER_MS,
-    continuation,
+    // xAI continues a chain only from stored responses: with `store: false` (the route default) `previous_response_id`
+    // fails with "Response with id=… not found", so those steps are sent in full over the reused connection. It also
+    // rejects `instructions` next to `previous_response_id` and keeps the instructions of the response it continues.
+    continuation: ({ instructions: _instructions, ...request }) => (request.store === false ? undefined : request),
   }),
   defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
