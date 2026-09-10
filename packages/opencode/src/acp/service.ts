@@ -1086,38 +1086,61 @@ function restoreSession(
   messages: MessageInfo[],
 ) {
   const history = restoreFromMessages(messages)
-  const durable = backing.model
-    ? {
-        providerID: ProviderV2.ID.make(backing.model.providerID),
-        modelID: ModelV2.ID.make(backing.model.id),
-      }
-    : undefined
-  const model =
-    durable && hasModel(snapshot, durable)
-      ? durable
-      : history.model && hasModel(snapshot, history.model)
-        ? history.model
-        : selectDefaultModel(snapshot)
-  const variants = Directory.variants(snapshot, model)
-  const variant = variants
-    ? ([
-        sameModel(model, durable) ? backing.model?.variant : undefined,
-        sameModel(model, history.model) ? history.variant : undefined,
-      ].find((item) => item && item in variants) ?? selectVariant(snapshot, model))
-    : undefined
-  const modeId = [backing.agent, history.modeId].find(
-    (item) => item && snapshot.availableModes.some((mode) => mode.id === item),
-  )
-
+  const durable = restoreDurableModel(backing.model)
+  const model = restoreModel(snapshot, durable.model, history.model)
   return {
     model,
-    variant,
-    modeId: modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
+    variant: restoreVariant(snapshot, model, durable, history),
+    modeId: restoreMode(snapshot, backing.agent, history.modeId),
   }
+}
+
+function restoreDurableModel(model: Session["model"] | undefined) {
+  if (!model) return {}
+  return {
+    model: {
+      providerID: ProviderV2.ID.make(model.providerID),
+      modelID: ModelV2.ID.make(model.id),
+    },
+    variant: model.variant,
+  }
+}
+
+function restoreModel(
+  snapshot: Directory.Snapshot,
+  durable: Directory.DefaultModel | undefined,
+  history: Directory.DefaultModel | undefined,
+) {
+  if (durable && hasModel(snapshot, durable)) return durable
+  if (history && hasModel(snapshot, history)) return history
+  return selectDefaultModel(snapshot)
+}
+
+function restoreVariant(
+  snapshot: Directory.Snapshot,
+  model: Directory.DefaultModel,
+  durable: { model?: Directory.DefaultModel; variant?: string },
+  history: { model?: Directory.DefaultModel; variant?: string },
+) {
+  const variants = Directory.variants(snapshot, model)
+  if (!variants) return
+  if (sameModel(model, durable.model) && durable.variant && durable.variant in variants) return durable.variant
+  if (sameModel(model, history.model) && history.variant && history.variant in variants) return history.variant
+  return selectVariant(snapshot, model)
+}
+
+function restoreMode(snapshot: Directory.Snapshot, durable: string | undefined, history: string | undefined) {
+  if (hasMode(snapshot, durable)) return durable
+  if (hasMode(snapshot, history)) return history
+  if (snapshot.availableModes.length > 0) return snapshot.defaultModeID
 }
 
 function hasModel(snapshot: Directory.Snapshot, model: Directory.DefaultModel) {
   return Boolean(snapshot.providers[model.providerID]?.models[model.modelID])
+}
+
+function hasMode(snapshot: Directory.Snapshot, modeId: string | undefined) {
+  return Boolean(modeId && snapshot.availableModes.some((mode) => mode.id === modeId))
 }
 
 function sameModel(left: Directory.DefaultModel, right: Directory.DefaultModel | undefined) {
