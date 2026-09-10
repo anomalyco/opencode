@@ -321,7 +321,7 @@ export function createFrames(options: KnightRiderOptions = {}): string[] {
       // Default to blocks
       // It's active if we have a valid color index that is within our colors array
       const isActive = index >= 0 && index < trailOptions.colors.length
-      return isActive ? "■" : "⬝"
+      return isActive ? "■" : "·"
     }).join("")
   })
 
