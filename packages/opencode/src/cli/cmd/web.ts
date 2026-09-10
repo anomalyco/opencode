@@ -28,6 +28,11 @@ function getNetworkIPs() {
   return results
 }
 
+export async function openBrowser(url: string, opener: typeof open = open) {
+  const subprocess = await opener(url)
+  subprocess.on("error", () => {})
+}
+
 export const WebCommand = effectCmd({
   command: "web",
   builder: (yargs) => withNetworkOptions(yargs),
@@ -72,11 +77,11 @@ export const WebCommand = effectCmd({
       }
 
       // Open localhost in browser
-      open(localhostUrl).catch(() => {})
+      openBrowser(localhostUrl).catch(() => {})
     } else {
       const displayUrl = server.url.toString()
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, displayUrl)
-      open(displayUrl).catch(() => {})
+      openBrowser(displayUrl).catch(() => {})
     }
 
     yield* Effect.never
