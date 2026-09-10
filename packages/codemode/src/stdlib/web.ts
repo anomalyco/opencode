@@ -6,7 +6,7 @@ import { coerceToString } from "./value.js"
 const base64 = (name: "atob" | "btoa") =>
   sync(name, (args, node) => {
     if (args.length === 0)
-      throw new InterpreterRuntimeError(`${name} requires a string argument.`, node).as("TypeError")
+      throw new InterpreterRuntimeError(`${name} requires 1 argument (a string)`, node).as("TypeError")
     const input = coerceToString(args[0])
     try {
       return name === "atob" ? atob(input) : btoa(input)
