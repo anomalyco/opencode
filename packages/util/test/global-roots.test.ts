@@ -13,6 +13,7 @@ describe("global roots", () => {
       XDG_CACHE_HOME: path.join(root, "cache"),
       XDG_CONFIG_HOME: path.join(root, "config"),
       XDG_STATE_HOME: path.join(root, "state"),
+      XDG_RUNTIME_DIR: path.join(root, "runtime"),
     }
 
     expect(run(env)).toEqual({
@@ -20,7 +21,7 @@ describe("global roots", () => {
       cache: path.join(env.XDG_CACHE_HOME, "opencode"),
       config: path.join(env.XDG_CONFIG_HOME, "opencode"),
       state: path.join(env.XDG_STATE_HOME, "opencode"),
-      tmp: path.join(os.tmpdir(), "opencode"),
+      tmp: path.join(env.XDG_RUNTIME_DIR, "opencode"),
     })
   })
 
@@ -33,6 +34,7 @@ describe("global roots", () => {
         XDG_CACHE_HOME: "",
         XDG_CONFIG_HOME: "",
         XDG_STATE_HOME: "",
+        XDG_RUNTIME_DIR: "",
         ...(process.platform === "win32" ? { USERPROFILE: home } : { HOME: home }),
       }),
     ).toEqual({

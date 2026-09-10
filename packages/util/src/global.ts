@@ -65,12 +65,21 @@ const acquire = (input: Partial<Interface>) =>
     const service = Service.of(make(input))
     yield* Effect.promise(() =>
       Promise.all(
-        [service.data, service.config, service.state, service.log, service.bin, service.repos, service.tmp].map(
-          (directory) => fs.promises.mkdir(directory, { recursive: true }),
+        [service.data, service.config, service.state, service.log, service.bin, service.repos].map((directory) =>
+          fs.promises.mkdir(directory, { recursive: true }),
         ),
       ),
     )
-    const canonicalTmp = yield* Effect.promise(() => fs.promises.realpath(service.tmp))
+    const temporary = yield* Effect.promise(async () => {
+      if (input.tmp !== undefined || process.env.XDG_RUNTIME_DIR) {
+        await fs.promises.mkdir(service.tmp, { recursive: true })
+        return service.tmp
+      }
+      await fs.promises.mkdir(path.dirname(service.tmp), { recursive: true })
+      return fs.promises.mkdtemp(`${service.tmp}-`)
+    })
+    yield* Effect.promise(() => fs.promises.access(temporary, fs.constants.W_OK | fs.constants.X_OK))
+    const canonicalTmp = yield* Effect.promise(() => fs.promises.realpath(temporary))
     return Service.of({ ...service, tmp: input.tmp ?? canonicalTmp })
   })
 
