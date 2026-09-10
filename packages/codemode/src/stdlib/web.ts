@@ -5,9 +5,8 @@ import { coerceToString } from "./value.js"
 // WebIDL DOMString conversion: a missing argument is a TypeError, anything else stringifies.
 const base64 = (name: "atob" | "btoa") =>
   sync(name, (args, node) => {
-    if (args.length === 0) {
-      throw new InterpreterRuntimeError(`${name} requires 1 argument, but only 0 were provided.`, node).as("TypeError")
-    }
+    if (args.length === 0)
+      throw new InterpreterRuntimeError(`${name} requires a string argument.`, node).as("TypeError")
     const input = coerceToString(args[0])
     try {
       return name === "atob" ? atob(input) : btoa(input)
