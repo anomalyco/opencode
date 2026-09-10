@@ -705,7 +705,7 @@ type MessageInfo = {
 }
 
 type AssistantError = NonNullable<AssistantMessage["error"]>
-type AssistantInfo = (UsageService.AssistantTokenCost & Pick<AssistantMessage, "error">) | undefined
+type AssistantInfo = (UsageService.AssistantTokenCost & Pick<AssistantMessage, "error" | "providerID">) | undefined
 
 function request<T>(fn: () => Promise<T | SdkResponse<T>>, service?: string) {
   return Effect.tryPromise({
@@ -863,6 +863,10 @@ const promptResponse = Effect.fn("ACP.promptResponse")(function* (
 
   if (info.error.name === "ProviderAuthError") {
     return yield* new ACPError.AuthRequiredError({ providerId: info.error.data.providerID })
+  }
+
+  if (info.error.name === "APIError" && (info.error.data.statusCode === 401 || info.error.data.statusCode === 403)) {
+    return yield* new ACPError.AuthRequiredError({ providerId: info.providerID })
   }
 
   return yield* new ACPError.ServiceFailureError({
