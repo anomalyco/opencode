@@ -80,8 +80,14 @@ export const Plugin = define({
         if (result.some((item) => Skill.Source.equals(item, source))) return
         result.push(source)
       }
-      const claude = loaded.entries.flatMap((entry) => (entry.type === "claude" ? [entry.path] : []))
-      const agents = loaded.entries.flatMap((entry) => (entry.type === "agents" ? [entry.path] : []))
+      const claude = [
+        path.join(global.home, ".claude"),
+        ...loaded.entries.flatMap((entry) => (entry.type === "claude" ? [entry.path] : [])),
+      ]
+      const agents = [
+        path.join(global.home, ".agents"),
+        ...loaded.entries.flatMap((entry) => (entry.type === "agents" ? [entry.path] : [])),
+      ]
       const directories = loaded.entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))
       const items = loaded.entries.flatMap((entry) => (entry.type === "document" ? (entry.info.skills ?? []) : []))
       for (const directory of [...claude, ...agents]) {
