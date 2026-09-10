@@ -260,6 +260,9 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       )
       yield* tx.run(`CREATE INDEX \`session_message_time_created_idx\` ON \`session_message\` (\`time_created\`);`)
       yield* tx.run(
+        `CREATE INDEX \`session_message_stats_idx\` ON \`session_message\` (\`time_created\`,\`session_id\`,\`type\`,json_extract("data", '$.model.providerID'),json_extract("data", '$.model.id'),json_extract("data", '$.model.variant'),json_extract("data", '$.tokens.input'),json_extract("data", '$.tokens.output'),json_extract("data", '$.tokens.reasoning'),json_extract("data", '$.tokens.cache.read'),json_extract("data", '$.tokens.cache.write'),json_extract("data", '$.cost'));`,
+      )
+      yield* tx.run(
         `CREATE INDEX \`session_pending_session_delivery_seq_idx\` ON \`session_pending\` (\`session_id\`,\`delivery\`,\`admitted_seq\`);`,
       )
       yield* tx.run(

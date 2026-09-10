@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "be60f352-8da1-40e1-8d70-dc41121cfbc5",
-  "prevIds": ["3fb67508-0196-4bae-b2bd-c08ece7583fd"],
+  "id": "021f81ad-c99d-4405-81a3-284baea2cdf0",
+  "prevIds": ["be60f352-8da1-40e1-8d70-dc41121cfbc5"],
   "ddl": [
     {
       "name": "account_state",
@@ -1939,6 +1939,64 @@
       "where": null,
       "origin": "manual",
       "name": "session_message_time_created_idx",
+      "entityType": "indexes",
+      "table": "session_message"
+    },
+    {
+      "columns": [
+        {
+          "value": "time_created",
+          "isExpression": false
+        },
+        {
+          "value": "session_id",
+          "isExpression": false
+        },
+        {
+          "value": "type",
+          "isExpression": false
+        },
+        {
+          "value": "json_extract(\"data\", '$.model.providerID')",
+          "isExpression": true
+        },
+        {
+          "value": "json_extract(\"data\", '$.model.id')",
+          "isExpression": true
+        },
+        {
+          "value": "json_extract(\"data\", '$.model.variant')",
+          "isExpression": true
+        },
+        {
+          "value": "json_extract(\"data\", '$.tokens.input')",
+          "isExpression": true
+        },
+        {
+          "value": "json_extract(\"data\", '$.tokens.output')",
+          "isExpression": true
+        },
+        {
+          "value": "json_extract(\"data\", '$.tokens.reasoning')",
+          "isExpression": true
+        },
+        {
+          "value": "json_extract(\"data\", '$.tokens.cache.read')",
+          "isExpression": true
+        },
+        {
+          "value": "json_extract(\"data\", '$.tokens.cache.write')",
+          "isExpression": true
+        },
+        {
+          "value": "json_extract(\"data\", '$.cost')",
+          "isExpression": true
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_message_stats_idx",
       "entityType": "indexes",
       "table": "session_message"
     },
