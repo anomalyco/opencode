@@ -3,6 +3,8 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.promo.deepseek": "DeepSeek V4.1 Flash lansman kampanyası: 4× kullanım — aylık $15 yerine $60.",
+  "go.graph.bonus": "{{count}}× kullanım",
   "nav.github": "GitHub",
   "nav.docs": "Dokümantasyon",
   "nav.changelog": "Değişiklik günlüğü",

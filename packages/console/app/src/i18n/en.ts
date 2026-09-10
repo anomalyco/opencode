@@ -1,4 +1,6 @@
 export const dict = {
+  "go.promo.deepseek": "DeepSeek V4.1 Flash launch promotion: 4× usage — $60 instead of $15 per month.",
+  "go.graph.bonus": "{{count}}× usage",
   "nav.github": "GitHub",
   "nav.docs": "Docs",
   "nav.data": "Data",

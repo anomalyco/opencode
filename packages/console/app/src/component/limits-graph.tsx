@@ -57,6 +57,7 @@ export function LimitsGraph(props: { href: string }) {
     >
       <div data-slot="heading">
         <h2 id={`${id}-title`}>{i18n.t("go.graph.period")}</h2>
+        <p data-slot="promotion">{i18n.t("go.promo.deepseek")}</p>
       </div>
 
       <div role="table" aria-labelledby={`${id}-title`} id={`${id}-models`}>
@@ -79,6 +80,9 @@ export function LimitsGraph(props: { href: string }) {
                   <bdi>{model.name}</bdi>
                   <Show when={model.fresh}>
                     <span data-slot="badge">{i18n.t("go.graph.new")}</span>
+                  </Show>
+                  <Show when={model.bonus}>
+                    <span data-slot="badge">{i18n.t("go.graph.bonus", { count: model.bonus! })}</span>
                   </Show>
                   <Show when={model.regions}>
                     <a
@@ -103,10 +107,16 @@ export function LimitsGraph(props: { href: string }) {
                     <div data-slot="bar" style={{ "--width": `${position(model.requests)}%` }} />
                   </div>
                   <div data-slot="requests">
+                    <Show when={model.baseRequests}>
+                      <s>{format().format(model.baseRequests!)}</s>{" "}
+                    </Show>
                     <bdi>{format().format(model.requests)}</bdi>
                   </div>
                 </div>
                 <div role="cell" data-slot="allowance" data-high={model.allowance >= 60 ? "" : undefined}>
+                  <Show when={model.baseAllowance}>
+                    <s>{currency().format(model.baseAllowance!)}</s>{" "}
+                  </Show>
                   <bdi>
                     <For each={currency().formatToParts(model.allowance)}>
                       {(part) => (

@@ -3,6 +3,8 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.promo.deepseek": "DeepSeek V4.1 Flash 출시 프로모션: 사용량 4배 — 월 사용 한도가 $15에서 $60으로 늘어납니다.",
+  "go.graph.bonus": "사용량 {{count}}배",
   "nav.github": "GitHub",
   "nav.docs": "문서",
   "nav.changelog": "변경 내역",

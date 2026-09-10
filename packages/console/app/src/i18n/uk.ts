@@ -2,6 +2,8 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.promo.deepseek": "Акція до запуску DeepSeek V4.1 Flash: ліміт у 4 рази більший — $60 замість $15 на місяць.",
+  "go.graph.bonus": "Ліміт ×{{count}}",
   "nav.github": "GitHub",
   "nav.docs": "Документація",
   "nav.changelog": "Журнал змін",
