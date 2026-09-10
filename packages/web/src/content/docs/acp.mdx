@@ -143,6 +143,24 @@ This config sets up CodeCompanion to use OpenCode as the ACP agent for chat.
 
 If you need to pass environment variables (like `OPENCODE_API_KEY`), refer to [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) in the CodeCompanion.nvim documentation for full details.
 
+---
+
+### Xcode
+
+To use the OpenCode ACP, follow these steps:
+1. In Xcode, open Settings -> Intelligence.
+1. Under the "Agents" section, click the "Add an Agent" button.
+1. Fill in the following fields:
+    - Name: `OpenCode` (arbitrary)
+    - Executable: _the return value of `which opencode`, e.g. `/Users/me/.opencode/bin/opencode`_
+    - Arguments: The first entry must be `acp`
+
+To start using it, go to the left-hand sidebar and switch from Navigators to Intelligence, Press the button for start new conversation (icon resembling 📝) and select `OpenCode` from the dropdown (or the specific name you set)
+
+**Please note**: The configuration will be read from `~/.config/opencode` rather than the project's opencode configuration, this is a limitation on Xcode's side.
+
+---
+
 ## Support
 
 OpenCode works the same via ACP as it does in the terminal. All features are supported:
