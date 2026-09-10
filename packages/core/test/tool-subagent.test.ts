@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { LanguageModel } from "@opencode/ai"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
@@ -428,6 +428,100 @@ describe("SubagentTool", () => {
           })
           const fallbackChild = yield* sessions.get(outputSessionID(fallback.metadata))
           expect(fallbackChild).toMatchObject({ parentID: parent.id, model: parentModel })
+        }),
+      ),
+    ),
+  )
+
+  it.live("forks all, recent, or no parent turns into a new child", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const time = DateTime.makeUnsafe(1)
+          const user = (text: string) =>
+            SessionMessage.User.make({ id: SessionMessage.ID.create(), type: "user", text, time: { created: time } })
+          const assistant = (text: string, finish: "stop" | "tool-calls", reasoning?: string) =>
+            SessionMessage.Assistant.make({
+              id: SessionMessage.ID.create(),
+              type: "assistant",
+              agent: Agent.ID.make("build"),
+              model: parentModel,
+              content: [
+                ...(reasoning
+                  ? [
+                      SessionMessage.AssistantReasoning.make({
+                        type: "reasoning",
+                        text: reasoning,
+                        time: { created: time, completed: time },
+                      }),
+                    ]
+                  : []),
+                SessionMessage.AssistantText.make({ type: "text", text }),
+              ],
+              finish,
+              cost: Money.USD.make(1),
+              tokens,
+              time: { created: time, completed: time },
+            })
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({
+            location,
+            model: parentModel,
+            messages: [
+              user("old task"),
+              assistant("old final answer", "stop", "private reasoning"),
+              user("recent task"),
+              assistant("working on it", "tool-calls"),
+              user("current task"),
+            ],
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const run = (id: string, fork_turns?: string) =>
+            executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call" as const,
+                id,
+                name: SubagentTool.name,
+                input: {
+                  agent: "reviewer",
+                  description: "review",
+                  prompt: "review this",
+                  ...(fork_turns === undefined ? {} : { fork_turns }),
+                },
+              },
+            })
+
+          const all = yield* run("call-fork-all")
+          expect((yield* sessions.context(outputSessionID(all.metadata))).slice(0, -1)).toMatchObject([
+            { type: "user", text: "old task" },
+            { type: "assistant", content: [{ type: "text", text: "old final answer" }] },
+            { type: "user", text: "recent task" },
+            { type: "user", text: "current task" },
+          ])
+
+          const recent = yield* run("call-fork-recent", "2")
+          expect((yield* sessions.context(outputSessionID(recent.metadata))).slice(0, -1)).toMatchObject([
+            { type: "user", text: "recent task" },
+            { type: "user", text: "current task" },
+          ])
+
+          const none = yield* run("call-fork-none", "none")
+          expect(yield* sessions.context(outputSessionID(none.metadata))).toMatchObject([
+            { type: "assistant", content: [{ type: "text", text: childText }] },
+          ])
+
+          expect(yield* run("call-fork-invalid", "0")).toMatchObject({
+            status: "error",
+            error: { message: expect.stringContaining("Invalid fork_turns value '0'") },
+          })
         }),
       ),
     ),

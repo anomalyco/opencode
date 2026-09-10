@@ -8,6 +8,7 @@ import { Config } from "../../config.js"
 import { Job } from "../../job.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
+import { SessionMessage } from "../../session/message.js"
 import { SessionSchema } from "../../session/schema.js"
 import { SubagentCompletion } from "../../session/subagent-completion.js"
 import { SubagentJob } from "../../session/subagent-job.js"
@@ -24,10 +25,49 @@ const backgroundResult = (sessionID: SessionSchema.ID) => ({
   ].join("\n"),
 })
 
+const forkMessages = (messages: readonly SessionMessage.Info[], turns: "all" | number) => {
+  const boundaries = messages.flatMap((message, index) =>
+    message.type === "user" || (message.type === "synthetic" && message.metadata?.source === "subagent") ? [index] : [],
+  )
+  const start = turns === "all" ? 0 : (boundaries.at(-turns) ?? boundaries[0] ?? messages.length)
+  return messages.slice(start).flatMap((message): SessionMessage.Info[] => {
+    if (message.type === "user" || message.type === "system" || message.type === "skill") return [message]
+    if (message.type === "compaction") return message.status === "completed" ? [message] : []
+    if (
+      message.type !== "assistant" ||
+      !message.time.completed ||
+      !message.finish ||
+      message.finish === "tool-calls" ||
+      message.finish === "error"
+    )
+      return []
+    const content = message.content.filter((item) => item.type === "text" && item.text.length > 0)
+    return content.length > 0
+      ? [
+          SessionMessage.Assistant.make({
+            id: message.id,
+            type: "assistant",
+            agent: message.agent,
+            model: message.model,
+            content,
+            finish: message.finish,
+            rawFinish: message.rawFinish,
+            metadata: message.metadata,
+            time: message.time,
+          }),
+        ]
+      : []
+  })
+}
+
 export const Input = Schema.Struct({
   agent: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
   description: Schema.String.annotate({ description: "A short 3-5 word label for the task, displayed to the user" }),
   prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
+  fork_turns: Schema.optionalKey(Schema.String).annotate({
+    description:
+      "Optional number of turns to fork. Defaults to `all`. Use `none`, `all`, or a positive integer string such as `3` to fork only the most recent turns.",
+  }),
   sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
     description:
       "Continue a specific previous subagent conversation by passing its sessionID. Calls without a sessionID start a new conversation.",
@@ -46,7 +86,7 @@ export const Output = Schema.Struct({
 export const description = [
   "Spawns an agent in a child session to work on the specified task.",
   "The output includes a sessionID you can pass back later to continue that specific conversation with the subagent.",
-  "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
+  "New child sessions inherit the parent context by default. Use fork_turns to control how much history is inherited.",
   "Foreground (default) runs the subagent to completion and returns its final response.",
   "Background mode (background=true) launches it asynchronously and returns immediately; you are notified when it finishes.",
   "Use background only for independent work that can run while you continue elsewhere.",
@@ -79,6 +119,17 @@ export const Plugin = {
                     (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
                   ),
                 )
+              const forkValue = input.fork_turns?.trim().toLowerCase() || "all"
+              const forkCount = Number(forkValue)
+              if (
+                forkValue !== "none" &&
+                forkValue !== "all" &&
+                (!/^\d+$/.test(forkValue) || forkCount < 1 || !Number.isSafeInteger(forkCount))
+              )
+                return yield* new ToolFailure({
+                  message: `Invalid fork_turns value '${input.fork_turns}'. Expected 'none', 'all', or a positive integer string.`,
+                })
+              const forkTurns = forkValue === "none" || forkValue === "all" ? forkValue : forkCount
               let current = parent
               let depth = 0
               while (current.parentID) {
@@ -148,14 +199,29 @@ export const Plugin = {
 
               // Model selection is policy/config/session state, not an LLM-facing tool argument.
               const model = agent.model ?? parent.model
+              const messages =
+                existing || forkTurns === "none"
+                  ? []
+                  : forkMessages(
+                      yield* sessions
+                        .context(parent.id)
+                        .pipe(
+                          Effect.mapError(
+                            (error) =>
+                              new ToolFailure({ message: `Failed to load parent context: ${parent.id}`, error }),
+                          ),
+                        ),
+                      forkTurns,
+                    )
               const child =
                 existing ??
                 (yield* sessions
                   .create({
                     parentID: context.sessionID,
                     title: input.description,
-                    agent: Agent.ID.make(input.agent),
+                    agent: agent.id,
                     model,
+                    messages,
                   })
                   .pipe(
                     Effect.mapError(

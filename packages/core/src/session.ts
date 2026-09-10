@@ -1,7 +1,7 @@
 export * as Session from "./session.js"
 export * from "./session/schema.js"
 
-import { Effect, Layer, Schema, Context, Stream } from "effect"
+import { DateTime, Effect, Layer, Schema, Context, Stream } from "effect"
 import { LLMClient } from "@opencode/ai"
 import { ListAnchor } from "@opencode/schema/session"
 import { and, desc, eq } from "drizzle-orm"
@@ -81,6 +81,7 @@ type CreateBaseInput = {
   agent?: Agent.ID
   model?: Model.Ref
   metadata?: SessionSchema.Metadata
+  messages?: readonly SessionMessage.Info[]
 }
 type CreateInput = CreateBaseInput &
   ({ location: Location.Ref; parentID?: never } | { parentID: SessionSchema.ID; location?: never })
@@ -223,6 +224,7 @@ const layer = Layer.effect(
     const environments = yield* SessionEnvironment.Service
     const sessions = yield* Session.make()
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
+    const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 
     const result = Service.of({
       create: Effect.fn("Session.create")(function* (input) {
@@ -235,6 +237,19 @@ const layer = Layer.effect(
         if (location === undefined)
           return yield* Effect.die(new Error("Session.create requires either location or an existing parentID"))
         const project = yield* projects.resolve(location.directory)
+        const messages = (input.messages ?? []).map((message, index) => {
+          const id = SessionMessage.ID.create()
+          const encoded = encodeMessage(message)
+          const { id: _, type, ...data } = encoded
+          return {
+            id,
+            session_id: sessionID,
+            type,
+            seq: index + 1,
+            time_created: DateTime.toEpochMillis(message.time.created),
+            data,
+          }
+        })
         const projected = yield* bus
           .publish(
             SessionEvent.Created,
@@ -259,7 +274,17 @@ const layer = Layer.effect(
                   }
                 : undefined,
             },
-            { location },
+            {
+              location,
+              commit: (seq) =>
+                messages.length === 0
+                  ? Effect.void
+                  : db
+                      .insert(SessionMessageTable)
+                      .values(messages)
+                      .run()
+                      .pipe(Effect.andThen(Bus.reserveSequence(db, sessionID, seq + messages.length)), Effect.orDie),
+            },
           )
           .pipe(
             Effect.as({ type: "created" } as const),
