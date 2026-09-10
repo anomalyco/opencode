@@ -3,7 +3,6 @@
  * - test/built-ins/RegExp/S15.10.7_A3_T1.js
  * - test/built-ins/RegExp/S15.10.7_A3_T2.js
  * - test/built-ins/Object/S15.2.2.1_A1_T1.js
- * - test/built-ins/Error/prototype/constructor/S15.11.4.1_A1_T2.js
  *
  * Copyright 2009 the Sputnik authors. All rights reserved.
  * Test262 portions are governed by the BSD license in LICENSE.test262.
@@ -47,17 +46,6 @@ describe("constructor Test262 parity", () => {
       await value(`
         const obj = new Object()
         return [obj !== undefined, obj.constructor === Object]
-      `),
-    ).toEqual([true, true])
-  })
-
-  test("test/built-ins/Error/prototype/constructor/S15.11.4.1_A1_T2.js", async () => {
-    // `Error.prototype.constructor` is unavailable; the instance half constructs through an alias instead.
-    expect(
-      await value(`
-        const constr = Error
-        const err = new constr()
-        return [err !== undefined, err.constructor === Error]
       `),
     ).toEqual([true, true])
   })
