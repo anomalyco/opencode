@@ -8,7 +8,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
 import { SessionInstructions } from "../../session/instructions.js"
-import { AbsolutePath } from "../../schema.js"
+import { AbsolutePath, NonNegativeInt } from "../../schema.js"
 import { ReadToolFileSystem } from "../read-filesystem.js"
 import { Environment } from "../../environment/index.js"
 
@@ -16,10 +16,12 @@ export const name = "read"
 const FILENAME = "AGENTS.md"
 const LocationInput = Schema.Struct({
   path: Schema.String.annotate({ description: "File or directory to read" }),
-  offset: ReadToolFileSystem.PageInput.fields.offset.annotate({
+  offset: Schema.optionalKey(NonNegativeInt).annotate({
     description: "The line or directory entry to start reading from (1-based)",
   }),
-  limit: ReadToolFileSystem.PageInput.fields.limit.annotate({
+  limit: Schema.optionalKey(
+    NonNegativeInt.check(Schema.isLessThanOrEqualTo(ReadToolFileSystem.MAX_READ_LINES)),
+  ).annotate({
     description: "The maximum number of lines or directory entries to read (defaults to 2000)",
   }),
 })
