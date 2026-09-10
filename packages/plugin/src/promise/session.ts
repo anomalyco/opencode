@@ -2,7 +2,6 @@ import type { SessionApi } from "@opencode/client/promise/api"
 import type { GenerationOptionsFields, Message, SystemPart } from "@opencode/ai"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
-import type { Money } from "@opencode/schema/money"
 import type { PromptInput } from "@opencode/schema/prompt-input"
 import type { Session } from "@opencode/schema/session"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
@@ -42,9 +41,8 @@ export interface SessionCompactionResult {
   summary: string
   providerState?: SessionMessage.ProviderState
   metadata?: Record<string, unknown>
-  /** Usage of the compaction request itself. `cost` defaults to the model's rate for `tokens`. */
+  /** Usage of the compaction request itself; cost follows the model's rate. */
   tokens?: TokenUsage.Info
-  cost?: Money.USD
 }
 
 export interface SessionCompaction extends SessionContext {

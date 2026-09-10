@@ -410,7 +410,7 @@ export const layer = Layer.effect(
     ) {
       const context = input.context
       const usage = result.tokens
-        ? { tokens: result.tokens, cost: result.cost ?? SessionUsage.calculateCost(context.model.cost, result.tokens) }
+        ? { tokens: result.tokens, cost: SessionUsage.calculateCost(context.model.cost, result.tokens) }
         : undefined
       if (usage)
         yield* bus.publish(SessionEvent.UsageRecorded, {
