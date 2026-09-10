@@ -17,6 +17,7 @@ import { IconMiniMax, IconMiMo, IconZai, IconAlibaba, IconDeepSeek } from "~/com
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { LocaleLinks } from "~/component/locale-links"
+import { goUsageLimits } from "~/lib/language"
 
 const checkLoggedIn = query(async () => {
   "use server"
@@ -79,12 +80,6 @@ export default function Home() {
 
         <div data-component="content">
           <section data-component="hero">
-            <div data-component="desktop-app-banner">
-              <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
-              <div data-slot="content">
-                <span data-slot="text">{i18n.t("go.banner.text")}</span>
-              </div>
-            </div>
             <div data-slot="hero-copy">
               <img data-slot="zen logo light" src={goLogoLight} alt="" />
               <img data-slot="zen logo dark" src={goLogoDark} alt="" />
@@ -207,7 +202,7 @@ export default function Home() {
           </section>
 
           <section data-component="comparison">
-            <LimitsGraph href={language.route("/docs/go/#usage-limits")} />
+            <LimitsGraph href={goUsageLimits(language.locale())} />
           </section>
 
           <section data-component="problem">

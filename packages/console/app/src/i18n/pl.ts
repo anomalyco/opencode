@@ -259,7 +259,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "następującymi wyjątkami",
 
   "go.title": "OpenCode Go | Niskokosztowe modele do kodowania dla każdego",
-  "go.banner.text": "GLM-5.3-Flash oferuje 2x wyższe limity użycia przez ograniczony czas",
   "go.meta.description":
     "Go kosztuje $10/miesiąc, oferując hojne limity użycia i niezawodny dostęp do wiodących modeli do kodowania.",
   "go.hero.title": "Niskokosztowe modele do kodowania dla każdego",
@@ -276,6 +275,14 @@ export const dict = {
   "go.graph.freePill": "Big Pickle i darmowe modele",
   "go.graph.go": "Go",
   "go.graph.label": "Żądania na 5 godzin",
+  "go.graph.period": "Użycie",
+  "go.graph.model": "Model",
+  "go.graph.requests": "Szac. żądania / 5 godz.",
+  "go.graph.allowance": "Miesięczne użycie",
+  "go.graph.new": "Nowość",
+  "go.graph.scale": "Nieliniowa skala liczby żądań",
+  "go.graph.showAll": "Pokaż wszystkie modele ({{count}})",
+  "go.graph.showLess": "Pokaż mniej modeli",
   "go.graph.limitedRegions": "ograniczone regiony",
   "go.graph.limitedTime": "ograniczony czas",
   "go.graph.usageLimits": "Limity użycia",

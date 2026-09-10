@@ -257,7 +257,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "ข้อยกเว้นดังนี้",
 
   "go.title": "OpenCode Go | โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
-  "go.banner.text": "GLM-5.3-Flash เพิ่มโควตาการใช้งานเป็น 2 เท่าในช่วงเวลาจำกัด",
   "go.meta.description":
     "Go มีราคา $10/เดือน พร้อมขีดจำกัดการใช้งานที่เอื้อเฟื้อและการเข้าถึงโมเดลเขียนโค้ดชั้นนำอย่างเชื่อถือได้",
   "go.hero.title": "โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
@@ -273,6 +272,14 @@ export const dict = {
   "go.graph.freePill": "Big Pickle และโมเดลฟรี",
   "go.graph.go": "Go",
   "go.graph.label": "คำขอต่อ 5 ชั่วโมง",
+  "go.graph.period": "การใช้งาน",
+  "go.graph.model": "โมเดล",
+  "go.graph.requests": "requests โดยประมาณ / 5 ชม.",
+  "go.graph.allowance": "ปริมาณการใช้งานรายเดือน",
+  "go.graph.new": "ใหม่",
+  "go.graph.scale": "มาตราส่วนจำนวนคำขอแบบไม่เป็นเชิงเส้น",
+  "go.graph.showAll": "ดูโมเดลทั้งหมด {{count}} โมเดล",
+  "go.graph.showLess": "แสดงโมเดลน้อยลง",
   "go.graph.limitedRegions": "เฉพาะบางภูมิภาค",
   "go.graph.limitedTime": "ช่วงเวลาจำกัด",
   "go.graph.usageLimits": "ขีดจำกัดการใช้งาน",

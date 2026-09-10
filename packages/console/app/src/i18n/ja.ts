@@ -257,7 +257,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下の例外",
 
   "go.title": "OpenCode Go | すべての人のための低価格なコーディングモデル",
-  "go.banner.text": "GLM-5.3-Flashの利用上限が期間限定で2倍に",
   "go.meta.description":
     "Goは月額$10で、主要なコーディングモデルへのゆとりある利用上限と安定したアクセスを提供します。",
   "go.hero.title": "すべての人のための低価格なコーディングモデル",
@@ -274,6 +273,14 @@ export const dict = {
   "go.graph.freePill": "Big Pickleと無料モデル",
   "go.graph.go": "Go",
   "go.graph.label": "5時間あたりのリクエスト数",
+  "go.graph.period": "利用枠",
+  "go.graph.model": "モデル",
+  "go.graph.requests": "推定リクエスト数 / 5時間",
+  "go.graph.allowance": "月間利用枠",
+  "go.graph.new": "新着",
+  "go.graph.scale": "リクエスト数は非線形目盛りで表示",
+  "go.graph.showAll": "全{{count}}モデルを表示",
+  "go.graph.showLess": "折りたたむ",
   "go.graph.limitedRegions": "一部の地域に限定",
   "go.graph.limitedTime": "期間限定",
   "go.graph.usageLimits": "利用制限",
