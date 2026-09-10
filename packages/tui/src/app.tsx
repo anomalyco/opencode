@@ -104,7 +104,6 @@ const appGlobalBindingCommands = [
 ] as const
 
 const appBindingCommands = [
-  "command.palette.show",
   "model.list",
   "model.cycle_recent",
   "model.cycle_recent_reverse",
@@ -961,6 +960,11 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
 
   useBindings(() => ({
     commands: appCommands(),
+  }))
+
+  useBindings(() => ({
+    enabled: () => dialog.stack.length === 0,
+    bindings: tuiConfig.keybinds.get(COMMAND_PALETTE_COMMAND),
   }))
 
   useBindings(() => ({
