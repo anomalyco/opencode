@@ -235,14 +235,14 @@ export const ExperimentalApi = HttpApi.make("experimental")
         HttpApiEndpoint.post("sessionBackground", ExperimentalPaths.sessionBackground, {
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
-          success: described(Schema.Boolean, "Backgrounded subagents"),
+          success: described(Schema.Boolean, "Task subagents promoted to async"),
           error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.session.background",
-            summary: "Background subagents",
+            summary: "Make Task subagents async",
             description:
-              "Detach any synchronous subagents currently blocking the session and continue them in the background.",
+              "Stop waiting for any Task subagents whose synchronous calls are currently blocking the session; the same running tasks continue asynchronously.",
           }),
         ),
         HttpApiEndpoint.get("resource", ExperimentalPaths.resource, {

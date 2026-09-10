@@ -21,6 +21,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { useSessionArchive } from "@/pages/session/session-archive"
 import { createSessionOwnership } from "./session-ownership"
 import { useLocal } from "@/context/local"
+import { selectHumanUserMessages } from "@opencode-ai/session-ui/closure-record"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -98,7 +99,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (!id) return []
     return sync().data.message[id] ?? []
   }
-  const userMessages = () => messages().filter((m) => m.role === "user") as UserMessage[]
+  const userMessages = () =>
+    selectHumanUserMessages(messages(), (messageID) => sync().data.part[messageID] ?? [])
   const visibleUserMessages = () => {
     const revert = info()?.revert?.messageID
     if (!revert) return userMessages()

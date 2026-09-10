@@ -129,6 +129,22 @@
     position: relative;
   }
 
+  [data-component="branch-closure"] {
+    min-width: 0;
+    max-width: var(--md-tool-width);
+    padding: 0.5rem calc(0.5rem + 3px);
+    border-left: 1px solid var(--sl-color-gray-5);
+    color: var(--sl-color-text-secondary);
+    font-size: 0.875rem;
+
+    [data-slot="branch-closure-label"] {
+      margin-bottom: 0.25rem;
+      color: var(--sl-color-text-dimmed);
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+  }
+
   [data-component="assistant-reasoning"] {
     min-width: 0;
     display: flex;

@@ -989,11 +989,8 @@ describe("workspace CRUD", () => {
     { git: true },
   )
 
-  it.live("sessionWarp syncs previous remote history, replays it, steals, and claims the sequence", () => {
+  it.live("sessionWarp refuses a remote prior owner before every dependent action", () => {
     const calls: FetchCall[] = []
-    let historySessionID: SessionID | undefined
-    let historySession: SessionNs.Info | undefined
-    let historyNextSeq = 0
     return Effect.gen(function* () {
       yield* HttpServer.serveEffect()(
         Effect.gen(function* () {
@@ -1007,24 +1004,7 @@ describe("workspace CRUD", () => {
             json: bodyText ? JSON.parse(bodyText) : undefined,
           }
           calls.push(call)
-          if (call.url.pathname === "/warp-source/sync/history") {
-            return yield* HttpServerResponse.json([
-              {
-                id: `evt_${unique("warp-source-history")}`,
-                aggregate_id: historySessionID!,
-                seq: historyNextSeq,
-                type: "session.updated.1",
-                data: { sessionID: historySessionID!, info: historySession! },
-              },
-            ])
-          }
-          if (call.url.pathname === "/warp-source/vcs/diff/raw") return HttpServerResponse.text("remote patch")
-          if (call.url.pathname === "/warp-target/sync/replay")
-            return yield* HttpServerResponse.json({ sessionID: "ok" })
-          if (call.url.pathname === "/warp-target/sync/steal")
-            return yield* HttpServerResponse.json({ sessionID: "ok" })
-          if (call.url.pathname === "/warp-target/vcs/apply") return yield* HttpServerResponse.json({ applied: true })
-          return HttpServerResponse.text("unexpected", { status: 500 })
+          return HttpServerResponse.text("remote prior owner must fail before HTTP", { status: 500 })
         }),
       )
       const url = yield* serverUrl()
@@ -1044,39 +1024,19 @@ describe("workspace CRUD", () => {
             registerAdapter(instance.project.id, targetType, remoteAdapter(`${url}/warp-target`).adapter)
             const session = yield* sessionSvc.create({})
             yield* attachSessionToWorkspace(session.id, previous.id)
-            historySessionID = session.id
-            historySession = { ...session, workspaceID: previous.id, title: "from source history" }
-            historyNextSeq = ((yield* sessionSequence(session.id)) ?? -1) + 1
+            const owner = yield* sessionSequenceOwner(session.id)
 
-            yield* workspace.sessionWarp({ workspaceID: target.id, sessionID: session.id, copyChanges: true })
+            const failure = yield* workspace
+              .sessionWarp({ workspaceID: target.id, sessionID: session.id, copyChanges: true })
+              .pipe(Effect.flip)
 
-            expect(calls.map((call) => `${call.method} ${call.url.pathname}`)).toEqual([
-              "POST /warp-source/sync/history",
-              "GET /warp-source/vcs/diff/raw",
-              "POST /warp-target/vcs/apply",
-              "POST /warp-target/sync/replay",
-              "POST /warp-target/sync/steal",
-            ])
-            expect(calls[0].json).toEqual({ [session.id]: historyNextSeq - 1 })
-            expect(calls[2].json).toEqual({ patch: "remote patch" })
-            expect(calls[3].json).toMatchObject({
-              directory: "remote-target-dir",
-              events: [
-                {
-                  aggregateID: session.id,
-                  seq: 0,
-                  type: "session.created.1",
-                },
-                {
-                  aggregateID: session.id,
-                  seq: historyNextSeq,
-                  type: "session.updated.1",
-                },
-              ],
-            })
-            expect(calls[4].json).toEqual({ sessionID: session.id })
-            expect((yield* sessionSvc.get(session.id)).title).toBe("from source history")
-            expect(yield* sessionSequenceOwner(session.id)).toBe(target.id)
+            expect(failure).toBeInstanceOf(Workspace.SessionWarpRemoteClosureProofError)
+            expect(failure.message).toBe(
+              "Session warp from a remote owner requires authenticated owner-runtime closure proof, which is unavailable.",
+            )
+            expect(calls).toEqual([])
+            expect((yield* sessionSvc.get(session.id)).workspaceID).toBe(previous.id)
+            expect(yield* sessionSequenceOwner(session.id)).toBe(owner)
           }),
         { git: true },
       )

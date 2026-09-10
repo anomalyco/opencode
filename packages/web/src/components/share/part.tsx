@@ -39,6 +39,7 @@ export interface PartProps {
   message: MessageV2.Info
   part: MessageV2.Part
   last: boolean
+  closure?: boolean
 }
 
 export function Part(props: PartProps) {
@@ -73,6 +74,9 @@ export function Part(props: PartProps) {
             }}
           >
             <Switch>
+              <Match when={props.closure && props.part.type === "text"}>
+                <IconCheckCircle width={18} height={18} />
+              </Match>
               <Match when={props.message.role === "user" && props.part.type === "text"}>
                 <IconUserCircle width={18} height={18} />
               </Match>
@@ -129,7 +133,13 @@ export function Part(props: PartProps) {
         <div data-slot="bar"></div>
       </div>
       <div data-component="content">
-        {props.message.role === "user" && props.part.type === "text" && (
+        {props.closure && props.part.type === "text" && (
+          <div data-component="branch-closure">
+            <div data-slot="branch-closure-label">Branch closure</div>
+            <ContentText text={props.part.text} expand={props.last} />
+          </div>
+        )}
+        {!props.closure && props.message.role === "user" && props.part.type === "text" && (
           <div data-component="user-text">
             <ContentText text={props.part.text} expand={props.last} />
           </div>

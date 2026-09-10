@@ -1,5 +1,8 @@
 // Opencode publish boundary for core events. Attach routed instance location
 // so direct EventV2 consumers can isolate directory/workspace streams.
+//
+// Also the closure-aware replay boundary: `replay`/`replayAll` are wrapped so a replay cannot
+// reach the destructive projectors without a permit issued under a mutation reservation.
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { GlobalBus } from "@/bus/global"
@@ -7,6 +10,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { SessionReplayPermit } from "@/session/closure/replay-permit"
 import { Context, Effect, Layer } from "effect"
 
 export class Service extends Context.Service<Service, EventV2.Interface>()("@opencode/EventV2Bridge") {}
@@ -62,7 +66,23 @@ const layer = Layer.effect(
     )
     yield* Effect.addFinalizer(() => unsubscribe)
 
-    return Service.of({ ...events, publish })
+    // Replay reaches the projectors' row deletes, so it must not run outside a mutation
+    // reservation. Every production replay is routed through `SessionMutation.replayLeased`, which
+    // is the only issuer of a permit; this is the check that makes routing around it impossible
+    // rather than merely discouraged.
+    //
+    // Deliberately a permit lookup and never a coordinator call. A coordinator dependency here
+    // would propagate to the twenty-odd modules that build this bridge, every one of which would
+    // then have to provide it. The refusal decision happens earlier, in `replayLeased`.
+    const replay: EventV2.Interface["replay"] = (event, options) =>
+      SessionReplayPermit.require_([event.aggregateID]).pipe(Effect.andThen(events.replay(event, options)))
+
+    const replayAll: EventV2.Interface["replayAll"] = (list, options) =>
+      SessionReplayPermit.require_(list.map((item) => item.aggregateID)).pipe(
+        Effect.andThen(events.replayAll(list, options)),
+      )
+
+    return Service.of({ ...events, publish, replay, replayAll })
   }),
 )
 

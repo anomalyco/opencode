@@ -6,6 +6,8 @@ import {
   type RunSession,
   type SessionMessages,
 } from "@/cli/cmd/run/session.shared"
+import { isCompleteClosurePair } from "@opencode-ai/core/session/closure-record"
+import { closureRecord, multipartPartial, ordinaryUser, wrongTextLookalike } from "../../lib/closure-record"
 
 type Message = SessionMessages[number]
 type Part = Message["parts"][number]
@@ -243,5 +245,60 @@ describe("run session shared", () => {
     })
 
     expect(sessionVariant(session, model)).toBe("minimal")
+  })
+
+  // A complete closure pair is dropped before turns are built, while a generic synthetic row that
+  // merely resembles one is not: the lookalike still contributes a turn and still selects a variant.
+  test("omits complete closure pairs before turn construction while generic synthetic rows retain variant semantics", () => {
+    const sessionID = "session-1"
+    const ordinary = ordinaryUser({
+      sessionID,
+      messageID: "msg_cli_ordinary",
+      partID: "prt_cli_ordinary",
+      providerID: "openai",
+      modelID: "gpt-5",
+      variant: "ordinary",
+    })
+    const synthetic = ordinaryUser({
+      sessionID,
+      messageID: "msg_cli_synthetic",
+      partID: "prt_cli_synthetic",
+      providerID: "openai",
+      modelID: "gpt-5",
+      variant: "synthetic",
+      synthetic: true,
+    })
+    const lookalike = wrongTextLookalike({
+      sessionID,
+      messageID: "msg_cli_lookalike",
+      partID: "prt_cli_lookalike",
+      providerID: "openai",
+      modelID: "gpt-5",
+      variant: "lookalike",
+    })
+    const partial = multipartPartial({
+      sessionID,
+      messageID: "msg_cli_partial",
+      partID: "prt_cli_partial",
+      providerID: "openai",
+      modelID: "gpt-5",
+      variant: "partial",
+    })
+    const closure = closureRecord({
+      sessionID,
+      messageID: "msg_cli_closure",
+      partID: "prt_cli_closure",
+      providerID: "openai",
+      modelID: "gpt-5",
+      variant: "closure",
+    })
+    expect([ordinary, synthetic, lookalike, partial].every((message) => !isCompleteClosurePair(message))).toBe(true)
+    expect(isCompleteClosurePair(closure)).toBe(true)
+
+    const out = createSession([ordinary, synthetic, lookalike, partial, closure] as SessionMessages)
+    expect(out.turns).toHaveLength(4)
+    expect(out.turns.map((item) => item.variant)).toEqual(["ordinary", "synthetic", "lookalike", "partial"])
+    expect(out.turns.map((item) => item.prompt.text)).toEqual(["ordinary prompt", "", "", ""])
+    expect(sessionVariant(out, model)).toBe("partial")
   })
 })

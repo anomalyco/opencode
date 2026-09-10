@@ -1656,12 +1656,12 @@
         ],
         "responses": {
           "200": {
-            "description": "Backgrounded subagents",
+            "description": "Task subagents promoted to async",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "boolean",
-                  "description": "Backgrounded subagents"
+                  "description": "Task subagents promoted to async"
                 }
               }
             }
@@ -1684,8 +1684,8 @@
             }
           }
         },
-        "description": "Detach any synchronous subagents currently blocking the session and continue them in the background.",
-        "summary": "Background subagents",
+        "description": "Stop waiting for any Task subagents whose synchronous calls are currently blocking the session; the same running tasks continue asynchronously.",
+        "summary": "Make Task subagents async",
         "x-codeSamples": [
           {
             "lang": "js",
@@ -4696,6 +4696,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "SessionBusyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBusyError"
+                }
+              }
+            }
           }
         },
         "description": "Provide answers to a question request from the AI assistant.",
@@ -4794,6 +4804,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/QuestionNotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SessionBusyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBusyError"
                 }
               }
             }
@@ -4933,6 +4953,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PermissionNotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SessionBusyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBusyError"
                 }
               }
             }
@@ -5719,6 +5749,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SessionBusyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBusyError"
                 }
               }
             }
@@ -6717,9 +6757,19 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "SessionClosureError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionClosureError"
+                }
+              }
+            }
           }
         },
-        "description": "Abort an active session and stop any ongoing AI processing or command execution.",
+        "description": "Cancel a session's Task branch. Stops this session's AI processing or command execution together with any nested Task work below it, records the outcome in each affected transcript, and returns true only after the branch is closed and released. A missing session, or one with no work in progress, succeeds with no effect.",
         "summary": "Abort session",
         "x-codeSamples": [
           {
@@ -7063,6 +7113,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SessionBusyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBusyError"
                 }
               }
             }
@@ -7823,6 +7883,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "SessionBusyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBusyError"
+                }
+              }
+            }
           }
         },
         "description": "Approve or deny a permission request from the AI assistant.",
@@ -7940,6 +8010,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "SessionBusyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBusyError"
+                }
+              }
+            }
           }
         },
         "description": "Delete a part from a message.",
@@ -8032,6 +8112,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SessionBusyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBusyError"
                 }
               }
             }
@@ -22847,6 +22937,23 @@
         "required": ["_tag", "requestID", "message"],
         "additionalProperties": false
       },
+      "SessionBusyError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["SessionBusyError"]
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "sessionID", "message"],
+        "additionalProperties": false
+      },
       "PermissionRequest": {
         "type": "object",
         "properties": {
@@ -23092,6 +23199,24 @@
           }
         }
       },
+      "SessionClosureError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["SessionClosureError"]
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["scope_incomplete", "quiescence_failed", "planning_failed", "record_failed", "closure_unavailable"]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "kind", "message"],
+        "additionalProperties": false
+      },
       "TextPartInput": {
         "type": "object",
         "properties": {
@@ -23235,23 +23360,6 @@
           }
         },
         "required": ["type", "prompt", "description", "agent"],
-        "additionalProperties": false
-      },
-      "SessionBusyError": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["SessionBusyError"]
-          },
-          "sessionID": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          }
-        },
-        "required": ["_tag", "sessionID", "message"],
         "additionalProperties": false
       },
       "EventTuiPromptAppend": {

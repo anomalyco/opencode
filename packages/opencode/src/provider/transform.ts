@@ -97,6 +97,26 @@ function sdkKey(npm: string): string | undefined {
   return undefined
 }
 
+function isMistral(model: Provider.Model) {
+  const id = model.api.id.toLowerCase()
+  return (
+    model.providerID === "mistral" ||
+    ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((family) => id.includes(family))
+  )
+}
+
+function mistralBridge(
+  model: Provider.Model,
+  previous: ModelMessage | undefined,
+  next: ModelMessage | undefined,
+): ModelMessage | undefined {
+  if (!isMistral(model) || previous?.role !== "tool" || next?.role !== "user") return
+  return {
+    role: "assistant",
+    content: [{ type: "text", text: "Done." }],
+  }
+}
+
 // TODO: fix this stupid inefficient dogshit function
 function normalizeMessages(
   msgs: ModelMessage[],
@@ -250,11 +270,7 @@ function normalizeMessages(
     })
   }
 
-  const modelID = model.api.id.toLowerCase()
-  if (
-    model.providerID === "mistral" ||
-    ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((family) => modelID.includes(family))
-  ) {
+  if (isMistral(model)) {
     const scrub = (id: string) => {
       return id
         .replace(/[^a-zA-Z0-9]/g, "") // Remove non-alphanumeric characters
@@ -285,17 +301,8 @@ function normalizeMessages(
       result.push(msg)
 
       // Fix message sequence: tool messages cannot be followed by user messages
-      if (msg.role === "tool" && nextMsg?.role === "user") {
-        result.push({
-          role: "assistant",
-          content: [
-            {
-              type: "text",
-              text: "Done.",
-            },
-          ],
-        })
-      }
+      const bridge = mistralBridge(model, msg, nextMsg)
+      if (bridge) result.push(bridge)
     }
     return result
   }
@@ -355,6 +362,13 @@ function normalizeMessages(
   return msgs
 }
 
+/**
+ * Places cache breakpoints without mutating the caller's messages.
+ *
+ * The copy must cover the write path actually taken — the message on the message-level path, and
+ * the message plus its `content` array plus the marked part on the content-part path, since a
+ * shallow message copy shares its parts.
+ */
 function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
   const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
   const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
@@ -380,30 +394,68 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
     },
   }
 
-  for (const msg of unique([...system, ...final])) {
-    const useMessageLevelOptions =
-      model.providerID === "anthropic" ||
-      model.providerID.includes("bedrock") ||
-      model.api.npm === "@ai-sdk/amazon-bedrock"
-    const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
+  const selected = new Set<ModelMessage>(unique([...system, ...final]))
+  if (selected.size === 0) return msgs
 
-    if (shouldUseContentOptions) {
-      const lastContent = msg.content[msg.content.length - 1]
+  const useMessageLevelOptions =
+    model.providerID === "anthropic" ||
+    model.providerID.includes("bedrock") ||
+    model.api.npm === "@ai-sdk/amazon-bedrock"
+
+  return msgs.map((msg) => {
+    if (!selected.has(msg)) return msg
+
+    if (!useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0) {
+      const last = msg.content.length - 1
+      const lastContent = msg.content[last]
       if (
         lastContent &&
         typeof lastContent === "object" &&
         lastContent.type !== "tool-approval-request" &&
         lastContent.type !== "tool-approval-response"
       ) {
-        lastContent.providerOptions = mergeDeep(lastContent.providerOptions ?? {}, providerOptions)
-        continue
+        // Copy the content array and the marked part: a shallow message copy shares both.
+        const content = [...msg.content]
+        content[last] = {
+          ...lastContent,
+          providerOptions: mergeDeep(lastContent.providerOptions ?? {}, providerOptions),
+        }
+        return { ...msg, content } as typeof msg
       }
     }
 
-    msg.providerOptions = mergeDeep(msg.providerOptions ?? {}, providerOptions)
-  }
+    return { ...msg, providerOptions: mergeDeep(msg.providerOptions ?? {}, providerOptions) } as typeof msg
+  })
+}
 
-  return msgs
+/** True when this model's route places automatic cache breakpoints. */
+function cacheEligible(model: Provider.Model): boolean {
+  return (
+    (model.providerID === "anthropic" ||
+      model.providerID === "google-vertex-anthropic" ||
+      model.api.id.includes("anthropic") ||
+      model.api.id.includes("claude") ||
+      model.id.includes("anthropic") ||
+      model.id.includes("claude") ||
+      model.api.npm === "@ai-sdk/anthropic" ||
+      model.api.npm === "@ai-sdk/alibaba") &&
+    model.api.npm !== "@ai-sdk/gateway"
+  )
+}
+
+/**
+ * Eligibility plus breakpoint placement, as one callable unit.
+ *
+ * `message()` calls this after both AI-SDK conversion and OpenCode normalization. The eligibility
+ * predicate must travel with placement: separating them marks messages on models this deliberately
+ * excludes.
+ *
+ * Returns the input array by reference when the model is ineligible, and a new array when it
+ * selects; callers must not key on array identity to infer whether selection ran.
+ */
+export function cacheBreakpoints(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+  if (!cacheEligible(model)) return msgs
+  return applyCaching(msgs, model)
 }
 
 function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
@@ -462,26 +514,29 @@ function mapProviderOptions(
   })
 }
 
-export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
+/**
+ * Request-local suffix, normalized like the main array and appended after AI-SDK cache selection.
+ */
+export type MessageSuffix = readonly ModelMessage[]
+
+export function message(
+  msgs: ModelMessage[],
+  model: Provider.Model,
+  options: Record<string, unknown>,
+  suffix?: MessageSuffix,
+  selectCache = true,
+) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
+  const tail = suffix?.length ? normalizeMessages(unsupportedParts([...suffix], model), model, options) : []
+  // Main and suffix must be normalized separately so only main is cache-selectable. Restore the one
+  // cross-message rule at their seam before concatenation.
+  const bridge = mistralBridge(model, msgs.at(-1), tail[0])
   const usesAnthropicAutomaticCaching =
     options.cacheControl !== undefined &&
     (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/google-vertex/anthropic")
-  if (
-    (model.providerID === "anthropic" ||
-      model.providerID === "google-vertex-anthropic" ||
-      model.api.id.includes("anthropic") ||
-      model.api.id.includes("claude") ||
-      model.id.includes("anthropic") ||
-      model.id.includes("claude") ||
-      model.api.npm === "@ai-sdk/anthropic" ||
-      model.api.npm === "@ai-sdk/alibaba") &&
-    model.api.npm !== "@ai-sdk/gateway" &&
-    !usesAnthropicAutomaticCaching
-  ) {
-    msgs = applyCaching(msgs, model)
-  }
+  if (selectCache && !usesAnthropicAutomaticCaching) msgs = cacheBreakpoints(msgs, model)
+  if (bridge || tail.length) msgs = [...msgs, ...(bridge ? [bridge] : []), ...tail]
 
   // Remap providerOptions keys from stored providerID to expected SDK key
   const key = sdkKey(model.api.npm)

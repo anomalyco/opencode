@@ -11,6 +11,7 @@ import { extractPromptFromParts } from "@/utils/prompt"
 import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useLanguage } from "@/context/language"
+import { isHumanUserMessage } from "@opencode-ai/session-ui/closure-record"
 
 interface ForkableMessage {
   id: string
@@ -39,9 +40,8 @@ export const DialogFork: Component = () => {
     const result: ForkableMessage[] = []
 
     for (const message of msgs) {
-      if (message.role !== "user") continue
-
       const parts = sync().data.part[message.id] ?? []
+      if (!isHumanUserMessage(message, parts)) continue
       const textPart = parts.find((x): x is SDKTextPart => x.type === "text" && !x.synthetic && !x.ignored)
       if (!textPart) continue
 

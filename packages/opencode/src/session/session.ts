@@ -10,6 +10,9 @@ import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { SessionClosure } from "./closure/coordinator"
+import { SessionMutation } from "./closure/mutation"
+import { CLOSURE_RECORD_METADATA_KEY } from "@opencode-ai/core/session/closure-record"
 import { SessionV2 } from "@opencode-ai/core/session"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
 import { locationServiceMapLayer } from "@opencode-ai/core/location-services"
@@ -408,6 +411,53 @@ export class BusyError extends Schema.TaggedErrorClass<BusyError>()("SessionBusy
   sessionID: SessionID,
 }) {}
 
+/**
+ * A message or part was named as the boundary of an operation that cannot use it as one.
+ *
+ * `operation` and `reason` are literal unions of one because a branch-closure record is currently
+ * the only rejected boundary and revert is the only operation that selects one. Both are kept as
+ * unions so a second case extends the schema rather than replacing it.
+ */
+export class BoundaryError extends Schema.TaggedErrorClass<BoundaryError>()("SessionBoundaryError", {
+  operation: Schema.Literals(["revert"]),
+  reason: Schema.Literals(["closure_record"]),
+  sessionID: SessionID,
+  messageID: MessageID,
+  partID: Schema.optional(PartID),
+}) {}
+
+export class ReservedMetadataError extends Schema.TaggedErrorClass<ReservedMetadataError>()(
+  "SessionReservedMetadataError",
+  {
+    key: Schema.Literal(CLOSURE_RECORD_METADATA_KEY),
+    sessionID: SessionID,
+    messageID: MessageID,
+    partID: PartID,
+  },
+) {}
+
+/**
+ * Reject caller-owned part bytes that claim the branch-closure provenance key.
+ *
+ * Closure records are the durable account of what a cancellation stopped, and their meaning depends
+ * on nobody else being able to write one. The key is reserved rather than the value validated: a
+ * malformed claim and a well-formed forgery get the same refusal, which keeps this a provenance
+ * gate and not a second, divergent copy of the classifier.
+ */
+export function rejectReservedPartMetadata(part: SessionV1.Part): Effect.Effect<void, ReservedMetadataError> {
+  const metadata = "metadata" in part ? part.metadata : undefined
+  if (typeof metadata !== "object" || metadata === null || !Object.hasOwn(metadata, CLOSURE_RECORD_METADATA_KEY))
+    return Effect.void
+  return Effect.fail(
+    new ReservedMetadataError({
+      key: CLOSURE_RECORD_METADATA_KEY,
+      sessionID: part.sessionID,
+      messageID: part.messageID,
+      partID: part.id,
+    }),
+  )
+}
+
 export type NotFound = NotFoundError
 
 export interface Interface {
@@ -447,16 +497,26 @@ export interface Interface {
   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<SessionV1.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
-  readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
+  readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound | SessionMutation.MutationRefused>
   readonly updateMessage: <T extends SessionV1.Info>(msg: T) => Effect.Effect<T>
-  readonly removeMessage: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<MessageID>
-  readonly removePart: (input: { sessionID: SessionID; messageID: MessageID; partID: PartID }) => Effect.Effect<PartID>
+  readonly removeMessage: (input: {
+    sessionID: SessionID
+    messageID: MessageID
+  }) => Effect.Effect<MessageID, SessionMutation.MutationRefused>
+  readonly removePart: (input: {
+    sessionID: SessionID
+    messageID: MessageID
+    partID: PartID
+  }) => Effect.Effect<PartID, SessionMutation.MutationRefused>
   readonly getPart: (input: {
     sessionID: SessionID
     messageID: MessageID
     partID: PartID
   }) => Effect.Effect<SessionV1.Part | undefined>
-  readonly updatePart: <T extends SessionV1.Part>(part: T) => Effect.Effect<T>
+  readonly updatePart: <T extends SessionV1.Part>(part: T) => Effect.Effect<T, ReservedMetadataError>
+  readonly replacePart: <T extends SessionV1.Part>(
+    part: T,
+  ) => Effect.Effect<T, SessionMutation.MutationRefused | ReservedMetadataError>
   readonly updatePartDelta: (input: {
     sessionID: SessionID
     messageID: MessageID
@@ -486,7 +546,7 @@ export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" 
 const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service
+  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service | SessionClosure.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -495,6 +555,7 @@ const layer: Layer.Layer<
     const background = yield* BackgroundJob.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const closure = yield* SessionClosure.Service
 
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID
@@ -603,7 +664,24 @@ const layer: Layer.Layer<
       return rows.map(fromRow)
     })
 
-    const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
+    // The whole subtree, collected before anything is reserved. The coordinator refuses a
+    // reservation when any session in its scope is being cancelled, so one subtree-scoped
+    // reservation makes the decision atomic for the entire removal: all of it is admitted, or none
+    // of it starts. Reserving per level would let a cancellation landing mid-recursion reject level
+    // k+1 after levels 1..k had already deleted, leaving a partial subtree.
+    const subtree: (sessionID: SessionID) => Effect.Effect<SessionID[]> = Effect.fnUntraced(function* (
+      sessionID: SessionID,
+    ) {
+      const kids = yield* children(sessionID)
+      const nested = yield* Effect.forEach(kids, (child) => subtree(child.id))
+      return [sessionID, ...nested.flat()]
+    })
+
+    // Deliberately unreserved: `remove` takes the subtree reservation once and this recursion runs
+    // entirely inside it. Re-acquiring per level would take one reservation per node.
+    const removeNode: (sessionID: SessionID) => Effect.Effect<void, NotFound> = Effect.fnUntraced(function* (
+      sessionID: SessionID,
+    ) {
       const session = yield* get(sessionID)
       try {
         // `remove` needs to work in all cases, such as broken sessions that
@@ -616,7 +694,7 @@ const layer: Layer.Layer<
         if (hasInstance) yield* cancelBackgroundJobs(background, sessionID)
         const kids = yield* children(sessionID)
         for (const child of kids) {
-          yield* remove(child.id)
+          yield* removeNode(child.id)
         }
 
         yield* events.publish(SessionV1.Event.Deleted, { sessionID, info: session })
@@ -626,13 +704,37 @@ const layer: Layer.Layer<
       }
     })
 
+    const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
+      // `get` stays ahead of the reservation so a missing session still answers NotFound rather
+      // than a refusal.
+      yield* get(sessionID)
+      const scope = yield* subtree(sessionID)
+
+      // `remove` is required to work for broken sessions that run cleanup without instance state,
+      // and the coordinator is reached through it — so with no instance context there is no
+      // coordinator to reserve with. This is not a permissive default: the same probe `removeNode`
+      // already uses to decide whether to cancel background jobs decides this, and a coordinator
+      // that exists but rejects the location still fails closed inside `leased`.
+      //
+      // The residual, stated no more narrowly than it is: a caller outside instance context cannot
+      // take a reservation. That does not establish that no cancellation is running over these rows
+      // elsewhere in the process — the coordinator is per-directory but the database is shared.
+      const hasInstance = yield* InstanceState.directory.pipe(
+        Effect.as(true),
+        Effect.catchCause(() => Effect.succeed(false)),
+      )
+      if (!hasInstance) return yield* removeNode(sessionID)
+
+      return yield* SessionMutation.leased(closure, { sessions: scope, kind: "remove_session" }, removeNode(sessionID))
+    })
+
     const updateMessage = <T extends SessionV1.Info>(msg: T): Effect.Effect<T> =>
       Effect.gen(function* () {
         yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID: msg.sessionID, info: msg })
         return msg
       }).pipe(Effect.withSpan("Session.updateMessage"))
 
-    const updatePart = <T extends SessionV1.Part>(part: T): Effect.Effect<T> =>
+    const persistPart = <T extends SessionV1.Part>(part: T): Effect.Effect<T> =>
       Effect.gen(function* () {
         yield* events.publish(SessionV1.Event.PartUpdated, {
           sessionID: part.sessionID,
@@ -640,7 +742,34 @@ const layer: Layer.Layer<
           time: Date.now(),
         })
         return part
-      }).pipe(Effect.withSpan("Session.updatePart"))
+      })
+
+    const updatePart = <T extends SessionV1.Part>(part: T): Effect.Effect<T, ReservedMetadataError> =>
+      rejectReservedPartMetadata(part).pipe(Effect.andThen(persistPart(part)), Effect.withSpan("Session.updatePart"))
+
+    // WHY THIS IS A SEPARATE METHOD RATHER THAN A GUARD ON `updatePart`. The two are different
+    // operations that happened to share one entry point. `updatePart` is the writer a live execution
+    // uses for parts it is producing: `prompt.ts::shellImpl` calls it per streamed shell chunk,
+    // and `processor.ts` calls it at every part boundary. Leasing it wholesale would reserve a
+    // mutation lease per chunk. `replacePart` is the destructive replacement of an ALREADY PERSISTED
+    // part at a coordinate its caller did not create — today only the HTTP PATCH route — and that is
+    // the operation named `replace_part`.
+    //
+    // Naming them apart is what moves the guard off the handler. Before this split the only lease
+    // lived in `handlers/session.ts`, so a second external caller — a V2 route, an SDK path, a
+    // plugin domain call — reaching `Session` directly would have had to remember to wrap itself.
+    // The method that names the operation now carries the lease.
+    //
+    // What this does NOT claim is that `updatePart` became safe to call blind. It did not, and the
+    // generic writer stays unleased by design. Its callers are governed by the source-derived
+    // inventory, which fails the build on any caller nobody has classified — that, not this method,
+    // is the control on the streaming writer.
+    const replacePart = <T extends SessionV1.Part>(
+      part: T,
+    ): Effect.Effect<T, SessionMutation.MutationRefused | ReservedMetadataError> =>
+      SessionMutation.leased(closure, { sessions: [part.sessionID], kind: "replace_part" }, updatePart(part)).pipe(
+        Effect.withSpan("Session.replacePart"),
+      )
 
     const getPart: Interface["getPart"] = Effect.fn("Session.getPart")(function* (input) {
       const row = yield* db
@@ -703,6 +832,24 @@ const layer: Layer.Layer<
       const idMap = new Map<string, MessageID>()
       const target = input.messageID ? msgs.findIndex((msg) => msg.info.id === input.messageID) : msgs.length
 
+      // This exemption is lexically private to the fork copy loop: it accepts an already-persisted
+      // source Part, copies its bytes, and can change only freshly minted row coordinates plus the
+      // pre-existing compaction-tail coordinate remap. It accepts no caller-supplied metadata and
+      // mints no closure metadata of its own. Fresh target coordinates keep any copied closure
+      // payload bound to its source facts, so it cannot become a valid record for the forked Session.
+      const replicatePart = <T extends SessionV1.Part>(source: T, messageID: MessageID) => {
+        const copied: SessionV1.Part = {
+          ...source,
+          id: PartID.ascending(),
+          messageID,
+          sessionID: session.id,
+        }
+        if (copied.type === "compaction" && copied.tail_start_id) {
+          copied.tail_start_id = idMap.get(copied.tail_start_id)
+        }
+        return persistPart(copied)
+      }
+
       for (const msg of msgs.slice(0, target < 0 ? msgs.length : target)) {
         const newID = MessageID.ascending()
         idMap.set(msg.info.id, newID)
@@ -716,16 +863,7 @@ const layer: Layer.Layer<
         })
 
         for (const part of msg.parts) {
-          const p: SessionV1.Part = {
-            ...part,
-            id: PartID.ascending(),
-            messageID: cloned.id,
-            sessionID: session.id,
-          }
-          if (p.type === "compaction" && p.tail_start_id) {
-            p.tail_start_id = idMap.get(p.tail_start_id)
-          }
-          yield* updatePart(p)
+          yield* replicatePart(part, cloned.id)
         }
       }
       return session
@@ -850,14 +988,24 @@ const layer: Layer.Layer<
       return result.reverse()
     })
 
+    // The publication is the deletion: these methods only publish, and the projector executes the
+    // row delete, so reserving the publication reserves the SQL. The reservation sits in the
+    // service rather than only at the HTTP handler, which is what makes a direct domain or SDK call
+    // unable to bypass it. An enclosing reservation that already covers this session — the one
+    // `revert.cleanup` takes, for instance — passes through, so its N deletions do not take N
+    // separate reservations.
     const removeMessage = Effect.fn("Session.removeMessage")(function* (input: {
       sessionID: SessionID
       messageID: MessageID
     }) {
-      yield* events.publish(SessionV1.Event.MessageRemoved, {
-        sessionID: input.sessionID,
-        messageID: input.messageID,
-      })
+      yield* SessionMutation.leased(
+        closure,
+        { sessions: [input.sessionID], kind: "remove_message" },
+        events.publish(SessionV1.Event.MessageRemoved, {
+          sessionID: input.sessionID,
+          messageID: input.messageID,
+        }),
+      )
       return input.messageID
     })
 
@@ -866,11 +1014,15 @@ const layer: Layer.Layer<
       messageID: MessageID
       partID: PartID
     }) {
-      yield* events.publish(SessionV1.Event.PartRemoved, {
-        sessionID: input.sessionID,
-        messageID: input.messageID,
-        partID: input.partID,
-      })
+      yield* SessionMutation.leased(
+        closure,
+        { sessions: [input.sessionID], kind: "remove_part" },
+        events.publish(SessionV1.Event.PartRemoved, {
+          sessionID: input.sessionID,
+          messageID: input.messageID,
+          partID: input.partID,
+        }),
+      )
       return input.partID
     })
 
@@ -928,6 +1080,7 @@ const layer: Layer.Layer<
       removeMessage,
       removePart,
       updatePart,
+      replacePart,
       getPart,
       updatePartDelta,
       findMessage,
@@ -939,15 +1092,18 @@ const cancelBackgroundJobs = Effect.fn("Session.cancelBackgroundJobs")(function*
   background: BackgroundJob.Interface,
   sessionID: SessionID,
 ) {
-  const jobs = yield* background.list()
+  // Cancel the exact runs this scan matched. A task job is filed under its session id, which is
+  // reused when that session is resumed, so a job can settle and be replaced between the scan and
+  // the cancellation.
+  const jobs = yield* background.listExact()
   yield* Effect.forEach(
-    jobs.filter((job) => {
-      if (job.status !== "running") return false
-      if (job.id === sessionID) return true
-      if (job.metadata?.sessionId === sessionID) return true
-      return job.metadata?.parentSessionId === sessionID
+    jobs.filter((entry) => {
+      if (entry.info.status !== "running") return false
+      if (entry.info.id === sessionID) return true
+      if (entry.info.metadata?.sessionId === sessionID) return true
+      return entry.info.metadata?.parentSessionId === sessionID
     }),
-    (job) => background.cancel(job.id),
+    (entry) => background.cancelExact(entry.lifetime),
     { concurrency: "unbounded", discard: true },
   )
 })
@@ -1010,7 +1166,7 @@ function listByProject(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node],
+  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node, SessionClosure.node],
 })
 
 export * as Session from "./session"

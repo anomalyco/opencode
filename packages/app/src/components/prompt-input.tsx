@@ -28,6 +28,7 @@ import {
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { selectHumanUserMessages } from "@opencode-ai/session-ui/closure-record"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
 import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
@@ -313,7 +314,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!sessionID) return false
     const messages = sync().data.message[sessionID]
     if (!messages) return false
-    return messages.some((m) => m.role === "user")
+    return selectHumanUserMessages(messages, (messageID) => sync().data.part[messageID] ?? []).length > 0
   })
 
   const history = props.history ?? createPersistedPromptInputHistory()

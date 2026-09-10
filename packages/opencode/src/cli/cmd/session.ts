@@ -62,7 +62,14 @@ export const SessionDeleteCommand = effectCmd({
     const sessionID = SessionID.make(args.sessionID)
     yield* svc
       .remove(sessionID)
-      .pipe(Effect.catchIf(NotFoundError.isInstance, () => fail(`Session not found: ${args.sessionID}`)))
+      .pipe(
+        Effect.catchIf(NotFoundError.isInstance, () => fail(`Session not found: ${args.sessionID}`)),
+        // A visible CLI failure is how the refusal is rejected here. Dying would surface a
+        // recoverable condition as an internal defect.
+        Effect.catchTag("SessionClosureMutationRefused", () =>
+          fail(`Session ${args.sessionID} is being cancelled and cannot be deleted right now`),
+        ),
+      )
     UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} deleted` + UI.Style.TEXT_NORMAL)
   }),
 })

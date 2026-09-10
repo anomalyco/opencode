@@ -239,9 +239,19 @@ describe("tool parameters", () => {
       const parsed = parse(Task, { description: "d", prompt: "p", subagent_type: "general" })
       expect(parsed.subagent_type).toBe("general")
     })
-    test("accepts optional background flag", () => {
+    test("accepts optional async flag", () => {
+      const parsed = parse(Task, { description: "d", prompt: "p", subagent_type: "general", async: true })
+      expect(parsed.async).toBe(true)
+      expect(parsed.background).toBeUndefined()
+    })
+    test("still accepts the deprecated background alias", () => {
       const parsed = parse(Task, { description: "d", prompt: "p", subagent_type: "general", background: true })
       expect(parsed.background).toBe(true)
+    })
+    test("omitting both inputs selects synchronous execution", () => {
+      const parsed = parse(Task, { description: "d", prompt: "p", subagent_type: "general" })
+      expect(parsed.async).toBeUndefined()
+      expect(parsed.background).toBeUndefined()
     })
     test("rejects missing prompt", () => {
       expect(accepts(Task, { description: "d", subagent_type: "general" })).toBe(false)

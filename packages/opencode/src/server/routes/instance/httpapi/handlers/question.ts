@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { QuestionNotFoundError } from "../errors"
+import * as SessionError from "./session-errors"
 
 export const questionHandlers = HttpApiBuilder.group(InstanceHttpApi, "question", (handlers) =>
   Effect.gen(function* () {
@@ -17,12 +18,31 @@ export const questionHandlers = HttpApiBuilder.group(InstanceHttpApi, "question"
       params: { requestID: QuestionID }
       payload: Question.Reply
     }) {
-      yield* svc
-        .reply({
-          requestID: ctx.params.requestID,
-          answers: ctx.payload.answers,
-        })
-        .pipe(
+      // Refused while the session's branch is being cancelled — an expected outcome of the user's
+      // own concurrent stop, reported as a conflict rather than a server defect.
+      yield* SessionError.mapAdmission(
+        svc
+          .reply({
+            requestID: ctx.params.requestID,
+            answers: ctx.payload.answers,
+          })
+          .pipe(
+            Effect.catchTag("Question.NotFoundError", (error) =>
+              Effect.fail(
+                new QuestionNotFoundError({
+                  requestID: String(error.requestID),
+                  message: `Question request not found: ${error.requestID}`,
+                }),
+              ),
+            ),
+          ),
+      )
+      return true
+    })
+
+    const reject = Effect.fn("QuestionHttpApi.reject")(function* (ctx: { params: { requestID: QuestionID } }) {
+      yield* SessionError.mapAdmission(
+        svc.reject(ctx.params.requestID).pipe(
           Effect.catchTag("Question.NotFoundError", (error) =>
             Effect.fail(
               new QuestionNotFoundError({
@@ -30,19 +50,6 @@ export const questionHandlers = HttpApiBuilder.group(InstanceHttpApi, "question"
                 message: `Question request not found: ${error.requestID}`,
               }),
             ),
-          ),
-        )
-      return true
-    })
-
-    const reject = Effect.fn("QuestionHttpApi.reject")(function* (ctx: { params: { requestID: QuestionID } }) {
-      yield* svc.reject(ctx.params.requestID).pipe(
-        Effect.catchTag("Question.NotFoundError", (error) =>
-          Effect.fail(
-            new QuestionNotFoundError({
-              requestID: String(error.requestID),
-              message: `Question request not found: ${error.requestID}`,
-            }),
           ),
         ),
       )

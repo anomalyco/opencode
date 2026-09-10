@@ -9,6 +9,8 @@ import type { MessageV2 } from "opencode/session/message-v2"
 import type { Message } from "opencode/session/message"
 import type { Session } from "opencode/session/index"
 import { Part, ProviderIcon } from "./share/part"
+import { isClosureShareMessage, isLegacyShareMessage, visibleShareParts } from "./share/share-message"
+import { fromLegacyUserMessage } from "./share/legacy-user-message"
 
 type MessageWithParts = MessageV2.Info & { parts: MessageV2.Part[] }
 
@@ -129,7 +131,7 @@ export default function Share(props: {
           }
           if (type === "message") {
             const [, messageID] = splits
-            if ("metadata" in d.content) {
+            if (isLegacyShareMessage(d.content)) {
               d.content = fromV1(d.content)
             }
             d.content.parts = d.content.parts ?? store.messages[messageID]?.parts ?? []
@@ -350,19 +352,8 @@ export default function Share(props: {
                 <SuspenseList revealOrder="forwards">
                   <For each={data().messages}>
                     {(msg, msgIndex) => {
-                      const filteredParts = createMemo(() =>
-                        msg.parts.filter((x, index) => {
-                          if (x.type === "step-start" && index > 0) return false
-                          if (x.type === "snapshot") return false
-                          if (x.type === "patch") return false
-                          if (x.type === "step-finish") return false
-                          if (x.type === "text" && x.synthetic === true) return false
-                          if (x.type === "text" && !x.text) return false
-                          if (x.type === "tool" && (x.state.status === "pending" || x.state.status === "running"))
-                            return false
-                          return true
-                        }),
-                      )
+                      const closure = createMemo(() => isClosureShareMessage(msg))
+                      const filteredParts = createMemo(() => visibleShareParts(msg))
 
                       return (
                         <Suspense>
@@ -380,7 +371,9 @@ export default function Share(props: {
                                 }
                               })
 
-                              return <Part last={last()} part={part} index={partIndex()} message={msg} />
+                              return (
+                                <Part closure={closure()} last={last()} part={part} index={partIndex()} message={msg} />
+                              )
                             }}
                           </For>
                         </Suspense>
@@ -599,47 +592,7 @@ export function fromV1(v1: Message.Info): MessageWithParts {
   }
 
   if (v1.role === "user") {
-    return {
-      id: v1.id,
-      sessionID: v1.metadata.sessionID,
-      role: "user",
-      agent: "user",
-      model: {
-        providerID: "",
-        modelID: "",
-      },
-      time: {
-        created: v1.metadata.time.created,
-      },
-      parts: v1.parts.flatMap((part, index): MessageV2.Part[] => {
-        const base = {
-          id: index.toString(),
-          messageID: v1.id,
-          sessionID: v1.metadata.sessionID,
-        }
-        if (part.type === "text") {
-          return [
-            {
-              ...base,
-              type: "text",
-              text: part.text,
-            },
-          ]
-        }
-        if (part.type === "file") {
-          return [
-            {
-              ...base,
-              type: "file",
-              mime: part.mediaType,
-              filename: part.filename,
-              url: part.url,
-            },
-          ]
-        }
-        return []
-      }),
-    }
+    return fromLegacyUserMessage(v1) as MessageWithParts
   }
 
   throw new Error("unknown message type")

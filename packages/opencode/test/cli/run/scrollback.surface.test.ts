@@ -1090,3 +1090,89 @@ test("renders promoted task markdown without a leading blank row", async () => {
     out.scrollback.destroy()
   }
 })
+
+test("renders running task status without a raw wrapper or leading blank row", async () => {
+  const out = await setup()
+
+  try {
+    await out.scrollback.append(
+      toolCommit({
+        tool: "task",
+        phase: "final",
+        toolState: "completed",
+        state: {
+          status: "completed",
+          input: {
+            description: "Explore run.ts",
+            subagent_type: "explore",
+          },
+          output: [
+            '<task id="child-1" state="running">',
+            "<summary>Async task started</summary>",
+            "<task_status>",
+            "The task is running asynchronously. Follow the Async Task Protocol.",
+            "</task_status>",
+            "</task>",
+          ].join("\n"),
+          metadata: {
+            sessionId: "child-1",
+            background: true,
+          },
+          time: { start: 1, end: 2 },
+        },
+      }),
+    )
+
+    const commits = claim(out.renderer)
+    try {
+      const output = render(commits)
+      expect(output.startsWith("\n")).toBe(false)
+      expect(output).toContain("The task is running asynchronously. Follow the Async Task Protocol.")
+      expect(output).not.toContain("<task")
+      expect(output).not.toContain("<summary>")
+    } finally {
+      destroy(commits)
+    }
+  } finally {
+    out.scrollback.destroy()
+  }
+})
+
+test("renders Task non-success with a multi-line reason and no leading blank row", async () => {
+  const out = await setup()
+
+  try {
+    await out.scrollback.append(
+      toolCommit({
+        tool: "task",
+        phase: "final",
+        toolState: "error",
+        state: {
+          status: "error",
+          input: {
+            description: "Explore run.ts",
+            subagent_type: "explore",
+          },
+          error: ["Child stopped early", "No final answer"].join("\n"),
+          metadata: {
+            sessionId: "child-1",
+          },
+          time: { start: 1, end: 2 },
+        },
+      }),
+    )
+
+    const commits = claim(out.renderer)
+    try {
+      const output = render(commits)
+      expect(output.startsWith("\n")).toBe(false)
+      expect(output).toContain("task failed")
+      expect(output).toContain("Child stopped early")
+      expect(output).toContain("No final answer")
+    } finally {
+      destroy(commits)
+    }
+  } finally {
+    out.scrollback.destroy()
+  }
+})

@@ -32,6 +32,7 @@ import { batch, onMount } from "solid-js"
 import path from "path"
 import { useKV } from "./kv"
 import { usePermission } from "./permission"
+import { transcriptStatus } from "../util/closure-record"
 
 const emptyConsoleState: ConsoleState = {
   consoleManagedProviders: [],
@@ -149,6 +150,7 @@ export const {
 
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
+    const treeSyncedRoots = new Set<string>()
     const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
     const touchMessage = (sessionID: string, messageID: string) => {
       hydratingSessions.get(sessionID)?.messages.add(messageID)
@@ -587,9 +589,7 @@ export const {
           if (session.time.compacting) return "compacting"
           const messages = store.message[sessionID] ?? []
           const last = messages.at(-1)
-          if (!last) return "idle"
-          if (last.role === "user") return "working"
-          return last.time.completed ? "idle" : "working"
+          return transcriptStatus(last, last ? (store.part[last.id] ?? []) : [])
         },
         async sync(sessionID: string) {
           if (fullSyncedSessions.has(sessionID)) return
@@ -664,6 +664,57 @@ export const {
           })
           syncingSessions.set(sessionID, task)
           return task
+        },
+        async syncTree(sessionID: string) {
+          // Walk up to the root, fetching any parent not yet in the store.
+          let rootID = sessionID
+          const visited = new Set<string>()
+          while (true) {
+            if (visited.has(rootID)) break
+            visited.add(rootID)
+            const match = search(store.session, rootID, (s) => s.id)
+            if (!match.found) break
+            const parentID = store.session[match.index].parentID
+            if (!parentID) break
+            const parentMatch = search(store.session, parentID, (s) => s.id)
+            if (parentMatch.found) {
+              rootID = parentID
+              continue
+            }
+            const res = await sdk.client.session.get({ sessionID: parentID }).catch(() => undefined)
+            if (!res?.data) break
+            setStore(
+              produce((draft) => {
+                const idx = search(draft.session, res.data!.id, (s) => s.id)
+                if (!idx.found) draft.session.splice(idx.index, 0, res.data!)
+              }),
+            )
+            rootID = parentID
+          }
+
+          if (treeSyncedRoots.has(rootID)) return
+          treeSyncedRoots.add(rootID)
+
+          // BFS from the root, loading every descendant level by level via session.children.
+          const queue = [rootID]
+          while (queue.length > 0) {
+            const level = [...queue]
+            queue.length = 0
+            const results = await Promise.all(
+              level.map((id) => sdk.client.session.children({ sessionID: id }).catch(() => undefined)),
+            )
+            const all = results.flatMap((r) => r?.data ?? [])
+            if (all.length === 0) break
+            setStore(
+              produce((draft) => {
+                for (const child of all) {
+                  const idx = search(draft.session, child.id, (s) => s.id)
+                  if (!idx.found) draft.session.splice(idx.index, 0, child)
+                }
+              }),
+            )
+            for (const child of all) queue.push(child.id)
+          }
         },
       },
       bootstrap,

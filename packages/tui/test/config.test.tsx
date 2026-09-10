@@ -12,6 +12,7 @@ import {
   type Info as TuiConfigInfo,
   useTuiConfig,
 } from "../src/config"
+import { TuiKeybind } from "../src/config/keybind"
 
 const decodeInfo = Schema.decodeUnknownSync(Info)
 const decodePlugin = Schema.decodeUnknownSync(PluginSpec)
@@ -99,6 +100,14 @@ test("resolves a session move keybind", () => {
   const config = resolve({ keybinds: { session_move: "ctrl+o" } }, { terminalSuspend: true })
 
   expect(config.keybinds.get("session.move")).toMatchObject([{ key: "ctrl+o" }])
+})
+
+test("keeps async promotion copy on the stable background keybind", () => {
+  expect(TuiKeybind.Definitions.session_background).toEqual({
+    default: "ctrl+b",
+    description: "Make subagents async",
+  })
+  expect(TuiKeybind.CommandMap.session_background).toBe("session.background")
 })
 
 test("disables suspend and assigns ctrl+z to undo when unsupported", () => {

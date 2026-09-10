@@ -31,7 +31,8 @@ import {
 } from "@agentclientprotocol/sdk"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import type { AssistantMessage, Message, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
+import { isCompleteClosurePair } from "@opencode-ai/core/session/closure-record"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
 import * as ACPError from "./error"
 import { buildConfigOptions, parseModelSelection } from "./config-option"
@@ -218,7 +219,7 @@ export function make(input: {
       () => input.sdk.session.messages({ directory: params.cwd, sessionID: params.sessionId }, { throwOnError: true }),
       "session",
     )
-    const restored = restoreFromMessages(messages.map((item) => item.info))
+    const restored = restoreFromMessages(messages)
     const model = restored.model ?? selectDefaultModel(snapshot)
     const state = yield* session.load({
       id: params.sessionId,
@@ -303,7 +304,7 @@ export function make(input: {
         ),
       "session",
     )
-    const restored = restoreFromMessages(messages.map((item) => item.info))
+    const restored = restoreFromMessages(messages)
     const model = restored.model ?? selectDefaultModel(snapshot)
     const state = yield* session.load({
       id: params.sessionId,
@@ -332,19 +333,26 @@ export function make(input: {
       () => input.sdk.session.abort({ directory: current.cwd, sessionID: current.id }, { throwOnError: true }),
       "session",
     ).pipe(
+      // Kept: `close` stays total, as upstream's own test requires. A failed backing abort is
+      // logged rather than failing the protocol method, so a stuck backing session cannot make an
+      // ACP session permanently un-closeable.
       Effect.catch((error) =>
         Effect.logError("failed to abort ACP backing session", { error: error, sessionID: current.id }),
       ),
     )
   })
 
+  // Abort before removing, not after. Removal returned the session it dropped and the abort was
+  // issued from that return, so the backing branch was still running while its record was being
+  // deleted. Ordering them the other way stops the delete racing the work it should have ended.
   const closeSession = Effect.fn("ACP.closeSession")(function* (params: CloseSessionRequest) {
-    const removed = yield* session.remove(params.sessionId)
+    const current = yield* session.tryGet(params.sessionId)
+    if (!current) return {}
+
+    yield* abortBackingSession(current)
+    yield* session.remove(params.sessionId)
     registeredMcp.delete(params.sessionId)
     sessionSnapshots.delete(params.sessionId)
-    if (!removed) return {}
-
-    yield* abortBackingSession(removed)
     return {}
   })
 
@@ -371,7 +379,7 @@ export function make(input: {
         input.sdk.session.messages({ directory: params.cwd, sessionID: forked.id, limit: 20 }, { throwOnError: true }),
       "session",
     )
-    const restored = restoreFromMessages(messages.map((item) => item.info))
+    const restored = restoreFromMessages(messages)
     const model = restored.model ?? selectDefaultModel(snapshot)
     const state = yield* session.load({
       id: forked.id,
@@ -692,16 +700,6 @@ type ConfigState = {
 type SdkResponse<T> = {
   readonly data?: T
   readonly error?: unknown
-}
-
-type MessageInfo = {
-  readonly role?: Message["role"]
-  readonly model?: Extract<Message, { role: "user" }>["model"]
-  readonly providerID?: Extract<Message, { role: "assistant" }>["providerID"]
-  readonly modelID?: Extract<Message, { role: "assistant" }>["modelID"]
-  readonly variant?: Extract<Message, { role: "assistant" }>["variant"]
-  readonly mode?: Extract<Message, { role: "assistant" }>["mode"]
-  readonly agent?: Message["agent"]
 }
 
 type AssistantError = NonNullable<AssistantMessage["error"]>
@@ -1034,24 +1032,39 @@ function stableStringify(value: unknown): string {
     .join(",")}}`
 }
 
-function restoreFromMessages(messages: readonly MessageInfo[]) {
+// Takes whole messages rather than their info, because deciding whether one is a branch-closure
+// record needs its parts. Such a record carries a model on a user message it was not sent with, so
+// restoring from it would resume the session on a model the user never chose.
+function restoreFromMessages(messages: readonly SessionMessageResponse[]) {
   const user = messages.findLast(
-    (message) => message.role === "user" && message.model?.providerID && message.model.modelID,
+    (message) =>
+      message.info.role === "user" &&
+      !isCompleteClosurePair(message) &&
+      message.info.model?.providerID &&
+      message.info.model.modelID,
   )
-  if (user?.model?.providerID && user.model.modelID) {
+  if (user?.info.role === "user" && user.info.model?.providerID && user.info.model.modelID) {
     return {
-      model: { providerID: user.model.providerID as ProviderV2.ID, modelID: user.model.modelID as ModelV2.ID },
-      variant: user.model.variant,
-      modeId: user.agent,
+      model: {
+        providerID: user.info.model.providerID as ProviderV2.ID,
+        modelID: user.info.model.modelID as ModelV2.ID,
+      },
+      variant: user.info.model.variant,
+      modeId: user.info.agent,
     }
   }
 
-  const assistant = messages.findLast((message) => message.providerID && message.modelID)
-  if (assistant?.providerID && assistant.modelID) {
+  const assistant = messages.findLast(
+    (message) => message.info.role === "assistant" && message.info.providerID && message.info.modelID,
+  )
+  if (assistant?.info.role === "assistant" && assistant.info.providerID && assistant.info.modelID) {
     return {
-      model: { providerID: assistant.providerID as ProviderV2.ID, modelID: assistant.modelID as ModelV2.ID },
-      variant: assistant.variant,
-      modeId: assistant.mode ?? assistant.agent,
+      model: {
+        providerID: assistant.info.providerID as ProviderV2.ID,
+        modelID: assistant.info.modelID as ModelV2.ID,
+      },
+      variant: assistant.info.variant,
+      modeId: assistant.info.mode ?? assistant.info.agent,
     }
   }
 

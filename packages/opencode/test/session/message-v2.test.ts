@@ -9,6 +9,7 @@ import { SessionID, MessageID, PartID } from "../../src/session/schema"
 import { Question } from "../../src/question"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Effect } from "effect"
 
 const sessionID = SessionID.make("session")
 const providerID = ProviderV2.ID.make("test")
@@ -1725,5 +1726,197 @@ describe("session.message-v2.latest", () => {
 
     expect(state.tasks).toHaveLength(1)
     expect(state.tasks[0]).toMatchObject({ type: "subtask", prompt: "inspect" })
+  })
+})
+
+describe("session.message-v2 request-only partition", () => {
+  function partitionInput(): SessionV1.WithParts[] {
+    return [
+      {
+        info: userInfo("m-durable-user"),
+        parts: [{ ...basePart("m-durable-user", "p1"), type: "text", text: "durable question" }] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo("m-durable-assistant", "m-durable-user"),
+        parts: [{ ...basePart("m-durable-assistant", "p2"), type: "text", text: "durable answer" }] as SessionV1.Part[],
+      },
+      {
+        info: userInfo("m-tail-one"),
+        parts: [{ ...basePart("m-tail-one", "p3"), type: "text", text: "request-only one" }] as SessionV1.Part[],
+      },
+      {
+        info: userInfo("m-tail-two"),
+        parts: [{ ...basePart("m-tail-two", "p4"), type: "text", text: "request-only two" }] as SessionV1.Part[],
+      },
+    ]
+  }
+
+  const separated = (requestOnlyTailCount?: number) =>
+    Effect.runPromise(MessageV2.toModelMessagesSplitEffect(partitionInput(), model, { requestOnlyTailCount }))
+
+  test("partitioned conversion is byte-identical to bulk conversion at every split point", async () => {
+    const bulk = await MessageV2.toModelMessages(partitionInput(), model)
+    expect(bulk.length).toBeGreaterThan(0)
+    for (const requestOnlyTailCount of [0, 1, 2, 3, 4, 99]) {
+      const partitioned = await separated(requestOnlyTailCount)
+      expect(JSON.stringify([...partitioned.messages, ...partitioned.tail])).toBe(JSON.stringify(bulk))
+    }
+  })
+
+  test("a negative or absent count converts in bulk", async () => {
+    const bulk = await MessageV2.toModelMessages(partitionInput(), model)
+    for (const requestOnlyTailCount of [undefined, -1, -99]) {
+      const output = await separated(requestOnlyTailCount)
+      expect(JSON.stringify(output.messages)).toBe(JSON.stringify(bulk))
+      expect(output.tail).toEqual([])
+    }
+  })
+
+  test("returns the converted request-only suffix separately", async () => {
+    const output = await separated(2)
+
+    expect(output.messages).toEqual([
+      { role: "user", content: [{ type: "text", text: "durable question" }] },
+      { role: "assistant", content: [{ type: "text", text: "durable answer" }] },
+    ])
+    expect(output.tail).toEqual([
+      { role: "user", content: [{ type: "text", text: "request-only one" }] },
+      { role: "user", content: [{ type: "text", text: "request-only two" }] },
+    ])
+  })
+
+  test("the returned suffix has the requested contiguous source cardinality", async () => {
+    for (const requestOnlyTailCount of [1, 2, 3]) {
+      const output = await separated(requestOnlyTailCount)
+      expect(output.messages).toHaveLength(4 - requestOnlyTailCount)
+      expect(output.tail).toHaveLength(requestOnlyTailCount)
+    }
+  })
+
+  test("keeps every provider message expanded from a request-only source in the suffix", async () => {
+    const assistantID = "m-tail-split"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo("m-durable"),
+        parts: [{ ...basePart("m-durable", "durable"), type: "text", text: "durable" }] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, "m-durable"),
+        parts: [
+          { ...basePart(assistantID, "first"), type: "text", text: "request-only first" },
+          { ...basePart(assistantID, "step"), type: "step-start" },
+          { ...basePart(assistantID, "second"), type: "text", text: "request-only second" },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const output = await Effect.runPromise(
+      MessageV2.toModelMessagesSplitEffect(input, model, { requestOnlyTailCount: 1 }),
+    )
+    expect(output.messages).toEqual([{ role: "user", content: [{ type: "text", text: "durable" }] }])
+    expect(output.tail.map((message) => message.role)).toEqual(["assistant", "assistant"])
+    expect(JSON.stringify(output.tail)).toContain("request-only first")
+    expect(JSON.stringify(output.tail)).toContain("request-only second")
+  })
+
+  test("keeps structured request-only content in the normal AI SDK conversion path", async () => {
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo("m-durable"),
+        parts: [{ ...basePart("m-durable", "durable"), type: "text", text: "durable" }] as SessionV1.Part[],
+      },
+      {
+        info: userInfo("m-tail-file"),
+        parts: [
+          {
+            ...basePart("m-tail-file", "file"),
+            type: "file",
+            mime: "image/png",
+            filename: "image.png",
+            url: "https://example.com/image.png",
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const bulk = await MessageV2.toModelMessages(input, model)
+    const output = await Effect.runPromise(
+      MessageV2.toModelMessagesSplitEffect(input, model, { requestOnlyTailCount: 1 }),
+    )
+
+    expect(output.messages).toEqual(bulk)
+    expect(output.tail).toEqual([])
+  })
+
+  test("keeps empty request-only text in the normal AI SDK conversion path", async () => {
+    const assistantID = "m-tail-empty"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo("m-durable"),
+        parts: [{ ...basePart("m-durable", "durable"), type: "text", text: "durable" }] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, "m-durable"),
+        parts: [{ ...basePart(assistantID, "empty"), type: "text", text: "" }] as SessionV1.Part[],
+      },
+    ]
+
+    const bulk = await MessageV2.toModelMessages(input, model)
+    const output = await Effect.runPromise(
+      MessageV2.toModelMessagesSplitEffect(input, model, { requestOnlyTailCount: 1 }),
+    )
+
+    expect(output.messages).toEqual(bulk)
+    expect(output.tail).toEqual([])
+  })
+})
+
+describe("session.message-v2.appendedTailCount", () => {
+  function after(...list: string[]): SessionV1.WithParts[] {
+    return list.map((id) => ({ info: { id }, parts: [] }) as unknown as SessionV1.WithParts)
+  }
+
+  test("counts a fresh-ID suffix appended after the surviving pre-hook anchor", () => {
+    expect(MessageV2.appendedTailCount(["a", "b"], after("a", "b", "c"))).toBe(1)
+    expect(MessageV2.appendedTailCount(["a", "b"], after("a", "b", "c", "d"))).toBe(2)
+  })
+
+  test("returns zero when nothing was appended", () => {
+    expect(MessageV2.appendedTailCount(["a", "b"], after("a", "b"))).toBe(0)
+  })
+
+  test("returns zero when there is no pre-hook anchor", () => {
+    expect(MessageV2.appendedTailCount([], after("a"))).toBe(0)
+  })
+
+  test("returns zero on duplicate identities before or after the hook", () => {
+    expect(MessageV2.appendedTailCount(["a", "a"], after("a", "a", "b"))).toBe(0)
+    expect(MessageV2.appendedTailCount(["a", "b"], after("a", "b", "c", "c"))).toBe(0)
+  })
+
+  test("returns zero when the anchor is missing or duplicated after the hook", () => {
+    expect(MessageV2.appendedTailCount(["a", "b"], after("a", "c"))).toBe(0)
+    expect(MessageV2.appendedTailCount(["a", "b"], after("a", "b", "b"))).toBe(0)
+  })
+
+  test("returns zero when surviving pre-hook messages are reordered before the anchor", () => {
+    expect(MessageV2.appendedTailCount(["a", "b", "c"], after("b", "a", "c", "d"))).toBe(0)
+  })
+
+  test("returns zero when a pre-hook identity is moved or reused after the anchor", () => {
+    expect(MessageV2.appendedTailCount(["a", "b"], after("b", "a"))).toBe(0)
+  })
+
+  test("tolerates prefix insertion and interior removal", () => {
+    expect(MessageV2.appendedTailCount(["a", "b"], after("x", "a", "b", "c"))).toBe(1)
+    expect(MessageV2.appendedTailCount(["a", "b", "c"], after("a", "c", "d"))).toBe(1)
+  })
+
+  test("never reports a count larger than the messages actually appended", () => {
+    for (const count of [0, 1, 2, 3]) {
+      const tail = Array.from({ length: count }, (_, index) => `new${index}`)
+      const result = MessageV2.appendedTailCount(["a", "b"], after("a", "b", ...tail))
+      expect(result).toBe(count)
+    }
   })
 })

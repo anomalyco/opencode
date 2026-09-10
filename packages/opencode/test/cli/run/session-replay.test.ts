@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { replayLocalRows, replaySession } from "@/cli/cmd/run/session-replay"
 import type { SessionMessages } from "@/cli/cmd/run/session.shared"
 import type { RunProvider } from "@/cli/cmd/run/types"
+import { isCompleteClosurePair } from "@opencode-ai/core/session/closure-record"
+import { closureRecord, multipartPartial, ordinaryUser, wrongTextLookalike } from "../../lib/closure-record"
 
 function userMessage(id: string, text: string): SessionMessages[number] {
   return {
@@ -390,6 +392,52 @@ describe("run session replay", () => {
         toolState: "completed",
       }),
     )
+  })
+
+  // A complete closure pair replays as a system commit rather than a user one, while a malformed
+  // row that resembles a record does not gain system status: the two partitions stay exact.
+  test("renders complete closure evidence as system history without promoting malformed synthetic rows", () => {
+    const sessionID = "session-1"
+    const ordinary = ordinaryUser({ sessionID, messageID: "msg_replay_ordinary", partID: "prt_replay_ordinary" })
+    const synthetic = ordinaryUser({
+      sessionID,
+      messageID: "msg_replay_synthetic",
+      partID: "prt_replay_synthetic",
+      synthetic: true,
+    })
+    const lookalike = wrongTextLookalike({
+      sessionID,
+      messageID: "msg_replay_lookalike",
+      partID: "prt_replay_lookalike",
+    })
+    const partial = multipartPartial({
+      sessionID,
+      messageID: "msg_replay_partial",
+      partID: "prt_replay_partial",
+    })
+    const closure = closureRecord({ sessionID, messageID: "msg_replay_closure", partID: "prt_replay_closure" })
+    expect([ordinary, synthetic, lookalike, partial].every((message) => !isCompleteClosurePair(message))).toBe(true)
+    expect(isCompleteClosurePair(closure)).toBe(true)
+
+    const out = replaySession({
+      messages: [ordinary, synthetic, lookalike, partial, closure] as SessionMessages,
+      permissions: [],
+      questions: [],
+      thinking: true,
+      limits: {},
+    })
+    expect(out.commits.filter((commit) => commit.kind === "user")).toEqual([
+      expect.objectContaining({ kind: "user", text: "ordinary prompt", messageID: ordinary.info.id }),
+    ])
+    expect(out.commits.filter((commit) => commit.kind === "system")).toEqual([
+      {
+        kind: "system",
+        text: closure.parts[0]!.type === "text" ? closure.parts[0].text : "",
+        phase: "start",
+        source: "system",
+        messageID: closure.info.id,
+      },
+    ])
   })
 
   test("merges failed local rows ahead of later persisted prompts", () => {

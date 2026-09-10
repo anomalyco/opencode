@@ -3,6 +3,7 @@ import { createMemo, createResource, onCleanup, untrack, type Accessor } from "s
 import { useServerSync } from "@/context/server-sync"
 import { useSync } from "@/context/sync"
 import { same } from "@/utils/same"
+import { selectHumanUserMessages, type MessageParts } from "@opencode-ai/session-ui/closure-record"
 
 const emptyUserMessages: UserMessage[] = []
 const sessionFreshness = 15_000
@@ -47,7 +48,11 @@ export function createTimelineModel(input: {
     const id = input.sessionID()
     return !id || isTimelineReady(sync().data.message[id], serverSync().session.history.loading(id))
   })
-  const userMessages = createMemo(() => selectUserMessages(messages()), emptyUserMessages, { equals: same })
+  const userMessages = createMemo(
+    () => selectUserMessages(messages(), (messageID) => sync().data.part[messageID] ?? []),
+    emptyUserMessages,
+    { equals: same },
+  )
   const visibleUserMessages = createMemo(
     () => {
       return selectVisibleUserMessages(userMessages(), input.revertMessageID())
@@ -94,8 +99,8 @@ export function createTimelineModel(input: {
   }
 }
 
-export function selectUserMessages(messages: Message[]) {
-  return messages.filter((message): message is UserMessage => message.role === "user")
+export function selectUserMessages(messages: Message[], parts: MessageParts) {
+  return selectHumanUserMessages(messages, parts)
 }
 
 export function isTimelineReady(messages: Message[] | undefined, loading: boolean) {

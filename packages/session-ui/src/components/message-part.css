@@ -7,6 +7,32 @@
   gap: 12px;
 }
 
+[data-component="branch-closure"] {
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+  border-left: 1px solid var(--v2-border-border-base);
+  color: var(--v2-text-text-muted);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-large);
+
+  [data-slot="branch-closure-label"] {
+    flex: 0 0 auto;
+    color: var(--v2-text-text-faint);
+    font-weight: var(--font-weight-medium);
+  }
+
+  [data-slot="branch-closure-text"] {
+    min-width: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+}
+
 [data-component="user-message"] {
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base);
@@ -1383,7 +1409,7 @@ body[data-new-layout] [data-component="user-message"] {
 }
 
 body:not([data-new-layout]) {
-  [data-component="user-message"] {
+[data-component="user-message"] {
     color: var(--text-strong);
 
     [data-slot="user-message-attachments"] + [data-slot="user-message-body"] {

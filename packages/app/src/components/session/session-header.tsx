@@ -33,6 +33,7 @@ import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { reviewTooltipKeybind } from "../command-tooltip-keybind"
 import { useTitlebarRightMount } from "../titlebar"
+import { selectHumanUserMessages } from "@opencode-ai/session-ui/closure-record"
 
 const OPEN_APPS = [
   "vscode",
@@ -231,9 +232,12 @@ export function SessionHeader() {
       ({ id: "finder", label: fileManager().label, icon: fileManager().icon } as const),
   )
   const opening = createMemo(() => openRequest.app !== undefined)
-  const tint = createMemo(() =>
-    messageAgentColor(params.id ? sync().data.message[params.id] : undefined, sync().data.agent),
-  )
+  const tint = createMemo(() => {
+    if (!params.id) return
+    const messages = sync().data.message[params.id] ?? []
+    const human = selectHumanUserMessages(messages, (messageID) => sync().data.part[messageID] ?? [])
+    return messageAgentColor(human, sync().data.agent)
+  })
   const v2ActionsState = createMemo<SessionHeaderV2ActionsState>(() => ({
     statusVisible: status(),
     statusLabel: language.t("status.popover.trigger"),

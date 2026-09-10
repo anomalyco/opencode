@@ -1545,6 +1545,88 @@ describe("session.llm.stream", () => {
   )
 
   it.instance(
+    "preserves appended message order through AI SDK and native routes",
+    () =>
+      Effect.gen(function* () {
+        const model = loadFixture("openai", "gpt-5.2").model
+        const chunks = [
+          { type: "response.created", response: { id: "resp-suffix" } },
+          {
+            type: "response.output_item.added",
+            output_index: 0,
+            item: { type: "message", id: "item-suffix", status: "in_progress" },
+          },
+          {
+            type: "response.content_part.added",
+            item_id: "item-suffix",
+            output_index: 0,
+            content_index: 0,
+            part: { type: "output_text", text: "", annotations: [] },
+          },
+          {
+            type: "response.output_text.delta",
+            item_id: "item-suffix",
+            output_index: 0,
+            content_index: 0,
+            delta: "done",
+            logprobs: null,
+          },
+          {
+            type: "response.completed",
+            response: { incomplete_details: null, usage: { input_tokens: 1, output_tokens: 1 } },
+          },
+        ]
+        const aiRequest = waitRequest("/responses", createEventResponse(chunks, true))
+        const nativeRequest = waitRequest("/responses", createEventResponse(chunks, true))
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.openai, ModelV2.ID.make(model.id))
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const input = (route: string): LLM.StreamInput => ({
+          user: {
+            id: MessageID.make(`msg_user-suffix-${route}`),
+            sessionID: SessionID.make(`session-suffix-${route}`),
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ProviderV2.ID.openai, modelID: resolved.id, variant: "high" },
+          },
+          sessionID: SessionID.make(`session-suffix-${route}`),
+          model: resolved,
+          agent,
+          system: ["stable system prefix"],
+          messages: [{ role: "user", content: "durable history" }],
+          messageSuffix: [
+            { role: "user", content: [{ type: "text", text: "plugin appended message" }] },
+            { role: "assistant", content: [{ type: "text", text: "request limit message" }] },
+          ],
+          tools: {},
+        })
+
+        yield* drainWith(llmLayerWithExecutor({ flags: { experimentalNativeLlm: false } }), input("ai"))
+        yield* drainWith(llmLayerWithExecutor({ flags: { experimentalNativeLlm: true } }), input("native"))
+
+        const ai = yield* Effect.promise(() => aiRequest)
+        const native = yield* Effect.promise(() => nativeRequest)
+        for (const capture of [ai, native]) {
+          const body = JSON.stringify(capture.body.input)
+          const durable = body.indexOf("durable history")
+          const plugin = body.indexOf("plugin appended message")
+          const limit = body.indexOf("request limit message")
+
+          expect(capture.url.pathname.endsWith("/responses")).toBe(true)
+          expect(durable).toBeGreaterThanOrEqual(0)
+          expect(plugin).toBeGreaterThan(durable)
+          expect(limit).toBeGreaterThan(plugin)
+        }
+      }),
+    { config: () => openAIConfig(loadFixture("openai", "gpt-5.2").model, `${state.server!.url.origin}/v1`) },
+  )
+
+  it.instance(
     "uses injected native request executor for tool calls",
     () =>
       Effect.gen(function* () {

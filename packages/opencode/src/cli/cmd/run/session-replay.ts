@@ -3,6 +3,7 @@ import { bootstrapSessionData, createSessionData, reduceSessionData, type Sessio
 import { messagePrompt, type SessionMessages } from "./session.shared"
 import { messageTurnSummaryCommit } from "./turn-summary"
 import type { FooterPatch, LocalReplayRow, RunProvider, StreamCommit } from "./types"
+import { isCompleteClosurePair } from "@opencode-ai/core/session/closure-record"
 
 type ReplayInput = {
   messages: SessionMessages
@@ -157,6 +158,24 @@ function replayMessage(
   config: ReplayConfig,
 ): ReplayMessage {
   if (message.info.role === "user") {
+    // A branch-closure record occupies a user message but is not something the user typed.
+    // Replaying it as a prompt would put words in their mouth, so it renders as the system notice
+    // it is.
+    if (isCompleteClosurePair(message)) {
+      const part = message.parts[0]
+      if (!part || part.type !== "text") return { commits: [] }
+      return {
+        commits: [
+          {
+            kind: "system",
+            text: part.text,
+            phase: "start",
+            source: "system",
+            messageID: message.info.id,
+          },
+        ],
+      }
+    }
     const prompt = messagePrompt(message)
     if (!prompt.text.trim()) {
       return {

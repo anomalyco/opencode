@@ -15,12 +15,17 @@ import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
+import { SessionClosure } from "@/session/closure/coordinator"
+import { SessionClosureModel as Model } from "@/session/closure/model"
+import { SessionAdmission } from "@/session/closure/admission"
+import { AttachmentCoordinator } from "@/session/attachment/coordinator"
 
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { disposeAllInstances } from "../fixture/fixture"
+import { syntheticAdmission } from "../lib/background"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -52,7 +57,14 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       RuntimeFlags.node,
       Ripgrep.node,
     ]),
-    [[RuntimeFlags.node, RuntimeFlags.layer(flags)]],
+    [
+      [RuntimeFlags.node, RuntimeFlags.layer(flags)],
+      // The background binder resolves whichever coordinator the layer provides, and these fixtures
+      // hand the task tool a caller lease minted by `taskClosure`. Both must be the same object, or
+      // the binder rejects a lease it never issued. Read through a thunk because the layer is built
+      // at module load, before `taskClosure` below is initialised.
+      [SessionClosure.node, Layer.effect(SessionClosure.Service, Effect.sync(() => taskClosure))],
+    ],
   )
 
 const it = testEffect(layer())
@@ -96,22 +108,164 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
   return { chat, assistant }
 })
 
+// Arms every job it is asked about. The background binder consults whichever coordinator the layer
+// provides, so these fixtures need one that admits: closure bookkeeping has its own suite, and what
+// is under test here is the task tool's own logic.
+const armingJobs = {
+  jobStart: () =>
+    Effect.succeed({
+      type: "arm_allowed" as const,
+      permit: Model.id("arm", "arm_task_test"),
+      sequence: 0n,
+      claim: Effect.succeed(true),
+    }),
+  jobExtend: () =>
+    Effect.succeed({
+      type: "arm_allowed" as const,
+      permit: Model.id("arm", "arm_task_test"),
+      sequence: 0n,
+      claim: Effect.succeed(true),
+    }),
+  jobPermit: () => Effect.succeed(true),
+  jobRegistered: () => Effect.void,
+  jobBinderFailed: () => Effect.void,
+  jobCancel: () => Effect.void,
+  jobTerminal: () => Effect.void,
+}
+
+const unusedJobs = armingJobs as unknown as SessionClosure.Interface
+
+type LeaseLog = {
+  readonly acquired: Array<{ session: SessionID; source: string; origin: string }>
+  readonly settled: Array<{ lease: string; disposition: string }>
+  readonly events: string[]
+}
+
+const leaseLog = (): LeaseLog => ({ acquired: [], settled: [], events: [] })
+
+/**
+ * A coordinator that admits. The admission helpers themselves are the shipped ones, so these
+ * fixtures exercise the real acquire/settle path and only the coordinator underneath is a stub.
+ */
+const admittingClosure = (log: LeaseLog, label: string): SessionClosure.Interface => ({
+  ...unusedJobs,
+  request: () => Effect.die("unused"),
+  view: Effect.die("unused"),
+  identity: Effect.die("unused"),
+  acquire: (input) =>
+    Effect.sync(() => {
+      log.events.push(`${label}:acquire`)
+      log.acquired.push({ session: input.session, source: input.source, origin: input.origin })
+      return {
+        type: "admitted" as const,
+        lease: Model.id("lease", `lease_${label}_${log.acquired.length}`),
+        epoch: 0n,
+        instance: Model.id("instance", "instance_task_test"),
+      }
+    }),
+  bind: () => Effect.void,
+  retire: (lease, disposition) =>
+    Effect.sync(() => {
+      log.events.push(`${label}:settle:${disposition ?? "retired"}`)
+      log.settled.push({ lease, disposition: disposition ?? "retired" })
+    }),
+  // Reserves as well as admits. `Session.remove` reserves the subtree before deleting it, and
+  // these fixtures delete sessions, so a stub that dies here would fail the removal tests on the
+  // fixture rather than on the behaviour they assert. Production has the same arrangement: `Session`
+  // resolves the coordinator its own layer provides.
+  reserveMutation: () =>
+    Effect.sync(() => {
+      log.events.push(`${label}:reserve`)
+      return { type: "reserved" as const, mutation: Model.id("mutation", `mutation_${label}_${log.events.length}`) }
+    }),
+  activateMutation: () => Effect.void,
+  retireMutation: () => Effect.void,
+})
+
+/**
+ * Answers "no scope" for `locate`, which is the only method reached with the feature flag off, and
+ * dies on the rest. A flag-on fixture that actually exercises attachment passes a real coordinator
+ * instead, so it cannot assert against one nothing else can observe.
+ */
+/**
+ * One coordinator, shared by the layer's background binder and by the caller lease these fixtures
+ * hand to the task tool. Production has the same arrangement — `SessionPrompt` gives `admitScoped`
+ * the very service the binder resolves — and a test with two would reject its own leases.
+ */
+const taskClosure = admittingClosure(leaseLog(), "task")
+
+const inertCoordinator = (): AttachmentCoordinator.TaskInterface => ({
+  open: () => Effect.die("unused"),
+  locate: () => Effect.succeed(undefined),
+  // Flag-on only: it sits past `executeSupplement`'s feature guard, so reaching it here means the
+  // fixture is exercising attachment behaviour and wants a real coordinator.
+  locateBorrowable: () => Effect.die("unused"),
+  // The same-ID claim is reached in both feature modes, because it orders admission between an
+  // owner and a supplemental prompt whether or not attachment machinery exists. These fixtures
+  // drive one call per task id, so that call is always the owner and nothing ever awaits it.
+  claim: (sessionID) =>
+    Deferred.make<boolean>().pipe(Effect.map((ready) => ({ owner: true as const, sessionID, token: {}, ready }))),
+  settleClaim: (claim, active) => Deferred.succeed(claim.ready, active).pipe(Effect.asVoid),
+  awaitClaim: (claim) => Deferred.await(claim.ready),
+})
+
 function stubOps(opts?: {
   onPrompt?: (input: SessionPrompt.PromptInput) => void
   text?: string
   error?: NonNullable<SessionV1.Assistant["error"]>
   toolError?: string
+  attachments?: AttachmentCoordinator.TaskInterface
 }): TaskPromptOps {
   return {
     cancel: () => Effect.void,
     resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
     prompt: (input) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
+        // Production admits - persisting the prompt and firing this hook - before entering the
+        // runner, and same-ID ordering depends on it. A stub that skipped it would leave an owner's
+        // claim unsettled until its whole run finished, which is not how production behaves.
+        if (input.onAdmitted) yield* input.onAdmitted
         opts?.onPrompt?.(input)
         return reply(input, opts?.text ?? "done", opts?.error, opts?.toolError)
       }),
+    attachments: opts?.attachments ?? inertCoordinator(),
+    acquireContinuation: (input) => SessionAdmission.acquireContinuation(taskClosure, input),
+    admitScoped: (input) => SessionAdmission.admitScoped(taskClosure, input),
+    // Records rather than dies: the task tool reaches this on every interrupt path, and these
+    // fixtures drive child cancellation through `cancel` instead. Reporting "absent" is honest —
+    // there is no runner registry behind this stub to interrupt.
+    physical: {
+      interruptExact: () => Effect.succeed({ type: "absent" as const }),
+      reportExact: () => Effect.succeed({ type: "absent" as const }),
+    },
   }
 }
+
+/**
+ * Ops carrying a real attachment coordinator. Required whenever the experiment is on, because the
+ * task tool then opens an invocation scope for every run; the inert default only answers `locate`.
+ */
+const attachedOps = Effect.fn("TaskToolTest.attachedOps")(function* (opts?: Parameters<typeof stubOps>[0]) {
+  return stubOps({ ...opts, attachments: yield* AttachmentCoordinator.make })
+})
+
+/**
+ * Wraps fixture ops so their prompt fires `onAdmitted`, the way production's does once the prompt is
+ * durably persisted and before the runner is entered.
+ *
+ * Same-ID admission ordering depends on that hook: the owner settles its claim there, and a second
+ * call naming the same task_id waits on that settlement. A test that overrides `prompt` wholesale
+ * replaces the base stub's firing, so without this wrapper the owner's claim stays unsettled for as
+ * long as its run is parked and the second call waits behind it.
+ */
+const admitting = (ops: TaskPromptOps): TaskPromptOps => ({
+  ...ops,
+  prompt: (input) =>
+    Effect.gen(function* () {
+      if (input.onAdmitted) yield* input.onAdmitted
+      return yield* ops.prompt(input)
+    }),
+})
 
 function reply(
   input: SessionPrompt.PromptInput,
@@ -249,7 +403,7 @@ describe("tool.task", () => {
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
-      const child = yield* sessions.create({ parentID: chat.id, title: "Existing child" })
+      const child = yield* sessions.create({ parentID: chat.id, title: "Existing child", agent: "general" })
       const tool = yield* TaskTool
       const def = yield* tool.init()
       let seen: SessionPrompt.PromptInput | undefined
@@ -426,11 +580,11 @@ describe("tool.task", () => {
       const cancelled = defer<SessionID>()
       const abort = new AbortController()
       const promptOps: TaskPromptOps = {
+        ...(yield* attachedOps()),
         cancel: (sessionID) =>
           Effect.sync(() => {
             cancelled.resolve(sessionID)
           }),
-        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
         prompt: (input) =>
           Effect.promise(() => {
             ready.resolve(input)
@@ -652,7 +806,38 @@ describe("tool.task", () => {
     },
   )
 
-  it.instance("rejects background execution when the experiment is disabled", () =>
+  it.instance("rejects async execution when the experiment is disabled", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const exit = yield* def
+        .execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            async: true,
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps() },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+    }),
+  )
+
+  it.instance("rejects the deprecated background input when the experiment is disabled", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
       const tool = yield* TaskTool
@@ -683,6 +868,101 @@ describe("tool.task", () => {
     }),
   )
 
+  // The one explicit input, both ways round. `async: true` returns a receipt while the subagent is
+  // still running; omitting it returns the subagent's own result. Same call, same stub, one field.
+  background.instance("async: true returns a running receipt without waiting for the subagent", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          async: true,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: { ...(yield* attachedOps()), prompt: () => Effect.never } satisfies TaskPromptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.metadata.background).toBe(true)
+      expect(result.output).toContain(`state="running"`)
+      expect((yield* jobs.get(result.metadata.sessionId))?.status).toBe("running")
+    }),
+  )
+
+  background.instance("omitting async waits for the subagent's result", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: yield* attachedOps({ text: "subagent answer" }) },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.metadata.background).toBeUndefined()
+      expect(result.output).toContain("subagent answer")
+    }),
+  )
+
+  background.instance("the deprecated background input still selects async execution", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          background: true,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: { ...(yield* attachedOps()), prompt: () => Effect.never } satisfies TaskPromptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.metadata.background).toBe(true)
+      expect(result.output).toContain(`state="running"`)
+      expect((yield* jobs.get(result.metadata.sessionId))?.status).toBe("running")
+    }),
+  )
+
   it.instance("promotes a running foreground task without restarting it", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
@@ -694,8 +974,7 @@ describe("tool.task", () => {
       const injected = yield* Deferred.make<SessionPrompt.PromptInput>()
       let runs = 0
       const promptOps: TaskPromptOps = {
-        cancel: () => Effect.void,
-        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+        ...(yield* attachedOps()),
         prompt: (input) => {
           if (input.sessionID === chat.id) {
             return Deferred.succeed(injected, input).pipe(Effect.as(reply(input, "injected")))
@@ -743,8 +1022,16 @@ describe("tool.task", () => {
       expect(runs).toBe(1)
 
       yield* Deferred.succeed(done, undefined)
-      expect((yield* jobs.wait({ id: result.metadata.sessionId })).info?.output).toBe("background done")
-      expect((yield* Deferred.await(injected)).parts[0]?.type).toBe("text")
+      // Promotion moved delivery to the observer, so the terminal carries no inline payload: the
+      // answer is published for the observer to take and arrives as its own rendered envelope.
+      expect((yield* jobs.wait({ id: result.metadata.sessionId })).info?.output).toBeUndefined()
+      const delivered = yield* Deferred.await(injected)
+      const deliveredText = delivered.parts[0]
+      expect(deliveredText?.type).toBe("text")
+      if (deliveredText?.type === "text") {
+        expect(deliveredText.text).toContain("background done")
+        expect(deliveredText.text).toContain(`state="completed"`)
+      }
       expect(runs).toBe(1)
     }),
   )
@@ -770,7 +1057,7 @@ describe("tool.task", () => {
           abort: new AbortController().signal,
           extra: {
             promptOps: {
-              ...stubOps(),
+              ...(yield* attachedOps()),
               prompt: () => Effect.never,
             } satisfies TaskPromptOps,
           },
@@ -798,8 +1085,8 @@ describe("tool.task", () => {
       const updated = defer<SessionPrompt.PromptInput>()
       const injected = defer<SessionPrompt.PromptInput>()
       let prompts = 0
-      const promptOps: TaskPromptOps = {
-        ...stubOps(),
+      const promptOps: TaskPromptOps = admitting({
+        ...(yield* attachedOps()),
         prompt: (input) => {
           if (input.sessionID === chat.id) {
             injected.resolve(input)
@@ -810,7 +1097,7 @@ describe("tool.task", () => {
           updated.resolve(input)
           return Effect.promise(() => second.promise).pipe(Effect.as(reply(input, "second done")))
         },
-      }
+      })
       const context = {
         sessionID: chat.id,
         messageID: assistant.id,
@@ -843,7 +1130,7 @@ describe("tool.task", () => {
 
       expect(result.metadata.sessionId).toBe(started.metadata.sessionId)
       expect(result.metadata.background).toBe(true)
-      expect(result.output).toContain("Background task updated")
+      expect(result.output).toContain("Async task updated")
       first.resolve()
       expect((yield* jobs.get(started.metadata.sessionId))?.status).toBe("running")
       expect((yield* Effect.promise(() => updated.promise)).parts).toEqual([
@@ -853,11 +1140,15 @@ describe("tool.task", () => {
       second.resolve()
       const waited = yield* jobs.wait({ id: started.metadata.sessionId, timeout: 1_000 })
       expect(waited.info?.status).toBe("completed")
-      expect(waited.info?.output).toBe("second done")
+      // Observer-owned, so the terminal carries no inline payload: both answers were published for
+      // the observer to take rather than one of them being stored on the terminal.
+      expect(waited.info?.output).toBeUndefined()
       const notification = yield* Effect.promise(() => injected.promise)
       expect(notification.variant).toBe("xhigh")
       expect(notification.parts[0]?.type).toBe("text")
-      if (notification.parts[0]?.type === "text") expect(notification.parts[0].text).toContain("second done")
+      // Answers are delivered one at a time in conversation order, so the first delivery is the
+      // owner's own answer - not whichever run happened to settle last.
+      if (notification.parts[0]?.type === "text") expect(notification.parts[0].text).toContain("first done")
     }),
   )
 
@@ -880,7 +1171,7 @@ describe("tool.task", () => {
           messageID: assistant.id,
           agent: "build",
           abort: new AbortController().signal,
-          extra: { promptOps: stubOps({ text: "background done" }) },
+          extra: { promptOps: yield* attachedOps({ text: "background done" }) },
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
@@ -890,7 +1181,10 @@ describe("tool.task", () => {
       const waited = yield* jobs.wait({ id: result.metadata.sessionId, timeout: 1_000 })
       expect(waited.timedOut).toBe(false)
       expect(waited.info?.status).toBe("completed")
-      expect(waited.info?.output).toBe("background done")
+      // An async task is observer-owned from the start, so its answer is published for the observer
+      // to take one at a time and the terminal carries no inline payload of its own. The rendered
+      // delivery is asserted where a test can observe the parent ingress.
+      expect(waited.info?.output).toBeUndefined()
     }),
   )
 
@@ -915,7 +1209,7 @@ describe("tool.task", () => {
           abort: new AbortController().signal,
           extra: {
             promptOps: {
-              ...stubOps({ text: "background done" }),
+              ...(yield* attachedOps({ text: "background done" })),
               prompt: (input) =>
                 input.sessionID === chat.id ? Effect.never : Effect.succeed(reply(input, "background done")),
             } satisfies TaskPromptOps,
@@ -954,7 +1248,7 @@ describe("tool.task", () => {
           abort: new AbortController().signal,
           extra: {
             promptOps: {
-              ...stubOps(),
+              ...(yield* attachedOps()),
               prompt: () => Effect.never,
             } satisfies TaskPromptOps,
           },
@@ -993,7 +1287,7 @@ describe("tool.task", () => {
           abort: new AbortController().signal,
           extra: {
             promptOps: {
-              ...stubOps(),
+              ...(yield* attachedOps()),
               prompt: () => Effect.never,
             } satisfies TaskPromptOps,
           },
@@ -1032,7 +1326,7 @@ describe("tool.task", () => {
           abort: new AbortController().signal,
           extra: {
             promptOps: {
-              ...stubOps(),
+              ...(yield* attachedOps()),
               prompt: () => Effect.never,
             } satisfies TaskPromptOps,
           },
@@ -1058,6 +1352,7 @@ describe("tool.task", () => {
       const child = yield* sessions.create({ parentID: chat.id, title: "child" })
 
       yield* jobs.start({
+        admission: syntheticAdmission(),
         id: child.id,
         type: "task",
         metadata: { parentSessionId: chat.id, sessionId: child.id },
@@ -1080,12 +1375,14 @@ describe("tool.task", () => {
       const grandchild = yield* sessions.create({ parentID: child.id, title: "grandchild" })
 
       yield* jobs.start({
+        admission: syntheticAdmission(),
         id: child.id,
         type: "task",
         metadata: { parentSessionId: chat.id, sessionId: child.id },
         run: Effect.never,
       })
       yield* jobs.start({
+        admission: syntheticAdmission(),
         id: grandchild.id,
         type: "task",
         metadata: { parentSessionId: child.id, sessionId: grandchild.id },

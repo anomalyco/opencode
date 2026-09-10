@@ -84,7 +84,7 @@ const emptyTools: ToolPart[] = []
 const emptyAssistantMessages: AssistantMessage[] = []
 const idle = { type: "idle" as const }
 
-type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, { _tag: "TurnGap" }>
+type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, { _tag: "TurnGap" | "ClosureEvidence" }>
 type TimelineRowByTag<T extends TimelineRow.TimelineRow["_tag"]> = Extract<TimelineRow.TimelineRow, { _tag: T }>
 
 const timelineFallbackItemSize = 60
@@ -1073,6 +1073,27 @@ export function MessageTimeline(props: {
     switch (row()._tag) {
       case "TurnGap":
         return <div data-timeline-row="TurnGap" aria-hidden="true" class="h-6" />
+      case "ClosureEvidence": {
+        const closureRow = row as Accessor<TimelineRowByTag<"ClosureEvidence">>
+        const message = createMemo(() => {
+          const value = messageByID().get(closureRow().messageID)
+          if (value?.role === "user") return value
+        })
+        return (
+          <Show when={message()}>
+            {(message) => (
+              <div
+                data-timeline-row="ClosureEvidence"
+                class="min-w-0 w-full max-w-full md:max-w-200 2xl:max-w-[1000px] md:mx-auto"
+              >
+                <div data-slot="session-closure-evidence" class="w-full px-4 md:px-5">
+                  <Message message={message()} parts={getMsgParts(closureRow().messageID)} />
+                </div>
+              </div>
+            )}
+          </Show>
+        )
+      }
       case "CommentStrip": {
         const commentStripRow = row as Accessor<TimelineRowByTag<"CommentStrip">>
         const comments = createMemo(() =>
