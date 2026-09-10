@@ -29,6 +29,8 @@ export const dateMethods = new Set([
   "toISOString",
   "toJSON",
   "toString",
+  "toDateString",
+  "toTimeString",
   "toUTCString",
   "toGMTString",
   "getFullYear",
@@ -103,6 +105,12 @@ export const invokeDateMethod = (
       return Number.isFinite(value.time) ? hosted.toISOString() : null
     case "toString":
       return coerceToString(value)
+    case "toDateString":
+      return hosted.toDateString()
+    case "toTimeString":
+      // Drop the implementation-defined "(Zone Name)" suffix so only the offset, already exposed by
+      // getTimezoneOffset, leaves the host.
+      return hosted.toTimeString().replace(/ \(.*\)$/, "")
     case "toUTCString":
     case "toGMTString":
       return hosted.toUTCString()

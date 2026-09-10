@@ -491,12 +491,8 @@ describe("CodeMode-specific string behavior", () => {
     expect(await value(`try { "x".normalize("nope"); return "no" } catch (e) { return e.message }`)).toContain('"NFC"')
   })
 
-  test("does not expose obsolete string aliases", async () => {
-    expect(await value(`return [typeof "x".trimLeft, typeof "x".trimRight, typeof "x".substr]`)).toEqual([
-      "undefined",
-      "undefined",
-      "undefined",
-    ])
+  test("exposes the Annex B string aliases every engine ships", async () => {
+    expect(await value(`return [" x ".trimLeft(), " x ".trimRight(), "abc".substr(1, 1)]`)).toEqual(["x ", " x", "b"])
   })
 })
 

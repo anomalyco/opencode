@@ -8,9 +8,12 @@ export const stringMethods = new Set([
   "trim",
   "trimStart",
   "trimEnd",
+  "trimLeft",
+  "trimRight",
   "split",
   "slice",
   "substring",
+  "substr",
   "includes",
   "startsWith",
   "endsWith",
@@ -32,6 +35,8 @@ export const stringMethods = new Set([
   "search",
   "localeCompare",
   "normalize",
+  "isWellFormed",
+  "toWellFormed",
 ])
 
 const codeUnits = (name: string, op: (...codes: Array<number>) => string) =>
