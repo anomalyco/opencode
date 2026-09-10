@@ -1328,8 +1328,11 @@ export function options(input: {
 
   // Any gpt version above 5.4 in combination with azure does not support reasoningEffort
   // so we should return early here.
-  const [, gptMajorVersion, gptMinorVersion] = input.model.api.id.match(/gpt-(\d+)\.(\d+)/) ?? []
-  const isGpt55OrNewer = Number(gptMajorVersion) > 5 || (Number(gptMajorVersion) === 5 && Number(gptMinorVersion) >= 5)
+  const [, gptMajorVersion, gptMinorVersion] = input.model.api.id.match(/gpt-(\d+)(?:\.(\d+))?/) ?? []
+  const gptMajor = Number(gptMajorVersion)
+  const gptMinor = Number(gptMinorVersion ?? 0)
+  const hasGptMinorVersion = gptMinorVersion !== undefined
+  const isGpt55OrNewer = gptMajor > 5 || (gptMajor === 5 && gptMinor >= 5)
   if (input.model.api.npm === "@ai-sdk/azure" && input.providerOptions?.useCompletionUrls) {
     if (!isGpt55OrNewer) {
       result["reasoningEffort"] = "medium"
@@ -1337,8 +1340,8 @@ export function options(input: {
     return result
   }
 
-  if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
-    if (!input.model.api.id.includes("gpt-5-pro")) {
+  if (gptMajor >= 5 && !input.model.api.id.includes(`gpt-${gptMajor}-chat`)) {
+    if (!input.model.api.id.includes(`gpt-${gptMajor}-pro`)) {
       result["reasoningEffort"] = "medium"
       if (
         input.model.api.npm === "@ai-sdk/openai" ||
@@ -1356,7 +1359,7 @@ export function options(input: {
     // Generic OpenAI-compatible APIs do not necessarily support OpenAI's verbosity parameter.
     // Only enable the default for integrations known to implement it.
     if (
-      input.model.api.id.includes("gpt-5.") &&
+      (gptMajor > 5 || hasGptMinorVersion) &&
       !input.model.api.id.includes("codex") &&
       !input.model.api.id.includes("-chat") &&
       (input.model.api.npm === "@ai-sdk/openai" || input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle")
