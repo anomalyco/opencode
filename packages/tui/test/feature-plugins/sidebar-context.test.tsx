@@ -11,7 +11,10 @@ function context(options?: { cost?: number; tokens?: number }) {
     theme: { text: { default: color, subdued: color } },
     data: {
       session: {
-        get: () => ({ location: { directory: "/workspace" } }),
+        get: () => ({
+          location: { directory: "/workspace" },
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        }),
         cost: () => options?.cost ?? 0,
         message: {
           list: () =>
