@@ -1,12 +1,31 @@
 import { Session } from "@/session/session"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { MessageV2 } from "../../session/message-v2"
 import { SessionID } from "../../session/schema"
 import { effectCmd, fail } from "../effect-cmd"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { EOL } from "os"
 import { Effect } from "effect"
+import { type SessionTransferArchive, type SessionTransferData } from "./session-transfer"
+
+export const collectSessionTree = Effect.fn("SessionTransfer.collect")(function* (
+  service: Session.Interface,
+  root: Session.Info,
+) {
+  const seen = new Set<Session.Info["id"]>()
+  const visit = (info: Session.Info): Effect.Effect<SessionTransferArchive["sessions"], Session.NotFound> =>
+    Effect.gen(function* () {
+      seen.add(info.id)
+      const messages = yield* service.messages({ sessionID: info.id })
+      // Sort siblings so depth-first exports remain stable across runs.
+      const children = (yield* service.children(info.id))
+        .filter((child) => !seen.has(child.id))
+        .toSorted((a, b) => a.id.localeCompare(b.id))
+      const descendants = yield* Effect.forEach(children, visit)
+      return [{ info, messages }, ...descendants.flat()]
+    })
+  return yield* visit(root)
+})
 
 function redact(kind: string, id: string, value: string) {
   return value.trim() ? `[redacted:${kind}:${id}]` : value
@@ -160,7 +179,7 @@ function part(part: SessionV1.Part): SessionV1.Part {
 
 const partFn = part
 
-function sanitize(data: { info: Session.Info; messages: SessionV1.WithParts[] }) {
+function sanitize(data: SessionTransferData) {
   return {
     info: {
       ...data.info,
@@ -219,6 +238,33 @@ function sanitize(data: { info: Session.Info; messages: SessionV1.WithParts[] })
   }
 }
 
+const deepSessionExport = Effect.fn("Cli.export.deep")(function* (
+  service: Session.Interface,
+  info: Session.Info,
+  sanitizeOutput?: boolean,
+) {
+  const sessions = yield* collectSessionTree(service, info)
+  return {
+    version: 1 as const,
+    rootSessionID: info.id,
+    sessions: sessions.map((item) => (sanitizeOutput ? sanitize(item) : item)),
+  }
+})
+
+const shallowSessionExport = Effect.fn("Cli.export.shallow")(function* (
+  service: Session.Interface,
+  info: Session.Info,
+  sanitizeOutput?: boolean,
+) {
+  const output = { info, messages: yield* service.messages({ sessionID: info.id }) }
+  if ((yield* service.children(info.id)).length > 0) {
+    process.stderr.write(
+      `Warning: session ${info.id} contains subagent transcripts that are not included in the export; use --with-subagents to include them.\n`,
+    )
+  }
+  return sanitizeOutput ? sanitize(output) : output
+})
+
 export const ExportCommand = effectCmd({
   command: "export [sessionID]",
   describe: "export session data as JSON",
@@ -231,13 +277,21 @@ export const ExportCommand = effectCmd({
       .option("sanitize", {
         describe: "redact sensitive transcript and file data",
         type: "boolean",
+      })
+      .option("with-subagents", {
+        describe: "include transcripts from all nested subagent runs",
+        type: "boolean",
       }),
   handler: Effect.fn("Cli.export")(function* (args) {
     return yield* run(args)
   }),
 })
 
-const run = Effect.fn("Cli.export.body")(function* (args: { sessionID?: string; sanitize?: boolean }) {
+const run = Effect.fn("Cli.export.body")(function* (args: {
+  sessionID?: string
+  sanitize?: boolean
+  withSubagents?: boolean
+}) {
   const svc = yield* Session.Service
   let sessionID = args.sessionID ? SessionID.make(args.sessionID) : undefined
   process.stderr.write(`Exporting session: ${sessionID ?? "latest"}\n`)
@@ -281,12 +335,11 @@ const run = Effect.fn("Cli.export.body")(function* (args: { sessionID?: string; 
   // Match legacy try/catch — catches both typed failures and defects
   // (Session.Service.get throws NotFoundError as a defect, not a typed E).
   return yield* Effect.gen(function* () {
-    const sessionInfo = yield* svc.get(sessionID!)
-    const messages = yield* svc.messages({ sessionID: sessionInfo.id })
-
-    const exportData = { info: sessionInfo, messages }
-
-    process.stdout.write(JSON.stringify(args.sanitize ? sanitize(exportData) : exportData, null, 2))
+    const sessionInfo = yield* svc.get(sessionID)
+    const output = args.withSubagents
+      ? yield* deepSessionExport(svc, sessionInfo, args.sanitize)
+      : yield* shallowSessionExport(svc, sessionInfo, args.sanitize)
+    process.stdout.write(JSON.stringify(output, null, 2))
     process.stdout.write(EOL)
   }).pipe(Effect.catchCause(() => fail(`Session not found: ${sessionID!}`)))
 })
