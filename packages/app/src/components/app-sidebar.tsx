@@ -25,11 +25,12 @@ import { ServerConnection, useServer } from "@/context/server"
 import { sessionHasOpenTab, useTabs } from "@/context/tabs"
 import { shouldOpenSessionInBackground } from "@/pages/home-session-open"
 import {
-  buildHomeSessionRecords,
   HomeSessionStatusController,
+  type HomeSessionRecord,
   type OpenSessionOptions,
 } from "@/pages/home/home-sessions-controller"
 import {
+  compareSessionTime,
   displayName,
   getProjectAvatarSource,
   projectForSession,
@@ -119,11 +120,6 @@ export function AppSidebar() {
     refetchOnReconnect: true,
   }))
 
-  const projectDirs = createMemo(() => {
-    const selected = selectedProject()
-    if (selected) return projectDirectories(selected)
-    return projects().flatMap(projectDirectories)
-  })
   const projectByID = createMemo(
     () => new Map(projects().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
   )
@@ -136,14 +132,25 @@ export function AppSidebar() {
       Date.now(),
     )
   })
-  const records = createMemo(() =>
-    buildHomeSessionRecords({
-      sessions: indexedSessions,
-      projectDirectories: projectDirs,
-      projects,
-      projectByID,
-    }).slice(0, SIDEBAR_SESSION_LIMIT),
-  )
+  // Show every recent session across projects (like Codex recents), not just
+  // sessions inside a known project directory. Sessions without a resolved
+  // project fall back to their directory for avatar/title purposes.
+  const records = createMemo((): HomeSessionRecord[] => {
+    const seen = new Map<string, Session>()
+    for (const session of indexedSessions()) seen.set(session.id, session)
+    return [...seen.values()]
+      .sort(compareSessionTime)
+      .slice(0, SIDEBAR_SESSION_LIMIT)
+      .map((session) => {
+        const project = projectForSession(session, projects(), projectByID())
+        const fallback = { worktree: session.directory }
+        return {
+          session,
+          project: project ?? { ...fallback, expanded: false },
+          projectName: displayName(project ?? fallback),
+        }
+      })
+  })
 
   const activeSessionId = createMemo(() => sidebarSessionIdFromPath(location.pathname))
   const serverKey = createMemo(() => {
@@ -252,7 +259,7 @@ export function AppSidebar() {
           data-component="app-sidebar"
           data-collapsed="true"
           class="hidden shrink-0 flex-col items-center gap-1 bg-v2-background-bg-base/70 py-2 backdrop-blur-xl lg:flex"
-          classList={{ "w-14": !trafficLights(), "w-24": trafficLights() }}
+          classList={{ "w-14": !trafficLights(), "w-[84px]": trafficLights() }}
           style={trafficLights() ? { "padding-top": "36px" } : undefined}
         >
           <TooltipV2 placement="right" value={language.t("home.title")}>
@@ -490,7 +497,8 @@ function MeDialog(props: { onHome: () => void; onSettings: () => void }) {
       </SidebarNavButton>
       <SidebarNavButton
         onClick={() => {
-          close()
+          // dialog.show() replaces the whole stack, so no manual close needed
+          // (avoids racing the close animation).
           props.onSettings()
         }}
       >
