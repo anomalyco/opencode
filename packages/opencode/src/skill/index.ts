@@ -351,7 +351,7 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
   const inlineGlobal = globalSkills.length <= MAX_GLOBAL_SKILLS_INLINE
   const inlineSkills = (inlineGlobal ? described : projectSkills).toSorted((a, b) => a.name.localeCompare(b.name))
 
-  const render = (descriptionLimit?: number) => {
+  const render = (descriptionLimit?: number, includeLocation = true) => {
     const description = (skill: Info) =>
       descriptionLimit === undefined ? skill.description! : skill.description!.slice(0, descriptionLimit)
 
@@ -364,7 +364,7 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
             "  <skill>",
             `    <name>${skill.name}</name>`,
             `    <description>${description(skill)}</description>`,
-            `    <location>${escapeHtml(skill.location)}</location>`,
+            ...(includeLocation ? [`    <location>${escapeHtml(skill.location)}</location>`] : []),
             "  </skill>",
           ]),
           "</available_skills>",
@@ -409,9 +409,18 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
   if (full.length <= MAX_SKILL_PROMPT_CHARS) return full
 
   const staticOutput = render(0)
-  const descriptionBudget = Math.max(0, MAX_SKILL_PROMPT_CHARS - staticOutput.length)
+  const compactStaticOutput = render(0, false)
+  if (compactStaticOutput.length > MAX_SKILL_PROMPT_CHARS) {
+    return compactStaticOutput.slice(0, MAX_SKILL_PROMPT_CHARS)
+  }
+
+  const includeLocation = staticOutput.length <= MAX_SKILL_PROMPT_CHARS
+  const descriptionBudget = Math.max(
+    0,
+    MAX_SKILL_PROMPT_CHARS - (includeLocation ? staticOutput.length : compactStaticOutput.length),
+  )
   const descriptionLimit = Math.floor(descriptionBudget / described.length)
-  return render(descriptionLimit)
+  return render(descriptionLimit, includeLocation)
 }
 
 export const node = LayerNode.make({

@@ -641,4 +641,18 @@ description: A skill in the .opencode/skills directory.
     expect(formatted).toContain("large-skill-0")
     expect(formatted).toContain("large-skill-15")
   })
+
+  test("falls back to compact skill metadata when locations consume the budget", () => {
+    const skills: Skill.Info[] = Array.from({ length: 16 }, (_, i) => ({
+      name: `pathological-skill-${i}`,
+      description: "description",
+      location: `/skills/${"nested/".repeat(25_000)}${i}/SKILL.md`,
+      content: "",
+      scope: "global",
+    }))
+
+    const formatted = Skill.fmt(skills, { verbose: true })
+    expect(formatted.length).toBeLessThanOrEqual(300_000)
+    expect(formatted).toContain("pathological-skill-0")
+  })
 })
