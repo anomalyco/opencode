@@ -27,9 +27,31 @@ const keys = new Set([
   "layout",
 ])
 
+// v2 nests servers under `mcp.servers` and keeps only `timeout` beside it, while
+// v1 used a flat map of server definitions whose entries are tagged `local` or
+// `remote`. Without this, the flat map decodes as v2, where excess properties are
+// ignored, and every server is silently dropped.
+//
+// Only an unambiguous flat map is treated as v1: a `servers` key or an entry
+// that is not a tagged server means v2. The loader falls back to a v2 decode if
+// a file detected as v1 fails to decode, so a wrong guess no longer discards the
+// file, but detection still should not claim v2 files as v1.
+function isV1Mcp(input: Record<string, unknown>) {
+  if (!isRecord(input.mcp) || "servers" in input.mcp) return false
+  const entries = Object.values(input.mcp)
+  return (
+    entries.length > 0 &&
+    entries.every((server) => isRecord(server) && (server.type === "local" || server.type === "remote"))
+  )
+}
+
 export function isV1(input: unknown) {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) return false
-  return Object.keys(input).some((key) => keys.has(key))
+  if (!isRecord(input)) return false
+  return Object.keys(input).some((key) => keys.has(key)) || isV1Mcp(input)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 export function migrate(info: typeof ConfigV1.Info.Type) {

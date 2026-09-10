@@ -76,6 +76,35 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("detects v1 configuration from a flat mcp map", () =>
+    Effect.sync(() => {
+      expect(ConfigMigrateV1.isV1({ mcp: { local: { type: "local", command: ["node", "server.js"] } } })).toBe(true)
+      expect(ConfigMigrateV1.isV1({ mcp: { remote: { type: "remote", url: "https://mcp.example.com" } } })).toBe(true)
+      expect(ConfigMigrateV1.isV1({ mcp: { servers: { local: { type: "local", command: ["node"] } } } })).toBe(false)
+      expect(ConfigMigrateV1.isV1({ mcp: { timeout: { request: 5000 } } })).toBe(false)
+      expect(ConfigMigrateV1.isV1({ mcp: {} })).toBe(false)
+      // `enabled`-only entries are valid v1 but carry no server definition, so
+      // migration drops them either way; they are not treated as a v1 signal.
+      expect(ConfigMigrateV1.isV1({ mcp: { local: { enabled: false } } })).toBe(false)
+      // Anything that is not a tagged server stays on the v2 path.
+      expect(ConfigMigrateV1.isV1({ mcp: { foo: { type: "typo" } } })).toBe(false)
+      expect(ConfigMigrateV1.isV1({ mcp: { timeout: { type: "foo" } } })).toBe(false)
+      expect(ConfigMigrateV1.isV1({ mcp: { local: { type: "local" }, remote: { type: "remote" } } })).toBe(true)
+      // Mixed shapes stay on the v2 path, so a failed v1 decode cannot discard
+      // the rest of the file.
+      expect(
+        ConfigMigrateV1.isV1({
+          mcp: { servers: { local: { type: "local", command: ["node"] } }, stale: { type: "local" } },
+        }),
+      ).toBe(false)
+      expect(
+        ConfigMigrateV1.isV1({
+          mcp: { local: { type: "local", command: ["node"] }, timeout: { request: 5000 } },
+        }),
+      ).toBe(false)
+    }),
+  )
+
   it.effect("migrates arbitrary v1 configuration into valid v2 configuration", () =>
     Effect.sync(() => {
       FastCheck.assert(
@@ -482,6 +511,74 @@ describe("Config", () => {
               sdk: { repository: "github.com/example/sdk", branch: "main" },
               shorthand: "github.com/example/docs",
             })
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("migrates a flat mcp map when no other v1-only key is present", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({
+                $schema: "https://opencode.ai/config.json",
+                mcp: {
+                  local: { type: "local", command: ["node", "./mcp/server.js"], enabled: true },
+                  remote: { type: "remote", url: "https://mcp.example.com/mcp", enabled: false },
+                },
+              }),
+            ),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+
+            expect(documents).toHaveLength(1)
+            expect(documents[0]?.info.mcp).toEqual({
+              servers: {
+                local: { type: "local", command: ["node", "./mcp/server.js"], disabled: false },
+                remote: { type: "remote", url: "https://mcp.example.com/mcp", disabled: true },
+              },
+            })
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("keeps the rest of a config whose mcp block claims v1 but fails to decode as v1", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({
+                model: "anthropic/claude",
+                // tagged `local`, but missing the required `command`
+                mcp: { local: { type: "local" } },
+              }),
+            ),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+
+            expect(documents).toHaveLength(1)
+            expect(documents[0]?.info.model).toBe("anthropic/claude")
+            expect(documents[0]?.info.mcp).toEqual({})
           }).pipe(Effect.provide(testLayer(tmp.path)))
         }),
       ),
