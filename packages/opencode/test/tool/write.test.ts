@@ -94,6 +94,30 @@ describe("tool.write", () => {
         expect(content).toBe("relative content")
       }),
     )
+
+    it.instance("strips trailing newlines from filePath before writing", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "trimmed.txt")
+        yield* run({ filePath: `${filepath}\n`, content: "trimmed path" })
+
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content).toBe("trimmed path")
+        expect(yield* Effect.promise(() => fs.readdir(test.directory))).toContain("trimmed.txt")
+      }),
+    )
+
+    it.instance("keeps intentional leading spaces in file names", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, " draft.md")
+        yield* run({ filePath: filepath, content: "spaced name" })
+
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content).toBe("spaced name")
+        expect(yield* Effect.promise(() => fs.readdir(test.directory))).toContain(" draft.md")
+      }),
+    )
   })
 
   describe("existing file overwrite", () => {

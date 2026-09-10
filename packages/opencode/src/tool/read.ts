@@ -231,7 +231,8 @@ export const ReadTool = Tool.define<
       ctx: Tool.Context<Metadata>,
     ) {
       const instance = yield* InstanceState.context
-      let filepath = params.filePath
+      let filepath = FSUtil.sanitizeToolPath(params.filePath)
+      if (!filepath) throw new Error("filePath is required")
       if (!path.isAbsolute(filepath)) {
         filepath = path.resolve(instance.directory, filepath)
       }
