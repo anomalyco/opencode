@@ -76,6 +76,27 @@ export function migrateCanonicalLocalServerState(value: unknown, canonicalLocalS
   return next
 }
 
+// Projects known to the server but never opened through the UI (agent-created or
+// CLI-registered) stay discoverable when appended after the opened ones, newest first.
+// The persisted store keeps only user-opened entries; the union is render-only.
+const KNOWN_PROJECTS_LIMIT = 10
+
+export function knownProjectWorktrees(input: {
+  opened: Array<{ worktree: string }>
+  known: Array<{ worktree: string; id?: string; time?: { updated?: number } }>
+  limit?: number
+}) {
+  const openedKeys = new Set(input.opened.map((project) => pathKey(project.worktree)))
+  return input.known
+    .filter(
+      (project) =>
+        !!project.worktree && project.id !== "global" && !openedKeys.has(pathKey(project.worktree)),
+    )
+    .sort((a, b) => (b.time?.updated ?? 0) - (a.time?.updated ?? 0))
+    .slice(0, input.limit ?? KNOWN_PROJECTS_LIMIT)
+    .map((project) => project.worktree)
+}
+
 export function createServerProjects<T extends ServerProjectState>(input: {
   scope: Accessor<ServerScope>
   store: Store<T>

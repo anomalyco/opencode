@@ -5,7 +5,12 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useServerSync } from "./server-sync"
 import { useServerSDK } from "./server-sdk"
-import { RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
+import {
+  knownProjectWorktrees,
+  RECENTLY_CLOSED_DISPLAY_LIMIT,
+  ServerConnection,
+  useServer,
+} from "./server"
 import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
 import { normalizeProjectInfo } from "./global-sync/utils"
@@ -513,7 +518,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       })
     })
 
-    const enriched = createMemo(() => server.projects.list().map(enrich))
+    const enriched = createMemo(() => {
+      const opened = server.projects.list()
+      const known = knownProjectWorktrees({ opened, known: serverSync().data.project }).map(
+        (worktree) => enrich({ worktree, expanded: false }),
+      )
+      return [...opened.map(enrich), ...known]
+    })
     const list = createMemo(() => {
       const projects = enriched()
       return projects.map((project) => {

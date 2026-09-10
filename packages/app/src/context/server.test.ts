@@ -3,6 +3,7 @@ import { createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
   createServerProjects,
+  knownProjectWorktrees,
   migrateCanonicalLocalServerState,
   nextServerAfterRemoval,
   resolveServerList,
@@ -241,5 +242,63 @@ describe("migrateCanonicalLocalServerState", () => {
       },
       lastProject: { local: "/local" },
     })
+  })
+})
+
+describe("knownProjectWorktrees", () => {
+  const opened = (worktree: string) => ({ worktree, expanded: true })
+  const known = (worktree: string, updated = 0) => ({ worktree, id: "p1", time: { created: 0, updated } })
+
+  test("appends server-known projects that were never opened, newest first", () => {
+    const result = knownProjectWorktrees({
+      opened: [opened("D:\\work\\alpha")],
+      known: [
+        known("D:\\work\\alpha", 100),
+        known("D:\\work\\old", 10),
+        known("D:\\work\\new", 50),
+      ],
+    })
+
+    expect(result).toEqual(["D:\\work\\new", "D:\\work\\old"])
+  })
+
+  test("dedupes against opened projects across path separators", () => {
+    const result = knownProjectWorktrees({
+      opened: [opened("D:\\work\\alpha"), opened("E:/work/beta")],
+      known: [known("D:/work/alpha", 100), known("E:\\work\\beta", 90), known("D:\\work\\gamma", 5)],
+    })
+
+    expect(result).toEqual(["D:\\work\\gamma"])
+  })
+
+  test("caps the appended known projects at the configured limit", () => {
+    const result = knownProjectWorktrees({
+      opened: [],
+      known: Array.from({ length: 15 }, (_, i) => known(`D:\\work\\p${i}`, i)),
+      limit: 3,
+    })
+
+    expect(result).toHaveLength(3)
+    expect(result).toEqual(["D:\\work\\p14", "D:\\work\\p13", "D:\\work\\p12"])
+  })
+
+  test("filters out the global project and empty worktrees", () => {
+    const result = knownProjectWorktrees({
+      opened: [],
+      known: [
+        { worktree: "/", id: "global", time: { created: 0, updated: 99 } },
+        { worktree: "", id: "p-blank", time: { created: 0, updated: 98 } },
+        { worktree: "D:\\work\\real", id: "p-real", time: { created: 0, updated: 1 } },
+      ],
+    })
+
+    expect(result).toEqual(["D:\\work\\real"])
+  })
+
+  test("returns empty for empty or fully-overlapping inputs", () => {
+    expect(knownProjectWorktrees({ opened: [], known: [] })).toEqual([])
+    expect(
+      knownProjectWorktrees({ opened: [opened("D:\\work\\alpha")], known: [known("D:\\work\\alpha", 5)] }),
+    ).toEqual([])
   })
 })
