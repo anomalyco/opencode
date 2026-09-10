@@ -251,7 +251,8 @@ export function AppSidebar() {
         <aside
           data-component="app-sidebar"
           data-collapsed="true"
-          class="hidden w-14 shrink-0 flex-col items-center gap-1 bg-v2-background-bg-base/70 py-2 backdrop-blur-xl lg:flex"
+          class="hidden shrink-0 flex-col items-center gap-1 bg-v2-background-bg-base/70 py-2 backdrop-blur-xl lg:flex"
+          classList={{ "w-14": !trafficLights(), "w-24": trafficLights() }}
           style={trafficLights() ? { "padding-top": "36px" } : undefined}
         >
           <TooltipV2 placement="right" value={language.t("home.title")}>
@@ -303,10 +304,7 @@ export function AppSidebar() {
         class="hidden w-64 shrink-0 flex-col bg-v2-background-bg-base/70 backdrop-blur-xl lg:flex"
         aria-label={language.t("sidebar.nav.projectsAndSessions")}
       >
-        <div
-          class="flex h-9 shrink-0 items-center px-2"
-          style={trafficLights() ? { "padding-left": "84px" } : undefined}
-        >
+        <div class="flex h-9 shrink-0 items-center justify-end px-2">
           <TooltipV2 placement="bottom" value={language.t("sidebar.menu.toggle")}>
             <IconButtonV2
               variant="ghost-muted"
