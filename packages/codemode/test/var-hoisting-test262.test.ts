@@ -233,3 +233,10 @@ describe("var semantics beyond Test262", () => {
     expect(await value(`function* gen() { var t = 1; yield t; var t = 2; yield t } return [...gen()]`)).toEqual([1, 2])
   })
 })
+
+describe("switch case function hoisting", () => {
+  test("function declarations are visible across all cases before their statement runs", async () => {
+    expect(await value(`switch (1) { case 1: return foo(); function foo() { return "hoisted" } }`)).toBe("hoisted")
+    expect(await value(`switch (2) { case 1: function foo() { return "a" } break; case 2: return foo() }`)).toBe("a")
+  })
+})

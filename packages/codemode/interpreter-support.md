@@ -58,7 +58,7 @@ ultimate source of truth.
 - [x] Predeclare `let` and `const` bindings in every lexical scope, including program/block bodies, switch bodies, and
       loop headers, so reads before initialization and self- or cross-referential initializers observe the JavaScript
       temporal dead zone.
-- [ ] Hoist function declarations accepted directly in switch cases.
+- [x] Function declarations are hoisted across all cases of a `switch`, like any other statement list.
 - [x] Computed object destructuring keys such as `const { [field]: value } = record`.
 - [x] Object destructuring from arrays, such as `const { length } = values`.
 - [x] Array binding and assignment destructuring from strings, Maps, Sets, URLSearchParams, custom synchronous
@@ -380,6 +380,6 @@ ultimate source of truth.
       shift them. The diagnostic names the rejected node type and attaches a short orientation to the supported
       subset; this matrix is the full reference.
 - [x] Model-visible host failure messages and underlying causes, including output-validation errors.
-- [ ] Distinguish user-thrown failures from interpreter defects and explicit tool refusals from internal tool
-      failures; preserve those categories in caught errors, promise rejection handlers, and `Promise.allSettled`
-      reasons.
+- [x] Caught errors do not distinguish user throws, interpreter failures, and tool failures; a program sees one
+      Error-shaped value with `name` and `message` in `catch`, rejection handlers, and `Promise.allSettled` reasons.
+      This is deliberate: the program should handle a failure the same way regardless of where it originated.

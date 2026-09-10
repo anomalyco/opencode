@@ -171,6 +171,8 @@ const collectPatternNames = (pattern: Pattern, out: Array<string> = []): Array<s
 }
 
 // `var` names declared anywhere in a function body except inside nested functions, which own theirs.
+// Memoized per body: a function's var names never change, and hoisting runs on every call.
+const varNames = new WeakMap<ReadonlyArray<Statement | ModuleDeclaration>, ReadonlyArray<string>>()
 const collectVarNames = (
   node: Statement | ModuleDeclaration | null | undefined,
   out: Array<string> = [],
@@ -446,12 +448,14 @@ class Frame<R> {
   // Hoisted `var` bindings start undefined, or copy a same-named parameter. Function bodies hoist
   // into their own scope above the parameters so closures in parameter defaults keep seeing outer names.
   private hoistVars(statements: ReadonlyArray<Statement | ModuleDeclaration>, parameters?: Map<string, Binding>): void {
+    const names =
+      varNames.get(statements) ??
+      statements.reduce<Array<string>>((out, statement) => collectVarNames(statement, out), [])
+    varNames.set(statements, names)
     const scope = this.scopes.current()
-    for (const statement of statements) {
-      for (const name of collectVarNames(statement)) {
-        if (scope.has(name)) continue
-        scope.set(name, { mutable: true, value: parameters?.get(name)?.value, initialized: true })
-      }
+    for (const name of names) {
+      if (scope.has(name)) continue
+      scope.set(name, { mutable: true, value: parameters?.get(name)?.value, initialized: true })
     }
   }
 
@@ -492,7 +496,9 @@ class Frame<R> {
       self.scopes.push()
       return yield* Effect.gen(function* () {
         const cases = node.cases
-        self.predeclareLexical(cases.flatMap((branch) => branch.consequent))
+        const statements = cases.flatMap((branch) => branch.consequent)
+        self.predeclareLexical(statements)
+        self.hoistFunctions(statements)
         let defaultIndex: number | undefined
         let selected: number | undefined
         for (const [index, branch] of cases.entries()) {
@@ -1649,16 +1655,8 @@ class Frame<R> {
     })
     if (fn.generator) return Effect.succeed(this.createGenerator(invocation, run, fn.async))
     if (!fn.async) return run
-    // The initial yield assigns the promise before the body can self-resolve.
-    const box: { promise?: Values.Promise } = {}
-    return Effect.map(
-      this.createPromise(
-        Effect.flatMap(run, (value) => resolvePromiseValue(invocation.runtime.runner, value, fn.body, box)),
-      ),
-      (promise) => {
-        box.promise = promise
-        return promise
-      },
+    return this.runtime.promises.createWithSelf((self) =>
+      Effect.flatMap(run, (value) => resolvePromiseValue(invocation.runtime.runner, value, fn.body, self)),
     )
   }
 
