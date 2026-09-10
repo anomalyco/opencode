@@ -1,6 +1,8 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { List } from "@opencode-ai/ui/list"
 import type { ListRef } from "@opencode-ai/ui/list"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
@@ -8,7 +10,13 @@ import { createMemo, createResource, createSignal } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { useGlobal } from "@/context/global"
-import { cleanPickerInput, createDirectorySearch, displayPickerPath } from "./directory-picker-domain"
+import {
+  cleanPickerInput,
+  createDirectorySearch,
+  displayPickerPath,
+  normalizePickerDrive,
+  pickerParent,
+} from "./directory-picker-domain"
 import type { Path } from "@opencode-ai/sdk/v2/client"
 
 interface DialogSelectDirectoryProps {
@@ -58,6 +66,26 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
   const [filter, setFilter] = createSignal("")
   let list: ListRef | undefined
+  let searchWrapper: HTMLDivElement | undefined
+
+  const focusSearch = () => {
+    searchWrapper?.querySelector<HTMLInputElement>('[data-slot="input-input"]')?.focus()
+  }
+
+  const current = createMemo(() => {
+    const value = cleanPickerInput(filter())
+    if (!value) return ""
+    const absolute = value === "~" ? home() : value.startsWith("~/") ? home() + value.slice(1) : value
+    return normalizePickerDrive(absolute).replace(/\/+$/, "")
+  })
+
+  const navigate = (absolute: string) => {
+    const target = normalizePickerDrive(absolute).replace(/\/+$/, "")
+    if (!target || target === current()) return
+    const path = displayPickerPath(target, "", home())
+    list?.setFilter(path.endsWith("/") ? path : path + "/")
+    focusSearch()
+  }
 
   const missingHome = createMemo(() => !sync.data.path.home)
   const [fallbackPath] = createResource(
@@ -130,9 +158,23 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
   return (
     <Dialog title={props.title ?? language.t("command.project.open")}>
-      <List
-        class="px-3"
-        search={{ placeholder: language.t("dialog.directory.search.placeholder"), autofocus: true }}
+      <div ref={searchWrapper}>
+        <List
+          class="px-3"
+          search={{
+            placeholder: language.t("dialog.directory.search.placeholder"),
+            autofocus: true,
+            action: (
+              <IconButton
+                icon="arrow-up"
+                variant="ghost"
+                title={language.t("dialog.directory.parent")}
+                aria-label={language.t("dialog.directory.parent")}
+                disabled={!current()}
+                onClick={() => navigate(pickerParent(current()))}
+              />
+            ),
+          }}
         emptyMessage={language.t("dialog.directory.empty")}
         loadingMessage={language.t("common.loading")}
         items={items}
@@ -191,10 +233,26 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
                   <span class="text-text-weak whitespace-nowrap">/</span>
                 </div>
               </div>
+              <span
+                data-directory-enter
+                role="button"
+                tabindex={-1}
+                title={language.t("common.open")}
+                aria-label={language.t("common.open")}
+                class="shrink-0 flex items-center rounded p-1 -mr-1 text-icon-weak hover:text-icon-base"
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  navigate(item.absolute)
+                }}
+              >
+                <Icon name="chevron-right" size="small" />
+              </span>
             </div>
           )
         }}
       </List>
+      </div>
     </Dialog>
   )
 }
