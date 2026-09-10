@@ -141,6 +141,15 @@ diff --git a/dist/cjs/client/streamableHttp.js b/dist/cjs/client/streamableHttp.
 index a29a7d3a0f14d9cd800ef5b296485237350c666f..c362ae5fe6c62c8c8eae7e2e61de1eedff5443c9 100644
 --- a/dist/cjs/client/streamableHttp.js
 +++ b/dist/cjs/client/streamableHttp.js
+@@ -204,7 +204,7 @@ class StreamableHTTPClientTransport {
+                     if (!event.event || event.event === 'message') {
+                         try {
+                             const message = types_js_1.JSONRPCMessageSchema.parse(JSON.parse(event.data));
+-                            if ((0, types_js_1.isJSONRPCResultResponse)(message)) {
++                            if ((0, types_js_1.isJSONRPCResultResponse)(message) || (0, types_js_1.isJSONRPCErrorResponse)(message)) {
+                                 // Mark that we received a response - no need to reconnect for this request
+                                 receivedResponse = true;
+                                 if (replayMessageId !== undefined) {
 @@ -290,7 +290,38 @@ class StreamableHTTPClientTransport {
          this.onclose?.();
      }
@@ -518,10 +527,19 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..ac75b14545fda44aff7ff4d97cc5da88
 @@ -1,5 +1,5 @@
  import { createFetchWithInit, normalizeHeaders } from '../shared/transport.js';
 -import { isInitializedNotification, isJSONRPCRequest, isJSONRPCResultResponse, JSONRPCMessageSchema } from '../types.js';
-+import { isInitializedNotification, isInitializeRequest, isJSONRPCRequest, isJSONRPCResultResponse, JSONRPCMessageSchema } from '../types.js';
++import { isInitializedNotification, isInitializeRequest, isJSONRPCErrorResponse, isJSONRPCRequest, isJSONRPCResultResponse, JSONRPCMessageSchema } from '../types.js';
  import { auth, extractWWWAuthenticateParams, UnauthorizedError } from './auth.js';
  import { EventSourceParserStream } from 'eventsource-parser/stream';
  // Default reconnection options for StreamableHTTP connections
+@@ -200,7 +200,7 @@ export class StreamableHTTPClientTransport {
+                     if (!event.event || event.event === 'message') {
+                         try {
+                             const message = JSONRPCMessageSchema.parse(JSON.parse(event.data));
+-                            if (isJSONRPCResultResponse(message)) {
++                            if (isJSONRPCResultResponse(message) || isJSONRPCErrorResponse(message)) {
+                                 // Mark that we received a response - no need to reconnect for this request
+                                 receivedResponse = true;
+                                 if (replayMessageId !== undefined) {
 @@ -286,7 +286,38 @@ export class StreamableHTTPClientTransport {
          this.onclose?.();
      }

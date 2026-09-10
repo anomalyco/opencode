@@ -56,7 +56,7 @@ test("shows the V2 thinking level control while relevant", async ({ page }) => {
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
   const composer = page.locator('[data-component="prompt-input-v2"]')
   const input = composer.locator('[data-component="prompt-input"]')
-  const control = composer.locator('button[title="Choose model variant"]')
+  const control = composer.getByRole("button", { name: "Choose model variant" })
   await expectAppVisible(composer)
 
   await idleComposer(page)

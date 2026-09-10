@@ -5,7 +5,8 @@ import { InstanceDisposed } from "@/server/event"
 import "@opencode-ai/core/account"
 import "@/server/event"
 import { Schema } from "effect"
-import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import semver from "semver"
 import { described } from "./metadata"
 
 const GlobalHealth = Schema.Struct({
@@ -48,7 +49,9 @@ const GlobalEventSchema = Schema.Struct({
 }).annotate({ identifier: "GlobalEvent" })
 
 export const GlobalUpgradeInput = Schema.Struct({
-  target: Schema.optional(Schema.String),
+  target: Schema.String.check(
+    Schema.makeFilter((value) => (semver.valid(value) === null ? "Expected a semantic version" : undefined)),
+  ),
 })
 
 const GlobalUpgradeResult = Schema.Union([
@@ -121,14 +124,14 @@ export const GlobalApi = HttpApi.make("global").add(
         }),
       ),
       HttpApiEndpoint.post("upgrade", GlobalPaths.upgrade, {
-        payload: [HttpApiSchema.NoContent, GlobalUpgradeInput],
+        payload: GlobalUpgradeInput,
         success: described(GlobalUpgradeResult, "Upgrade result"),
         error: HttpApiError.BadRequest,
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "global.upgrade",
           summary: "Upgrade opencode",
-          description: "Upgrade opencode to the specified version or latest if not specified.",
+          description: "Upgrade opencode to the specified version.",
         }),
       ),
     )

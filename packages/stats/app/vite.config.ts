@@ -18,6 +18,7 @@ export default defineConfig({
     allowedHosts: true,
   },
   build: {
-    minify: false,
+    minify: "esbuild",
+    cssMinify: true,
   },
 })

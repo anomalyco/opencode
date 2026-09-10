@@ -1,5 +1,6 @@
 import { For } from "solid-js"
 import { createStore } from "solid-js/store"
+import { DockShell } from "@opencode-ai/ui/dock-surface"
 import { SessionRevertDock } from "@/pages/session/composer/session-revert-dock"
 import { SettingsProvider, useSettings } from "@/context/settings"
 
@@ -78,12 +79,17 @@ function Stage(props: { count: number }) {
       {/* Reproduce the real composer stack: dock + card overlapping the dock's bottom by lift() = 18px */}
       <div style={{ display: "flex", "flex-direction": "column" }}>
         <SessionRevertDock items={store.items} onRestore={restore} />
-        <div
+        <DockShell
+          data-dock-border-underlay={v2() ? "v2" : "legacy"}
           style={{ position: "relative", "z-index": 70, "margin-top": "-18px" }}
-          class="min-h-24 w-full rounded-[12px] border border-v2-border-border-base bg-v2-background-bg-base px-4 py-3 text-[13px] text-v2-text-text-faint"
+          classList={{
+            "min-h-24 w-full rounded-[12px] px-4 py-3 text-[13px]": true,
+            "bg-v2-background-bg-base text-v2-text-text-faint": v2(),
+            "text-text-weak": !v2(),
+          }}
         >
           Ask anything...
-        </div>
+        </DockShell>
       </div>
 
       <div class="text-[12px] text-v2-text-text-faint">

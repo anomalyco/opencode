@@ -460,6 +460,46 @@ noLLMServer.instance(
   { config: cfg },
 )
 
+noLLMServer.instance(
+  "loop exits for a completed parent turn with nonmonotonic message IDs",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      const userID = MessageID.make("msg_z_user")
+      const assistantID = MessageID.make("msg_a_assistant")
+      yield* sessions.updateMessage({
+        id: userID,
+        role: "user",
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        time: { created: 100 },
+      })
+      yield* sessions.updateMessage({
+        id: assistantID,
+        role: "assistant",
+        parentID: userID,
+        sessionID: chat.id,
+        mode: "build",
+        agent: "build",
+        cost: 0,
+        path: { cwd: "/tmp", root: "/tmp" },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        time: { created: 200, completed: 201 },
+        finish: "stop",
+      })
+
+      const result = yield* prompt.loop({ sessionID: chat.id })
+
+      expect(result.info.id).toBe(assistantID)
+    }),
+  { config: cfg },
+)
+
 it.instance("loop exits without an LLM request for interrupted orphan tool calls", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
@@ -798,6 +838,34 @@ it.instance("loop continues when finish is tool-calls", () =>
       parts: [{ type: "text", text: "hello" }],
     })
     yield* llm.tool("first", { value: "first" })
+    yield* llm.text("second")
+
+    const result = yield* prompt.loop({ sessionID: session.id })
+    expect(yield* llm.calls).toBe(2)
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
+      expect(result.info.finish).toBe("stop")
+    }
+  }),
+)
+
+it.instance("loop continues when finish is unknown", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.push(reply())
     yield* llm.text("second")
 
     const result = yield* prompt.loop({ sessionID: session.id })

@@ -21,6 +21,29 @@ describe("file path helpers", () => {
     expect(path.normalize("c:\\repo\\src\\app.ts")).toBe("src\\app.ts")
   })
 
+  test("normalizes Windows directory separators", () => {
+    const path = createPathHelpers(() => "C:\\repo")
+    expect(path.normalizeDir("frontend\\")).toBe("frontend")
+    expect(path.normalizeDir("frontend\\src\\")).toBe("frontend/src")
+    expect(path.normalizeDir("C:\\repo\\frontend\\")).toBe("frontend")
+  })
+
+  test("normalizes separators for Windows roots written with forward slashes", () => {
+    const path = createPathHelpers(() => "C:/repo")
+    expect(path.normalizeDir("frontend\\src\\")).toBe("frontend/src")
+  })
+
+  test("normalizes separators for Windows UNC roots", () => {
+    const path = createPathHelpers(() => "\\\\server\\share")
+    expect(path.normalizeDir("\\\\server\\share\\frontend\\")).toBe("frontend")
+  })
+
+  test("preserves backslashes in POSIX directory names", () => {
+    const path = createPathHelpers(() => "/repo")
+    expect(path.normalizeDir("literal\\name\\")).toBe("literal\\name\\")
+    expect(path.normalizeDir("literal\\name/")).toBe("literal\\name")
+  })
+
   test("keeps query/hash stripping behavior stable", () => {
     expect(stripQueryAndHash("a/b.ts#L12?x=1")).toBe("a/b.ts")
     expect(stripQueryAndHash("a/b.ts?x=1#L12")).toBe("a/b.ts")

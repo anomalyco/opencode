@@ -5,7 +5,10 @@ import { LLMRequestPrep } from "@/session/llm/request"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
-import { jsonSchema } from "ai"
+import { generateText, jsonSchema, type ModelMessage } from "ai"
+import { createAmazonBedrock, type AmazonBedrockLanguageModelOptions } from "@ai-sdk/amazon-bedrock"
+import { createAnthropic } from "@ai-sdk/anthropic"
+import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
 
 describe("ProviderTransform.options - setCacheKey", () => {
   const sessionID = "test-session-123"
@@ -86,6 +89,32 @@ describe("ProviderTransform.options - setCacheKey", () => {
     }
     const result = ProviderTransform.options({ model: openaiModel, sessionID, providerOptions: {} })
     expect(result.promptCacheKey).toBe(sessionID)
+  })
+
+  test("should set promptCacheKey for the OpenAI SDK regardless of provider ID", () => {
+    const result = ProviderTransform.options({
+      model: {
+        ...mockModel,
+        providerID: "custom-openai",
+        api: { id: "gpt-5", url: "https://example.com", npm: "@ai-sdk/openai" },
+      },
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.promptCacheKey).toBe(sessionID)
+  })
+
+  test("should not set promptCacheKey for the OpenAI-compatible SDK by provider name", () => {
+    const result = ProviderTransform.options({
+      model: {
+        ...mockModel,
+        providerID: "openai",
+        api: { id: "gpt-5", url: "https://example.com", npm: "@ai-sdk/openai-compatible" },
+      },
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.promptCacheKey).toBeUndefined()
   })
 
   test("should not set promptCacheKey for openai when explicitly disabled", () => {
@@ -209,6 +238,70 @@ describe("ProviderTransform.options - setCacheKey", () => {
       providerOptions: {},
     })
     expect(result.store).toBe(false)
+    expect(result.promptCacheKey).toBe(sessionID)
+  })
+
+  test("should disable the Azure cache key without disabling store=false", () => {
+    const result = ProviderTransform.options({
+      model: {
+        ...mockModel,
+        providerID: "azure",
+        api: { id: "gpt-5", url: "https://azure.com", npm: "@ai-sdk/azure" },
+      },
+      sessionID,
+      providerOptions: { setCacheKey: false },
+    })
+    expect(result.store).toBe(false)
+    expect(result.promptCacheKey).toBeUndefined()
+  })
+
+  test("should keep the Azure cache key for gpt-5.5 early return", () => {
+    const result = ProviderTransform.options({
+      model: {
+        ...mockModel,
+        providerID: "azure",
+        api: { id: "gpt-5.5", url: "https://azure.com", npm: "@ai-sdk/azure" },
+      },
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.store).toBe(false)
+    expect(result.reasoningSummary).toBe("auto")
+    expect(result.promptCacheKey).toBe(sessionID)
+  })
+
+  for (const npm of ["@ai-sdk/deepinfra", "@ai-sdk/cerebras"]) {
+    test(`should set the snake-case cache key for ${npm}`, () => {
+      const result = ProviderTransform.options({
+        model: { ...mockModel, providerID: "custom", api: { ...mockModel.api, npm } },
+        sessionID,
+        providerOptions: {},
+      })
+      expect(result.prompt_cache_key).toBe(sessionID)
+      expect(result.promptCacheKey).toBeUndefined()
+    })
+  }
+
+  test("should set promptCacheKey for the Mistral SDK", () => {
+    const result = ProviderTransform.options({
+      model: { ...mockModel, providerID: "custom", api: { ...mockModel.api, npm: "@ai-sdk/mistral" } },
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.promptCacheKey).toBe(sessionID)
+  })
+
+  test("should not send an undocumented OpenRouter prompt_cache_key", () => {
+    const result = ProviderTransform.options({
+      model: {
+        ...mockModel,
+        providerID: "openrouter",
+        api: { ...mockModel.api, npm: "@openrouter/ai-sdk-provider" },
+      },
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.prompt_cache_key).toBeUndefined()
   })
 })
 
@@ -433,6 +526,7 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.reasoningEffort).toBe("medium")
     expect(result.reasoningSummary).toBeUndefined()
     expect(result.include).toBeUndefined()
+    expect(result.textVerbosity).toBeUndefined()
   })
 
   test("azure chat completions omit Responses-only reasoning options after variants merge", async () => {
@@ -591,14 +685,34 @@ describe("ProviderTransform.options - gpt-5 reasoningEffort", () => {
     expect(result.reasoningEffort).toBeUndefined()
   })
 
-  test("gpt-5.5 should NOT set reasoningEffort", () => {
+  test("gpt-5.5 should NOT set reasoningEffort for the completions API", () => {
     const result = ProviderTransform.options({
       model: createModel("gpt-5.5"),
+      sessionID,
+      providerOptions: { useCompletionUrls: true },
+    })
+
+    expect(result.reasoningEffort).toBeUndefined()
+  })
+
+  test("gpt-5.6 should NOT set reasoningEffort for the completions API", () => {
+    const result = ProviderTransform.options({
+      model: createModel("gpt-5.6"),
+      sessionID,
+      providerOptions: { useCompletionUrls: true },
+    })
+
+    expect(result.reasoningEffort).toBeUndefined()
+  })
+
+  test("gpt-5.6 should set reasoningEffort for the responses API", () => {
+    const result = ProviderTransform.options({
+      model: createModel("gpt-5.6"),
       sessionID,
       providerOptions: {},
     })
 
-    expect(result.reasoningEffort).toBeUndefined()
+    expect(result.reasoningEffort).toBe("medium")
   })
 })
 
@@ -719,6 +833,365 @@ describe("ProviderTransform.providerOptions", () => {
   test("forces reasoning for OpenAI package models marked reasoning-capable", () => {
     expect(ProviderTransform.providerOptions(createModel(), { store: false })).toEqual({
       openai: { forceReasoning: true, store: false },
+    })
+  })
+
+  test("uses canonical sdk key for custom xAI models", () => {
+    const model = createModel({
+      providerID: "my-xai",
+      api: { id: "grok-4", url: "https://api.x.ai", npm: "@ai-sdk/xai" },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { promptCacheKey: "session" })).toEqual({
+      xai: { promptCacheKey: "session" },
+    })
+  })
+
+  describe("anthropic thinking block binding", () => {
+    const binding = { prefixMismatchBehavior: "drop_block" }
+    const claude = (npm: string, id: string) =>
+      createModel({ providerID: "custom", api: { id, url: "https://example.com", npm } })
+    const sdks = [
+      { npm: "@ai-sdk/anthropic", key: "anthropic", option: "thinking" },
+      { npm: "@ai-sdk/google-vertex/anthropic", key: "anthropic", option: "thinking" },
+      { npm: "@ai-sdk/amazon-bedrock", key: "bedrock", option: "reasoningConfig" },
+    ]
+
+    test("adds blockBinding to explicit adaptive thinking on @ai-sdk/anthropic", () => {
+      const model = claude("@ai-sdk/anthropic", "claude-fable-5-1")
+      expect(ProviderTransform.providerOptions(model, { thinking: { type: "adaptive" }, effort: "high" })).toEqual({
+        anthropic: { thinking: { type: "adaptive", blockBinding: binding }, effort: "high" },
+      })
+    })
+
+    test("leaves explicit enabled thinking on older models alone", () => {
+      const model = claude("@ai-sdk/anthropic", "claude-haiku-4-5")
+      expect(ProviderTransform.providerOptions(model, { thinking: { type: "enabled", budgetTokens: 4000 } })).toEqual({
+        anthropic: { thinking: { type: "enabled", budgetTokens: 4000 } },
+      })
+    })
+
+    sdks.forEach((sdk) => {
+      describe(sdk.npm, () => {
+        test.each([
+          "claude-fable-5-1",
+          "claude-fable-5.1",
+          "claude-5.1-fable",
+          "global.anthropic.claude-fable-5-1",
+          "us.anthropic.claude-fable-5-1-v1:0",
+          "claude-fable-5-1@default",
+          "CLAUDE-FABLE-5-1",
+          "claude-opus-5-1",
+          "claude-sonnet-5-2",
+          "claude-mythos-5-2",
+          "claude-mythos-5-10",
+          "claude-opus-6",
+          "claude-6-opus",
+          "claude-mythos-6-20270901",
+        ])("adds binding for %s", (id) => {
+          const model = claude(sdk.npm, id)
+          expect(ProviderTransform.providerOptions(model, {})).toEqual({
+            [sdk.key]: { [sdk.option]: { type: "adaptive", blockBinding: binding } },
+          })
+          expect(
+            ProviderTransform.providerOptions(model, { [sdk.option]: { type: "adaptive", display: "summarized" } }),
+          ).toEqual({
+            [sdk.key]: { [sdk.option]: { type: "adaptive", display: "summarized", blockBinding: binding } },
+          })
+          expect(
+            ProviderTransform.providerOptions(model, { [sdk.option]: { type: "enabled", budgetTokens: 4000 } }),
+          ).toEqual({
+            [sdk.key]: { [sdk.option]: { type: "enabled", budgetTokens: 4000, blockBinding: binding } },
+          })
+          expect(ProviderTransform.providerOptions(model, { [sdk.option]: { type: "disabled" } })).toEqual({
+            [sdk.key]: { [sdk.option]: { type: "disabled" } },
+          })
+        })
+
+        test.each([
+          "claude-haiku-4-5",
+          "claude-opus-4-8",
+          "claude-sonnet-4-6",
+          "claude-opus-5",
+          "claude-sonnet-5",
+          "claude-fable-5",
+          "claude-opus-5-0",
+          "claude-opus-5-20260724",
+          "global.anthropic.claude-opus-5",
+          "us.anthropic.claude-opus-5",
+          "claude-sonnet-5@default",
+          "claude-mythos-5-1",
+          "claude-mythos-5.1",
+          "claude-5.1-mythos",
+          "global.anthropic.claude-mythos-5-1-v1:0",
+          "claude-mythos-5-1@default",
+          "CLAUDE-MYTHOS-5-1",
+          "claude-future",
+        ])("leaves thinking unchanged for %s", (id) => {
+          const model = claude(sdk.npm, id)
+          expect(ProviderTransform.providerOptions(model, {})).toEqual({ [sdk.key]: {} })
+          expect(
+            ProviderTransform.providerOptions(model, { [sdk.option]: { type: "adaptive", display: "summarized" } }),
+          ).toEqual({ [sdk.key]: { [sdk.option]: { type: "adaptive", display: "summarized" } } })
+          expect(
+            ProviderTransform.providerOptions(model, { [sdk.option]: { type: "enabled", budgetTokens: 4000 } }),
+          ).toEqual({ [sdk.key]: { [sdk.option]: { type: "enabled", budgetTokens: 4000 } } })
+        })
+
+        test.each(["claude-fable-5-1", "claude-opus-5"])("honors explicit binding controls for %s", (id) => {
+          const model = claude(sdk.npm, id)
+          const options = Object.freeze({
+            [sdk.option]: Object.freeze({ type: "adaptive", blockBinding: false }),
+          })
+          expect(ProviderTransform.providerOptions(model, options)).toEqual({
+            [sdk.key]: { [sdk.option]: { type: "adaptive" } },
+          })
+          expect(ProviderTransform.providerOptions(model, { [sdk.option]: { blockBinding: false } })).toEqual({
+            [sdk.key]: {},
+          })
+          const custom = { [sdk.option]: { type: "adaptive", blockBinding: { prefixMismatchBehavior: "error" } } }
+          expect(ProviderTransform.providerOptions(model, custom)).toEqual({ [sdk.key]: custom })
+        })
+
+        test.each([
+          ["claude-opus-5", "default"],
+          ["claude-opus-5", "high"],
+          ["claude-sonnet-5", "default"],
+          ["claude-sonnet-5", "high"],
+          ["claude-mythos-5-1", "default"],
+          ["claude-mythos-5-1", "high"],
+          ["claude-haiku-4-5", "title"],
+        ])("omits binding from the %s %s request body and betas", async (id, mode) => {
+          const requests: Request[] = []
+          const capture = Object.assign(
+            async (...args: Parameters<typeof fetch>) => {
+              requests.push(new Request(...args))
+              return Response.json(
+                sdk.key === "bedrock"
+                  ? {
+                      output: { message: { role: "assistant", content: [{ text: "ok" }] } },
+                      stopReason: "end_turn",
+                      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                    }
+                  : {
+                      type: "message",
+                      id: "msg_1",
+                      model: "test-model",
+                      role: "assistant",
+                      content: [{ type: "text", text: "ok" }],
+                      stop_reason: "end_turn",
+                      usage: { input_tokens: 1, output_tokens: 1 },
+                    },
+              )
+            },
+            { preconnect: () => undefined },
+          )
+          const provider =
+            sdk.key === "bedrock"
+              ? createAmazonBedrock({ apiKey: "test-key", region: "ap-southeast-1", fetch: capture })
+              : sdk.npm === "@ai-sdk/google-vertex/anthropic"
+                ? createVertexAnthropic({
+                    project: "test-project",
+                    location: "global",
+                    generateAuthToken: async () => "test-token",
+                    fetch: capture,
+                  })
+                : createAnthropic({ apiKey: "test-key", fetch: capture })
+          const model = claude(
+            sdk.npm,
+            sdk.key === "bedrock"
+              ? `global.anthropic.${id}`
+              : sdk.npm === "@ai-sdk/google-vertex/anthropic"
+                ? `${id}@default`
+                : id,
+          )
+          const variants = ProviderTransform.variants(model)
+          const options =
+            mode === "title"
+              ? ProviderTransform.smallOptions({ ...model, variants })
+              : mode === "high"
+                ? variants.high
+                : {}
+          await generateText({
+            model: provider(model.api.id),
+            prompt: "hi",
+            maxOutputTokens: 32000,
+            providerOptions: ProviderTransform.providerOptions(model, options),
+          })
+          expect(requests).toHaveLength(1)
+          const body = await requests[0].json()
+          const fields = sdk.key === "bedrock" ? (body.additionalModelRequestFields ?? {}) : body
+          expect(fields.thinking).toEqual(
+            mode === "title"
+              ? { type: "enabled", budget_tokens: 16000 }
+              : mode === "high"
+                ? { type: "adaptive", display: "summarized" }
+                : undefined,
+          )
+          expect(fields.output_config).toEqual(mode === "high" ? { effort: "high" } : undefined)
+          expect(fields.anthropic_beta ?? []).not.toContain("thinking-binding-controls-2026-08-01")
+          expect(requests[0].headers.get("anthropic-beta")?.split(",") ?? []).not.toContain(
+            "thinking-binding-controls-2026-08-01",
+          )
+        })
+      })
+    })
+
+    test("leaves disabled thinking alone", () => {
+      const model = claude("@ai-sdk/anthropic", "claude-fable-5-1")
+      expect(ProviderTransform.providerOptions(model, { thinking: { type: "disabled" } })).toEqual({
+        anthropic: { thinking: { type: "disabled" } },
+      })
+    })
+
+    test("applies to vertex anthropic", () => {
+      const model = claude("@ai-sdk/google-vertex/anthropic", "claude-fable-5-1")
+      expect(ProviderTransform.providerOptions(model, { thinking: { type: "adaptive" }, effort: "max" })).toEqual({
+        anthropic: { thinking: { type: "adaptive", blockBinding: binding }, effort: "max" },
+      })
+    })
+
+    test("applies to bedrock reasoningConfig", () => {
+      const model = claude("@ai-sdk/amazon-bedrock", "us.anthropic.claude-fable-5-1-v1:0")
+      expect(
+        ProviderTransform.providerOptions(model, { reasoningConfig: { type: "adaptive", maxReasoningEffort: "high" } }),
+      ).toEqual({
+        bedrock: { reasoningConfig: { type: "adaptive", maxReasoningEffort: "high", blockBinding: binding } },
+      })
+      expect(ProviderTransform.providerOptions(model, {})).toEqual({
+        bedrock: { reasoningConfig: { type: "adaptive", blockBinding: binding } },
+      })
+    })
+
+    test("does not touch bedrock non-anthropic models", () => {
+      const model = claude("@ai-sdk/amazon-bedrock", "amazon.nova-pro-v1:0")
+      expect(ProviderTransform.providerOptions(model, { reasoningConfig: { type: "enabled" } })).toEqual({
+        bedrock: { reasoningConfig: { type: "enabled" } },
+      })
+    })
+
+    test("does not touch non-claude models on anthropic-compatible transports", () => {
+      const model = claude("@ai-sdk/anthropic", "kimi-k2-thinking")
+      expect(ProviderTransform.providerOptions(model, { thinking: { type: "adaptive" } })).toEqual({
+        anthropic: { thinking: { type: "adaptive" } },
+      })
+    })
+
+    test("reaches the anthropic wire as block_binding plus beta header", async () => {
+      const model = claude("@ai-sdk/anthropic", "claude-fable-5-1")
+      let sent: { headers: Headers; body: any } | undefined
+      const provider = createAnthropic({
+        apiKey: "test-key",
+        fetch: Object.assign(
+          async (...args: Parameters<typeof fetch>) => {
+            sent = { headers: new Headers(args[1]?.headers), body: JSON.parse(String(args[1]?.body)) }
+            return Response.json({
+              type: "message",
+              id: "msg_1",
+              model: "claude-fable-5-1",
+              role: "assistant",
+              content: [{ type: "text", text: "ok" }],
+              stop_reason: "end_turn",
+              usage: { input_tokens: 1, output_tokens: 1 },
+              input_transformations: [
+                { type: "thinking_dropped", path: "messages.1.content.0", reason: "prefix_binding_mismatch" },
+              ],
+            })
+          },
+          { preconnect: () => undefined },
+        ),
+      })
+      const result = await generateText({
+        model: provider("claude-fable-5-1"),
+        prompt: "hi",
+        providerOptions: ProviderTransform.providerOptions(model, {}),
+      })
+      expect(sent?.body.thinking).toEqual({
+        type: "adaptive",
+        block_binding: { prefix_mismatch_behavior: "drop_block" },
+      })
+      expect(sent?.headers.get("anthropic-beta")?.split(",")).toContain("thinking-binding-controls-2026-08-01")
+      expect(result.providerMetadata?.anthropic?.inputTransformations).toEqual([
+        { type: "thinking_dropped", path: "messages.1.content.0", reason: "prefix_binding_mismatch" },
+      ])
+    })
+
+    test("reaches the vertex anthropic wire as block_binding plus beta header", async () => {
+      const model = claude("@ai-sdk/google-vertex/anthropic", "claude-fable-5-1")
+      let sent: { url: string; headers: Headers; body: any } | undefined
+      const provider = createVertexAnthropic({
+        project: "test-project",
+        location: "global",
+        generateAuthToken: async () => "test-token",
+        fetch: Object.assign(
+          async (...args: Parameters<typeof fetch>) => {
+            sent = {
+              url: String(args[0]),
+              headers: new Headers(args[1]?.headers),
+              body: JSON.parse(String(args[1]?.body)),
+            }
+            return Response.json({
+              type: "message",
+              id: "msg_1",
+              model: "claude-fable-5-1",
+              role: "assistant",
+              content: [{ type: "text", text: "ok" }],
+              stop_reason: "end_turn",
+              usage: { input_tokens: 1, output_tokens: 1 },
+            })
+          },
+          { preconnect: () => undefined },
+        ),
+      })
+      await generateText({
+        model: provider("claude-fable-5-1"),
+        prompt: "hi",
+        providerOptions: ProviderTransform.providerOptions(model, {}),
+      })
+      // Same wire shape Anthropic's own Vertex SDK produces: rawPredict URL, model moved
+      // out of the body, anthropic_version added, betas carried in the anthropic-beta header.
+      expect(sent?.url).toBe(
+        "https://aiplatform.googleapis.com/v1/projects/test-project/locations/global/publishers/anthropic/models/claude-fable-5-1:rawPredict",
+      )
+      expect(sent?.body.model).toBeUndefined()
+      expect(sent?.body.anthropic_version).toBe("vertex-2023-10-16")
+      expect(sent?.body.thinking).toEqual({
+        type: "adaptive",
+        block_binding: { prefix_mismatch_behavior: "drop_block" },
+      })
+      expect(sent?.headers.get("anthropic-beta")?.split(",")).toContain("thinking-binding-controls-2026-08-01")
+    })
+
+    test("reaches the bedrock wire as additionalModelRequestFields", async () => {
+      const model = claude("@ai-sdk/amazon-bedrock", "us.anthropic.claude-fable-5-1-v1:0")
+      let body: any
+      const provider = createAmazonBedrock({
+        apiKey: "test-key",
+        region: "us-east-1",
+        fetch: Object.assign(
+          async (...args: Parameters<typeof fetch>) => {
+            body = JSON.parse(String(args[1]?.body))
+            return Response.json({
+              output: { message: { role: "assistant", content: [{ text: "ok" }] } },
+              stopReason: "end_turn",
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            })
+          },
+          { preconnect: () => undefined },
+        ),
+      })
+      await generateText({
+        model: provider("us.anthropic.claude-fable-5-1-v1:0"),
+        prompt: "hi",
+        providerOptions: ProviderTransform.providerOptions(model, {
+          reasoningConfig: { type: "adaptive", maxReasoningEffort: "high" },
+        }),
+      })
+      expect(body.additionalModelRequestFields.thinking).toEqual({
+        type: "adaptive",
+        block_binding: { prefix_mismatch_behavior: "drop_block" },
+      })
+      expect(body.additionalModelRequestFields.anthropic_beta).toContain("thinking-binding-controls-2026-08-01")
     })
   })
 
@@ -1672,6 +2145,55 @@ describe("ProviderTransform.schema - moonshot $ref siblings", () => {
   })
 })
 
+describe("ProviderTransform.message - Mistral tool call IDs", () => {
+  test.each(["codestral-latest", "pixtral-large-latest", "open-mixtral-8x22b"])(
+    "normalizes IDs for custom OpenAI-compatible %s models",
+    (id) => {
+      const result = ProviderTransform.message(
+        [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool-call",
+                toolCallId: "toolu_01CBhTTz95qkd9LJMdC9sf8t",
+                toolName: "read",
+                input: { filePath: "/tmp/test" },
+              },
+            ],
+          },
+          {
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: "toolu_01CBhTTz95qkd9LJMdC9sf8t",
+                toolName: "read",
+                output: { type: "text", value: "test" },
+              },
+            ],
+          },
+        ] as any,
+        {
+          id: `custom/${id}`,
+          providerID: "custom",
+          api: {
+            id,
+            url: "https://example.com/v1",
+            npm: "@ai-sdk/openai-compatible",
+          },
+        } as any,
+        {},
+      )
+
+      expect(result).toMatchObject([
+        { role: "assistant", content: [{ type: "tool-call", toolCallId: "toolu01CB" }] },
+        { role: "tool", content: [{ type: "tool-result", toolCallId: "toolu01CB" }] },
+      ])
+    },
+  )
+})
+
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   test("DeepSeek with tool calls includes reasoning_content in providerOptions", () => {
     const msgs = [
@@ -2189,6 +2711,134 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[0].content).toBe("Hello")
     expect(result[1].content).toHaveLength(1)
     expect(result[1].content[0]).toEqual({ type: "text", text: "Answer" })
+  })
+
+  describe("Bedrock reasoning replay", () => {
+    const model = {
+      ...anthropicModel,
+      id: "amazon-bedrock/anthropic.claude-opus-4-6",
+      providerID: "amazon-bedrock",
+      api: {
+        id: "anthropic.claude-opus-4-6",
+        url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+    }
+
+    for (const cached of [false, true]) {
+      test(`omits unsigned reasoning before SDK conversion (caching: ${cached})`, async () => {
+        const selected = cached
+          ? model
+          : { ...model, id: "amazon-bedrock/openai.gpt-oss-120b", api: { ...model.api, id: "openai.gpt-oss-120b" } }
+        const messages = ProviderTransform.message(
+          [
+            { role: "user", content: "Think" },
+            { role: "assistant", content: [{ type: "text", text: "Earlier answer" }] },
+            {
+              role: "assistant",
+              content: [
+                { type: "reasoning", text: "Partial thought" },
+                { type: "text", text: "" },
+              ],
+            },
+            { role: "user", content: "Continue" },
+          ],
+          selected,
+          {},
+        )
+        expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "user"])
+        expect(messages[1].providerOptions?.bedrock?.cachePoint).toEqual(cached ? { type: "default" } : undefined)
+        const provider = createAmazonBedrock({
+          apiKey: "test-key",
+          region: "us-east-1",
+          fetch: Object.assign(
+            async (...args: Parameters<typeof fetch>) => {
+              const body = JSON.parse(String(args[1]?.body))
+              expect(body.messages).toEqual([
+                { role: "user", content: [{ text: "Think" }] },
+                {
+                  role: "assistant",
+                  content: [{ text: "Earlier answer" }, ...(cached ? [{ cachePoint: { type: "default" } }] : [])],
+                },
+                {
+                  role: "user",
+                  content: [{ text: "Continue" }, ...(cached ? [{ cachePoint: { type: "default" } }] : [])],
+                },
+              ])
+              return Response.json({
+                output: { message: { role: "assistant", content: [{ text: "Recovered" }] } },
+                stopReason: "end_turn",
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              })
+            },
+            { preconnect: () => undefined },
+          ),
+        })
+        const result = await generateText({ model: provider(selected.api.id), messages, maxRetries: 0 })
+        expect(result.text).toBe("Recovered")
+      })
+    }
+
+    for (const namespace of ["bedrock", "amazon-bedrock", "custom-bedrock"]) {
+      for (const field of ["signature", "redactedContent", "redactedData"]) {
+        test(`preserves ${namespace}.${field} on empty reasoning`, () => {
+          const result = ProviderTransform.message(
+            [
+              {
+                role: "assistant",
+                content: [{ type: "reasoning", text: "", providerOptions: { [namespace]: { [field]: "opaque" } } }],
+              },
+            ],
+            namespace === "custom-bedrock" ? { ...model, providerID: namespace } : model,
+            {},
+          )
+          expect(result).toHaveLength(1)
+          expect(result[0].content).toEqual([
+            { type: "reasoning", text: "", providerOptions: { bedrock: { [field]: "opaque" } } },
+          ])
+        })
+      }
+    }
+
+    test("uses stored provider metadata when it will overwrite the SDK namespace", () => {
+      const result = ProviderTransform.message(
+        [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "reasoning",
+                text: "Partial thought",
+                providerOptions: { "amazon-bedrock": {}, bedrock: { signature: "overwritten" } },
+              },
+            ],
+          },
+        ],
+        model,
+        {},
+      )
+      expect(result).toEqual([])
+    })
+
+    test("keeps text and tool calls next to unsigned reasoning", () => {
+      const content: ModelMessage["content"] = [
+        { type: "text", text: "Answer" },
+        { type: "tool-call", toolCallId: "call_1", toolName: "lookup", input: {} },
+      ]
+      const result = ProviderTransform.message(
+        [{ role: "assistant", content: [{ type: "reasoning", text: "Partial thought" }, ...content] }],
+        model,
+        {},
+      )
+      expect(result).toHaveLength(1)
+      expect(result[0].content).toEqual(content)
+    })
+
+    test("does not remove unsigned reasoning for other providers", () => {
+      const content: ModelMessage["content"] = [{ type: "reasoning", text: "Partial thought" }]
+      const result = ProviderTransform.message([{ role: "assistant", content }], anthropicModel, {})
+      expect(result[0].content).toEqual(content)
+    })
   })
 
   test("does not filter for non-anthropic providers", () => {
@@ -2962,6 +3612,20 @@ describe("ProviderTransform.message - cache control on gateway", () => {
     })
   })
 
+  test("does not add explicit breakpoints when Anthropic automatic caching is enabled", () => {
+    const model = createModel({
+      providerID: "anthropic",
+      api: { id: "claude-sonnet-4", url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
+    })
+    const msgs = [
+      { role: "system", content: "You are a helpful assistant" },
+      { role: "user", content: "Hello" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, { cacheControl: { type: "ephemeral" } }) as any[]
+    expect(result.every((message) => message.providerOptions === undefined)).toBe(true)
+  })
+
   test("google-vertex-anthropic applies cache control", () => {
     const model = createModel({
       providerID: "google-vertex-anthropic",
@@ -3022,14 +3686,127 @@ describe("ProviderTransform.message - cache control on gateway", () => {
 
 describe("ProviderTransform.temperature - Cohere North", () => {
   test("defaults north-mini-code models to 1.0", () => {
-    expect(ProviderTransform.temperature({ id: "cohere/North-Mini-Code-1-0-latest" } as any)).toBe(1.0)
+    expect(
+      ProviderTransform.temperature({
+        id: "cohere/North-Mini-Code-1-0-latest",
+        api: { id: "North-Mini-Code-1-0-latest" },
+      } as any),
+    ).toBe(1.0)
+  })
+})
+
+describe("ProviderTransform sampling defaults - Qwen", () => {
+  test.each(["Qwen3.8-27B", "qwen3-coder-30b-a3b-instruct"])('leaves sampling unset for "%s"', (id) => {
+    const model = {
+      id: `custom/${id}`,
+      api: { id },
+    } as any
+
+    expect(ProviderTransform.temperature(model)).toBeUndefined()
+    expect(ProviderTransform.topP(model)).toBeUndefined()
+    expect(ProviderTransform.topK(model)).toBeUndefined()
+  })
+})
+
+describe("ProviderTransform sampling defaults - Gemini", () => {
+  const model = (id: string) =>
+    ({
+      id: `google/${id}`,
+      api: { id },
+    }) as any
+
+  const alias = (id: string, apiID: string) =>
+    ({
+      id,
+      api: { id: apiID },
+    }) as any
+
+  test.each([
+    "gemini-3.5-flash-lite",
+    "gemini-3-5-flash-lite",
+    "gemini-3.6-flash",
+    "gemini-3-6-flash",
+    "gemini-4-pro",
+    "gemini-future",
+  ])("omits deprecated sampling controls for %s", (id) => {
+    expect(ProviderTransform.temperature(model(id))).toBeUndefined()
+    expect(ProviderTransform.topP(model(id))).toBeUndefined()
+    expect(ProviderTransform.topK(model(id))).toBeUndefined()
+  })
+
+  test.each([
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash-lite",
+    "gemini-2-5-flash-lite",
+    "gemini-3-flash-preview",
+    "gemini-3-pro-image",
+    "gemini-3.1-flash-lite",
+    "gemini-3.1-pro-preview",
+    "gemini-3-1-pro-preview",
+    "gemini-3.5-flash",
+    "gemini-3-5-flash",
+  ])("preserves sampling defaults for %s", (id) => {
+    expect(ProviderTransform.temperature(model(id))).toBe(1)
+    expect(ProviderTransform.topP(model(id))).toBe(0.95)
+    expect(ProviderTransform.topK(model(id))).toBe(64)
+  })
+
+  test("uses the API model ID for configured aliases", () => {
+    const deprecated = alias("google/gemini-3.5-flash", "google/gemini-3.6-flash")
+    expect(ProviderTransform.temperature(deprecated)).toBeUndefined()
+    expect(ProviderTransform.topP(deprecated)).toBeUndefined()
+    expect(ProviderTransform.topK(deprecated)).toBeUndefined()
+
+    const supported = alias("my-gemini", "google/gemini-2.5-flash")
+    expect(ProviderTransform.temperature(supported)).toBe(1)
+    expect(ProviderTransform.topP(supported)).toBe(0.95)
+    expect(ProviderTransform.topK(supported)).toBe(64)
+  })
+})
+
+describe("ProviderTransform sampling defaults - DeepSeek", () => {
+  const model = (providerID: string, id: string) =>
+    ({
+      id: `${providerID}/${id}`,
+      providerID,
+      api: { id },
+    }) as any
+
+  test.each([
+    ["deepseek", "deepseek-v4-flash"],
+    ["opencode", "deepseek-v4-flash"],
+    ["opencode-go", "deepseek-v4-flash"],
+    ["openrouter", "deepseek/deepseek-v4-flash-0731"],
+    ["ollama-cloud", "deepseek-v4-flash:0731"],
+  ])("defaults top_p for %s/%s", (providerID, id) => {
+    expect(ProviderTransform.temperature(model(providerID, id))).toBeUndefined()
+    expect(ProviderTransform.topP(model(providerID, id))).toBe(0.95)
+    expect(ProviderTransform.topK(model(providerID, id))).toBeUndefined()
+  })
+
+  test.each([
+    ["openrouter", "deepseek/deepseek-v4-flash"],
+    ["vercel", "deepseek/deepseek-v4-flash"],
+    ["custom", "deepseek-ai/DeepSeek-V4-Flash"],
+  ])("preserves legacy defaults for %s/%s", (providerID, id) => {
+    expect(ProviderTransform.temperature(model(providerID, id))).toBeUndefined()
+    expect(ProviderTransform.topP(model(providerID, id))).toBeUndefined()
+    expect(ProviderTransform.topK(model(providerID, id))).toBeUndefined()
   })
 })
 
 describe("ProviderTransform.reasoningVariants", () => {
   const model = (reasoning_options: ModelsDev.Model["reasoning_options"]) => ({ reasoning_options }) as ModelsDev.Model
-  const target = (npm: string, id = "test-model") =>
-    ({ id, api: { id, npm, url: "" }, capabilities: { reasoning: true }, limit: { output: 64_000 } }) as any
+  const target = (npm: string, id = "test-model", family = "") =>
+    ({
+      id,
+      providerID: "test",
+      family,
+      api: { id, npm, url: "" },
+      capabilities: { reasoning: true },
+      limit: { output: 64_000 },
+    }) as any
 
   test("respects explicitly empty reasoning options", () => {
     expect(ProviderTransform.reasoningVariants(model([]), target("@ai-sdk/openai"))).toEqual({})
@@ -3043,6 +3820,7 @@ describe("ProviderTransform.reasoningVariants", () => {
       { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
       "claude-opus-4-7",
     ],
+    ["@ai-sdk/anthropic", { thinking: { type: "adaptive", display: "summarized" }, effort: "high" }, "claude-opus-5"],
     ["@ai-sdk/google", { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } }],
     ["@ai-sdk/google-vertex", { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } }],
     [
@@ -3086,6 +3864,7 @@ describe("ProviderTransform.reasoningVariants", () => {
     ["@ai-sdk/togetherai", { reasoningEffort: "high" }],
     ["venice-ai-sdk-provider", { reasoningEffort: "high" }],
     ["ai-gateway-provider", { reasoningEffort: "high" }],
+    ["merge-gateway-ai-sdk-provider", { reasoningEffort: "high" }],
     ["@ai-sdk/amazon-bedrock", { reasoningConfig: { type: "enabled", maxReasoningEffort: "high" } }],
   ])("converts effort for %s", (npm, expected, ...args) => {
     const id = args[0] as string | undefined
@@ -3094,22 +3873,96 @@ describe("ProviderTransform.reasoningVariants", () => {
     )
   })
 
-  test("uses bare effort for Claude Opus 4.5", () => {
+  test.each(["luna", "sol", "terra"])("serializes Bedrock GPT-5.6 %s none effort", async (name) => {
+    const item = target("@ai-sdk/amazon-bedrock", `global.openai.gpt-5.6-${name}`)
+    const variants = ProviderTransform.reasoningVariants(
+      model([{ type: "effort", values: ["none", "low", "medium", "high", "xhigh", "max"] }]),
+      item,
+    )
+    for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
+      expect(variants?.[effort]).toEqual({ reasoningConfig: { type: "enabled", maxReasoningEffort: effort } })
+    }
+    expect(variants?.none).toEqual({
+      reasoningConfig: { type: "enabled", maxReasoningEffort: "none" },
+    } satisfies AmazonBedrockLanguageModelOptions)
+    const sent: unknown[] = []
+    const provider = createAmazonBedrock({
+      apiKey: "test-key",
+      region: "us-east-1",
+      fetch: Object.assign(
+        async (...args: Parameters<typeof fetch>) => {
+          sent.push(JSON.parse(String(args[1]?.body)))
+          return Response.json({
+            output: { message: { role: "assistant", content: [{ text: "ok" }] } },
+            stopReason: "end_turn",
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          })
+        },
+        { preconnect: () => undefined },
+      ),
+    })
+    await generateText({
+      model: provider(item.api.id),
+      prompt: "hi",
+      providerOptions: ProviderTransform.providerOptions(item, variants?.none ?? {}),
+    })
+    expect(sent).toEqual([expect.objectContaining({ additionalModelRequestFields: { reasoning: { effort: "none" } } })])
+  })
+
+  test("combines effort with extended thinking for Claude Opus 4.5", () => {
     expect(
       ProviderTransform.reasoningVariants(
         model([{ type: "effort", values: ["high"] }]),
         target("@ai-sdk/anthropic", "claude-opus-4-5"),
       ),
-    ).toEqual({ high: { effort: "high" } })
+    ).toEqual({
+      high: {
+        thinking: { type: "enabled", budgetTokens: 16_000 },
+        effort: "high",
+      },
+    })
   })
 
-  test("leaves legacy Anthropic effort options to budget fallback", () => {
+  test("uses explicit effort metadata for Anthropic-compatible models", () => {
     expect(
       ProviderTransform.reasoningVariants(
         model([{ type: "effort", values: ["high"] }]),
         target("@ai-sdk/anthropic", "claude-sonnet-4"),
       ),
-    ).toBeUndefined()
+    ).toEqual({ high: { effort: "high" } })
+
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "effort", values: ["max"] }]),
+        target("@ai-sdk/anthropic", "k3"),
+      ),
+    ).toEqual({ max: { effort: "max" } })
+  })
+
+  test("maps Kimi effort metadata to adaptive thinking", () => {
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "effort", values: ["low", "high", "max"] }]),
+        target("@ai-sdk/anthropic", "kimi-k3"),
+      ),
+    ).toEqual({
+      low: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
+      high: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+      max: { thinking: { type: "adaptive", display: "summarized" }, effort: "max" },
+    })
+  })
+
+  test("maps GitLab model efforts to provider-specific options", () => {
+    const options = model([{ type: "effort", values: ["max"] }])
+    const openai = target("gitlab-ai-provider", "duo-chat-gpt-5-6-sol", "gpt-sol")
+    const anthropic = target("gitlab-ai-provider", "duo-chat-opus-4-8", "claude-opus")
+
+    expect(ProviderTransform.reasoningVariants(options, openai)).toEqual({
+      max: { reasoningEffort: "max" },
+    })
+    expect(ProviderTransform.reasoningVariants(options, anthropic)).toEqual({
+      max: { thinking: { type: "adaptive", effort: "max" } },
+    })
   })
 
   test("uses adaptive reasoning config for Anthropic models on Bedrock", () => {
@@ -3129,13 +3982,45 @@ describe("ProviderTransform.reasoningVariants", () => {
     })
   })
 
-  test("leaves legacy Anthropic Bedrock effort options to budget fallback", () => {
+  test("uses adaptive reasoning config for Claude Opus 5 on Bedrock", () => {
+    const result = ProviderTransform.reasoningVariants(
+      model([{ type: "effort", values: ["low", "medium", "high", "xhigh", "max"] }]),
+      target("@ai-sdk/amazon-bedrock", "us.anthropic.claude-opus-5"),
+    )
+    expect(Object.keys(result ?? {})).toEqual(["low", "medium", "high", "xhigh", "max"])
+    expect(result?.high).toEqual({
+      reasoningConfig: {
+        type: "adaptive",
+        maxReasoningEffort: "high",
+        display: "summarized",
+      },
+    })
+  })
+
+  test("combines effort with extended thinking for Claude Opus 4.5 on Bedrock", () => {
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "effort", values: ["high"] }]),
+        target("@ai-sdk/amazon-bedrock", "us.anthropic.claude-opus-4-5-20251101-v1:0"),
+      ),
+    ).toEqual({
+      high: {
+        reasoningConfig: {
+          type: "enabled",
+          budgetTokens: 16_000,
+          maxReasoningEffort: "high",
+        },
+      },
+    })
+  })
+
+  test("does not replace unsupported Anthropic Bedrock effort options with token budgets", () => {
     expect(
       ProviderTransform.reasoningVariants(
         model([{ type: "effort", values: ["high"] }]),
         target("@ai-sdk/amazon-bedrock", "anthropic.claude-sonnet-4-v1:0"),
       ),
-    ).toBeUndefined()
+    ).toEqual({})
   })
 
   test.each([
@@ -3256,10 +4141,13 @@ describe("ProviderTransform.reasoningVariants", () => {
     })
   })
 
-  test("leaves unsupported options for heuristic fallback", () => {
+  test("does not replace unsupported effort options with heuristic variants", () => {
     expect(
       ProviderTransform.reasoningVariants(model([{ type: "effort", values: ["high"] }]), target("@ai-sdk/perplexity")),
-    ).toBeUndefined()
+    ).toEqual({})
+  })
+
+  test("leaves unsupported toggle options for heuristic fallback", () => {
     expect(ProviderTransform.reasoningVariants(model([{ type: "toggle" }]), target("@ai-sdk/openai"))).toBeUndefined()
   })
 
@@ -3273,17 +4161,15 @@ describe("ProviderTransform.reasoningVariants", () => {
     expect(ProviderTransform.reasoningVariants(effort, target("@ai-sdk/gateway", "google/gemini-3-pro"))).toEqual({
       high: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
     })
-    expect(
-      ProviderTransform.reasoningVariants(effort, target("@ai-sdk/github-copilot", "gemini-3-pro")),
-    ).toBeUndefined()
+    expect(ProviderTransform.reasoningVariants(effort, target("@ai-sdk/github-copilot", "gemini-3-pro"))).toEqual({})
   })
 
-  test.each(["@ai-sdk/cohere", "@ai-sdk/perplexity", "@ai-sdk/vercel", "@ai-sdk/alibaba", "gitlab-ai-provider"])(
+  test.each(["@ai-sdk/cohere", "@ai-sdk/perplexity", "@ai-sdk/vercel", "@ai-sdk/alibaba"])(
     "does not invent effort controls for %s",
     (npm) => {
-      expect(
-        ProviderTransform.reasoningVariants(model([{ type: "effort", values: ["high"] }]), target(npm)),
-      ).toBeUndefined()
+      expect(ProviderTransform.reasoningVariants(model([{ type: "effort", values: ["high"] }]), target(npm))).toEqual(
+        {},
+      )
     },
   )
 })
@@ -3389,6 +4275,22 @@ describe("ProviderTransform.variants", () => {
     expect(ProviderTransform.variants(model)).toEqual({
       none: { thinking: { type: "disabled" } },
       thinking: { thinking: { type: "adaptive" } },
+    })
+  })
+
+  test.each(["nvidia", "lilac"])("%s minimax m3 returns chat template thinking toggles", (providerID) => {
+    const model = createMockModel({
+      id: `${providerID}/minimaxai/minimax-m3`,
+      providerID,
+      api: {
+        id: "minimaxai/minimax-m3",
+        url: "https://api.example.com/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    expect(ProviderTransform.variants(model)).toEqual({
+      none: { chat_template_kwargs: { thinking_mode: "disabled" } },
+      thinking: { chat_template_kwargs: { thinking_mode: "enabled" } },
     })
   })
 
@@ -4411,10 +5313,16 @@ describe("ProviderTransform.variants", () => {
   describe("@ai-sdk/anthropic", () => {
     for (const testCase of [
       {
+        name: "opus 4 dated",
+        apiIds: ["claude-opus-4-20250514"],
+        efforts: ["high", "max"],
+        expectedHigh: { thinking: { type: "enabled", budgetTokens: 16000 } },
+      },
+      {
         name: "opus 4.5",
         apiIds: ["claude-opus-4-5-20251101", "claude-opus-4.5-20251101"],
         efforts: ["low", "medium", "high"],
-        expectedHigh: { effort: "high" },
+        expectedHigh: { thinking: { type: "enabled", budgetTokens: 16000 }, effort: "high" },
       },
       {
         name: "sonnet 4.6",
@@ -4443,6 +5351,18 @@ describe("ProviderTransform.variants", () => {
       {
         name: "sonnet 5",
         apiIds: ["claude-sonnet-5", "claude-sonnet-5-20260630"],
+        efforts: ["low", "medium", "high", "xhigh", "max"],
+        expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+      },
+      {
+        name: "opus 5",
+        apiIds: ["claude-opus-5", "claude-opus-5-20260724"],
+        efforts: ["low", "medium", "high", "xhigh", "max"],
+        expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+      },
+      {
+        name: "unversioned future model",
+        apiIds: ["claude-future"],
         efforts: ["low", "medium", "high", "xhigh", "max"],
         expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
       },
@@ -4565,6 +5485,28 @@ describe("ProviderTransform.variants", () => {
         effort: "high",
       })
     })
+
+    test("opus 5 uses adaptive reasoning for Vertex model IDs", () => {
+      const result = ProviderTransform.variants(
+        createMockModel({
+          id: "google-vertex-anthropic/claude-opus-5@default",
+          providerID: "google-vertex-anthropic",
+          api: {
+            id: "claude-opus-5@default",
+            url: "https://us-central1-aiplatform.googleapis.com",
+            npm: "@ai-sdk/google-vertex/anthropic",
+          },
+        }),
+      )
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.high).toEqual({
+        thinking: {
+          type: "adaptive",
+          display: "summarized",
+        },
+        effort: "high",
+      })
+    })
   })
 
   describe("@ai-sdk/amazon-bedrock", () => {
@@ -4645,6 +5587,28 @@ describe("ProviderTransform.variants", () => {
           providerID: "bedrock",
           api: {
             id: "anthropic.claude-sonnet-5",
+            url: "https://bedrock.amazonaws.com",
+            npm: "@ai-sdk/amazon-bedrock",
+          },
+        }),
+      )
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.high).toEqual({
+        reasoningConfig: {
+          type: "adaptive",
+          maxReasoningEffort: "high",
+          display: "summarized",
+        },
+      })
+    })
+
+    test("anthropic opus 5 returns adaptive reasoning options with xhigh", () => {
+      const result = ProviderTransform.variants(
+        createMockModel({
+          id: "bedrock/anthropic-claude-opus-5",
+          providerID: "bedrock",
+          api: {
+            id: "us.anthropic.claude-opus-5-v1:0",
             url: "https://bedrock.amazonaws.com",
             npm: "@ai-sdk/amazon-bedrock",
           },
@@ -4845,6 +5809,12 @@ describe("ProviderTransform.variants", () => {
       {
         name: "sonnet 5",
         apiIds: ["anthropic--claude-sonnet-5", "anthropic--claude-5-sonnet"],
+        efforts: ["low", "medium", "high", "xhigh", "max"],
+        thinking: { type: "adaptive", display: "summarized" },
+      },
+      {
+        name: "opus 5",
+        apiIds: ["anthropic--claude-opus-5", "anthropic--claude-5-opus"],
         efforts: ["low", "medium", "high", "xhigh", "max"],
         thinking: { type: "adaptive", display: "summarized" },
       },
@@ -5126,5 +6096,116 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     // which @ai-sdk/openai-compatible never reads, silently dropping reasoningEffort.
     const result = ProviderTransform.providerOptions(createModel(), { reasoningEffort: "high" })
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
+  })
+})
+
+describe("ProviderTransform.providerOptions - merge-gateway-ai-sdk-provider", () => {
+  const model = {
+    id: "merge-gateway/openai/gpt-5.6-sol",
+    providerID: "merge-gateway",
+    api: {
+      id: "openai/gpt-5.6-sol",
+      url: "https://api-gateway.merge.dev/v1/ai-sdk",
+      npm: "merge-gateway-ai-sdk-provider",
+    },
+    capabilities: { reasoning: true },
+  } as any
+
+  test("routes normalized effort under the adapter's mergeGateway key", () => {
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "high" })).toEqual({
+      mergeGateway: { reasoningEffort: "high" },
+    })
+  })
+})
+
+describe("ProviderTransform.options - kimi family adaptive thinking", () => {
+  const createModel = (overrides: Record<string, any> = {}) =>
+    ({
+      id: "moonshotai/kimi-k2-thinking",
+      providerID: "moonshotai",
+      api: {
+        id: "kimi-k2-thinking",
+        url: "https://api.moonshot.ai/anthropic",
+        npm: "@ai-sdk/anthropic",
+      },
+      name: "Kimi K2 Thinking",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
+      limit: { context: 262144, output: 262144 },
+      status: "active",
+      options: {},
+      headers: {},
+      ...overrides,
+    }) as any
+
+  test("uses adaptive thinking with effort instead of budget tokens", () => {
+    const result = ProviderTransform.options({ model: createModel(), sessionID: "s1", providerOptions: {} })
+    expect(result.thinking).toEqual({ type: "adaptive", display: "summarized" })
+    expect(result.effort).toBe("high")
+    expect(JSON.stringify(result)).not.toContain("budgetTokens")
+  })
+
+  test("uses adaptive thinking through Google Vertex Anthropic", () => {
+    const model = createModel()
+    model.api.npm = "@ai-sdk/google-vertex/anthropic"
+    const result = ProviderTransform.options({ model, sessionID: "s1", providerOptions: {} })
+    expect(result.thinking).toEqual({ type: "adaptive", display: "summarized" })
+    expect(result.effort).toBe("high")
+  })
+
+  test("provides adaptive effort variants without models.dev metadata", () => {
+    expect(ProviderTransform.variants(createModel())).toEqual(
+      Object.fromEntries(
+        ["low", "medium", "high", "xhigh", "max"].map((effort) => [
+          effort,
+          { thinking: { type: "adaptive", display: "summarized" }, effort },
+        ]),
+      ),
+    )
+
+    const model = createModel()
+    model.api.npm = "@ai-sdk/openai-compatible"
+    expect(ProviderTransform.variants(model)).toEqual({})
+  })
+
+  test("does not enable thinking for kimi models without reasoning capability", () => {
+    const model = createModel()
+    model.capabilities.reasoning = false
+    const result = ProviderTransform.options({ model, sessionID: "s1", providerOptions: {} })
+    expect(result.thinking).toBeUndefined()
+  })
+
+  test("does not set thinking defaults for non-kimi anthropic models", () => {
+    const model = createModel({
+      id: "anthropic/claude-sonnet-4-5",
+      providerID: "anthropic",
+      api: {
+        id: "claude-sonnet-4-5",
+        url: "https://api.anthropic.com",
+        npm: "@ai-sdk/anthropic",
+      },
+    })
+    const result = ProviderTransform.options({ model, sessionID: "s1", providerOptions: {} })
+    expect(result.thinking).toBeUndefined()
+    expect(result.effort).toBeUndefined()
+  })
+
+  test("does not set adaptive thinking for kimi on openai-compatible", () => {
+    const model = createModel()
+    model.api = {
+      id: "kimi-k2-thinking",
+      url: "https://api.moonshot.ai/v1",
+      npm: "@ai-sdk/openai-compatible",
+    }
+    const result = ProviderTransform.options({ model, sessionID: "s1", providerOptions: {} })
+    expect(result.thinking).toBeUndefined()
   })
 })

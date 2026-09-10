@@ -13,7 +13,7 @@ function createPromptStore() {
           id: "attachment-1",
           filename: "notes.txt",
           mime: "text/plain",
-          dataUrl: "data:text/plain;base64,",
+          blob: { id: "a", url: "blob:a" },
         },
       ],
       cursor: 3,
@@ -50,10 +50,32 @@ describe("prompt input v2 store", () => {
         id: "attachment-1",
         filename: "notes.txt",
         mime: "text/plain",
-        dataUrl: "data:text/plain;base64,",
+        blob: { id: "a", url: "blob:a" },
       },
     ])
     expect(prompt.state.cursor).toBe(7)
+  })
+
+  test("inserts text without flattening structured mentions", () => {
+    const [state, setState] = createStore<PromptInputV2PersistedState>({
+      prompt: [
+        { type: "text", content: "A ", start: 0, end: 2 },
+        { type: "file", path: "one", content: "@one", start: 2, end: 6 },
+        { type: "text", content: " B", start: 6, end: 8 },
+      ],
+      cursor: 2,
+      context: { items: [] },
+    })
+    const prompt = createPromptInputV2Store([state, setState])
+
+    prompt.addText("X\nY")
+
+    expect(prompt.state.prompt).toEqual([
+      { type: "text", content: "A X\nY", start: 0, end: 5 },
+      { type: "file", path: "one", content: "@one", start: 5, end: 9 },
+      { type: "text", content: " B", start: 9, end: 11 },
+    ])
+    expect(prompt.state.cursor).toBe(5)
   })
 
   test("mutates context, attachments, and model through shared actions", () => {

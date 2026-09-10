@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { GlobalSession, Project } from "@opencode-ai/sdk/v2/client"
+import type { Project } from "@opencode-ai/sdk/v2/client"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import { createRoot } from "solid-js"
 import { createServerSessionEntries } from "@/components/command-palette"
 import type { LocalProject } from "@/context/layout"
@@ -14,15 +15,16 @@ const stored: Project = {
   time: { created: 1, updated: 1 },
 }
 
-const session: GlobalSession = {
+const session: SessionInfo = {
   id: "session-1",
-  slug: "session-1",
   projectID: stored.id,
-  directory: stored.worktree,
+  agent: "build",
+  model: { id: "model-1", providerID: "provider-1" },
+  cost: 0,
+  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  location: { directory: stored.worktree },
   title: "Palette session",
-  version: "1",
   time: { created: 1, updated: 2 },
-  project: { id: stored.id, name: stored.name, worktree: stored.worktree },
 }
 
 describe("command palette sessions", () => {

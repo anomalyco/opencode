@@ -3,6 +3,7 @@ import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
@@ -21,6 +22,7 @@ import type {
   PromptInputV2Suggestion,
 } from "./types"
 import type { PromptInputV2Interaction, PromptInputV2SelectControl } from "./interaction"
+import "./attachments.css"
 
 export type {
   PromptInputV2Attachment,
@@ -36,11 +38,16 @@ export type PromptInputV2Props = {
   controller: PromptInputV2Interaction
   disabled?: boolean
   readOnly?: boolean
+  borderUnderlay?: boolean
   class?: string
   modelControl?: JSX.Element
+  variantControlVisible?: boolean
+  attachKeybind?: string[]
+  attachShortcut?: string
 }
 
 export function PromptInputV2(props: PromptInputV2Props) {
+  const i18n = useI18n()
   const state = props.controller.state
   const view = props.controller.view
   let editor: HTMLDivElement | undefined
@@ -82,14 +89,14 @@ export function PromptInputV2(props: PromptInputV2Props) {
       />
       <Show when={state.popover.type !== "closed"}>
         <PromptInputV2Popover
-          emptyLabel="No matching items"
+          emptyLabel={i18n.t("ui.promptInput.noMatchingItems")}
           items={props.controller.suggestions()}
           activeID={state.popover.type === "closed" ? undefined : state.popover.activeID}
           search={
             state.popover.type === "command-menu"
               ? {
                   value: state.popover.query,
-                  label: "Commands",
+                  label: i18n.t("ui.promptInput.commands"),
                   placeholder: "/",
                   onValueChange: props.controller.setQuery,
                   onKeyDown: props.controller.onKeyDown,
@@ -102,8 +109,12 @@ export function PromptInputV2(props: PromptInputV2Props) {
       </Show>
       <form
         data-component="prompt-input-v2"
-        class="group/prompt-input relative min-h-[96px] w-full rounded-xl bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
-        classList={{ "border border-v2-icon-icon-info border-dashed": state.drag === "active" }}
+        data-dock-border-underlay={props.borderUnderlay ? "v2" : undefined}
+        class="group/prompt-input relative min-h-[96px] w-full overflow-clip rounded-xl bg-v2-background-bg-base"
+        classList={{
+          "shadow-[var(--v2-elevation-raised)]": !props.borderUnderlay,
+          "border border-v2-icon-icon-info border-dashed": state.drag === "active",
+        }}
         onSubmit={(event) => {
           event.preventDefault()
           if (!props.disabled) props.controller.submit()
@@ -115,7 +126,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
       >
         <Show when={state.drag === "active"}>
           <div class="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-xl bg-v2-background-bg-base/90 text-v2-text-text-base">
-            Drop files to attach
+            {i18n.t("ui.promptInput.dropFiles")}
           </div>
         </Show>
 
@@ -124,7 +135,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
             attachments={props.controller.attachments()}
             comments={props.controller.comments()}
             activeCommentID={state.activeContextID}
-            removeLabel="Remove attachment"
+            removeLabel={i18n.t("ui.promptInput.removeAttachment")}
             onAttachmentClick={props.controller.openAttachment}
             onAttachmentRemove={(attachment) => props.controller.removeAttachment(attachment.id)}
             onCommentClick={(comment) => props.controller.toggleContext(comment.key)}
@@ -142,7 +153,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
             data-component="prompt-input"
             role="textbox"
             aria-multiline="true"
-            aria-label="Prompt"
+            aria-label={i18n.t("ui.promptInput.label")}
             contenteditable={!props.disabled && !props.readOnly}
             autocapitalize={state.mode === "normal" ? "sentences" : "off"}
             autocorrect={state.mode === "normal" ? "on" : "off"}
@@ -177,7 +188,9 @@ export function PromptInputV2(props: PromptInputV2Props) {
               classList={{ "font-mono!": state.mode === "shell" }}
             >
               {view.placeholder?.() ??
-                (state.mode === "shell" ? "Enter shell command..." : "Ask anything, / for commands, @ for context...")}
+                (state.mode === "shell"
+                  ? i18n.t("ui.promptInput.placeholder.shell")
+                  : i18n.t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" }))}
             </div>
           </Show>
         </div>
@@ -191,32 +204,36 @@ export function PromptInputV2(props: PromptInputV2Props) {
           >
             <PromptInputV2AddMenu
               disabled={state.mode === "shell"}
-              title="Add images and files"
-              keybind={["Mod", "U"]}
-              attachLabel="Images and files"
-              attachShortcut="Mod+U"
-              commandsLabel="Commands"
-              contextLabel="Context"
-              shellLabel="Shell command"
+              title={i18n.t("ui.promptInput.add")}
+              keybind={props.attachKeybind ?? ["Mod", "U"]}
+              attachLabel={i18n.t("ui.promptInput.attachments")}
+              attachShortcut={props.attachShortcut ?? "Mod+U"}
+              commandsLabel={i18n.t("ui.promptInput.commands")}
+              contextLabel={i18n.t("ui.promptInput.context")}
+              shellLabel={i18n.t("ui.promptInput.shell")}
               onAttach={props.controller.attach}
               onCommands={props.controller.openCommands}
               onContext={props.controller.openContext}
               onShell={props.controller.openShell}
             />
-            <Show when={view.agent}>
+            <Show when={view.agent} keyed>
               {(control) => (
-                <PromptInputV2ConfiguredSelect title="Choose agent" keybind={["Mod", "."]} control={control()} />
+                <PromptInputV2ConfiguredSelect
+                  title={i18n.t("ui.promptInput.chooseAgent")}
+                  keybind={["Mod", "."]}
+                  control={control}
+                />
               )}
             </Show>
             <Show
               when={props.modelControl}
               fallback={
-                <Show when={view.model}>
+                <Show when={view.model} keyed>
                   {(control) => (
                     <PromptInputV2ConfiguredSelect
-                      title="Choose model"
+                      title={i18n.t("ui.promptInput.chooseModel")}
                       keybind={["Mod", "M"]}
-                      control={control()}
+                      control={control}
                       model
                     />
                   )}
@@ -225,10 +242,14 @@ export function PromptInputV2(props: PromptInputV2Props) {
             >
               {props.modelControl}
             </Show>
-            <Show when={view.variant}>
+            <Show when={(props.variantControlVisible ?? true) && view.variant} keyed>
               {(control) => (
-                <Show when={control().options().length > 1}>
-                  <PromptInputV2ConfiguredSelect title="Choose model variant" control={control()} />
+                <Show when={control.options().length > 1}>
+                  <PromptInputV2ConfiguredSelect
+                    title={i18n.t("ui.promptInput.chooseVariant")}
+                    keybind={["Shift", "Mod", "D"]}
+                    control={control}
+                  />
                 </Show>
               )}
             </Show>
@@ -237,8 +258,8 @@ export function PromptInputV2(props: PromptInputV2Props) {
             mode={state.mode}
             stopping={view.submit.stopping()}
             disabled={!props.controller.canSubmit()}
-            sendLabel="Send"
-            stopLabel="Stop"
+            sendLabel={i18n.t("ui.promptInput.send")}
+            stopLabel={i18n.t("ui.promptInput.stop")}
             onSubmit={props.controller.submit}
             onStop={props.controller.stop}
           />
@@ -364,9 +385,10 @@ export function PromptInputV2Attachments(props: {
   onCommentClick?: (comment: PromptInputV2Comment) => void
   onCommentRemove?: (comment: PromptInputV2Comment) => void
 }) {
+  const i18n = useI18n()
   return (
     <Show when={props.attachments.length > 0 || (props.comments?.length ?? 0) > 0}>
-      <div data-slot="prompt-attachments" class="relative">
+      <div data-component="prompt-input-v2-attachments" data-slot="prompt-attachments" class="relative">
         <div
           data-slot="prompt-attachments-scroll"
           class="flex flex-nowrap gap-2 overflow-x-auto no-scrollbar px-2 pt-2 pb-1"
@@ -391,7 +413,7 @@ export function PromptInputV2Attachments(props: {
                 <button
                   type="button"
                   onClick={() => props.onCommentRemove?.(comment)}
-                  class="absolute -top-1 -right-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                   aria-label={props.removeLabel}
                 >
                   <IconV2 name="outline-xmark" class="text-v2-icon-icon-contrast" />
@@ -407,12 +429,12 @@ export function PromptInputV2Attachments(props: {
                     when={attachment.mime.startsWith("image/")}
                     fallback={
                       <AttachmentCardV2 title={attachment.filename}>
-                        {typeLabel(attachment.filename, attachment.mime)}
+                        {typeLabel(attachment.filename, attachment.mime, i18n.t("ui.common.file"))}
                       </AttachmentCardV2>
                     }
                   >
                     <img
-                      src={attachment.dataUrl}
+                      src={attachment.blob.url}
                       alt={attachment.filename}
                       class="w-[58px] h-[46px] rounded-[6px] object-cover"
                       onClick={() => props.onAttachmentClick?.(attachment)}
@@ -423,7 +445,7 @@ export function PromptInputV2Attachments(props: {
                 <button
                   type="button"
                   onClick={() => props.onAttachmentRemove(attachment)}
-                  class="absolute -top-1 -right-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                   aria-label={props.removeLabel}
                 >
                   <IconV2 name="outline-xmark" class="text-v2-icon-icon-contrast" />
@@ -432,8 +454,14 @@ export function PromptInputV2Attachments(props: {
             )}
           </For>
         </div>
-        <div class="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-[linear-gradient(to_right,var(--v2-background-bg-base),transparent)]" />
-        <div class="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-base),transparent)]" />
+        <div
+          data-slot="prompt-attachments-fade-left"
+          class="pointer-events-none absolute inset-y-0 start-0 z-10 w-6 bg-[linear-gradient(to_right,var(--v2-background-bg-base),transparent)] rtl:bg-[linear-gradient(to_left,var(--v2-background-bg-base),transparent)]"
+        />
+        <div
+          data-slot="prompt-attachments-fade-right"
+          class="pointer-events-none absolute inset-y-0 end-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-base),transparent)] rtl:bg-[linear-gradient(to_right,var(--v2-background-bg-base),transparent)]"
+        />
       </div>
     </Show>
   )
@@ -507,7 +535,7 @@ function PromptInputV2ConfiguredSelect(props: {
   return (
     <PromptInputV2Select
       title={props.title}
-      keybind={props.keybind}
+      keybind={props.control.keybind?.() ?? props.keybind}
       options={props.control.options()}
       current={current()}
       currentIcon={
@@ -531,36 +559,46 @@ export function PromptInputV2Select(props: {
   onSelect: (id: string) => void
 }) {
   return (
-    <MenuV2 gutter={6} modal={false} placement="top-start" onOpenChange={props.onOpenChange}>
-      <MenuV2.Trigger
-        as={ButtonV2}
-        variant="ghost-muted"
-        size="normal"
-        class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
-        title={keybindTitle(props.title, props.keybind)}
-      >
-        {props.currentIcon}
-        <span class="truncate capitalize leading-5">
-          {props.options.find((option) => option.id === props.current)?.label ?? props.current}
-        </span>
-        <span class="-ml-0.5 -mr-1 flex shrink-0">
-          <IconV2 name="chevron-down" />
-        </span>
-      </MenuV2.Trigger>
-      <MenuV2.Portal>
-        <MenuV2.Content>
-          <MenuV2.RadioGroup value={props.current} onChange={props.onSelect}>
-            <For each={props.options}>
-              {(option) => (
-                <MenuV2.RadioItem value={option.id} class="capitalize" closeOnSelect>
-                  {option.label}
-                </MenuV2.RadioItem>
-              )}
-            </For>
-          </MenuV2.RadioGroup>
-        </MenuV2.Content>
-      </MenuV2.Portal>
-    </MenuV2>
+    <TooltipV2
+      placement="top"
+      value={
+        <>
+          {props.title}
+          <KeybindV2 keys={props.keybind ?? []} variant="neutral" />
+        </>
+      }
+    >
+      <MenuV2 gutter={6} modal={false} placement="top-start" onOpenChange={props.onOpenChange}>
+        <MenuV2.Trigger
+          as={ButtonV2}
+          variant="ghost-muted"
+          size="normal"
+          class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
+          aria-label={props.title}
+        >
+          {props.currentIcon}
+          <span class="truncate capitalize leading-5">
+            {props.options.find((option) => option.id === props.current)?.label ?? props.current}
+          </span>
+          <span class="-ms-0.5 -me-1 flex shrink-0">
+            <IconV2 name="chevron-down" />
+          </span>
+        </MenuV2.Trigger>
+        <MenuV2.Portal>
+          <MenuV2.Content>
+            <MenuV2.RadioGroup value={props.current} onChange={props.onSelect}>
+              <For each={props.options}>
+                {(option) => (
+                  <MenuV2.RadioItem value={option.id} class="capitalize" closeOnSelect>
+                    {option.label}
+                  </MenuV2.RadioItem>
+                )}
+              </For>
+            </MenuV2.RadioGroup>
+          </MenuV2.Content>
+        </MenuV2.Portal>
+      </MenuV2>
+    </TooltipV2>
   )
 }
 
@@ -608,7 +646,7 @@ export function PromptInputV2Popover(props: {
             <button
               type="button"
               data-suggestion-id={item.id}
-              class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-v2-overlay-simple-overlay-hover"
+              class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-start hover:bg-v2-overlay-simple-overlay-hover"
               classList={{ "bg-v2-overlay-simple-overlay-hover": props.activeID === item.id }}
               onPointerMove={() => props.onActiveChange(item)}
               onClick={() => props.onSelect(item)}
@@ -682,9 +720,4 @@ function PromptInputV2SuggestionIcon(props: { item: PromptInputV2Suggestion }) {
       class="size-4 shrink-0"
     />
   )
-}
-
-function keybindTitle(label: string, keybind?: string[]) {
-  if (!keybind?.length) return label
-  return `${label} (${keybind.join("+")})`
 }

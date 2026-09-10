@@ -24,6 +24,12 @@ import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 
+type SessionFileViewProps = {
+  tab: string
+}
+
+const selectionSide = (range: SelectedLineRange) => range.endSide ?? range.side ?? "additions"
+
 function FileCommentMenu(props: {
   moreLabel: string
   editLabel: string
@@ -207,8 +213,9 @@ export function FileTabContent(props: { tab: string }) {
   )
 }
 
-export function SessionFileView(props: { tab: string }) {
+export function SessionFileView(props: SessionFileViewProps) {
   const settings = useSettings()
+
   return (
     <Show when={settings.general.newLayoutDesigns()} fallback={<SessionFileViewV1 tab={props.tab} />}>
       <SessionFileViewV2 tab={props.tab} />
@@ -548,10 +555,10 @@ function SessionFileViewV2(props: { tab: string }) {
     })
   }
 
-  const buildPreview = (filePath: string, selection: FileSelection) => {
+  const buildPreview = (filePath: string, lines: SelectedLineRange) => {
     const source = filePath === path() ? contents() : file.get(filePath)?.content?.content
     if (!source) return undefined
-    return selectionPreview(source, selection)
+    return selectionPreview(source, selectionFromLines(lines))
   }
 
   const addCommentToContext = (input: {
@@ -562,7 +569,7 @@ function SessionFileViewV2(props: { tab: string }) {
     origin?: "review" | "file"
   }) => {
     const selection = selectionFromLines(input.selection)
-    const preview = input.preview ?? buildPreview(input.file, selection)
+    const preview = input.preview ?? buildPreview(input.file, input.selection)
 
     const saved = comments.add({
       file: input.file,
@@ -587,7 +594,7 @@ function SessionFileViewV2(props: { tab: string }) {
     comment: string
   }) => {
     comments.update(input.file, input.id, input.comment)
-    const preview = input.file === path() ? buildPreview(input.file, selectionFromLines(input.selection)) : undefined
+    const preview = input.file === path() ? buildPreview(input.file, input.selection) : undefined
     prompt.context.updateComment(input.file, input.id, {
       comment: input.comment,
       ...(preview ? { preview } : {}),
@@ -628,7 +635,7 @@ function SessionFileViewV2(props: { tab: string }) {
     mention: {
       items: file.searchFilesAndDirectories,
     },
-    getSide: (range) => range.endSide ?? range.side ?? "additions",
+    getSide: selectionSide,
     state: {
       opened: () => note.openedComment,
       setOpened: (id) => setNote("openedComment", id),
@@ -757,7 +764,7 @@ function SessionFileViewV2(props: { tab: string }) {
           commentsUi.onLineNumberSelectionEnd(range)
         }}
         search={search}
-        class="select-text [--opencode-diffs-bg:var(--v2-background-bg-base)]"
+        class="select-text"
         media={{
           mode: "auto",
           path: path(),

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test"
 import { assistantMessage, setupTimeline, toolPart, userMessage } from "../performance/timeline-stability/fixture"
 
 for (const profile of [
-  { locale: "de", label: "Erkundet" },
+  { locale: "de", label: "Erkundung abgeschlossen" },
   { locale: "ar", label: "تم الاستكشاف" },
 ] as const) {
   test(`projects translated context status in ${profile.locale}`, async ({ page }) => {

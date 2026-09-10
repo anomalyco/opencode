@@ -37,8 +37,18 @@ describe("extractPromptFromParts", () => {
     expect(result).toHaveLength(3)
     expect(result[0]).toMatchObject({ type: "text", content: "check these" })
     expect(result.slice(1)).toMatchObject([
-      { type: "image", filename: "a.png", mime: "image/png", dataUrl: "data:image/png;base64,AAA" },
-      { type: "image", filename: "b.pdf", mime: "application/pdf", dataUrl: "data:application/pdf;base64,BBB" },
+      {
+        type: "image",
+        filename: "a.png",
+        mime: "image/png",
+        blob: expect.objectContaining({ id: expect.any(String) }),
+      },
+      {
+        type: "image",
+        filename: "b.pdf",
+        mime: "application/pdf",
+        blob: expect.objectContaining({ id: expect.any(String) }),
+      },
     ])
   })
 })

@@ -1,5 +1,7 @@
 [data-component="diff-changes"] {
   display: flex;
+  direction: ltr;
+  unicode-bidi: isolate;
   gap: 8px;
   justify-content: flex-end;
   align-items: center;
