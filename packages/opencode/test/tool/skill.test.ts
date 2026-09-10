@@ -38,7 +38,7 @@ describe("tool.skill", () => {
         Bun.write(
           path.join(skill, "SKILL.md"),
           `---
-name: tool-skill
+name: 'tool<&"skill'
 description: Skill for tool tests.
 ---
 
@@ -48,7 +48,7 @@ Use this skill.
 `,
         ),
       )
-      yield* Effect.promise(() => Bun.write(path.join(skill, "scripts", "demo.txt"), "demo"))
+      yield* Effect.promise(() => Bun.write(path.join(skill, "scripts", "demo&<notes>.txt"), "demo"))
 
       const home = process.env.OPENCODE_TEST_HOME
       process.env.OPENCODE_TEST_HOME = dir
@@ -79,17 +79,20 @@ Use this skill.
           }),
       }
 
-      const result = yield* tool.execute({ name: "tool-skill" }, ctx)
-      const file = path.resolve(skill, "scripts", "demo.txt")
+      const result = yield* tool.execute({ name: 'tool<&"skill' }, ctx)
+      const file = path.resolve(skill, "scripts", "demo&<notes>.txt")
+      const escapedFile = path.resolve(skill, "scripts", "demo&amp;&lt;notes&gt;.txt")
 
       expect(requests.length).toBe(1)
       expect(requests[0].permission).toBe("skill")
-      expect(requests[0].patterns).toContain("tool-skill")
-      expect(requests[0].always).toContain("tool-skill")
+      expect(requests[0].patterns).toContain('tool<&"skill')
+      expect(requests[0].always).toContain('tool<&"skill')
       expect(result.metadata.dir).toBe(skill)
-      expect(result.output).toContain(`<skill_content name="tool-skill">`)
+      expect(result.output).toContain(`<skill_content name="tool&lt;&amp;&quot;skill">`)
+      expect(result.output).not.toContain(`<skill_content name="tool<&"skill">`)
       expect(result.output).toContain(`Base directory for this skill: ${skill}`)
-      expect(result.output).toContain(`<file>${file}</file>`)
+      expect(result.output).toContain(`<file>${escapedFile}</file>`)
+      expect(result.output).not.toContain(`<file>${file}</file>`)
     }),
   )
 

@@ -1,6 +1,7 @@
 import path from "path"
 import { Effect, Schema } from "effect"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { escapeHtml } from "@/util/html"
 import { Skill } from "../skill"
 import * as Tool from "./tool"
 import DESCRIPTION from "./skill.txt"
@@ -45,7 +46,7 @@ export const SkillTool = Tool.define(
           return {
             title: `Loaded skill: ${info.name}`,
             output: [
-              `<skill_content name="${info.name}">`,
+              `<skill_content name="${escapeHtml(info.name)}">`,
               `# Skill: ${info.name}`,
               "",
               info.content.trim(),
@@ -55,7 +56,7 @@ export const SkillTool = Tool.define(
               "Note: file list is sampled.",
               "",
               "<skill_files>",
-              files.map((file) => `<file>${path.resolve(dir, file.path)}</file>`).join("\n"),
+              files.map((file) => `<file>${escapeHtml(path.resolve(dir, file.path))}</file>`).join("\n"),
               "</skill_files>",
               "</skill_content>",
             ].join("\n"),

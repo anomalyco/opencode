@@ -64,13 +64,13 @@ const withHome = <A, E, R>(home: string, self: Effect.Effect<A, E, R>) =>
   )
 
 describe("skill", () => {
-  it.effect("formats verbose locations as XML-safe filesystem paths", () =>
+  it.effect("formats verbose skill metadata as XML-safe values", () =>
     Effect.sync(() => {
       const output = Skill.fmt(
         [
           {
-            name: "tagged-skill",
-            description: "A tagged skill.",
+            name: "tagged<&skill",
+            description: "Compare A < B & C.",
             location: "/tmp/plugin.git#v1.3.0/SKILL.md",
             content: "",
           },
@@ -84,8 +84,12 @@ describe("skill", () => {
         { verbose: true },
       )
 
+      expect(output).toContain("<name>tagged&lt;&amp;skill</name>")
+      expect(output).not.toContain("<name>tagged<&skill</name>")
       expect(output).toContain("<location>/tmp/plugin.git#v1.3.0/SKILL.md</location>")
       expect(output).toContain("<location>&lt;built-in&gt;</location>")
+      expect(output).toContain("<description>Compare A &lt; B &amp; C.</description>")
+      expect(output).not.toContain("<description>Compare A < B & C.</description>")
       expect(output).not.toContain("file://")
       expect(output).not.toContain("%23")
     }),
