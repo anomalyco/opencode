@@ -31,7 +31,9 @@
  *
  * Boxed-primitive cases (`Object.assign("a")`, `Object.assign(1, …)`) are omitted: CodeMode has no
  * wrapper objects, so a primitive target is a TypeError rather than a boxed result. `Override.js`
- * checks `Object.keys(result).length` instead of `Object.getOwnPropertyNames`.
+ * checks `Object.keys(result).length` instead of `Object.getOwnPropertyNames`. `target-Array.js`
+ * omits its named-key (`-0`, `1.5`, `4294967295`), `length`, and Proxy assertions: arrays here hold
+ * only indexed elements, so those keys are a TypeError (pinned below) rather than array properties.
  */
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
@@ -158,9 +160,24 @@ describe("Object.assign Test262 parity", () => {
         const sparseArraySource = []
         sparseArraySource[2] = 3
         result = Object.assign(target, sparseArraySource)
-        return [...first, result === target, [...result]]
+        const second = [result === target, [...result]]
+        result = Object.assign(target, { 4: 0 })
+        return [...first, ...second, result === target, result.length, result[3] === undefined, result[4]]
       `),
-    ).toEqual([true, [1, 8, 9], true, [1, 8, 3]])
+    ).toEqual([true, [1, 8, 9], true, [1, 8, 3], true, 5, true, 0])
+  })
+
+  test("array targets accept only array indexes (deviation from target-Array.js)", async () => {
+    expect(
+      await value(`
+        const target = [7]
+        const out = []
+        for (const source of [{ length: 0 }, { x: 1 }, { "1.5": 1 }, { "-0": 1 }, { ["__proto__"]: null }]) {
+          try { Object.assign(target, source) } catch (error) { out.push(error.name) }
+        }
+        return [out, [...target], target.length, Object.keys(target)]
+      `),
+    ).toEqual([["TypeError", "TypeError", "TypeError", "TypeError", "TypeError"], [7], 1, ["0"]])
   })
 
   test("test/built-ins/Object/assign/Target-{Null,Undefined}.js", async () => {

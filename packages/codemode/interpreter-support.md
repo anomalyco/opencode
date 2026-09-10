@@ -210,7 +210,9 @@ ultimate source of truth.
       primitive wrapper objects (`Object(1)`) are rejected explicitly.
 - [x] Computed property names and object spread.
 - [x] `Object.keys`, `Object.values`, `Object.entries`, `Object.hasOwn`, `Object.assign`, and `Object.fromEntries`, with
-      synchronous iterator support for `fromEntries`.
+      synchronous iterator support for `fromEntries`. Sources follow ToObject: strings enumerate by index, other
+      primitives and wrappers contribute nothing, and `null`/`undefined` throw. `Object.assign` accepts array
+      targets for index keys only; a primitive target is a `TypeError` rather than a boxed object.
 - [x] `Object.keys` over arrays and tool references.
 - [x] Object identity is preserved by in-CodeMode Object helpers.
 - [x] `__proto__`, `constructor`, and `prototype` are ordinary own data keys. `x.constructor` without an own key resolves

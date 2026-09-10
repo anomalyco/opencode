@@ -6,6 +6,7 @@ import {
   containsOpaqueReference,
   describeValue,
   isRuntimeReference,
+  parseArrayIndex,
   rejectCircularInsertion,
   typeofValue,
 } from "../interpreter/references.js"
@@ -54,6 +55,14 @@ export const objectAssign = (args: Array<unknown>, node: AstNode): unknown => {
   const out = target as Record<string, unknown>
   const seen = new Set<object>()
   const guardedSet = (key: PropertyKey, item: unknown): void => {
+    // Arrays hold only indexed elements, as with direct assignment; Reflect.set would otherwise
+    // reach Array's length and Object.prototype's __proto__ setter.
+    if (Array.isArray(out) && (typeof key === "symbol" || parseArrayIndex(key) === undefined)) {
+      throw new InterpreterRuntimeError(
+        `Object.assign cannot assign '${String(key)}' to an array: only array indexes may be assigned.`,
+        node,
+      ).as("TypeError")
+    }
     rejectCircularInsertion(out, item, "Object.assign result", node, seen)
     if (!Reflect.set(out, key, item))
       throw new InterpreterRuntimeError(`Object.assign could not assign property '${String(key)}'.`, node).as(

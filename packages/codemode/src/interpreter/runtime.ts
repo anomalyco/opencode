@@ -75,6 +75,7 @@ import {
   containsOpaqueReference,
   describeValue,
   isRuntimeReference,
+  parseArrayIndex,
   rejectCircularInsertion,
   typeofValue,
 } from "./references.js"
@@ -88,15 +89,6 @@ import { uriArgument, urlMethods, urlProperties, urlSearchParamsMethods, urlWrit
 import { enumerableSource } from "../stdlib/object.js"
 import { coerceToNumber, coerceToString, compoundOperators, errorBrandName } from "../stdlib/value.js"
 import { Values } from "../values.js"
-
-const MAX_ARRAY_LENGTH = 4_294_967_295
-
-const parseArrayIndex = (key: string | number): number | undefined => {
-  const property = String(key)
-  if (!/^(0|[1-9]\d*)$/.test(property)) return undefined
-  const index = Number(property)
-  return index < MAX_ARRAY_LENGTH ? index : undefined
-}
 
 const calleeDescription = (callee: Expression | Super | undefined): string => {
   if (callee?.type === "Identifier") return callee.name
