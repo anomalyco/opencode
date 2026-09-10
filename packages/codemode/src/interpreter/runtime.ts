@@ -170,6 +170,49 @@ const collectPatternNames = (pattern: Pattern, out: Array<string> = []): Array<s
   return out
 }
 
+// `var` names declared anywhere in a function body except inside nested functions, which own theirs.
+const collectVarNames = (
+  node: Statement | ModuleDeclaration | null | undefined,
+  out: Array<string> = [],
+): Array<string> => {
+  if (!node) return out
+  switch (node.type) {
+    case "VariableDeclaration":
+      if (node.kind === "var") for (const declaration of node.declarations) collectPatternNames(declaration.id, out)
+      break
+    case "BlockStatement":
+      for (const statement of node.body) collectVarNames(statement, out)
+      break
+    case "IfStatement":
+      collectVarNames(node.consequent, out)
+      collectVarNames(node.alternate, out)
+      break
+    case "ForStatement":
+      if (node.init?.type === "VariableDeclaration") collectVarNames(node.init, out)
+      collectVarNames(node.body, out)
+      break
+    case "ForInStatement":
+    case "ForOfStatement":
+      if (node.left.type === "VariableDeclaration") collectVarNames(node.left, out)
+      collectVarNames(node.body, out)
+      break
+    case "WhileStatement":
+    case "DoWhileStatement":
+    case "LabeledStatement":
+      collectVarNames(node.body, out)
+      break
+    case "SwitchStatement":
+      for (const item of node.cases) for (const statement of item.consequent) collectVarNames(statement, out)
+      break
+    case "TryStatement":
+      collectVarNames(node.block, out)
+      collectVarNames(node.handler?.body, out)
+      collectVarNames(node.finalizer, out)
+      break
+  }
+  return out
+}
+
 const loopDeclaration = (left: VariableDeclaration | Pattern, statement: "for...of" | "for...in") => {
   if (left.type !== "VariableDeclaration") return undefined
   const declaration = left.declarations.length === 1 ? left.declarations[0] : undefined
@@ -276,6 +319,7 @@ class Frame<R> {
     return Effect.gen(function* () {
       self.predeclareLexical(program.body)
       self.hoistFunctions(program.body)
+      self.hoistVars(program.body)
       let value: unknown = undefined
       for (const [index, statement] of program.body.entries()) {
         if (index === program.body.length - 1 && statement.type === "ExpressionStatement") {
@@ -396,6 +440,18 @@ class Frame<R> {
     for (const node of statements) {
       if (node.type !== "FunctionDeclaration") continue
       this.scopes.declare(node.id.name, this.createFunction(node), true, node)
+    }
+  }
+
+  // Hoisted `var` bindings start undefined, or copy a same-named parameter. Function bodies hoist
+  // into their own scope above the parameters so closures in parameter defaults keep seeing outer names.
+  private hoistVars(statements: ReadonlyArray<Statement | ModuleDeclaration>, parameters?: Map<string, Binding>): void {
+    const scope = this.scopes.current()
+    for (const statement of statements) {
+      for (const name of collectVarNames(statement)) {
+        if (scope.has(name)) continue
+        scope.set(name, { mutable: true, value: parameters?.get(name)?.value, initialized: true })
+      }
     }
   }
 
@@ -589,10 +645,12 @@ class Frame<R> {
 
       const evaluateBody = (value: unknown) =>
         Effect.gen(function* () {
-          if (declared) {
+          if (declared?.lexical) {
             self.scopes.push()
-            if (declared.lexical) self.predeclarePattern(declared.pattern, declared.mutable, left)
-            yield* self.declarePattern(declared.pattern, value, declared.mutable, left, declared.lexical)
+            self.predeclarePattern(declared.pattern, declared.mutable, left)
+            yield* self.declarePattern(declared.pattern, value, declared.mutable, left, true)
+          } else if (declared) {
+            yield* self.assignPattern(declared.pattern, value, left)
           } else if (assignment) {
             yield* self.assignPattern(assignment, value, left)
           }
@@ -600,7 +658,7 @@ class Frame<R> {
         }).pipe(
           Effect.ensuring(
             Effect.sync(() => {
-              if (declared) self.scopes.pop()
+              if (declared?.lexical) self.scopes.pop()
             }),
           ),
         )
@@ -834,10 +892,12 @@ class Frame<R> {
 
       for (const key of keys) {
         const result = yield* Effect.gen(function* () {
-          if (declared) {
+          if (declared?.lexical) {
             self.scopes.push()
-            if (declared.lexical) self.predeclarePattern(declared.pattern, declared.mutable, left)
-            yield* self.declarePattern(declared.pattern, key, declared.mutable, left, declared.lexical)
+            self.predeclarePattern(declared.pattern, declared.mutable, left)
+            yield* self.declarePattern(declared.pattern, key, declared.mutable, left, true)
+          } else if (declared) {
+            yield* self.assignPattern(declared.pattern, key, left)
           } else if (assignmentName) {
             self.scopes.set(assignmentName, key, left)
           }
@@ -845,7 +905,7 @@ class Frame<R> {
         }).pipe(
           Effect.ensuring(
             Effect.sync(() => {
-              if (declared) self.scopes.pop()
+              if (declared?.lexical) self.scopes.pop()
             }),
           ),
         )
@@ -952,8 +1012,13 @@ class Frame<R> {
         }
 
         const init = declaration.init
+        // `var x` alone is a no-op: the binding was hoisted on function entry.
+        if (kind === "var") {
+          if (init) yield* self.assignPattern(declaration.id, yield* self.evaluateExpression(init), declaration)
+          continue
+        }
         const value = init ? yield* self.evaluateExpression(init) : undefined
-        yield* self.declarePattern(declaration.id, value, kind !== "const", declaration, kind !== "var")
+        yield* self.declarePattern(declaration.id, value, kind !== "const", declaration, true)
       }
     })
   }
@@ -1574,6 +1639,8 @@ class Frame<R> {
       }
 
       if (fn.body.type === "BlockStatement") {
+        invocation.scopes.push()
+        invocation.hoistVars(fn.body.body, paramScope)
         const result = yield* invocation.evaluateStatement(fn.body)
         return result.kind === "return" ? result.value : undefined
       }
