@@ -6,9 +6,9 @@ import { compileRequest, LLMClient } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
 
 const recorded = recordedTests({
-  prefix: "bedrock-mantle-replay",
+  prefix: "bedrock-mantle-chat",
   provider: "amazon-bedrock",
-  protocol: "openai-responses",
+  protocol: "openai-chat",
   requires: ["AWS_BEARER_TOKEN_BEDROCK"],
   tags: ["continuation", "tool-loop"],
 })
@@ -23,7 +23,7 @@ for (const id of ["openai.gpt-oss-120b", "openai.gpt-oss-20b"]) {
           model: AmazonBedrockMantle.configure({
             apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK ?? "fixture",
             region: "us-east-1",
-          }).responses(id),
+          }).chat(id),
           prompt: 'Reply with exactly "OK".',
           generation: { maxTokens: 512 },
         })
@@ -35,7 +35,8 @@ for (const id of ["openai.gpt-oss-120b", "openai.gpt-oss-20b"]) {
           providerOptions: { reasoningEffort: "low" },
         })
         const prepared = yield* compileRequest(low)
-        expect(prepared.body.input).toEqual(
+        expect(prepared.body.reasoning_effort).toBe("low")
+        expect(prepared.body.messages).toEqual(
           expect.arrayContaining([expect.objectContaining({ role: "assistant", content: "OK" })]),
         )
         const second = yield* LLMClient.generate(low)
@@ -79,3 +80,39 @@ for (const id of ["openai.gpt-oss-120b", "openai.gpt-oss-20b"]) {
     120_000,
   )
 }
+
+const responses = recordedTests({
+  prefix: "bedrock-mantle-responses",
+  provider: "amazon-bedrock",
+  protocol: "open-responses",
+  requires: ["AWS_BEARER_TOKEN_BEDROCK"],
+  tags: ["continuation"],
+  metadata: { model: "openai.gpt-5.5" },
+})
+
+responses.effect(
+  "continues GPT 5.5 with the shared Responses protocol",
+  () =>
+    Effect.gen(function* () {
+      const request = LLM.request({
+        model: AmazonBedrockMantle.configure({
+          apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK ?? "fixture",
+          region: "us-east-1",
+          baseURL: "https://bedrock-mantle.us-east-1.api.aws/openai/v1",
+        }).responses("openai.gpt-5.5"),
+        prompt: 'Reply with exactly "OK".',
+        generation: { maxTokens: 256 },
+      })
+      expect(request.model.route.protocol).toBe("open-responses")
+      const first = yield* LLMClient.generate(request)
+      expect(first.text.trim()).toBe("OK")
+      const second = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          messages: [...request.messages, first.message, Message.user('Now reply with exactly "TEST".')],
+        }),
+      )
+      expect(second.text.trim()).toBe("TEST")
+      expect(second.finishReason.normalized).toBe("stop")
+    }),
+  120_000,
+)
