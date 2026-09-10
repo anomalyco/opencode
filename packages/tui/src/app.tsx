@@ -428,8 +428,23 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     },
     { priority: 1 },
   )
+  // Copy-on-select keeps the highlight so it can still be added to the prompt. Dismiss it on
+  // the first key that no binding consumed, leaving leader sequences mid-flight untouched.
+  // Dialogs are exempt so typing in the command palette cannot drop the pending selection.
+  const offRetainedSelection = keymap.intercept(
+    "key:after",
+    (ctx) => {
+      if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+      if (ctx.handled || ctx.pendingSequence.length > 0) return
+      if (dialog.stack.length > 0) return
+      renderer.clearSelection()
+    },
+    { priority: 1 },
+  )
+
   onCleanup(() => {
     offSelectionKeys()
+    offRetainedSelection()
     attention.dispose()
   })
 
@@ -1091,7 +1106,12 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       flexDirection="column"
       backgroundColor={theme.background}
       onMouseDown={(evt) => {
-        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
+          // A click that did not start a new selection dismisses the retained highlight,
+          // so the click still reaches handlers that ignore selection releases.
+          if (renderer.getSelection()?.getSelectedText()) renderer.clearSelection()
+          return
+        }
         if (evt.button !== MouseButton.RIGHT) return
 
         if (!Selection.copy(renderer, toast, clipboard)) return
@@ -1100,7 +1120,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       }}
       onMouseUp={
         !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT
-          ? () => Selection.copy(renderer, toast, clipboard)
+          ? () => Selection.copy(renderer, toast, clipboard, { retain: true })
           : undefined
       }
     >

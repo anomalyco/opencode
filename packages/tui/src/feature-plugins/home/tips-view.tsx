@@ -8,6 +8,7 @@ const themeCount = Object.keys(DEFAULT_THEMES).length
 type TipPart = { text: string; highlight: boolean }
 type TipShortcut = Accessor<string>
 type Shortcuts = {
+  addSelection: TipShortcut
   agentCycle: TipShortcut
   childFirst: TipShortcut
   childNext: TipShortcut
@@ -98,6 +99,7 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
   const theme = useTheme().theme
   const tipOffset = Math.random()
   const shortcuts: Shortcuts = {
+    addSelection: configShortcut(props.api, "prompt.add_selection"),
     agentCycle: useCommandShortcut("agent.cycle"),
     childFirst: configShortcut(props.api, "session.child.first"),
     childNext: configShortcut(props.api, "session.child.next"),
@@ -165,6 +167,7 @@ const TIPS: Tip[] = [
   "Type {highlight}@{/highlight} followed by a filename to fuzzy search and attach files",
   "Start a message with {highlight}!{/highlight} to run shell commands (e.g., {highlight}!ls -la{/highlight})",
   (shortcuts) => press(shortcuts.agentCycle(), "to cycle between Build and Plan agents"),
+  (shortcuts) => press(shortcuts.addSelection(), "to quote selected text into the prompt as context"),
   "Use {highlight}/undo{/highlight} to revert the last message and file changes",
   "Use {highlight}/redo{/highlight} to restore previously undone messages and file changes",
   "Run {highlight}/share{/highlight} to create a public opencode.ai link",
