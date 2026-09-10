@@ -76,7 +76,6 @@ Mevcut model listesi şunları içerir:
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
-- **Omen Alpha**
 
 Test edip yenilerini ekledikçe model listesi değişebilir.
 
@@ -136,7 +135,6 @@ Token fiyatları 1M token başına verilmiştir.
 
 | Model                                   | Input  | Output | Cached Read | Cached Write | Aylık limit |
 | --------------------------------------- | ------ | ------ | ----------- | ------------ | ----------- |
-| Omen Alpha                              | $0.20  | $0.66  | $0.04       | -            | **$100**    |
 | GLM-5.3-Flash                           | $0.15  | $0.50  | $0.03       | -            | **$60**     |
 | GLM-5.3                                 | $1.40  | $4.40  | $0.26       | -            | **$15**     |
 | GLM-5.2                                 | $1.40  | $4.40  | $0.26       | -            | **$60**     |
@@ -184,7 +182,6 @@ Aşağıdaki tabloda tipik Go kullanım modellerine dayalı tahmini istek sayıs
 
 | Model                        | 5 saatte bir istek | haftalık istek | aylık istek |
 | ---------------------------- | ------------------ | -------------- | ----------- |
-| Omen Alpha                   | 11,600             | 29,000         | 57,900      |
 | GLM-5.3-Flash                | 6,320              | 15,790         | 31,580      |
 | GLM-5.3                      | 220                | 540            | 1,080       |
 | GLM-5.2                      | 880                | 2,150          | 4,300       |
@@ -239,7 +236,6 @@ Tahminler istek başına aşağıdaki token sayılarını kullanır; gerçek kul
 - Hy3 — İstek başına 830 girdi, 71.500 önbelleğe alınmış, 295 çıktı token'ı
 - MiMo-V2.5 — İstek başına 830 girdi, 71.500 önbelleğe alınmış, 295 çıktı token'ı
 - MiMo-V2.5-Pro — İstek başına 790 girdi, 86.000 önbelleğe alınmış, 305 çıktı token'ı
-- Omen Alpha — İstek başına 300 girdi, 40.000 önbelleğe alınmış, 100 çıktı token'ı
 
 Mevcut kullanımınızı **<a href={console}>konsoldan</a>** takip edebilirsiniz.
 
@@ -303,7 +299,6 @@ Go modellerine aşağıdaki API uç noktaları aracılığıyla da erişebilirsi
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Omen Alpha                   | omen-alpha                   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 OpenCode yapılandırmanızdaki [model id](/docs/config/#models) formatı `opencode-go/<model-id>` şeklindedir. Örneğin, Kimi K3 için yapılandırmanızda `opencode-go/kimi-k3` kullanmalısınız.
 
@@ -350,7 +345,6 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash Vision Exp | Kullanılmaz   | 0 gün        |
 | Hy4 preview                  | Kullanılmaz   | 0 gün        |
 | Hy3                          | Kullanılmaz   | 0 gün        |
-| Omen Alpha                   | Kullanılmaz   | 0 gün        |
 
 - **Grok 4.6:** ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır. [Daha fazla bilgi](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır. [Daha fazla bilgi](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).

@@ -34,7 +34,6 @@ export const goModels = [
     fresh: true,
   },
   { id: "longcat-2.0", name: "LongCat-2.0", requests: 11400, allowance: 60 },
-  { id: "omen-alpha", name: "Omen Alpha", requests: 11600, allowance: 100, featured: true, fresh: true },
   { id: "mimo-v2.5", name: "MiMo-V2.5", requests: 30100, allowance: 60, featured: true },
   {
     id: "muse-spark-1.3-contributor",

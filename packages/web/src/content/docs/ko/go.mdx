@@ -76,7 +76,6 @@ workspace당 한 명의 멤버만 OpenCode Go를 구독할 수 있습니다.
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
-- **Omen Alpha**
 
 새로운 모델을 테스트하고 추가함에 따라 이 목록은 변경될 수 있습니다.
 
@@ -136,7 +135,6 @@ OpenCode 외에도 다음 클라이언트가 OpenCode Go에서 올바르게 작�
 
 | Model                                   | Input  | Output | Cached Read | Cached Write | 월간 한도 |
 | --------------------------------------- | ------ | ------ | ----------- | ------------ | --------- |
-| Omen Alpha                              | $0.20  | $0.66  | $0.04       | -            | **$100**  |
 | GLM-5.3-Flash                           | $0.15  | $0.50  | $0.03       | -            | **$60**   |
 | GLM-5.3                                 | $1.40  | $4.40  | $0.26       | -            | **$15**   |
 | GLM-5.2                                 | $1.40  | $4.40  | $0.26       | -            | **$60**   |
@@ -184,7 +182,6 @@ OpenCode 외에도 다음 클라이언트가 OpenCode Go에서 올바르게 작�
 
 | Model                        | 5시간당 요청 횟수 | 주간 요청 횟수 | 월간 요청 횟수 |
 | ---------------------------- | ----------------- | -------------- | -------------- |
-| Omen Alpha                   | 11,600            | 29,000         | 57,900         |
 | GLM-5.3-Flash                | 6,320             | 15,790         | 31,580         |
 | GLM-5.3                      | 220               | 540            | 1,080          |
 | GLM-5.2                      | 880               | 2,150          | 4,300          |
@@ -239,7 +236,6 @@ OpenCode 외에도 다음 클라이언트가 OpenCode Go에서 올바르게 작�
 - Hy3 — 요청당 입력 830, 캐시 71,500, 출력 토큰 295
 - MiMo-V2.5 — 요청당 입력 830, 캐시 71,500, 출력 토큰 295
 - MiMo-V2.5-Pro — 요청당 입력 790, 캐시 86,000, 출력 토큰 305
-- Omen Alpha — 요청당 입력 300, 캐시 40,000, 출력 토큰 100
 
 현재 사용량은 **<a href={console}>console</a>**에서 확인할 수 있습니다.
 
@@ -303,7 +299,6 @@ Go에서는 월 $10를 지불하며, 포함된 월간 사용량은 모델마다 
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Omen Alpha                   | omen-alpha                   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 OpenCode config의 [model id](/docs/config/#models)는 `opencode-go/<model-id>` 형식을 사용합니다. 예를 들어 Kimi K3의 경우 config에서 `opencode-go/kimi-k3`를 사용하면 됩니다.
 
@@ -350,7 +345,6 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash Vision Exp | 사용되지 않음 | 0일         |
 | Hy4 preview                  | 사용되지 않음 | 0일         |
 | Hy3                          | 사용되지 않음 | 0일         |
-| Omen Alpha                   | 사용되지 않음 | 0일         |
 
 - **Grok 4.6:** ZDR은 저장된 데이터에 의존하는 중요한 API 기능(상태 저장형 Responses API, Files and Collections, Batch API 포함)을 비활성화합니다. [자세히 알아보기](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** 모든 API 기능 사용에 대해 악용 모니터링 로그가 생성되며 최대 30일 동안 보존됩니다. [자세히 알아보기](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).

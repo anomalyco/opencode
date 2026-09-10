@@ -76,7 +76,6 @@ OpenCode Go 的工作方式与 OpenCode 中的其他提供商一样。
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
-- **Omen Alpha**
 
 随着我们进行测试和添加新模型，该列表可能会发生变化。
 
@@ -135,7 +134,6 @@ Token 价格按每 1M tokens 列示。
 
 | 模型                                    | 输入   | 输出   | 缓存读取  | 缓存写入 | 每月限制 |
 | --------------------------------------- | ------ | ------ | --------- | -------- | -------- |
-| Omen Alpha                              | $0.20  | $0.66  | $0.04     | -        | **$100** |
 | GLM-5.3-Flash                           | $0.15  | $0.50  | $0.03     | -        | **$60**  |
 | GLM-5.3                                 | $1.40  | $4.40  | $0.26     | -        | **$15**  |
 | GLM-5.2                                 | $1.40  | $4.40  | $0.26     | -        | **$60**  |
@@ -183,7 +181,6 @@ Token 价格按每 1M tokens 列示。
 
 | Model                        | 每 5 小时请求数 | 每周请求数 | 每月请求数 |
 | ---------------------------- | --------------- | ---------- | ---------- |
-| Omen Alpha                   | 11,600          | 29,000     | 57,900     |
 | GLM-5.3-Flash                | 6,320           | 15,790     | 31,580     |
 | GLM-5.3                      | 220             | 540        | 1,080      |
 | GLM-5.2                      | 880             | 2,150      | 4,300      |
@@ -238,7 +235,6 @@ Token 价格按每 1M tokens 列示。
 - Qwen3.6 Plus — 每次请求 500 个输入 token，57,000 个缓存 token，190 个输出 token
 - Hy4 preview — 每次请求 830 个输入 token，71,500 个缓存 token，295 个输出 token
 - Hy3 — 每次请求 830 个输入 token，71,500 个缓存 token，295 个输出 token
-- Omen Alpha — 每次请求 300 个输入 token，40,000 个缓存 token，100 个输出 token
 
 你可以在 **<a href={console}>控制台</a>** 中跟踪你当前的使用情况。
 
@@ -302,7 +298,6 @@ Token 价格按每 1M tokens 列示。
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Omen Alpha                   | omen-alpha                   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 你的 OpenCode 配置中的 [模型 ID](/docs/config/#models) 使用 `opencode-go/<model-id>` 格式。例如，对于 Kimi K3，你将在配置中使用 `opencode-go/kimi-k3`。
 
@@ -349,7 +344,6 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash Vision Exp | 不使用   | 0 天     |
 | Hy4 preview                  | 不使用   | 0 天     |
 | Hy3                          | 不使用   | 0 天     |
-| Omen Alpha                   | 不使用   | 0 天     |
 
 - **Grok 4.6:** ZDR 会禁用依赖所存储数据的重要 API 功能，包括有状态的 Responses API、Files and Collections 和 Batch API。[了解更多](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)。
 - **GPT 5.6 Luna:** 所有 API 功能的使用都会生成滥用监控日志，并最多保留 30 天。[了解更多](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)。

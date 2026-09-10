@@ -86,7 +86,6 @@ The current list of models includes:
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
-- **Omen Alpha**
 
 The list of models may change as we test and add new ones.
 
@@ -151,7 +150,6 @@ Token prices are per 1M tokens.
 
 | Model                                   | Input  | Output | Cached Read | Cached Write | Monthly limit |
 | --------------------------------------- | ------ | ------ | ----------- | ------------ | ------------- |
-| Omen Alpha                              | $0.20  | $0.66  | $0.04       | -            | **$100**      |
 | GLM-5.3-Flash                           | $0.15  | $0.50  | $0.03       | -            | **$60**       |
 | GLM-5.3                                 | $1.40  | $4.40  | $0.26       | -            | **$15**       |
 | GLM-5.2                                 | $1.40  | $4.40  | $0.26       | -            | **$60**       |
@@ -199,7 +197,6 @@ The table below provides an estimated request count based on typical Go usage pa
 
 | Model                        | requests per 5 hour | requests per week | requests per month |
 | ---------------------------- | ------------------- | ----------------- | ------------------ |
-| Omen Alpha                   | 11,600              | 29,000            | 57,900             |
 | GLM-5.3-Flash                | 6,320               | 15,790            | 31,580             |
 | GLM-5.3                      | 220                 | 540               | 1,080              |
 | GLM-5.2                      | 880                 | 2,150             | 4,300              |
@@ -254,7 +251,6 @@ The estimates use the following token counts per request; actual usage varies.
 - Qwen3.6 Plus — 500 input, 57,000 cached, 190 output tokens per request
 - Hy4 preview — 830 input, 71,500 cached, 295 output tokens per request
 - Hy3 — 830 input, 71,500 cached, 295 output tokens per request
-- Omen Alpha — 300 input, 40,000 cached, 100 output tokens per request
 
 You can track your current usage in the **<a href={console}>console</a>**.
 
@@ -320,7 +316,6 @@ You can also access Go models through the following API endpoints.
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Omen Alpha                   | omen-alpha                   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 The [model id](/docs/config/#models) in your OpenCode config
 uses the format `opencode-go/<model-id>`. For example, for Kimi K3, you would
@@ -369,7 +364,6 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash Vision Exp | Not used       | 0 days\*       |
 | Hy4 preview                  | Not used       | 0 days         |
 | Hy3                          | Not used       | 0 days         |
-| Omen Alpha                   | Not used       | 0 days         |
 
 - **Grok 4.6:** ZDR disables important API features that depend on stored data, including the stateful Responses API, Files and Collections, and the Batch API. [Learn more](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Abuse monitoring logs are generated for all API feature usage and retained for up to 30 days. [Learn more](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).

@@ -86,7 +86,6 @@ La lista actual de modelos incluye:
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
-- **Omen Alpha**
 
 La lista de modelos puede cambiar a medida que probamos y agregamos otros nuevos.
 
@@ -149,7 +148,6 @@ Los precios de tokens se indican por 1M tokens.
 
 | Modelo                                  | Entrada | Salida | Lectura en caché | Escritura en caché | Límite mensual |
 | --------------------------------------- | ------- | ------ | ---------------- | ------------------ | -------------- |
-| Omen Alpha                              | $0.20   | $0.66  | $0.04            | -                  | **$100**       |
 | GLM-5.3-Flash                           | $0.15   | $0.50  | $0.03            | -                  | **$60**        |
 | GLM-5.3                                 | $1.40   | $4.40  | $0.26            | -                  | **$15**        |
 | GLM-5.2                                 | $1.40   | $4.40  | $0.26            | -                  | **$60**        |
@@ -197,7 +195,6 @@ La siguiente tabla ofrece una cantidad estimada de peticiones basada en los patr
 
 | Model                        | peticiones por 5 horas | peticiones por semana | peticiones por mes |
 | ---------------------------- | ---------------------- | --------------------- | ------------------ |
-| Omen Alpha                   | 11,600                 | 29,000                | 57,900             |
 | GLM-5.3-Flash                | 6,320                  | 15,790                | 31,580             |
 | GLM-5.3                      | 220                    | 540                   | 1,080              |
 | GLM-5.2                      | 880                    | 2,150                 | 4,300              |
@@ -252,7 +249,6 @@ Las estimaciones usan las siguientes cantidades de tokens por petición; el uso 
 - Hy3 — 830 tokens de entrada, 71,500 en caché, 295 tokens de salida por petición
 - MiMo-V2.5 — 830 tokens de entrada, 71,500 en caché, 295 tokens de salida por petición
 - MiMo-V2.5-Pro — 790 tokens de entrada, 86,000 en caché, 305 tokens de salida por petición
-- Omen Alpha — 300 tokens de entrada, 40,000 en caché, 100 tokens de salida por petición
 
 Puedes realizar un seguimiento de tu uso actual en la **<a href={console}>consola</a>**.
 
@@ -318,7 +314,6 @@ También puedes acceder a los modelos de Go a través de los siguientes endpoint
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Omen Alpha                   | omen-alpha                   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 El [ID del modelo](/docs/config/#models) en tu configuración de OpenCode
 usa el formato `opencode-go/<model-id>`. Por ejemplo, para Kimi K3, usarías
@@ -367,7 +362,6 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash Vision Exp | No utilizado             | 0 días             |
 | Hy4 preview                  | No utilizado             | 0 días             |
 | Hy3                          | No utilizado             | 0 días             |
-| Omen Alpha                   | No utilizado             | 0 días             |
 
 - **Grok 4.6:** ZDR deshabilita funciones importantes de la API que dependen de datos almacenados, incluidas la Responses API con estado, Files and Collections y la Batch API. [Más información](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Se generan registros de supervisión de abusos para todo el uso de funciones de la API y se conservan durante un máximo de 30 días. [Más información](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).

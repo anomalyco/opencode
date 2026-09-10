@@ -76,7 +76,6 @@ OpenCode Goをサブスクライブできるのは、1つのワークスペー�
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
-- **Omen Alpha**
 
 新しいモデルをテストして追加するにつれて、モデルのリストは変更される場合があります。
 
@@ -136,7 +135,6 @@ OpenCodeに加えて、以下のクライアントがOpenCode Goで正常に動�
 
 | Model                                   | Input  | Output | Cached Read | Cached Write | 月間上限 |
 | --------------------------------------- | ------ | ------ | ----------- | ------------ | -------- |
-| Omen Alpha                              | $0.20  | $0.66  | $0.04       | -            | **$100** |
 | GLM-5.3-Flash                           | $0.15  | $0.50  | $0.03       | -            | **$60**  |
 | GLM-5.3                                 | $1.40  | $4.40  | $0.26       | -            | **$15**  |
 | GLM-5.2                                 | $1.40  | $4.40  | $0.26       | -            | **$60**  |
@@ -184,7 +182,6 @@ OpenCodeに加えて、以下のクライアントがOpenCode Goで正常に動�
 
 | Model                        | 5時間あたりのリクエスト数 | 週間リクエスト数 | 月間リクエスト数 |
 | ---------------------------- | ------------------------- | ---------------- | ---------------- |
-| Omen Alpha                   | 11,600                    | 29,000           | 57,900           |
 | GLM-5.3-Flash                | 6,320                     | 15,790           | 31,580           |
 | GLM-5.3                      | 220                       | 540              | 1,080            |
 | GLM-5.2                      | 880                       | 2,150            | 4,300            |
@@ -239,7 +236,6 @@ OpenCodeに加えて、以下のクライアントがOpenCode Goで正常に動�
 - Hy3 — リクエストあたり 入力 830トークン、キャッシュ 71,500トークン、出力 295トークン
 - MiMo-V2.5 — リクエストあたり 入力 830トークン、キャッシュ 71,500トークン、出力 295トークン
 - MiMo-V2.5-Pro — リクエストあたり 入力 790トークン、キャッシュ 86,000トークン、出力 305トークン
-- Omen Alpha — リクエストあたり 入力 300トークン、キャッシュ 40,000トークン、出力 100トークン
 
 現在の利用状況は**<a href={console}>コンソール</a>**で追跡できます。
 
@@ -303,7 +299,6 @@ Goでは月額$10を支払い、含まれる月間利用枠はモデルによっ
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Omen Alpha                   | omen-alpha                   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 OpenCode設定の[model id](/docs/config/#models)は、`opencode-go/<model-id>`という形式を使用します。たとえば、Kimi K3の場合は、設定で`opencode-go/kimi-k3`を使用します。
 
@@ -350,7 +345,6 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash Vision Exp | 使用なし             | 0日         |
 | Hy4 preview                  | 使用なし             | 0日         |
 | Hy3                          | 使用なし             | 0日         |
-| Omen Alpha                   | 使用なし             | 0日         |
 
 - **Grok 4.6:** ZDRでは、保存データに依存する重要なAPI機能（ステートフルなResponses API、Files and Collections、Batch APIなど）が無効になります。[詳しく見る](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)。
 - **GPT 5.6 Luna:** 不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。[詳しく見る](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)。

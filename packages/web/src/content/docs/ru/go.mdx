@@ -86,7 +86,6 @@ OpenCode Go работает так же, как и любой другой пр
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
-- **Omen Alpha**
 
 Список моделей может меняться по мере того, как мы тестируем и добавляем новые.
 
@@ -149,7 +148,6 @@ OpenCode Go предназначен для [OpenCode](https://opencode.ai) и �
 
 | Model                                   | Input  | Output | Cached Read | Cached Write | Месячный лимит |
 | --------------------------------------- | ------ | ------ | ----------- | ------------ | -------------- |
-| Omen Alpha                              | $0.20  | $0.66  | $0.04       | -            | **$100**       |
 | GLM-5.3-Flash                           | $0.15  | $0.50  | $0.03       | -            | **$60**        |
 | GLM-5.3                                 | $1.40  | $4.40  | $0.26       | -            | **$15**        |
 | GLM-5.2                                 | $1.40  | $4.40  | $0.26       | -            | **$60**        |
@@ -197,7 +195,6 @@ OpenCode Go предназначен для [OpenCode](https://opencode.ai) и �
 
 | Model                        | запросов за 5 часов | запросов в неделю | запросов в месяц |
 | ---------------------------- | ------------------- | ----------------- | ---------------- |
-| Omen Alpha                   | 11,600              | 29,000            | 57,900           |
 | GLM-5.3-Flash                | 6,320               | 15,790            | 31,580           |
 | GLM-5.3                      | 220                 | 540               | 1,080            |
 | GLM-5.2                      | 880                 | 2,150             | 4,300            |
@@ -252,7 +249,6 @@ OpenCode Go предназначен для [OpenCode](https://opencode.ai) и �
 - Hy3 — 830 входных, 71,500 кешированных, 295 выходных токенов на запрос
 - MiMo-V2.5 — 830 входных, 71,500 кешированных, 295 выходных токенов на запрос
 - MiMo-V2.5-Pro — 790 входных, 86,000 кешированных, 305 выходных токенов на запрос
-- Omen Alpha — 300 входных, 40 000 кешированных, 100 выходных токенов на запрос
 
 Вы можете отслеживать текущее использование в **<a href={console}>консоли</a>**.
 
@@ -318,7 +314,6 @@ OpenCode Go предназначен для [OpenCode](https://opencode.ai) и �
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Omen Alpha                   | omen-alpha                   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 [ID модели](/docs/config/#models) в вашем конфиге OpenCode
 использует формат `opencode-go/<model-id>`. Например, для Kimi K3 вам нужно
@@ -367,7 +362,6 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash Vision Exp | Не используется  | 0 дней          |
 | Hy4 preview                  | Не используется  | 0 дней          |
 | Hy3                          | Не используется  | 0 дней          |
-| Omen Alpha                   | Не используется  | 0 дней          |
 
 - **Grok 4.6:** ZDR отключает важные функции API, зависящие от сохраненных данных, включая Responses API с сохранением состояния, Files and Collections и Batch API. [Подробнее](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Журналы мониторинга злоупотреблений создаются при любом использовании функций API и хранятся до 30 дней. [Подробнее](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
