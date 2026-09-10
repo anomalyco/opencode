@@ -6,7 +6,6 @@ import { OpenResponses } from "./open-responses.js"
 
 const PROTOCOL = "open-responses.websocket.v1"
 const VERSION = 1
-const decodeEvent = Schema.decodeUnknownEffect(OpenResponses.protocol.stream.event)
 
 interface CheckpointValue {
   readonly version: typeof VERSION
@@ -15,12 +14,16 @@ interface CheckpointValue {
   readonly output: ReadonlyArray<unknown>
 }
 
+/** Fields to send next to `previous_response_id`, or undefined to send the step in full. */
+export type Shape = (request: Readonly<Record<string, unknown>>) => Readonly<Record<string, unknown>> | undefined
+
 export interface DriverInput {
   readonly id: string
   readonly name: string
   readonly request: Readonly<Record<string, unknown>>
   readonly message: string
   readonly base: WebSocketChannelDriver
+  readonly continuation?: Shape
 }
 
 const checkpointValue = (checkpoint: ChannelCheckpoint | undefined): CheckpointValue | undefined => {
@@ -104,6 +107,13 @@ const incremental = (
 
 const code = (event: OpenResponses.Event) => event.code || event.error?.code || event.response?.error?.code || undefined
 
+// A classified failure (overflow, rate limit, quota, policy, auth) describes the request as a whole and keeps its
+// runner-owned recovery; anything else the provider refuses before creating a response is blamed on the continuation.
+const blamesContinuation = (reason: AIError["reason"]) => {
+  if (reason._tag === "InvalidRequest") return reason.classification === undefined
+  return reason._tag === "ProviderInternal" || reason._tag === "UnknownProvider"
+}
+
 const rejected = (
   observation: Extract<ChannelObservation, { readonly type: "provider-failure" }>,
   recovery: "retry-full" | "rotate-and-retry-full",
@@ -127,40 +137,42 @@ const rejected = (
 
 export const driver = (input: DriverInput): WebSocketChannelDriver => {
   const { previous_response_id: _previousResponseID, ...request } = input.request
+  const shape = input.continuation ?? ((fields: Readonly<Record<string, unknown>>) => fields)
   let output: OpenResponses.StreamItem[] = []
+  let created = false
   return {
     create: (checkpoint) =>
       Effect.sync(() => {
         output = []
+        created = false
         const previous = checkpointValue(checkpoint)
         const delta = previous ? incremental(request, previous) : undefined
-        if (!previous || !delta) return { message: ProviderShared.encodeJson(request), mode: "full" as const }
+        const fields = delta ? shape(request) : undefined
+        if (!previous || !delta || !fields)
+          return { message: ProviderShared.encodeJson(request), mode: "full" as const }
         return {
-          message: ProviderShared.encodeJson({ ...request, input: delta, previous_response_id: previous.responseID }),
+          message: ProviderShared.encodeJson({ ...fields, input: delta, previous_response_id: previous.responseID }),
           mode: "incremental" as const,
         }
       }),
     observe: (create, frame) =>
       Effect.gen(function* () {
-        const event = yield* decodeEvent(frame).pipe(
+        const event = yield* OpenResponses.decodeChannelEvent(frame).pipe(
           Effect.mapError((cause) =>
             ProviderShared.eventError(input.id, `Invalid ${input.name} WebSocket event`, frame, cause),
           ),
         )
         const observation = yield* input.base.observe(create, frame)
+        if (event.type === "response.created") created = true
         if (event.type === "response.output_item.done" && event.item) output.push(event.item)
         if (observation.type === "provider-failure") {
           const rejection = code(event)
           if (rejection === "previous_response_not_found") return rejected(observation, "retry-full")
           if (rejection === "websocket_connection_limit_reached") return rejected(observation, "rotate-and-retry-full")
-          // Only the continuation distinguishes an incremental send from a full one, so an unclassified
-          // invalid request there is retried full; Codex reports a stale previous_response_id that way, with
-          // no code. Classified failures such as context overflow keep their runner-owned recovery.
-          if (
-            create.mode === "incremental" &&
-            observation.error.reason._tag === "InvalidRequest" &&
-            observation.error.reason.classification === undefined
-          )
+          // Only the continuation distinguishes an incremental send from a full one, so a refusal before the
+          // provider creates a response is retried full. Codex reports a stale previous_response_id as an
+          // invalid_request_error with no code; xAI reports every rejection as an api_error.
+          if (create.mode === "incremental" && !created && blamesContinuation(observation.error.reason))
             return rejected(observation, "retry-full")
         }
         if (observation.type !== "completed") return observation
@@ -195,4 +207,4 @@ export const driver = (input: DriverInput): WebSocketChannelDriver => {
   }
 }
 
-export const OpenResponsesContinuation = { driver } as const
+export * as OpenResponsesContinuation from "./open-responses-continuation.js"

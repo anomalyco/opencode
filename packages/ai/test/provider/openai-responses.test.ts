@@ -90,7 +90,11 @@ const classifyingChannelDriver = (message: string): WebSocketChannelDriver => {
   }
 }
 
-const continuationDriver = (request: Readonly<Record<string, unknown>>, base = baseChannelDriver) => {
+const continuationDriver = (
+  request: Readonly<Record<string, unknown>>,
+  base = baseChannelDriver,
+  continuation?: OpenResponsesContinuation.Shape,
+) => {
   const message = ProviderShared.encodeJson(request)
   return OpenResponsesContinuation.driver({
     id: "openai-responses",
@@ -98,6 +102,7 @@ const continuationDriver = (request: Readonly<Record<string, unknown>>, base = b
     request,
     message,
     base: base(message),
+    continuation,
   })
 }
 
@@ -921,6 +926,111 @@ describe("OpenAI Responses route", () => {
         type: "provider-failure",
         error: { reason: { _tag: "InvalidRequest", classification: "context-overflow" } },
       })
+    }),
+  )
+
+  it.effect("retries an incremental send in full when the provider refuses it before creating a response", () =>
+    Effect.gen(function* () {
+      const firstRequest = {
+        type: "response.create",
+        model: "grok-4.6",
+        store: false,
+        input: [{ role: "user", content: [{ type: "input_text", text: "First" }] }],
+      }
+      const first = continuationDriver(firstRequest, classifyingChannelDriver)
+      const saved = checkpoint(
+        yield* first.observe(
+          yield* first.create(undefined),
+          ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_1" } }),
+        ),
+      )
+      const second = continuationDriver(
+        {
+          ...firstRequest,
+          input: [...firstRequest.input, { role: "user", content: [{ type: "input_text", text: "Second" }] }],
+        },
+        classifyingChannelDriver,
+      )
+      // xAI reports every rejection as an api_error, which classifies as a retryable provider failure.
+      const notFound = ProviderShared.encodeJson({
+        type: "error",
+        error: { type: "api_error", message: "gRPC error: Response with id=resp_1 not found" },
+      })
+      const incremental = yield* second.create(saved)
+      expect(incremental.mode).toBe("incremental")
+      expect(yield* second.observe(incremental, notFound)).toMatchObject({
+        type: "rejected",
+        recovery: "retry-full",
+        error: { reason: { _tag: "Transport", delivery: "rejected" } },
+      })
+
+      // Once the provider has created a response the continuation was accepted; a later error is its own failure.
+      const started = yield* second.create(saved)
+      yield* second.observe(
+        started,
+        ProviderShared.encodeJson({ type: "response.created", response: { id: "resp_2" } }),
+      )
+      expect(yield* second.observe(started, notFound)).toMatchObject({
+        type: "provider-failure",
+        error: { reason: { _tag: "ProviderInternal" } },
+      })
+
+      // A full send has no continuation to blame.
+      expect(yield* second.observe(yield* second.create(undefined), notFound)).toMatchObject({
+        type: "provider-failure",
+        error: { reason: { _tag: "ProviderInternal" } },
+      })
+
+      // A rate limit describes the request as a whole; resending it in full would only hit the limit again.
+      const limited = ProviderShared.encodeJson({
+        type: "error",
+        error: { type: "rate_limit_error", message: "Rate limit exceeded" },
+      })
+      expect(yield* second.observe(yield* second.create(saved), limited)).toMatchObject({
+        type: "provider-failure",
+        error: { reason: { _tag: "RateLimit" } },
+      })
+    }),
+  )
+
+  it.effect("shapes the incremental send with the route continuation", () =>
+    Effect.gen(function* () {
+      const firstRequest = {
+        type: "response.create",
+        model: "grok-4.6",
+        store: true,
+        instructions: "You are terse.",
+        input: [{ role: "user", content: [{ type: "input_text", text: "First" }] }],
+      }
+      const secondRequest = {
+        ...firstRequest,
+        input: [...firstRequest.input, { role: "user", content: [{ type: "input_text", text: "Second" }] }],
+      }
+      const saved = checkpoint(
+        yield* continuationDriver(firstRequest).observe(
+          yield* continuationDriver(firstRequest).create(undefined),
+          ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_1" } }),
+        ),
+      )
+
+      const trimmed = yield* continuationDriver(
+        secondRequest,
+        baseChannelDriver,
+        ({ instructions: _, ...rest }) => rest,
+      ).create(saved)
+      expect(trimmed.mode).toBe("incremental")
+      expect(JSON.parse(trimmed.message)).toEqual({
+        type: "response.create",
+        model: "grok-4.6",
+        store: true,
+        previous_response_id: "resp_1",
+        input: [{ role: "user", content: [{ type: "input_text", text: "Second" }] }],
+      })
+
+      // Declining the continuation sends the step in full and never sends a previous_response_id.
+      const declined = yield* continuationDriver(secondRequest, baseChannelDriver, () => undefined).create(saved)
+      expect(declined.mode).toBe("full")
+      expect(JSON.parse(declined.message)).toEqual(secondRequest)
     }),
   )
 
