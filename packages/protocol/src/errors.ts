@@ -1,4 +1,7 @@
 import { Schema } from "effect"
+import { NonNegativeInt } from "@opencode-ai/schema/schema"
+import { Attachment } from "@opencode-ai/schema/attachment"
+import { Session } from "@opencode-ai/schema/session"
 
 export class InvalidRequestError extends Schema.TaggedErrorClass<InvalidRequestError>()(
   "InvalidRequestError",
@@ -23,6 +26,26 @@ export class ConflictError extends Schema.TaggedErrorClass<ConflictError>()(
     resource: Schema.optional(Schema.String),
   },
   { httpApiStatus: 409 },
+) {}
+
+export class PayloadTooLargeError extends Schema.TaggedErrorClass<PayloadTooLargeError>()(
+  "PayloadTooLargeError",
+  {
+    message: Schema.String,
+    scope: Schema.Literals(["file", "session", "global"]),
+    maximumBytes: NonNegativeInt,
+  },
+  { httpApiStatus: 413 },
+) {}
+
+export class AttachmentNotFoundError extends Schema.TaggedErrorClass<AttachmentNotFoundError>()(
+  "AttachmentNotFoundError",
+  {
+    sessionID: Session.ID,
+    attachmentID: Attachment.ID.pipe(Schema.optional),
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
 ) {}
 
 export class ServiceUnavailableError extends Schema.TaggedErrorClass<ServiceUnavailableError>()(
