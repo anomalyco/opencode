@@ -252,7 +252,7 @@ export function AppSidebar() {
           data-component="app-sidebar"
           data-collapsed="true"
           class="hidden w-14 shrink-0 flex-col items-center gap-1 bg-v2-background-bg-base/70 py-2 backdrop-blur-xl lg:flex"
-          style={trafficLights() ? { "padding-top": "30px" } : undefined}
+          style={trafficLights() ? { "padding-top": "36px" } : undefined}
         >
           <TooltipV2 placement="right" value={language.t("home.title")}>
             <button
@@ -304,18 +304,9 @@ export function AppSidebar() {
         aria-label={language.t("sidebar.nav.projectsAndSessions")}
       >
         <div
-          class="flex shrink-0 items-center justify-between p-2 pb-1"
-          style={trafficLights() ? { "padding-top": "30px" } : undefined}
+          class="flex h-9 shrink-0 items-center px-2"
+          style={trafficLights() ? { "padding-left": "84px" } : undefined}
         >
-          <button
-            type="button"
-            data-action="sidebar-home"
-            onClick={goHome}
-            class="flex min-w-0 items-center rounded-[6px] px-1.5 py-1 focus-visible:bg-v2-background-bg-layer-01 focus-visible:outline-none"
-            aria-label={language.t("home.title")}
-          >
-            <Logo class="h-5 w-auto" />
-          </button>
           <TooltipV2 placement="bottom" value={language.t("sidebar.menu.toggle")}>
             <IconButtonV2
               variant="ghost-muted"
@@ -325,6 +316,19 @@ export function AppSidebar() {
               onClick={() => setState("collapsed", true)}
             />
           </TooltipV2>
+        </div>
+        <div
+          class="flex shrink-0 items-center px-3 pb-3 pt-1"
+        >
+          <button
+            type="button"
+            data-action="sidebar-home"
+            onClick={goHome}
+            class="flex min-w-0 items-center rounded-[6px] px-1.5 py-2 focus-visible:bg-v2-background-bg-layer-01 focus-visible:outline-none"
+            aria-label={language.t("home.title")}
+          >
+            <Logo class="h-5 w-auto" />
+          </button>
         </div>
         <div class="shrink-0 px-2 pb-1">
           <SidebarNavButton data-action="sidebar-new-chat" onClick={openNewChat} disabled={!newChatTarget()}>
