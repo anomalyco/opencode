@@ -268,8 +268,14 @@ export const TuiThreadCommand = cmd({
 
       try {
         const { Effect } = await import("effect")
+        const { Config } = await import("@/config/config")
+        const { AppRuntime } = await import("@/effect/app-runtime")
         const { run } = await import("../tui/layer")
         const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
+        const clipboardConfig = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.get())).catch(() => ({}))
+        if (clipboardConfig.clipboard?.linux?.enablePrimaryCopy) {
+          process.env.OPENCODE_CLIPBOARD_PRIMARY_COPY = "true"
+        }
         await Effect.runPromise(
           run({
             url: transport.url,
