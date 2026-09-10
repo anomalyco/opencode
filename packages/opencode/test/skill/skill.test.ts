@@ -602,7 +602,7 @@ description: A skill in the .opencode/skills directory.
     const formatted = Skill.fmt([projectSkill, ...globalSkills], { verbose: true })
     expect(formatted).toContain("<name>project-deploy</name>")
     expect(formatted).toContain('<global_skills count="25">')
-    expect(formatted).not.toContain("<name>global-skill-24</name>")
+    expect(formatted).toContain("global-skill-24")
   })
 
   test("formats small numbers of global skills inline alongside project skills", () => {
@@ -625,5 +625,20 @@ description: A skill in the .opencode/skills directory.
     expect(formatted).toContain("<name>local-skill</name>")
     expect(formatted).toContain("<name>global-helper</name>")
     expect(formatted).not.toContain("<global_skills")
+  })
+
+  test("keeps skill prompt output within the character budget", () => {
+    const skills: Skill.Info[] = Array.from({ length: 16 }, (_, i) => ({
+      name: `large-skill-${i}`,
+      description: "x".repeat(40_000),
+      location: `/skills/large-skill-${i}/SKILL.md`,
+      content: "",
+      scope: "global",
+    }))
+
+    const formatted = Skill.fmt(skills, { verbose: true })
+    expect(formatted.length).toBeLessThanOrEqual(300_000)
+    expect(formatted).toContain("large-skill-0")
+    expect(formatted).toContain("large-skill-15")
   })
 })

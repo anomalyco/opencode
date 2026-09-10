@@ -339,6 +339,7 @@ const layer = Layer.effect(
 )
 
 const MAX_GLOBAL_SKILLS_INLINE = 15
+const MAX_SKILL_PROMPT_CHARS = 300_000
 
 export function fmt(list: Info[], opts: { verbose: boolean }) {
   const described = list.filter((skill) => skill.description !== undefined)
@@ -347,53 +348,70 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
   const projectSkills = described.filter((s) => s.scope !== "global")
   const globalSkills = described.filter((s) => s.scope === "global")
 
-  // When global skills are few (<= 15), render them inline alongside project skills
   const inlineGlobal = globalSkills.length <= MAX_GLOBAL_SKILLS_INLINE
   const inlineSkills = (inlineGlobal ? described : projectSkills).toSorted((a, b) => a.name.localeCompare(b.name))
 
-  const sections: string[] = []
+  const render = (descriptionLimit?: number) => {
+    const description = (skill: Info) =>
+      descriptionLimit === undefined ? skill.description! : skill.description!.slice(0, descriptionLimit)
 
-  if (opts.verbose) {
+    if (opts.verbose) {
+      const sections: string[] = []
+      if (inlineSkills.length > 0) {
+        sections.push(
+          "<available_skills>",
+          ...inlineSkills.flatMap((skill) => [
+            "  <skill>",
+            `    <name>${skill.name}</name>`,
+            `    <description>${description(skill)}</description>`,
+            `    <location>${escapeHtml(skill.location)}</location>`,
+            "  </skill>",
+          ]),
+          "</available_skills>",
+        )
+      }
+
+      if (!inlineGlobal && globalSkills.length > 0) {
+        sections.push(
+          `<global_skills count="${globalSkills.length}">`,
+          `  There are ${globalSkills.length} additional global skills installed in your machine environment (~/.agents/skills, ~/.claude/skills).`,
+          ...globalSkills.toSorted((a, b) => a.name.localeCompare(b.name)).map(
+            (skill) => `  - ${skill.name}: ${description(skill)}`,
+          ),
+          "</global_skills>",
+        )
+      }
+
+      return sections.join("\n")
+    }
+
+    const sections: string[] = []
     if (inlineSkills.length > 0) {
       sections.push(
-        "<available_skills>",
-        ...inlineSkills.flatMap((skill) => [
-          "  <skill>",
-          `    <name>${skill.name}</name>`,
-          `    <description>${skill.description}</description>`,
-          `    <location>${escapeHtml(skill.location)}</location>`,
-          "  </skill>",
-        ]),
-        "</available_skills>",
+        "## Available Skills",
+        ...inlineSkills.map((skill) => `- **${skill.name}**: ${description(skill)}`),
       )
     }
 
     if (!inlineGlobal && globalSkills.length > 0) {
       sections.push(
-        `<global_skills count="${globalSkills.length}">`,
-        `  There are ${globalSkills.length} additional global skills installed in your machine environment (~/.agents/skills, ~/.claude/skills).`,
-        `  Use the \`skill\` tool with the skill name to load and inspect any global skill when a task requires specialized domain guidance.`,
-        "</global_skills>",
+        `\n*Plus ${globalSkills.length} global skills available on-demand via the \`skill\` tool:*`,
+        ...globalSkills.toSorted((a, b) => a.name.localeCompare(b.name)).map(
+          (skill) => `- **${skill.name}**: ${description(skill)}`,
+        ),
       )
     }
 
     return sections.join("\n")
   }
 
-  if (inlineSkills.length > 0) {
-    sections.push(
-      "## Available Skills",
-      ...inlineSkills.map((skill) => `- **${skill.name}**: ${skill.description}`),
-    )
-  }
+  const full = render()
+  if (full.length <= MAX_SKILL_PROMPT_CHARS) return full
 
-  if (!inlineGlobal && globalSkills.length > 0) {
-    sections.push(
-      `\n*Plus ${globalSkills.length} global skills available on-demand via the \`skill\` tool.*`,
-    )
-  }
-
-  return sections.join("\n")
+  const staticOutput = render(0)
+  const descriptionBudget = Math.max(0, MAX_SKILL_PROMPT_CHARS - staticOutput.length)
+  const descriptionLimit = Math.floor(descriptionBudget / described.length)
+  return render(descriptionLimit)
 }
 
 export const node = LayerNode.make({
