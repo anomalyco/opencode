@@ -57,7 +57,6 @@ export function LimitsGraph(props: { href: string }) {
     >
       <div data-slot="heading">
         <h2 id={`${id}-title`}>{i18n.t("go.graph.period")}</h2>
-        <p data-slot="promotion">{i18n.t("go.promo.deepseek")}</p>
       </div>
 
       <div role="table" aria-labelledby={`${id}-title`} id={`${id}-models`}>
