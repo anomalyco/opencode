@@ -1968,6 +1968,48 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ---
 
+### LLM Tech
+
+1. Head over to the [LLM Tech docs](https://llmtech.eu/docs/), grab an API key, and copy it.
+
+2. Run the `/connect` command and search for LLM Tech.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter the API key for the provider.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select the model you want.
+
+   ```txt
+   /models
+   ```
+
+   Inference runs on dedicated GPUs inside the EU with zero data retention, and the endpoint is OpenAI compatible. You can also add models through your opencode config.
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "llmtech": {
+         "models": {
+           "unsloth/Qwen3.8-27B-NVFP4": {}
+         }
+       }
+     }
+   }
+   ```
+
+---
+
 ### Poolside
 
 [Poolside](https://poolside.ai) provides access to its models through an OpenAI-compatible API.
