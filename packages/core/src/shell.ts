@@ -47,6 +47,7 @@ type Active = {
   done: Deferred.Deferred<Info, NotFoundError>
   timeoutFiber?: Fiber.Fiber<void>
   timeout?: (duration: number) => Effect.Effect<void>
+  stop?: () => Effect.Effect<void>
 }
 
 /**
@@ -74,6 +75,7 @@ export interface Interface {
   readonly timeout: (id: Shell.ID, duration: number) => Effect.Effect<Shell.Info, NotFoundError>
   readonly output: (id: Shell.ID, input?: Shell.OutputInput) => Effect.Effect<Shell.Output, NotFoundError>
   readonly remove: (id: Shell.ID) => Effect.Effect<void, NotFoundError>
+  readonly stop: (id: Shell.ID) => Effect.Effect<Shell.Info, NotFoundError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Shell") {}
@@ -184,6 +186,12 @@ const layer = () =>
 
       const wait = Effect.fn("Shell.wait")(function* (id: Shell.ID) {
         return yield* Deferred.await((yield* require(id)).done)
+      })
+
+      const stop = Effect.fn("Shell.stop")(function* (id: Shell.ID) {
+        const command = yield* require(id)
+        if (command.stop) yield* command.stop()
+        return yield* Deferred.await(command.done)
       })
 
       const timeout = Effect.fn("Shell.timeout")(function* (id: Shell.ID, duration: number) {
@@ -372,9 +380,17 @@ const layer = () =>
                   // Keep exited history data-only. Interrupt last because finish may run on the timeout fiber.
                   const timeoutFiber = command.timeoutFiber
                   command.timeout = undefined
+                  command.stop = undefined
                   command.timeoutFiber = undefined
                   if (timeoutFiber) yield* Fiber.interrupt(timeoutFiber)
                 })
+
+              command.stop = () =>
+                finish(
+                  "killed",
+                  undefined,
+                  handle.kill({ forceKillAfter: Duration.seconds(3) }).pipe(Effect.catch(() => Effect.void)),
+                )
 
               command.timeout = (duration) =>
                 Effect.gen(function* () {
@@ -416,7 +432,7 @@ const layer = () =>
         return command.info
       })
 
-      return Service.of({ create, list, get, wait, result, timeout, output, remove })
+      return Service.of({ create, list, get, wait, result, timeout, output, remove, stop })
     }),
   )
 

@@ -17,6 +17,7 @@ import { Shell } from "../../shell.js"
 import { ShellParse } from "../../shell/parse.js"
 import { ShellSelect } from "../../shell/select.js"
 import { ShellResult } from "../../shell/result.js"
+import { ID, Status } from "@opencode/schema/shell"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
@@ -41,6 +42,7 @@ const description = (shell?: string) =>
     "Rely on automatic truncation unless filtering the output is more useful.",
     "Commands accept an optional timeout, background commands have no timeout by default.",
     "Background commands return immediately, and you will be notified when they complete.",
+    "Use shell_stop with the returned shell ID to stop a background command.",
   ].join(" ")
 
 export const Input = Schema.Struct({
@@ -225,7 +227,7 @@ export const Plugin = {
               }).pipe(
                 Effect.tap((output) => Deferred.succeed(settled, output)),
                 Effect.map((output) => resultMessages(output).join("\n\n")),
-                Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),
+                Effect.onInterrupt(() => shell.stop(info.id).pipe(Effect.ignore)),
               )
               const job = yield* jobs.start({
                 // CodeMode children share a tool-call ID, but each shell must own its job.
@@ -267,6 +269,38 @@ export const Plugin = {
                 (error) => new ToolFailure({ message: `Unable to execute command: ${input.command}`, error }),
               ),
             ),
+        }),
+      )
+      .pipe(Effect.orDie)
+
+    yield* ctx.tool
+      .transform((editor) =>
+        editor.add({
+          name: "shell_stop",
+          options: { codemode: false, permission: name },
+          description:
+            "Stop a shell command by its shell ID and wait for termination. Captured output is preserved. Already finished commands are returned unchanged.",
+          input: Schema.Struct({ shellID: ID }),
+          output: Schema.Struct({ status: Status }),
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              const info = yield* shell.get(input.shellID)
+              yield* permission.assert({
+                action: name,
+                resources: [info.command],
+                save: [info.command],
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.messageID, id: context.id },
+              })
+              const job = yield* jobs.cancel(input.shellID)
+              const stopped = yield* job ? shell.wait(input.shellID) : shell.stop(input.shellID)
+              return {
+                output: { status: stopped.status },
+                content: [{ type: "text" as const, text: `Shell ${input.shellID}: ${stopped.status}` }],
+                metadata: { shellID: input.shellID },
+              }
+            }).pipe(Effect.mapError((error) => new ToolFailure({ message: "Unable to stop shell command", error }))),
         }),
       )
       .pipe(Effect.orDie)
