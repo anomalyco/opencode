@@ -253,8 +253,24 @@ describe("visibleProjectEntries", () => {
     ])
   })
 
-  test("prefers bookmarks over server projects once any exist", () => {
+  test("keeps server projects after the first bookmark appears", () => {
     const bookmarked = [{ worktree: "/repo/a", expanded: true }]
-    expect(visibleProjectEntries(bookmarked, [{ worktree: "/repo/b" }])).toEqual(bookmarked)
+    expect(visibleProjectEntries(bookmarked, [{ worktree: "/repo/a" }, { worktree: "/repo/b" }])).toEqual([
+      { worktree: "/repo/a", expanded: true },
+      { worktree: "/repo/b", expanded: false },
+    ])
+  })
+
+  test("deduplicates server projects already bookmarked by normalized path", () => {
+    const bookmarked = [{ worktree: "/repo/a/", expanded: true }]
+    expect(visibleProjectEntries(bookmarked, [{ worktree: "/repo/a" }])).toEqual([
+      { worktree: "/repo/a/", expanded: true },
+    ])
+  })
+
+  test("hides server projects the user closed", () => {
+    expect(visibleProjectEntries([], [{ worktree: "/repo/a" }, { worktree: "/repo/b" }], ["/repo/a"])).toEqual([
+      { worktree: "/repo/b", expanded: false },
+    ])
   })
 })

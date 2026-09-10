@@ -145,12 +145,24 @@ export function createServerProjects<T extends ServerProjectState>(input: {
   }
 }
 
+// Bookmarks are authoritative and keep their order. Server projects stay discoverable alongside
+// them so a fresh web client (which never seeds bookmarks) still shows the `/project` list, and so
+// bookmarks added later do not evict the remaining server projects. `hidden` is the per-server
+// recently-closed set: server projects the user explicitly closed stay out until reopened.
 export function visibleProjectEntries(
   bookmarked: ReadonlyArray<StoredProject>,
   server: ReadonlyArray<{ worktree: string }>,
-) {
-  if (bookmarked.length > 0) return [...bookmarked]
-  return server.map((project) => ({ worktree: project.worktree, expanded: false }))
+  hidden: ReadonlyArray<string> = [],
+): StoredProject[] {
+  const seen = new Set(bookmarked.map((project) => pathKey(project.worktree)))
+  const hiddenKeys = new Set(hidden.map((project) => pathKey(project)))
+  const discovered = server.flatMap((project) => {
+    const key = pathKey(project.worktree)
+    if (hiddenKeys.has(key) || seen.has(key)) return []
+    seen.add(key)
+    return [{ worktree: project.worktree, expanded: false }]
+  })
+  return [...bookmarked, ...discovered]
 }
 
 export function resolveServerList(input: {
