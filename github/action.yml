@@ -77,3 +77,4 @@ runs:
         MENTIONS: ${{ inputs.mentions }}
         VARIANT: ${{ inputs.variant }}
         OIDC_BASE_URL: ${{ inputs.oidc_base_url }}
+        GHES_APP_TOKEN: ${{ env.GHES_APP_TOKEN }}

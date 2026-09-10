@@ -2,6 +2,36 @@ import type { SessionV1 } from "@opencode-ai/core/v1/session"
 
 export { parseGitHubRemote } from "@/util/repository"
 
+export function parseGitRemote(url: string): { host: string; owner: string; repo: string } | null {
+  const match = url.match(/^(?:(?:https?|ssh):\/\/)?(?:git@)?([^/:]+)[:/]([^/]+)\/([^/]+?)(?:\.git)?$/)
+  if (!match) return null
+  return { host: match[1], owner: match[2], repo: match[3] }
+}
+
+export function getGitHubURLs() {
+  const serverUrl = (process.env.GITHUB_SERVER_URL || "https://github.com").replace(/\/+$/, "")
+  const apiUrl = (process.env.GITHUB_API_URL || "https://api.github.com").replace(/\/+$/, "")
+  const graphqlUrl = (process.env.GITHUB_GRAPHQL_URL || "https://api.github.com")
+    .replace(/\/+$/, "")
+    .replace(/\/graphql$/, "")
+  const host = new URL(serverUrl).host
+  return { serverUrl, apiUrl, graphqlUrl, host }
+}
+
+export async function createGitHubClients(auth: string) {
+  const { Octokit } = await import("@octokit/rest")
+  const { graphql } = await import("@octokit/graphql")
+  const urls = getGitHubURLs()
+  return {
+    rest: new Octokit({ auth, baseUrl: urls.apiUrl }),
+    graph: graphql.defaults({ baseUrl: urls.graphqlUrl, headers: { authorization: `token ${auth}` } }),
+  }
+}
+
+export function getNoreplyEmail(username: string, host: string) {
+  return `${username}@users.noreply.${host}`
+}
+
 /**
  * Extracts displayable text from assistant response parts.
  * Returns null for non-text responses (signals summary needed).

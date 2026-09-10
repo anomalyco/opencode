@@ -113,6 +113,21 @@ type IssueQueryResponse = {
   }
 }
 
+function getGitHubURLs() {
+  const serverUrl = (process.env.GITHUB_SERVER_URL || "https://github.com").replace(/\/+$/, "")
+  const apiUrl = (process.env.GITHUB_API_URL || "https://api.github.com").replace(/\/+$/, "")
+  const graphqlUrl = (process.env.GITHUB_GRAPHQL_URL || "https://api.github.com")
+    .replace(/\/+$/, "")
+    .replace(/\/graphql$/, "")
+  const host = new URL(serverUrl).host
+  return { serverUrl, apiUrl, graphqlUrl, host }
+}
+
+function getNoreplyEmail(username: string, host: string) {
+  return `${username}@users.noreply.${host}`
+}
+
+const ghUrls = getGitHubURLs()
 const { client, server } = createOpencode()
 let accessToken: string
 let octoRest: Octokit
@@ -130,8 +145,9 @@ try {
   await assertOpencodeConnected()
 
   accessToken = await getAccessToken()
-  octoRest = new Octokit({ auth: accessToken })
+  octoRest = new Octokit({ auth: accessToken, baseUrl: ghUrls.apiUrl })
   octoGraph = graphql.defaults({
+    baseUrl: ghUrls.graphqlUrl,
     headers: { authorization: `token ${accessToken}` },
   })
 
@@ -369,6 +385,9 @@ function useShareUrl() {
 async function getAccessToken() {
   const { repo } = useContext()
 
+  const ghesAppToken = process.env["GHES_APP_TOKEN"]
+  if (ghesAppToken) return ghesAppToken
+
   const envToken = useEnvGithubToken()
   if (envToken) return envToken
 
@@ -447,8 +466,9 @@ async function getUserPrompt() {
   // ie. <img alt="Image" src="https://github.com/user-attachments/assets/xxxx" />
   // ie. [api.json](https://github.com/user-attachments/files/21433810/api.json)
   // ie. ![Image](https://github.com/user-attachments/assets/xxxx)
-  const mdMatches = prompt.matchAll(/!?\[.*?\]\((https:\/\/github\.com\/user-attachments\/[^)]+)\)/gi)
-  const tagMatches = prompt.matchAll(/<img .*?src="(https:\/\/github\.com\/user-attachments\/[^"]+)" \/>/gi)
+  const hostPattern = ghUrls.host.replace(/\./g, "\\.")
+  const mdMatches = prompt.matchAll(new RegExp(`!?\\[.*?\\]\\((https:\\/\\/${hostPattern}\\/user-attachments\\/[^)]+)\\)`, "gi"))
+  const tagMatches = prompt.matchAll(new RegExp(`<img .*?src="(https:\\/\\/${hostPattern}\\/user-attachments\\/[^"]+)" \\/>`, "gi"))
   const matches = [...mdMatches, ...tagMatches].sort((a, b) => a.index - b.index)
   console.log("Images", JSON.stringify(matches, null, 2))
 
@@ -655,7 +675,7 @@ async function configureGit(appToken: string) {
   if (isMock()) return
 
   console.log("Configuring git...")
-  const config = "http.https://github.com/.extraheader"
+  const config = `http.${ghUrls.serverUrl}/.extraheader`
   const ret = await $`git config --local --get ${config}`
   gitConfig = ret.stdout.toString().trim()
 
@@ -677,7 +697,7 @@ async function assertGitIdentityConfigured() {
 async function restoreGitConfig() {
   if (gitConfig === undefined) return
   console.log("Restoring git config...")
-  const config = "http.https://github.com/.extraheader"
+  const config = `http.${ghUrls.serverUrl}/.extraheader`
   await $`git config --local ${config} "${gitConfig}"`
 }
 
@@ -705,7 +725,7 @@ async function checkoutForkBranch(pr: GitHubPullRequest) {
   const localBranch = generateBranchName("pr")
   const depth = Math.max(pr.commits.totalCount, 20)
 
-  await $`git remote add fork https://github.com/${pr.headRepository.nameWithOwner}.git`
+  await $`git remote add fork ${ghUrls.serverUrl}/${pr.headRepository.nameWithOwner}.git`
   await $`git fetch fork --depth=${depth} ${remoteBranch}`
   await $`git checkout -b ${localBranch} fork/${remoteBranch}`
 }
@@ -728,7 +748,7 @@ async function pushToNewBranch(summary: string, branch: string) {
   await $`git add .`
   await $`git commit -m "${summary}
 
-Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
+Co-authored-by: ${actor} <${getNoreplyEmail(actor, ghUrls.host)}>"`
   await $`git push -u origin ${branch}`
 }
 
@@ -740,7 +760,7 @@ async function pushToLocalBranch(summary: string) {
   await $`git add .`
   await $`git commit -m "${summary}
 
-Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
+Co-authored-by: ${actor} <${getNoreplyEmail(actor, ghUrls.host)}>"`
   await $`git push`
 }
 
@@ -754,7 +774,7 @@ async function pushToForkBranch(summary: string, pr: GitHubPullRequest) {
   await $`git add .`
   await $`git commit -m "${summary}
 
-Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
+Co-authored-by: ${actor} <${getNoreplyEmail(actor, ghUrls.host)}>"`
   await $`git push fork HEAD:${remoteBranch}`
 }
 
@@ -1061,7 +1081,7 @@ async function revokeAppToken() {
   if (!accessToken) return
   console.log("Revoking app token...")
 
-  await fetch("https://api.github.com/installation/token", {
+  await fetch(`${ghUrls.apiUrl}/installation/token`, {
     method: "DELETE",
     headers: {
       Authorization: `Bearer ${accessToken}`,
