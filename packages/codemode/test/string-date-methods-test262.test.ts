@@ -177,9 +177,3 @@ describe("Date string formatting Test262 parity", () => {
     expect(await value(`return new Date(NaN).toTimeString()`)).toBe("Invalid Date")
   })
 })
-
-describe("toTimeString zone name", () => {
-  test("omits the host's implementation-defined zone name", async () => {
-    expect(await value(`return new Date(0).toTimeString()`)).toMatch(/^\d{2}:\d{2}:\d{2} GMT[+-]\d{4}$/)
-  })
-})

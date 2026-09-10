@@ -317,8 +317,7 @@ ultimate source of truth.
 - [x] Local and UTC Date setters, including native argument coercion, mutation, rollover, invalid-Date recovery, and
       `TimeClip` behavior.
 - [x] `Date.prototype.toUTCString` and its `toGMTString` alias.
-- [x] `toDateString` and `toTimeString` in the host's local timezone; `toTimeString` omits the implementation-defined
-      zone name and keeps only the offset.
+- [x] `toDateString` and `toTimeString` in the host's local timezone.
 - [x] Native one-argument Date coercion for supported values, including booleans, null, arrays, and plain objects.
 - [x] Native Date loose-equality and default primitive-coercion semantics, using CodeMode's deterministic ISO string
       representation for the string primitive.

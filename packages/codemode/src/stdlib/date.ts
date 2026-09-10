@@ -108,9 +108,7 @@ export const invokeDateMethod = (
     case "toDateString":
       return hosted.toDateString()
     case "toTimeString":
-      // Drop the implementation-defined "(Zone Name)" suffix so only the offset, already exposed by
-      // getTimezoneOffset, leaves the host.
-      return hosted.toTimeString().replace(/ \(.*\)$/, "")
+      return hosted.toTimeString()
     case "toUTCString":
     case "toGMTString":
       return hosted.toUTCString()
