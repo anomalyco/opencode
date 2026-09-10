@@ -12,7 +12,10 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { CodeMode } from "../src/index.js"
-import base64Cases from "./fixtures/wpt-base64.json"
+
+const base64Cases = (await Bun.file(new URL("./fixtures/wpt-base64.json", import.meta.url)).json()) as Array<
+  [string, Array<number> | null]
+>
 
 const value = async (code: string) => {
   const result = await Effect.runPromise(CodeMode.execute({ code, tools: {} }))
@@ -84,7 +87,6 @@ describe("btoa WPT parity (html/webappapis/atob/base64.any.js)", () => {
 })
 
 describe("atob WPT parity (fetch/data-urls/resources/base64.json)", () => {
-  const cases = base64Cases as Array<[string, Array<number> | null]>
   const idlCases: Array<[unknown, Array<number> | null]> = [
     [undefined, null],
     [null, [158, 233, 101]],
@@ -100,10 +102,10 @@ describe("atob WPT parity (fetch/data-urls/resources/base64.json)", () => {
     [-0, null],
   ]
 
-  test(`${cases.length} forgiving-base64 inputs decode to the expected bytes or throw InvalidCharacterError`, async () => {
+  test(`${base64Cases.length} forgiving-base64 inputs decode to the expected bytes or throw InvalidCharacterError`, async () => {
     expect(
       await value(`
-        const cases = ${JSON.stringify(cases)}
+        const cases = ${JSON.stringify(base64Cases)}
         return cases.flatMap(([input, output]) => {
           try {
             const result = atob(input)
