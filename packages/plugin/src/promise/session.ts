@@ -35,17 +35,15 @@ export interface SessionContext extends SessionRequest {
   tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>
 }
 
-/** A completed compaction message without its identity. */
 export interface SessionCompactionResult {
   summary: string
   providerState?: SessionMessage.ProviderState
   metadata?: Record<string, unknown>
-  /** Usage of the compaction request itself; cost follows the model's rate. */
   tokens?: TokenUsage.Info
 }
 
 export interface SessionCompaction extends SessionContext {
-  /** Set to record this compaction and skip the model request. */
+  /** Set to use this compaction and skip the model request. */
   result?: SessionCompactionResult
 }
 
