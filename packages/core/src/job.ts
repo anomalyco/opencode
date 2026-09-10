@@ -398,14 +398,7 @@ export const make = Effect.gen(function* () {
   })
 
   const pendingBackground: Interface["pendingBackground"] = Effect.gen(function* () {
-    const recovered: Background[] = []
-    let after: string | undefined
-    do {
-      const page = yield* kv.scan({ prefix: backgroundPrefix, after })
-      recovered.push(...Array.filterMap(page.entries, (entry) => decodeBackground(entry.value)))
-      after = page.next
-    } while (after)
-    return recovered
+    return Array.filterMap(yield* kv.scanAll(backgroundPrefix), (entry) => decodeBackground(entry.value))
   }).pipe(Effect.withSpan("Job.pendingBackground"))
 
   const completeBackground: Interface["completeBackground"] = Effect.fn("Job.completeBackground")((notificationID) =>
