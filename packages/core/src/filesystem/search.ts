@@ -5,7 +5,9 @@ import path from "path"
 import { Context, Effect, Layer, Scope } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
-import { FileSystem } from "../filesystem"
+// Keep the service module type-only: it depends on this module's node during initialisation.
+import type { GlobInput, GrepInput } from "../filesystem"
+import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { FSUtil } from "../fs-util"
 import { Location } from "../location"
 import { Ripgrep } from "../ripgrep"
@@ -14,8 +16,8 @@ import { Flag } from "../flag/flag"
 
 export interface Interface {
   readonly find: (input: FileSystem.FindInput) => Effect.Effect<FileSystem.Entry[]>
-  readonly glob: (input: FileSystem.GlobInput) => Effect.Effect<readonly FileSystem.Entry[]>
-  readonly grep: (input: FileSystem.GrepInput) => Effect.Effect<readonly FileSystem.Match[]>
+  readonly glob: (input: GlobInput) => Effect.Effect<readonly FileSystem.Entry[]>
+  readonly grep: (input: GrepInput) => Effect.Effect<readonly FileSystem.Match[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileSystem/Search") {}

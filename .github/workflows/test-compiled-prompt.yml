@@ -1,0 +1,54 @@
+name: compiled prompt
+
+on:
+  pull_request:
+    paths:
+      - "packages/core/src/filesystem.ts"
+      - "packages/core/src/filesystem/**"
+      - "packages/core/src/effect/**"
+      - "packages/opencode/script/build.ts"
+      - "packages/opencode/script/test-compiled-prompt.*"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/test-compiled-prompt.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  compiled-prompt:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+
+      # Exercise the proposed runtime independently of the production pin.
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.2"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build native executable with embedded web UI
+        env:
+          OPENCODE_CHANNEL: prod
+          OPENCODE_VERSION: 0.0.0-compiled-test
+          MODELS_DEV_API_JSON: ${{ github.workspace }}/packages/opencode/test/tool/fixtures/models-api.json
+        run: bun run --cwd packages/opencode script/build.ts --single --skip-install
+
+      - name: Exercise compiled prompt, tool and second turn
+        run: >-
+          python3 packages/opencode/script/test-compiled-prompt.py
+          packages/opencode/dist/opencode-linux-x64/bin/opencode --expect-bun 1.4.2
