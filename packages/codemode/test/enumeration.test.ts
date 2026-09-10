@@ -85,18 +85,16 @@ describe("Object.keys over arrays", () => {
     expect(await value(`return Object.keys({ a: 1, b: 2 })`)).toEqual(["a", "b"])
   })
 
-  test("non-object inputs name what was received", async () => {
-    expect((await error(`return Object.keys("nope")`)).message).toContain(
-      "Object.keys expects a data object or array, received a string.",
-    )
-    expect((await error(`return Object.entries(42)`)).message).toContain("received a number.")
-    expect((await error(`return Object.values(null)`)).message).toContain("received null.")
+  test("non-object inputs follow ToObject, and nullish inputs name what was received", async () => {
+    expect(
+      await value(`return [Object.keys("ab"), Object.entries(42), Object.keys(() => 1), Object.keys(true)]`),
+    ).toEqual([["0", "1"], [], [], []])
+    expect(await value(`try { Object.values(null) } catch (e) { return [e.name, e.message] }`)).toEqual([
+      "TypeError",
+      "Object.values(...) cannot convert null to an object.",
+    ])
     expect((await error(`return Object.keys(tools.github.list_issues({ value: "x" }))`)).message).toContain(
-      "received an un-awaited Promise.",
-    )
-    expect((await error(`return Object.entries(() => 1)`)).message).toContain("received a function.")
-    expect((await error(`return { ...[1] }`)).message).toContain(
-      "Object spread requires a data object, received an array.",
+      "received an un-awaited Promise",
     )
     expect((await error(`const { a } = new Map(); return a`)).message).toContain("received a Map.")
     expect((await error(`return Array.from(7)`)).message).toContain("received a number.")
@@ -161,11 +159,21 @@ describe("for...in", () => {
     ).toEqual(["github.list_issues", "github.get_issue", "memory.search", "playwright.navigate"])
   })
 
-  test("unsupported values fail with a hint at for...of and Object.keys", async () => {
-    for (const expression of [`"text"`, "new Map([[1, 2]])", "new Set([1])", "42", "null"]) {
-      const failure = await error(`for (const key in ${expression}) {}; return "no"`)
-      expect(failure.message).toContain("for...in requires a plain object, array, or tools reference")
-      expect(failure.message).toContain("Use for...of for arrays/strings/Maps/Sets, or Object.keys(value)")
-    }
+  test("non-object values enumerate like JS: strings by index, everything else nothing", async () => {
+    expect(
+      await value(`
+        const out = []
+        for (const key in "ab") out.push(key)
+        for (const key in 42) out.push(key)
+        for (const key in null) out.push(key)
+        for (const key in undefined) out.push(key)
+        for (const key in new Map([[1, 2]])) out.push(key)
+        for (const key in Math) out.push(key)
+        return out
+      `),
+    ).toEqual(["0", "1"])
+    expect((await error(`for (const key in tools.github.list_issues({ value: "x" })) {}`)).message).toContain(
+      "un-awaited Promise",
+    )
   })
 })

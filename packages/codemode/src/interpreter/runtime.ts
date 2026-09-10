@@ -85,6 +85,7 @@ import { numberMethods } from "../stdlib/number.js"
 import { constructRegExp, regexpMethods, regexpProperties } from "../stdlib/regexp.js"
 import { stringMethods } from "../stdlib/string.js"
 import { uriArgument, urlMethods, urlProperties, urlSearchParamsMethods, urlWritableProperties } from "../stdlib/url.js"
+import { enumerableSource } from "../stdlib/object.js"
 import { coerceToNumber, coerceToString, compoundOperators, errorBrandName } from "../stdlib/value.js"
 import { Values } from "../values.js"
 
@@ -852,17 +853,11 @@ class Frame<R> {
     throw new InterpreterRuntimeError(`${context} must be a function.`, node).as("TypeError")
   }
 
-  private enumerableKeys(value: unknown): Array<string> | undefined {
-    if (value instanceof ToolReference) {
-      return [...this.runtime.toolKeys(value.path)]
-    }
-    if (Array.isArray(value)) {
-      return Object.keys(value)
-    }
-    if (value !== null && typeof value === "object" && !isRuntimeReference(value)) {
-      return Object.keys(value)
-    }
-    return undefined
+  // for...in over null/undefined iterates nothing, like JS.
+  private enumerableKeys(value: unknown, node: AstNode): Array<string> {
+    if (value instanceof ToolReference) return [...this.runtime.toolKeys(value.path)]
+    if (value === null || value === undefined) return []
+    return Object.keys(enumerableSource("for...in", value, node))
   }
 
   private evaluateForInStatement(
@@ -878,13 +873,7 @@ class Frame<R> {
       if (declared?.lexical) self.predeclarePattern(declared.pattern, declared.mutable, left)
       const right = yield* self.evaluateExpression(node.right)
 
-      const keys = self.enumerableKeys(right)
-      if (keys === undefined) {
-        throw new InterpreterRuntimeError(
-          "for...in requires a plain object, array, or tools reference. Use for...of for arrays/strings/Maps/Sets, or Object.keys(value) for a key list.",
-          node,
-        )
-      }
+      const keys = self.enumerableKeys(right, node.right)
 
       if (left.type !== "Identifier" && left.type !== "VariableDeclaration") {
         throw new InterpreterRuntimeError("Unsupported for...in binding.", left)
@@ -1916,16 +1905,10 @@ class Frame<R> {
       for (const property of node.properties) {
         if (property.type === "SpreadElement") {
           const spread = yield* self.evaluateExpression(property.argument)
-          if (spread === null || spread === undefined || Values.isValue(spread)) continue
-          if (typeof spread !== "object" || Array.isArray(spread) || isRuntimeReference(spread)) {
-            throw new InterpreterRuntimeError(
-              `Object spread requires a data object, received ${describeValue(spread)}.`,
-              property,
-              "InvalidDataValue",
-            )
-          }
-          for (const [key, value] of Object.entries(spread)) objectValue[key] = value
-          copyIteratorSymbols(spread, objectValue)
+          if (spread === null || spread === undefined) continue
+          const from = enumerableSource("Object spread", spread, property)
+          for (const [key, value] of Object.entries(from)) objectValue[key] = value
+          if (typeof from === "object") copyIteratorSymbols(from, objectValue)
           continue
         }
 

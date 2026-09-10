@@ -118,9 +118,12 @@ describe("H6: object spread of null/undefined is a no-op", () => {
     expect(await value(`const o = { a: 1 }; return { ...o, b: 2 }`)).toEqual({ a: 1, b: 2 })
   })
 
-  test("spreading an array into an object still errors", async () => {
-    const err = await error(`return { ...[1,2], a: 1 }`)
-    expect(err.kind).toBe("InvalidDataValue")
+  test("spreading an array or string into an object copies index keys, like JS", async () => {
+    expect(await value(`return { ...[1,2], a: 1 }`)).toEqual({ 0: 1, 1: 2, a: 1 })
+    expect(await value(`return { ..."ab", ...5, ...true, ...(() => 1), ...new Map([[1, 2]]) }`)).toEqual({
+      0: "a",
+      1: "b",
+    })
   })
 })
 

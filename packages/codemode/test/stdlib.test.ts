@@ -1130,7 +1130,7 @@ describe("CodeMode values at intra-CodeMode checkpoints", () => {
     const diagnostic = await error(`return Object.keys(Promise.resolve({ a: 1 }))`)
     expect(diagnostic.kind).toBe("InvalidDataValue")
     expect(diagnostic.message).toContain("await")
-    expect((await error(`return Object.keys(Math)`)).kind).toBe("InvalidDataValue")
+    expect(await value(`return Object.keys(Math)`)).toEqual([])
   })
 
   test("Object.assign keeps Maps usable", async () => {

@@ -5,6 +5,7 @@ import { type AstNode, AsyncIteratorSymbol, InterpreterRuntimeError, IteratorSym
 import {
   containsOpaqueReference,
   describeValue,
+  isRuntimeReference,
   rejectCircularInsertion,
   typeofValue,
 } from "../interpreter/references.js"
@@ -14,24 +15,44 @@ import { Values } from "../values.js"
 import { groupBy } from "./collections.js"
 import { coerceToString } from "./value.js"
 
-const requireObject = (name: string, input: unknown, node: AstNode): Record<string, unknown> => {
-  if (Array.isArray(input)) return input as unknown as Record<string, unknown>
-  if (Values.isValue(input)) return {}
-  const prototype = input === null || typeof input !== "object" ? undefined : Object.getPrototypeOf(input)
-  if (prototype !== null && prototype !== Object.prototype) {
+// ToObject for enumeration. Strings return themselves: the host's Object.keys/entries/hasOwn index a
+// primitive string directly. Numbers, booleans, wrappers, and functions have no own enumerable keys.
+export const enumerableSource = (label: string, value: unknown, node: AstNode): Record<string, unknown> => {
+  if (value === null || value === undefined) {
+    throw new InterpreterRuntimeError(`${label} cannot convert ${describeValue(value)} to an object.`, node).as(
+      "TypeError",
+    )
+  }
+  if (value instanceof Values.Promise) {
     throw new InterpreterRuntimeError(
-      `Object.${name} expects a data object or array, received ${describeValue(input)}.`,
+      `${label} received an un-awaited Promise; await it before inspecting the result.`,
       node,
       "InvalidDataValue",
     )
   }
-  return input as Record<string, unknown>
+  if (value instanceof ToolReference) {
+    throw new InterpreterRuntimeError(
+      `${label} cannot read tool references: they are not plain data. Use Object.keys(tools) for names, or search({ query }) for signatures.`,
+      node,
+      "InvalidDataValue",
+    )
+  }
+  if (typeof value === "string") return value as unknown as Record<string, unknown>
+  if (typeof value !== "object" || Values.isValue(value) || isRuntimeReference(value)) return {}
+  return value as Record<string, unknown>
 }
+
+const requireObject = (name: string, input: unknown, node: AstNode) =>
+  enumerableSource(`Object.${name}(...)`, input, node)
 
 export const objectAssign = (args: Array<unknown>, node: AstNode): unknown => {
   const target = args[0]
-  if (target === null || typeof target !== "object" || Array.isArray(target) || Values.isValue(target)) {
-    throw new InterpreterRuntimeError("Object.assign expects a data object target.", node)
+  // JS would box a primitive target; wrappers and primitives cannot hold fields here.
+  if (target === null || typeof target !== "object" || Values.isValue(target) || isRuntimeReference(target)) {
+    throw new InterpreterRuntimeError(
+      `Object.assign expects a data object or array target, received ${describeValue(target)}.`,
+      node,
+    ).as("TypeError")
   }
   const out = target as Record<string, unknown>
   const seen = new Set<object>()
@@ -43,18 +64,15 @@ export const objectAssign = (args: Array<unknown>, node: AstNode): unknown => {
       )
   }
   for (const source of args.slice(1)) {
-    if (source === null || source === undefined || Values.isValue(source)) continue
-    if (typeof source !== "object" || Array.isArray(source)) {
-      throw new InterpreterRuntimeError("Object.assign expects data objects.", node)
+    if (source === null || source === undefined) continue
+    const from = enumerableSource("Object.assign(...)", source, node)
+    if (typeof from !== "object") {
+      for (const [key, item] of Object.entries(from)) guardedSet(key, item)
+      continue
     }
-    for (const key of Reflect.ownKeys(source)) {
-      if (typeof key === "string") {
-        if (Object.prototype.propertyIsEnumerable.call(source, key)) guardedSet(key, Reflect.get(source, key))
-        continue
-      }
-      if (key !== AsyncIteratorSymbol && key !== IteratorSymbol) continue
-      if (!Object.prototype.propertyIsEnumerable.call(source, key)) continue
-      guardedSet(key, Reflect.get(source, key))
+    for (const key of Reflect.ownKeys(from)) {
+      if (typeof key === "symbol" && key !== AsyncIteratorSymbol && key !== IteratorSymbol) continue
+      if (Object.prototype.propertyIsEnumerable.call(from, key)) guardedSet(key, Reflect.get(from, key))
     }
   }
   return out
@@ -121,10 +139,7 @@ const rejectTools = (name: string, args: Array<unknown>, node: AstNode): void =>
 }
 
 const objectStatic = (name: string, impl: (args: Array<unknown>, node: AstNode) => unknown) =>
-  sync(`Object.${name}`, (args, node) => {
-    rejectTools(name, args, node)
-    return impl(args, node)
-  })
+  sync(`Object.${name}`, impl)
 
 // Object constructs identically with or without new, like JS. Only `keys` copies its result into the
 // program; `values`, `entries`, `assign`, and `fromEntries` hand back the program's own values.
