@@ -886,6 +886,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Meldingen wissen",
   "sidebar.empty.title": "Geen projecten geopend",
   "sidebar.empty.description": "Open een project om aan de slag te gaan",
+  "sidebar.projects.empty": "No projects",
   "debugBar.ariaLabel": "Diagnostiek voor ontwikkelprestaties",
   "debugBar.na": "n.v.t.",
   "debugBar.nav.label": "NAV",

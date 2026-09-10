@@ -896,6 +896,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Bildirimleri temizle",
   "sidebar.empty.title": "Açık proje yok",
   "sidebar.empty.description": "Başlamak için bir proje açın",
+  "sidebar.projects.empty": "No projects",
 
   "app.name.desktop": "OpenCode Masaüstü",
 

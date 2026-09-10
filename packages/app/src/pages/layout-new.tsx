@@ -5,10 +5,12 @@ import { DebugBar } from "@/components/debug-bar"
 import { TabsInfoPopup } from "@/components/help-button"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
 import { usePlatform } from "@/context/platform"
+import { useTabs } from "@/context/tabs"
 import { setV2Toast, ToastRegion } from "@/utils/toast"
 
 export default function NewLayout(props: ParentProps) {
   const platform = usePlatform()
+  const tabs = useTabs()
   const [state, setState] = createStore({ debugTools: true })
 
   createEffect(() => setV2Toast(true))
@@ -31,14 +33,18 @@ export default function NewLayout(props: ParentProps) {
         "padding-bottom": "env(safe-area-inset-bottom, 0px)",
       }}
     >
-      <Titlebar
-        update={update}
-        debugTools={
-          import.meta.env.DEV
-            ? { visible: state.debugTools, toggle: () => setState("debugTools", (value) => !value) }
-            : undefined
-        }
-      />
+      {/* Keep the titlebar mounted (tab keybinds/effects) but hide the empty
+          strip when there are no tabs to show. */}
+      <div classList={{ hidden: tabs.store.length === 0, contents: tabs.store.length > 0 }}>
+        <Titlebar
+          update={update}
+          debugTools={
+            import.meta.env.DEV
+              ? { visible: state.debugTools, toggle: () => setState("debugTools", (value) => !value) }
+              : undefined
+          }
+        />
+      </div>
       <div class="flex min-h-0 flex-1 items-stretch">
         <AppSidebar />
         <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">

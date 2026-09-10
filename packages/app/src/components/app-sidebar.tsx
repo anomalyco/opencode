@@ -4,12 +4,13 @@ import { useQuery } from "@tanstack/solid-query"
 import { createEffect, createMemo, For, Show, startTransition, type Accessor, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useSettingsCommand } from "@/components/settings-dialog"
+import { useCommand } from "@/context/command"
 import { useGlobal } from "@/context/global"
 import {
   loadHomeSessionIndex,
@@ -19,6 +20,7 @@ import {
 import { getProjectAvatarVariant, useLayout, type HomeProjectSelection, type LocalProject } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
+import { usePlatform } from "@/context/platform"
 import { ServerConnection, useServer } from "@/context/server"
 import { sessionHasOpenTab, useTabs } from "@/context/tabs"
 import { shouldOpenSessionInBackground } from "@/pages/home-session-open"
@@ -63,10 +65,16 @@ export function AppSidebar() {
   const server = useServer()
   const language = useLanguage()
   const notification = useNotification()
+  const platform = usePlatform()
   const location = useLocation()
   const navigate = useNavigate()
+  const command = useCommand()
+  const dialog = useDialog()
   const openSettings = useSettingsCommand()
   const [state, setState] = persisted(Persist.window("app.sidebar"), createStore({ collapsed: false }))
+  // Native macOS traffic lights overlay the top-left when the titlebar is
+  // hidden, so clear them with extra top padding on desktop macOS.
+  const trafficLights = () => platform.platform === "desktop" && platform.os === "macos"
 
   const selection = layout.home.selection
   const focusedConn = createMemo(
@@ -196,6 +204,19 @@ export function AppSidebar() {
     if (location.pathname !== "/") navigate("/")
   }
 
+  const openSearch = () => {
+    goHome()
+    // The home route registers the focus command on mount; retry in case it
+    // is not registered yet. Unknown ids are a safe no-op.
+    const trigger = () => command.trigger("home.sessions.search.focus")
+    setTimeout(trigger, 120)
+    setTimeout(trigger, 600)
+  }
+
+  const openMe = () => {
+    void dialog.show(() => <MeDialog onHome={goHome} onSettings={openSettings} />)
+  }
+
   let started = false
   createEffect(() => {
     if (started || !tabs.ready() || location.pathname !== "/") return
@@ -230,7 +251,8 @@ export function AppSidebar() {
         <aside
           data-component="app-sidebar"
           data-collapsed="true"
-          class="hidden w-14 shrink-0 flex-col items-center gap-1 border-r border-v2-border-border-base py-2 lg:flex"
+          class="hidden w-14 shrink-0 flex-col items-center gap-1 bg-v2-background-bg-base/70 py-2 backdrop-blur-xl lg:flex"
+          style={trafficLights() ? { "padding-top": "30px" } : undefined}
         >
           <TooltipV2 placement="right" value={language.t("home.title")}>
             <button
@@ -253,13 +275,13 @@ export function AppSidebar() {
               onClick={openNewChat}
             />
           </TooltipV2>
-          <TooltipV2 placement="right" value={language.t("sidebar.settings")}>
+          <TooltipV2 placement="right" value="Me">
             <IconButtonV2
               variant="ghost-muted"
               size="large"
               icon={<IconV2 name="settings-gear" />}
-              aria-label={language.t("sidebar.settings")}
-              onClick={openSettings}
+              aria-label="Me"
+              onClick={openMe}
             />
           </TooltipV2>
           <div class="mt-auto">
@@ -278,10 +300,13 @@ export function AppSidebar() {
     >
       <aside
         data-component="app-sidebar"
-        class="hidden w-64 shrink-0 flex-col border-r border-v2-border-border-base lg:flex"
+        class="hidden w-64 shrink-0 flex-col bg-v2-background-bg-base/70 backdrop-blur-xl lg:flex"
         aria-label={language.t("sidebar.nav.projectsAndSessions")}
       >
-        <div class="flex shrink-0 items-center justify-between p-2 pb-1">
+        <div
+          class="flex shrink-0 items-center justify-between p-2 pb-1"
+          style={trafficLights() ? { "padding-top": "30px" } : undefined}
+        >
           <button
             type="button"
             data-action="sidebar-home"
@@ -302,17 +327,12 @@ export function AppSidebar() {
           </TooltipV2>
         </div>
         <div class="shrink-0 px-2 pb-1">
-          <ButtonV2
-            data-action="sidebar-new-chat"
-            variant="neutral"
-            size="normal"
-            icon="edit"
-            class="h-8 w-full justify-start px-2.5 [font-weight:530]"
-            disabled={!newChatTarget()}
-            onClick={openNewChat}
-          >
-            {language.t("command.session.new")}
-          </ButtonV2>
+          <SidebarNavButton data-action="sidebar-new-chat" onClick={openNewChat} disabled={!newChatTarget()}>
+            <IconV2 name="edit" size="small" />
+            <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+              {language.t("command.session.new")}
+            </span>
+          </SidebarNavButton>
         </div>
         <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2 pb-2">
           <section class="flex min-w-0 flex-col gap-1" aria-label={language.t("home.projects")}>
@@ -365,10 +385,20 @@ export function AppSidebar() {
             </Show>
           </section>
           <section class="flex min-w-0 flex-col gap-1" aria-label={language.t("sidebar.project.recentSessions")}>
-            <div class="flex h-7 min-w-0 shrink-0 items-center px-1.5">
+            <div class="flex h-7 min-w-0 shrink-0 items-center justify-between px-1.5">
               <div class="text-v2-text-text-muted [font-weight:530]">
                 {language.t("sidebar.project.recentSessions")}
               </div>
+              <TooltipV2 placement="bottom" value={language.t("home.sessions.search.placeholder")}>
+                <IconButtonV2
+                  data-action="sidebar-search-sessions"
+                  variant="ghost-muted"
+                  size="small"
+                  icon={<IconV2 name="magnifying-glass" />}
+                  aria-label={language.t("home.sessions.search.placeholder")}
+                  onClick={openSearch}
+                />
+              </TooltipV2>
             </div>
             <Show
               when={records().length > 0}
@@ -427,22 +457,47 @@ export function AppSidebar() {
             </Show>
           </section>
         </div>
-        <div class="flex shrink-0 flex-col gap-1 border-t border-v2-border-border-base p-2">
-          <SidebarNavButton onClick={goHome}>
+        <div class="flex shrink-0 flex-col gap-1 border-t border-v2-border-border-base/60 p-2">
+          <SidebarNavButton onClick={openMe}>
             <Mark class="h-4 w-auto shrink-0" />
-            <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-              {language.t("home.title")}
-            </span>
-          </SidebarNavButton>
-          <SidebarNavButton onClick={openSettings}>
-            <IconV2 name="settings-gear" size="small" />
-            <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-              {language.t("sidebar.settings")}
-            </span>
+            <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">Me</span>
           </SidebarNavButton>
         </div>
       </aside>
     </Show>
+  )
+}
+
+function MeDialog(props: { onHome: () => void; onSettings: () => void }) {
+  const dialog = useDialog()
+  const language = useLanguage()
+  const close = () => dialog.close()
+  return (
+    <div class="flex w-64 flex-col gap-1 rounded-[12px] bg-v2-background-bg-base p-2 shadow-[var(--v2-elevation-floating)]">
+      <div class="px-2 py-1 text-v2-text-text-muted [font-weight:530]">Me</div>
+      <SidebarNavButton
+        onClick={() => {
+          close()
+          props.onHome()
+        }}
+      >
+        <Mark class="h-4 w-auto shrink-0" />
+        <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+          {language.t("home.title")}
+        </span>
+      </SidebarNavButton>
+      <SidebarNavButton
+        onClick={() => {
+          close()
+          props.onSettings()
+        }}
+      >
+        <IconV2 name="settings-gear" size="small" />
+        <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+          {language.t("sidebar.settings")}
+        </span>
+      </SidebarNavButton>
+    </div>
   )
 }
 
@@ -543,16 +598,18 @@ function SidebarProjectRow(props: {
   )
 }
 
-function SidebarNavButton(props: ParentProps<{ onClick: () => void }>) {
+function SidebarNavButton(props: ParentProps<{ onClick: () => void; disabled?: boolean }>) {
   return (
     <button
       type="button"
       onClick={props.onClick}
+      disabled={props.disabled}
       class={`
         flex h-7 min-w-0 w-full shrink-0 cursor-default items-center gap-2 rounded-[6px] bg-transparent px-1.5
         text-left text-v2-text-text-faint [font-weight:440]
         transition-[background-color,color] duration-[120ms] ease-in-out
         hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base
+        disabled:opacity-40
         focus-visible:bg-v2-background-bg-layer-01 focus-visible:outline-none
       `}
     >
