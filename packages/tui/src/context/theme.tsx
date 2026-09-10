@@ -320,7 +320,12 @@ const themeContext = createSimpleContext({
     themePerformance.set("Init", `${(performance.now() - initStarted).toFixed(2)} ms`)
     const current = createComponentTheme(valuesV2, mode)
 
-    createEffect(() => renderer.setBackgroundColor(valuesV2().background.default))
+    // Keep the terminal's own background until the configured theme resolves so `system` and custom
+    // themes never flash the built-in fallback palette first.
+    createEffect(() => {
+      if (!store.ready && !store.themes[store.active]) return
+      renderer.setBackgroundColor(valuesV2().background.default)
+    })
 
     const currentSyntax = createSyntaxStyleMemo(() => generateSyntax(valuesV2(), mode()))
     const service: Themes = {
