@@ -288,8 +288,12 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     createEffect(() => {
       if (typeof document === "undefined") return
       const root = document.documentElement
-      root.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.mono))
+      const mono = monoFontFamily(store.appearance?.mono)
+      root.style.setProperty("--font-family-mono", mono)
       root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.sans))
+      // Inline code can first appear during history backfill. Load its selected
+      // face with the shell so that font discovery does not resize that mount.
+      void document.fonts?.load(`440 13px ${mono}`).catch(() => undefined)
     })
 
     return {

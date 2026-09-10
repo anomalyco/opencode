@@ -118,9 +118,12 @@ describe("H6: object spread of null/undefined is a no-op", () => {
     expect(await value(`const o = { a: 1 }; return { ...o, b: 2 }`)).toEqual({ a: 1, b: 2 })
   })
 
-  test("spreading an array into an object still errors", async () => {
-    const err = await error(`return { ...[1,2], a: 1 }`)
-    expect(err.kind).toBe("InvalidDataValue")
+  test("spreading an array or string into an object copies index keys, like JS", async () => {
+    expect(await value(`return { ...[1,2], a: 1 }`)).toEqual({ 0: 1, 1: 2, a: 1 })
+    expect(await value(`return { ..."ab", ...5, ...true, ...(() => 1), ...new Map([[1, 2]]) }`)).toEqual({
+      0: "a",
+      1: "b",
+    })
   })
 })
 
@@ -265,9 +268,11 @@ describe("property deletion", () => {
     expect((await error(`return delete tools.example`)).kind).toBe("InvalidDataValue")
   })
 
-  test("keeps blocked property names unavailable", async () => {
-    expect((await error(`const object = {}; return delete object.__proto__`)).kind).toBe("ExecutionFailure")
-    expect((await error(`const values = []; return delete values["constructor"]`)).kind).toBe("ExecutionFailure")
+  test("prototype-named keys delete like any own data key", async () => {
+    expect(
+      await value(`const object = { __proto__: 1, a: 2 }; delete object.__proto__; return Object.keys(object)`),
+    ).toEqual(["a"])
+    expect(await value(`const values = [1]; delete values["constructor"]; return values`)).toEqual([1])
   })
 })
 
@@ -486,12 +491,8 @@ describe("CodeMode-specific string behavior", () => {
     expect(await value(`try { "x".normalize("nope"); return "no" } catch (e) { return e.message }`)).toContain('"NFC"')
   })
 
-  test("does not expose obsolete string aliases", async () => {
-    expect(await value(`return [typeof "x".trimLeft, typeof "x".trimRight, typeof "x".substr]`)).toEqual([
-      "undefined",
-      "undefined",
-      "undefined",
-    ])
+  test("exposes the Annex B string aliases every engine ships", async () => {
+    expect(await value(`return [" x ".trimLeft(), " x ".trimRight(), "abc".substr(1, 1)]`)).toEqual(["x ", " x", "b"])
   })
 })
 
@@ -906,10 +907,12 @@ describe("coercion parity: unknown static members read as undefined", () => {
     )
   })
 
-  test("blocked members still throw instead of reading as undefined", async () => {
-    const err = await error(`return Math.constructor`)
-    expect(err.message).toContain("not available")
-    const coercionErr = await error(`return Number.constructor`)
-    expect(coercionErr.message).toContain("Number.constructor is not available")
+  test("prototype-named members on globals read as undefined like other unknown statics", async () => {
+    expect(await value(`return [Math.constructor, Number.constructor, Object.prototype, Array.__proto__]`)).toEqual([
+      null,
+      null,
+      null,
+      null,
+    ])
   })
 })

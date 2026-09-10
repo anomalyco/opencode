@@ -163,7 +163,7 @@ function mapProviderOptions(settings: Readonly<Record<string, unknown>>, exclude
 
 function mapBedrockMantle(input: MapInput, baseSettings: Readonly<Record<string, unknown>>): Mapping | undefined {
   const settings = input.settings
-  const chat = input.modelID === "openai.gpt-oss-safeguard-20b" || input.modelID === "openai.gpt-oss-safeguard-120b"
+  const chat = input.modelID.includes("gpt-oss")
   return {
     package: `@opencode/ai/providers/amazon-bedrock/mantle/${chat ? "chat" : "responses"}`,
     settings: {

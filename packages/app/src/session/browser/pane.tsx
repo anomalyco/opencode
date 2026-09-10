@@ -109,6 +109,13 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
 
   createEffect(() => !store.editing && setStore("address", address()))
   createEffect(
+    on(registration, (current) => {
+      // Session routes can change before this pane unmounts. Hide the registration
+      // that owned the native view, rather than reading the destination's handle.
+      onCleanup(() => current?.setLayout())
+    }),
+  )
+  createEffect(
     on(
       [
         () => platform.webviewZoom?.(),
@@ -140,7 +147,6 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
   createEventListener(document, "visibilitychange", () => setStore("visible", document.visibilityState === "visible"))
   onCleanup(() => {
     if (frame !== undefined) cancelAnimationFrame(frame)
-    registration()?.setLayout()
   })
 
   return (

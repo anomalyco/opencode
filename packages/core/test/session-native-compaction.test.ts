@@ -400,6 +400,34 @@ it.live("only known automatic native overflow falls back locally and failed reco
   }),
 )
 
+it.live("compaction hooks supply the summary instead of provider compaction", () =>
+  Effect.gen(function* () {
+    const fixture = yield* setup()
+    yield* fixture.prompt("Original user")
+    yield* fixture.hooks.register("session", "compaction", (event) =>
+      Effect.sync(() => {
+        event.result = {
+          summary: "## Objective\n- hooked summary",
+          providerState: { responseId: "plugin" },
+          metadata: { plugin: "custom" },
+          tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
+        }
+      }),
+    )
+    expect(yield* fixture.compact).toEqual({ status: "completed" })
+    expect(fixture.state.calls).toBe(0)
+    expect((yield* fixture.load).messages.at(-1)).toMatchObject({
+      type: "compaction",
+      status: "completed",
+      summary: "## Objective\n- hooked summary",
+      recent: "",
+      providerState: { responseId: "plugin" },
+      metadata: { plugin: "custom" },
+      tokens: { input: 10, output: 5 },
+    })
+  }),
+)
+
 it.live("rejects request-hook route rewrites before provider compaction", () =>
   Effect.gen(function* () {
     const fixture = yield* setup()

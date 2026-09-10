@@ -392,7 +392,8 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
   const i18n = useI18n()
   const summary = () => (props.message.status === "failed" ? "" : props.message.summary)
   const error = () => {
-    if (props.message.status !== "failed" || props.message.error.type === "aborted") return ""
+    if (props.message.status !== "failed") return ""
+    if (props.message.error.type === "aborted" || props.message.error.type === "compaction.interrupted") return ""
     return props.error
   }
   const compact = createMemo(
@@ -410,23 +411,21 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
       output: compact().format(output),
     })
   }
-  const label = createMemo(() =>
-    [
-      i18n.t(
-        props.message.status === "completed" && props.message.providerContext
-          ? "ui.messagePart.providerCompaction"
-          : "ui.messagePart.compaction",
-      ),
-      usage(),
-    ]
-      .filter(Boolean)
-      .join(" · "),
-  )
+  const outcome = () => {
+    if (props.message.status !== "failed")
+      return props.message.status === "completed" && props.message.providerContext
+        ? "ui.messagePart.providerCompaction"
+        : "ui.messagePart.compaction"
+    if (props.message.error.type === "aborted") return "ui.messagePart.compaction.cancelled"
+    if (props.message.error.type === "compaction.interrupted") return "ui.messagePart.compaction.interrupted"
+    return "ui.messagePart.compaction.failed"
+  }
+  const label = createMemo(() => [i18n.t(outcome()), usage()].filter(Boolean).join(" · "))
 
   return (
     <div data-component="session-compaction-message">
       <div class="py-2">
-        <TimelineSeparator label={label()} />
+        <TimelineSeparator label={i18n.t("ui.messagePart.compaction.started")} />
       </div>
       <Show when={summary().trim()}>
         <div data-component="text-part" data-timeline-part-id={props.message.id}>
@@ -437,6 +436,22 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
               streaming={props.message.status === "running"}
             />
           </div>
+        </div>
+      </Show>
+      <Show when={props.message.status === "running"}>
+        <div role="status" class="py-2">
+          <BasicTool
+            icon="archive"
+            trigger={{ title: i18n.t("ui.messagePart.compaction.running") }}
+            status="running"
+            locked
+            hideDetails
+          />
+        </div>
+      </Show>
+      <Show when={props.message.status !== "running"}>
+        <div class="py-2">
+          <TimelineSeparator label={label()} />
         </div>
       </Show>
       <Show when={error()}>

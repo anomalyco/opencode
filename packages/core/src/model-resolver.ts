@@ -323,7 +323,7 @@ export const layer = Layer.effect(
         cost: selected.cost,
         limit: selected.limit,
         compaction: selected.compaction,
-        websocket: selected.websocket ?? true,
+        websocket: selected.websocket ?? false,
       }
     })
     return Service.of({

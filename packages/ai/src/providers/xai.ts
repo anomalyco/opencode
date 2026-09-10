@@ -41,6 +41,10 @@ const responsesRoute = Route.make({
     id: "openai-responses",
     name: "xAI Responses",
     rotateAfterMs: RESPONSES_WEBSOCKET_ROTATE_AFTER_MS,
+    // xAI continues a chain only from stored responses: with `store: false` (the route default) `previous_response_id`
+    // fails with "Response with id=… not found", so those steps are sent in full over the reused connection. It also
+    // rejects `instructions` next to `previous_response_id` and keeps the instructions of the response it continues.
+    continuation: ({ instructions: _instructions, ...request }) => (request.store === false ? undefined : request),
   }),
   defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })

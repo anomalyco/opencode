@@ -6,15 +6,6 @@ import { typeofValue } from "../interpreter/references.js"
 import { fromData, type SafeObject, toData, toProgram } from "../data.js"
 import { Values } from "../values.js"
 
-export const invokeJsonMethod = <R>(
-  runner: Runner<R>,
-  name: "parse" | "stringify",
-  args: Array<unknown>,
-  node: AstNode,
-): Effect.Effect<unknown, unknown, R> => {
-  return name === "parse" ? parse(runner, args, node) : stringify(runner, args, node)
-}
-
 export const jsonGlobal = <R>(runner: Runner<R>) =>
   new HostNamespace("JSON", {
     parse: new HostFunction<R>({ name: "JSON.parse", call: (args, node) => parse(runner, args, node) }),

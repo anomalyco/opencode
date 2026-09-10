@@ -1,7 +1,7 @@
 import { createSimpleContext } from "@opencode/ui/context"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { type Accessor, createEffect, createMemo, onCleanup, onMount } from "solid-js"
-import { createStore } from "solid-js/store"
+import { type Accessor, batch, createEffect, createMemo, onCleanup, onMount } from "solid-js"
+import { createStore, reconcile } from "solid-js/store"
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -306,19 +306,20 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     createEffect(() => {
       if (!catalogReady()) return
 
-      setCatalog(
-        registered().reduce((acc, opt) => {
-          const id = actionId(opt.id)
-          if (opt.title)
-            acc[id] = {
+      batch(() =>
+        registered().forEach((opt) => {
+          if (!opt.title) return
+          setCatalog(
+            actionId(opt.id),
+            reconcile({
               title: opt.title,
               description: opt.description,
               category: opt.category,
               keybind: opt.keybind,
               slash: opt.slash,
-            }
-          return acc
-        }, {} as CommandCatalog),
+            }),
+          )
+        }),
       )
     })
 

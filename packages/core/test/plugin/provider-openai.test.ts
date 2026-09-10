@@ -207,6 +207,7 @@ describe("OpenAIPlugin", () => {
       expect(model.enabled).toBe(true)
       expect(model.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
       expect(model.capabilities.responsesWebsockets).toBe(true)
+      expect(model.websocket).toBe(true)
       expect(direct.headers).not.toHaveProperty("originator")
       expect(direct.baseURL).toBe("https://api.openai.com/v1")
       expect(provider.headers).not.toHaveProperty("x-codex-beta-features")
@@ -216,7 +217,7 @@ describe("OpenAIPlugin", () => {
     }),
   )
 
-  it.effect("selects Azure WebSocket from capability unless the policy disables it", () =>
+  it.effect("selects WebSocket only from explicit policy", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
       yield* credentials.create({
@@ -267,11 +268,13 @@ describe("OpenAIPlugin", () => {
           Effect.provideService(SessionModelTransport.Service, transport),
         )
 
-      const prepared = yield* prepare()
+      const prepared = yield* prepare(true)
+      const defaulted = yield* prepare()
       const disabled = yield* prepare(false)
 
       expect(prepared.options.webSocket).toBe(executor)
       expect(prepared.options.http).toBeUndefined()
+      expect(defaulted.options.webSocket).toBeUndefined()
       expect(disabled.options.webSocket).toBeUndefined()
     }),
   )

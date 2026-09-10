@@ -88,8 +88,12 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
       if (value.mode === "normal" && !command) {
         session.handoff?.set(handoffMessage(value))
         const optimisticBusy = !input.adapter.working()
-        if (optimisticBusy) session.data.session.setStatus(session.id, "running")
-        const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit).then(
+        if (optimisticBusy && input.adapter.kind === "new-session")
+          session.data.session.setStatus(session.id, "running")
+        const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit, () => {
+          if (optimisticBusy && input.adapter.kind === "active-session")
+            session.data.session.setStatus(session.id, "running")
+        }).then(
           () => ({ ok: true as const }),
           (error) => ({ ok: false as const, error }),
         )
@@ -122,15 +126,9 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
 
       if (command) {
         clearSubmission(input, submission)
-        // Commands always steer: the server applies a command's configured
-        // agent and model immediately at admission, so queueing one would
-        // reconfigure the turn it is supposed to wait behind.
-        void sendCommand(
-          session,
-          { ...value, delivery: "steer" },
-          command,
-          input.adapter.controls().model.selection.trackSessionCommit,
-        ).catch((error) => failSubmission(input, session, "command", error, restore, value.id))
+        void sendCommand(session, value, command, input.adapter.controls().model.selection.trackSessionCommit).catch(
+          (error) => failSubmission(input, session, "command", error, restore, value.id),
+        )
         return
       }
     } finally {
@@ -322,7 +320,8 @@ async function sendCommand(
   track?: ModelSelection["trackSessionCommit"],
 ) {
   const request = await buildSubmissionRequest(session, value)
-  await applySelection(session, value.selection, track)
+  // Like queued prompts, queued commands must not apply the composer's selection to active work.
+  if (value.delivery === "steer") await applySelection(session, value.selection, track)
   await session.api.command({
     sessionID: session.id,
     command: command.command,
@@ -359,7 +358,8 @@ async function applySelection(
 async function sendPrompt(
   session: ComposerSession,
   value: ComposerSubmission,
-  track?: ModelSelection["trackSessionCommit"],
+  track: ModelSelection["trackSessionCommit"] | undefined,
+  onAdmit: () => void,
 ) {
   const request = await buildSubmissionRequest(session, value)
   // Switching agent or model reconfigures the session immediately, and with it
@@ -389,7 +389,9 @@ async function sendPrompt(
       },
     },
   }
-  await session.data.session.prompt(admission).catch(() => session.data.session.prompt(admission))
+  const sending = session.data.session.prompt(admission).catch(() => session.data.session.prompt(admission))
+  onAdmit()
+  await sending
 }
 
 async function buildSubmissionRequest(session: ComposerSession, value: ComposerSubmission) {

@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { isBlockedMember, type SafeObject, toProgram } from "../data.js"
+import { type SafeObject, toProgram } from "../data.js"
 import { dateSetterArgumentCount, invokeDateMethod } from "../stdlib/date.js"
 import { invokeNumberMethod } from "../stdlib/number.js"
 import { invokeRegExpMethod, matchToValue, toHostRegex } from "../stdlib/regexp.js"
@@ -118,9 +118,11 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
       result = value.trim()
       break
     case "trimStart":
+    case "trimLeft":
       result = value.trimStart()
       break
     case "trimEnd":
+    case "trimRight":
       result = value.trimEnd()
       break
     // Locale/options are deliberately unsupported; comparison uses the host default locale.
@@ -241,6 +243,15 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
     case "substring":
       result = value.substring(optNum(0) ?? 0, optNum(1))
       break
+    case "substr":
+      result = value.substr(optNum(0) ?? 0, optNum(1))
+      break
+    case "isWellFormed":
+      result = value.isWellFormed()
+      break
+    case "toWellFormed":
+      result = value.toWellFormed()
+      break
     case "charCodeAt":
       result = value.charCodeAt(optNum(0) ?? 0)
       break
@@ -280,7 +291,7 @@ const invokeStringReplacer = <R>(
     if (hasGroups) {
       const safeGroups: SafeObject = Object.create(null) as SafeObject
       for (const [key, group] of Object.entries(groups)) {
-        if (!isBlockedMember(key)) safeGroups[key] = group
+        safeGroups[key] = group
       }
       callbackArgs[callbackArgs.length - 1] = safeGroups
     }

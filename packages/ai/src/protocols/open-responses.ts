@@ -405,6 +405,24 @@ export const Event = Schema.StructWithRest(
 export type Event = Schema.Schema.Type<typeof Event>
 export type NormalizedEvent = Event & { readonly item?: OutputItem | null }
 
+const decodeEventValue = Schema.decodeUnknownEffect(Event)
+const decodeFrame = Schema.decodeUnknownEffect(ProviderShared.Json)
+
+/**
+ * Decodes one WebSocket frame. xAI answers a rejected `response.create` with `{ "error": { "message", "type" } }` and no
+ * event type; that envelope reads as an error event so the failure classifies instead of failing decoding.
+ */
+export const decodeChannelEvent = (frame: string) =>
+  decodeFrame(frame).pipe(
+    Effect.flatMap((value) =>
+      decodeEventValue(
+        ProviderShared.isRecord(value) && value.type === undefined && ProviderShared.isRecord(value.error)
+          ? { ...value, type: "error" }
+          : value,
+      ),
+    ),
+  )
+
 export interface ProviderAdapter {
   readonly id: string
   readonly name: string
@@ -655,7 +673,8 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
             type: "message" as const,
             ...(group.id === undefined ? {} : { id: group.id }),
             role: "assistant" as const,
-            status: metadata?.status,
+            // Replayed text is a finished input item, even if generation was cut short.
+            status: "completed",
             content: group.parts.map((part) => ({ type: "output_text" as const, text: part.text })),
             ...(group.phase === undefined ? {} : { phase: group.phase }),
           })),

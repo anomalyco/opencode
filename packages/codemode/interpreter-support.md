@@ -31,8 +31,8 @@ ultimate source of truth.
 - [x] `null`, `undefined`, booleans, finite and non-finite numbers, and strings.
 - [x] Array literals, including holes and spread from arrays, strings, Maps, Sets, URLSearchParams, custom synchronous
       iterators, and synchronous generators.
-- [x] Object literals with shorthand, computed string/number keys, and spread from plain data objects; `null` and
-      `undefined` are no-ops, while arrays are rejected.
+- [x] Object literals with shorthand, computed string/number keys, and spread following ToObject: data objects and
+      arrays copy own enumerable keys, strings copy index keys, and other values contribute nothing.
 - [x] Template literals with interpolation.
 - [x] Regular-expression literals.
 - [x] `NaN` and `Infinity` globals.
@@ -44,18 +44,21 @@ ultimate source of truth.
 
 ## Bindings and destructuring
 
-- [x] `const`, `let`, and accepted `var` declarations.
+- [x] `const`, `let`, and `var` declarations.
 - [x] Object and array destructuring in declarations, parameters, assignment expressions, and `for...of` bindings.
 - [x] Nested patterns, defaults, elisions, and rest elements.
-- [x] Assignment to identifiers, unblocked plain-object fields, non-negative integer array indexes, and writable URL
+- [x] Assignment to identifiers, plain-object fields, non-negative integer array indexes, and writable URL
       fields.
 - [x] Direct function declarations are hoisted in program and block statement lists.
 - [x] Parameter defaults observe a temporal dead zone for later parameters.
-- [ ] JavaScript-correct function scoping, hoisting, and redeclaration for accepted `var` declarations.
+- [x] `var` is function-scoped and hoisted: names declared anywhere in a function or program body, including loop
+      heads, blocks, `switch` cases, and `try`/`catch`, read as `undefined` before their statement runs; redeclaration
+      assigns the one binding; a same-named parameter keeps its argument; closures in parameter defaults see outer
+      names rather than body `var`s.
 - [x] Predeclare `let` and `const` bindings in every lexical scope, including program/block bodies, switch bodies, and
       loop headers, so reads before initialization and self- or cross-referential initializers observe the JavaScript
       temporal dead zone.
-- [ ] Hoist function declarations accepted directly in switch cases.
+- [x] Function declarations are hoisted across all cases of a `switch`, like any other statement list.
 - [x] Computed object destructuring keys such as `const { [field]: value } = record`.
 - [x] Object destructuring from arrays, such as `const { length } = values`.
 - [x] Array binding and assignment destructuring from strings, Maps, Sets, URLSearchParams, custom synchronous
@@ -70,7 +73,7 @@ ultimate source of truth.
 - [x] `for`, `while`, and `do...while`.
 - [x] `for...of` over arrays, strings, Maps, Sets, URLSearchParams, custom synchronous iterators, and confined
       synchronous generators. Abrupt completion invokes the iterator's optional `return()`.
-- [x] `for...in` over own keys of plain objects, arrays, and tool references.
+- [x] `for...in` over own keys of plain objects, arrays, strings, and tool references; other values iterate nothing.
 - [x] Unlabeled `break` and `continue`.
 - [x] `try`, `catch`, optional catch bindings, and `finally`.
 - [x] `throw` with arbitrary values.
@@ -210,13 +213,16 @@ ultimate source of truth.
       primitive wrapper objects (`Object(1)`) are rejected explicitly.
 - [x] Computed property names and object spread.
 - [x] `Object.keys`, `Object.values`, `Object.entries`, `Object.hasOwn`, `Object.assign`, and `Object.fromEntries`, with
-      synchronous iterator support for `fromEntries`.
+      synchronous iterator support for `fromEntries`. Sources follow ToObject: strings enumerate by index, other
+      primitives and wrappers contribute nothing, and `null`/`undefined` throw. `Object.assign` accepts array
+      targets for index keys only; a primitive target is a `TypeError` rather than a boxed object.
 - [x] `Object.keys` over arrays and tool references.
 - [x] Object identity is preserved by in-CodeMode Object helpers.
-- [x] Prototype traversal and mutation through `__proto__`, `constructor`, and `prototype` are blocked.
+- [x] `__proto__`, `constructor`, and `prototype` are ordinary own data keys. `x.constructor` without an own key resolves
+      to the owning built-in (`[].constructor === Array`, `new TypeError().constructor === TypeError`); prototype objects
+      are not observable, so `[].__proto__` and `Object.prototype` read as `undefined` and `o.__proto__ = x` sets an own
+      field.
 - [x] Circular references are rejected when created (`o.self = o`, `array.push(array)`), not at serialization as in JS.
-- [ ] Legal own data fields named `__proto__`, `constructor`, or `prototype` are rejected at JSON/tool boundaries and
-      cannot be created, read, or written in CodeMode; tool path segments with those names remain supported.
 - [x] `Object.is` for supported data values.
 - [x] `Object.groupBy` over finite collections and custom synchronous iterators/generators, with string-key coercion
       and null-prototype results.
@@ -247,12 +253,13 @@ ultimate source of truth.
 ## Strings
 
 - [x] Case/normalization: `toLowerCase`, `toUpperCase`, `normalize`.
-- [x] Trimming: `trim`, `trimStart`, and `trimEnd`.
+- [x] Trimming: `trim`, `trimStart`, and `trimEnd`, plus the Annex B `trimLeft` and `trimRight` aliases.
 - [x] Searching/tests: `includes`, `startsWith`, `endsWith`, `indexOf`, `lastIndexOf`, and `search`.
-- [x] Slicing/access: `slice`, `substring`, `at`, `charAt`, `charCodeAt`, and `codePointAt`.
+- [x] Slicing/access: `slice`, `substring`, Annex B `substr`, `at`, `charAt`, `charCodeAt`, and `codePointAt`.
 - [x] Construction/transformation: `split`, `concat`, `repeat`, `padStart`, `padEnd`, `replace`, and `replaceAll`.
 - [x] Regular-expression integration: `match`, materialized `matchAll`, `replace`, `replaceAll`, `split`, and `search`.
 - [x] `localeCompare`; locale and options arguments are currently ignored.
+- [x] `isWellFormed` and `toWellFormed`.
 - [x] `toString`, `length`, numeric indexing, spread, and `for...of` by Unicode code point.
 - [x] Static `String.fromCharCode` and `String.fromCodePoint`.
 - [x] Native argument coercion for supported String methods; for example, `includes(1)` and `slice("1")` coerce like
@@ -280,23 +287,20 @@ ultimate source of truth.
       use their epoch time) and reject opaque runtime references as data errors.
 - [x] Unknown static members on global namespaces and on `Number`/`String`/the coercion functions read as `undefined`
       for feature detection. Calling any undefined value reports a native-style `TypeError` naming the callee, for
-      example `Math.sum is not a function.` Blocked members (`constructor`, `__proto__`, ...) still throw,
-      and unknown `Promise` statics keep their descriptive error.
+      example `Math.sum is not a function.` Unknown `Promise` statics keep their descriptive error.
 - [x] `Math.sumPrecise` over finite collections and custom synchronous iterators/generators, rejecting non-number
       elements without coercion.
 - [x] Global coercing `isFinite` and `isNaN`; opaque runtime references reject as data errors, like `Number(...)`.
 
 ## JSON and console
 
-- [x] `JSON.parse` and `JSON.stringify` for supported data objects; the blocked data-key gap listed above still applies.
+- [x] `JSON.parse` and `JSON.stringify` for supported data objects.
 - [x] Numeric/string indentation for `JSON.stringify`.
 - [x] `JSON.parse` reviver callbacks, including postorder traversal, deletion through `undefined`, and root replacement.
       Revivers receive `(key, value)` but no `this` holder because CodeMode functions intentionally have no `this`.
 - [x] `JSON.stringify` function and array replacers. Function replacers receive `(key, value)` in preorder, including
       the root, but no `this` holder. Array replacers preserve requested property order, deduplicate names, coerce
       number primitives, and ignore non-string/non-number entries. Primitive wrapper entries remain unsupported.
-- [x] JSON callbacks retain the blocked-key boundary: parsed or stringified data containing `__proto__`, `constructor`,
-      or `prototype` is rejected before callback traversal.
 - [x] Captured `console.log`, `console.info`, `console.debug`, `console.warn`, and `console.error`.
 - [x] Captured `console.dir` and `console.table`.
 
@@ -316,6 +320,7 @@ ultimate source of truth.
 - [x] Local and UTC Date setters, including native argument coercion, mutation, rollover, invalid-Date recovery, and
       `TimeClip` behavior.
 - [x] `Date.prototype.toUTCString` and its `toGMTString` alias.
+- [x] `toDateString` and `toTimeString` in the host's local timezone.
 - [x] Native one-argument Date coercion for supported values, including booleans, null, arrays, and plain objects.
 - [x] Native Date loose-equality and default primitive-coercion semantics, using CodeMode's deterministic ISO string
       representation for the string primitive.
@@ -327,7 +332,7 @@ ultimate source of truth.
 - [x] `test`, `exec`, and `toString`.
 - [x] Readable `source`, `flags`, `lastIndex`, `hasIndices`, `global`, `ignoreCase`, `multiline`, `sticky`, `unicode`,
       `unicodeSets`, and `dotAll`.
-- [x] Captures, safe named groups (blocked member names are omitted), match `.index`, and stateful global matching.
+- [x] Captures, named groups, match `.index`, and stateful global matching.
 - [x] Integration with supported String methods, including function replacers.
 - [x] Writable `lastIndex`.
 - [x] Match `indices` metadata for the `d` flag, including named groups on `exec`, `match`, and `matchAll` results.
@@ -359,6 +364,14 @@ ultimate source of truth.
       `entries`, `toString`, and `size`.
 - [x] URL values serialize to their href; URLSearchParams serialize to `{}`.
 
+## Web platform helpers
+
+- [x] `atob` and `btoa` with forgiving-base64 decoding and WebIDL string conversion; invalid input throws an Error
+      named `InvalidCharacterError`, since there is no `DOMException`.
+- [x] `crypto.randomUUID()`.
+- [ ] `crypto.getRandomValues` and `crypto.subtle`, `TextEncoder`/`TextDecoder`, and `Blob`: these need a binary
+      value type, which the JSON-like data model does not have yet.
+
 ## Errors and diagnostics
 
 - [x] `Error`, `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, and `URIError`, callable with
@@ -375,6 +388,6 @@ ultimate source of truth.
       shift them. The diagnostic names the rejected node type and attaches a short orientation to the supported
       subset; this matrix is the full reference.
 - [x] Model-visible host failure messages and underlying causes, including output-validation errors.
-- [ ] Distinguish user-thrown failures from interpreter defects and explicit tool refusals from internal tool
-      failures; preserve those categories in caught errors, promise rejection handlers, and `Promise.allSettled`
-      reasons.
+- [x] Caught errors do not distinguish user throws, interpreter failures, and tool failures; a program sees one
+      Error-shaped value with `name` and `message` in `catch`, rejection handlers, and `Promise.allSettled` reasons.
+      This is deliberate: the program should handle a failure the same way regardless of where it originated.

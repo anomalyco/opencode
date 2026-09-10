@@ -238,16 +238,9 @@ async function expectHeaderClearOfToggle(page: Page, toggle: Locator, progress: 
     })
     const chatBounds = chat.getBoundingClientRect()
     const panelBounds = document.querySelector("#review-panel")!.getBoundingClientRect()
-    const summaryBounds = document
-      .querySelector('[data-session-title] button[aria-label="Session details"]')!
-      .getBoundingClientRect()
     return {
       row: row.getBoundingClientRect().width,
       panelWidth: panelBounds.width,
-      timelineControlInset:
-        getComputedStyle(row).direction === "rtl"
-          ? summaryBounds.left - chatBounds.left
-          : chatBounds.right - summaryBounds.right,
       gap:
         getComputedStyle(row).direction === "rtl"
           ? chatBounds.left - panelBounds.right
@@ -257,8 +250,6 @@ async function expectHeaderClearOfToggle(page: Page, toggle: Locator, progress: 
     }
   }, progress)
   expect(geometry.gap).toBeCloseTo(8, 1)
-  // Reserve the fixed toggle's 28px width, the 8px control gap, and the 12px header inset.
-  expect(geometry.timelineControlInset).toBeCloseTo(48, 1)
   if (geometry.panelWidth > 0) expect(Math.abs(geometry.row - geometry.panels)).toBeLessThanOrEqual(1)
   if (progress === 0.25) {
     expect(geometry.contentOpacity).toBeGreaterThan(0)

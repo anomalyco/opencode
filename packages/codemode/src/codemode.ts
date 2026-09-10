@@ -105,7 +105,7 @@ export type Result = typeof Result.Type
 
 /** Reusable confined runtime over explicit tools. */
 export type Runtime<R = never> = {
-  readonly catalog: () => ReadonlyArray<ToolDescription>
+  readonly catalog: ReadonlyArray<ToolDescription>
   readonly execute: (code: string) => Effect.Effect<Result, never, R>
 }
 
@@ -134,7 +134,7 @@ export const make = <const Provided extends Record<string, unknown> = {}>(
   const prepared = ToolRuntime.prepare((options.tools ?? {}) as Tools<Services<Provided>>)
   const limits = resolveExecutionLimits(options.limits)
   return {
-    catalog: () => prepared.catalog,
+    catalog: prepared.catalog,
     execute: (code) => executeProgram(code, prepared, limits, options),
   }
 }

@@ -32,6 +32,17 @@ export class PromiseRuntime<R> {
 
   constructor(private readonly scope: Scope.Scope) {}
 
+  // Resolution bodies need the promise's own identity to reject `resolve(promise)` self-resolution.
+  createWithSelf(
+    body: (self: { promise?: Values.Promise }) => Effect.Effect<unknown, unknown, R>,
+  ): Effect.Effect<Values.Promise, never, R> {
+    const self: { promise?: Values.Promise } = {}
+    return Effect.map(this.create(body(self)), (promise) => {
+      self.promise = promise
+      return promise
+    })
+  }
+
   create(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<Values.Promise, never, R> {
     return Effect.suspend(() => {
       // Allocate before forking so reruns get distinct IDs and diagnostics retain creation order.
@@ -126,11 +137,7 @@ export const resolvePromise = <R>(
   node: AstNode,
 ): Effect.Effect<Values.Promise, never, R> => {
   if (value instanceof Values.Promise) return Effect.succeed(value)
-  const box: { promise?: Values.Promise } = {}
-  return Effect.map(promises.create(resolvePromiseValue(runner, value, node, box)), (promise) => {
-    box.promise = promise
-    return promise
-  })
+  return promises.createWithSelf((self) => resolvePromiseValue(runner, value, node, self))
 }
 
 const promiseStatics = ["all", "allSettled", "race", "any", "resolve", "reject"] as const
@@ -254,11 +261,9 @@ const constructPromise = <R>(
   }
   return Effect.gen(function* () {
     const deferred = Deferred.makeUnsafe<unknown, unknown>()
-    const box: { promise?: Values.Promise } = {}
-    const promise = yield* promises.create(
-      Effect.flatMap(Deferred.await(deferred), (value) => resolvePromiseValue(runner, value, node, box)),
+    const promise = yield* promises.createWithSelf((self) =>
+      Effect.flatMap(Deferred.await(deferred), (value) => resolvePromiseValue(runner, value, node, self)),
     )
-    box.promise = promise
     const resolve = capability("resolve", (value) => Deferred.doneUnsafe(deferred, Exit.succeed(value)))
     const reject = capability("reject", (value) => Deferred.doneUnsafe(deferred, Exit.fail(new ProgramThrow(value))))
     const executed = yield* Effect.exit(runner.invokeFunction(executor, [resolve, reject]))
@@ -310,19 +315,16 @@ const chainReaction = <R>(
   method: string,
   node: AstNode,
 ): Effect.Effect<Values.Promise, never, R> => {
-  const box: { promise?: Values.Promise } = {}
-  const body = Effect.gen(function* () {
-    const exit = yield* reactionExit(promises, source)
-    const handler = Exit.isSuccess(exit) ? onFulfilled : onRejected
-    if (handler === undefined) return yield* exit
-    const input = Exit.isSuccess(exit) ? exit.value : caughtErrorValue(Cause.squash(exit.cause))
-    const result = yield* applyCollectionCallback(runner, handler, method, node)([input])
-    return yield* resolvePromiseValue(runner, result, node, box)
-  })
-  return Effect.map(promises.create(body), (derived) => {
-    box.promise = derived
-    return derived
-  })
+  return promises.createWithSelf((self) =>
+    Effect.gen(function* () {
+      const exit = yield* reactionExit(promises, source)
+      const handler = Exit.isSuccess(exit) ? onFulfilled : onRejected
+      if (handler === undefined) return yield* exit
+      const input = Exit.isSuccess(exit) ? exit.value : caughtErrorValue(Cause.squash(exit.cause))
+      const result = yield* applyCollectionCallback(runner, handler, method, node)([input])
+      return yield* resolvePromiseValue(runner, result, node, self)
+    }),
+  )
 }
 
 const chainFinally = <R>(

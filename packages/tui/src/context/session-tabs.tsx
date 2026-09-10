@@ -169,7 +169,12 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           : members.some((id) => (data.session.form.list(id)?.length ?? 0) > 0)
             ? ("question" as const)
             : (false as const),
-        busy: members.some((id) => data.session.status(id) === "running" || data.session.pending.list(id).length > 0),
+        // Parked synthetic context (user shells, plan reminders) stays pending without execution; only work counts as busy.
+        busy: members.some(
+          (id) =>
+            data.session.status(id) === "running" ||
+            data.session.pending.list(id).some((item) => item.type !== "synthetic"),
+        ),
         renaming: data.session.title.pending(session),
       }
     }

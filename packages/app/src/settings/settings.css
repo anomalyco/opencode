@@ -51,6 +51,8 @@
   flex: 1;
   min-width: 0;
   max-width: 720px;
+  /* Leave room for raised card shadows inside the scrollport. */
+  padding-inline: 4px;
 }
 
 .settings-screen .settings-tab-header {

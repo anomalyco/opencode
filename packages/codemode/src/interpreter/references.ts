@@ -108,3 +108,12 @@ export const typeofValue = (value: unknown): string => {
   if (value instanceof ToolReference) return value.path.length > 0 ? "function" : "object"
   return typeof value
 }
+
+const MAX_ARRAY_LENGTH = 4_294_967_295
+
+export const parseArrayIndex = (key: string | number): number | undefined => {
+  const property = String(key)
+  if (!/^(0|[1-9]\d*)$/.test(property)) return undefined
+  const index = Number(property)
+  return index < MAX_ARRAY_LENGTH ? index : undefined
+}

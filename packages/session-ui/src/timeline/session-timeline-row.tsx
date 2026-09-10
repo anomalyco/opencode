@@ -69,7 +69,10 @@ export function createSessionTimelineRowRenderer(input: {
   const patchPartKeys = new WeakMap<SessionMessageAssistant["content"][number], string>()
   const patchOwners = createMemo(() => {
     const owners = new Map<string, string>()
-    input.projection.rows().forEach((row) => {
+    const rows = input.projection.rows()
+    // Track status changes before a group is first opened: a failed patch can
+    // split an existing group without changing the projection's row identities.
+    rows.forEach((row) => {
       if (row._tag !== "AssistantPart" || row.group.type !== "context") return
       row.group.refs.forEach((ref) => {
         const content = Timeline.resolveContent(input.projection.messageByID().get(ref.messageID), ref.partID)
@@ -97,10 +100,15 @@ export function createSessionTimelineRowRenderer(input: {
   }
   const copyContentID = (messageID: string) => {
     if (workingTurn(messageID)) return null
-    return (input.projection.assistantMessagesByParent().get(messageID) ?? emptyAssistantMessages)
-      .toReversed()
-      .flatMap((message) => Timeline.contentEntries(message).toReversed())
-      .find((entry) => entry.content.type === "text" && !!entry.content.text.trim())?.id
+    const message = input.projection
+      .assistantMessagesByParent()
+      .get(messageID)
+      ?.findLast((message) => message.content.some((content) => content.type === "text" && !!content.text.trim()))
+    return message
+      ? Timeline.contentEntries(message).findLast(
+          (entry) => entry.content.type === "text" && !!entry.content.text.trim(),
+        )?.id
+      : undefined
   }
   const padding = () => input.padding?.() ?? "px-4 md:px-5"
   const indexGroupContents = (refs: PartRef[]) => {

@@ -349,6 +349,7 @@ export function SessionSummaryPanel(props: {
 
 type MessageTimelineProps = {
   hideHeader?: boolean
+  active?: boolean
   session: TimelineSessionSource
   background: SessionBackground
   actions?: SessionUserActions
@@ -363,6 +364,7 @@ type MessageTimelineProps = {
   onSelectionInteraction: (event: MouseEvent) => void
   pinned: boolean
   centered: boolean
+  reserveReviewToggle: boolean
   setContentRef: (el: HTMLDivElement) => void
   diffs: Accessor<{ additions: number; deletions: number }[] | undefined>
   onReview: () => void
@@ -458,6 +460,7 @@ function MessageTimelineView(
   const pinned = createMemo(() => props.pinned)
   const messageByID = projection.messageByID
   const virtualized = createTimelineVirtualizer({
+    active: () => props.active !== false,
     sessionKey: () => `${server.key}/${props.data.sessionID()}`,
     presentationKey: () => JSON.stringify(props.data.timelineDetail()),
     projection,
@@ -550,6 +553,12 @@ function MessageTimelineView(
     if (!title.editing || props.pending.rename()) return
     if (await props.action.rename(title.draft)) setTitle("editing", false)
   }
+
+  createEffect(() => {
+    if (props.active !== false) return
+    setSummary(false)
+    setTitle({ draft: "", editing: false, menuOpen: false, pendingRename: false })
+  })
 
   const rowRenderer = createSessionTimelineRowRenderer({
     sessionID: () => sessionID()!,
@@ -845,7 +854,7 @@ function MessageTimelineView(
                         </Popover>
                       )}
                     </Show>
-                    <SessionHeader />
+                    <SessionHeader reserveReviewToggle={props.reserveReviewToggle} />
                   </div>
                 )}
               </Show>

@@ -6,7 +6,7 @@ import { StatusPopover } from "@/shell/status/status-popover"
 import { TitlebarRight } from "@/shell/titlebar/right-slot"
 import { Tooltip } from "@opencode/ui/tooltip"
 
-export function SessionHeader() {
+export function SessionHeader(props: { reserveReviewToggle: boolean }) {
   const language = useLanguage()
   const settings = useSettings()
 
@@ -21,8 +21,7 @@ export function SessionHeader() {
           </Tooltip>
         </Show>
       </TitlebarRight>
-      {/* Keep the fixed toggle's slot mounted throughout panel motion. */}
-      <Show when={isDesktop()}>
+      <Show when={isDesktop() && props.reserveReviewToggle}>
         <div class="size-7 shrink-0" aria-hidden />
       </Show>
     </>

@@ -29,6 +29,8 @@ export const dateMethods = new Set([
   "toISOString",
   "toJSON",
   "toString",
+  "toDateString",
+  "toTimeString",
   "toUTCString",
   "toGMTString",
   "getFullYear",
@@ -103,6 +105,10 @@ export const invokeDateMethod = (
       return Number.isFinite(value.time) ? hosted.toISOString() : null
     case "toString":
       return coerceToString(value)
+    case "toDateString":
+      return hosted.toDateString()
+    case "toTimeString":
+      return hosted.toTimeString()
     case "toUTCString":
     case "toGMTString":
       return hosted.toUTCString()

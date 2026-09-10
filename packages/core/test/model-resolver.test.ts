@@ -169,19 +169,19 @@ describe("ModelResolver", () => {
     ),
   )
 
-  it.effect("maps Bedrock Mantle models to native Responses and safeguards to Chat", () =>
+  it.effect("maps Bedrock Mantle GPT-OSS models to Chat and other models to Responses", () =>
     Effect.gen(function* () {
       const credential = Credential.Key.make({ type: "key", key: "secret" })
       const responses = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
-          modelID: "openai.gpt-oss-120b",
+          modelID: "openai.gpt-5.5",
           settings: { region: "us-east-2" },
         }),
         credential,
       )
       const chat = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
-          modelID: "openai.gpt-oss-safeguard-20b",
+          modelID: "openai.gpt-oss-20b",
           settings: { region: "us-east-2" },
         }),
         credential,
@@ -1041,7 +1041,7 @@ describe("ModelResolver", () => {
         ["@ai-sdk/amazon-bedrock", "@opencode/ai/providers/amazon-bedrock", "api-model"],
         [
           "@ai-sdk/amazon-bedrock/mantle",
-          "@opencode/ai/providers/amazon-bedrock/mantle/responses",
+          "@opencode/ai/providers/amazon-bedrock/mantle/chat",
           "openai.gpt-oss-120b",
         ],
         ["@ai-sdk/azure", "@opencode/ai/providers/azure/responses", "api-model"],
@@ -1271,7 +1271,7 @@ describe("ModelResolver", () => {
       expect(bedrock.route.id).toBe("bedrock-converse")
       expect(bedrock.route.defaults.generation).toEqual({ topP: 0.8 })
       expect(bedrock.route.defaults.http?.body).toEqual({ serviceTier: { type: "priority" } })
-      expect(mantle.route.id).toBe("bedrock-mantle-responses")
+      expect(mantle.route.id).toBe("bedrock-mantle-chat")
       expect(mantle.route.defaults.generation).toEqual({ topP: 0.6 })
     }),
   )

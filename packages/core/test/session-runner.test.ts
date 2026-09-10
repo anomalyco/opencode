@@ -20,6 +20,7 @@ import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { AnthropicMessages, OpenAIResponses } from "@opencode/ai/protocols"
 import { compileRequest } from "@opencode/ai/route/client"
 import { TestLLM } from "@opencode/ai/testing"
+import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Catalog } from "@opencode/core/catalog"
 import { Database } from "@opencode/core/database/database"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -2411,15 +2412,16 @@ describe("SessionRunnerLLM", () => {
           model: { id: ID.make(s.currentModel.id), providerID: Provider.ID.make(s.currentModel.provider), variant },
         })
         const requestAgents: Agent.ID[] = []
-        yield* hooks.register("session", "context", (event) =>
+        const hook = (event: SessionHooks["context"]) =>
           Effect.sync(() => {
             expect(event.agent).toBe(agentID)
             expect(event.model.variant).toBe(variant)
             event.system.push(SystemPart.make("Hook-provided instructions"))
             event.tools.echo.description = "Hook-provided tool description"
             event.options.maxTokens = 4_000
-          }),
-        )
+          })
+        yield* hooks.register("session", "context", hook)
+        yield* hooks.register("session", "compaction", hook)
         yield* hooks.register("session", "model.request", (event) =>
           Effect.sync(() => {
             requestAgents.push(event.agent)

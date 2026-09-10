@@ -175,7 +175,7 @@ describe("AISDKNative", () => {
       settings: { region: "us-east-1" },
     })
     expect(map("@ai-sdk/amazon-bedrock/mantle", { region: "us-east-1" }, "openai.gpt-oss-120b")).toEqual({
-      package: "@opencode/ai/providers/amazon-bedrock/mantle/responses",
+      package: "@opencode/ai/providers/amazon-bedrock/mantle/chat",
       settings: { region: "us-east-1" },
     })
   })
@@ -287,7 +287,7 @@ describe("AISDKNative", () => {
     }
 
     expect(map("@ai-sdk/amazon-bedrock/mantle", settings, "openai.gpt-oss-120b")).toEqual({
-      package: "@opencode/ai/providers/amazon-bedrock/mantle/responses",
+      package: "@opencode/ai/providers/amazon-bedrock/mantle/chat",
       settings: {
         apiKey: "token",
         baseURL: "https://mantle.test/v1",
@@ -336,7 +336,7 @@ describe("AISDKNative", () => {
         "openai.gpt-oss-120b",
       ),
     ).toEqual({
-      package: "@opencode/ai/providers/amazon-bedrock/mantle/responses",
+      package: "@opencode/ai/providers/amazon-bedrock/mantle/chat",
       settings: {
         credentials: {
           accessKeyId: "key",
