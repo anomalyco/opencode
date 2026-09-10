@@ -369,6 +369,9 @@ ultimate source of truth.
 - [x] `atob` and `btoa` with forgiving-base64 decoding and WebIDL string conversion; invalid input throws an Error
       named `InvalidCharacterError`, since there is no `DOMException`.
 - [x] `crypto.randomUUID()`.
+- [x] `structuredClone` over the data model: objects, arrays with holes, Date, RegExp (`lastIndex` reset), Map, Set,
+      URL, URLSearchParams, and Errors (name, message, and cause only); shared references stay shared within one
+      clone; functions, promises, and tool references throw an Error named `DataCloneError`.
 - [ ] `crypto.getRandomValues` and `crypto.subtle`, `TextEncoder`/`TextDecoder`, and `Blob`: these need a binary
       value type, which the JSON-like data model does not have yet.
 

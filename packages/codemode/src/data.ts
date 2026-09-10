@@ -138,6 +138,6 @@ const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Se
 
 // Own data property regardless of the target's prototype, so a "__proto__" key on a host object or
 // array never reaches the Object.prototype setter.
-const define = (target: object, key: string, value: unknown): void => {
+export const define = (target: object, key: string, value: unknown): void => {
   Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true })
 }
