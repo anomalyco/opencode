@@ -1944,7 +1944,16 @@ describe("SessionRunnerLLM", () => {
     expect(yield* entries.list(sessionID)).toEqual([{ key: "nullable", value: null }])
   })
 
-  scenario("rejects API instruction entries larger than 8KB", function* () {
+  scenario("accepts API instruction entries up to 256 KiB", function* () {
+    const entries = yield* InstructionEntry.Service
+    const value = "x".repeat(InstructionEntry.MaxValueBytes - 2)
+
+    yield* entries.put({ sessionID, key: "large", value })
+
+    expect(yield* entries.list(sessionID)).toEqual([{ key: "large", value }])
+  })
+
+  scenario("rejects API instruction entries larger than 256 KiB", function* () {
     const entries = yield* InstructionEntry.Service
 
     const exit = yield* entries
