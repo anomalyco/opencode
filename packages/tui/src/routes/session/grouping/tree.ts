@@ -18,24 +18,38 @@ export function groupEntries<Entry, Kind extends string>(
   entries: readonly Entry[],
   path: (entry: Entry) => readonly Kind[],
 ): readonly GroupNode<Entry, Kind>[] {
-  const result: GroupNode<Entry, Kind>[] = []
-  // Only fresh groups are mutable during construction. No input tree is edited.
-  const stack: { type: "group"; kind: Kind; children: GroupNode<Entry, Kind>[]; size: number }[] = []
+  const result: BuildingNode<Entry, Kind>[] = []
   entries.forEach((entry) => {
-    const kinds = path(entry)
-    const shared = kinds.findIndex((kind, depth) => stack[depth]?.kind !== kind)
-    stack.length = shared === -1 ? kinds.length : shared
-    kinds.slice(stack.length).forEach((kind) => {
-      const group = { type: "group" as const, kind, children: [] as GroupNode<Entry, Kind>[], size: 0 }
-      const children = stack.at(-1)?.children ?? result
-      children.push(group)
-      stack.push(group)
-    })
-    stack.forEach((group) => group.size++)
-    const children = stack.at(-1)?.children ?? result
-    children.push({ type: "entry", entry, size: 1 })
+    appendEntry(result, entry, path(entry))
   })
   return result
+}
+
+// Only freshly constructed nodes are writable; the published tree is readonly.
+type BuildingNode<Entry, Kind extends string> =
+  | { type: "entry"; entry: Entry; size: 1 }
+  | { type: "group"; kind: Kind; children: BuildingNode<Entry, Kind>[]; size: number }
+
+function appendEntry<Entry, Kind extends string>(
+  nodes: BuildingNode<Entry, Kind>[],
+  entry: Entry,
+  path: readonly Kind[],
+  depth = 0,
+) {
+  const kind = path[depth]
+  if (kind === undefined) {
+    nodes.push({ type: "entry", entry, size: 1 })
+    return
+  }
+  const previous = nodes.at(-1)
+  if (previous?.type === "group" && previous.kind === kind) {
+    previous.size++
+    appendEntry(previous.children, entry, path, depth + 1)
+    return
+  }
+  const children: BuildingNode<Entry, Kind>[] = []
+  appendEntry(children, entry, path, depth + 1)
+  nodes.push({ type: "group", kind, children, size: 1 })
 }
 
 /**
