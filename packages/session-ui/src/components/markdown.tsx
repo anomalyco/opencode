@@ -683,6 +683,17 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
     })
   }
 
+  if (block.mode === "full") {
+    next.querySelectorAll<HTMLElement>("pre > code.language-mermaid").forEach((code) => {
+      const pre = code.parentElement!
+      const wrapper = document.createElement("div")
+      wrapper.setAttribute("data-component", "markdown-code")
+      pre.replaceWith(wrapper)
+      wrapper.appendChild(pre)
+      decorateMermaid(wrapper, code, true)
+    })
+  }
+
   if (existing) return
   if (!current) {
     container.appendChild(next)
