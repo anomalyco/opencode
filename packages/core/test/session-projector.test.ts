@@ -549,19 +549,19 @@ describe("SessionProjector", () => {
     Effect.gen(function* () {
       const db = yield* seedSession()
       const bus = yield* Bus.Service
-      const suspended = () =>
+      const claim = () =>
         db
-          .select({ timeSuspended: SessionTable.time_suspended })
+          .select({ executionClaimedAt: SessionTable.execution_claimed_at })
           .from(SessionTable)
           .where(eq(SessionTable.id, sessionID))
           .get()
           .pipe(Effect.orDie)
 
       yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: "shutdown" })
-      expect((yield* suspended())?.timeSuspended).toBeNull()
+      expect((yield* claim())?.executionClaimedAt).toBeNull()
 
       yield* bus.publish(SessionEvent.Execution.Started, { sessionID })
-      expect((yield* suspended())?.timeSuspended).toBeNull()
+      expect((yield* claim())?.executionClaimedAt).toBeNull()
     }),
   )
 

@@ -62,17 +62,17 @@ export const SessionTable = sqliteTable(
     idle_outcome: text().$type<NonNullable<Session.Info["outcome"]>>(),
     time_compacting: integer(),
     time_archived: integer(),
-    /** The execution claim timestamp (historical column name; see SessionStore.claim). */
-    time_suspended: integer(),
+    /** Write-ahead recovery marker; see SessionStore.claim. */
+    execution_claimed_at: integer(),
     resume_attempts: integer().notNull().default(0),
   },
   (table) => [
     index("session_v2_project_idx").on(table.project_id),
     index("session_v2_workspace_idx").on(table.workspace_id),
     index("session_v2_parent_idx").on(table.parent_id),
-    index("session_v2_time_suspended_idx")
-      .on(table.time_suspended)
-      .where(sql`${table.time_suspended} is not null`),
+    index("session_v2_execution_claimed_at_idx")
+      .on(table.execution_claimed_at)
+      .where(sql`${table.execution_claimed_at} is not null`),
   ],
 )
 

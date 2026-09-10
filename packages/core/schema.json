@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "be60f352-8da1-40e1-8d70-dc41121cfbc5",
-  "prevIds": ["3fb67508-0196-4bae-b2bd-c08ece7583fd"],
+  "id": "7f833e4e-de8a-4792-a726-e70daa8b5a4e",
+  "prevIds": ["be60f352-8da1-40e1-8d70-dc41121cfbc5"],
   "ddl": [
     {
       "name": "account_state",
@@ -1406,7 +1406,7 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
-      "name": "time_suspended",
+      "name": "execution_claimed_at",
       "entityType": "columns",
       "table": "session_v2"
     },
@@ -2041,17 +2041,17 @@
     {
       "columns": [
         {
-          "value": "time_suspended",
+          "value": "execution_claimed_at",
           "isExpression": false
         }
       ],
       "isUnique": false,
-      "where": "\"session_v2\".\"time_suspended\" is not null",
+      "where": "\"session_v2\".\"execution_claimed_at\" is not null",
       "origin": "manual",
-      "name": "session_v2_time_suspended_idx",
+      "name": "session_v2_execution_claimed_at_idx",
       "entityType": "indexes",
       "table": "session_v2"
     }
   ],
-  "renames": []
+  "renames": ["session_v2.time_suspended->session_v2.execution_claimed_at"]
 }
