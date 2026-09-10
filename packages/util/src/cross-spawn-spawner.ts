@@ -220,6 +220,12 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     Effect.suspend(() => {
       let sink: Sink.Sink<void, unknown, never, PlatformError.PlatformError> = Sink.drain
       if (Predicate.isNotNull(proc.stdin)) {
+        // A child that exits before its stdin is flushed surfaces EPIPE asynchronously through the
+        // stream's destroy path after the sink has already completed. With no listener attached at
+        // that point the error event is process-fatal: a single misconfigured MCP server command
+        // crash-loops the whole background service. Failures during active writes still reach the
+        // sink through its own error handling below.
+        proc.stdin.on("error", () => {})
         sink = NodeSink.fromWritable({
           evaluate: () => proc.stdin!,
           onError: (err) => toPlatformError("fromWritable(stdin)", toError(err), command),

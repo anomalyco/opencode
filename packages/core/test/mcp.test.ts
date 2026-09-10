@@ -628,6 +628,32 @@ test("reports a local MCP server as failed when the location has no execution pl
   )
 })
 
+test("survives a local MCP command that dies before reading stdin", async () => {
+  // The transport flushes the initialize frame into the child's stdin as it exits; the broken
+  // pipe surfaces EPIPE asynchronously, after connect already failed. Unguarded, that error had
+  // no listener and killed the whole process, crash-looping the background service over a single
+  // misconfigured server. The connects are concurrent because the escape is racy.
+  const config = new ConfigMCP.Local({
+    type: "local",
+    command: ["bun", "run", "--cwd", "/nonexistent/mcp/dir", "--silent", "start"],
+  })
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.forEach(
+        ["one", "two", "three", "four"],
+        (name) =>
+          Effect.gen(function* () {
+            const exit = yield* Effect.exit(Effect.scoped(connect(name, config, import.meta.dir)))
+            expect(Exit.isFailure(exit)).toBe(true)
+          }),
+        { concurrency: "unbounded" },
+      )
+      // Give the async destroy path time to deliver a late EPIPE before the test ends.
+      yield* Effect.sleep(1_000)
+    }),
+  )
+})
+
 test("rejects sends before the stdio transport is started", async () => {
   await Effect.runPromise(
     Effect.scoped(
