@@ -1261,7 +1261,20 @@ describe("SessionTransfer", () => {
               type: "assistant",
               agent: Agent.ID.make("build"),
               model,
-              content: [],
+              content: [
+                { type: "text", text: "Read the file" },
+                {
+                  type: "tool",
+                  id: "call_transfer_read",
+                  name: "read",
+                  state: {
+                    status: "completed",
+                    input: { filePath: "/project/README.md" },
+                    content: [{ type: "text", text: "File contents" }],
+                  },
+                  time: { created: DateTime.makeUnsafe(3), completed: DateTime.makeUnsafe(4) },
+                },
+              ],
               time: { created: DateTime.makeUnsafe(3), completed: DateTime.makeUnsafe(4) },
             },
             {
@@ -1312,6 +1325,14 @@ describe("SessionTransfer", () => {
         completedCompactionID,
       ])
       expect(yield* Bus.latestSequence(db, sessionID)).toBe(4)
+      const data = yield* transfer.export({ sessionID })
+      const copy = yield* transfer.import({ data, location })
+      const copied = yield* session.messages({ sessionID: copy.id, order: "asc" })
+      expect(copy.id).not.toBe(sessionID)
+      expect(copied).toHaveLength(data.messages.length)
+      expect(new Set(copied.map((message) => message.id)).size).toBe(copied.length)
+      expect(copied.every((message) => !data.messages.some((source) => source.id === message.id))).toBe(true)
+      expect(copied.map(({ id, ...message }) => message)).toEqual(data.messages.map(({ id, ...message }) => message))
     }),
   )
 
@@ -1399,16 +1420,48 @@ describe("SessionTransfer", () => {
     }),
   )
 
-  it.effect("rejects an existing session ID without changing its transcript", () =>
+  it.effect("copies an existing session with fresh message IDs into another location", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
       const transfer = yield* SessionTransfer.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
       const existing = yield* session.create({ location, title: "Existing" })
-      const exit = yield* Effect.exit(transfer.import({ data: { info: existing, messages: [] }, location }))
+      yield* session.prompt({ sessionID: existing.id, text: "Original prompt", resume: false })
+      yield* SessionInbox.promote(db, bus, existing.id, "steer")
+      const data = yield* transfer.export({ sessionID: existing.id })
+      const destination = Location.Ref.make({ directory: AbsolutePath.make("/another-project") })
+      const imported = yield* transfer.import({ data, location: destination })
+      const copy = yield* session.messages({ sessionID: imported.id, order: "asc" })
 
-      expect(exit._tag).toBe("Failure")
-      expect((yield* session.get(existing.id)).title).toBe("Existing")
-      expect(yield* session.messages({ sessionID: existing.id })).toEqual([])
+      expect(imported.id).not.toBe(existing.id)
+      expect(imported).toMatchObject({ title: "Existing", location: destination })
+      expect(copy).toHaveLength(1)
+      const first = copy[0]
+      const original = data.messages[0]
+      if (!first || !original) throw new Error("Expected original and copied messages")
+      expect(first.id).not.toBe(original.id)
+      expect(first).toEqual({ ...original, id: first.id })
+      expect(yield* session.get(existing.id)).toEqual(data.info)
+      expect(yield* session.messages({ sessionID: existing.id, order: "asc" })).toEqual([...data.messages])
+      expect(yield* Bus.latestSequence(db, imported.id)).toBe(1)
+
+      yield* session.prompt({ sessionID: imported.id, text: "Continue copy", resume: false })
+      yield* SessionInbox.promote(db, bus, imported.id, "steer")
+      expect(yield* session.messages({ sessionID: imported.id, order: "asc" })).toMatchObject([
+        Expected.user("Original prompt"),
+        Expected.user("Continue copy"),
+      ])
+      expect(yield* session.messages({ sessionID: existing.id, order: "asc" })).toEqual([...data.messages])
+
+      const repeated = yield* transfer.import({ data, location: destination })
+      expect(repeated.id).not.toBe(existing.id)
+      expect(repeated.id).not.toBe(imported.id)
+      const repeatedMessages = yield* session.messages({ sessionID: repeated.id, order: "asc" })
+      expect(repeatedMessages).toHaveLength(1)
+      expect(repeatedMessages[0]?.id).toBeDefined()
+      expect(repeatedMessages[0]?.id).not.toBe(first.id)
+      expect(repeatedMessages[0]?.id).not.toBe(original.id)
     }),
   )
 
