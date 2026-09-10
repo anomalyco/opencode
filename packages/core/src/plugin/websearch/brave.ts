@@ -33,7 +33,7 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
       })
       editor.method.update({
         integrationID: "brave",
-        method: { type: "env", names: ["BRAVE_API_KEY"] },
+        method: { type: "env", names: ["BRAVE_API_KEY", "BRAVE_SEARCH_API_KEY"] },
       })
     })
 
@@ -77,7 +77,7 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
             if (!key)
               return yield* Effect.fail(
                 new Error(
-                  "Brave Search requires an API key. Set BRAVE_API_KEY or add a key to the Brave Search integration.",
+                  "Brave Search requires an API key. Set BRAVE_API_KEY or BRAVE_SEARCH_API_KEY, or add a key to the Brave Search integration.",
                 ),
               )
 

@@ -322,7 +322,7 @@ describe("built-in web search providers", () => {
       expect(yield* integrations.get(Integration.ID.make("brave"))).toMatchObject({
         id: "brave",
         name: "Brave Search",
-        methods: [{ type: "key" }, { type: "env", names: ["BRAVE_API_KEY"] }],
+        methods: [{ type: "key" }, { type: "env", names: ["BRAVE_API_KEY", "BRAVE_SEARCH_API_KEY"] }],
       })
 
       expect(yield* websearch.query({ query: "effect typescript", providerID: WebSearch.ID.make("brave") })).toEqual(
