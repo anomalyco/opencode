@@ -15,7 +15,7 @@ import { Effect } from "effect"
 
 type PermissionEvent = Extract<Event, { type: "permission.asked" }>
 type Reply = "once" | "always" | "reject"
-type Connection = Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
+type Connection = Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile" | "sessionUpdate">>
 
 const permissionOptions: PermissionOption[] = [
   { optionId: "once", kind: "allow_once", name: "Allow once" },
@@ -31,6 +31,7 @@ export class Handler {
       sdk: OpencodeClient
       connection: Connection
       session: ACPSession.Interface
+      isV2?: () => boolean
     },
   ) {}
 
@@ -58,20 +59,41 @@ export class Handler {
       return
     }
 
-    const result = await this.input.connection
-      .requestPermission({
-        sessionId: permission.sessionID,
-        toolCall: await permissionToolCall({
-          toolCallId: permission.tool?.callID ?? permission.id,
-          toolName: permission.permission,
-          input: permission.metadata,
-        }),
-        options: permissionOptions,
-      })
-      .catch(async () => {
-        await this.reply(permission.id, "reject", session.cwd)
-        return undefined
-      })
+    const toolCall = await permissionToolCall({
+      toolCallId: permission.tool?.callID ?? permission.id,
+      toolName: permission.permission,
+      input: permission.metadata,
+    })
+    const title = permissionTitle(permission.permission, permission.metadata) ?? permission.permission
+
+    // v2: emit requires_action before requesting permission, running after resolution.
+    if (this.input.isV2?.()) {
+      await this.emitStateUpdate(permission.sessionID, "requires_action")
+    }
+
+    // v2: title is required, subject is a tagged union (type: tool_call / type: command).
+    // v1: bare toolCall field, no title/description separation.
+    const params = this.input.isV2?.()
+      ? ({
+          sessionId: permission.sessionID,
+          title,
+          subject: { type: "tool_call", toolCall },
+          options: permissionOptions,
+        } as unknown as Parameters<NonNullable<Connection["requestPermission"]>>[0])
+      : {
+          sessionId: permission.sessionID,
+          toolCall,
+          options: permissionOptions,
+        }
+
+    const result = await this.input.connection.requestPermission(params).catch(async () => {
+      await this.reply(permission.id, "reject", session.cwd)
+      return undefined
+    })
+
+    if (this.input.isV2?.()) {
+      await this.emitStateUpdate(permission.sessionID, "running")
+    }
 
     if (!result) return
 
@@ -86,6 +108,16 @@ export class Handler {
     }
 
     await this.reply(permission.id, reply, session.cwd)
+  }
+
+  private async emitStateUpdate(sessionId: string, state: "requires_action" | "running") {
+    if (!this.input.connection.sessionUpdate) return
+    await this.input.connection
+      .sessionUpdate({
+        sessionId,
+        update: { sessionUpdate: "state_update", state },
+      } as unknown as Parameters<NonNullable<Connection["sessionUpdate"]>>[0])
+      .catch(() => {})
   }
 
   private async reply(requestID: string, reply: Reply, directory: string) {

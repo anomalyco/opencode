@@ -22,10 +22,9 @@ import {
   type ResumeSessionRequest,
   type ResumeSessionResponse,
   type SessionInfo,
+  type SessionNotification,
   type SetSessionConfigOptionRequest,
   type SetSessionConfigOptionResponse,
-  type SetSessionModelRequest,
-  type SetSessionModelResponse,
   type SetSessionModeRequest,
   type SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
@@ -34,13 +33,14 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import type { AssistantMessage, Message, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
 import * as ACPError from "./error"
-import { buildConfigOptions, parseModelSelection } from "./config-option"
+import { buildConfigOptions, parseModelSelection, toV2ConfigOptions } from "./config-option"
 import { promptContentToParts } from "./content"
 import { Directory } from "./directory"
 import { ACPEvent } from "./event"
 import { ACPSession } from "./session"
 import { UsageService } from "./usage"
 import { ACPProfile } from "./profile"
+import { Identifier } from "@/id/id"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Provider } from "@/provider/provider"
@@ -49,8 +49,18 @@ import type { Command } from "@/command"
 export const AuthMethodID = "opencode-login"
 
 export type Error = ACPError.Error
-type ServiceConnection = Pick<AgentSideConnection, "sessionUpdate"> &
+export type ServiceConnection = Pick<AgentSideConnection, "sessionUpdate"> &
   Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
+
+// SDK 1.3.0 removed the unstable SetSessionModelRequest type. This is an
+// opencode-specific extension method for LLM model selection (distinct from
+// session mode selection). The modelId field carries a provider/model string
+// like "anthropic/claude-3.5-sonnet".
+type SetSessionModelRequest = {
+  sessionId: string
+  modelId: string
+}
+type SetSessionModelResponse = Record<string, never>
 
 export type Interface = {
   readonly initialize: (input: InitializeRequest) => Effect.Effect<InitializeResponse, Error>
@@ -68,6 +78,7 @@ export type Interface = {
   readonly setSessionModel: (input: SetSessionModelRequest) => Effect.Effect<SetSessionModelResponse, Error>
   readonly prompt: (input: PromptRequest) => Effect.Effect<PromptResponse, Error>
   readonly cancel: (input: CancelNotification) => Effect.Effect<void, Error>
+  readonly logout: () => Effect.Effect<void, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ACP/Service") {}
@@ -79,17 +90,63 @@ export function make(input: {
   session?: ACPSession.Interface
   usage?: UsageService.Interface
   eventSubscription?: (subscription: ACPEvent.Subscription) => void
+  v2?: boolean
 }): Interface {
   const session = input.session ?? makeSessionService()
   const directoryService = input.directory ?? makeDirectoryService(input.sdk)
   const registeredMcp = new Map<string, Set<string>>()
   const sessionSnapshots = new Map<string, Directory.Snapshot>()
+  // ACP over stdio is inherently single-connection-per-process: the CLI's
+  // ndJsonStream binds one stdin/stdout pair to one router.connect() call.
+  // `v2Active` is therefore connection-scoped in practice. If multi-connection
+  // transport (e.g. WebSocket) is added, this must be keyed by connection ID.
+  let v2Active = false
+  // Track sessions that already have a running state_update so onBusy doesn't
+  // emit a duplicate after the eager emission on prompt acceptance.
+  const v2Running = new Set<string>()
+  const onBusy = Effect.fn("ACP.v2.onBusy")(function* (sessionId: string) {
+    if (v2Running.has(sessionId)) return
+    v2Running.add(sessionId)
+    yield* emitV2StateUpdate(input.connection, sessionId, "running")
+  })
+  const onIdle = Effect.fn("ACP.v2.onIdle")(function* (sessionId: string) {
+    const current = yield* session.tryGet(sessionId)
+    if (!current) return
+    yield* sendUsageUpdate(input.usage, input.sdk, input.connection, sessionId, current.cwd)
+    const messages = yield* request(
+      () => input.sdk.session.messages({ sessionID: sessionId, directory: current.cwd }, { throwOnError: true }),
+      "session",
+    ).pipe(
+      Effect.catch(() =>
+        Effect.logError("v2 idle: failed to fetch messages", { sessionId }).pipe(Effect.as(undefined)),
+      ),
+    )
+    const info = messages
+      ? UsageService.latestAssistantMessage(messages as readonly UsageService.SessionMessage[])
+      : undefined
+    yield* emitV2StateUpdate(input.connection, sessionId, "idle", stopReasonForMessage(info))
+    v2Running.delete(sessionId)
+  })
   const events = input.connection
-    ? ACPEvent.start({ sdk: input.sdk, connection: input.connection, session })
+    ? ACPEvent.start({
+        sdk: input.sdk,
+        connection: input.connection,
+        session,
+        isV2: () => v2Active,
+        onBusy,
+        onIdle,
+      })
     : undefined
   if (events) input.eventSubscription?.(events)
   const runUntilIdle = <A>(sessionId: string, fn: () => Promise<A>) =>
     events ? events.runUntilIdle(sessionId, fn) : fn()
+
+  // v2 renames config option `id` to `configId`. Applied at the boundary so
+  // internal code keeps using the v1 field name.
+  const responseConfigOptions = (snapshot: Directory.Snapshot, state: ConfigState) => {
+    const options = configOptions(snapshot, state)
+    return v2Active ? toV2ConfigOptions(options) : options
+  }
 
   const initialize = Effect.fn("ACP.initialize")(function* (params: InitializeRequest) {
     const started = performance.now()
@@ -99,7 +156,12 @@ export function make(input: {
       id: AuthMethodID,
     }
 
-    if (params.clientCapabilities?._meta?.["terminal-auth"] === true) {
+    // v2 clients send `capabilities` (not `clientCapabilities`); the v1 SDK schema strips it,
+    // so read it back from the raw params to detect the terminal-auth capability in either form.
+    const rawCapabilities = (params as unknown as { capabilities?: { _meta?: Record<string, unknown> } }).capabilities
+    const terminalAuth =
+      params.clientCapabilities?._meta?.["terminal-auth"] === true || rawCapabilities?._meta?.["terminal-auth"] === true
+    if (terminalAuth) {
       authMethod._meta = {
         "terminal-auth": {
           command: "opencode",
@@ -107,6 +169,32 @@ export function make(input: {
           label: "OpenCode Login",
         },
       }
+    }
+
+    if (input.v2 && params.protocolVersion === 2) {
+      v2Active = true
+      const v2AuthMethod = {
+        methodId: AuthMethodID,
+        type: "agent" as const,
+        name: "Login with opencode",
+        description: "Run `opencode auth login` in the terminal",
+        ...(terminalAuth ? { _meta: authMethod._meta } : {}),
+      }
+      const v2Response = {
+        protocolVersion: 2,
+        info: { name: "OpenCode", version: InstallationVersion },
+        capabilities: {
+          session: {
+            prompt: { image: {}, embeddedContext: {} },
+            mcp: { http: {}, stdio: {} },
+            delete: {},
+            additionalDirectories: {},
+          },
+        },
+        authMethods: [v2AuthMethod],
+      }
+      ACPProfile.duration("acp.initialize", started)
+      return v2Response as unknown as InitializeResponse
     }
 
     const response = {
@@ -198,7 +286,7 @@ export function make(input: {
 
     const response = {
       sessionId: state.id,
-      configOptions: configOptions(snapshot, {
+      configOptions: responseConfigOptions(snapshot, {
         model: state.model ?? selected,
         variant: state.variant,
         modeId: state.modeId,
@@ -235,7 +323,7 @@ export function make(input: {
     yield* replayMessages(events, messages)
 
     return {
-      configOptions: configOptions(snapshot, {
+      configOptions: responseConfigOptions(snapshot, {
         model: state.model ?? model,
         variant: state.variant,
         modeId: state.modeId,
@@ -257,23 +345,19 @@ export function make(input: {
         ),
       "session",
     )
-    const serverEntries = sessions.map(
-      (item): SessionInfo => ({
-        sessionId: item.id,
-        cwd: item.directory,
-        title: item.title,
-        updatedAt: new Date(item.time.updated).toISOString(),
-      }),
-    )
+    const serverEntries = sessions.map((item): SessionInfo => ({
+      sessionId: item.id,
+      cwd: item.directory,
+      title: item.title,
+      updatedAt: new Date(item.time.updated).toISOString(),
+    }))
     const liveEntries = (yield* session.list(params.cwd ?? undefined))
       .filter((item) => !serverEntries.some((entry) => entry.sessionId === item.id))
-      .map(
-        (item): SessionInfo => ({
-          sessionId: item.id,
-          cwd: item.cwd,
-          updatedAt: item.createdAt.toISOString(),
-        }),
-      )
+      .map((item): SessionInfo => ({
+        sessionId: item.id,
+        cwd: item.cwd,
+        updatedAt: item.createdAt.toISOString(),
+      }))
     const sorted = [...liveEntries, ...serverEntries].toSorted(
       (a, b) => new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime(),
     )
@@ -295,14 +379,20 @@ export function make(input: {
       () => input.sdk.session.get({ directory: params.cwd, sessionID: params.sessionId }, { throwOnError: true }),
       "session",
     )
-    const messages = yield* request(
-      () =>
-        input.sdk.session.messages(
-          { directory: params.cwd, sessionID: params.sessionId, limit: 20 },
-          { throwOnError: true },
-        ),
-      "session",
-    )
+    // v2 adds `replayFrom` — when present, replay conversation history as session/update
+    // notifications before returning. The v1 SDK type doesn't have this field.
+    const replayFrom = (params as unknown as { replayFrom?: { type: string } | null }).replayFrom
+    const wantsReplay = replayFrom != null
+    const messages = wantsReplay
+      ? yield* fetchAllMessages(input.sdk, params.cwd, params.sessionId)
+      : yield* request(
+          () =>
+            input.sdk.session.messages(
+              { directory: params.cwd, sessionID: params.sessionId, limit: 20 },
+              { throwOnError: true },
+            ),
+          "session",
+        )
     const restored = restoreFromMessages(messages.map((item) => item.info))
     const model = restored.model ?? selectDefaultModel(snapshot)
     const state = yield* session.load({
@@ -318,8 +408,10 @@ export function make(input: {
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers ?? [])
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
 
+    if (wantsReplay) yield* replayMessages(events, messages)
+
     return {
-      configOptions: configOptions(snapshot, {
+      configOptions: responseConfigOptions(snapshot, {
         model: state.model ?? model,
         variant: state.variant,
         modeId: state.modeId,
@@ -351,6 +443,13 @@ export function make(input: {
   const cancel = Effect.fn("ACP.cancel")(function* (params: CancelNotification) {
     const current = yield* session.get(params.sessionId)
     yield* abortBackingSession(current)
+  })
+
+  const logout = Effect.fn("ACP.logout")(function* () {
+    // opencode doesn't have a server-side logout endpoint; auth is stateless.
+    // The method exists to satisfy the v2 spec requirement that agents with
+    // authMethods MUST implement auth/logout.
+    return {}
   })
 
   const forkSession = Effect.fn("ACP.forkSession")(function* (params: ForkSessionRequest) {
@@ -389,7 +488,7 @@ export function make(input: {
 
     return {
       sessionId: state.id,
-      configOptions: configOptions(snapshot, {
+      configOptions: responseConfigOptions(snapshot, {
         model: state.model ?? model,
         variant: state.variant,
         modeId: state.modeId,
@@ -413,7 +512,7 @@ export function make(input: {
         .setVariant(params.sessionId, Directory.variants(snapshot, selected.model) ? variant : undefined)
         .pipe(Effect.andThen(session.setModel(params.sessionId, selected.model)))
       return {
-        configOptions: configOptions(snapshot, {
+        configOptions: responseConfigOptions(snapshot, {
           model: state.model ?? selected.model,
           variant: state.variant,
           modeId: state.modeId,
@@ -429,7 +528,7 @@ export function make(input: {
       }
       const state = yield* session.setVariant(params.sessionId, params.value)
       return {
-        configOptions: configOptions(snapshot, {
+        configOptions: responseConfigOptions(snapshot, {
           model: state.model ?? model,
           variant: state.variant,
           modeId: state.modeId,
@@ -443,7 +542,7 @@ export function make(input: {
       }
       const state = yield* session.setMode(params.sessionId, params.value)
       return {
-        configOptions: configOptions(snapshot, {
+        configOptions: responseConfigOptions(snapshot, {
           model: state.model ?? selectDefaultModel(snapshot),
           variant: state.variant,
           modeId: state.modeId,
@@ -504,6 +603,35 @@ export function make(input: {
       const command = detectSlashCommand(parts)
 
       if (!command) {
+        if (v2Active) {
+          // v2 prompt lifecycle: admit non-blocking via prompt_async and acknowledge
+          // immediately with `{}`. The event subscription drives foreground state:
+          // state_update running on busy, idle + stopReason on idle. A second
+          // session/prompt arriving while a turn is still running admits another
+          // input, which opencode steers by default at the next safe boundary.
+          const messageId = (params as unknown as { messageId?: string }).messageId ?? Identifier.ascending("message")
+          yield* request(
+            () =>
+              input.sdk.session.promptAsync(
+                {
+                  sessionID: current.id,
+                  model: { providerID: selected.providerID, modelID: selected.modelID },
+                  ...(variant ? { variant } : {}),
+                  parts,
+                  ...(modeId ? { agent: modeId } : {}),
+                  directory: current.cwd,
+                  messageID: messageId,
+                },
+                { throwOnError: true },
+              ),
+            "session",
+          ).pipe(Effect.asVoid)
+          yield* emitV2UserMessage(input.connection, current.id, messageId, params.prompt)
+          v2Running.add(current.id)
+          yield* emitV2StateUpdate(input.connection, current.id, "running")
+          return {} as unknown as PromptResponse
+        }
+
         const response = yield* request(
           () =>
             runUntilIdle(current.id, () =>
@@ -525,7 +653,7 @@ export function make(input: {
           "session",
         )
         yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-        return yield* promptResponse(response.info, params.messageId)
+        return yield* promptResponse(response.info, undefined)
       }
 
       const known = snapshot.availableCommands.find((item) => item.name === command.name)
@@ -549,7 +677,7 @@ export function make(input: {
           "session",
         )
         yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-        return yield* promptResponse(response.info, params.messageId)
+        return yield* promptResponse(response.info, undefined)
       }
 
       if (command.name === "compact") {
@@ -571,9 +699,10 @@ export function make(input: {
       }
 
       yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-      return yield* promptResponse(undefined, params.messageId)
+      return yield* promptResponse(undefined, undefined)
     }),
     cancel,
+    logout,
   }
 }
 
@@ -680,6 +809,31 @@ function replayMessages(subscription: ACPEvent.Subscription | undefined, message
     for (const message of messages) {
       await subscription.replayMessage(message).catch(() => {})
     }
+  })
+}
+
+const REPLAY_PAGE_SIZE = 50
+
+function fetchAllMessages(sdk: OpencodeClient, directory: string, sessionId: string) {
+  return Effect.gen(function* () {
+    const all: SessionMessageResponse[] = []
+    let before: string | undefined
+    while (true) {
+      const response = yield* Effect.tryPromise({
+        try: () =>
+          sdk.session.messages(
+            { directory, sessionID: sessionId, limit: REPLAY_PAGE_SIZE, ...(before ? { before } : {}) },
+            { throwOnError: true },
+          ),
+        catch: (error) => fromUnknownError(error, "session"),
+      })
+      const result = response as unknown as { data: SessionMessageResponse[]; cursor?: { next?: string } }
+      const page = result.data ?? (result as unknown as SessionMessageResponse[])
+      all.push(...page)
+      before = result.cursor?.next
+      if (!before || page.length < REPLAY_PAGE_SIZE) break
+    }
+    return all
   })
 }
 
@@ -823,20 +977,18 @@ function detectSlashCommand(parts: ReturnType<typeof promptContentToParts>) {
 
 const promptResponse = Effect.fn("ACP.promptResponse")(function* (
   info: AssistantInfo,
-  messageId: string | null | undefined,
+  _messageId: string | null | undefined,
 ) {
   if (!info?.error) {
     return {
       stopReason: "end_turn" as const,
       ...(info ? { usage: UsageService.buildUsage(info) } : {}),
-      ...(messageId ? { userMessageId: messageId } : {}),
       _meta: {},
     }
   }
 
   const base = {
     usage: UsageService.buildUsage(info),
-    ...(messageId ? { userMessageId: messageId } : {}),
     _meta: {},
   }
 
@@ -875,6 +1027,58 @@ const promptResponse = Effect.fn("ACP.promptResponse")(function* (
 function promptErrorMessage(error: AssistantError) {
   if ("message" in error.data && typeof error.data.message === "string") return error.data.message
   return "OpenCode prompt failed"
+}
+
+// --- ACP v2 prompt-lifecycle helpers -------------------------------------------
+
+type V2StopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | "cancelled"
+
+// v2 cannot fail the prompt response post-acceptance, so auth/service errors that v1
+// surfaces as request errors collapse to end_turn here. The common stop reasons
+// (cancelled / max_tokens / refusal) are still derived from the assistant message error.
+function stopReasonForMessage(info: AssistantInfo): V2StopReason {
+  if (!info?.error) return "end_turn"
+  if (info.error.name === "MessageAbortedError") return "cancelled"
+  if (info.error.name === "MessageOutputLengthError") return "max_tokens"
+  if (info.error.name === "ContentFilterError") return "refusal"
+  return "end_turn"
+}
+
+// The v2 state_update / user_message variants are not in the SDK 0.21 (v1) SessionUpdate
+// union, so they are cast at the wire boundary. The constructed payloads are valid v2
+// session/update notifications; only the TypeScript type is widened through `unknown`.
+function emitV2StateUpdate(
+  connection: ServiceConnection | undefined,
+  sessionId: string,
+  state: "running" | "idle",
+  stopReason?: V2StopReason,
+) {
+  if (!connection) return Effect.void
+  return Effect.promise(() =>
+    connection
+      .sessionUpdate({
+        sessionId,
+        update: { sessionUpdate: "state_update", state, ...(stopReason ? { stopReason } : {}) },
+      } as unknown as SessionNotification)
+      .then(() => {}),
+  )
+}
+
+function emitV2UserMessage(
+  connection: ServiceConnection | undefined,
+  sessionId: string,
+  messageId: string,
+  content: readonly unknown[],
+) {
+  if (!connection) return Effect.void
+  return Effect.promise(() =>
+    connection
+      .sessionUpdate({
+        sessionId,
+        update: { sessionUpdate: "user_message", messageId, content },
+      } as unknown as SessionNotification)
+      .then(() => {}),
+  )
 }
 
 function sendUsageUpdate(
@@ -948,6 +1152,7 @@ function sendAvailableCommands(
           availableCommands: snapshot.availableCommands.map((command) => ({
             name: command.name,
             description: command.description ?? "",
+            ...(command.hints.length > 0 ? { input: { type: "text", hint: command.hints[0] } } : {}),
           })),
         },
       })
@@ -970,6 +1175,7 @@ function registerMcpServers(
   return Effect.all(
     servers
       .map((server) => ({ server, config: mcpConfig(server) }))
+      .filter((entry) => entry.config !== undefined)
       .filter((entry) => {
         const key = mcpRegistrationKey(entry.server.name, entry.config)
         if (current.has(key) || pending.has(key)) return false
@@ -1011,17 +1217,25 @@ function mcpRegistrationKey(name: string, config: ReturnType<typeof mcpConfig>) 
 }
 
 function mcpConfig(server: McpServer) {
-  if ("type" in server) {
+  if (!("type" in server)) {
+    // McpServerStdio has no type discriminator
     return {
-      type: "remote" as const,
-      url: server.url,
-      headers: Object.fromEntries(server.headers.map((header) => [header.name, header.value])),
+      type: "local" as const,
+      command: [server.command, ...server.args],
+      environment: Object.fromEntries(server.env.map((entry) => [entry.name, entry.value])),
     }
   }
-  return {
-    type: "local" as const,
-    command: [server.command, ...server.args],
-    environment: Object.fromEntries(server.env.map((entry) => [entry.name, entry.value])),
+  switch (server.type) {
+    case "http":
+    case "sse":
+      return {
+        type: "remote" as const,
+        url: server.url,
+        headers: Object.fromEntries(server.headers.map((header) => [header.name, header.value])),
+      }
+    case "acp":
+      // ACP-transport MCP servers are managed by the client; skip server-side registration.
+      return undefined
   }
 }
 
