@@ -52,6 +52,7 @@ function fakeSelectorSdk(calls: string[]) {
     return { modelId: id, provider: method, specificationVersion: "v3" } as unknown as LanguageModelV3
   }
   return {
+    deepseek: make("deepseek"),
     responses: make("responses"),
     messages: make("messages"),
     chat: make("chat"),
@@ -194,6 +195,23 @@ describe("AzurePlugin", () => {
         options: { useCompletionUrls: true },
       })
       expect(calls).toEqual(["chat:deployment"])
+    }),
+  )
+
+  it.effect("selects DeepSeek for named deployments", () =>
+    Effect.gen(function* () {
+      const aisdk = yield* AISDK.Service
+      const calls: string[] = []
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.azure, ModelV2.ID.make("deepseek-v4-pro")),
+          api: { id: ModelV2.ID.make("production-deployment"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: { useCompletionUrls: true },
+      })
+      expect(calls).toEqual(["deepseek:production-deployment"])
     }),
   )
 
