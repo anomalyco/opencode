@@ -24,4 +24,14 @@ describe("pty protocol", () => {
     expect(frames[0].length).toBe(PtyProtocol.REPLAY_CHUNK)
     expect(frames.join("")).toBe(big)
   })
+
+  test("does not split surrogate pairs between replay frames", () => {
+    const replay = "x".repeat(PtyProtocol.REPLAY_CHUNK - 1) + "😀"
+    const frames = PtyProtocol.chunks(replay)
+    const decoder = new TextDecoder()
+    const encoder = new TextEncoder()
+
+    expect(frames).toEqual(["x".repeat(PtyProtocol.REPLAY_CHUNK - 1), "😀"])
+    expect(frames.map((frame) => decoder.decode(encoder.encode(frame))).join("")).toBe(replay)
+  })
 })

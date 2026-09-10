@@ -22,7 +22,19 @@ export function metaFrame(cursor: number) {
 
 export function chunks(data: string) {
   const out: string[] = []
-  for (let i = 0; i < data.length; i += REPLAY_CHUNK) out.push(data.slice(i, i + REPLAY_CHUNK))
+  for (let i = 0; i < data.length; ) {
+    const boundary = Math.min(i + REPLAY_CHUNK, data.length)
+    const end =
+      boundary < data.length &&
+      data.charCodeAt(boundary - 1) >= 0xd800 &&
+      data.charCodeAt(boundary - 1) <= 0xdbff &&
+      data.charCodeAt(boundary) >= 0xdc00 &&
+      data.charCodeAt(boundary) <= 0xdfff
+        ? boundary - 1
+        : boundary
+    out.push(data.slice(i, end))
+    i = end
+  }
   return out
 }
 
