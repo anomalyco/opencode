@@ -93,6 +93,7 @@ export type PromptRef = {
   mode: "normal" | "shell"
   setMode(mode: "normal" | "shell"): void
   set(prompt: PromptInfo): void
+  append(text: string): boolean
   reset(): void
   blur(): void
   focus(): void
@@ -692,6 +693,18 @@ export function Prompt(props: PromptProps) {
       setStore("prompt", prompt)
       restoreExtmarksFromPrompt(prompt)
       input.gotoBufferEnd()
+    },
+    append(text) {
+      if (text.length === 0) return true
+      if (disposed || input.isDestroyed) return false
+      input.insertText(text)
+      setTimeout(() => {
+        if (disposed || input.isDestroyed) return
+        input.getLayoutNode().markDirty()
+        input.gotoBufferEnd()
+        renderer.requestRender()
+      }, 0)
+      return true
     },
     reset() {
       resetComposer()

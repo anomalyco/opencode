@@ -1,6 +1,6 @@
 import { PluginContextProvider } from "@opencode/plugin/tui"
 import type { JSX } from "solid-js"
-import type { Context, Dialog, Page, SlotClaim, SlotMap, SlotPath, Toast } from "@opencode/plugin/tui/context"
+import type { Context, Dialog, Page, Prompt, SlotClaim, SlotMap, SlotPath, Toast } from "@opencode/plugin/tui/context"
 import type { Placement, PlacementKind } from "./structure"
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
@@ -18,6 +18,7 @@ import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
 import { useAttention } from "../context/attention"
+import { usePromptRef } from "../context/prompt"
 import { useStorage } from "../context/storage"
 import { useSessionTabs } from "../context/session-tabs"
 import { useOptionalPanel } from "../context/panel"
@@ -71,6 +72,7 @@ export function usePluginHost() {
     storage: useStorage(),
     sessionTabs: useSessionTabs(),
     panel: useOptionalPanel(),
+    prompt: usePromptRef(),
     local: useLocal(),
   }
 }
@@ -118,6 +120,19 @@ export function createPluginContext(input: {
         title: toast.title ?? host.data.session.get(sessionID)?.title,
         action: { label: "Open", run: () => host.route.navigate({ type: "session", sessionID }) },
       })
+    },
+  }
+  const promptApi: Prompt = {
+    current() {
+      return host.prompt.current?.current.text
+    },
+    append(text) {
+      const ref = host.prompt.current
+      if (!ref) return false
+      return ref.append(text)
+    },
+    focus() {
+      host.prompt.current?.focus()
     },
   }
   // Unregistering after deactivation is a no-op: deactivate already resets
@@ -176,6 +191,7 @@ export function createPluginContext(input: {
     ui: {
       dialog: dialogApi,
       toast: toastApi,
+      prompt: promptApi,
       format: {
         path: (value) => abbreviateHome(value, host.paths.home),
       },
