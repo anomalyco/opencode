@@ -22,6 +22,11 @@ describe("Amazon Bedrock Mantle provider", () => {
   ;[
     { model: AmazonBedrockMantle.configure({ apiKey: "test-key" }).responses("openai.gpt-oss-120b"), string: true },
     { model: AmazonBedrockMantle.configure({ apiKey: "test-key" }).responses("openai.gpt-oss-20b"), string: true },
+    { model: AmazonBedrockMantle.configure({ apiKey: "test-key" }).responses("gpt-oss-20b"), string: true },
+    {
+      model: AmazonBedrockMantle.configure({ apiKey: "test-key" }).responses("prefix/gpt-oss-120b-suffix"),
+      string: true,
+    },
     { model: AmazonBedrockMantle.configure({ apiKey: "test-key" }).responses("openai.gpt-5.6-luna"), string: false },
     { model: OpenAI.configure({ apiKey: "test-key" }).responses("openai.gpt-oss-120b"), string: false },
   ].forEach((fixture) => {

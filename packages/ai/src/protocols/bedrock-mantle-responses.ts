@@ -9,10 +9,10 @@ export const protocol = Protocol.make({
     ...OpenAIResponses.protocol.body,
     from: Effect.fn("BedrockMantleResponses.fromRequest")(function* (request) {
       const body = yield* OpenAIResponses.protocol.body.from(request)
-      if (request.model.id !== "openai.gpt-oss-120b" && request.model.id !== "openai.gpt-oss-20b") return body
+      if (!(request.model.id.includes("gpt-oss-20") || request.model.id.includes("gpt-oss-120"))) return body
 
-      // Mantle's GPT-OSS backend rejects output_text history, even with the
-      // original id/status/annotations. The standard string form round-trips.
+      // Send earlier assistant replies as content: "OK". These models reject
+      // content: [{ type: "output_text", text: "OK" }].
       return {
         ...body,
         // GPT-OSS only accepts automatic tool selection. Disable tools by
