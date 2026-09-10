@@ -10,16 +10,16 @@ import { Agent } from "@/agent/agent"
 import { isImageAttachment } from "@/util/media"
 import { LLM } from "./llm"
 
-const TRANSCRIBE_INSTRUCTION = `Transcribe every piece of text visible in this image, preserving order and structure.
-Include code, error messages, terminal output, and UI labels verbatim.
-Output only the transcription, with no commentary or summary.`
+const TRANSCRIBE_INSTRUCTION = `Describe this image for a developer who cannot see it.
+Transcribe all visible text verbatim, including code, error messages, terminal output, and UI labels.
+If there is little or no text, describe the visual content instead: layout, components, colors, and anything a developer would need to understand it.`
 
 const TRANSCRIBE_AGENT: Agent.Info = {
   name: "vision",
   mode: "primary",
   permission: [],
   options: {},
-  prompt: "You convert images into faithful text. Never summarize or omit content.",
+  prompt: "You convert images into faithful text and descriptions. Never summarize away content.",
 }
 
 function supportsVision(model: Provider.Model) {
