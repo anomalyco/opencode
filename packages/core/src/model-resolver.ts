@@ -348,9 +348,14 @@ export const layer = Layer.effect(
 )
 
 function hasConfiguredAuth(model: Info) {
-  return [model.settings?.apiKey, model.settings?.authToken, model.settings?.accessToken].some(
-    (value) => typeof value === "string" && value !== "",
-  )
+  return [
+    model.settings?.apiKey,
+    model.settings?.authToken,
+    model.settings?.accessToken,
+    Provider.packageName(model.package) === "@opencode/ai/providers/cloudflare-ai-gateway"
+      ? model.settings?.gatewayApiKey
+      : undefined,
+  ].some((value) => typeof value === "string" && value !== "")
 }
 
 function usesAPIKeyAuth(packageName: string | undefined) {

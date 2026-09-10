@@ -301,7 +301,7 @@ describe("ModelResolver", () => {
     ),
   )
 
-  it.effect("uses no native API-key auth for explicitly enabled providers without credentials", () => {
+  it.effect("preserves configured auth for explicitly enabled providers without integration credentials", () => {
     const selected = model(Provider.aisdk("@ai-sdk/google"), {
       providerID: Provider.ID.make("gateway"),
       canonical: Provider.ID.google,
@@ -317,7 +317,7 @@ describe("ModelResolver", () => {
       }),
       model("@opencode/ai/providers/mistral", {
         providerID: Provider.ID.make("gateway"),
-        settings: { baseURL: "https://native-mistral.example.com/v1" },
+        settings: { baseURL: "https://native-mistral.example.com/v1", gatewayApiKey: "gateway-fixture" },
         headers: { "cf-access-token": "access-token" },
       }),
       ...["baseten", "cloudflare-ai-gateway", "cloudflare-workers-ai", "deepseek", "fireworks"].map((name) =>
@@ -406,7 +406,43 @@ describe("ModelResolver", () => {
             expect(headers["cf-access-token"]).toBe("access-token")
             expect(headers.authorization).toBeUndefined()
             expect(headers["x-goog-api-key"]).toBeUndefined()
+            expect(headers["cf-aig-authorization"]).toBeUndefined()
           }),
+        )
+        yield* Effect.forEach(
+          [
+            { settings: { gatewayApiKey: "gateway-fixture" }, gateway: "Bearer gateway-fixture", upstream: undefined },
+            {
+              settings: { gatewayApiKey: "gateway-fixture", apiKey: "upstream-fixture" },
+              gateway: "Bearer gateway-fixture",
+              upstream: "Bearer upstream-fixture",
+            },
+            { settings: { apiKey: "upstream-fixture" }, gateway: undefined, upstream: "Bearer upstream-fixture" },
+            { settings: { gatewayApiKey: "" }, gateway: undefined, upstream: undefined },
+          ],
+          (entry) =>
+            Effect.forEach(["@opencode/ai", "@opencode-ai/ai"], (name) =>
+              Effect.gen(function* () {
+                const resolved = yield* resolver.resolveModel(
+                  model(`${name}/providers/cloudflare-ai-gateway`, {
+                    providerID: selected.providerID,
+                    settings: { baseURL: "https://gateway.test/v1/compat", ...entry.settings },
+                    headers: { "cf-access-token": "access-fixture" },
+                  }),
+                )
+                const headers = yield* resolved.model.route.auth.apply({
+                  request: LLM.request({ model: resolved.model, prompt: "Hello" }),
+                  method: "POST",
+                  url: "https://gateway.test/v1/compat/chat/completions",
+                  body: "{}",
+                  headers: Headers.fromInput(resolved.model.route.defaults.headers),
+                })
+
+                expect<string | undefined>(headers["cf-aig-authorization"]).toBe(entry.gateway)
+                expect<string | undefined>(headers.authorization).toBe(entry.upstream)
+                expect(headers["cf-access-token"]).toBe("access-fixture")
+              }),
+            ),
         )
       }).pipe(Effect.provide(layer)),
     )
