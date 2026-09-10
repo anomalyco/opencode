@@ -50,6 +50,7 @@ import { Truncate } from "@/tool/truncate"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Format } from "../../src/format"
+import { TestConfig } from "../fixture/config"
 import { TestInstance } from "../fixture/fixture"
 import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
@@ -208,6 +209,13 @@ const promptRoot = LayerNode.group([
   RuntimeFlags.node,
 ])
 
+const promptReplacement = [
+  [SessionSummary.node, summary],
+  [LSP.node, lsp],
+  [MCP.node, makeMcp()],
+  [RuntimeFlags.node, runtimeFlags],
+] as const
+
 function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
   const replacements = [
     [SessionSummary.node, summary],
@@ -238,6 +246,13 @@ function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processo
 function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
   return makePrompt(input)
 }
+
+const tinyImageServer = testEffect(
+  LayerNode.compile(promptRoot, [
+    ...promptReplacement,
+    [Config.node, TestConfig.layer({ get: () => Effect.succeed({ attachment: { image: { max_base64_bytes: 1 } } }) })],
+  ] as const),
+)
 
 const it = testEffect(makeHttp())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
@@ -2129,6 +2144,183 @@ noLLMServer.instance(
 )
 
 // Missing file handling
+
+noLLMServer.instance(
+  "does not fail the prompt when an image attachment cannot be decoded (unsupported format)",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      // Minimal AVIF payload — valid enough to carry image/avif but not decodable by the photon resizer.
+      const avif = Buffer.from(
+        "AAAAABZmdHlwYXZpZm0wMDEAAAAAAG1pZjEA",
+        "base64",
+      ).toString("base64")
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "please review this image" },
+          {
+            type: "file",
+            mime: "image/avif",
+            url: `data:image/avif;base64,${avif}`,
+            filename: "screenshot.avif",
+          },
+        ],
+      })
+
+      if (msg.info.role !== "user") throw new Error("expected user message")
+      const notice = msg.parts.find(
+        (part) =>
+          part.type === "text" && part.synthetic && part.text.includes("could not be processed"),
+      )
+      expect(notice).toBeDefined()
+      expect(notice?.type === "text" && notice.text.includes("screenshot.avif")).toBe(true)
+
+      // original text survives and stays before the degradation notice
+      const texts = msg.parts.map((part) => (part.type === "text" ? part.text : ""))
+      expect(texts).toContain("please review this image")
+      expect(texts.indexOf("please review this image")).toBeLessThan(texts.indexOf(notice?.type === "text" ? notice.text : ""))
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
+tinyImageServer.instance(
+  "does not fail the prompt when an image attachment exceeds the size limit",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      // Valid 1x1 PNG — decodes fine but exceeds the 1-byte max_base64_bytes limit.
+      const png = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+        "base64",
+      ).toString("base64")
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "please review this image" },
+          {
+            type: "file",
+            mime: "image/png",
+            url: `data:image/png;base64,${png}`,
+            filename: "screenshot.png",
+          },
+        ],
+      })
+
+      if (msg.info.role !== "user") throw new Error("expected user message")
+      const notice = msg.parts.find(
+        (part) =>
+          part.type === "text" && part.synthetic && part.text.includes("could not be processed"),
+      )
+      expect(notice).toBeDefined()
+      expect(notice?.type === "text" && notice.text.includes("screenshot.png")).toBe(true)
+
+      // original text survives and stays before the degradation notice
+      const texts = msg.parts.map((part) => (part.type === "text" ? part.text : ""))
+      expect(texts).toContain("please review this image")
+      expect(texts.indexOf("please review this image")).toBeLessThan(texts.indexOf(notice?.type === "text" ? notice.text : ""))
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
+noLLMServer.instance(
+  "does not fail the prompt when an image attachment has an invalid data URL",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "please review this image" },
+          {
+            type: "file",
+            mime: "image/png",
+            url: "http://example.com/not-a-data-url.png",
+            filename: "screenshot.png",
+          },
+        ],
+      })
+
+      if (msg.info.role !== "user") throw new Error("expected user message")
+      const notice = msg.parts.find(
+        (part) =>
+          part.type === "text" && part.synthetic && part.text.includes("could not be processed"),
+      )
+      expect(notice).toBeDefined()
+      expect(notice?.type === "text" && notice.text.includes("screenshot.png")).toBe(true)
+
+      // original text survives and stays before the degradation notice
+      const texts = msg.parts.map((part) => (part.type === "text" ? part.text : ""))
+      expect(texts).toContain("please review this image")
+      expect(texts.indexOf("please review this image")).toBeLessThan(texts.indexOf(notice?.type === "text" ? notice.text : ""))
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
+noLLMServer.instance(
+  "keeps a valid image as a file part when a sibling image degrades",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      // Valid 1x1 PNG (decodes fine under the default limit) alongside an undecodable AVIF.
+      const png = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+        "base64",
+      ).toString("base64")
+      const avif = Buffer.from(
+        "AAAAABZmdHlwYXZpZm0wMDEAAAAAAG1pZjEA",
+        "base64",
+      ).toString("base64")
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "please review these images" },
+          { type: "file", mime: "image/png", url: `data:image/png;base64,${png}`, filename: "ok.png" },
+          { type: "file", mime: "image/avif", url: `data:image/avif;base64,${avif}`, filename: "bad.avif" },
+        ],
+      })
+
+      if (msg.info.role !== "user") throw new Error("expected user message")
+      const notice = msg.parts.find(
+        (part) =>
+          part.type === "text" && part.synthetic && part.text.includes("could not be processed"),
+      )
+      expect(notice).toBeDefined()
+      const validFile = msg.parts.find((part) => part.type === "file" && part.filename === "ok.png")
+      expect(validFile).toBeDefined()
+      const texts = msg.parts.map((part) => (part.type === "text" ? part.text : ""))
+      expect(texts.indexOf("please review these images")).toBeLessThan(texts.indexOf(notice?.type === "text" ? notice.text : ""))
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
 
 noLLMServer.instance(
   "does not fail the prompt when a file part is missing",
