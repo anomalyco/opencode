@@ -11,9 +11,13 @@ if (!expectedBunVersion) {
 }
 const expectedBunVersionRange = `^${expectedBunVersion}`;
 if (!semver.satisfies(process.versions.bun, expectedBunVersionRange)) {
-  throw new Error(`This script requires bun@${expectedBunVersionRange}, but you are using bun@${process.versions.bun}`);
-}
-if (process.versions.bun !== expectedBunVersion) {
+  const message = `This script requires bun@${expectedBunVersionRange}, but you are using bun@${process.versions.bun}`;
+  if (process.env.IN_NIX_SHELL) {
+    console.warn(`Warning: ${message}`);
+  } else {
+    throw new Error(message);
+  }
+} else if (process.versions.bun !== expectedBunVersion) {
   console.warn(`Warning: Bun version ${process.versions.bun} differs from expected ${expectedBunVersion}`);
 }
 '
