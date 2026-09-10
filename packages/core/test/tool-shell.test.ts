@@ -1436,7 +1436,7 @@ describe("ShellTool", () => {
   )
 
   for (const cancel of ["tool", "interrupt"] as const) {
-    it.live(`cancels a background shell through ${cancel} with retained output`, () =>
+    it.live(`cancels a background shell through ${cancel} with interruption cleanup`, () =>
       Effect.acquireUseRelease(
         Effect.promise(() => tmpdir()),
         (tmp) => {
@@ -1461,11 +1461,11 @@ describe("ShellTool", () => {
                   ...toolIdentity,
                   call: { type: "tool-call", id: "call-stop", name: "shell_stop", input: { shellID: id } },
                 })
-                expect(stopped.output).toEqual({ status: "killed" })
+                expect(stopped.output).toEqual({ status: "cancelled" })
               }
               expect((yield* jobs.get(id))?.status).toBe("cancelled")
-              expect((yield* shell.wait(id)).status).toBe("killed")
-              expect((yield* shell.result(info)).capture).toBeDefined()
+              expect(yield* shell.get(id).pipe(Effect.flip)).toBeInstanceOf(Shell.NotFoundError)
+              expect((yield* shell.result(info)).capture).toBeUndefined()
               expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
                 text: expect.stringContaining("Command cancelled"),
                 metadata: { state: "cancelled" },
