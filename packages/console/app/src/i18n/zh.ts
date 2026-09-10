@@ -3,6 +3,8 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.promo.deepseek": "DeepSeek V4.1 Flash 限时享受 4 倍使用额度",
+  "go.graph.bonus": "{{count}} 倍用量",
   "nav.github": "GitHub",
   "nav.docs": "文档",
   "nav.changelog": "更新日志",
@@ -248,7 +250,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下例外情况除外",
 
   "go.title": "OpenCode Go | 人人可用的低成本编程模型",
-  "go.banner.text": "GLM-5.3-Flash 限时享受 2 倍使用额度",
   "go.meta.description": "Go 每月 $10，提供充裕的使用限额，并可可靠访问领先的编程模型。",
   "go.hero.title": "人人可用的低成本编程模型",
   "go.hero.body":
@@ -263,6 +264,14 @@ export const dict = {
   "go.graph.freePill": "Big Pickle 和免费模型",
   "go.graph.go": "Go",
   "go.graph.label": "每 5 小时请求数",
+  "go.graph.period": "使用额度",
+  "go.graph.model": "模型",
+  "go.graph.requests": "预估请求数 / 5 小时",
+  "go.graph.allowance": "每月使用额度",
+  "go.graph.new": "新",
+  "go.graph.scale": "请求数采用非线性刻度",
+  "go.graph.showAll": "查看全部 {{count}} 个模型",
+  "go.graph.showLess": "收起模型",
   "go.graph.limitedRegions": "仅限部分地区",
   "go.graph.limitedTime": "限时",
   "go.graph.usageLimits": "使用限制",
