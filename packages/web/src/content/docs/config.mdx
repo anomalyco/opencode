@@ -763,6 +763,31 @@ You can control context compaction behavior through the `compaction` option.
 
 ---
 
+### Infinite
+
+You can control infinite agent mode auto-continue limits through the `infinite` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "infinite": {
+    "maxIterations": 100,
+    "maxHours": 8,
+    "sentinel": "[TASK_COMPLETE]",
+    "todoDetection": true
+  }
+}
+```
+
+- `maxIterations` - Maximum auto-continue iterations before stopping (default: `100`).
+- `maxHours` - Maximum wall-clock hours before stopping (default: `8`).
+- `sentinel` - Completion marker the agent emits when the task is fully complete (default: `"[TASK_COMPLETE]"`).
+- `todoDetection` - Stop when all todos are completed or cancelled (default: `true`).
+
+Use the Mode toggle in the composer footer to switch between `Complete` and `Infinite` per session. The existing Stop button interrupts the loop at any time.
+
+---
+
 ### Watcher
 
 You can configure file watcher ignore patterns through the `watcher` option.
