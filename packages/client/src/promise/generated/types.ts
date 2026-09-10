@@ -1235,6 +1235,7 @@ export type SessionStepEnded = {
     providerState?: SessionMessageProviderState1
     cost: MoneyUSD
     tokens: TokenUsageInfo
+    requestDurationMs?: number
     snapshot?: string
     files?: Array<string>
   }
@@ -2167,7 +2168,7 @@ export type SessionInboxEnqueued = {
 export type SessionMessageAssistant = {
   id: string
   metadata?: { [x: string]: JsonValue }
-  time: { created: number; streamed?: number; completed?: number }
+  time: { created: number; streamed?: number; completed?: number; requestDurationMs?: number }
   type: "assistant"
   agent: string
   model: ModelRef
@@ -3057,7 +3058,12 @@ export type SessionImportInput = {
       | {
           readonly id: string
           readonly metadata?: { readonly [x: string]: JsonValue }
-          readonly time: { readonly created: number; readonly streamed?: number; readonly completed?: number }
+          readonly time: {
+            readonly created: number
+            readonly streamed?: number
+            readonly completed?: number
+            readonly requestDurationMs?: number
+          }
           readonly type: "assistant"
           readonly agent: string
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
@@ -3367,7 +3373,12 @@ export type SessionImportInput = {
       | {
           readonly id: string
           readonly metadata?: { readonly [x: string]: JsonValue }
-          readonly time: { readonly created: number; readonly streamed?: number; readonly completed?: number }
+          readonly time: {
+            readonly created: number
+            readonly streamed?: number
+            readonly completed?: number
+            readonly requestDurationMs?: number
+          }
           readonly type: "assistant"
           readonly agent: string
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
@@ -3677,7 +3688,12 @@ export type SessionImportInput = {
       | {
           readonly id: string
           readonly metadata?: { readonly [x: string]: JsonValue }
-          readonly time: { readonly created: number; readonly streamed?: number; readonly completed?: number }
+          readonly time: {
+            readonly created: number
+            readonly streamed?: number
+            readonly completed?: number
+            readonly requestDurationMs?: number
+          }
           readonly type: "assistant"
           readonly agent: string
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
