@@ -301,9 +301,9 @@ function drawSourceConnectors(
         )
       }
     }
-    fadeSourcePath(grid, connector, route.points, styles, occupancy)
+    if (nodesById.has(route.edge.from)) fadeSourcePath(grid, connector, route.points, styles, occupancy)
     if (route.edge.sourceArrowhead && route.points[1]) {
-      grid.setCell(sourcePoint.x, sourcePoint.y, diagramArrowHeadBetween(route.points[1], sourcePoint), "edge")
+      grid.setCell(sourcePoint.x, sourcePoint.y, diagramArrowHeadBetween(sourcePoint, connector), "edge")
     }
   }
 }
@@ -328,7 +328,17 @@ export function drawFlowchartDiagramGrid(
     const bound = bounds.get(node.id)
     if (bound) drawNode(grid, node, bound, borderStyle)
   }
-  drawSourceConnectors(grid, diagram, bounds, routes)
+  drawSourceConnectors(
+    grid,
+    diagram,
+    new Map([
+      ...bounds,
+      ...[...subgraphBounds].map(
+        ([id, frame]) => [id, { ...frame, lines: [] }] satisfies [string, FlowchartNodeBounds],
+      ),
+    ]),
+    routes,
+  )
   for (const subgraph of diagram.subgraphs ?? []) {
     const bound = subgraphBounds.get(subgraph.id)
     if (bound) drawSubgraphLabel(grid, bound)

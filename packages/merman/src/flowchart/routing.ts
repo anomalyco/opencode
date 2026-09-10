@@ -792,6 +792,29 @@ function labelIntersectsRoutePaths(
   })
 }
 
+function labelCutsOwnRoute(label: FlowchartEdgeLabelLayout | undefined, route: FlowchartEdgeRoute): boolean {
+  if (!label) return false
+  return label.lines.some((line, lineIndex) => {
+    const bounds = {
+      left: label.point.x,
+      top: label.point.y + lineIndex,
+      width: diagramTextWidth(line),
+      height: 1,
+    }
+    return route.points.slice(1).some((to, index) => {
+      const from = route.points[index]!
+      if (!pathIntersectsBounds([from, to], bounds)) return false
+      // Only a single-line label may interrupt a straight segment, without covering its ends or bends.
+      return (
+        label.height > 1 ||
+        from.y !== to.y ||
+        bounds.left <= Math.min(from.x, to.x) ||
+        bounds.left + bounds.width - 1 >= Math.max(from.x, to.x)
+      )
+    })
+  })
+}
+
 function routeIntersectsLabels(route: FlowchartEdgeRoute, labels: readonly FlowchartEdgeLabelLayout[]): boolean {
   return labels.some((label) =>
     label.lines.some((line, lineIndex) => {
@@ -879,13 +902,61 @@ function avoidNodeObstacles(
   subgraphBounds: ReadonlyMap<string, FlowchartSubgraphBounds> | undefined,
   routeIndex: number,
   diagram: FlowchartDiagram,
+  direction: FlowchartDirection,
 ): FlowchartEdgeRoute {
-  const allNodeBounds = [...bounds.values()]
-  const allSubgraphBounds = [...(subgraphBounds?.values() ?? [])]
   const subgraphs = diagram.subgraphs ?? []
   const contains = (subgraph: FlowchartSubgraph, nodeId: string): boolean =>
+    subgraph.id === nodeId ||
     subgraph.nodeIds.includes(nodeId) ||
     subgraphs.some((child) => child.parentId === subgraph.id && contains(child, nodeId))
+  const source = bounds.get(route.edge.from)
+  const target = bounds.get(route.edge.to)
+  const container =
+    source && target && source.id !== target.id
+      ? subgraphs.find(
+          (subgraph) =>
+            (subgraph.id === source.id && contains(subgraph, target.id)) ||
+            (subgraph.id === target.id && contains(subgraph, source.id)),
+        )
+      : undefined
+  const containedFrame = container ? subgraphBounds?.get(container.id) : undefined
+  if (containedFrame && source && target) {
+    const isSource = containedFrame.id === source.id
+    const member = isSource ? target : source
+    const travel = direction === "BT" ? "up" : direction === "LR" ? "right" : direction === "RL" ? "left" : "down"
+    const side = isSource ? oppositeSide(sideForDirection(travel)) : sideForDirection(travel)
+    // The containing endpoint is a border, not a solid node. Its outside port faces the frame interior.
+    const strip: FlowchartNodeBounds = {
+      ...containedFrame,
+      lines: [],
+      left: side === "right" ? containedFrame.left + containedFrame.width - 1 : containedFrame.left,
+      top: side === "bottom" ? containedFrame.top + containedFrame.height - 1 : containedFrame.top,
+      width: side === "left" || side === "right" ? 1 : containedFrame.width,
+      height: side === "top" || side === "bottom" ? 1 : containedFrame.height,
+      centerX:
+        side === "left"
+          ? containedFrame.left
+          : side === "right"
+            ? containedFrame.left + containedFrame.width - 1
+            : member.centerX,
+      centerY:
+        side === "top"
+          ? containedFrame.top
+          : side === "bottom"
+            ? containedFrame.top + containedFrame.height - 1
+            : member.centerY,
+    }
+    bounds = new Map(bounds).set(strip.id, strip)
+    route = {
+      ...route,
+      points: edgePath(isSource ? strip : source, isSource ? target : strip, direction),
+      labelPoint: undefined,
+    }
+  }
+  const allNodeBounds = [...bounds.values()].filter(
+    (bound) => !subgraphBounds?.has(bound.id) || bound.id === route.edge.from || bound.id === route.edge.to,
+  )
+  const allSubgraphBounds = [...(subgraphBounds?.values() ?? [])]
   const owner = [...subgraphs].reverse().find((subgraph) => {
     if (!contains(subgraph, route.edge.from) || !contains(subgraph, route.edge.to)) return false
     const children = subgraphs.filter((child) => child.parentId === subgraph.id)
@@ -895,7 +966,7 @@ function avoidNodeObstacles(
       !children.some((child) => contains(child, route.edge.from) && contains(child, route.edge.to))
     )
   })
-  const ownerBounds = owner ? subgraphBounds?.get(owner.id) : undefined
+  const ownerBounds = containedFrame ?? (owner ? subgraphBounds?.get(owner.id) : undefined)
   const leavesOwner = (candidate: FlowchartEdgeRoute): boolean =>
     Boolean(
       ownerBounds &&
@@ -919,6 +990,7 @@ function avoidNodeObstacles(
       return pathIntersectsBounds(candidate.points, bound, allowedContact)
     })
   const intersectsStructuralObstacle = (candidate: FlowchartEdgeRoute): boolean =>
+    (containedFrame !== undefined && leavesOwner(candidate)) ||
     intersectsNode(candidate) ||
     allSubgraphBounds.some(
       (bound) =>
@@ -944,6 +1016,11 @@ function avoidNodeObstacles(
     )
   }
   if (!intersectsObstacle(route)) return route
+  // Move a multiline label before pushing an otherwise valid edge outside its group.
+  if (subgraphBounds && labelHeight(route.edge) > 1 && !leavesOwner(route) && !intersectsRoutingObstacle(route)) {
+    const relabeled = avoidLabelOverlap(route, otherRoutes, bounds, subgraphBounds)
+    if (!intersectsObstacle(relabeled)) return relabeled
+  }
 
   const from = bounds.get(route.edge.from)
   const to = bounds.get(route.edge.to)
@@ -1154,7 +1231,7 @@ function avoidLabelOverlap(
   includeLabelWidth = true,
 ): FlowchartEdgeRoute {
   if (!route.edge.label) return route
-  const nodeBounds = [...bounds.values()]
+  const nodeBounds = [...bounds.values()].filter((bound) => !subgraphBounds?.has(bound.id))
   const frameBounds = [...(subgraphBounds?.values() ?? [])]
   const otherLabels = otherRoutes.flatMap((other) =>
     other.edge.label ? [flowchartRouteLabelLayout(other, diagramTextWidth)] : [],
@@ -1181,6 +1258,7 @@ function avoidLabelOverlap(
     frameBounds.some((bound) => labelIntersectsSubgraphFrame(label, bound)) ||
     labelIntersectsLabels(label, otherLabels) ||
     labelIntersectsRoutePaths(label, otherRoutes) ||
+    labelCutsOwnRoute(label, route) ||
     otherConnectorBounds.some((bound) => labelIntersectsBounds(label, bound))
   const current = flowchartRouteLabelLayout(route, diagramTextWidth)
   if (!intersectsObstacle(current)) return route
@@ -1290,7 +1368,15 @@ export function routeFlowchartEdges(
     routes.push({ edge, points: edgePath(from, to, directionForEdge(edge), leftBoundary) })
   }
   for (let index = routes.length - 1; index >= 0; index--) {
-    routes[index] = avoidNodeObstacles(routes[index]!, routes, bounds, subgraphBounds, index, routedDiagram)
+    routes[index] = avoidNodeObstacles(
+      routes[index]!,
+      routes,
+      bounds,
+      subgraphBounds,
+      index,
+      routedDiagram,
+      directionForEdge(routes[index]!.edge),
+    )
   }
   const subgraphs = diagram.subgraphs ?? []
   const subgraphById = new Map(subgraphs.map((subgraph) => [subgraph.id, subgraph]))
@@ -1419,11 +1505,24 @@ export function flowchartSourceConnector(
   from: FlowchartNodeBounds,
   sourcePoint: FlowchartPoint,
 ): { x: number; y: number; char: string } {
-  const side = sideForOutsidePoint(from, sourcePoint)
+  const inside =
+    sourcePoint.x > from.left &&
+    sourcePoint.x < from.left + from.width - 1 &&
+    sourcePoint.y > from.top &&
+    sourcePoint.y < from.top + from.height - 1
+  const side = inside
+    ? sourcePoint.x === from.left + 1
+      ? "left"
+      : sourcePoint.x === from.left + from.width - 2
+        ? "right"
+        : sourcePoint.y === from.top + 1
+          ? "top"
+          : "bottom"
+    : sideForOutsidePoint(from, sourcePoint)
   const connector = boundsSidePoint(from, side, "border")
   return {
     x: side === "top" || side === "bottom" ? sourcePoint.x : connector.x,
     y: side === "left" || side === "right" ? sourcePoint.y : connector.y,
-    char: connectorChar(side),
+    char: connectorChar(inside ? oppositeSide(side) : side),
   }
 }
