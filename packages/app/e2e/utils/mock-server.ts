@@ -38,7 +38,6 @@ export interface MockServerConfig {
   sessionStatus?: Record<string, unknown> | (() => Record<string, unknown>)
   inbox?: unknown[] | (() => unknown[])
   onPrompt?: (input: { sessionID: string; body: Record<string, unknown> }) => void
-  commands?: { name: string; description?: string }[]
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" }) => void
 }
 
@@ -255,7 +254,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
             Effect.andThen(noContent),
           ),
         credentialRemove: () => noContent,
-        command: () => Effect.succeed({ location: location(config), data: config.commands ?? [] }),
+        command: () => Effect.succeed({ location: location(config), data: [] }),
         skill: () => Effect.succeed({ location: location(config), data: [] }),
         plugin: () => Effect.succeed({ location: location(config), data: [] }),
         mcp: () => Effect.succeed({ location: location(config), data: [] }),

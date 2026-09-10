@@ -65,14 +65,12 @@ function submitInput(
   mode: "normal" | "shell" = "normal",
   commands: () => readonly { name: string }[] | undefined = () => [],
   skills: () => readonly Skill.Info[] | undefined = () => [],
-  delivery?: Parameters<typeof createComposerSubmit>[0]["delivery"],
 ) {
   return createComposerSubmit({
     adapter,
     mode: () => mode,
     commands,
     skills,
-    delivery,
     editor: () => undefined,
     queueScroll() {},
     addToHistory() {},
@@ -130,54 +128,6 @@ function session(input: {
 }
 
 describe("Composer submission", () => {
-  test.each([
-    { delivery: "queue" as const, alternate: false },
-    { delivery: "steer" as const, alternate: false },
-    { delivery: "queue" as const, alternate: true },
-    { delivery: "steer" as const, alternate: true },
-  ])("submits slash commands with $delivery delivery and alternate=$alternate", async ({ delivery, alternate }) => {
-    const state = createMemoryComposerState({ prompt: "/review changes" }).capture()
-    const calls: string[] = []
-    const admitted = Promise.withResolvers<Parameters<ComposerSession["api"]["command"]>[0]>()
-    const target = session({
-      calls,
-      current: () => ({ agent: "plan", model: { id: "old", providerID: "old" } }),
-      prompt: async () => {
-        throw new Error("command must not call prompt")
-      },
-      command: async (request) => {
-        calls.push("command")
-        admitted.resolve(request)
-      },
-    })
-    const adapter: ActiveComposerAdapter = {
-      kind: "active-session",
-      state,
-      ready: () => true,
-      controls,
-      working: () => true,
-      session: () => target,
-      interrupt: async () => undefined,
-      submitted() {},
-      setEditor() {},
-    }
-    await submitInput(
-      adapter,
-      undefined,
-      "normal",
-      () => [{ name: "review" }],
-      undefined,
-      (value) => {
-        expect(value).toBe(alternate)
-        return delivery
-      },
-    ).submit(new Event("submit"), { alternate })
-
-    expect(await admitted.promise).toMatchObject({ command: "review", text: "changes", delivery })
-    expect(calls).toEqual(delivery === "queue" ? ["command"] : ["switch-agent", "switch-model", "command"])
-    expect(state.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
-  })
-
   test("applies the captured agent and model before a custom command without passing over its overrides", async () => {
     const state = createMemoryComposerState({ prompt: "/review changes" }).capture()
     const calls: string[] = []

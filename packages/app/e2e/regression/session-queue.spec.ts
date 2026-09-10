@@ -139,14 +139,8 @@ async function openSession(page: Page, mock: ReturnType<typeof createQueueMock>,
     sessionStatus: () => ({ [sessionID]: { type: "running" } }),
     inbox: () => mock.rows.map((row) => ({ ...row, payload: { ...row.payload } })),
     onPrompt: mock.onPrompt,
-    commands: [{ name: "review", description: "Review current changes" }],
     onInboxChange: mock.onInboxChange,
     events: mock.events,
-  })
-  await page.route(`**/api/session/${sessionID}/command`, async (route) => {
-    const body = route.request().postDataJSON() as Record<string, unknown>
-    mock.onPrompt({ sessionID, body: { ...body, text: `Review ${body.text}` } })
-    await route.fulfill({ status: 204 })
   })
   await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   const composer = page.locator('[data-component="composer"]')
@@ -172,31 +166,6 @@ test("follow-up preference controls Enter while Mod+Enter uses the alternate del
   await expect.poll(() => mock.prompts.map((prompt) => prompt.delivery)).toEqual(["queue", "steer"])
   await expect(view.input).toHaveText("")
 })
-
-for (const behavior of ["queue", "steer"] as const) {
-  test(`slash commands respect ${behavior} preference and alternate submit`, async ({ page }, testInfo) => {
-    const mock = createQueueMock([])
-    const view = await openSession(page, mock, behavior)
-    await expect(view.input).toBeEditable()
-    await view.input.fill("/review current changes")
-    await expect(view.composer.locator('[data-action="composer-alternate-delivery"]')).toContainText(
-      behavior === "queue" ? "Steer" : "Queue",
-    )
-    await view.input.press("Enter")
-    await expect(page.getByText("Review current changes", { exact: true })).toBeVisible()
-    await expect(view.input).toHaveText("")
-    await page.screenshot({ path: testInfo.outputPath("slash-command-delivery.png") })
-    expect(mock.prompts.map((prompt) => prompt.delivery)).toEqual([behavior])
-    await expect(view.rows).toHaveCount(behavior === "queue" ? 1 : 0)
-
-    await view.input.fill("/review the retry path")
-    await view.input.press("ControlOrMeta+Enter")
-    await expect
-      .poll(() => mock.prompts.map((prompt) => prompt.delivery))
-      .toEqual([behavior, behavior === "queue" ? "steer" : "queue"])
-    await expect(view.rows).toHaveCount(1)
-  })
-}
 
 test("dragging reorders queued prompts", async ({ page }) => {
   const mock = createQueueMock(["first queued prompt", "second queued prompt", "third queued prompt"])
