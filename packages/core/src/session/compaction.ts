@@ -446,7 +446,6 @@ export const layer = Layer.effect(
     const compactionRequest = (
       input: ExecuteInput,
       messages: readonly SessionMessage.Info[],
-      prompt: Message[],
       webSocket?: "session",
     ) => {
       const context = input.context
@@ -466,7 +465,6 @@ export const layer = Layer.effect(
         messages: [
           ...transcript.messages,
           ...(input.instructionUpdate ? [Message.system(input.instructionUpdate)] : []),
-          ...prompt,
         ],
         webSocket,
       })
@@ -486,7 +484,7 @@ export const layer = Layer.effect(
           inputID: input.inputID,
           error: { type: "provider.unsupported-operation", message },
         })
-      const prepared = yield* compactionRequest(input, context.messages, [], "session")
+      const prepared = yield* compactionRequest(input, context.messages, "session")
       if (prepared.event.result) {
         yield* started(input, "")
         return yield* supplied(input, prepared.event.result, "")
@@ -603,10 +601,12 @@ export const layer = Layer.effect(
       )
       // Checkpoints from the previous template ran far longer than this one asks for; its catch-all heading identifies them.
       const legacy = previous?.summary.includes(LEGACY_HEADING) ?? false
-      const prepared = yield* compactionRequest(input, history.messages, [
-        Message.user(buildPrompt(previous !== undefined, legacy)),
-      ])
+      const prepared = yield* compactionRequest(input, history.messages)
       if (prepared.event.result) return yield* supplied(input, prepared.event.result, history.recent)
+      // Hooks see the transcript alone; the summary prompt is appended after they run.
+      const first = LLMRequest.update(prepared.request, {
+        messages: [...prepared.request.messages, Message.user(buildPrompt(previous !== undefined, legacy))],
+      })
       // Both requests share the retry allowance; rejected output never enters the reminder request.
       const transient = SessionRunnerRetry.transient(yield* SessionRunnerRetry.policy(context.session.id), {
         agent: context.agent.id,
@@ -614,10 +614,10 @@ export const layer = Layer.effect(
         hook: prepared.retry,
       })
       for (const request of [
-        prepared.request,
-        LLMRequest.update(prepared.request, {
+        first,
+        LLMRequest.update(first, {
           messages: [
-            ...prepared.request.messages,
+            ...first.messages,
             Message.user(
               "The previous response did not fill in the required summary template. Do not call tools. Return the summary as text using the exact section headings from the template.",
             ),

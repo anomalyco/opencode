@@ -358,6 +358,14 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     }
     const session = yield* insertSession(sessionID, { parent_id: parentID })
     const modelRequests = yield* SessionModelRequest.Service
+    const hooks = yield* PluginHooks.Service
+    let hooked = 0
+    yield* hooks.register("session", "compaction", (event) =>
+      Effect.sync(() => {
+        hooked = event.messages.length
+        expect(JSON.stringify(event.messages)).not.toContain("Summarize only what")
+      }),
+    )
     const messages = [
       userMessage,
       SessionMessage.Shell.make({
@@ -410,6 +418,8 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("Use Effect services and generators.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("User shell pwd completed: /project")
+    expect(requests[0]?.messages).toHaveLength(hooked + 1)
+    expect(JSON.stringify(requests[0]?.messages.at(-1))).toContain("Summarize only what")
     expect(JSON.stringify(requests[0]?.messages)).not.toContain("display-only-output")
     // The compaction message carries its own request usage so clients can show what compacting cost.
     expect(yield* store.context(sessionID)).toMatchObject([
