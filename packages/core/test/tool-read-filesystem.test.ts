@@ -82,6 +82,29 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
+  it.effect("reports out-of-range directory pagination as a typed error", () =>
+    Effect.gen(function* () {
+      const { fs, files, directory } = yield* fixture
+      yield* files.writeFileString(path.join(directory, "a.txt"), "a")
+      yield* files.writeFileString(path.join(directory, "b.txt"), "b")
+
+      const error = yield* ReadToolFileSystem.list(fs, directory, { offset: 100 }).pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(ReadToolFileSystem.OffsetOutOfRangeError)
+      expect(error.message).toBe("Offset 100 is out of range")
+    }),
+  )
+
+  it.effect("returns an empty directory page at offset 1", () =>
+    Effect.gen(function* () {
+      const { fs, directory } = yield* fixture
+
+      const result = yield* ReadToolFileSystem.list(fs, directory, { offset: 1 })
+
+      expect(result).toMatchObject({ entries: [], truncated: false })
+    }),
+  )
+
   it.effect("stops reading after the requested page is complete", () =>
     Effect.gen(function* () {
       const { fs, files, directory } = yield* fixture
