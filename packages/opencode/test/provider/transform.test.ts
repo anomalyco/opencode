@@ -544,6 +544,27 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.textVerbosity).toBeUndefined()
   })
 
+  test("openai gpt-5 models only enable textVerbosity for the exact official hostname", () => {
+    for (const url of [
+      "https://proxy.example/api.openai.com/v1",
+      "https://api.openai.com.evil.test/v1",
+      "https://evil.test/v1?upstream=api.openai.com",
+    ]) {
+      const model = {
+        ...createGpt5Model("gpt-5.6"),
+        api: { ...createGpt5Model("gpt-5.6").api, url },
+      }
+      const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+      expect(result.textVerbosity).toBeUndefined()
+    }
+
+    const official = {
+      ...createGpt5Model("gpt-5.6"),
+      api: { ...createGpt5Model("gpt-5.6").api, url: "https://api.openai.com/v1" },
+    }
+    expect(ProviderTransform.options({ model: official, sessionID, providerOptions: {} }).textVerbosity).toBe("low")
+  })
+
   test("azure chat completions omit Responses-only reasoning options after variants merge", async () => {
     const model = {
       ...createGpt5Model("gpt-5.4"),
