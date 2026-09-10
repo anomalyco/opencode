@@ -320,7 +320,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   const bootstrap = useQuery(() => ({
     queryKey: [serverSDK.scope, "bootstrap"],
     queryFn: async () => {
-      await bootstrapGlobal({
+      const result = await bootstrapGlobal({
         serverSDK: serverSDK.client,
         serverAPI: serverSDK.api,
         protocol: serverSDK.protocol,
@@ -332,7 +332,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         queryClient,
       })
       bootedAt = Date.now()
-      return bootedAt
+      return { bootedAt, projects: result.projects }
     },
   }))
 
@@ -675,6 +675,9 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     set,
     get ready() {
       return globalStore.ready
+    },
+    get projectsReady() {
+      return bootstrap.data?.projects === true
     },
     get error() {
       return globalStore.error

@@ -5,6 +5,7 @@ import type { Config, OpencodeClient, Project } from "@opencode-ai/sdk/v2/client
 import type { AgentApi, CatalogApi, CommandApi, ReferenceApi } from "@opencode-ai/client/promise"
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import {
+  bootstrapGlobalResult,
   bootstrapDirectory,
   loadAgentsQuery,
   loadCommands,
@@ -180,6 +181,16 @@ describe("bootstrapDirectory", () => {
     await new Promise((resolve) => setTimeout(resolve, 80))
 
     expect(store.status).toBe("complete")
+  })
+})
+
+describe("bootstrapGlobalResult", () => {
+  const fulfilled = { status: "fulfilled", value: undefined } as const
+  const rejected = { status: "rejected", reason: new Error("failed") } as const
+
+  test("marks projects ready only when the project request fulfilled", () => {
+    expect(bootstrapGlobalResult([fulfilled, fulfilled, fulfilled, fulfilled])).toEqual({ projects: true })
+    expect(bootstrapGlobalResult([fulfilled, fulfilled, fulfilled, rejected])).toEqual({ projects: false })
   })
 })
 
