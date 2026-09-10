@@ -74,6 +74,21 @@ export interface QuotaWindow {
   readonly resetsAt?: string
 }
 
+export class RateLimitedError extends Error {
+  readonly retryAfterMs: number
+  constructor(retryAfterMs: number) {
+    super("Muse Code is rate limited. Wait before retrying; no alternate account is used.")
+    this.retryAfterMs = retryAfterMs
+  }
+}
+
+const retryAfterMs = (value: string | null): number => {
+  const seconds = Number(value)
+  if (value && Number.isFinite(seconds)) return Math.max(1000, seconds * 1000)
+  const when = Date.parse(value ?? "")
+  return Number.isFinite(when) ? Math.max(1000, when - Date.now()) : 60_000
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
@@ -94,7 +109,7 @@ async function fetchJSON(fetchFn: typeof fetch, url: string, init: RequestInit, 
     if (signal?.aborted) throw new Error("Muse Code request cancelled.")
     throw new Error("Muse Code network request failed or timed out. Retry when connectivity is restored.")
   }
-  if (response.status === 429) throw new Error("Muse Code is rate limited. Wait before retrying.")
+  if (response.status === 429) throw new RateLimitedError(retryAfterMs(response.headers.get("retry-after")))
   if (response.status === 401)
     throw new Error("Muse Code authorization expired or was revoked. Reconnect the subscription.")
   if (response.status === 402)
@@ -172,19 +187,38 @@ async function postTokenPayload(fetchFn: typeof fetch, deviceCode: string, signa
     throw new Error("Muse Code returned malformed token data.")
   }
   if (!isRecord(payload)) throw new Error("Muse Code returned malformed token data.")
-  return { status: response.status, payload }
+  return { status: response.status, payload, retryAfter: response.headers.get("retry-after") }
 }
 
 export const pollDeviceToken = async (
   deviceCode: string,
   fetchFn: typeof fetch = fetch,
-  opts: { intervalMs: number; deadline: number; now?: () => number; wait?: (ms: number) => Promise<void>; signal?: AbortSignal } = {
-    intervalMs: 5000,
-    deadline: Number.POSITIVE_INFINITY,
+  opts: {
+    intervalMs: number
+    deadline: number
+    now?: () => number
+    wait?: (ms: number) => Promise<void>
+    signal?: AbortSignal
   },
 ): Promise<string> => {
   const now = opts.now ?? Date.now
-  const wait = opts.wait ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)))
+  // The default wait is cancellable so closing the login attempt stops the
+  // sleep instead of leaving polling running past the device deadline.
+  const wait =
+    opts.wait ??
+    ((ms: number) =>
+      new Promise<void>((resolve, reject) => {
+        if (opts.signal?.aborted) return reject(new Error("Muse Code login cancelled."))
+        const timer = setTimeout(resolve, ms)
+        opts.signal?.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer)
+            reject(new Error("Muse Code login cancelled."))
+          },
+          { once: true },
+        )
+      }))
   let interval = opts.intervalMs
   while (now() < opts.deadline) {
     if (opts.signal?.aborted) throw new Error("Muse Code login cancelled.")
@@ -192,7 +226,7 @@ export const pollDeviceToken = async (
       throw new Error("Muse Code login cancelled.")
     })
     if (now() >= opts.deadline || opts.signal?.aborted) throw new Error("Muse Code login cancelled.")
-    const { status, payload } = await postTokenPayload(fetchFn, deviceCode, opts.signal)
+    const { status, payload, retryAfter } = await postTokenPayload(fetchFn, deviceCode, opts.signal)
     if (payload["error"] === "authorization_pending") continue
     if (payload["error"] === "slow_down") {
       interval += 5000
@@ -201,9 +235,8 @@ export const pollDeviceToken = async (
     if (payload["error"] === "access_denied")
       throw new Error("Muse Code device authorization denied. Start a new login if this was unintended.")
     if (payload["error"] === "expired_token") break
-    if (status === 429) throw new Error("Muse Code is rate limited. Wait before retrying.")
-    if (status === 401)
-      throw new Error("Muse Code authorization expired or was revoked. Reconnect the subscription.")
+    if (status === 429) throw new RateLimitedError(retryAfterMs(retryAfter))
+    if (status === 401) throw new Error("Muse Code authorization expired or was revoked. Reconnect the subscription.")
     if (status === 402)
       throw new Error("Muse Code requires a subscription payment action. Check billing in your Meta account.")
     if (status === 403)
@@ -215,12 +248,12 @@ export const pollDeviceToken = async (
   throw new Error("Muse Code device code expired. Start a new login.")
 }
 
-export const exchangeSubscriptionKey = async (
+async function postSubscriptionKey(
   accountToken: string,
   onboard: boolean,
-  fetchFn: typeof fetch = fetch,
+  fetchFn: typeof fetch,
   signal?: AbortSignal,
-): Promise<SubscriptionKey> => {
+): Promise<Record<string, unknown>> {
   const payload = await fetchJSON(
     fetchFn,
     subscriptionKeyURL,
@@ -237,12 +270,33 @@ export const exchangeSubscriptionKey = async (
     throw new Error("Muse Code subscription is inactive. Activate it in your Meta account, then reconnect.")
   if (payload["require_payment"] === true || payload["action_url"] || payload["require_payment_action_url"])
     throw new Error("Muse Code requires a subscription or billing action. Check billing in your Meta account.")
+  return payload
+}
+
+export const exchangeSubscriptionKey = async (
+  accountToken: string,
+  onboard: boolean,
+  fetchFn: typeof fetch = fetch,
+  signal?: AbortSignal,
+): Promise<SubscriptionKey> => {
+  const payload = await postSubscriptionKey(accountToken, onboard, fetchFn, signal)
   // Only the onboard exchange returns an inference key and identity; quota
   // lookups must never satisfy authentication.
   if (!onboard) return { active: payload["is_subs_active"] !== false }
   const apiKey = payload["api_key"]
   const accountID = payload["user_id"] ?? payload["user_email"]
   return { apiKey: text(apiKey, "subscription key"), accountID: text(accountID, "account identity"), active: true }
+}
+
+// Redacted subscription quota for an account token. The quota lookup never
+// returns an inference key, so it cannot satisfy authentication.
+export const fetchQuota = async (
+  accountToken: string,
+  fetchFn: typeof fetch = fetch,
+  signal?: AbortSignal,
+): Promise<{ active: boolean; windows: QuotaWindow[] }> => {
+  const payload = await postSubscriptionKey(accountToken, false, fetchFn, signal)
+  return { active: payload["is_subs_active"] !== false, windows: quotaOf(payload) }
 }
 
 // Account-entitled model IDs from the subscription key. Callers intersect
@@ -263,7 +317,8 @@ export const discoverModelIDs = async (
   const entitled: string[] = []
   const unknown: string[] = []
   for (const row of payload["data"]) {
-    if (!isRecord(row) || typeof row["id"] !== "string") throw new Error("Muse Code model discovery returned malformed data.")
+    if (!isRecord(row) || typeof row["id"] !== "string")
+      throw new Error("Muse Code model discovery returned malformed data.")
     if (KNOWN_IDS.includes(row["id"])) entitled.push(row["id"])
     else unknown.push(row["id"])
   }
@@ -330,9 +385,14 @@ const subscriptionAuth = (input: ProviderAuthOption<"optional">) =>
 
 export const configure = (input: LanguageModelOptions = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
+  // The subscription credential is only ever attached to the verified Meta
+  // API. Base-URL overrides are rejected instead of redirecting credentials
+  // to an unverified destination.
+  if (endpoint !== undefined && endpoint !== baseURL)
+    throw new Error("Muse Code refused an unverified inference destination.")
   const options = {
     ...defaults,
-    endpoint: { baseURL: endpoint ?? baseURL },
+    endpoint: { baseURL },
     auth: subscriptionAuth(input),
   }
   const configuredResponses = responsesRoute.with(options)

@@ -1,10 +1,21 @@
 import { describe, expect, test } from "bun:test"
+import { Effect } from "effect"
+import { LLM, LLMClient } from "../../src/index.js"
+import { MetaResponses } from "../../src/protocols/meta-responses.js"
+import { compileRequest } from "../../src/route/client.js"
+import { it } from "../lib/effect.js"
+import { dynamicResponse } from "../lib/http.js"
+import { sseEvents } from "../lib/sse.js"
 import {
   EFFORTS,
   NAMES,
+  RateLimitedError,
+  configure,
   discoverModelIDs,
+  model as museModel,
   effortsFor,
   exchangeSubscriptionKey,
+  fetchQuota,
   pollDeviceToken,
   quotaOf,
   startDeviceAuthorization,
@@ -53,9 +64,8 @@ describe("muse-code device authorization", () => {
     expect(authorization.url).toBe("https://auth.meta.com/device")
     expect(authorization.intervalMs).toBe(1000)
     await expect(
-      startDeviceAuthorization(
-        (async () => Response.json({ ...device, verification_uri: "https://evil.example" })) as typeof fetch,
-      ),
+      startDeviceAuthorization((async () =>
+        Response.json({ ...device, verification_uri: "https://evil.example" })) as typeof fetch),
     ).rejects.toThrow(/unverified/)
   })
 
@@ -127,4 +137,107 @@ describe("muse-code subscription exchange", () => {
       unknown: ["muse-spark-99"],
     })
   })
+
+  test("quota lookups are redacted and never mint keys", async () => {
+    const bodies: string[] = []
+    const fetchFn = (async (_url: unknown, init?: RequestInit) => {
+      bodies.push(String(JSON.parse(String(init?.body))?.onboard ?? false))
+      return Response.json({ is_subs_active: true, subs_usage: { window: { used_percent: 7 } } })
+    }) as typeof fetch
+    await expect(fetchQuota("fixture-account", fetchFn)).resolves.toEqual({
+      active: true,
+      windows: [{ window: "window", usedPercent: 7 }],
+    })
+    expect(bodies).toEqual(["false"])
+  })
+
+  test("rate limiting carries the Retry-After horizon", async () => {
+    const limited = (async () => new Response("{}", { status: 429, headers: { "retry-after": "120" } })) as typeof fetch
+    const failure = await exchangeSubscriptionKey("fixture-account", true, limited).catch((error) => error)
+    expect(failure).toBeInstanceOf(RateLimitedError)
+    expect((failure as RateLimitedError).retryAfterMs).toBe(120_000)
+  })
+
+  test("the default poll wait is cancellable", async () => {
+    const controller = new AbortController()
+    const pending = (async () => {
+      await new Promise((_resolve, reject) =>
+        controller.signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true }),
+      )
+    }) as typeof fetch
+    const polled = pollDeviceToken("fixture-device", pending, {
+      intervalMs: 60_000,
+      deadline: Date.now() + 120_000,
+      signal: controller.signal,
+    })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    controller.abort()
+    await expect(polled).rejects.toThrow(/cancelled/)
+  })
+
+  test("inference rejects unverified base URLs instead of moving credentials", () => {
+    expect(() => configure({ baseURL: "https://evil.example/v1" })).toThrow(/unverified/)
+    expect(() => configure({ apiKey: "fixture-key" }).responses("muse-spark-1.3")).not.toThrow()
+  })
+})
+
+describe("muse-code transport", () => {
+  const tools = [{ name: "read", description: "Read a file", inputSchema: { type: "object" } }]
+
+  it.effect("sends the subscription key only to the verified Responses endpoint", () =>
+    Effect.gen(function* () {
+      const responses = configure({ apiKey: "fixture-subscription-key" }).responses("muse-spark-1.3")
+      expect(responses.provider).toBe("muse-code")
+      expect(responses.route.providerMetadataKey).toBe("muse-code")
+      expect(responses.route.endpoint.baseURL).toBe("https://api.meta.ai/v1")
+      expect(responses.route.body).toBe(MetaResponses.protocol.body)
+      const compiled = yield* compileRequest(LLM.request({ model: responses, prompt: "Hello", tools }))
+      expect(compiled.protocol).toBe("meta-responses")
+      expect(compiled.body).toMatchObject({
+        model: "muse-spark-1.3",
+        store: false,
+        include: ["reasoning.encrypted_content"],
+      })
+      expect(JSON.stringify(compiled.body.tools)).toContain('"read"')
+      const response = yield* LLMClient.generate(LLM.request({ model: responses, prompt: "Hello", tools })).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.sync(() => {
+              expect(input.request.method).toBe("POST")
+              expect(input.request.url).toBe("https://api.meta.ai/v1/responses")
+              expect(input.request.headers.authorization).toBe("Bearer fixture-subscription-key")
+              expect(JSON.parse(input.text)).toMatchObject({ model: "muse-spark-1.3", stream: true, store: false })
+              return input.respond(
+                sseEvents(
+                  { type: "response.created", response: { id: "resp_muse" } },
+                  {
+                    type: "response.output_item.done",
+                    output_index: 0,
+                    item: {
+                      id: "msg_muse",
+                      type: "message",
+                      role: "assistant",
+                      content: [{ type: "output_text", text: "MUSE_SUBSCRIPTION_OK" }],
+                    },
+                  },
+                  { type: "response.completed", response: { id: "resp_muse" } },
+                ),
+                { headers: { "content-type": "text/event-stream" } },
+              )
+            }),
+          ),
+        ),
+      )
+      expect(response.text).toBe("MUSE_SUBSCRIPTION_OK")
+    }),
+  )
+
+  it.effect("settings select models without inheriting environment credentials", () =>
+    Effect.gen(function* () {
+      const selected = museModel("muse-spark-1.2", { apiKey: "explicit-key" })
+      expect(selected.route.endpoint.baseURL).toBe("https://api.meta.ai/v1")
+      const compiled = yield* compileRequest(LLM.request({ model: selected, prompt: "Hello" }))
+      expect(compiled.body).toMatchObject({ store: false })
+    }),
+  )
 })
