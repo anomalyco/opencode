@@ -60,6 +60,7 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
     summary_diffs: info.summary?.diffs ? [...info.summary.diffs] : undefined,
     metadata: info.metadata,
     cost: info.cost ?? 0,
+    budget: info.budget ?? null,
     tokens_input: (info.tokens ?? { input: 0 }).input,
     tokens_output: (info.tokens ?? { output: 0 }).output,
     tokens_reasoning: (info.tokens ?? { reasoning: 0 }).reasoning,

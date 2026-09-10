@@ -1129,6 +1129,12 @@ const layer = Layer.effect(
             break
           }
 
+          const sessionState = yield* sessions.get(sessionID).pipe(Effect.orDie)
+          if (sessionState.budget !== undefined && (sessionState.cost ?? 0) >= sessionState.budget) {
+            yield* status.set(sessionID, { type: "idle" })
+            break
+          }
+
           step++
           if (step === 1)
             yield* title({

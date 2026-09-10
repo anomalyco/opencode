@@ -307,6 +307,15 @@ export const dict = {
   "prompt.attachment.remove": "Remove attachment",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
+  "prompt.action.voiceInput": "Voice input",
+  "prompt.action.voiceStop": "Stop voice input",
+  "prompt.voice.error.notAllowed": "Microphone access denied",
+  "prompt.voice.error.noSpeech": "No speech detected",
+  "prompt.voice.error.audioCapture": "Could not access the microphone",
+  "prompt.voice.error.network": "Speech recognition unavailable",
+  "prompt.voice.error.serviceNotAllowed": "Speech recognition service unavailable",
+  "prompt.voice.error.languageNotSupported": "Speech recognition does not support this language",
+  "prompt.voice.error.generic": "Speech recognition failed",
 
   "prompt.toast.pasteUnsupported.title": "Unsupported attachment",
   "prompt.toast.pasteUnsupported.description": "Only images, PDFs, or text files can be attached here.",
@@ -517,6 +526,11 @@ export const dict = {
   "context.usage.clickToView": "Click to view context",
   "context.usage.view": "View context usage",
 
+  "context.budget.title": "Session budget",
+  "context.budget.unset": "No budget set",
+  "context.budget.edit": "Edit budget",
+  "context.budget.clear": "Clear",
+
   "language.en": "English",
   "language.zh": "简体中文",
   "language.zht": "繁體中文",
@@ -701,6 +715,8 @@ export const dict = {
   "session.messages.jumpToLatest": "Jump to latest",
 
   "session.context.addToContext": "Add {{selection}} to context",
+  "session.budget.exceeded.title": "Session budget reached",
+  "session.budget.exceeded.description": "The session reached its budget. Increase or clear the budget to continue.",
   "session.todo.title": "Todos",
   "session.todo.collapse": "Collapse",
   "session.todo.expand": "Expand",

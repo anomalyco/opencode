@@ -182,6 +182,7 @@ export type Session = {
     diffs?: Array<SnapshotFileDiff>
   }
   cost?: number
+  budget?: number
   tokens?: {
     input: number
     output: number
@@ -2210,6 +2211,7 @@ export type GlobalSession = {
     diffs?: Array<SnapshotFileDiff>
   }
   cost?: number
+  budget?: number
   tokens?: {
     input: number
     output: number
@@ -3912,6 +3914,7 @@ export type SessionV2Info = {
   agent?: string
   model?: ModelRef
   cost: number
+  budget?: number
   tokens: {
     input: number
     output: number
@@ -9487,6 +9490,7 @@ export type SessionCreateData = {
       [key: string]: unknown
     }
     permission?: PermissionRuleset
+    budget?: number
     workspaceID?: string
   }
   path?: never
@@ -9620,6 +9624,7 @@ export type SessionUpdateData = {
       [key: string]: unknown
     }
     permission?: PermissionRuleset
+    budget?: number | null
     time?: {
       archived?: number
     }

@@ -79,6 +79,7 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { createPromptInputTransientState } from "./prompt-input/transient-state"
+import { createVoiceInput, type VoiceErrorKind } from "./prompt-input/voice"
 import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import type { ReferenceInfo } from "@opencode-ai/sdk/v2/client"
@@ -1101,6 +1102,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return true
   }
 
+  const voice = createVoiceInput({
+    lang: () => language.locale(),
+    onFinal: (text) => {
+      addPart({ type: "text", content: text, start: 0, end: text.length })
+    },
+    onError: (kind) => {
+      const keys: Partial<Record<VoiceErrorKind, string>> = {
+        "not-allowed": "prompt.voice.error.notAllowed",
+        "no-speech": "prompt.voice.error.noSpeech",
+        "audio-capture": "prompt.voice.error.audioCapture",
+        network: "prompt.voice.error.network",
+        "service-not-allowed": "prompt.voice.error.serviceNotAllowed",
+        "language-not-supported": "prompt.voice.error.languageNotSupported",
+        unknown: "prompt.voice.error.generic",
+      }
+      const key = keys[kind]
+      if (!key) return
+      showToast({ variant: "error", title: language.t(key) })
+    },
+  })
+
   const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
     history.add(prompt, mode, mode === "shell" ? [] : historyComments())
   }
@@ -1501,7 +1523,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           onMouseDown={(e) => {
             const target = e.target
             if (!(target instanceof HTMLElement)) return
-            if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"]')) {
+            if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-voice"]')) {
               return
             }
             editorRef?.focus()
@@ -1575,6 +1597,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             />
 
             <div class="flex items-center gap-1 pointer-events-auto">
+              <Show when={voice.supported() && store.mode === "normal"}>
+                <Tooltip placement="top" value={voice.listening() ? language.t("prompt.action.voiceStop") : language.t("prompt.action.voiceInput")}>
+                  <IconButton
+                    data-action="prompt-voice"
+                    type="button"
+                    variant={voice.listening() ? "primary" : "ghost"}
+                    icon={voice.listening() ? "mic-active" : "mic"}
+                    class="size-8"
+                    aria-label={
+                      voice.listening() ? language.t("prompt.action.voiceStop") : language.t("prompt.action.voiceInput")
+                    }
+                    onClick={() => voice.toggle()}
+                  />
+                </Tooltip>
+              </Show>
               <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                 <IconButton
                   data-action="prompt-submit"

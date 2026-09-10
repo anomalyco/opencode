@@ -111,6 +111,8 @@ const emptyFollowups: FollowupItem[] = []
 type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
 
+const budgetNotified = new Set<string>()
+
 const sessionViewState = () => ({
   messageId: undefined as string | undefined,
   mobileTab: "session" as "session" | "changes",
@@ -532,6 +534,24 @@ export default function Page() {
   }
 
   const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
+
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    const sessionInfo = info()
+    const limit = sessionInfo?.budget
+    if (!limit) return
+    const cost = sessionInfo?.cost
+    if (typeof cost !== "number" || cost < limit) return
+    if (sync().data.session_working(id)) return
+    if (budgetNotified.has(id)) return
+    budgetNotified.add(id)
+    showToast({
+      variant: "error",
+      title: language.t("session.budget.exceeded.title"),
+      description: language.t("session.budget.exceeded.description"),
+    })
+  })
   const isChildSession = createMemo(() => !!info()?.parentID)
   const canReview = createMemo(() => !!sync().project)
   const reviewTab = createMemo(() => isDesktop())
