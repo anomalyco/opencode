@@ -42,9 +42,6 @@ export const enumerableSource = (label: string, value: unknown, node: AstNode): 
   return value as Record<string, unknown>
 }
 
-const requireObject = (name: string, input: unknown, node: AstNode) =>
-  enumerableSource(`Object.${name}(...)`, input, node)
-
 export const objectAssign = (args: Array<unknown>, node: AstNode): unknown => {
   const target = args[0]
   // JS would box a primitive target; wrappers and primitives cannot hold fields here.
@@ -154,17 +151,19 @@ export const objectGlobal = <R>(runner: Runner<R>, toolKeys: (path: ReadonlyArra
         toProgram(
           args[0] instanceof ToolReference
             ? [...toolKeys(args[0].path)]
-            : Object.keys(requireObject("keys", args[0], node)),
+            : Object.keys(enumerableSource("Object.keys(...)", args[0], node)),
           "Object.keys result",
         ),
       ),
-      values: objectStatic("values", (args, node) => Object.values(requireObject("values", args[0], node))),
+      values: objectStatic("values", (args, node) =>
+        Object.values(enumerableSource("Object.values(...)", args[0], node)),
+      ),
       entries: objectStatic("entries", (args, node) =>
-        Object.entries(requireObject("entries", args[0], node)).map(([key, item]) => [key, item]),
+        Object.entries(enumerableSource("Object.entries(...)", args[0], node)).map(([key, item]) => [key, item]),
       ),
       hasOwn: objectStatic("hasOwn", (args, node) =>
         Object.hasOwn(
-          requireObject("hasOwn", args[0], node),
+          enumerableSource("Object.hasOwn(...)", args[0], node),
           args[1] === AsyncIteratorSymbol || args[1] === IteratorSymbol ? args[1] : String(args[1]),
         ),
       ),
