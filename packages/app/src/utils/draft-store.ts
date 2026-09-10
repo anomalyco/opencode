@@ -153,19 +153,6 @@ export function createBrowserDraftStore(): DraftStore {
   })
 }
 
-export async function blobDataUrl(blob: BlobReference, mime: string) {
-  const data = await fetch(blob.url).then((response) => response.blob())
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.addEventListener("error", () => reject(reader.error))
-    reader.addEventListener("load", () => {
-      const value = typeof reader.result === "string" ? reader.result : ""
-      resolve(`data:${mime};base64,${value.slice(value.indexOf(",") + 1)}`)
-    })
-    reader.readAsDataURL(data)
-  })
-}
-
 export function createLegacyBlobReference(dataUrl: string): BlobReference {
   return { id: dataUrl, url: dataUrl }
 }

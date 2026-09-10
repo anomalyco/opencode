@@ -129,6 +129,34 @@ describe("createCompatibleApi", () => {
     ])
   })
 
+  test("keeps attachment conversion local for V1 servers", async () => {
+    const { api, requests } = setup("v1")
+    const uploaded = await api.session.attachment({
+      sessionID: "ses_1",
+      file: new Blob(["hello"], { type: "text/plain" }),
+      name: "notes.txt",
+    })
+
+    expect(requests).toEqual([])
+    expect(uploaded).toMatchObject({ name: "notes.txt", mime: "text/plain", size: 5 })
+    expect(uploaded.uri).toBe("data:text/plain;base64,aGVsbG8=")
+
+    await api.session.prompt({
+      sessionID: "ses_1",
+      id: "msg_1",
+      text: "inspect",
+      files: [{ uri: uploaded.uri, name: uploaded.name, mime: uploaded.mime }],
+    })
+
+    expect(new URL(requests[0]!.url).pathname).toBe("/session/ses_1/prompt_async")
+    expect((await requests[0]!.json()).parts[1]).toMatchObject({
+      type: "file",
+      mime: "text/plain",
+      url: "data:text/plain;base64,aGVsbG8=",
+      filename: "notes.txt",
+    })
+  })
+
   test("resolves protocol detection once across implementation methods", async () => {
     let detections = 0
     const resolved = Promise.resolve<"v1" | "v2">("v2")
