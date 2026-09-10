@@ -73,6 +73,10 @@ export const layer = Layer.effect(
     const text: Interface["text"] = (input) =>
       runText(input).pipe(
         Effect.catchTag(
+          ["ProviderPolicy.Unavailable", "ProviderPolicy.Denied"],
+          (error) => new UnavailableError({ message: error.message }),
+        ),
+        Effect.catchTag(
           "Integration.Authorization",
           () =>
             new UnavailableError({
