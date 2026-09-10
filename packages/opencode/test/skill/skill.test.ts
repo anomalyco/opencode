@@ -655,4 +655,18 @@ description: A skill in the .opencode/skills directory.
     expect(formatted.length).toBeLessThanOrEqual(300_000)
     expect(formatted).toContain("pathological-skill-0")
   })
+
+  test("keeps pathological compact fallback structurally closed", () => {
+    const skills: Skill.Info[] = Array.from({ length: 16 }, (_, i) => ({
+      name: `${"very-long-skill-name-".repeat(20_000)}${i}`,
+      description: "description",
+      location: "/skills/SKILL.md",
+      content: "",
+      scope: "global",
+    }))
+
+    const formatted = Skill.fmt(skills, { verbose: true })
+    expect(formatted.length).toBeLessThanOrEqual(300_000)
+    expect(formatted.endsWith("</global_skills>")).toBe(true)
+  })
 })

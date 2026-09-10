@@ -411,7 +411,31 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
   const staticOutput = render(0)
   const compactStaticOutput = render(0, false)
   if (compactStaticOutput.length > MAX_SKILL_PROMPT_CHARS) {
-    return compactStaticOutput.slice(0, MAX_SKILL_PROMPT_CHARS)
+    const lines = [
+      ...(inlineSkills.length > 0
+        ? [
+            "<available_skills>",
+            ...inlineSkills.map((skill) => `  <skill>\n    <name>${skill.name}</name>\n  </skill>`),
+            "</available_skills>",
+          ]
+        : []),
+      ...(globalSkills.length > 0
+        ? [
+            `<global_skills count="${globalSkills.length}">`,
+            ...globalSkills.map((skill) => `  - ${skill.name}`),
+            "</global_skills>",
+          ]
+        : []),
+    ]
+    const output: string[] = []
+    let length = 0
+    for (const line of lines) {
+      const next = length === 0 ? line.length : length + 1 + line.length
+      if (next > MAX_SKILL_PROMPT_CHARS) continue
+      output.push(line)
+      length = next
+    }
+    return output.join("\n")
   }
 
   const includeLocation = staticOutput.length <= MAX_SKILL_PROMPT_CHARS
