@@ -362,8 +362,8 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
           "<available_skills>",
           ...inlineSkills.flatMap((skill) => [
             "  <skill>",
-            `    <name>${skill.name}</name>`,
-            `    <description>${description(skill)}</description>`,
+            `    <name>${escapeHtml(skill.name)}</name>`,
+            `    <description>${escapeHtml(description(skill))}</description>`,
             ...(includeLocation ? [`    <location>${escapeHtml(skill.location)}</location>`] : []),
             "  </skill>",
           ]),
@@ -376,7 +376,7 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
           `<global_skills count="${globalSkills.length}">`,
           `  There are ${globalSkills.length} additional global skills installed in your machine environment (~/.agents/skills, ~/.claude/skills).`,
           ...globalSkills.toSorted((a, b) => a.name.localeCompare(b.name)).map(
-            (skill) => `  - ${skill.name}: ${description(skill)}`,
+            (skill) => `  - ${escapeHtml(skill.name)}: ${escapeHtml(description(skill))}`,
           ),
           "</global_skills>",
         )
@@ -415,14 +415,14 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
       ...(inlineSkills.length > 0
         ? [
             "<available_skills>",
-            ...inlineSkills.map((skill) => `  <skill>\n    <name>${skill.name}</name>\n  </skill>`),
+            ...inlineSkills.map((skill) => `  <skill>\n    <name>${escapeHtml(skill.name)}</name>\n  </skill>`),
             "</available_skills>",
           ]
         : []),
       ...(globalSkills.length > 0
         ? [
             `<global_skills count="${globalSkills.length}">`,
-            ...globalSkills.map((skill) => `  - ${skill.name}`),
+            ...globalSkills.map((skill) => `  - ${escapeHtml(skill.name)}`),
             "</global_skills>",
           ]
         : []),

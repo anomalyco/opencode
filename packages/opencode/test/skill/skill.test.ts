@@ -669,4 +669,22 @@ description: A skill in the .opencode/skills directory.
     expect(formatted.length).toBeLessThanOrEqual(300_000)
     expect(formatted.endsWith("</global_skills>")).toBe(true)
   })
+
+  test("escapes skill metadata in XML prompt output", () => {
+    const formatted = Skill.fmt(
+      [
+        {
+          name: "unsafe <skill> & name",
+          description: "Use <script> & tools",
+          location: "/skills/SKILL.md",
+          content: "",
+        },
+      ],
+      { verbose: true },
+    )
+
+    expect(formatted).toContain("unsafe &lt;skill&gt; &amp; name")
+    expect(formatted).toContain("Use &lt;script&gt; &amp; tools")
+    expect(formatted).not.toContain("<script>")
+  })
 })
