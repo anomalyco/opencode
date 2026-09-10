@@ -129,6 +129,7 @@ const TOKEN_SCALE = 1_000_000
 const DOLLARS_PER_MICROCENT = 1 / 100_000_000
 const METRIC_MODEL_LIMIT = 10
 const TOP_MODEL_SEGMENT_LIMIT = 9
+const TOP_MODEL_RANK_RANGE: UsageRange = "1D"
 const SITE_PRODUCT = "Go"
 const LEADERBOARD_CHANGE_MIN_MULTIPLE = 10
 const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const
@@ -347,7 +348,7 @@ function buildStatsHomeData(
           product,
           range,
           getWindow(range, earliest, latest),
-          getWindow("1W", earliest, latest),
+          getWindow(TOP_MODEL_RANK_RANGE, earliest, latest),
         ),
       ),
     ),
@@ -358,7 +359,7 @@ function buildStatsHomeData(
           product,
           range,
           getWindow(range, earliest, latest),
-          getWindow("1W", earliest, latest),
+          getWindow(TOP_MODEL_RANK_RANGE, earliest, latest),
           "users",
         ),
       ),
