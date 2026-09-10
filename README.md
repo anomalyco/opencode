@@ -16,27 +16,27 @@
 
 <p align="center">
   <a href="README.md">English</a> |
-  <a href="README.zh.md">简体中文</a> |
-  <a href="README.zht.md">繁體中文</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.de.md">Deutsch</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.it.md">Italiano</a> |
-  <a href="README.da.md">Dansk</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.pl.md">Polski</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.bs.md">Bosanski</a> |
-  <a href="README.ar.md">العربية</a> |
-  <a href="README.no.md">Norsk</a> |
-  <a href="README.br.md">Português (Brasil)</a> |
-  <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a> |
-  <a href="README.uk.md">Українська</a> |
-  <a href="README.bn.md">বাংলা</a> |
-  <a href="README.gr.md">Ελληνικά</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
+  <a href="docs/i18n/README.zh.md">简体中文</a> |
+  <a href="docs/i18n/README.zht.md">繁體中文</a> |
+  <a href="docs/i18n/README.ko.md">한국어</a> |
+  <a href="docs/i18n/README.de.md">Deutsch</a> |
+  <a href="docs/i18n/README.es.md">Español</a> |
+  <a href="docs/i18n/README.fr.md">Français</a> |
+  <a href="docs/i18n/README.it.md">Italiano</a> |
+  <a href="docs/i18n/README.da.md">Dansk</a> |
+  <a href="docs/i18n/README.ja.md">日本語</a> |
+  <a href="docs/i18n/README.pl.md">Polski</a> |
+  <a href="docs/i18n/README.ru.md">Русский</a> |
+  <a href="docs/i18n/README.bs.md">Bosanski</a> |
+  <a href="docs/i18n/README.ar.md">العربية</a> |
+  <a href="docs/i18n/README.no.md">Norsk</a> |
+  <a href="docs/i18n/README.br.md">Português (Brasil)</a> |
+  <a href="docs/i18n/README.th.md">ไทย</a> |
+  <a href="docs/i18n/README.tr.md">Türkçe</a> |
+  <a href="docs/i18n/README.uk.md">Українська</a> |
+  <a href="docs/i18n/README.bn.md">বাংলা</a> |
+  <a href="docs/i18n/README.gr.md">Ελληνικά</a> |
+  <a href="docs/i18n/README.vi.md">Tiếng Việt</a>
 </p>
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
