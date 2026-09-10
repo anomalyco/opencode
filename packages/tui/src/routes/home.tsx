@@ -50,6 +50,7 @@ export function Home() {
       once = true
       return
     }
+    if (route.skipInitialPrompt) return
     if (!args.prompt) return
     r.set({ input: args.prompt, parts: [] })
     once = true
@@ -61,6 +62,7 @@ export function Home() {
     if (sent) return
     if (!r) return
     if (!sync.ready || !local.model.ready) return
+    if (route.skipInitialPrompt) return
     if (!args.prompt) return
     if (r.current.input !== args.prompt) return
     sent = true

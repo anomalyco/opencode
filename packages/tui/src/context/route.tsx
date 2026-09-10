@@ -6,6 +6,11 @@ import { useTuiStartup } from "./runtime"
 export type HomeRoute = {
   type: "home"
   prompt?: PromptInfo
+  skipInitialPrompt?: boolean
+}
+
+export type LoadingRoute = {
+  type: "loading"
 }
 
 export type SessionRoute = {
@@ -20,7 +25,7 @@ export type PluginRoute = {
   data?: Record<string, unknown>
 }
 
-export type Route = HomeRoute | SessionRoute | PluginRoute
+export type Route = HomeRoute | LoadingRoute | SessionRoute | PluginRoute
 
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",

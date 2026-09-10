@@ -1070,6 +1070,46 @@ describe("tool.task", () => {
     }),
   )
 
+  background.instance("cancelling a child task run does not deadlock", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const runState = yield* SessionRunState.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const started = yield* Deferred.make<void>()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          background: true,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {
+            promptOps: {
+              cancel: (sessionID) => runState.cancel(sessionID).pipe(Effect.asVoid),
+              resolvePromptParts: (template) => Effect.succeed([{ type: "text", text: template }]),
+              prompt: () => Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+            } satisfies TaskPromptOps,
+          },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      yield* Deferred.await(started)
+      yield* runState.cancel(result.metadata.sessionId).pipe(Effect.timeout("1 second"))
+      expect((yield* jobs.get(result.metadata.sessionId))?.status).toBe("cancelled")
+    }),
+  )
+
   it.instance("cancelling a parent run recursively cancels descendant background tasks", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
