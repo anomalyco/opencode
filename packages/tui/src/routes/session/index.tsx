@@ -86,11 +86,13 @@ import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
 import { Slot } from "../../plugin/render"
 import { usePlugin } from "../../plugin/context"
+import { ToolPresentation, useToolDetails, useToolStatus } from "./tool-presentation"
 import {
   cacheReuseDrop,
   createSessionRows,
   isToolRow,
   messageBoundaryIDs,
+  survivingScrollAnchor,
   resolvePart,
   sessionRowID,
   turnDuration,
@@ -287,8 +289,9 @@ export function Session(props: {
       if (id === sessionID) setRowsSynced(true)
     },
   )
+  const [toolCalls, setToolCalls] = createSignal(config.session?.tool_calls ?? "show")
   const rows = createMemo(() =>
-    config.session?.tool_calls === "hide"
+    toolCalls() === "hide"
       ? transcript.filter((row) => !isToolRow(row, (id) => data.session.message.get(route.sessionID, id)))
       : transcript,
   )
@@ -376,7 +379,7 @@ export function Session(props: {
     if (restored || !synced() || !rowsSynced() || !scroll || scroll.isDestroyed) return
     restored = true
     // Initial synchronization can finish after the reader has already navigated.
-    if (!isAwayFromBottom()) restoreScrollPosition()
+    if (!isAwayFromBottom()) restoreScrollPosition(sessionTabs.scrollAnchor(sessionID))
   })
   let awayTimer: ReturnType<typeof setTimeout> | undefined
   onCleanup(() => {
@@ -508,10 +511,10 @@ export function Session(props: {
   function saveScrollAnchor() {
     // Initial layout must not overwrite the saved position before synchronization restores it.
     if (!restored) return
-    if (!isAwayFromBottom()) {
-      sessionTabs.setScrollAnchor(sessionID, undefined)
-      return
-    }
+    sessionTabs.setScrollAnchor(sessionID, readScrollAnchor())
+  }
+  function readScrollAnchor() {
+    if (!isAwayFromBottom()) return
     let first: { messageID: string; screenY: number } | undefined
     let anchor: { messageID: string; screenY: number } | undefined
     for (const child of scroll.getChildren()) {
@@ -521,13 +524,13 @@ export function Session(props: {
       if (item.screenY <= 0) anchor = item
     }
     anchor ??= first
-    if (anchor) sessionTabs.setScrollAnchor(sessionID, anchor)
-    else sessionTabs.setScrollAnchor(sessionID, undefined)
+    return anchor
   }
-  function restoreScrollPosition() {
-    const anchor = sessionTabs.scrollAnchor(sessionID)
+  function restoreScrollPosition(saved: ReturnType<typeof readScrollAnchor>) {
+    const anchor = survivingScrollAnchor(saved, boundaries(), messages())
     const index = anchor ? boundaries().indexOf(anchor.messageID) : -1
     if (!anchor || index === -1) {
+      scroll.stickyScroll = true
       scroll.scrollTo(scroll.scrollHeight)
       setAwayFromBottom(false)
       return
@@ -560,6 +563,27 @@ export function Session(props: {
       })
     restore()
   }
+
+  createEffect(
+    on(
+      () => config.session?.tool_calls ?? "show",
+      (mode) => {
+        if (!restored || !scroll || scroll.isDestroyed) {
+          setToolCalls(mode)
+          return
+        }
+        // Capture identity before replacing the row list: pinned offsets belong
+        // to the old projection. This also works when session tabs are disabled.
+        const anchor = readScrollAnchor()
+        clearMessageNavigation()
+        setToolCalls(mode)
+        setHiddenRows(undefined)
+        setVisibleRowsEnd(undefined)
+        restoreScrollPosition(anchor)
+      },
+      { defer: true },
+    ),
+  )
 
   createEffect(() => {
     const current = prompt()
@@ -2627,51 +2651,10 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText; mes
 
 function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }) {
   const ctx = use()
-  const renderer = useRenderer()
-  const theme = useTheme()
   return (
-    <Show
-      when={ctx.config.session?.tool_calls === "minimal"}
-      fallback={<ToolPartContent part={props.part} images={props.images} />}
-    >
-      {(_) => {
-        const [expanded, setExpanded] = createSignal(false)
-        const [hover, setHover] = createSignal(false)
-        const failed = () => props.part.state.status === "error"
-        const summary = createMemo(() => {
-          const input = props.part.state.input
-          const label = minimalToolSummary(props.part.name, typeof input === "string" ? {} : input)
-          const error = props.part.state.status === "error" ? ` — failed: ${props.part.state.error.message}` : ""
-          return `${label}${error}`.replace(/\s+/g, " ")
-        })
-        return (
-          <>
-            <InlineToolRow
-              id={`minimal-tool:${props.part.name}:${props.part.id}`}
-              singleLine
-              icon={failed() ? "✗" : expanded() ? "▾" : "▸"}
-              complete
-              pending={props.part.name}
-              spinner={props.part.state.status === "streaming" || props.part.state.status === "running"}
-              failed={failed()}
-              color={hover() ? theme.text.default : theme.text.subdued}
-              errorColor={theme.text.feedback.error.default}
-              onMouseOver={() => setHover(true)}
-              onMouseOut={() => setHover(false)}
-              onMouseUp={() => {
-                if (renderer.getSelection()?.getSelectedText()) return
-                setExpanded((value) => !value)
-              }}
-            >
-              {summary()}
-            </InlineToolRow>
-            <Show when={expanded()}>
-              <ToolPartContent part={props.part} images={props.images} />
-            </Show>
-          </>
-        )
-      }}
-    </Show>
+    <ToolPresentation part={props.part} sessionID={ctx.sessionID}>
+      <ToolPartContent part={props.part} images={props.images} />
+    </ToolPresentation>
   )
 }
 
@@ -2836,6 +2819,7 @@ type ToolProps = {
 }
 function GenericTool(props: ToolProps) {
   const theme = useTheme()
+  const details = useToolDetails()
   const output = createMemo(() => props.output?.trim() ?? "")
   const input = createMemo(() => Object.entries(props.input))
   const [expanded, setExpanded] = createSignal(false)
@@ -2844,17 +2828,19 @@ function GenericTool(props: ToolProps) {
 
   return (
     <>
-      <InlineTool
-        icon={props.part.state.status === "error" ? "✗" : "✓"}
-        complete={props.part.state.status === "completed"}
-        pending={props.tool}
-        spinner={loading()}
-        part={props.part}
-        onClick={expandable() ? () => setExpanded((value) => !value) : undefined}
-      >
-        {genericToolSummary(props.tool, props.input)}
-      </InlineTool>
-      <Show when={expanded()}>
+      <Show when={!details()}>
+        <InlineTool
+          icon={props.part.state.status === "error" ? "✗" : "✓"}
+          complete={props.part.state.status === "completed"}
+          pending={props.tool}
+          spinner={loading()}
+          part={props.part}
+          onClick={expandable() ? () => setExpanded((value) => !value) : undefined}
+        >
+          {genericToolSummary(props.tool, props.input)}
+        </InlineTool>
+      </Show>
+      <Show when={details() || expanded()}>
         <box paddingLeft={3 + INLINE_TOOL_ICON_WIDTH}>
           <For each={input()}>
             {([key, value]) => (
@@ -2891,16 +2877,6 @@ export function genericToolSummary(tool: string, input: Record<string, unknown>)
   return `${tool}${args ? ` ${args}` : ""}`
 }
 
-export function minimalToolSummary(tool: string, input: Record<string, unknown>) {
-  const patch = stringValue(input.patchText)
-  const primary = patch
-    ? [...patch.matchAll(/\*\*\* (?:Add|Update|Delete) File: ([^\r\n]+)/g)].map((match) => match[1].trim()).join(", ")
-    : ["description", "path", "filePath", "command", "pattern", "url", "query"]
-        .map((key) => stringValue(input[key]))
-        .find((value) => value?.trim())
-  return `${tool}${primary ? ` ${primary}` : ""}`.replace(/\s+/g, " ")
-}
-
 function useToolPermission(part: () => SessionMessageAssistantTool | undefined) {
   const ctx = use()
   const data = useData()
@@ -2931,21 +2907,12 @@ function InlineTool(props: {
   const [hover, setHover] = createSignal(false)
   const [errorExpanded, setErrorExpanded] = createSignal(false)
   const permission = useToolPermission(() => props.part)
-
-  const error = createMemo(() =>
-    !props.running && props.part.state.status === "error" ? props.part.state.error.message : undefined,
-  )
-
-  const denied = createMemo(
-    () =>
-      error()?.includes("QuestionRejectedError") ||
-      error()?.includes("rejected permission") ||
-      error()?.includes("specified a rule") ||
-      error()?.includes("user dismissed"),
-  )
-
-  const failed = createMemo(() => Boolean(error() && !denied()))
-  const clickable = createMemo(() => Boolean(props.onClick || failed()))
+  const details = useToolDetails()
+  const status = useToolStatus(() => props.part)
+  const error = () => (props.running ? undefined : status().error)
+  const denied = () => status().denied
+  const failed = () => !props.running && status().failed
+  const clickable = createMemo(() => Boolean(props.onClick || (!details() && failed() && error())))
   const fg = createMemo(() => {
     if (props.color) return props.color
     if (permission()) return theme.text.feedback.warning.default
@@ -2961,9 +2928,9 @@ function InlineTool(props: {
       color={fg()}
       errorColor={theme.text.feedback.error.default}
       failed={failed()}
-      denied={Boolean(denied())}
+      denied={denied()}
       error={error()}
-      errorExpanded={errorExpanded()}
+      errorExpanded={!details() && errorExpanded()}
       complete={props.complete}
       pending={props.pending}
       failure={props.failure}
@@ -2973,7 +2940,7 @@ function InlineTool(props: {
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
-        if (failed()) {
+        if (failed() && error() && !details()) {
           setErrorExpanded((value) => !value)
           return
         }
@@ -2986,8 +2953,6 @@ function InlineTool(props: {
 }
 
 export function InlineToolRow(props: {
-  id?: string
-  singleLine?: boolean
   icon: string
   iconColor?: RGBA
   color?: RGBA
@@ -3007,36 +2972,8 @@ export function InlineToolRow(props: {
   onMouseUp?: () => void
 }) {
   return (
-    <box
-      id={props.id}
-      paddingLeft={3}
-      onMouseOver={props.onMouseOver}
-      onMouseOut={props.onMouseOut}
-      onMouseUp={props.onMouseUp}
-    >
+    <box paddingLeft={3} onMouseOver={props.onMouseOver} onMouseOut={props.onMouseOut} onMouseUp={props.onMouseUp}>
       <Switch>
-        <Match when={props.singleLine}>
-          <box flexDirection="row" height={1}>
-            <box width={INLINE_TOOL_ICON_WIDTH} flexShrink={0}>
-              <Show
-                when={props.spinner}
-                fallback={<text fg={props.failed ? props.errorColor : props.color}>{props.icon}</text>}
-              >
-                <Spinner color={props.color} />
-              </Show>
-            </box>
-            <text
-              flexGrow={1}
-              minWidth={0}
-              height={1}
-              wrapMode="none"
-              truncate
-              fg={props.failed ? props.errorColor : props.color}
-            >
-              {props.children}
-            </text>
-          </box>
-        </Match>
         <Match when={props.spinner}>
           <Show when={props.status} fallback={<Spinner color={props.color} children={props.children} />}>
             {(status) => (
@@ -3146,8 +3083,10 @@ function BlockToolContent(props: BlockToolProps & { borderColor: RGBA }) {
   const ctx = use()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
+  const details = useToolDetails()
   const error = createMemo(
-    () => props.error ?? (props.part?.state.status === "error" ? props.part.state.error.message : undefined),
+    () =>
+      props.error ?? (!details() && props.part?.state.status === "error" ? props.part.state.error.message : undefined),
   )
   const permission = useToolPermission(() => props.part)
   return (
@@ -3160,9 +3099,10 @@ function BlockToolContent(props: BlockToolProps & { borderColor: RGBA }) {
       backgroundColor={hover() ? theme.raise(theme.background.default) : theme.background.default}
       customBorderChars={SplitBorder.customBorderChars}
       borderColor={props.borderColor}
-      onMouseOver={() => props.onClick && setHover(true)}
+      onMouseOver={() => !details() && props.onClick && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
+        if (details()) return
         if (renderer.getSelection()?.getSelectedText()) return
         props.onClick?.()
       }}
@@ -3253,6 +3193,8 @@ function ShellDisplay(props: {
   const ctx = use()
   const client = useClient()
   const data = useData()
+  const details = useToolDetails()
+  const status = useToolStatus(() => props.part)
   const pathFormatter = usePathFormatter()
   // A Session can move while its shell is still running in the original Location.
   const location = data.shell.get(props.shellID ?? "")?.location ?? data.session.get(ctx.sessionID)?.location
@@ -3262,9 +3204,12 @@ function ShellDisplay(props: {
     const id = props.shellID
     return Boolean(id && data.shell.get(id))
   })
-  const isRunning = createMemo(() => props.status === "running" || backgroundRunning())
+  const isRunning = createMemo(() =>
+    props.part ? status().running : props.status === "running" || backgroundRunning(),
+  )
   const workdir = createMemo(() => pathFormatter.format(props.workdir))
-  const [expanded, setExpanded] = createSignal(false)
+  const [open, setExpanded] = createSignal(false)
+  const expanded = () => details() || open()
   const [backgroundOutput, setBackgroundOutput] = createSignal("")
   const [outputTruncated, setOutputTruncated] = createSignal(false)
   let loading = false
@@ -3314,13 +3259,14 @@ function ShellDisplay(props: {
   }
   createEffect(() => {
     const running = backgroundRunning()
+    const visible = expanded()
     if (!running) {
-      if (wasRunning) void loadBackgroundOutput(true)
+      if (wasRunning || visible) void loadBackgroundOutput(true)
       wasRunning = false
       return
     }
     wasRunning = true
-    if (props.background && !expanded()) return
+    if (props.background && !visible) return
     void loadBackgroundOutput()
     const interval = setInterval(() => void loadBackgroundOutput(), 1_000)
     onCleanup(() => clearInterval(interval))
@@ -3348,11 +3294,7 @@ function ShellDisplay(props: {
   const limitedInput = createMemo(() => limited().slice(0, input().length))
   const limitedOutput = createMemo(() => limited().slice(Math.min(limited().length, input().length + 2)))
   const expandable = createMemo(() => Boolean(props.shellID) || collapsed().overflow)
-  const toggle = () => {
-    const next = !expanded()
-    setExpanded(next)
-    if (next) void loadBackgroundOutput(!backgroundRunning())
-  }
+  const toggle = () => setExpanded((value) => !value)
 
   return (
     <BlockTool part={props.part} error={props.error} onClick={expandable() ? toggle : undefined}>
@@ -3513,14 +3455,11 @@ function WebSearch(props: ToolProps) {
 
 function Subagent(props: ToolProps) {
   const { navigate } = useRoute()
-  const data = useData()
+  const status = useToolStatus(() => props.part)
   const sessionID = createMemo(() => stringValue(props.metadata.sessionID) ?? stringValue(props.metadata.sessionId))
   const description = createMemo(() => stringValue(props.input.description))
   const continuation = createMemo(() => Boolean(stringValue(props.input.sessionID)))
-  const isRunning = createMemo(() => {
-    const id = sessionID()
-    return props.part.state.status === "running" || Boolean(id && data.session.status(id) === "running")
-  })
+  const isRunning = () => status().running
 
   return (
     <InlineTool
@@ -3628,25 +3567,29 @@ function ExecuteCallView(props: { call: Accessor<ExecuteCall> }) {
 function Execute(props: ToolProps) {
   const ctx = use()
   const theme = useTheme()
-  const isLoading = createMemo(() => props.part.state.status === "streaming" || props.part.state.status === "running")
+  const details = useToolDetails()
+  const status = useToolStatus(() => props.part)
+  const isLoading = () => status().running
   const calls = createMemo(() => executeCalls(props.metadata.toolCalls))
   const output = createMemo(() => stripAnsi(props.output?.trim() ?? ""))
-  const hasRuntimeError = createMemo(() => props.metadata.error === true || props.part.state.status === "error")
+  const hasRuntimeError = () => status().failed
   const outputPreview = createMemo(() => collapseToolOutput(output(), 4, 4 * Math.max(20, ctx.width - 6)).output)
   const showOutput = createMemo(() => output() && hasRuntimeError())
 
   return (
     <>
-      <InlineTool
-        icon={hasRuntimeError() ? "✗" : props.part.state.status === "completed" ? "✓" : "│"}
-        color={hasRuntimeError() ? theme.text.feedback.error.default : undefined}
-        spinner={isLoading()}
-        pending="execute"
-        complete={true}
-        part={props.part}
-      >
-        execute
-      </InlineTool>
+      <Show when={!details()}>
+        <InlineTool
+          icon={hasRuntimeError() ? "✗" : props.part.state.status === "completed" ? "✓" : "│"}
+          color={hasRuntimeError() ? theme.text.feedback.error.default : undefined}
+          spinner={isLoading()}
+          pending="execute"
+          complete={true}
+          part={props.part}
+        >
+          execute
+        </InlineTool>
+      </Show>
       <Index each={calls()}>{(call) => <ExecuteCallView call={call} />}</Index>
       <Show when={showOutput()}>
         <box paddingLeft={3}>
@@ -3948,7 +3891,12 @@ function recordValue(value: unknown): Record<string, unknown> | undefined {
   return isRecord(value) ? value : undefined
 }
 
-function formatSessionTranscript(session: SessionInfo, messages: SessionMessageInfo[], thinking: boolean, tools = true) {
+function formatSessionTranscript(
+  session: SessionInfo,
+  messages: SessionMessageInfo[],
+  thinking: boolean,
+  tools = true,
+) {
   const body = messages.flatMap((message) => {
     if (message.type === "user") return [`## User\n\n${message.text}`]
     if (message.type === "shell")

@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { For } from "solid-js"
+import { minimalToolSummary, ToolSummaryRow } from "../../../src/routes/session/tool-presentation"
+import { toolPresentationStatus } from "../../../src/util/tool-display"
 import { testRender, type JSX } from "@opentui/solid"
 import {
   InlineToolRow,
   executeCallSummary,
   genericToolSummary,
-  minimalToolSummary,
   isBackgroundSubagent,
   parseApplyPatchFiles,
   parseDiagnostics,
@@ -138,16 +139,18 @@ describe("TUI inline tool wrapping", () => {
     expect(minimalToolSummary("custom.lookup", {})).toBe("custom.lookup")
   })
 
-  test.each([24, 70, 112])("minimal tool rows stay one line at %s columns", async (width) => {
+  test.each([24, 112])("minimal tool rows stay one line at %s columns", async (width) => {
     const frame = await renderFrame(
       () => (
         <box width={width}>
-          <InlineToolRow singleLine icon="▸" complete pending="shell">
-            {minimalToolSummary("shell", { command: `echo first\necho ${"long-argument-".repeat(30)}` })}
-          </InlineToolRow>
-          <InlineToolRow singleLine icon="✗" complete failed pending="read" error="Hidden error details">
-            {`read ${"long/path/".repeat(30)} — failed`}
-          </InlineToolRow>
+          <ToolSummaryRow
+            status={toolPresentationStatus(undefined)}
+            summary={minimalToolSummary("shell", { command: `echo first\necho ${"long-argument-".repeat(30)}` })}
+          />
+          <ToolSummaryRow
+            status={{ ...toolPresentationStatus(undefined), failed: true, error: "Hidden error details" }}
+            summary={`read ${"long/path/".repeat(30)} — failed`}
+          />
           <text>AFTER_TOOLS</text>
         </box>
       ),

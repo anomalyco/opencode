@@ -424,6 +424,22 @@ export function sessionRowID(row: SessionRow, boundaryID?: string) {
   if (row.type === "part") return `session-part:${row.ref.messageID}:${row.ref.partID}`
 }
 
+export function survivingScrollAnchor(
+  anchor: { messageID: string; screenY: number } | undefined,
+  boundaries: (string | undefined)[],
+  messages: readonly SessionMessageInfo[],
+) {
+  if (!anchor) return
+  const visible = new Set(boundaries.filter((id) => id !== undefined))
+  if (visible.has(anchor.messageID)) return anchor
+  const index = messages.findIndex((message) => message.id === anchor.messageID)
+  if (index === -1) return
+  const message =
+    messages.slice(0, index).findLast((message) => visible.has(message.id)) ??
+    messages.slice(index + 1).find((message) => visible.has(message.id))
+  if (message) return { messageID: message.id, screenY: 0 }
+}
+
 function rowBoundaryMessageID(row: SessionRow, messages: Map<string, SessionMessageInfo>) {
   if (row.type === "message") {
     const message = messages.get(row.messageID)

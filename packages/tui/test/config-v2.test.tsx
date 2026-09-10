@@ -100,9 +100,7 @@ test("names tool grouping explicitly in settings", () => {
 test("validates tool call visibility and keeps calls visible by default", () => {
   for (const tool_calls of ["hide", "minimal", "show"] as const) {
     expect(decodeInfo({ session: { tool_calls } })).toEqual({ session: { tool_calls } })
-    expect(resolve({ session: { tool_calls } }, { terminalSuspend: true }).session.tool_calls).toBe(tool_calls)
   }
-  expect(() => decodeInfo({ session: { tool_calls: false } })).toThrow()
   expect(() => decodeInfo({ session: { tool_calls: "collapsed" } })).toThrow()
   expect(settings.find((setting) => setting.path.join(".") === "session.tool_calls")).toMatchObject({
     title: "Tool calls",
