@@ -32,6 +32,7 @@ export function resolveGitGraphStyleColors(
     merge: colors.secondary ?? rgba(BRANCH_RGB[2]),
     highlight: colors.warning ?? rgba(BRANCH_RGB[1]),
     reverse: colors.warning ?? rgba(BRANCH_RGB[5]),
+    cherry: colors.muted ?? rgba(BRANCH_RGB[6]),
     label: colors.text ?? rgba([228, 239, 232]),
   }
 }

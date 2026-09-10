@@ -122,7 +122,28 @@ export function parseMermaidGitGraphDiagram(content: string): GitGraphDiagram {
     }
 
     if (operation === "cherry-pick") {
-      throw syntaxError(source.lineNumber, line, "Cherry-pick is not supported")
+      const attributes = parseAttributes(rest, source.lineNumber, line, ["id", "tag"])
+      const referenced = single(attributes, "id", source.lineNumber, line)
+      if (referenced === undefined)
+        throw syntaxError(source.lineNumber, line, "GitGraph cherry-pick requires an id")
+      const sourceCommit = commits.find((commit) => commit.id === referenced)
+      if (sourceCommit === undefined)
+        throw syntaxError(source.lineNumber, line, `cherry-pick references unknown commit "${referenced}"`)
+      const id = `commit-${generatedId++}`
+      const currentHead = heads.get(currentBranch)
+      const commit: GitGraphCommit = {
+        id,
+        message: sourceCommit.message,
+        tags: attributes.get("tag") ?? sourceCommit.tags,
+        type: "CHERRY",
+        branch: currentBranch,
+        parents: currentHead === undefined ? [] : [currentHead],
+        cherryPicked: referenced,
+      }
+      commits.push(commit)
+      ids.add(id)
+      heads.set(currentBranch, id)
+      continue
     }
     throw syntaxError(source.lineNumber, line)
   }
