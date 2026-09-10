@@ -258,7 +258,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "følgende undtagelser",
 
   "go.title": "OpenCode Go | Kodningsmodeller til lav pris for alle",
-  "go.banner.text": "GLM-5.3-Flash får fordoblet brugsgrænse i en begrænset periode",
   "go.meta.description":
     "Go koster $10/måned, med generøse brugsgrænser og pålidelig adgang til førende kodningsmodeller.",
   "go.hero.title": "Kodningsmodeller til lav pris for alle",
@@ -274,9 +273,17 @@ export const dict = {
   "go.graph.freePill": "Big Pickle og gratis modeller",
   "go.graph.go": "Go",
   "go.graph.label": "Forespørgsler pr. 5 timer",
+  "go.graph.period": "Forbrug",
+  "go.graph.model": "Model",
+  "go.graph.requests": "Estimerede anmodninger / 5 timer",
+  "go.graph.allowance": "Månedligt forbrug",
+  "go.graph.new": "Ny",
+  "go.graph.scale": "Ikke-lineær skala for anmodninger",
+  "go.graph.showAll": "Vis alle {{count}} modeller",
+  "go.graph.showLess": "Vis færre modeller",
   "go.graph.limitedRegions": "begrænsede regioner",
   "go.graph.limitedTime": "begrænset periode",
-  "go.graph.usageLimits": "Brugsgrænser",
+  "go.graph.usageLimits": "Forbrugsgrænser",
   "go.graph.aria": "Forespørgsler pr. 5t: {{free}} vs {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
