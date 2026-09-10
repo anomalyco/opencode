@@ -272,7 +272,7 @@ export function maybeParseApplyPatch(
   if (argv.length === 3 && argv[0] === "bash" && argv[1] === "-lc") {
     // Simple extraction - in real implementation would need proper bash parsing
     const script = argv[2]
-    const heredocMatch = script.match(/apply_patch\s*<<['"](\w+)['"]\s*\n([\s\S]*?)\n\1/)
+    const heredocMatch = script.match(/apply_patch\s*<<['"]?([A-Za-z0-9_.+-]+)['"]?\s*\n([\s\S]*?)\n\1/)
 
     if (heredocMatch) {
       const patchContent = heredocMatch[2]
