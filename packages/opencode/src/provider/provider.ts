@@ -31,6 +31,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { NanoGPT } from "./nanogpt"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 
@@ -1735,6 +1736,10 @@ const layer = Layer.effect(
       try {
         const provider = s.providers[model.providerID]
         const options = { ...provider.options }
+
+        if (model.providerID === "nano-gpt" && model.api.npm === "@ai-sdk/openai-compatible") {
+          options.metadataExtractor = NanoGPT.metadataExtractor
+        }
 
         if (
           model.providerID === "google-vertex" &&
