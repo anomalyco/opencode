@@ -482,7 +482,7 @@ function MeDialog(props: { onHome: () => void; onSettings: () => void }) {
   const language = useLanguage()
   const close = () => dialog.close()
   return (
-    <div class="flex w-64 flex-col gap-1 rounded-[12px] bg-v2-background-bg-base p-2 shadow-[var(--v2-elevation-floating)]">
+    <div class="pointer-events-auto flex w-64 flex-col gap-1 rounded-[12px] bg-v2-background-bg-base p-2 shadow-[var(--v2-elevation-floating)]">
       <div class="px-2 py-1 text-v2-text-text-muted [font-weight:530]">Me</div>
       <SidebarNavButton
         onClick={() => {
