@@ -364,6 +364,14 @@ ultimate source of truth.
       `entries`, `toString`, and `size`.
 - [x] URL values serialize to their href; URLSearchParams serialize to `{}`.
 
+## Web platform helpers
+
+- [x] `atob` and `btoa` with forgiving-base64 decoding and WebIDL string conversion; invalid input throws an Error
+      named `InvalidCharacterError`, since there is no `DOMException`.
+- [x] `crypto.randomUUID()`.
+- [ ] `crypto.getRandomValues` and `crypto.subtle`, `TextEncoder`/`TextDecoder`, and `Blob`: these need a binary
+      value type, which the JSON-like data model does not have yet.
+
 ## Errors and diagnostics
 
 - [x] `Error`, `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, and `URIError`, callable with

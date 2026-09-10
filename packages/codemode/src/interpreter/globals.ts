@@ -11,6 +11,7 @@ import { regexpGlobal } from "../stdlib/regexp.js"
 import { stringGlobal } from "../stdlib/string.js"
 import { uriGlobal, urlGlobal, urlSearchParamsGlobal } from "../stdlib/url.js"
 import { coercion, errorConstructors } from "../stdlib/value.js"
+import { atobGlobal, btoaGlobal, cryptoGlobal } from "../stdlib/web.js"
 import { ToolReference } from "../tool-runtime.js"
 import { errorGlobal } from "./errors.js"
 import { HostFunction } from "./host.js"
@@ -71,5 +72,8 @@ export const globals = <R>(host: Host<R>): ReadonlyArray<readonly [string, unkno
   ["encodeURIComponent", uriGlobal("encodeURIComponent")],
   ["decodeURI", uriGlobal("decodeURI")],
   ["decodeURIComponent", uriGlobal("decodeURIComponent")],
+  ["atob", atobGlobal],
+  ["btoa", btoaGlobal],
+  ["crypto", cryptoGlobal],
   ...[...errorConstructors].map((name) => [name, errorGlobal(name, host.runner)] as const),
 ]
