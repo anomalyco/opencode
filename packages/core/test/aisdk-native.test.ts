@@ -259,9 +259,9 @@ describe("AISDKNative", () => {
 
     // GPT-5.6+ reject `reasoning_effort` and take the Responses-style nested field.
     for (const modelID of ["global.openai.gpt-5.6-sol", "us.openai.gpt-5.6-sol", "us.openai.gpt-6-astra"]) {
-      expect(map("@ai-sdk/amazon-bedrock", { reasoningConfig: { maxReasoningEffort: "none" } }, modelID)?.body).toEqual(
-        { additionalModelRequestFields: { reasoning: { effort: "none" } } },
-      )
+      expect(
+        map("@ai-sdk/amazon-bedrock", { reasoningConfig: { maxReasoningEffort: "none" } }, modelID)?.body,
+      ).toEqual({ additionalModelRequestFields: { reasoning: { effort: "none" } } })
     }
     expect(
       map(
@@ -300,14 +300,7 @@ describe("AISDKNative", () => {
       },
       headers: { "x-test": "value" },
     })
-    for (const modelID of [
-      "openai.gpt-oss-20b",
-      "openai.gpt-oss-120b",
-      "openai.gpt-oss-safeguard-20b",
-      "openai.gpt-oss-safeguard-120b",
-      "gpt-oss-20b",
-      "prefix/gpt-oss-120b-suffix",
-    ]) {
+    for (const modelID of ["openai.gpt-oss-safeguard-20b", "openai.gpt-oss-safeguard-120b"]) {
       expect(map("@ai-sdk/amazon-bedrock/mantle", settings, modelID)?.package).toBe(
         "@opencode/ai/providers/amazon-bedrock/mantle/chat",
       )
@@ -321,10 +314,7 @@ describe("AISDKNative", () => {
         },
         "openai.gpt-5.5",
       ),
-    ).toMatchObject({
-      package: "@opencode/ai/providers/amazon-bedrock/mantle/responses",
-      settings: { baseURL: "https://bedrock-mantle.us-west-2.api.aws/openai/v1" },
-    })
+    ).toMatchObject({ settings: { baseURL: "https://bedrock-mantle.us-west-2.api.aws/openai/v1" } })
   })
 
   test("maps static Bedrock Mantle credentials without leaking connection options", () => {

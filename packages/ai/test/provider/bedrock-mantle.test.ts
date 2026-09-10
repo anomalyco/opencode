@@ -25,9 +25,11 @@ describe("Amazon Bedrock Mantle provider", () => {
       expect(provider.model).toBe(provider.responses)
       expect(AmazonBedrockMantle.model).toBe(AmazonBedrockMantle.responsesModel)
       expect(model).toBe(AmazonBedrockMantle.responsesModel)
-      expect(provider.model("openai.gpt-5.5").route.transport).toBe(OpenResponses.httpTransport)
+      expect(provider.model("openai.gpt-oss-120b").route.transport).toBe(OpenResponses.httpTransport)
       const chat = yield* compileRequest(LLM.request({ model: provider.chat("openai.gpt-oss-120b"), prompt: "Hi" }))
-      const responses = yield* compileRequest(LLM.request({ model: provider.model("openai.gpt-5.5"), prompt: "Hi" }))
+      const responses = yield* compileRequest(
+        LLM.request({ model: provider.model("openai.gpt-oss-120b"), prompt: "Hi" }),
+      )
 
       expect(chat).toMatchObject({
         route: "bedrock-mantle-chat",
@@ -37,7 +39,7 @@ describe("Amazon Bedrock Mantle provider", () => {
       expect(responses).toMatchObject({
         route: "bedrock-mantle-responses",
         protocol: "open-responses",
-        body: { model: "openai.gpt-5.5", store: false },
+        body: { model: "openai.gpt-oss-120b", store: false },
       })
       expect(provider.model("openai.gpt-oss-120b").route.providerMetadataKey).toBe("mantle")
       expect(provider.chat("openai.gpt-oss-120b").route.providerMetadataKey).toBe("mantle")

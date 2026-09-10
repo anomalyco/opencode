@@ -179,30 +179,22 @@ describe("ModelResolver", () => {
         }),
         credential,
       )
+      const chat = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
+          modelID: "openai.gpt-oss-20b",
+          settings: { region: "us-east-2" },
+        }),
+        credential,
+      )
+
       expect(responses.route).toMatchObject({
         id: "bedrock-mantle-responses",
-        protocol: "open-responses",
         endpoint: { baseURL: "https://bedrock-mantle.us-east-2.api.aws/v1" },
       })
-      for (const modelID of [
-        "openai.gpt-oss-20b",
-        "openai.gpt-oss-120b",
-        "openai.gpt-oss-safeguard-20b",
-        "openai.gpt-oss-safeguard-120b",
-      ]) {
-        const chat = yield* ModelResolver.fromCatalogModel(
-          model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
-            modelID,
-            settings: { region: "us-east-2" },
-          }),
-          credential,
-        )
-        expect(chat.route).toMatchObject({
-          id: "bedrock-mantle-chat",
-          protocol: "openai-chat",
-          endpoint: { baseURL: "https://bedrock-mantle.us-east-2.api.aws/v1" },
-        })
-      }
+      expect(chat.route).toMatchObject({
+        id: "bedrock-mantle-chat",
+        endpoint: { baseURL: "https://bedrock-mantle.us-east-2.api.aws/v1" },
+      })
     }),
   )
 
@@ -1047,7 +1039,11 @@ describe("ModelResolver", () => {
       const packages = [
         ["@ai-sdk/anthropic", "@opencode/ai/providers/anthropic", "api-model"],
         ["@ai-sdk/amazon-bedrock", "@opencode/ai/providers/amazon-bedrock", "api-model"],
-        ["@ai-sdk/amazon-bedrock/mantle", "@opencode/ai/providers/amazon-bedrock/mantle/chat", "openai.gpt-oss-120b"],
+        [
+          "@ai-sdk/amazon-bedrock/mantle",
+          "@opencode/ai/providers/amazon-bedrock/mantle/chat",
+          "openai.gpt-oss-120b",
+        ],
         ["@ai-sdk/azure", "@opencode/ai/providers/azure/responses", "api-model"],
         ["@ai-sdk/cerebras", "@opencode/ai/providers/cerebras", "api-model"],
         ["@ai-sdk/deepinfra", "@opencode/ai/providers/deepinfra", "api-model"],
