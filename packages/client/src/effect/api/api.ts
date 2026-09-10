@@ -11,6 +11,7 @@ import type { RelativePath } from "@opencode/schema/schema"
 import type { Brand } from "effect"
 import type { Model } from "@opencode/schema/model"
 import type { DateTime } from "effect"
+import type { Permission } from "@opencode/schema/permission"
 import type { SessionMessage } from "@opencode/schema/session-message"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 import type { PromptInput } from "@opencode/schema/prompt-input"
@@ -26,7 +27,6 @@ import type { Integration } from "@opencode/schema/integration"
 import type { Form } from "@opencode/schema/form"
 import type { Mcp } from "@opencode/schema/mcp"
 import type { Credential } from "@opencode/schema/credential"
-import type { Permission } from "@opencode/schema/permission"
 import type { PermissionSaved } from "@opencode/schema/permission-saved"
 import type { FileSystem } from "@opencode/schema/filesystem"
 import type { Command } from "@opencode/schema/command"
@@ -209,6 +209,7 @@ export type SessionCreateInput = {
   readonly model?: Model.Ref | undefined
   readonly location?: Location.Ref | undefined
   readonly metadata?: Session.Metadata | undefined
+  readonly permissions?: Permission.Ruleset | undefined
 }
 export type SessionCreateOutput = Session.Info
 export type SessionCreateOperation<E = never> = (input?: SessionCreateInput) => Effect.Effect<SessionCreateOutput, E>
@@ -437,6 +438,7 @@ export type SessionLogOutput =
             readonly agent?: Agent.ID | undefined
             readonly model?: Model.Ref | undefined
             readonly metadata?: Session.Metadata | undefined
+            readonly permissions?: Permission.Ruleset | undefined
             readonly version: string
           }
         }
@@ -488,6 +490,15 @@ export type SessionLogOutput =
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?: Location.Ref | undefined
           readonly data: { readonly sessionID: Session.ID; readonly title: string }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.permissions.updated"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?: Location.Ref | undefined
+          readonly data: { readonly sessionID: Session.ID; readonly permissions: Permission.Ruleset }
         }
       | {
           readonly id: Event.ID
@@ -1585,6 +1596,12 @@ export type PermissionReplyOperation<E = never> = (
   input: PermissionReplyInput,
 ) => Effect.Effect<PermissionReplyOutput, E>
 
+export type PermissionRulesInput = { readonly sessionID: Session.ID; readonly permissions: Permission.Ruleset }
+export type PermissionRulesOutput = void
+export type PermissionRulesOperation<E = never> = (
+  input: PermissionRulesInput,
+) => Effect.Effect<PermissionRulesOutput, E>
+
 export interface PermissionApi<E = never> {
   readonly request: { readonly list: PermissionRequestListOperation<E> }
   readonly saved: { readonly list: PermissionSavedListOperation<E>; readonly remove: PermissionSavedRemoveOperation<E> }
@@ -1592,6 +1609,7 @@ export interface PermissionApi<E = never> {
   readonly list: PermissionListOperation<E>
   readonly get: PermissionGetOperation<E>
   readonly reply: PermissionReplyOperation<E>
+  readonly rules: PermissionRulesOperation<E>
 }
 
 export type FileListInput = {
