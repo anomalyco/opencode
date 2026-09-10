@@ -122,6 +122,7 @@ describe("opencode run (non-interactive subprocess)", () => {
           expect(typeof evt.sessionID).toBe("string")
         }
         expect(events.map((event) => event.type)).toEqual(["step_start", "text", "step_finish"])
+        expect(events.at(-1)?.part).toEqual(expect.objectContaining({ type: "step-finish", reason: "stop" }))
         expect(events.map(({ timestamp: _, sessionID: __, ...event }) => event)).toEqual([
           { type: "step_start", part: expect.objectContaining({ type: "step-start" }) },
           {

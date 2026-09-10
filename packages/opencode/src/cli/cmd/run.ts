@@ -747,7 +747,9 @@ export const RunCommand = effectCmd({
               }
 
               if (part.type === "step-finish") {
-                if (emit("step_finish", { part })) continue
+                const emitted = emit("step_finish", { part })
+                if (part.reason === "stop") break
+                if (emitted) continue
               }
 
               if (part.type === "text" && part.time?.end) {
