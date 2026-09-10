@@ -466,7 +466,6 @@ it.effect("compaction hooks can supply the summary instead of the model", () =>
       Effect.sync(() => {
         expect(event.sessionID).toBe(sessionID)
         expect(event.agent).toBe(Agent.defaultID)
-        expect(event.kind).toBe("compaction")
         expect(JSON.stringify(event.messages)).toContain("Hooked compaction should see this conversation.")
         event.result = { summary: "## Objective\n- hooked summary" }
       }),

@@ -370,7 +370,6 @@ it.effect(
         Effect.sync(() => {
           expect(event.sessionID).toBe(sessionID)
           expect(event.agent).toBe(Agent.ID.make("build"))
-          expect(event.kind).toBe("generate")
           expect(Object.keys(event.tools)).toEqual(["lookup"])
           event.system.push(SystemPart.make("Answer briefly."))
           event.messages = [Message.user("[redacted]")]

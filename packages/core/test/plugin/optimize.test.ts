@@ -30,7 +30,6 @@ const makeHost = Effect.gen(function* () {
 })
 
 const context = (id: string, system = fallback): SessionHooks["context"] => ({
-  kind: "primary",
   sessionID: Session.ID.make("ses_model_optimization"),
   agent: Agent.ID.make("build"),
   model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make(id) }),

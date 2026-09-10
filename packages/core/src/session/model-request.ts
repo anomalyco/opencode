@@ -214,7 +214,7 @@ export const layer = Layer.effect(
         tools.definitions.map((t) => [{ description: t.description, input: { ...t.inputSchema } }, t] as const),
       )
       const shaped = yield* shape(
-        { sessionID: session.id, model: model.ref, kind, system: input.system, messages: input.messages, options: {} },
+        { sessionID: session.id, model: model.ref, system: input.system, messages: input.messages, options: {} },
         Object.fromEntries(Array.from(given, ([d, t]) => [t.name, d])),
       )
       // Match by identity first, then by key. Entries matching neither were invented by a

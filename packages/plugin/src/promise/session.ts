@@ -25,7 +25,6 @@ export type SessionRequestOptions = Types.DeepMutable<GenerationOptionsFields> &
 export interface SessionRequest {
   readonly sessionID: Session.ID
   readonly model: Model.Ref
-  readonly kind: SessionRequestKind
   system: Array<SystemPart>
   messages: Array<Message>
   options: SessionRequestOptions

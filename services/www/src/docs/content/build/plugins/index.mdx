@@ -1223,7 +1223,7 @@ await ctx.session.hook("compaction", async (event) => {
 ```
 
 Changes affect only the outgoing model call, not persisted history or configuration. A hook that should apply to
-every request must register for each kind; `event.kind` says which one is running.
+every request must register for each kind.
 
 Request overrides follow these rules:
 
@@ -1355,7 +1355,6 @@ interface SessionRetryHook {
 interface SessionRequestHook {
   readonly sessionID: string
   readonly model: { providerID: string; id: string; variant?: string }
-  readonly kind: "primary" | "compaction" | "title" | "generate"
   system: SystemPart[]
   messages: Message[]
   options: {
