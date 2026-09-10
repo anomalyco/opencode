@@ -25,6 +25,13 @@
     }
   }
 
+  s {
+    display: block;
+    color: var(--color-text-weak);
+    font-size: 0.6875rem;
+    font-weight: 400;
+  }
+
   [data-slot="columns"],
   [data-slot="model-row"] {
     display: grid;
