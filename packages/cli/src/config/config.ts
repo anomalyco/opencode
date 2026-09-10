@@ -7,6 +7,7 @@ import { produce, type Draft } from "immer"
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser"
 import path from "path"
 import { ConfigMigration } from "./migrate"
+import { ConfigPersistence } from "./persist"
 import { Info, SchemaURL } from "./schema"
 
 export * from "./schema"
@@ -37,13 +38,6 @@ export const layer = Layer.effect(
       const value: any = parse(text, errors, { allowTrailingComma: true })
       if (errors.length) return undefined
       return Option.getOrUndefined(decodeRecord(value))
-    })
-
-    const write = Effect.fnUntraced(function* (text: string) {
-      const temp = file + ".tmp"
-      yield* fs.makeDirectory(path.dirname(file), { recursive: true })
-      yield* fs.writeFileString(temp, text, { mode: 0o600 })
-      yield* fs.rename(temp, file)
     })
 
     const migrate = ConfigMigration.run({ file, config: global.config, state: global.state }).pipe(
@@ -101,7 +95,9 @@ export const layer = Layer.effect(
           const errors: ParseError[] = []
           const config = Option.getOrUndefined(decode(parse(updated, errors, { allowTrailingComma: true })))
           if (errors.length || config === undefined) return yield* Effect.fail(new Error("Invalid CLI config update"))
-          yield* write(updated.endsWith("\n") ? updated : updated + "\n")
+          yield* ConfigPersistence.write(file, updated.endsWith("\n") ? updated : updated + "\n").pipe(
+            Effect.provideService(FileSystem.FileSystem, fs),
+          )
           return config
         }),
       ).pipe(Effect.mapError((cause) => new Error("Failed to update CLI config", { cause }))),
