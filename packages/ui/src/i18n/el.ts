@@ -69,7 +69,7 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.error.addCredits": "Προσθήκη πιστώσεων",
   "dialog.usageExceeded.freeTier.title": "Συμπληρώθηκε το δωρεάν όριο",
   "dialog.usageExceeded.freeTier.description":
-    "Εγγραφείτε στο OpenCode Μετάβαση για αξιόπιστη πρόσβαση στα καλύτερα μοντέλα ανοιχτού κώδικα, ξεκινώντας από 5 $/μήνα.",
+    "Εγγραφείτε στο OpenCode Go για 10 $/μήνα και αποκτήστε αξιόπιστη πρόσβαση στα καλύτερα μοντέλα ανοιχτού κώδικα.",
   "dialog.usageExceeded.freeTier.actionLabel": "Εγγραφή",
   "dialog.usageExceeded.accountRateLimit.title": "Συμπληρώθηκε το όριο μετάβασης",
   "dialog.usageExceeded.accountRateLimit.description":

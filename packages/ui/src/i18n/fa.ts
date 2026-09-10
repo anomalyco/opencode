@@ -69,7 +69,7 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.error.addCredits": "اعتبار اضافه کنید",
   "dialog.usageExceeded.freeTier.title": "به حد مجاز رایگان رسیده است",
   "dialog.usageExceeded.freeTier.description":
-    "برای دسترسی مطمئن به بهترین مدل های منبع باز، از 5 دلار در ماه، در OpenCode Go مشترک شوید.",
+    "برای دسترسی مطمئن به بهترین مدل‌های منبع باز، با قیمت 10 دلار در ماه در OpenCode Go مشترک شوید.",
   "dialog.usageExceeded.freeTier.actionLabel": "مشترک شوید",
   "dialog.usageExceeded.accountRateLimit.title": "به حد مجاز رفتن رسید",
   "dialog.usageExceeded.accountRateLimit.description":

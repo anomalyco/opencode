@@ -207,6 +207,9 @@ describe("session.retry.retryable", () => {
     "provider-returned-error",
     "terminated",
     "fetch failed",
+    "network error",
+    "network-error",
+    "network_error",
     "connection refused",
     "connect ECONNREFUSED",
     "request ETIMEDOUT",
@@ -215,6 +218,9 @@ describe("session.retry.retryable", () => {
     "response timed out",
     "Please retry your request",
     "try your request again",
+    "Please try again in a few minutes",
+    "The model is currently at capacity due to high demand",
+    "The service is temporarily at capacity",
     "upstream returned status 524",
   ])("retries matching API error text: %s", (message) => {
     expect(SessionRetry.retryable(wrap(message), retryProvider)).toEqual({ message })
@@ -348,7 +354,7 @@ describe("session.retry.retryable", () => {
         reason: "free_tier_limit",
         provider: "opencode",
         title: "Free limit reached",
-        message: "Subscribe to OpenCode Go for reliable access to the best open-source models, starting at $5/month.",
+        message: "Subscribe to OpenCode Go for reliable access to the best open-source models for $10/month.",
         label: "subscribe",
         link: SessionRetry.GO_UPSELL_URL,
       },
