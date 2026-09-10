@@ -1,4 +1,3 @@
-import type { WebContents } from "electron"
 import { Effect, Queue, Stream } from "effect"
 import type { DesktopEvent } from "../shared/ipc-rpc/events"
 
@@ -20,7 +19,9 @@ export function ipcEventStream(senderId: number) {
   return queue ? Stream.fromQueue(queue) : Stream.empty
 }
 
-export function emitIpcEvent(sender: WebContents, event: DesktopEvent) {
+export function emitIpcEvent(sender: { id: number }, event: DesktopEvent) {
   const queue = queues.get(sender.id)
-  if (queue) Queue.offerUnsafe(queue, event)
+  if (!queue) return false
+  Queue.offerUnsafe(queue, event)
+  return true
 }
