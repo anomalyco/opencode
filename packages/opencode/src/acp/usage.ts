@@ -57,7 +57,7 @@ export interface Interface {
     readonly connection: UsageConnection
     readonly sessionID: string
     readonly directory: string
-  }) => Effect.Effect<void>
+  }) => Effect.Effect<readonly SessionMessage[] | undefined>
 }
 
 export class MessageLoader extends Context.Service<MessageLoader, MessageLoaderInterface>()(
@@ -100,6 +100,38 @@ export function buildUsage(message: AssistantTokenCost): Usage {
     ...(cachedReadTokens > 0 ? { cachedReadTokens } : {}),
     ...(cachedWriteTokens > 0 ? { cachedWriteTokens } : {}),
   }
+}
+
+/**
+ * Usage summed over the current turn: every assistant message after the last
+ * user message. Each tool-call step is its own assistant message, so the final
+ * message alone under-counts a multi-step turn. Subtask and compaction
+ * messages are parented to the same user message and count toward the turn.
+ */
+export function turnUsage(messages: readonly SessionMessage[]): Usage | undefined {
+  const start = messages.findLastIndex((message) => message.info.role === "user") + 1
+  const turn = messages
+    .slice(start)
+    .map((message) => message.info)
+    .filter((info): info is AssistantMessage => info.role === "assistant")
+  if (turn.length === 0) return undefined
+  return buildUsage(
+    turn.reduce(
+      (total, info) => ({
+        cost: total.cost + info.cost,
+        tokens: {
+          input: total.tokens.input + info.tokens.input,
+          output: total.tokens.output + info.tokens.output,
+          reasoning: total.tokens.reasoning + info.tokens.reasoning,
+          cache: {
+            read: total.tokens.cache.read + info.tokens.cache.read,
+            write: total.tokens.cache.write + info.tokens.cache.write,
+          },
+        },
+      }),
+      { cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } },
+    ),
+  )
 }
 
 export function latestAssistantMessage(messages: readonly SessionMessage[]): AssistantMessage | undefined {
@@ -192,18 +224,18 @@ const layer = Layer.effect(
             Effect.logError("failed to fetch messages for usage update", { error: error }).pipe(Effect.as(undefined)),
           ),
         )
-      if (!messages) return
+      if (!messages) return undefined
 
       const message = latestAssistantMessage(messages)
-      if (!message) return
-      if (!message.providerID || !message.modelID) return
+      if (!message) return messages
+      if (!message.providerID || !message.modelID) return messages
 
       const size = yield* contextLimit({
         directory: input.directory,
         providerID: ProviderV2.ID.make(message.providerID),
         modelID: ModelV2.ID.make(message.modelID),
       })
-      if (!size) return
+      if (!size) return messages
 
       yield* Effect.promise(() =>
         input.connection
@@ -218,6 +250,7 @@ const layer = Layer.effect(
           })
           .catch(() => {}),
       )
+      return messages
     })
 
     return Service.of({
