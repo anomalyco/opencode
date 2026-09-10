@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { Skill } from "../../src/skill"
@@ -582,4 +582,48 @@ description: A skill in the .opencode/skills directory.
       { git: true },
     ),
   )
+
+  test("formats project skills inline and summarizes large global skill libraries", () => {
+    const projectSkill: Skill.Info = {
+      name: "project-deploy",
+      description: "Deploys project artifacts.",
+      location: "/project/.opencode/skill/project-deploy/SKILL.md",
+      content: "# Deploy",
+      scope: "project",
+    }
+    const globalSkills: Skill.Info[] = Array.from({ length: 25 }, (_, i) => ({
+      name: `global-skill-${i}`,
+      description: `Global skill number ${i}`,
+      location: `/home/.agents/skills/global-skill-${i}/SKILL.md`,
+      content: `# Global ${i}`,
+      scope: "global",
+    }))
+
+    const formatted = Skill.fmt([projectSkill, ...globalSkills], { verbose: true })
+    expect(formatted).toContain("<name>project-deploy</name>")
+    expect(formatted).toContain('<global_skills count="25">')
+    expect(formatted).not.toContain("<name>global-skill-24</name>")
+  })
+
+  test("formats small numbers of global skills inline alongside project skills", () => {
+    const projectSkill: Skill.Info = {
+      name: "local-skill",
+      description: "Local workspace skill.",
+      location: "/project/.opencode/skill/local-skill/SKILL.md",
+      content: "# Local",
+      scope: "project",
+    }
+    const globalSkill: Skill.Info = {
+      name: "global-helper",
+      description: "Helper global skill.",
+      location: "/home/.agents/skills/global-helper/SKILL.md",
+      content: "# Helper",
+      scope: "global",
+    }
+
+    const formatted = Skill.fmt([projectSkill, globalSkill], { verbose: true })
+    expect(formatted).toContain("<name>local-skill</name>")
+    expect(formatted).toContain("<name>global-helper</name>")
+    expect(formatted).not.toContain("<global_skills")
+  })
 })
