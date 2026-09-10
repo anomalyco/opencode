@@ -26,7 +26,7 @@ describe("dotted tool names", () => {
   const runtime = CodeMode.make({ tools: { api: { "issues.list": echo("List issues", "listed") } } })
 
   test("a dotted name becomes nested namespaces in the catalog", () => {
-    const catalog = runtime.catalog()
+    const catalog = runtime.catalog
     expect(catalog).toHaveLength(1)
     expect(catalog[0]?.path).toBe("api.issues.list")
     expect(catalog[0]?.signature).toStartWith("tools.api.issues.list(")
@@ -51,7 +51,7 @@ describe("dotted tool names", () => {
 
   test("a top-level dotted name nests from the root", async () => {
     const flat = CodeMode.make({ tools: { "issues.list": echo("List issues", "flat") } })
-    expect(flat.catalog()[0]?.path).toBe("issues.list")
+    expect(flat.catalog[0]?.path).toBe("issues.list")
     expect(await value(flat, `return await tools.issues.list({})`)).toBe("flat")
   })
 
@@ -85,7 +85,7 @@ describe("callable namespaces", () => {
   test("a path can hold a tool and child tools at once", async () => {
     expect(await value(runtime, `return await tools.issues({})`)).toBe("all")
     expect(await value(runtime, `return await tools.issues.list({})`)).toBe("list")
-    expect(runtime.catalog().map((tool) => tool.path)).toEqual(["issues", "issues.list"])
+    expect(runtime.catalog.map((tool) => tool.path)).toEqual(["issues", "issues.list"])
   })
 
   test("a callable namespace enumerates its children", async () => {
@@ -145,7 +145,7 @@ describe("tool input diagnostics", () => {
 
   test("an empty-input tool advertises () and runs with zero arguments", async () => {
     const empty = CodeMode.make({ tools: { ping: echo("Ping", "pong") } })
-    expect(empty.catalog()[0]?.signature).toBe("tools.ping(): Promise<string>")
+    expect(empty.catalog[0]?.signature).toBe("tools.ping(): Promise<string>")
     expect(await value(empty, `return await tools.ping()`)).toBe("pong")
   })
 })
@@ -160,7 +160,7 @@ describe("blocked member names on tool paths", () => {
   })
 
   test("tools may use blocked member names because path segments never touch real properties", async () => {
-    expect(runtime.catalog().map((tool) => tool.path)).toEqual(["issues.constructor", "nested.__proto__", "prototype"])
+    expect(runtime.catalog.map((tool) => tool.path)).toEqual(["issues.constructor", "nested.__proto__", "prototype"])
     expect(await value(runtime, `return await tools.prototype({})`)).toBe("proto")
     expect(await value(runtime, `return await tools.issues.constructor({})`)).toBe("ctor")
     expect(await value(runtime, `return await tools["issues.constructor"]({})`)).toBe("ctor")
@@ -172,7 +172,7 @@ describe("blocked member names on tool paths", () => {
     const poisoned = CodeMode.make({
       tools: { ns: { __proto__: echo("Hidden", "hidden"), real: echo("Real tool", "real") } },
     })
-    expect(poisoned.catalog().map((tool) => tool.path)).toEqual(["ns.real"])
+    expect(poisoned.catalog.map((tool) => tool.path)).toEqual(["ns.real"])
     expect(await value(poisoned, `return await tools.ns.real({})`)).toBe("real")
   })
 
@@ -221,7 +221,7 @@ describe("namespace metadata", () => {
   const runtime = CodeMode.make({ tools })
 
   test("the wrapper does not add a segment to callable paths", async () => {
-    expect(runtime.catalog().map((tool) => tool.path)).toEqual(["api.status", "api.users.list", "plain.read"])
+    expect(runtime.catalog.map((tool) => tool.path)).toEqual(["api.status", "api.users.list", "plain.read"])
     expect(await value(runtime, `return await tools.api.users.list({})`)).toBe("users")
   })
 
@@ -260,8 +260,8 @@ describe("canonical path collisions", () => {
       tools: { "issues.list": echo("First", "first"), issues: { list: echo("Second", "second") } },
     })
     expect(await value(runtime, `return await tools.issues.list({})`)).toBe("second")
-    expect(runtime.catalog()).toHaveLength(1)
-    expect(runtime.catalog()[0]?.description).toBe("Second")
+    expect(runtime.catalog).toHaveLength(1)
+    expect(runtime.catalog[0]?.description).toBe("Second")
   })
 
   test("overriding one path keeps sibling tools from both shapes", async () => {
@@ -272,7 +272,7 @@ describe("canonical path collisions", () => {
         "issues.close": echo("Close issue", "closed"),
       },
     })
-    expect(runtime.catalog().map((tool) => tool.path)).toEqual(["issues.close", "issues.get", "issues.list"])
+    expect(runtime.catalog.map((tool) => tool.path)).toEqual(["issues.close", "issues.get", "issues.list"])
     expect(await value(runtime, `return await tools.issues.list({})`)).toBe("second")
     expect(await value(runtime, `return await tools.issues.get({})`)).toBe("got")
     expect(await value(runtime, `return await tools.issues.close({})`)).toBe("closed")

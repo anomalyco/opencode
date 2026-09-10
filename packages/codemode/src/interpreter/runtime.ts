@@ -90,6 +90,18 @@ import { enumerableSource } from "../stdlib/object.js"
 import { coerceToNumber, coerceToString, compoundOperators, errorBrandName } from "../stdlib/value.js"
 import { Values } from "../values.js"
 
+// What a loop does with its body's result: exit with a StatementResult, or undefined to keep iterating.
+// Unlabelled break ends this loop; a label the loop does not carry propagates outward.
+const loopExit = (result: StatementResult, labels: ReadonlySet<string> | undefined): StatementResult | undefined => {
+  if (result.kind === "return") return result
+  if (result.kind === "break") {
+    if (result.label !== undefined && !labels?.has(result.label)) return result
+    return { kind: "none" }
+  }
+  if (result.kind === "continue" && result.label !== undefined && !labels?.has(result.label)) return result
+  return undefined
+}
+
 const calleeDescription = (callee: Expression | Super | undefined): string => {
   if (callee?.type === "Identifier") return callee.name
   if (callee?.type === "MemberExpression") {
@@ -466,21 +478,8 @@ class Frame<R> {
     const self = this
     return Effect.gen(function* () {
       while (yield* self.evaluateExpression(node.test)) {
-        const result = yield* self.evaluateStatement(node.body)
-
-        if (result.kind === "continue") {
-          if (result.label !== undefined && !labels?.has(result.label)) return result
-          continue
-        }
-
-        if (result.kind === "break") {
-          if (result.label !== undefined && !labels?.has(result.label)) return result
-          return { kind: "none" } satisfies StatementResult
-        }
-
-        if (result.kind === "return") {
-          return result
-        }
+        const exit = loopExit(yield* self.evaluateStatement(node.body), labels)
+        if (exit !== undefined) return exit
       }
 
       return { kind: "none" } satisfies StatementResult
@@ -494,21 +493,8 @@ class Frame<R> {
     const self = this
     return Effect.gen(function* () {
       do {
-        const result = yield* self.evaluateStatement(node.body)
-
-        if (result.kind === "continue") {
-          if (result.label !== undefined && !labels?.has(result.label)) return result
-          continue
-        }
-
-        if (result.kind === "break") {
-          if (result.label !== undefined && !labels?.has(result.label)) return result
-          return { kind: "none" } satisfies StatementResult
-        }
-
-        if (result.kind === "return") {
-          return result
-        }
+        const exit = loopExit(yield* self.evaluateStatement(node.body), labels)
+        if (exit !== undefined) return exit
       } while (yield* self.evaluateExpression(node.test))
 
       return { kind: "none" } satisfies StatementResult
@@ -554,26 +540,12 @@ class Frame<R> {
       nextIteration()
 
       while (testNode ? yield* self.evaluateExpression(testNode) : true) {
-        const result = yield* self.evaluateStatement(node.body)
-
-        if (result.kind === "return") {
-          return result
-        }
-
-        if (result.kind === "break") {
-          if (result.label !== undefined && !labels?.has(result.label)) return result
-          return { kind: "none" } satisfies StatementResult
-        }
-
-        if (result.kind === "continue" && result.label !== undefined && !labels?.has(result.label)) return result
+        const exit = loopExit(yield* self.evaluateStatement(node.body), labels)
+        if (exit !== undefined) return exit
 
         nextIteration()
         if (updateNode) {
           yield* self.evaluateExpression(updateNode)
-        }
-
-        if (result.kind === "continue") {
-          continue
         }
       }
 
@@ -647,22 +619,10 @@ class Frame<R> {
           }
           return yield* Effect.failCause(bodyExit.cause)
         }
-        const result = bodyExit.value
-
-        if (result.kind === "return") {
+        const exit = loopExit(bodyExit.value, labels)
+        if (exit !== undefined) {
           yield* close()
-          return result
-        }
-
-        if (result.kind === "break") {
-          yield* close()
-          if (result.label !== undefined && !labels?.has(result.label)) return result
-          return { kind: "none" } satisfies StatementResult
-        }
-
-        if (result.kind === "continue" && result.label !== undefined && !labels?.has(result.label)) {
-          yield* close()
-          return result
+          return exit
         }
       }
     }).pipe(
@@ -890,19 +850,8 @@ class Frame<R> {
           ),
         )
 
-        if (result.kind === "return") {
-          return result
-        }
-
-        if (result.kind === "break") {
-          if (result.label !== undefined && !labels?.has(result.label)) return result
-          return { kind: "none" } satisfies StatementResult
-        }
-
-        if (result.kind === "continue") {
-          if (result.label !== undefined && !labels?.has(result.label)) return result
-          continue
-        }
+        const exit = loopExit(result, labels)
+        if (exit !== undefined) return exit
       }
 
       return { kind: "none" } satisfies StatementResult

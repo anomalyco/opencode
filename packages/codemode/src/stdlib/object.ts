@@ -134,19 +134,6 @@ const constructObject = (args: Array<unknown>, node: AstNode): unknown => {
   )
 }
 
-// Tool references are not data; only Object.keys(tools) reads them, for tool names.
-const rejectTools = (name: string, args: Array<unknown>, node: AstNode): void => {
-  if (!(args[0] instanceof ToolReference)) return
-  throw new InterpreterRuntimeError(
-    `Object.${name}(...) cannot read tool references: they are not plain data. Use Object.keys(tools) for names, or search({ query }) for signatures.`,
-    node,
-    "InvalidDataValue",
-  )
-}
-
-const objectStatic = (name: string, impl: (args: Array<unknown>, node: AstNode) => unknown) =>
-  sync(`Object.${name}`, impl)
-
 // Object constructs identically with or without new, like JS. Only `keys` copies its result into the
 // program; `values`, `entries`, `assign`, and `fromEntries` hand back the program's own values.
 export const objectGlobal = <R>(runner: Runner<R>, toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>) =>
@@ -164,32 +151,28 @@ export const objectGlobal = <R>(runner: Runner<R>, toolKeys: (path: ReadonlyArra
           "Object.keys result",
         ),
       ),
-      values: objectStatic("values", (args, node) =>
+      values: sync("Object.values", (args, node) =>
         Object.values(enumerableSource("Object.values(...)", args[0], node)),
       ),
-      entries: objectStatic("entries", (args, node) =>
+      entries: sync("Object.entries", (args, node) =>
         Object.entries(enumerableSource("Object.entries(...)", args[0], node)).map(([key, item]) => [key, item]),
       ),
-      hasOwn: objectStatic("hasOwn", (args, node) =>
+      hasOwn: sync("Object.hasOwn", (args, node) =>
         Object.hasOwn(
           enumerableSource("Object.hasOwn(...)", args[0], node),
           args[1] === AsyncIteratorSymbol || args[1] === IteratorSymbol ? args[1] : String(args[1]),
         ),
       ),
-      is: objectStatic("is", (args, node) => {
+      is: sync("Object.is", (args, node) => {
         if (containsOpaqueReference(args[0]) || containsOpaqueReference(args[1])) {
           throw new InterpreterRuntimeError("Object.is requires data values.", node, "InvalidDataValue")
         }
         return Object.is(args[0], args[1])
       }),
-      assign: objectStatic("assign", objectAssign),
+      assign: sync("Object.assign", objectAssign),
       fromEntries: new HostFunction<R>({
         name: "Object.fromEntries",
-        call: (args, node) =>
-          Effect.suspend(() => {
-            rejectTools("fromEntries", args, node)
-            return objectFromEntries(runner, args[0], node)
-          }),
+        call: (args, node) => Effect.suspend(() => objectFromEntries(runner, args[0], node)),
       }),
       groupBy: groupBy(runner, "Object"),
     },
