@@ -1,8 +1,9 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { useQuery } from "@tanstack/solid-query"
-import { createMemo, For, Show, startTransition, type Accessor, type ParentProps } from "solid-js"
+import { createEffect, createMemo, For, Show, startTransition, type Accessor, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
@@ -191,6 +192,24 @@ export function AppSidebar() {
     openProjectNewSession(target.conn, target.directory)
   }
 
+  const goHome = () => {
+    if (location.pathname !== "/") navigate("/")
+  }
+
+  let started = false
+  createEffect(() => {
+    if (started || !tabs.ready() || location.pathname !== "/") return
+    if (tabs.store.length > 0) {
+      started = true
+      const last = tabs.store[tabs.store.length - 1]
+      if (last) tabs.select(last)
+      return
+    }
+    if (!newChatTarget()) return
+    started = true
+    openNewChat()
+  })
+
   const selectProject = (conn: ServerConnection.Any, directory: string) => {
     const key = ServerConnection.key(conn)
     if (global.servers.health[key]?.healthy === false) return
@@ -213,6 +232,17 @@ export function AppSidebar() {
           data-collapsed="true"
           class="hidden w-14 shrink-0 flex-col items-center gap-1 border-r border-v2-border-border-base py-2 lg:flex"
         >
+          <TooltipV2 placement="right" value={language.t("home.title")}>
+            <button
+              type="button"
+              data-action="sidebar-home"
+              class="flex size-9 shrink-0 items-center justify-center rounded-[6px] transition-[background-color] duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-01"
+              aria-label={language.t("home.title")}
+              onClick={goHome}
+            >
+              <Mark class="h-5 w-auto" />
+            </button>
+          </TooltipV2>
           <TooltipV2 placement="right" value={language.t("command.session.new")}>
             <IconButtonV2
               variant="ghost-muted"
@@ -251,18 +281,16 @@ export function AppSidebar() {
         class="hidden w-64 shrink-0 flex-col border-r border-v2-border-border-base lg:flex"
         aria-label={language.t("sidebar.nav.projectsAndSessions")}
       >
-        <div class="flex shrink-0 items-center gap-1 p-2">
-          <ButtonV2
-            data-action="sidebar-new-chat"
-            variant="neutral"
-            size="normal"
-            icon="edit"
-            class="h-8 flex-1 justify-start px-2.5 [font-weight:530]"
-            disabled={!newChatTarget()}
-            onClick={openNewChat}
+        <div class="flex shrink-0 items-center justify-between p-2 pb-1">
+          <button
+            type="button"
+            data-action="sidebar-home"
+            onClick={goHome}
+            class="flex min-w-0 items-center rounded-[6px] px-1.5 py-1 focus-visible:bg-v2-background-bg-layer-01 focus-visible:outline-none"
+            aria-label={language.t("home.title")}
           >
-            {language.t("command.session.new")}
-          </ButtonV2>
+            <Logo class="h-5 w-auto" />
+          </button>
           <TooltipV2 placement="bottom" value={language.t("sidebar.menu.toggle")}>
             <IconButtonV2
               variant="ghost-muted"
@@ -273,6 +301,19 @@ export function AppSidebar() {
             />
           </TooltipV2>
         </div>
+        <div class="shrink-0 px-2 pb-1">
+          <ButtonV2
+            data-action="sidebar-new-chat"
+            variant="neutral"
+            size="normal"
+            icon="edit"
+            class="h-8 w-full justify-start px-2.5 [font-weight:530]"
+            disabled={!newChatTarget()}
+            onClick={openNewChat}
+          >
+            {language.t("command.session.new")}
+          </ButtonV2>
+        </div>
         <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2 pb-2">
           <section class="flex min-w-0 flex-col gap-1" aria-label={language.t("home.projects")}>
             <div class="flex h-7 min-w-0 shrink-0 items-center px-1.5">
@@ -282,8 +323,7 @@ export function AppSidebar() {
               when={projects().length > 0}
               fallback={
                 <div class="px-1.5 py-1 text-v2-text-text-faint [font-weight:440]">
-                  <div>{language.t("sidebar.empty.title")}</div>
-                  <div class="mt-0.5 text-v2-text-text-faint">{language.t("sidebar.empty.description")}</div>
+                  {language.t("sidebar.projects.empty")}
                 </div>
               }
             >
@@ -388,6 +428,12 @@ export function AppSidebar() {
           </section>
         </div>
         <div class="flex shrink-0 flex-col gap-1 border-t border-v2-border-border-base p-2">
+          <SidebarNavButton onClick={goHome}>
+            <Mark class="h-4 w-auto shrink-0" />
+            <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+              {language.t("home.title")}
+            </span>
+          </SidebarNavButton>
           <SidebarNavButton onClick={openSettings}>
             <IconV2 name="settings-gear" size="small" />
             <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
