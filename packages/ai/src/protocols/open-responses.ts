@@ -179,7 +179,7 @@ export const InputItem = Schema.Union([
     type: Schema.tag("message"),
     id: Schema.optionalKey(Schema.String),
     role: Schema.tag("assistant"),
-    content: Schema.Array(OpenResponsesOutputText),
+    content: Schema.Union([Schema.String, Schema.Array(OpenResponsesOutputText)]),
     phase: Schema.optionalKey(MessagePhase),
     status: Schema.optional(Schema.String),
   }),

@@ -2,6 +2,7 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenAIResponses } from "../protocols/openai-responses.js"
+import { BedrockMantleResponses } from "../protocols/bedrock-mantle-responses.js"
 import { BedrockAuth, type Credentials } from "../protocols/utils/bedrock-auth.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
@@ -37,7 +38,7 @@ const responsesRoute = Route.make({
   id: "bedrock-mantle-responses",
   provider: id,
   providerMetadataKey: "mantle",
-  protocol: OpenAIResponses.protocol,
+  protocol: BedrockMantleResponses.protocol,
   endpoint: OpenAIResponses.route.endpoint,
   auth: OpenAIResponses.route.auth,
   transport: OpenAIResponses.httpTransport,

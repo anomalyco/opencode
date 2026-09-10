@@ -1,8 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, Message } from "../../src/index.js"
-import { AmazonBedrockMantle } from "../../src/providers.js"
+import { LLM, Message, ToolDefinition } from "../../src/index.js"
+import { AmazonBedrockMantle, OpenAI } from "../../src/providers.js"
 import { model } from "../../src/providers/amazon-bedrock/mantle.js"
 import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
 import { compileRequest, LLMClient } from "../../src/route/client.js"
@@ -19,6 +19,98 @@ const credentials = {
 }
 
 describe("Amazon Bedrock Mantle provider", () => {
+  ;[
+    { model: AmazonBedrockMantle.configure({ apiKey: "test-key" }).responses("openai.gpt-oss-120b"), string: true },
+    { model: AmazonBedrockMantle.configure({ apiKey: "test-key" }).responses("openai.gpt-oss-20b"), string: true },
+    { model: AmazonBedrockMantle.configure({ apiKey: "test-key" }).responses("openai.gpt-5.6-luna"), string: false },
+    { model: OpenAI.configure({ apiKey: "test-key" }).responses("openai.gpt-oss-120b"), string: false },
+  ].forEach((fixture) => {
+    it.effect(`replays assistant text for ${fixture.model.provider}/${fixture.model.id}`, () =>
+      Effect.gen(function* () {
+        const key = fixture.model.route.providerMetadataKey ?? "openresponses"
+        const prepared = yield* compileRequest(
+          LLM.request({
+            model: fixture.model,
+            messages: [
+              Message.user("Say OK"),
+              Message.assistant([
+                {
+                  type: "reasoning",
+                  text: "Considering.",
+                  providerMetadata: { [key]: { itemId: "rs_1", reasoningEncryptedContent: "opaque" } },
+                },
+                {
+                  type: "text",
+                  text: "OK",
+                  providerMetadata: { [key]: { itemId: "msg_1", phase: "commentary" } },
+                },
+                { type: "tool-call", id: "call_1", name: "lookup", input: {} },
+                { type: "text", text: "After call." },
+                { type: "text", text: "More text." },
+              ]),
+              Message.tool({ id: "call_1", name: "lookup", result: { type: "text", value: "Done" } }),
+              Message.user("Say TEST"),
+            ],
+            providerOptions: { reasoningEffort: "low" },
+          }),
+        )
+        expect(prepared.body.reasoning).toMatchObject({ effort: "low" })
+        expect(prepared.body.input).toEqual([
+          { role: "user", content: [{ type: "input_text", text: "Say OK" }] },
+          {
+            type: "reasoning",
+            id: "rs_1",
+            summary: [{ type: "summary_text", text: "Considering." }],
+            encrypted_content: "opaque",
+          },
+          {
+            type: "message",
+            id: "msg_1",
+            role: "assistant",
+            phase: "commentary",
+            status: "completed",
+            content: fixture.string ? "OK" : [{ type: "output_text", text: "OK" }],
+          },
+          { type: "function_call", call_id: "call_1", name: "lookup", arguments: "{}" },
+          {
+            type: "message",
+            role: "assistant",
+            status: "completed",
+            content: fixture.string
+              ? "After call.\nMore text."
+              : [
+                  { type: "output_text", text: "After call." },
+                  { type: "output_text", text: "More text." },
+                ],
+          },
+          { type: "function_call_output", call_id: "call_1", output: "Done" },
+          { role: "user", content: [{ type: "input_text", text: "Say TEST" }] },
+        ])
+      }),
+    )
+  })
+  ;["openai.gpt-oss-120b", "openai.gpt-oss-20b", "openai.gpt-5.6-luna"].forEach((id) => {
+    it.effect(`disables tools for ${id} using its supported request shape`, () =>
+      Effect.gen(function* () {
+        const prepared = yield* compileRequest(
+          LLM.request({
+            model: AmazonBedrockMantle.configure({ apiKey: "test-key" }).responses(id),
+            prompt: "Give the final answer.",
+            tools: [ToolDefinition.make({ name: "lookup", description: "Look up a value", inputSchema: {} })],
+            toolChoice: "none",
+          }),
+        )
+        if (id === "openai.gpt-5.6-luna") {
+          expect(prepared.body.tool_choice).toBe("none")
+          expect(prepared.body.tools).toHaveLength(1)
+          return
+        }
+        expect(prepared.body.tool_choice).toBeUndefined()
+        expect(prepared.body.tools).toBeUndefined()
+      }),
+    )
+  })
+
   it.effect("uses Responses by default and exposes Chat explicitly", () =>
     Effect.gen(function* () {
       const provider = AmazonBedrockMantle.configure({ credentials })
