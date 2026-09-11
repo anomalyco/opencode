@@ -7,8 +7,7 @@ export const NvidiaPlugin = define({
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
-        if (!Provider.isAISDK(item.provider.package)) continue
-        if (Provider.packageName(item.provider.package) !== "@ai-sdk/openai-compatible") continue
+        if (Provider.packageName(item.provider.package) !== "@opencode/ai/providers/openai-compatible") continue
         if (item.provider.settings?.baseURL !== "https://integrate.api.nvidia.com/v1") continue
         evt.provider.update(item.provider.id, (provider) => {
           provider.headers = {

@@ -82,6 +82,7 @@ import { AgentPlugin } from "./agent.js"
 import BrowserPlugin from "@opencode/plugin-browser"
 import { CommandPlugin } from "./command.js"
 import { PlanPlugin } from "./plan.js"
+import { AISDKNativePlugin } from "./aisdk-native.js"
 import { ModelsDevPlugin } from "./models-dev.js"
 import { McpCodeModeExclusionPlugin } from "./mcp-codemode-exclusion.js"
 import { ProviderPlugins } from "./provider.js"
@@ -240,6 +241,7 @@ const post = [
   ConfigProviderPlugin.Plugin,
   ConfigWebSearchPlugin.Plugin,
   ConfigWorktreePlugin.Plugin,
+  AISDKNativePlugin.Plugin,
   VariantPlugin.Plugin,
   ConfigPolicyPlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]

@@ -5,7 +5,6 @@ import { LanguageModel, ProviderConfigurationError } from "@opencode/ai"
 import { Auth } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
-import { AISDKNative } from "./aisdk-native.js"
 import { Catalog } from "./catalog.js"
 import { Credential } from "./credential.js"
 import { Integration } from "./integration.js"
@@ -195,25 +194,15 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   dependencies?: Dependencies,
 ) {
   const resolved = prepareRuntimeModel(model, credential)
-  const packageName = Provider.packageName(resolved.package)
   const configuration = credential?.type === "key" ? credential.configuration : undefined
   const configured = { ...resolved.settings, ...credential?.metadata, ...configuration }
-  const mapping = Provider.isAISDK(resolved.package)
-    ? AISDKNative.map({
-        packageName,
-        settings: configured,
-        modelID: resolved.modelID ?? resolved.id,
-        providerID: resolved.canonical ?? resolved.providerID,
-      })
-    : undefined
-  const native = mapping?.package ?? packageName
-  if (Provider.isAISDK(resolved.package) && !mapping) {
+  if (Provider.isAISDK(resolved.package)) {
     const loadAISDK = dependencies?.loadAISDK
     if (!loadAISDK) return yield* unsupported(resolved)
     const settings = yield* prepareProviderSettings(
       resolved,
       Provider.mergeOverlay(resolved.settings, {
-        ...nativeCredentialSettings(resolved.package ?? "", credential),
+        ...nativeCredentialSettings(resolved.package, credential),
         ...credential?.metadata,
         ...configuration,
       }) ?? {},
@@ -222,19 +211,22 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
       Effect.mapError((error) => initialization(resolved, "init", error.cause)),
     )
   }
-  if (!native) return yield* unsupported(resolved)
+  const specifier = Provider.packageName(resolved.package)
+  if (!specifier) return yield* unsupported(resolved)
 
-  const specifier = native
-  const mapped = yield* prepareProviderSettings(resolved, Provider.nativeSettings(mapping?.settings ?? configured))
+  const mapped = yield* prepareProviderSettings(resolved, Provider.nativeSettings(configured))
   const module = yield* (dependencies?.loadPackage ?? Provider.loadPackage)(specifier).pipe(
     Effect.mapError((error) => initialization(resolved, "load", error.cause)),
   )
+  // The generic OpenAI-compatible package takes the catalog provider as its identity; others carry their own.
+  const provider =
+    resolved.canonical ?? (specifier === "@opencode/ai/providers/openai-compatible" ? resolved.providerID : undefined)
   const settings = {
     ...(credential ? Struct.omit(mapped, ["accessToken", "apiKey", "authToken"]) : mapped),
-    ...(resolved.canonical === undefined ? {} : { provider: resolved.canonical }),
+    ...(provider === undefined ? {} : { provider }),
     ...nativeCredentialSettings(specifier, credential),
-    headers: Provider.mergeHeaders(mapping?.headers, resolved.headers),
-    body: Provider.mergeOverlay(mapping?.body, resolved.body),
+    headers: resolved.headers,
+    body: resolved.body,
   }
   return yield* Effect.try({
     try: () => {
@@ -424,18 +416,6 @@ function hasConfiguredAuth(model: Info) {
 function usesAPIKeyAuth(packageName: string | undefined) {
   const name = Provider.packageName(packageName)
   return (
-    name === "@ai-sdk/openai" ||
-    name === "@ai-sdk/anthropic" ||
-    name === "@ai-sdk/cerebras" ||
-    name === "@ai-sdk/deepinfra" ||
-    name === "@ai-sdk/openai-compatible" ||
-    name === "@ai-sdk/google" ||
-    name === "@ai-sdk/groq" ||
-    name === "@ai-sdk/mistral" ||
-    name === "@ai-sdk/togetherai" ||
-    name === "@ai-sdk/xai" ||
-    name === "@openrouter/ai-sdk-provider" ||
-    name === "@ai-sdk/azure" ||
     name === "@opencode/ai/providers/openai" ||
     name?.startsWith("@opencode/ai/providers/openai/") === true ||
     name === "@opencode/ai/providers/anthropic" ||

@@ -49,7 +49,7 @@ const fixtureSnapshot = [
       id: Provider.ID.make("acme"),
       name: "Acme",
       activation: "auto",
-      package: Provider.aisdk("@ai-sdk/openai-compatible"),
+      package: "@opencode/ai/providers/openai-compatible",
     },
     models: [
       {
@@ -112,7 +112,7 @@ const fixture2Snapshot = [
       id: Provider.ID.make("beta"),
       name: "Beta",
       activation: "auto",
-      package: Provider.aisdk("@ai-sdk/openai-compatible"),
+      package: "@opencode/ai/providers/openai-compatible",
     },
     models: [
       {
@@ -254,8 +254,8 @@ describe("ModelsDev Service", () => {
         cache,
         ModelsDev.Service.use((service) => service.get()),
       )
-      expect(result[0]?.info.package).toBe(Provider.aisdk("@ai-sdk/openai-compatible"))
-      expect(result[0]?.models[0]?.package).toBe(Provider.aisdk("@ai-sdk/openai"))
+      expect(result[0]?.info.package).toBe("@opencode/ai/providers/openai-compatible")
+      expect(result[0]?.models[0]?.package).toBe("@opencode/ai/providers/openai")
     }),
   )
 

@@ -105,7 +105,7 @@ test("defensively syncs advertised Copilot models", async () => {
       Model.VariantID.make("high"),
     ])
     expect(model?.capabilities.input).toEqual(["text", "image", "pdf"])
-    expect(models.get(Model.ID.make("claude-sonnet"))?.package).toBe(Provider.aisdk("@ai-sdk/anthropic"))
+    expect(models.get(Model.ID.make("claude-sonnet"))?.package).toBe("@opencode/ai/providers/anthropic")
     expect(models.get(Model.ID.make("claude-sonnet"))?.settings).toMatchObject({
       baseURL: `${server.url.origin}/v1`,
       endpoint: "messages",
@@ -148,8 +148,16 @@ test("prices cache reads from either token price spelling", async () => {
 
   try {
     const models = await CopilotModels.get(server.url.origin, {}, [])
-    expect(models.get(Model.ID.make("renamed"))?.cost[0]).toMatchObject({ input: 2.5, output: 15, cache: { read: 0.25 } })
-    expect(models.get(Model.ID.make("legacy"))?.cost[0]).toMatchObject({ input: 2.5, output: 15, cache: { read: 0.25 } })
+    expect(models.get(Model.ID.make("renamed"))?.cost[0]).toMatchObject({
+      input: 2.5,
+      output: 15,
+      cache: { read: 0.25 },
+    })
+    expect(models.get(Model.ID.make("legacy"))?.cost[0]).toMatchObject({
+      input: 2.5,
+      output: 15,
+      cache: { read: 0.25 },
+    })
     expect(models.get(Model.ID.make("unpriced"))?.cost[0]).toMatchObject({ cache: { read: 0 } })
   } finally {
     await server.stop(true)

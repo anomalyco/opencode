@@ -23,11 +23,11 @@ describe("VariantPlugin", () => {
       const service = yield* Catalog.Service
       yield* service.transform((catalog) => {
         catalog.provider.update(Provider.ID.opencode, (provider) => {
-          provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+          provider.package = "@opencode/ai/providers/openai-compatible"
         })
         catalog.model.update(Provider.ID.opencode, Model.ID.make("glm-5.2"), (model) => {
           model.modelID = Model.ID.make("glm-5.2")
-          model.package = Provider.aisdk("@ai-sdk/openai-compatible")
+          model.package = "@opencode/ai/providers/openai-compatible"
         })
       })
       yield* VariantPlugin.Plugin.effect(host({ catalog: catalogHost(service) }))
@@ -45,7 +45,7 @@ describe("VariantPlugin", () => {
       yield* service.transform((catalog) => {
         catalog.model.update(Provider.ID.opencode, Model.ID.make("glm-5.2"), (model) => {
           model.modelID = Model.ID.make("glm-5.2")
-          model.package = Provider.aisdk("@ai-sdk/openai-compatible")
+          model.package = "@opencode/ai/providers/openai-compatible"
           model.variants = [{ id: Model.VariantID.make("high"), settings: {}, headers: { custom: "true" }, body: {} }]
         })
       })

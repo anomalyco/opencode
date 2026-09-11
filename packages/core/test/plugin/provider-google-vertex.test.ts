@@ -69,7 +69,7 @@ describe("GoogleVertexPlugin", () => {
       const catalog = yield* Catalog.Service
       yield* catalog.transform((catalog) =>
         catalog.provider.update(Provider.ID.opencode, (provider) => {
-          provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+          provider.package = "@opencode/ai/providers/openai-compatible"
           provider.settings = { ...provider.settings, baseURL: "https://opencode.ai/zen/v1" }
         }),
       )
@@ -95,7 +95,7 @@ describe("GoogleVertexPlugin", () => {
           const catalog = yield* Catalog.Service
           yield* catalog.transform((catalog) =>
             catalog.provider.update(Provider.ID.make("google-vertex"), (provider) => {
-              provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+              provider.package = "@opencode/ai/providers/openai-compatible"
               provider.settings = {
                 ...provider.settings,
                 baseURL:
@@ -108,7 +108,7 @@ describe("GoogleVertexPlugin", () => {
           expect(provider.settings?.project).toBe("google-cloud-project")
           expect(provider.settings?.location).toBe("google-vertex-location")
           expect(provider).toMatchObject({
-            package: "aisdk:@ai-sdk/openai-compatible",
+            package: "@opencode/ai/providers/openai-compatible",
             settings: {
               baseURL:
                 "https://google-vertex-location-aiplatform.googleapis.com/v1/projects/google-cloud-project/locations/google-vertex-location",
@@ -131,7 +131,7 @@ describe("GoogleVertexPlugin", () => {
           const catalog = yield* Catalog.Service
           yield* catalog.transform((catalog) =>
             catalog.provider.update(Provider.ID.make("google-vertex"), (provider) => {
-              provider.package = Provider.aisdk("@ai-sdk/google-vertex")
+              provider.package = "@opencode/ai/providers/google-vertex"
             }),
           )
           yield* addPlugin()
@@ -154,7 +154,7 @@ describe("GoogleVertexPlugin", () => {
           const catalog = yield* Catalog.Service
           yield* catalog.transform((catalog) =>
             catalog.provider.update(Provider.ID.make("google-vertex"), (provider) => {
-              provider.package = Provider.aisdk("@ai-sdk/google-vertex")
+              provider.package = "@opencode/ai/providers/google-vertex"
             }),
           )
           yield* addPlugin()
@@ -180,7 +180,7 @@ describe("GoogleVertexPlugin", () => {
           const catalog = yield* Catalog.Service
           yield* catalog.transform((catalog) =>
             catalog.provider.update(Provider.ID.make("google-vertex"), (provider) => {
-              provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+              provider.package = "@opencode/ai/providers/openai-compatible"
               provider.settings = {
                 ...provider.settings,
                 baseURL:
@@ -193,7 +193,7 @@ describe("GoogleVertexPlugin", () => {
 
           expect(provider.settings?.project).toBe("vertex-project")
           expect(provider).toMatchObject({
-            package: "aisdk:@ai-sdk/openai-compatible",
+            package: "@opencode/ai/providers/openai-compatible",
             settings: {
               baseURL:
                 "https://europe-west4-aiplatform.googleapis.com/v1/projects/vertex-project/locations/europe-west4",
@@ -218,7 +218,7 @@ describe("GoogleVertexPlugin", () => {
           const catalog = yield* Catalog.Service
           yield* catalog.transform((catalog) => {
             catalog.provider.update(Provider.ID.make("google-vertex"), (provider) => {
-              provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+              provider.package = "@opencode/ai/providers/openai-compatible"
               provider.settings = {
                 ...provider.settings,
                 baseURL:
@@ -234,7 +234,7 @@ describe("GoogleVertexPlugin", () => {
           expect(provider.settings?.project).toBe("config-project")
           expect(provider.settings?.location).toBe("global")
           expect(provider).toMatchObject({
-            package: "aisdk:@ai-sdk/openai-compatible",
+            package: "@opencode/ai/providers/openai-compatible",
             settings: { baseURL: "https://aiplatform.googleapis.com/v1/projects/config-project/locations/global" },
           })
           expect(model.settings).toEqual(provider.settings)
@@ -247,7 +247,7 @@ describe("GoogleVertexPlugin", () => {
       const catalog = yield* Catalog.Service
       yield* catalog.transform((catalog) =>
         catalog.provider.update(Provider.ID.make("google-vertex"), (provider) => {
-          provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+          provider.package = "@opencode/ai/providers/openai-compatible"
           provider.settings = {
             ...provider.settings,
             baseURL:
@@ -259,7 +259,7 @@ describe("GoogleVertexPlugin", () => {
       yield* addPlugin()
       const provider = required(yield* catalog.provider.get(Provider.ID.make("google-vertex")))
       expect(provider).toMatchObject({
-        package: "aisdk:@ai-sdk/openai-compatible",
+        package: "@opencode/ai/providers/openai-compatible",
         settings: { baseURL: "https://eu-aiplatform.googleapis.com/v1/projects/config-project/locations/eu" },
       })
     }),
@@ -280,7 +280,7 @@ describe("GoogleVertexPlugin", () => {
           const catalog = yield* Catalog.Service
           yield* catalog.transform((catalog) =>
             catalog.provider.update(Provider.ID.make("google-vertex"), (provider) => {
-              provider.package = Provider.aisdk("@ai-sdk/google-vertex")
+              provider.package = "@opencode/ai/providers/google-vertex"
               provider.settings = { ...provider.settings, project: "config-project" }
             }),
           )
@@ -313,7 +313,7 @@ describe("GoogleVertexPlugin", () => {
         model: Model.Info.make({
           ...Model.Info.default(Provider.ID.make("google-vertex"), Model.ID.make("gemini")),
           modelID: Model.ID.make("gemini"),
-          package: "aisdk:@ai-sdk/openai-compatible",
+          package: "@opencode/ai/providers/openai-compatible",
         }),
         package: "@ai-sdk/openai-compatible",
         options: {

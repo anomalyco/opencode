@@ -657,7 +657,7 @@ describe("LocationServiceMap", () => {
             const catalog = yield* Catalog.Service
             yield* catalog.transform((editor) => {
               editor.provider.update(Provider.ID.make("aliased"), (provider) => {
-                provider.package = Provider.aisdk("@ai-sdk/openai")
+                provider.package = "@opencode/ai/providers/openai"
               })
               editor.model.update(Provider.ID.make("aliased"), Model.ID.make("fast"), (model) => {
                 // Catalog id and package model id intentionally differ, like gpt-5.5-fast -> gpt-5.5.

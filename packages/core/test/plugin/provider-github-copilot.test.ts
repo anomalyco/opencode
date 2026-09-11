@@ -302,7 +302,7 @@ describe("GithubCopilotPlugin", () => {
       yield* catalog.transform((catalog) => {
         catalog.provider.update(Provider.ID.githubCopilot, () => {})
         catalog.model.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol"), (model) => {
-          model.package = Provider.aisdk("@ai-sdk/openai-compatible")
+          model.package = "@opencode/ai/providers/openai-compatible"
         })
       })
       yield* addPlugin()

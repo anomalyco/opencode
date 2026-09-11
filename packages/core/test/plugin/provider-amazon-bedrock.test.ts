@@ -57,7 +57,7 @@ const seedBedrock = Effect.fn(function* (settings?: Record<string, unknown>) {
   const catalog = yield* Catalog.Service
   yield* catalog.transform((catalog) => {
     catalog.provider.update(Provider.ID.amazonBedrock, (item) => {
-      item.package = Provider.aisdk("@ai-sdk/amazon-bedrock")
+      item.package = "@opencode/ai/providers/amazon-bedrock"
       if (settings) item.settings = settings
     })
   })
@@ -71,7 +71,7 @@ describe("AmazonBedrockPlugin", () => {
         const catalog = yield* seedBedrock({ endpoint: "https://bedrock.example" })
         yield* addPlugin()
         const result = required(yield* catalog.provider.get(Provider.ID.amazonBedrock))
-        expect(result.package).toBe(Provider.aisdk("@ai-sdk/amazon-bedrock"))
+        expect(result.package).toBe("@opencode/ai/providers/amazon-bedrock")
         expect(result.settings).toEqual({ baseURL: "https://bedrock.example", region: "us-east-1" })
       }),
     ),
@@ -152,7 +152,7 @@ describe("AmazonBedrockPlugin", () => {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
           catalog.provider.update(Provider.ID.amazonBedrock, (item) => {
-            item.package = Provider.aisdk("@ai-sdk/amazon-bedrock")
+            item.package = "@opencode/ai/providers/amazon-bedrock"
             item.activation = "disabled"
           })
         })
@@ -206,13 +206,13 @@ describe("AmazonBedrockPlugin", () => {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
           catalog.provider.update(Provider.ID.make("mantle"), (item) => {
-            item.package = Provider.aisdk("@ai-sdk/amazon-bedrock/mantle")
+            item.package = "@opencode/ai/providers/amazon-bedrock/mantle/responses"
           })
           catalog.provider.update(Provider.ID.make("native"), (item) => {
             item.package = "@opencode/ai/providers/amazon-bedrock"
           })
           catalog.provider.update(Provider.ID.make("other"), (item) => {
-            item.package = Provider.aisdk("@ai-sdk/anthropic")
+            item.package = "@opencode/ai/providers/anthropic"
           })
         })
         yield* addPlugin()

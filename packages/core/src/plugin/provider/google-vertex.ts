@@ -59,13 +59,10 @@ export const GoogleVertexPlugin = define({
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
-        if (!Provider.isAISDK(item.provider.package)) continue
+        const packageName = Provider.packageName(item.provider.package)
         if (
-          Provider.packageName(item.provider.package) !== "@ai-sdk/google-vertex" &&
-          !(
-            item.provider.id === Provider.ID.googleVertex &&
-            Provider.packageName(item.provider.package)?.includes("@ai-sdk/openai-compatible")
-          )
+          packageName !== "@opencode/ai/providers/google-vertex" &&
+          !(item.provider.id === Provider.ID.googleVertex && packageName === "@opencode/ai/providers/openai-compatible")
         )
           continue
         const project = resolveProject(item.provider.settings ?? {})

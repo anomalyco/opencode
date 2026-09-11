@@ -712,8 +712,8 @@ describe("Config", () => {
     })
 
     expect(migrated.providers?.bedrock).toMatchObject({
-      package: Provider.aisdk("@ai-sdk/amazon-bedrock"),
-      models: { claude: { package: Provider.aisdk("@ai-sdk/anthropic") } },
+      package: "@opencode/ai/providers/amazon-bedrock",
+      models: { claude: { package: "@opencode/ai/providers/anthropic" } },
       settings: { region: "us-east-1", profile: "dev" },
       headers: { "x-test": "1" },
       body: { trace: true },
@@ -755,14 +755,14 @@ describe("Config", () => {
     ])
     expect(migrated.providers?.azure).toMatchObject({
       env: ["AZURE_COGNITIVE_SERVICES_API_KEY"],
-      package: Provider.aisdk("@ai-sdk/azure"),
+      package: "@opencode/ai/providers/azure/responses",
       models: { deployment: {} },
     })
     expect(migrated.providers?.["azure-cognitive-services"]).toBeUndefined()
     expect(migrated.providers?.["google-vertex"]).toMatchObject({
       settings: { project: "test-project", location: "us-central1" },
       models: {
-        "claude-sonnet": { package: Provider.aisdk("@ai-sdk/google-vertex/anthropic") },
+        "claude-sonnet": { package: "@opencode/ai/providers/google-vertex/messages" },
       },
     })
     expect(migrated.providers?.["google-vertex"]).not.toHaveProperty("package")
@@ -781,7 +781,7 @@ describe("Config", () => {
 
     expect(migrated.providers?.azure).toMatchObject({
       env: ["AZURE_COGNITIVE_SERVICES_API_KEY"],
-      package: Provider.aisdk("@ai-sdk/openai-compatible"),
+      package: "@opencode/ai/providers/openai-compatible",
       settings: {
         baseURL: "https://${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}.cognitiveservices.azure.com/openai",
       },
@@ -813,7 +813,7 @@ describe("Config", () => {
 
     expect(migrated.providers?.["google-vertex"]?.package).toBeUndefined()
     expect(migrated.providers?.["google-vertex"]?.models?.claude?.package).toBe(
-      Provider.aisdk("@ai-sdk/google-vertex/anthropic"),
+      "@opencode/ai/providers/google-vertex/messages",
     )
   })
 
@@ -1445,7 +1445,7 @@ describe("Config", () => {
               },
             })
             expect(documents[0]?.info.providers?.openai).toMatchObject({
-              package: Provider.aisdk("@ai-sdk/openai"),
+              package: "@opencode/ai/providers/openai",
               settings: { apiKey: "secret", organization: "org" },
               models: {
                 model: {
@@ -1455,7 +1455,7 @@ describe("Config", () => {
               },
             })
             expect(documents[0]?.info.providers?.anthropic).toMatchObject({
-              package: Provider.aisdk("@ai-sdk/anthropic"),
+              package: "@opencode/ai/providers/anthropic",
               models: {
                 model: {
                   settings: {

@@ -1,10 +1,76 @@
 import { describe, expect, test } from "bun:test"
 import { AISDKNative } from "@opencode/core/aisdk-native"
+import { Provider } from "@opencode/core/provider"
 
-const map = (packageName: string, settings: Readonly<Record<string, unknown>>, modelID = "test-model") =>
-  AISDKNative.map({ packageName, settings, modelID, providerID: "test-provider" })
+// A model that names a legacy package, rewritten the way the catalog does it.
+const map = (packageName: string, settings: Readonly<Record<string, unknown>>, modelID = "test-model") => {
+  const model: AISDKNative.ModelTarget = { id: modelID, package: Provider.aisdk(packageName), settings }
+  AISDKNative.rewrite({}, [model])
+  const { id: _, ...rest } = model
+  return rest as Partial<AISDKNative.Target>
+}
 
 describe("AISDKNative", () => {
+  test("rewrites a provider and its models in place", () => {
+    const provider: AISDKNative.Target = {
+      package: Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"),
+      settings: { region: "us-east-1", bearerToken: "token" },
+    }
+    const chat: AISDKNative.ModelTarget = {
+      id: "openai.gpt-oss-120b",
+      variants: [{ id: "high", settings: { reasoningEffort: "high" } }],
+    }
+    const responses: AISDKNative.ModelTarget = { id: "openai.gpt-5.5" }
+    const explicit: AISDKNative.ModelTarget = {
+      id: "claude",
+      package: Provider.aisdk("@ai-sdk/anthropic"),
+      settings: { effort: "high" },
+    }
+    const opaque: AISDKNative.ModelTarget = {
+      id: "sonar",
+      package: Provider.aisdk("@ai-sdk/perplexity"),
+      settings: { extraBody: {} },
+    }
+    AISDKNative.rewrite(provider, [chat, responses, explicit, opaque])
+    expect(provider).toEqual({
+      package: "@opencode/ai/providers/amazon-bedrock/mantle/responses",
+      settings: { region: "us-east-1", apiKey: "token" },
+    })
+    // Only models whose native package differs from the provider's name one.
+    expect(chat).toEqual({
+      id: "openai.gpt-oss-120b",
+      package: "@opencode/ai/providers/amazon-bedrock/mantle/chat",
+      variants: [{ id: "high", settings: { reasoningEffort: "high" } }],
+    })
+    expect(responses).toEqual({ id: "openai.gpt-5.5" })
+    expect(explicit).toEqual({
+      id: "claude",
+      package: "@opencode/ai/providers/anthropic",
+      settings: { effort: "high" },
+    })
+    expect(opaque).toEqual({ id: "sonar", package: Provider.aisdk("@ai-sdk/perplexity"), settings: { extraBody: {} } })
+  })
+
+  test("moves provider-level Converse request settings onto each model", () => {
+    const provider: AISDKNative.Target = {
+      package: Provider.aisdk("@ai-sdk/amazon-bedrock"),
+      settings: { region: "us-east-1", reasoningConfig: { maxReasoningEffort: "high" } },
+    }
+    const claude: AISDKNative.ModelTarget = { id: "anthropic.claude-sonnet-4-6" }
+    const nova: AISDKNative.ModelTarget = {
+      id: "amazon.nova-2-lite-v1:0",
+      variants: [{ id: "none", settings: { additionalModelRequestFields: { reasoningConfig: { type: "disabled" } } } }],
+    }
+    AISDKNative.rewrite(provider, [claude, nova])
+    expect(provider).toEqual({ package: "@opencode/ai/providers/amazon-bedrock", settings: { region: "us-east-1" } })
+    expect(claude.body).toEqual({ additionalModelRequestFields: { output_config: { effort: "high" } } })
+    expect(nova).toEqual({
+      id: "amazon.nova-2-lite-v1:0",
+      body: { additionalModelRequestFields: { reasoningConfig: { maxReasoningEffort: "high" } } },
+      variants: [{ id: "none", body: { additionalModelRequestFields: { reasoningConfig: { type: "disabled" } } } }],
+    })
+  })
+
   test("maps OpenAI-family packages and request options to native providers", () => {
     expect(
       map("@ai-sdk/openai", {
@@ -30,11 +96,7 @@ describe("AISDKNative", () => {
     })
     expect(map("@ai-sdk/openai-compatible", { baseURL: "https://example.com/v1", reasoningEffort: "high" })).toEqual({
       package: "@opencode/ai/providers/openai-compatible",
-      settings: {
-        baseURL: "https://example.com/v1",
-        provider: "test-provider",
-        reasoningEffort: "high",
-      },
+      settings: { baseURL: "https://example.com/v1", reasoningEffort: "high" },
     })
   })
 
@@ -77,10 +139,7 @@ describe("AISDKNative", () => {
         },
         headers: { "x-provider": name },
       })
-      expect(map(`@ai-sdk/${name}`, {})).toEqual({
-        package: `@opencode/ai/providers/${name}`,
-        settings: {},
-      })
+      expect(map(`@ai-sdk/${name}`, {})).toEqual({ package: `@opencode/ai/providers/${name}` })
     }
   })
 
@@ -323,7 +382,6 @@ describe("AISDKNative", () => {
     })
     expect(map("@ai-sdk/amazon-bedrock", { auth: "bogus" }, "anthropic.claude")).toEqual({
       package: "@opencode/ai/providers/amazon-bedrock",
-      settings: {},
     })
   })
 

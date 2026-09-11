@@ -8,8 +8,7 @@ export const OpenRouterPlugin = define({
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
-        if (!Provider.isAISDK(item.provider.package)) continue
-        if (Provider.packageName(item.provider.package) !== "@openrouter/ai-sdk-provider") continue
+        if (Provider.packageName(item.provider.package) !== "@opencode/ai/providers/openrouter") continue
         evt.provider.update(item.provider.id, (provider) => {
           provider.headers = { ...provider.headers, "HTTP-Referer": "https://opencode.ai/", "X-Title": "opencode" }
         })

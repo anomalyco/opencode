@@ -149,7 +149,7 @@ function build(id: Model.ID, remote: UsableModel, baseURL: string, previous?: Mo
     providerID: Provider.ID.githubCopilot,
     family: previous?.family ?? Model.Family.make(remote.capabilities.family),
     name: previous?.name ?? remote.name,
-    package: Provider.aisdk(messages ? "@ai-sdk/anthropic" : "@ai-sdk/github-copilot"),
+    package: messages ? "@opencode/ai/providers/anthropic" : Provider.aisdk("@ai-sdk/github-copilot"),
     settings: Provider.mergeOverlay(previous?.settings, {
       baseURL: messages ? `${baseURL}/v1` : baseURL,
       ...(endpoint ? { endpoint } : {}),

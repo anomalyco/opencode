@@ -13,10 +13,8 @@ const CHAIN_ENV = [
   "AWS_CONTAINER_CREDENTIALS_FULL_URI",
 ]
 
-const isBedrock = (item: { readonly package: string }) => {
-  const name = Provider.packageName(item.package)
-  return name.startsWith("@ai-sdk/amazon-bedrock") || name.startsWith("@opencode/ai/providers/amazon-bedrock")
-}
+const isBedrock = (item: { readonly package: string }) =>
+  Provider.packageName(item.package).startsWith("@opencode/ai/providers/amazon-bedrock")
 
 export const AmazonBedrockPlugin = define({
   id: "opencode.provider.amazon.bedrock",

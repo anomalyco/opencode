@@ -9,6 +9,7 @@ import { ConfigCommandV1 } from "./command.js"
 import { ConfigMCPV1 } from "./mcp.js"
 import { ConfigPermissionV1 } from "./permission.js"
 import { ConfigProviderV1 } from "./provider.js"
+import { AISDKNative } from "../../aisdk-native.js"
 import { ConfigProviderOptionsV1 } from "./provider-options.js"
 import { Provider } from "../../provider.js"
 import { Model } from "../../model.js"
@@ -239,9 +240,19 @@ function providers(info?: Readonly<Record<string, ConfigProviderV1.Info>>) {
 }
 
 export function migrateProvider(sourceID: string, info: ConfigProviderV1.Info) {
-  if (sourceID === "azure-cognitive-services") return migrateAzureCognitiveServicesProvider(info)
-  if (sourceID === "google-vertex-anthropic") return migrateGoogleVertexAnthropicProvider(info)
-  return migrateStandardProvider(info)
+  const migrated =
+    sourceID === "azure-cognitive-services"
+      ? migrateAzureCognitiveServicesProvider(info)
+      : sourceID === "google-vertex-anthropic"
+        ? migrateGoogleVertexAnthropicProvider(info)
+        : migrateStandardProvider(info)
+  // V1 only knew AI SDK packages; the migrated document names the native replacements directly.
+  const models = Object.entries(migrated.models ?? {}).map(([id, model]) => ({ id, ...model }))
+  AISDKNative.rewrite(migrated, models)
+  return {
+    ...migrated,
+    models: migrated.models && Object.fromEntries(models.map(({ id, ...model }) => [id, model])),
+  }
 }
 
 function migrateStandardProvider(info: ConfigProviderV1.Info) {

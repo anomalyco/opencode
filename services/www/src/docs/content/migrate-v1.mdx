@@ -336,7 +336,7 @@ Rename the singular `provider` map to `providers`. V2 separates the runtime pack
 {
   "providers": {
     "acme": {
-      "package": "aisdk:@ai-sdk/openai-compatible",
+      "package": "@opencode/ai/providers/openai-compatible",
       "settings": {
         "baseURL": "https://llm.example.com/v1",
         "apiKey": "{env:ACME_API_KEY}"
@@ -346,8 +346,10 @@ Rename the singular `provider` map to `providers`. V2 separates the runtime pack
 }
 ```
 
-V1 `npm` becomes `package`, and AI SDK packages receive the `aisdk:` prefix. `api` becomes `settings.baseURL`. Provider
-`options` are separated into `settings`, `headers`, and `body` according to their request role. See [Providers](/providers).
+V1 `npm` becomes `package`. AI SDK packages with a native OpenCode implementation become that native package, and their
+options are rewritten to the native spelling; other AI SDK packages keep running on the AI SDK with an `aisdk:` prefix.
+`api` becomes `settings.baseURL`. Provider `options` are separated into `settings`, `headers`, and `body` according to
+their request role. See [Providers](/providers).
 
 V2 consolidated two legacy provider namespaces:
 

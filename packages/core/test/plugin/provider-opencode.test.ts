@@ -370,7 +370,7 @@ describe("OpencodePlugin", () => {
                   remote: {
                     canonical: "openai",
                     name: "Remote",
-                    package: "aisdk:@ai-sdk/openai-compatible",
+                    package: "@opencode/ai/providers/openai-compatible",
                     env: ["REMOTE_API_KEY"],
                     settings: {
                       baseURL: `${origin}/v1`,
@@ -409,7 +409,7 @@ describe("OpencodePlugin", () => {
                       },
                       override: {
                         name: "Override",
-                        package: "aisdk:@ai-sdk/anthropic",
+                        package: "@opencode/ai/providers/anthropic",
                         settings: { baseURL: `${origin}/anthropic` },
                       },
                       disabled: { name: "Disabled", disabled: true },
@@ -428,11 +428,11 @@ describe("OpencodePlugin", () => {
           const integrations = yield* Integration.Service
           yield* catalog.transform((editor) => {
             editor.provider.update(Provider.ID.openai, (provider) => {
-              provider.package = Provider.aisdk("@ai-sdk/openai")
+              provider.package = "@opencode/ai/providers/openai"
               provider.integrationID = Integration.ID.make("openai")
             })
             editor.model.update(Provider.ID.openai, Model.ID.make("api-model"), (model) => {
-              model.package = Provider.aisdk("@ai-sdk/openai")
+              model.package = "@opencode/ai/providers/openai"
               model.settings = { baseURL: "https://upstream.example/v1" }
               model.variants = [
                 {
@@ -464,7 +464,7 @@ describe("OpencodePlugin", () => {
             canonical: "openai",
             name: "Remote",
             integrationID: "opencode",
-            package: Provider.aisdk("@ai-sdk/openai-compatible"),
+            package: "@opencode/ai/providers/openai-compatible",
             settings: { baseURL: `${server.url.origin}/v1`, custom: "value" },
             headers: { "x-org-id": "org" },
           })
@@ -481,13 +481,13 @@ describe("OpencodePlugin", () => {
             capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
             cost: [{ input: 1, output: 2, cache: { read: 0.1, write: 0 } }],
             limit: { context: 1000, output: 100 },
-            package: Provider.aisdk("@ai-sdk/openai-compatible"),
+            package: "@opencode/ai/providers/openai-compatible",
             settings: { baseURL: `${server.url.origin}/v1`, custom: "value", temperature: 0.5 },
             headers: { "x-org-id": "org" },
           })
           expect(model.settings).toEqual({ baseURL: `${server.url.origin}/v1`, custom: "value", temperature: 0.5 })
           const override = required(yield* catalog.model.get(Provider.ID.make("remote"), Model.ID.make("override")))
-          expect(override.package).toBe(Provider.aisdk("@ai-sdk/anthropic"))
+          expect(override.package).toBe("@opencode/ai/providers/anthropic")
           expect(override.settings?.baseURL).toBe(`${server.url.origin}/anthropic`)
           expect(model.variants).toEqual([
             {
@@ -990,16 +990,16 @@ describe("OpencodePlugin", () => {
                 providers: {
                   remote: {
                     canonical: "openai",
-                    package: "aisdk:@ai-sdk/openai",
+                    package: "@opencode/ai/providers/openai",
                     settings: { baseURL: new URL(request.url).origin },
                     models: {
                       ...models,
-                      override: { ...models.astra, package: "aisdk:@ai-sdk/openai-compatible" },
+                      override: { ...models.astra, package: "@opencode/ai/providers/openai-compatible" },
                     },
                   },
                   compatible: {
                     canonical: "openai",
-                    package: "aisdk:@ai-sdk/openai-compatible",
+                    package: "@opencode/ai/providers/openai-compatible",
                     models,
                   },
                 },

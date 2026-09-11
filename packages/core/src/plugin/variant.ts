@@ -33,8 +33,7 @@ export function generate(
   model: { readonly id: string; readonly modelID?: string; readonly package?: string },
   provider?: { readonly package: string },
 ): NonNullable<Model.Info["variants"]> {
-  const packageName = model.package ?? provider?.package
-  if (!Provider.isAISDK(packageName) || Provider.packageName(packageName) !== "@ai-sdk/openai-compatible") return []
+  if (Provider.packageName(model.package ?? provider?.package) !== "@opencode/ai/providers/openai-compatible") return []
   const ids = `${model.id} ${model.modelID ?? ""}`.toLowerCase()
   if (!["glm-5.2", "glm-5-2", "glm-5p2"].some((name) => ids.includes(name))) return []
   return ["high", "max"].map((id) => ({

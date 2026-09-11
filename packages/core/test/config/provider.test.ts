@@ -116,7 +116,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
           info: decode({
             providers: {
               litellm: {
-                package: "aisdk:@ai-sdk/openai-compatible",
+                package: "@opencode/ai/providers/openai-compatible",
                 models: { chat: {} },
               },
             },
@@ -145,7 +145,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
           info: decode({
             providers: {
               custom: {
-                package: "aisdk:@ai-sdk/openai-compatible",
+                package: "@opencode/ai/providers/openai-compatible",
                 models: { chat: {} },
               },
             },
@@ -181,7 +181,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
           info: decode({
             providers: {
               custom: {
-                package: "aisdk:@ai-sdk/openai-compatible",
+                package: "@opencode/ai/providers/openai-compatible",
                 models: {
                   inherited: { name: "Inherited" },
                   overridden: {
@@ -273,7 +273,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
         models: { chat: {} },
       },
       native: {
-        package: "aisdk:@ai-sdk/openai",
+        package: "@opencode/ai/providers/openai",
         settings: { baseURL: "https://proxy.example/v1" },
         headers: { "x-provider": "default" },
         body: { store: false },
@@ -298,13 +298,13 @@ describe("ConfigProviderPlugin.Plugin", () => {
         },
       },
       native: {
-        package: "aisdk:@ai-sdk/openai",
+        package: "@opencode/ai/providers/openai",
         settings: { baseURL: "https://proxy.example/v1" },
         models: {
           chat: {
             modelID: "vendor/chat",
             name: "Custom chat",
-            package: "aisdk:@ai-sdk/anthropic",
+            package: "@opencode/ai/providers/anthropic",
             settings: { baseURL: "https://model.example/v1", temperature: 0.2 },
             limit: { context: 100000, input: 80000, output: 16000 },
             cost: { input: 1, output: 2, cache: { read: 0.1, write: 0.2 } },
@@ -350,7 +350,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const modelID = Model.ID.make("chat")
       yield* catalog.transform((editor) => {
         editor.model.update(providerID, modelID, (model) => {
-          model.package = "aisdk:@ai-sdk/anthropic"
+          model.package = "@opencode/ai/providers/anthropic"
           model.settings = { baseURL: "https://catalog.example/v1" }
           model.capabilities = { tools: false, input: ["audio"], output: ["audio"] }
           model.limit = { context: 100000, input: 80000, output: 16000 }
@@ -384,7 +384,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
           info: decode({
             providers: {
               opencode: {
-                package: "aisdk:@ai-sdk/openai",
+                package: "@opencode/ai/providers/openai",
                 settings: { baseURL: "https://opencode.test/v1" },
                 models: {
                   "alpha-gpt-next": {
@@ -433,7 +433,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
           info: decode({
             providers: {
               opencode: {
-                package: "aisdk:@ai-sdk/openai",
+                package: "@opencode/ai/providers/openai",
                 settings: { baseURL: "https://opencode.test/v1" },
               },
             },
@@ -557,7 +557,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
 
         yield* catalog.transform((editor) => {
           editor.provider.update(Provider.ID.anthropic, (provider) => {
-            provider.package = "aisdk:@ai-sdk/anthropic"
+            provider.package = "@opencode/ai/providers/anthropic"
           })
           editor.model.update(Provider.ID.anthropic, modelID, (model) => {
             model.variants = [{ id: Model.VariantID.make("fast"), settings: { effort: "high" } }]

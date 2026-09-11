@@ -71,7 +71,7 @@ describe("OllamaPlugin", () => {
                     }
                   : body.model === "unknown-context"
                     ? show({ family: "unknown", capabilities: ["completion"], context: 0 })
-                  : show({ family: "nomic-bert", capabilities: ["embedding"], context: 8192 }),
+                    : show({ family: "nomic-bert", capabilities: ["embedding"], context: 8192 }),
               )
             },
           }),

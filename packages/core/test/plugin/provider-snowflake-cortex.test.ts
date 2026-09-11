@@ -56,7 +56,7 @@ const fixture = Effect.fn(function* () {
   const host = yield* PluginHost.make(plugin)
   yield* catalog.transform((editor) => {
     editor.provider.update(providerID, (provider) => {
-      provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+      provider.package = "@opencode/ai/providers/openai-compatible"
       provider.settings = { baseURL: "https://${SNOWFLAKE_ACCOUNT}.snowflakecomputing.com/api/v2/cortex/v1" }
     })
     editor.model.update(providerID, modelID, () => {})
@@ -225,9 +225,7 @@ it.live("uses environment tokens rather than the account identifier and bypasses
           type: "env",
           name: "SNOWFLAKE_CORTEX_TOKEN",
         })
-        expect((yield* test.catalog.provider.get(providerID))?.package).toBe(
-          Provider.aisdk("@ai-sdk/openai-compatible"),
-        )
+        expect((yield* test.catalog.provider.get(providerID))?.package).toBe("@opencode/ai/providers/openai-compatible")
         expect(yield* test.hooks.has("aisdk", "sdk", providerID)).toBe(false)
 
         yield* test.stop

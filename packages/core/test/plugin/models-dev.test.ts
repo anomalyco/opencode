@@ -1081,18 +1081,19 @@ describe("ModelsDevPlugin", () => {
         Provider.ID.make("amazon-bedrock"),
         Model.ID.make("us.amazon.nova-2-lite-v1:0"),
       )
+      // Native Bedrock takes Converse request fields in the body.
       expect(bedrock?.variants).toEqual([
         {
           id: Model.VariantID.make("none"),
-          settings: { additionalModelRequestFields: { reasoningConfig: { type: "disabled" } } },
+          body: { additionalModelRequestFields: { reasoningConfig: { type: "disabled" } } },
         },
         {
           id: Model.VariantID.make("low"),
-          settings: { reasoningConfig: { type: "enabled", maxReasoningEffort: "low" } },
+          body: { additionalModelRequestFields: { reasoningConfig: { type: "enabled", maxReasoningEffort: "low" } } },
         },
         {
           id: Model.VariantID.make("high"),
-          settings: { reasoningConfig: { type: "enabled", maxReasoningEffort: "high" } },
+          body: { additionalModelRequestFields: { reasoningConfig: { type: "enabled", maxReasoningEffort: "high" } } },
         },
       ])
 

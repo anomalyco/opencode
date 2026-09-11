@@ -43,7 +43,7 @@ const fixture = Effect.gen(function* () {
   })
   yield* catalog.transform((editor) => {
     editor.provider.update(providerID, (provider) => {
-      provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+      provider.package = "@opencode/ai/providers/openai-compatible"
       provider.settings = { baseURL: "https://api.poe.com/v1" }
     })
     editor.model.update(providerID, modelID, () => {})

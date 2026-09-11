@@ -11,6 +11,7 @@ import { Provider } from "@opencode/core/provider"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Catalog } from "@opencode/core/catalog"
 import { AISDK } from "@opencode/core/aisdk"
+import { AISDKNative } from "@opencode/core/aisdk-native"
 import { Npm } from "@opencode/util/npm"
 import { it } from "./lib/effect"
 
@@ -26,8 +27,9 @@ interface ModelOptions {
   readonly limit?: Info["limit"]
 }
 
-const model = (packageName: string | undefined, options: ModelOptions = {}) =>
-  Info.make({
+// A catalog model as the resolver receives it: legacy packages are already rewritten to native ones.
+const model = (packageName: string | undefined, options: ModelOptions = {}) => {
+  const info = Info.make({
     id: ID.make("test-model"),
     modelID: ID.make(options.modelID ?? "api-test-model"),
     providerID: options.providerID ?? Provider.ID.make("test-provider"),
@@ -46,6 +48,10 @@ const model = (packageName: string | undefined, options: ModelOptions = {}) =>
     enabled: true,
     limit: options.limit ?? { context: 100, output: 20 },
   })
+  const draft = structuredClone(info)
+  AISDKNative.rewrite({}, [draft])
+  return draft
+}
 
 function withEnv<A, E, R>(variables: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
   return Effect.acquireUseRelease(
@@ -215,7 +221,7 @@ describe("ModelResolver", () => {
           id: "bedrock-mantle-responses",
           endpoint: { baseURL: "https://bedrock-mantle.us-west-2.api.aws/openai/v1" },
         })
-        expect(catalog.settings?.baseURL).toBe("https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1")
+        expect(catalog.settings?.baseURL).toBe("https://bedrock-mantle.us-west-2.api.aws/openai/v1")
       }),
     ),
   )
@@ -478,7 +484,7 @@ describe("ModelResolver", () => {
       expect(prepared.body).toMatchObject({ max_completion_tokens: 10 })
       expect(prepared.body).not.toHaveProperty("max_tokens")
       expect(resolved.route.endpoint.baseURL).toBe("https://compatible.example/v1")
-      expect(resolved.route.defaults.http?.body).toEqual({})
+      expect(resolved.route.defaults.http?.body ?? {}).toEqual({})
     }),
   )
 
@@ -711,7 +717,7 @@ describe("ModelResolver", () => {
         }),
       )
 
-      expect(resolved.route.defaults.http?.body).toEqual({})
+      expect(resolved.route.defaults.http?.body ?? {}).toEqual({})
     }),
   )
 
@@ -1409,7 +1415,7 @@ describe("ModelResolver", () => {
         _tag: "SessionRunnerModel.ModelConfigurationError",
         providerID: "azure",
         modelID: "test-model",
-        package: "aisdk:@ai-sdk/azure",
+        package: "@opencode/ai/providers/azure/responses",
         detail: "Azure requires resourceName or baseURL",
       })
       expect(failure.message).toBe("Cannot initialize azure/test-model: Azure requires resourceName or baseURL")
