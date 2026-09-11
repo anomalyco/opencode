@@ -103,10 +103,15 @@ const layer = Layer.effect(
       )
     }
 
+    const isRootOrSystemDirectory = (dir: string) => {
+      const normalized = dir.replace(/\\/g, "/").replace(/\/+$/, "")
+      return !normalized || /^[a-zA-Z]:$/.test(normalized) || normalized === "/"
+    }
+
     const config = (yield* (yield* Config.Service).entries())
       .filter((entry): entry is Config.Document => entry.type === "document")
       .flatMap((item) => item.info.watcher?.ignore ?? [])
-    if (location.vcs && (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER)) {
+    if (location.vcs && (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) && !isRootOrSystemDirectory(location.directory)) {
       yield* Effect.forkScoped(
         subscribe(location.directory, [...Ignore.PATTERNS, ...config, ...protecteds(location.directory)]),
       )
@@ -115,7 +120,7 @@ const layer = Layer.effect(
     if (location.vcs?.type === "git") {
       const resolved = (yield* git.repo.discover(location.directory))?.gitDirectory
       const vcs = resolved ? yield* fs.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved))) : undefined
-      if (vcs && !config.includes(".git") && !config.includes(vcs) && (!resolved || !config.includes(resolved))) {
+      if (vcs && !isRootOrSystemDirectory(vcs) && !config.includes(".git") && !config.includes(vcs) && (!resolved || !config.includes(resolved))) {
         const ignore = (yield* fs.readDirectoryEntries(vcs).pipe(Effect.catch(() => Effect.succeed([])))).flatMap(
           (entry) => (entry.name === "HEAD" ? [] : [entry.name]),
         )
