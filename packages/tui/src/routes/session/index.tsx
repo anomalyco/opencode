@@ -673,6 +673,10 @@ export function Session() {
       title: sidebarVisible() ? "Hide sidebar" : "Show sidebar",
       value: "session.sidebar.toggle",
       category: "Session",
+	  slash: {
+		  name: "toggle-sidebar",
+		  aliases: ["sidebar"],
+	  },
       run: () => {
         batch(() => {
           const isVisible = sidebarVisible()
