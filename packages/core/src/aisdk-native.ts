@@ -18,10 +18,12 @@ export interface MapInput {
   readonly providerID: string
 }
 
+// AI SDK constructor options with no native counterpart.
+const LEGACY_KEYS = ["compatibility", "generateId", "name", "useCompletionUrls"] as const
+
 /**
- * Maps an AI SDK package and its flat settings onto the native `@opencode/ai` package that replaces it.
- * Settings pass through `Provider.nativeSettings`; only packages whose AI SDK vocabulary differs from the
- * native one translate keys here.
+ * Maps a legacy AI SDK package and its settings onto the native `@opencode/ai` package that replaces it.
+ * Settings stay flat; only spellings that differ between the AI SDK and the native package are translated.
  */
 export function map(input: MapInput): Mapping | undefined {
   const native = mapPackage(input)
@@ -29,16 +31,15 @@ export function map(input: MapInput): Mapping | undefined {
   const headers = isStringRecord(input.settings.headers) ? input.settings.headers : undefined
   const converse = native === "@opencode/ai/providers/amazon-bedrock"
   // AI SDK constructors take request overlays as `headers` and `extraBody`; the mapping carries them separately.
-  // `useCompletionUrls` only selects the Azure package above.
   const settings = {
-    ...Struct.omit(input.settings, ["headers", "extraBody", "useCompletionUrls", ...OPENROUTER_HEADER_KEYS]),
+    ...Struct.omit(input.settings, ["headers", "extraBody", ...LEGACY_KEYS, ...OPENROUTER_HEADER_KEYS]),
     ...(native === "@opencode/ai/providers/openai-compatible" ? { provider: input.providerID } : {}),
   }
   return {
     package: native,
-    settings: Provider.nativeSettings(
-      native.startsWith("@opencode/ai/providers/amazon-bedrock") ? bedrockSettings(settings, converse) : settings,
-    ),
+    settings: native.startsWith("@opencode/ai/providers/amazon-bedrock")
+      ? bedrockSettings(settings, converse)
+      : settings,
     ...(headers === undefined ? {} : { headers }),
     ...(isRecord(input.settings.extraBody) ? { body: input.settings.extraBody } : {}),
     ...(converse ? bedrockRequest(input) : {}),

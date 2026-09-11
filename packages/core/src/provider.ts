@@ -1,6 +1,6 @@
 export * as Provider from "./provider.js"
 
-import { Effect, Schema } from "effect"
+import { Effect, Schema, Struct } from "effect"
 import { Provider } from "@opencode/schema/provider"
 import type { ProviderPackageDefinition } from "@opencode/ai"
 import { isRecord } from "@opencode/ai/utils/record"
@@ -103,51 +103,25 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
   return yield* importPackage(specifier, entrypoint)
 })
 
-// Keys native provider packages read from the top level of `settings`; see the `Settings` types under
-// `@opencode/ai/providers`. Catalog settings are flat, so every other key is a request option.
-const CONNECTION_KEYS = new Set([
-  "accessToken",
-  "accountId",
-  "apiKey",
-  "apiVersion",
-  "auth",
-  "authToken",
-  "baseURL",
-  "body",
-  "credentials",
-  "gatewayApiKey",
-  "gatewayId",
-  "headers",
-  "location",
-  "organization",
-  "profile",
-  "project",
-  "provider",
-  "queryParams",
-  "region",
-  "resourceName",
-  "topP",
-  "useDeploymentBasedUrls",
-])
+// Settings the AI SDK runtime in `aisdk.ts` consumes itself; native packages never see them.
+const TRANSPORT_KEYS = ["chunkTimeout", "fetch", "timeout"] as const
+// Credentials the resolver injects plus the `ProviderPackage.Settings` base contract. Nothing else about a
+// package's shape is known here.
+const PACKAGE_KEYS = ["accessToken", "apiKey", "authToken", "baseURL", "body", "headers"] as const
 
 /**
- * Shapes flat catalog settings for a native provider package: connection keys stay on top and every other
- * key moves into `providerOptions`. A nested `providerOptions` written in the package's own shape merges in
- * rather than nesting twice, so AI SDK-style and native-style configs resolve identically.
+ * Prepares flat opencode settings for a native provider package. The package reads the connection keys it
+ * declares from the top level and its protocol reads request options from `providerOptions`, so the same
+ * settings are offered to both and each side picks the names it knows. A legacy nested `providerOptions`
+ * is flattened first.
  */
 export function nativeSettings(settings: Readonly<Record<string, unknown>>): Record<string, unknown> {
-  // A provider ID is a string; OpenRouter's routing preferences reuse the `provider` key as an object.
-  const connection = ([key, value]: readonly [string, unknown]) =>
-    CONNECTION_KEYS.has(key) && (key !== "provider" || typeof value === "string")
-  const entries = Object.entries(settings)
-  const providerOptions = {
-    ...(isRecord(settings.providerOptions) ? settings.providerOptions : {}),
-    ...Object.fromEntries(entries.filter((entry) => entry[0] !== "providerOptions" && !connection(entry))),
-  }
-  return {
-    ...Object.fromEntries(entries.filter(connection)),
-    ...(Object.keys(providerOptions).length === 0 ? {} : { providerOptions }),
-  }
+  const flat = Struct.omit({ ...(isRecord(settings.providerOptions) ? settings.providerOptions : {}), ...settings }, [
+    "providerOptions",
+    ...TRANSPORT_KEYS,
+  ])
+  const providerOptions = Struct.omit(flat, PACKAGE_KEYS)
+  return { ...flat, ...(Object.keys(providerOptions).length === 0 ? {} : { providerOptions }) }
 }
 
 export function mergeOverlay(

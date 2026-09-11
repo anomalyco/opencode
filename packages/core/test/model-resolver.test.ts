@@ -855,6 +855,7 @@ describe("ModelResolver", () => {
                 expect(modelID).toBe("api-test-model")
                 expect(settings).toEqual({
                   region: "test",
+                  providerOptions: { region: "test" },
                   headers: { "x-package": "header" },
                   body: { custom: true },
                 })
@@ -1039,11 +1040,7 @@ describe("ModelResolver", () => {
       const packages = [
         ["@ai-sdk/anthropic", "@opencode/ai/providers/anthropic", "api-model"],
         ["@ai-sdk/amazon-bedrock", "@opencode/ai/providers/amazon-bedrock", "api-model"],
-        [
-          "@ai-sdk/amazon-bedrock/mantle",
-          "@opencode/ai/providers/amazon-bedrock/mantle/chat",
-          "openai.gpt-oss-120b",
-        ],
+        ["@ai-sdk/amazon-bedrock/mantle", "@opencode/ai/providers/amazon-bedrock/mantle/chat", "openai.gpt-oss-120b"],
         ["@ai-sdk/azure", "@opencode/ai/providers/azure/responses", "api-model"],
         ["@ai-sdk/cerebras", "@opencode/ai/providers/cerebras", "api-model"],
         ["@ai-sdk/deepinfra", "@opencode/ai/providers/deepinfra", "api-model"],

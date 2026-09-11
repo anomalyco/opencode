@@ -27,4 +27,24 @@ describe("Provider", () => {
       expect(loaded.model).toBeFunction()
     }
   })
+
+  test("offers flat settings to native packages as both connection settings and request options", () => {
+    expect(
+      Provider.nativeSettings({
+        apiKey: "secret",
+        baseURL: "https://example.com/v1",
+        region: "us-east-1",
+        reasoningEffort: "high",
+        chunkTimeout: 1000,
+        providerOptions: { textVerbosity: "low" },
+      }),
+    ).toEqual({
+      apiKey: "secret",
+      baseURL: "https://example.com/v1",
+      region: "us-east-1",
+      reasoningEffort: "high",
+      textVerbosity: "low",
+      providerOptions: { region: "us-east-1", reasoningEffort: "high", textVerbosity: "low" },
+    })
+  })
 })

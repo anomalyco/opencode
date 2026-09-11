@@ -21,12 +21,10 @@ describe("AISDKNative", () => {
       settings: {
         apiKey: "secret",
         baseURL: "https://api.meta.ai/v1",
-        providerOptions: {
-          reasoningEffort: "xhigh",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"],
-          truncation: "auto",
-        },
+        reasoningEffort: "xhigh",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+        truncation: "auto",
         organization: "org",
       },
     })
@@ -35,7 +33,7 @@ describe("AISDKNative", () => {
       settings: {
         baseURL: "https://example.com/v1",
         provider: "test-provider",
-        providerOptions: { reasoningEffort: "high" },
+        reasoningEffort: "high",
       },
     })
   })
@@ -53,10 +51,8 @@ describe("AISDKNative", () => {
       settings: {
         authToken: "token",
         baseURL: "https://anthropic.example/v1",
-        providerOptions: {
-          thinking: { type: "adaptive", display: "summarized" },
-          effort: "high",
-        },
+        thinking: { type: "adaptive", display: "summarized" },
+        effort: "high",
       },
     })
   })
@@ -77,7 +73,8 @@ describe("AISDKNative", () => {
         settings: {
           apiKey: "secret",
           baseURL: `https://${name}.example/v1`,
-          providerOptions: { name: "custom-provider", reasoningEffort: "high", customOption: { enabled: true } },
+          reasoningEffort: "high",
+          customOption: { enabled: true },
         },
         headers: { "x-provider": name },
       })
@@ -101,10 +98,8 @@ describe("AISDKNative", () => {
       settings: {
         project: "project",
         location: "us-central1",
-        providerOptions: {
-          labels: { environment: "test" },
-          thinkingConfig: { thinkingLevel: "high" },
-        },
+        labels: { environment: "test" },
+        thinkingConfig: { thinkingLevel: "high" },
       },
     })
   })
@@ -129,27 +124,16 @@ describe("AISDKNative", () => {
       settings: {
         apiKey: "secret",
         baseURL: "https://mistral.example/v1",
-        providerOptions: {
-          safePrompt: false,
-          documentImageLimit: 4,
-          documentPageLimit: 12,
-          parallelToolCalls: false,
-          promptCacheKey: "session-123",
-          reasoningEffort: "high",
-          promptMode: "reasoning",
-        },
+        safePrompt: false,
+        documentImageLimit: 4,
+        documentPageLimit: 12,
+        parallelToolCalls: false,
+        promptCacheKey: "session-123",
+        reasoningEffort: "high",
+        promptMode: "reasoning",
       },
       headers: { "x-provider": "mistral" },
       body: { custom: { enabled: true } },
-    })
-  })
-
-  test("merges a nested providerOptions object instead of nesting it again", () => {
-    expect(
-      map("@ai-sdk/openai", { apiKey: "secret", reasoningEffort: "high", providerOptions: { textVerbosity: "low" } }),
-    ).toEqual({
-      package: "@opencode/ai/providers/openai",
-      settings: { apiKey: "secret", providerOptions: { textVerbosity: "low", reasoningEffort: "high" } },
     })
   })
 
@@ -181,7 +165,7 @@ describe("AISDKNative", () => {
         apiVersion: "2025-01-01-preview",
         queryParams: { feature: "enabled" },
         useDeploymentBasedUrls: true,
-        providerOptions: { reasoningEffort: "high" },
+        reasoningEffort: "high",
       },
     })
     expect(map("@ai-sdk/azure", { ...settings, useCompletionUrls: true }, "custom-deployment")?.package).toBe(
@@ -276,11 +260,9 @@ describe("AISDKNative", () => {
         apiKey: "token",
         baseURL: "https://mantle.test/v1",
         region: "us-west-2",
-        providerOptions: {
-          reasoningEffort: "high",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"],
-        },
+        reasoningEffort: "high",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
       },
       headers: { "x-test": "value" },
     })
@@ -328,7 +310,7 @@ describe("AISDKNative", () => {
           region: "eu-west-1",
         },
         baseURL: "https://bedrock-mantle.eu-west-1.api.aws/v1",
-        providerOptions: { store: false },
+        store: false,
       },
     })
   })
@@ -372,12 +354,10 @@ describe("AISDKNative", () => {
     ).toEqual({
       package: "@opencode/ai/providers/openrouter",
       settings: {
-        providerOptions: {
-          models: ["anthropic/claude-sonnet-4.6"],
-          provider: { only: ["anthropic"], require_parameters: true },
-          reasoning: { effort: "high" },
-          future_option: { enabled: true },
-        },
+        models: ["anthropic/claude-sonnet-4.6"],
+        provider: { only: ["anthropic"], require_parameters: true },
+        reasoning: { effort: "high" },
+        future_option: { enabled: true },
       },
       headers: {
         "x-openrouter-title": "Configured",
@@ -403,15 +383,13 @@ describe("AISDKNative", () => {
     ).toEqual({
       package: "@opencode/ai/providers/google",
       settings: {
-        providerOptions: {
-          cachedContent: "cachedContents/example",
-          safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
-          serviceTier: "flex",
-          thinkingConfig: {
-            thinkingBudget: 0,
-            includeThoughts: false,
-            thinkingLevel: "high",
-          },
+        cachedContent: "cachedContents/example",
+        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
+        serviceTier: "flex",
+        thinkingConfig: {
+          thinkingBudget: 0,
+          includeThoughts: false,
+          thinkingLevel: "high",
         },
       },
     })
@@ -420,7 +398,7 @@ describe("AISDKNative", () => {
   test("maps Google thinking settings independently", () => {
     for (const thinkingConfig of [{ thinkingBudget: -1 }, { includeThoughts: true }, { thinkingLevel: "medium" }]) {
       expect(map("@ai-sdk/google", { thinkingConfig })).toMatchObject({
-        settings: { providerOptions: { thinkingConfig } },
+        settings: { thinkingConfig },
       })
     }
   })
@@ -434,11 +412,9 @@ describe("AISDKNative", () => {
       }),
     ).toMatchObject({
       settings: {
-        providerOptions: {
-          cachedContent: "cachedContents/example",
-          safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
-          serviceTier: "future-tier",
-        },
+        cachedContent: "cachedContents/example",
+        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }],
+        serviceTier: "future-tier",
       },
     })
   })
@@ -461,10 +437,8 @@ describe("AISDKNative", () => {
         baseURL: "https://vertex.example/v1",
         location: "eu",
         project: "vertex-project",
-        providerOptions: {
-          labels: { component: "opencode", environment: "test" },
-          thinkingConfig: { thinkingLevel: "high" },
-        },
+        labels: { component: "opencode", environment: "test" },
+        thinkingConfig: { thinkingLevel: "high" },
       },
       headers: { "x-test": "value" },
     })
@@ -488,10 +462,8 @@ describe("AISDKNative", () => {
         baseURL: "https://vertex.example/v1",
         location: "eu",
         project: "vertex-project",
-        providerOptions: {
-          thinking: { type: "adaptive", display: "summarized" },
-          effort: "high",
-        },
+        thinking: { type: "adaptive", display: "summarized" },
+        effort: "high",
       },
       headers: { "x-test": "value" },
     })
@@ -510,10 +482,8 @@ describe("AISDKNative", () => {
       settings: {
         apiKey: "secret",
         baseURL: "https://xai.example/v1",
-        providerOptions: {
-          reasoningEffort: "custom",
-          store: true,
-        },
+        reasoningEffort: "custom",
+        store: true,
       },
     })
   })
