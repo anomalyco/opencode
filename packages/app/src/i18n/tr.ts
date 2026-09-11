@@ -935,6 +935,10 @@ export const dict = {
   "settings.general.row.terminalFont.description": "Terminalde kullanılan yazı tipini özelleştirin",
   "settings.general.row.uiFont.title": "Arayüz yazı tipi",
   "settings.general.row.uiFont.description": "Arayüz genelinde kullanılan yazı tipini özelleştirin",
+  "settings.general.row.fontSize.title": "Yazı tipi boyutu",
+  "settings.general.row.fontSize.description": "Uygulama genelinde kullanılan temel yazı tipi boyutunu özelleştirin",
+  "settings.general.row.lineHeight.title": "Satır yüksekliği",
+  "settings.general.row.lineHeight.description": "Okunabilir metin ve kod için satır yüksekliğini özelleştirin",
   "settings.general.row.followup.title": "Takip davranışı",
   "settings.general.row.followup.description":
     "Takip istemlerinin hemen yönlendirilmesini mi yoksa sırada beklemesini mi istediğinizi seçin",
