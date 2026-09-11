@@ -115,4 +115,67 @@ describe("ReadToolFileSystem", () => {
       )
     }),
   )
+
+  Array.of(
+    { name: "a surrogate pair at the truncation boundary", text: "a".repeat(1999) + "😀tail", head: "a".repeat(1999) },
+    {
+      name: "a complete surrogate pair within the limit",
+      text: "a".repeat(1998) + "😀tail",
+      head: "a".repeat(1998) + "😀",
+    },
+    { name: "ASCII at the truncation boundary", text: "a".repeat(2000) + "tail", head: "a".repeat(2000) },
+    { name: "BMP Unicode at the truncation boundary", text: "文".repeat(2000) + "tail", head: "文".repeat(2000) },
+  ).forEach((input) => {
+    it.live(`preserves valid Unicode when truncating ${input.name}`, () =>
+      Effect.gen(function* () {
+        const test = yield* fixture
+        const file = path.join(test.directory, "unicode.txt")
+        yield* test.files.writeFileString(file, input.text + "\nnext")
+
+        const result = yield* ReadToolFileSystem.read(test.fs, file, "unicode.txt", { limit: 1 })
+
+        expect(result).toMatchObject({
+          type: "text-page",
+          content: input.head + "... (line truncated to 2000 chars)",
+          truncated: true,
+          next: 2,
+        })
+        expect(result.content.isWellFormed()).toBe(true)
+        expect(Buffer.from(result.content).toString()).toBe(result.content)
+      }),
+    )
+  })
+
+  it.live("keeps exact-limit Unicode lines without a truncation marker", () =>
+    Effect.gen(function* () {
+      const test = yield* fixture
+      const file = path.join(test.directory, "exact.txt")
+      const content = "a".repeat(1998) + "😀"
+      yield* test.files.writeFileString(file, content + "\r\nnext")
+
+      const result = yield* ReadToolFileSystem.read(test.fs, file, "exact.txt", { limit: 1 })
+
+      expect(result).toMatchObject({ type: "text-page", content, truncated: true, next: 2 })
+      expect(result.content.isWellFormed()).toBe(true)
+    }),
+  )
+
+  it.live("preserves Unicode when a truncated line spans read chunks and ends at EOF", () =>
+    Effect.gen(function* () {
+      const test = yield* fixture
+      const file = path.join(test.directory, "chunks.txt")
+      // The first two bytes of the emoji fall in the first 64 KiB read.
+      yield* test.files.writeFileString(file, "p".repeat(63_534) + "\n" + "a".repeat(1999) + "😀tail")
+
+      const result = yield* ReadToolFileSystem.read(test.fs, file, "chunks.txt", { offset: 2, limit: 1 })
+
+      expect(result).toMatchObject({
+        type: "text-page",
+        content: "a".repeat(1999) + "... (line truncated to 2000 chars)",
+        offset: 2,
+        truncated: false,
+      })
+      expect(result.content.isWellFormed()).toBe(true)
+    }),
+  )
 })
