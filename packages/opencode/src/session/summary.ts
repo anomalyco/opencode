@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { isDeepStrictEqual } from "node:util"
 import { Effect, Layer, Context, Schema } from "effect"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -122,6 +123,7 @@ const layer = Layer.effect(
       const target = messages.find((m) => m.info.id === input.messageID)
       if (!target || target.info.role !== "user") return
       const msgDiffs = yield* computeDiff({ messages })
+      if (isDeepStrictEqual(target.info.summary?.diffs, msgDiffs)) return
       // Turn patches are their own durable stream: ordinary message updates must never duplicate them.
       yield* events.publish(Session.Event.MessageDiffUpdated, {
         sessionID: input.sessionID,
