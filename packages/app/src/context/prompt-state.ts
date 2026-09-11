@@ -1,5 +1,5 @@
-import { checksum } from "@opencode-ai/core/util/encode"
-import type { FilePartSource } from "@opencode-ai/sdk/v2/client"
+import { checksum } from "@argus-ai/core/util/encode"
+import type { FilePartSource } from "@argus-ai/sdk/v2/client"
 import { batch, createMemo, type Accessor } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
 import type { FileSelection } from "@/context/file"

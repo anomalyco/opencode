@@ -1,9 +1,9 @@
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Tag } from "@opencode-ai/ui/v2/badge-v2"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
+import { useDialog } from "@argus-ai/ui/context/dialog"
+import { Tag } from "@argus-ai/ui/v2/badge-v2"
+import { ButtonV2 } from "@argus-ai/ui/v2/button-v2"
+import { Icon as IconV2 } from "@argus-ai/ui/v2/icon"
+import { IconButtonV2 } from "@argus-ai/ui/v2/icon-button-v2"
+import { MenuV2 } from "@argus-ai/ui/v2/menu-v2"
 import { useMutation } from "@tanstack/solid-query"
 import fuzzysort from "fuzzysort"
 import { type Accessor, For, Show, createMemo } from "solid-js"
@@ -15,7 +15,7 @@ import { ServerConnection } from "@/context/server"
 import { showToast } from "@/utils/toast"
 import { DialogAddWslServer } from "./dialog-add-server"
 import { useWslServers } from "./context"
-import { wslOpencodeAction, wslRuntimeRetryable } from "./settings-model"
+import { wslArgusAction, wslRuntimeRetryable } from "./settings-model"
 
 type Controller = ReturnType<typeof useServerManagementController>
 
@@ -94,9 +94,9 @@ export function WslServerSettings(props: {
       <For each={props.servers()}>
         {(item) => {
           const key = ServerConnection.Key.make(item.config.id)
-          const check = () => wsl.data?.opencodeChecks[item.config.distro]
-          const opencodeAction = () => wslOpencodeAction(check())
-          const busy = () => wsl.data?.job?.kind === "install-opencode" && wsl.data.job.distro === item.config.distro
+          const check = () => wsl.data?.argusChecks[item.config.distro]
+          const argusAction = () => wslArgusAction(check())
+          const busy = () => wsl.data?.job?.kind === "install-argus" && wsl.data.job.distro === item.config.distro
           return (
             <div class="settings-v2-servers-row">
               <div class="settings-v2-servers-lead">
@@ -117,12 +117,12 @@ export function WslServerSettings(props: {
                 <Show when={props.controller.canDefault() && props.controller.defaultKey() === key}>
                   <Tag>{language.t("dialog.server.status.default")}</Tag>
                 </Show>
-                <Show when={opencodeAction()}>
+                <Show when={argusAction()}>
                   {(label) => (
                     <ButtonV2
                       size="small"
                       disabled={busy() || request.isPending}
-                      onClick={() => api && request.mutate(() => api.installOpencode(item.config.distro))}
+                      onClick={() => api && request.mutate(() => api.installArgus(item.config.distro))}
                     >
                       {busy() ? language.t("wsl.server.updating") : language.t(label())}
                     </ButtonV2>

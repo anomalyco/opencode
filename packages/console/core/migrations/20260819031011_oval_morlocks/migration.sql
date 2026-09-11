@@ -1,1 +1,0 @@
-ALTER TABLE `workspace` RENAME COLUMN `allow_non_zdr` TO `allow_training`;

@@ -4,8 +4,8 @@ import { useTheme } from "../context/theme"
 import { MouseButton, Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { useBindings, useOpencodeModeStack } from "../keymap"
+import { Flag } from "@argus-ai/core/flag/flag"
+import { useBindings, useArgusModeStack } from "../keymap"
 import { useClipboard } from "../context/clipboard"
 
 export function Dialog(
@@ -76,7 +76,7 @@ function init() {
   })
 
   const renderer = useRenderer()
-  const modeStack = useOpencodeModeStack()
+  const modeStack = useArgusModeStack()
 
   createEffect(() => {
     if (store.stack.length === 0) return
@@ -203,14 +203,14 @@ export function DialogProvider(props: ParentProps) {
         position="absolute"
         zIndex={3000}
         onMouseDown={(evt: { button: number; preventDefault(): void; stopPropagation(): void }) => {
-          if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+          if (!Flag.ARGUS_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
           if (evt.button !== MouseButton.RIGHT) return
 
           if (!copySelection()) return
           evt.preventDefault()
           evt.stopPropagation()
         }}
-        onMouseUp={!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? copySelection : undefined}
+        onMouseUp={!Flag.ARGUS_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? copySelection : undefined}
       >
         <Show when={value.stack.length}>
           <Dialog onClose={() => value.clear()} size={value.size}>

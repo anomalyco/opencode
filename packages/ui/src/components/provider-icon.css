@@ -1,4 +1,5 @@
-[data-component="provider-icon"] {
+[data-component="provider-icon"],
+[data-component="provider-logo"] {
   flex-shrink: 0;
   width: 16px;
   height: 16px;

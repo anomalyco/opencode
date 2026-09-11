@@ -1,10 +1,10 @@
-import { Button } from "@opencode-ai/ui/button"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { Button } from "@argus-ai/ui/button"
+import { useDialog } from "@argus-ai/ui/context/dialog"
+import { Dialog } from "@argus-ai/ui/dialog"
+import { IconButton } from "@argus-ai/ui/icon-button"
+import { ProviderIcon } from "@argus-ai/ui/provider-icon"
 import { useMutation } from "@tanstack/solid-query"
-import { TextField } from "@opencode-ai/ui/text-field"
+import { TextField } from "@argus-ai/ui/text-field"
 import { showToast } from "@/utils/toast"
 import { batch, For } from "solid-js"
 import { createStore, produce } from "solid-js/store"
@@ -185,7 +185,7 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
       <form onSubmit={save} class="px-2.5 pb-6 flex flex-col gap-6">
         <p class="text-14-regular text-text-base">
           {language.t("provider.custom.description.prefix")}
-          <ExternalLink href="https://opencode.ai/docs/providers/#custom-provider" tabIndex={-1}>
+          <ExternalLink href="https://argus.ai/docs/providers/#custom-provider" tabIndex={-1}>
             {language.t("provider.custom.description.link")}
           </ExternalLink>
           {language.t("provider.custom.description.suffix")}

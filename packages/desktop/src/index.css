@@ -1,0 +1,21 @@
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, sans-serif; }
+.app { display: flex; flex-direction: column; height: 100vh; }
+.topbar { display: flex; gap: 12px; align-items: baseline; padding: 12px 16px; border-bottom: 1px solid #3333; }
+.serverbar { display: flex; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #3333; }
+.serverbar input { flex: 1; padding: 8px; }
+.layout { display: flex; flex: 1; min-height: 0; }
+.sessions { width: 300px; border-right: 1px solid #3333; overflow: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.session { text-align: left; padding: 8px; border: 1px solid #3333; border-radius: 8px; background: transparent; cursor: pointer; }
+.session.active { border-color: #646cff; }
+.title { font-weight: 600; }
+.muted { opacity: 0.65; font-size: 12px; }
+.chat { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.messages { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.message { border: 1px solid #3333; border-radius: 8px; padding: 8px; }
+.message pre { white-space: pre-wrap; word-break: break-word; margin: 8px 0 0; font-size: 12px; }
+.composer { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid #3333; }
+.composer textarea { flex: 1; padding: 8px; }
+.error { background: #5f1a1a; color: #ffd7d7; padding: 8px 16px; }
+button { padding: 8px 12px; cursor: pointer; }

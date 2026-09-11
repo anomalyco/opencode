@@ -2,9 +2,16 @@ import type { HomeProjectsController } from "./home-projects-controller"
 import { HomeProjectsView } from "./home-projects-view"
 import type { HomeScrollController } from "./home-scroll-controller"
 
-export function HomeProjects(props: { projects: HomeProjectsController; scroll: HomeScrollController }) {
+export function HomeProjects(props: {
+  projects: HomeProjectsController
+  scroll: HomeScrollController
+  sidebar?: boolean
+  showUtility?: boolean
+}) {
   return (
     <HomeProjectsView
+      sidebar={props.sidebar}
+      showUtility={props.showUtility}
       language={props.projects.copy.language}
       servers={props.projects.server.list}
       projects={props.projects.project.list}

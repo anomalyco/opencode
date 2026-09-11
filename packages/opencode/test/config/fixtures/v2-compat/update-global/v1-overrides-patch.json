@@ -1,6 +1,0 @@
-{
-  "snapshot": false,
-  "permission": { "read": "deny" },
-  "agent": { "reviewer": { "disable": true } },
-  "mcp": { "modern": { "enabled": false } }
-}

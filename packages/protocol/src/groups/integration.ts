@@ -1,5 +1,5 @@
-import { Integration } from "@opencode-ai/schema/integration"
-import { Location } from "@opencode-ai/schema/location"
+import { Integration } from "@argus-ai/schema/integration"
+import { Location } from "@argus-ai/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { InvalidRequestError } from "../errors"

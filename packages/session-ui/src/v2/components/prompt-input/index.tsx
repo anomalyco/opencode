@@ -1,15 +1,15 @@
 import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
-import { FileIcon } from "@opencode-ai/ui/file-icon"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { useI18n } from "@opencode-ai/ui/context/i18n"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { FileIcon } from "@argus-ai/ui/file-icon"
+import { Icon } from "@argus-ai/ui/icon"
+import { IconButton } from "@argus-ai/ui/icon-button"
+import { ProviderLogo } from "@argus-ai/ui/provider-logo"
+import { useI18n } from "@argus-ai/ui/context/i18n"
+import { ButtonV2 } from "@argus-ai/ui/v2/button-v2"
+import { Icon as IconV2 } from "@argus-ai/ui/v2/icon"
+import { IconButtonV2 } from "@argus-ai/ui/v2/icon-button-v2"
+import { KeybindV2 } from "@argus-ai/ui/v2/keybind-v2"
+import { MenuV2 } from "@argus-ai/ui/v2/menu-v2"
+import { TooltipV2 } from "@argus-ai/ui/v2/tooltip-v2"
 import { AttachmentCardV2 } from "../attachment-card-v2"
 import { CommentCardV2 } from "../comment-card-v2"
 import { typeLabel } from "../../../components/message-file"
@@ -110,7 +110,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
       <form
         data-component="prompt-input-v2"
         data-dock-border-underlay={props.borderUnderlay ? "v2" : undefined}
-        class="group/prompt-input relative min-h-[96px] w-full overflow-clip rounded-xl bg-v2-background-bg-base"
+        class="group/prompt-input glass-surface-bright relative min-h-[96px] w-full overflow-clip rounded-xl"
         classList={{
           "shadow-[var(--v2-elevation-raised)]": !props.borderUnderlay,
           "border border-v2-icon-icon-info border-dashed": state.drag === "active",
@@ -540,7 +540,7 @@ function PromptInputV2ConfiguredSelect(props: {
       current={current()}
       currentIcon={
         <Show when={props.model && providerID()}>
-          <ProviderIcon id={providerID()!} class="size-4 shrink-0 opacity-60" />
+          <ProviderLogo id={providerID()!} class="size-4 shrink-0 opacity-60" />
         </Show>
       }
       onSelect={props.control.onSelect}

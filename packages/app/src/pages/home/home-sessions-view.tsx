@@ -1,11 +1,11 @@
-import type { Session } from "@opencode-ai/sdk/v2/client"
+import type { Session } from "@argus-ai/sdk/v2/client"
 import { type Accessor, createMemo, For, Show, Suspense } from "solid-js"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { Spinner } from "@argus-ai/ui/spinner"
+import { ScrollView } from "@argus-ai/ui/scroll-view"
+import { ButtonV2 } from "@argus-ai/ui/v2/button-v2"
+import { Icon as IconV2 } from "@argus-ai/ui/v2/icon"
+import { IconButtonV2 } from "@argus-ai/ui/v2/icon-button-v2"
+import { TooltipV2 } from "@argus-ai/ui/v2/tooltip-v2"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { SessionTabAvatarView } from "@/pages/layout/session-tab-avatar"
@@ -37,6 +37,7 @@ function isBackgroundOpen(event: MouseEvent) {
 }
 
 export type HomeSessionsViewProps = {
+  sidebar?: boolean
   language: ReturnType<typeof useLanguage>
   groups: Accessor<HomeSessionGroup[]>
   showProjectName: Accessor<boolean>
@@ -72,17 +73,23 @@ export type HomeSessionsViewProps = {
 }
 
 export function HomeSessionsView(props: HomeSessionsViewProps) {
+  const groupStickyTop = () => `${props.sidebar ? "top-[72px]" : "top-[84px] lg:top-[108px]"}`
   return (
     <section
       ref={props.onSetHoverTarget}
       class="min-h-0 min-w-0 flex-1 flex flex-col"
       aria-label={props.language.t("sidebar.project.recentSessions")}
     >
-      <div class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-3 pt-6 lg:pt-12" onWheel={props.onWheel}>
+      <div
+        class={`sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-3 ${props.sidebar ? "pt-2" : "pt-6 lg:pt-12"}`}
+        onWheel={props.onWheel}
+      >
         <HomeSessionSearch {...props} />
         <Suspense>
           <Show when={props.groups().length > 0 && props.canCreateSession()}>
-            <div class="pointer-events-none absolute right-0 top-[84px] z-20 flex lg:top-[108px]">
+            <div
+              class={`pointer-events-none absolute right-0 z-20 flex ${props.sidebar ? "top-[52px]" : "top-[84px] lg:top-[108px]"}`}
+            >
               <ButtonV2
                 data-action="home-new-session"
                 variant="ghost-muted"
@@ -97,14 +104,18 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           </Show>
         </Suspense>
       </div>
-      <div class="pointer-events-none sticky top-[84px] z-40 h-0 -mr-3 lg:top-[108px]">
+      <Show when={!props.sidebar}>
         <div
-          ref={props.onSetThumbTrack}
-          data-component="home-session-scroll-track"
-          class="relative ml-auto h-[calc(100cqh-84px)] w-3 lg:h-[calc(100cqh-108px)]"
-        />
-      </div>
-      <div class="-mr-3 min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]">
+          class={`pointer-events-none sticky z-40 h-0 -mr-3 ${props.sidebar ? "top-[72px]" : "top-[84px] lg:top-[108px]"}`}
+        >
+          <div
+            ref={props.onSetThumbTrack}
+            data-component="home-session-scroll-track"
+            class={`relative ml-auto w-3 ${props.sidebar ? "h-[calc(100cqh-72px)]" : "h-[calc(100cqh-84px)] lg:h-[calc(100cqh-108px)]"}`}
+          />
+        </div>
+      </Show>
+      <div class={`-mr-3 ${props.sidebar ? "min-h-[calc(100cqh-60px)]" : "min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]"}`}>
         <Suspense
           fallback={
             <div class="pt-3">
@@ -130,6 +141,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
                       titleOpacity={props.titleOpacity(group.id)}
                       onSetRef={(element) => props.onSetHeader(group.id, element)}
                       elevated={index() === 0}
+                      sidebar={props.sidebar}
                     />
                     <div
                       class={`flex min-w-0 flex-col gap-px pt-4 ${index() === props.groups().length - 1 ? "" : "mb-6"}`}
@@ -397,13 +409,14 @@ function HomeSessionGroupHeader(props: {
   titleOpacity: number
   onSetRef: (element: HTMLDivElement) => void
   elevated?: boolean
+  sidebar?: boolean
 }) {
   return (
     <div
       ref={props.onSetRef}
       class={`
-        pointer-events-none sticky top-[84px] flex h-7 min-w-0 items-center justify-between
-        bg-v2-background-bg-base pl-3 lg:top-[108px]
+        pointer-events-none sticky flex h-7 min-w-0 items-center justify-between
+        bg-v2-background-bg-base pl-3 ${props.sidebar ? "top-[72px]" : "top-[84px] lg:top-[108px]"}
       `}
       classList={{ "home-session-group-header z-[5]": !!props.elevated, "z-10": !props.elevated }}
     >

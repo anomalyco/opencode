@@ -1,11 +1,11 @@
 {
-  "name": "@opencode-ai/ui",
+  "name": "@argus-ai/ui",
   "version": "1.18.30",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/opencode.git",
+    "url": "git+https://github.com/argus-team/argus.git",
     "directory": "packages/ui"
   },
   "publishConfig": {

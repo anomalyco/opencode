@@ -1,12 +1,12 @@
 import "@/index.css"
 import * as Sentry from "@sentry/solid"
-import { I18nProvider } from "@opencode-ai/ui/context"
-import { DialogProvider } from "@opencode-ai/ui/context/dialog"
-import { FileComponentProvider } from "@opencode-ai/ui/context/file"
-import { File } from "@opencode-ai/session-ui/file"
-import { Font } from "@opencode-ai/ui/font"
-import { Splash } from "@opencode-ai/ui/logo"
-import { ThemeProvider } from "@opencode-ai/ui/theme/context"
+import { I18nProvider } from "@argus-ai/ui/context"
+import { DialogProvider } from "@argus-ai/ui/context/dialog"
+import { FileComponentProvider } from "@argus-ai/ui/context/file"
+import { File } from "@argus-ai/session-ui/file"
+import { Font } from "@argus-ai/ui/font"
+import { Splash } from "@argus-ai/ui/logo"
+import { ThemeProvider } from "@argus-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
 import {
   type BaseRouterProps,
@@ -20,7 +20,7 @@ import {
 } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Effect } from "effect"
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@argus-ai/core/util/encode"
 import {
   type Component,
   createEffect,
@@ -66,7 +66,7 @@ import { legacySessionHref, legacySessionServer, requireServerKey, sessionHref }
 import { createSessionLineage } from "@/pages/session/session-lineage"
 
 import { SessionPage, SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
-import { NewHome } from "@/pages/home"
+import { HomeIndex } from "@/pages/home/home-index"
 import { LegacyHome } from "@/pages/home/legacy-home"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
@@ -268,7 +268,7 @@ function LayoutCompatibility(props: ParentProps) {
 
 declare global {
   interface Window {
-    __OPENCODE__?: {
+    __ARGUS__?: {
       deepLinks?: string[]
     }
     api?: {
@@ -491,7 +491,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean; start
       </Show>
       <Show when={loading()}>
         <div class="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-background-base">
-          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+          <Splash class="w-16 h-auto opacity-50 animate-pulse" />
         </div>
       </Show>
     </>
@@ -512,7 +512,7 @@ function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key:
   return (
     <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base gap-6 p-6">
       <div class="flex flex-col items-center max-w-md text-center">
-        <Splash class="w-12 h-15 mb-4" />
+        <Splash class="w-12 h-auto mb-4" />
         <p class="text-14-regular text-text-base">
           {unreachable()[0]}
           <span class="text-text-strong font-medium">{name()}</span>
@@ -636,7 +636,7 @@ function Routes(props: { serverScoped?: JSX.Element }) {
         </Route>
       </Route>
       <Show when={settings.general.newLayoutDesigns()}>
-        <Route path="/" component={NewHome} />
+        <Route path="/" component={HomeIndex} />
         <Route path="/:dir/session/:id" component={NewLayoutLegacySessionRedirect} />
         <Route path="/server/:serverKey/session/:id" component={TargetSessionRoute} />
       </Show>

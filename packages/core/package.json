@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.18.30",
-  "name": "@opencode-ai/core",
+  "name": "@argus-ai/core",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -13,7 +13,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "argus": "./bin/argus"
   },
   "exports": {
     "./effect/layer-node": "./src/effect/layer-node.ts",
@@ -57,7 +57,7 @@
     "@parcel/watcher-linux-x64-musl": "2.5.1",
     "@parcel/watcher-win32-arm64": "2.5.1",
     "@parcel/watcher-win32-x64": "2.5.1",
-    "@opencode-ai/http-recorder": "workspace:*",
+    "@argus-ai/http-recorder": "workspace:*",
     "drizzle-kit": "catalog:"
   },
   "dependencies": {
@@ -89,11 +89,11 @@
     "@ff-labs/fff-bun": "0.9.4",
     "@npmcli/arborist": "9.4.0",
     "@npmcli/config": "10.8.1",
-    "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
-    "@opencode-ai/effect-sqlite-node": "workspace:*",
-    "@opencode-ai/llm": "workspace:*",
-    "@opencode-ai/schema": "workspace:*",
-    "@opencode-ai/plugin": "workspace:*",
+    "@argus-ai/effect-drizzle-sqlite": "workspace:*",
+    "@argus-ai/effect-sqlite-node": "workspace:*",
+    "@argus-ai/llm": "workspace:*",
+    "@argus-ai/schema": "workspace:*",
+    "@argus-ai/plugin": "workspace:*",
     "@opentelemetry/api": "1.9.0",
     "@opentelemetry/context-async-hooks": "2.6.1",
     "@opentelemetry/exporter-trace-otlp-http": "0.214.0",

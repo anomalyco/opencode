@@ -1,21 +1,15 @@
 {
-  "name": "OpenCode",
-  "short_name": "OpenCode",
+  "name": "Argus",
+  "short_name": "Argus",
   "id": "/",
   "start_url": "/",
   "scope": "/",
   "icons": [
     {
-      "src": "/web-app-manifest-192x192.png",
-      "sizes": "192x192",
+      "src": "/logowithbg.png",
+      "sizes": "1254x1254",
       "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "/web-app-manifest-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any"
     }
   ],
   "theme_color": "#080808",

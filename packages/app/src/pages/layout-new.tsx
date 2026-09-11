@@ -5,6 +5,7 @@ import { TabsInfoPopup } from "@/components/help-button"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
 import { usePlatform } from "@/context/platform"
 import { setV2Toast, ToastRegion } from "@/utils/toast"
+import { HomeSidebar } from "@/pages/home/home-sidebar"
 
 export default function NewLayout(props: ParentProps) {
   const platform = usePlatform()
@@ -38,8 +39,14 @@ export default function NewLayout(props: ParentProps) {
             : undefined
         }
       />
-      <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
-        <Suspense>{props.children}</Suspense>
+      <main class="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-row items-stretch contain-strict">
+        <HomeSidebar />
+        <div class="relative flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
+          <div aria-hidden="true" class="glass-ambient" />
+          <div class="relative z-10 flex h-full w-full min-h-0 min-w-0 flex-col items-start">
+            <Suspense>{props.children}</Suspense>
+          </div>
+        </div>
       </main>
       {import.meta.env.DEV && state.debugTools && <DebugBar inline />}
       <TabsInfoPopup />

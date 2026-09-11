@@ -14,19 +14,19 @@ import {
   closestCenter,
   type DragEvent,
 } from "@thisbeyond/solid-dnd"
-import { Tabs } from "@opencode-ai/ui/tabs"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { Mark } from "@opencode-ai/ui/logo"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
-import type { FileDiffInfo } from "@opencode-ai/client/promise"
+import { Tabs } from "@argus-ai/ui/tabs"
+import { IconButton } from "@argus-ai/ui/icon-button"
+import { Icon } from "@argus-ai/ui/icon"
+import { TooltipKeybind } from "@argus-ai/ui/tooltip"
+import { ResizeHandle } from "@argus-ai/ui/resize-handle"
+import { Mark } from "@argus-ai/ui/logo"
+import { IconButtonV2 } from "@argus-ai/ui/v2/icon-button-v2"
+import { KeybindV2 } from "@argus-ai/ui/v2/keybind-v2"
+import { TooltipV2 } from "@argus-ai/ui/v2/tooltip-v2"
+import type { SnapshotFileDiff, VcsFileDiff } from "@argus-ai/sdk/v2"
+import type { FileDiffInfo } from "@argus-ai/client/promise"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@argus-ai/ui/context/dialog"
 
 import FileTree from "@/components/file-tree"
 import { normalizeFileTreeV2Path } from "@/components/file-tree-v2-model"
@@ -294,9 +294,9 @@ export function SessionSidePanel(props: {
         aria-label={language.t("session.panel.reviewAndFiles")}
         aria-hidden={!open()}
         inert={!open()}
-        class="relative min-w-0 flex overflow-hidden"
+        class="relative min-w-0 flex overflow-hidden animate-in fade-in slide-in-from-right-1 duration-150"
         classList={{
-          "bg-v2-background-bg-base": settings.general.newLayoutDesigns(),
+          "bg-v2-background-bg-base/70 backdrop-blur-xl": settings.general.newLayoutDesigns(),
           "bg-background-base": !settings.general.newLayoutDesigns(),
           "h-full shrink-0": !props.stacked,
           "h-full min-h-0": props.stacked,

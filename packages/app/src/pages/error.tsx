@@ -1,12 +1,11 @@
-import { TextField } from "@opencode-ai/ui/text-field"
+import { TextField } from "@argus-ai/ui/text-field"
 import * as Sentry from "@sentry/solid"
-import { Logo } from "@opencode-ai/ui/logo"
-import { Button } from "@opencode-ai/ui/button"
+import { Button } from "@argus-ai/ui/button"
 import { Component, createSignal, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@argus-ai/ui/icon"
 import { errorDescriptionKey } from "./error-description"
 
 export type InitError = {
@@ -281,7 +280,12 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
       data-tauri-drag-region
     >
       <div class="w-2/3 max-w-3xl flex flex-col items-center justify-center gap-8">
-        <Logo class="w-58.5 opacity-12 shrink-0" />
+        <div
+          aria-hidden="true"
+          class="text-center font-extrabold tracking-tighter leading-none text-text-weak opacity-15 select-none text-7xl"
+        >
+          argus
+        </div>
         <div class="flex flex-col items-center gap-2 text-center">
           <h1 class="text-lg font-medium text-text-strong">{language.t("error.page.title")}</h1>
           <p class="text-sm text-text-weak">{language.t(errorDescriptionKey(props.error))}</p>
@@ -354,7 +358,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
             <button
               type="button"
               class="flex items-center text-text-interactive-base gap-1"
-              onClick={() => platform.openExternal("https://opencode.ai/desktop-feedback")}
+              onClick={() => platform.openExternal("https://argus.ai/desktop-feedback")}
             >
               <div>{language.t("error.page.report.discord")}</div>
               <Icon name="discord" class="text-text-interactive-base" />

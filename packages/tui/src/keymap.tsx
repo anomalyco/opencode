@@ -18,18 +18,18 @@ import { useTuiConfig } from "./config"
 import { TuiKeybind } from "./config/keybind"
 
 export const LEADER_TOKEN = "leader"
-export const OPENCODE_BASE_MODE = "base"
+export const ARGUS_BASE_MODE = "base"
 export const COMMAND_PALETTE_COMMAND = "command.palette.show"
 
-const OPENCODE_MODE_KEY = "opencode.mode"
+const ARGUS_MODE_KEY = "argus.mode"
 
-export const OpencodeKeymapProvider = KeymapProvider
-export const useOpencodeKeymap = useKeymap
+export const ArgusKeymapProvider = KeymapProvider
+export const useArgusKeymap = useKeymap
 
 export { useBindings, useKeymapSelector }
 
 export type OpenTuiKeymap = ReturnType<typeof useKeymap>
-type OpencodeModeStack = ReturnType<typeof createOpencodeModeStack>
+type ArgusModeStack = ReturnType<typeof createArgusModeStack>
 type CommandSlashEntry = {
   display: string
   description?: string
@@ -44,18 +44,18 @@ type BindingLookup = {
 type FormatConfig = { keybinds: BindingLookup }
 type ResolvedKeymapConfig = FormatConfig & { leader_timeout: number }
 
-const modeStacks = new WeakMap<OpenTuiKeymap, OpencodeModeStack>()
+const modeStacks = new WeakMap<OpenTuiKeymap, ArgusModeStack>()
 
 function isVisiblePaletteCommand(command: Command) {
   return command.hidden !== true && command.name !== COMMAND_PALETTE_COMMAND
 }
 
-export function createOpencodeModeStack(keymap: OpenTuiKeymap) {
-  keymap.setData(OPENCODE_MODE_KEY, OPENCODE_BASE_MODE)
+export function createArgusModeStack(keymap: OpenTuiKeymap) {
+  keymap.setData(ARGUS_MODE_KEY, ARGUS_BASE_MODE)
 
   const offFields = keymap.registerLayerFields({
     mode(value, ctx) {
-      ctx.require(OPENCODE_MODE_KEY, value)
+      ctx.require(ARGUS_MODE_KEY, value)
     },
   })
 
@@ -63,12 +63,12 @@ export function createOpencodeModeStack(keymap: OpenTuiKeymap) {
   let disposed = false
 
   const update = () => {
-    keymap.setData(OPENCODE_MODE_KEY, stack.at(-1)?.mode ?? OPENCODE_BASE_MODE)
+    keymap.setData(ARGUS_MODE_KEY, stack.at(-1)?.mode ?? ARGUS_BASE_MODE)
   }
 
   const stackApi = {
     current() {
-      return stack.at(-1)?.mode ?? OPENCODE_BASE_MODE
+      return stack.at(-1)?.mode ?? ARGUS_BASE_MODE
     },
     push(mode: string) {
       if (disposed) return () => {}
@@ -90,7 +90,7 @@ export function createOpencodeModeStack(keymap: OpenTuiKeymap) {
       disposed = true
       stack.length = 0
       offFields()
-      keymap.setData(OPENCODE_MODE_KEY, undefined)
+      keymap.setData(ARGUS_MODE_KEY, undefined)
       modeStacks.delete(keymap)
     },
   }
@@ -99,13 +99,13 @@ export function createOpencodeModeStack(keymap: OpenTuiKeymap) {
   return stackApi
 }
 
-export function useOpencodeModeStack() {
-  return getOpencodeModeStack(useOpencodeKeymap())
+export function useArgusModeStack() {
+  return getArgusModeStack(useArgusKeymap())
 }
 
-export function getOpencodeModeStack(keymap: OpenTuiKeymap) {
+export function getArgusModeStack(keymap: OpenTuiKeymap) {
   const value = modeStacks.get(keymap)
-  if (!value) throw new Error("Opencode mode stack is not registered for this keymap")
+  if (!value) throw new Error("Argus mode stack is not registered for this keymap")
   return value
 }
 
@@ -211,8 +211,8 @@ export function formatKeyBindings(bindings: Parameters<typeof formatCommandBindi
   return formatCommandBindingsExtra(bindings, formatOptions(config))
 }
 
-export function registerOpencodeKeymap(keymap: OpenTuiKeymap, renderer: CliRenderer, config: ResolvedKeymapConfig) {
-  const modeStack = createOpencodeModeStack(keymap)
+export function registerArgusKeymap(keymap: OpenTuiKeymap, renderer: CliRenderer, config: ResolvedKeymapConfig) {
+  const modeStack = createArgusModeStack(keymap)
   const offCommaBindings = registerCommaBindings(keymap)
   const offAliasExpander = registerKeyAliases(keymap)
   const offBaseLayout = registerBaseLayoutFallback(keymap)
@@ -258,7 +258,7 @@ export function useCommandShortcut(command: string): Accessor<string> {
 }
 
 export function useCommandSlashes(): Accessor<readonly CommandSlashEntry[]> {
-  const keymap = useOpencodeKeymap()
+  const keymap = useArgusKeymap()
   const entries = useKeymapSelector((keymap: OpenTuiKeymap) =>
     keymap.getCommandEntries({
       visibility: "reachable",

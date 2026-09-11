@@ -1,8 +1,8 @@
-import { QuestionV2 } from "@opencode-ai/core/question"
+import { QuestionV2 } from "@argus-ai/core/question"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { QuestionNotFoundError } from "@opencode-ai/protocol/errors"
+import { QuestionNotFoundError } from "@argus-ai/protocol/errors"
 import { response } from "../location"
 
 function missingRequest(id: QuestionV2.ID) {

@@ -1,5 +1,5 @@
-import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { useSpring } from "@opencode-ai/ui/motion-spring"
+import { useFilteredList } from "@argus-ai/ui/hooks"
+import { useSpring } from "@argus-ai/ui/motion-spring"
 import {
   createEffect,
   on,
@@ -29,20 +29,20 @@ import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
-import { Button } from "@opencode-ai/ui/button"
-import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
-import { Icon } from "@opencode-ai/ui/icon"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Select } from "@opencode-ai/ui/select"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Button } from "@argus-ai/ui/button"
+import { DockShellForm, DockTray } from "@argus-ai/ui/dock-surface"
+import { Icon } from "@argus-ai/ui/icon"
+import { ProviderLogo } from "@argus-ai/ui/provider-logo"
+import { Tooltip, TooltipKeybind } from "@argus-ai/ui/tooltip"
+import { ButtonV2 } from "@argus-ai/ui/v2/button-v2"
+import { Icon as IconV2 } from "@argus-ai/ui/v2/icon"
+import { IconButtonV2 } from "@argus-ai/ui/v2/icon-button-v2"
+import { KeybindV2 } from "@argus-ai/ui/v2/keybind-v2"
+import { MenuV2 } from "@argus-ai/ui/v2/menu-v2"
+import { TooltipV2 } from "@argus-ai/ui/v2/tooltip-v2"
+import { IconButton } from "@argus-ai/ui/icon-button"
+import { Select } from "@argus-ai/ui/select"
+import { useDialog } from "@argus-ai/ui/context/dialog"
 import { ModelSelectorPopover, ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { DialogSelectModelUnpaidV2 } from "@/components/dialog-select-model-unpaid-v2"
@@ -80,8 +80,8 @@ import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { createPromptInputTransientState } from "./prompt-input/transient-state"
 import { showToast } from "@/utils/toast"
-import { ImagePreview } from "@opencode-ai/ui/image-preview"
-import type { ReferenceInfo } from "@opencode-ai/sdk/v2/client"
+import { ImagePreview } from "@argus-ai/ui/image-preview"
+import type { ReferenceInfo } from "@argus-ai/sdk/v2/client"
 
 export { createPromptInputHistory }
 export type { PromptInputControls, PromptInputHistory, PromptInputProps, PromptInputState, PromptInputSubmission }
@@ -1701,7 +1701,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                               }}
                             >
                               <Show when={props.controls.model.selection.current()?.provider?.id}>
-                                <ProviderIcon
+                                <ProviderLogo
                                   id={props.controls.model.selection.current()?.provider?.id ?? ""}
                                   class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
                                   style={{ "will-change": "opacity", transform: "translateZ(0)" }}
@@ -1734,7 +1734,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                                 data-action="prompt-model"
                               >
                                 <Show when={props.controls.model.selection.current()?.provider?.id}>
-                                  <ProviderIcon
+                                  <ProviderLogo
                                     id={props.controls.model.selection.current()?.provider?.id ?? ""}
                                     class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
                                     style={{ "will-change": "opacity", transform: "translateZ(0)" }}

@@ -1,8 +1,7 @@
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { WordmarkV2 } from "@opencode-ai/ui/v2/wordmark-v2"
+import { useDialog } from "@argus-ai/ui/context/dialog"
+import { Tooltip } from "@argus-ai/ui/tooltip"
+import { Icon as IconV2 } from "@argus-ai/ui/v2/icon"
+import { TooltipV2 } from "@argus-ai/ui/v2/tooltip-v2"
 import { Show, createMemo, createSignal, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
@@ -35,11 +34,13 @@ export function NewSessionView(props: {
     <div class="@container relative flex flex-col min-h-0 h-full flex-1">
       <div
         data-component="session-new-design"
-        class="relative flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-deep"
+        class="glass-surface flex-1 min-h-0 overflow-hidden rounded-[10px]"
       >
-        <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
+        <div class="absolute inset-x-0 top-[25.375%] flex justify-center overflow-hidden px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
-            <WordmarkV2 class="h-auto w-full text-v2-background-bg-inverse" />
+            <div class="mx-auto w-full max-w-130">
+              <img src="/logo.png" alt="" data-component="logo-splash" class="mx-auto w-32 h-auto opacity-30" />
+            </div>
             <div class="mt-8 flex flex-col gap-8">
               <PromptInputV2Composer controller={props.input} />
               <Show when={props.project.empty()}>

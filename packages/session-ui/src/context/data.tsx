@@ -1,6 +1,6 @@
-import type { Message, Session, Part, SnapshotFileDiff, SessionStatus, Provider } from "@opencode-ai/sdk/v2"
-import type { FileDiffInfo } from "@opencode-ai/client/promise"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import type { Message, Session, Part, SnapshotFileDiff, SessionStatus, Provider } from "@argus-ai/sdk/v2"
+import type { FileDiffInfo } from "@argus-ai/client/promise"
+import { createSimpleContext } from "@argus-ai/ui/context"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 
 export type NormalizedProviderListResponse = {

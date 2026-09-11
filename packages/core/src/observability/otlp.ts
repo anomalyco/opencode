@@ -35,13 +35,13 @@ function resourceAttributes() {
 
 export function resource(): { serviceName: string; serviceVersion: string; attributes: Record<string, string> } {
   return {
-    serviceName: "opencode",
+    serviceName: "argus",
     serviceVersion: InstallationVersion,
     attributes: {
       ...resourceAttributes(),
       "deployment.environment.name": InstallationChannel,
-      "opencode.client": Flag.OPENCODE_CLIENT,
-      "opencode.run": runID,
+      "argus.client": Flag.ARGUS_CLIENT,
+      "argus.run": runID,
       "service.instance.id": runID,
     },
   }

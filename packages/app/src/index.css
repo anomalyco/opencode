@@ -1,6 +1,6 @@
-@import "@opencode-ai/ui/styles/tailwind";
-@import "@opencode-ai/session-ui/styles";
-@import "@opencode-ai/ui/v2/styles/tailwind.css";
+@import "@argus-ai/ui/styles/tailwind";
+@import "@argus-ai/session-ui/styles";
+@import "@argus-ai/ui/v2/styles/tailwind.css";
 @import "tw-animate-css";
 
 @font-face {
@@ -326,5 +326,60 @@
       animation-timeline: --manage-models-scroll;
       animation-range: 0 0.1px;
     }
+  }
+
+  /* ── Calm Liquid Glass ── */
+  .glass-ambient {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+    background: radial-gradient(
+        1100px 700px at 12% -12%,
+        color-mix(in srgb, var(--v2-blue-500) 9%, transparent),
+        transparent 62%
+      ),
+      radial-gradient(
+        900px 600px at 88% 8%,
+        color-mix(in srgb, var(--v2-blue-400) 7%, transparent),
+        transparent 58%
+      ),
+      radial-gradient(
+        1000px 900px at 50% 118%,
+        color-mix(in srgb, var(--v2-blue-600) 10%, transparent),
+        transparent 60%
+      );
+  }
+
+  .glass-surface {
+    position: relative;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--v2-background-bg-base) 88%, transparent) 0%,
+      color-mix(in srgb, var(--v2-background-bg-base) 44%, transparent) 100%
+    );
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+    backdrop-filter: blur(24px) saturate(150%);
+    border: 1px solid var(--v2-border-border-muted);
+    box-shadow:
+      inset 0 1px 0 0 color-mix(in srgb, var(--v2-text-text-inverse) 20%, transparent),
+      inset 0 0 0 0.5px color-mix(in srgb, var(--v2-alpha-light-6) 60%, transparent),
+      0 12px 40px -18px color-mix(in srgb, var(--v2-alpha-dark-40) 80%, transparent);
+  }
+
+  .glass-surface-bright {
+    position: relative;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--v2-background-bg-base) 92%, transparent) 0%,
+      color-mix(in srgb, var(--v2-background-bg-base) 64%, transparent) 100%
+    );
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--v2-border-border-muted);
+    box-shadow:
+      inset 0 1px 0 0 color-mix(in srgb, var(--v2-text-text-inverse) 16%, transparent),
+      inset 0 -1px 0 0 color-mix(in srgb, var(--v2-alpha-light-4) 40%, transparent);
   }
 }

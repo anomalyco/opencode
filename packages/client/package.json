@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/client",
+  "name": "@argus-ai/client",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -9,14 +9,12 @@
     "./effect": "./src/effect.ts"
   },
   "scripts": {
-    "generate": "bun run script/build.ts",
-    "check:generated": "bun run generate && git diff --exit-code -- src/generated src/generated-effect",
     "test": "bun test --timeout 5000",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/schema": "workspace:*",
-    "@opencode-ai/protocol": "workspace:*"
+    "@argus-ai/schema": "workspace:*",
+    "@argus-ai/protocol": "workspace:*"
   },
   "peerDependencies": {
     "effect": "4.0.0-beta.83"
@@ -28,9 +26,8 @@
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/httpapi-codegen": "workspace:*",
-    "@opencode-ai/server": "workspace:*",
+    "@argus-ai/core": "workspace:*",
+    "@argus-ai/server": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:",

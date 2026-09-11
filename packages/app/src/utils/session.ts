@@ -1,5 +1,5 @@
-import type { SessionApi, SessionInfo, SessionListInput } from "@opencode-ai/client/promise"
-import type { Session } from "@opencode-ai/sdk/v2/client"
+import type { SessionApi, SessionInfo, SessionListInput } from "@argus-ai/client/promise"
+import type { Session } from "@argus-ai/sdk/v2/client"
 import { withTimestampedFallback } from "./session-title"
 
 export function normalizeSessionInfo(input: SessionInfo | Session): Session {

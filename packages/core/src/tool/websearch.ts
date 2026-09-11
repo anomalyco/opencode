@@ -1,6 +1,6 @@
 export * as WebSearchTool from "./websearch"
 
-import { ToolFailure } from "@opencode-ai/llm"
+import { ToolFailure } from "@argus-ai/llm"
 import { Context, Duration, Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { makeLocationNode } from "../effect/app-node"
@@ -67,17 +67,17 @@ export interface Config {
   readonly parallelApiKey?: string
 }
 
-export class ConfigService extends Context.Service<ConfigService, Config>()("@opencode/v2/WebSearchConfig") {}
+export class ConfigService extends Context.Service<ConfigService, Config>()("@argus/v2/WebSearchConfig") {}
 
 /** Isolates the retained product environment contract from the generic tool implementation. */
 export const defaultConfigLayer = Layer.sync(ConfigService, () =>
   ConfigService.of({
     provider:
-      process.env.OPENCODE_WEBSEARCH_PROVIDER === "exa" || process.env.OPENCODE_WEBSEARCH_PROVIDER === "parallel"
-        ? process.env.OPENCODE_WEBSEARCH_PROVIDER
+      process.env.ARGUS_WEBSEARCH_PROVIDER === "exa" || process.env.ARGUS_WEBSEARCH_PROVIDER === "parallel"
+        ? process.env.ARGUS_WEBSEARCH_PROVIDER
         : undefined,
-    enableExa: truthy("OPENCODE_EXPERIMENTAL") || truthy("OPENCODE_ENABLE_EXA") || truthy("OPENCODE_EXPERIMENTAL_EXA"),
-    enableParallel: truthy("OPENCODE_ENABLE_PARALLEL") || truthy("OPENCODE_EXPERIMENTAL_PARALLEL"),
+    enableExa: truthy("ARGUS_EXPERIMENTAL") || truthy("ARGUS_ENABLE_EXA") || truthy("ARGUS_EXPERIMENTAL_EXA"),
+    enableParallel: truthy("ARGUS_ENABLE_PARALLEL") || truthy("ARGUS_EXPERIMENTAL_PARALLEL"),
     exaApiKey: process.env.EXA_API_KEY,
     parallelApiKey: process.env.PARALLEL_API_KEY,
   }),
@@ -142,7 +142,8 @@ const McpRequest = <F extends Schema.Struct.Fields>(args: Schema.Struct<F>) =>
     params: Schema.Struct({ name: Schema.String, arguments: args }),
   })
 
-const exaUrl = (apiKey: string | undefined) => {
+export { ExaArgs, ParallelArgs, McpRequest }
+export const exaUrl = (apiKey: string | undefined) => {
   if (!apiKey) return EXA_URL
   const url = new URL(EXA_URL)
   url.searchParams.set("exaApiKey", apiKey)
@@ -237,7 +238,7 @@ const layer = Layer.effectDiscard(
                         // V2 invocation context does not safely expose the model yet.
                       },
                       {
-                        "User-Agent": `opencode/${InstallationVersion}`,
+                        "User-Agent": `argus/${InstallationVersion}`,
                         ...(config.parallelApiKey ? { Authorization: `Bearer ${config.parallelApiKey}` } : {}),
                       },
                     )

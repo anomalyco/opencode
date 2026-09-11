@@ -1,16 +1,16 @@
-import { Database } from "@opencode-ai/core/database/database"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { EventV2 } from "@opencode-ai/core/event"
-import { Credential } from "@opencode-ai/core/credential"
-import { PermissionSaved } from "@opencode-ai/core/permission/saved"
-import { PtyTicket } from "@opencode-ai/core/pty/ticket"
-import { SessionV2 } from "@opencode-ai/core/session"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
-import { SessionExecutionLocal } from "@opencode-ai/core/session/execution/local"
-import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
+import { Database } from "@argus-ai/core/database/database"
+import { LayerNode } from "@argus-ai/core/effect/layer-node"
+import { httpClient } from "@argus-ai/core/effect/app-node-platform"
+import { AppNodeBuilder } from "@argus-ai/core/effect/app-node-builder"
+import { EventV2 } from "@argus-ai/core/event"
+import { Credential } from "@argus-ai/core/credential"
+import { PermissionSaved } from "@argus-ai/core/permission/saved"
+import { PtyTicket } from "@argus-ai/core/pty/ticket"
+import { SessionV2 } from "@argus-ai/core/session"
+import { SessionExecution } from "@argus-ai/core/session/execution"
+import { LocationServiceMap } from "@argus-ai/core/location-service-map"
+import { SessionExecutionLocal } from "@argus-ai/core/session/execution/local"
+import { ToolOutputStore } from "@argus-ai/core/tool-output-store"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Layer, Option } from "effect"
@@ -39,13 +39,13 @@ const applicationServices = LayerNode.group([
 export function createRoutes(password?: string) {
   return makeRoutes(
     password
-      ? ServerAuth.Config.configLayer({ username: "opencode", password: Option.some(password) })
+      ? ServerAuth.Config.configLayer({ username: "argus", password: Option.some(password) })
       : ServerAuth.Config.layer,
   )
 }
 
 export function createEmbeddedRoutes() {
-  return makeRoutes(ServerAuth.Config.configLayer({ username: "opencode", password: Option.none() }))
+  return makeRoutes(ServerAuth.Config.configLayer({ username: "argus", password: Option.none() }))
 }
 
 function makeRoutes<AuthError, AuthServices>(auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>) {

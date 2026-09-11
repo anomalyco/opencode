@@ -501,3 +501,9 @@
     --v2-illustration-illustration-layer-03: var(--v2-grey-700);
   }
 }
+
+/* Invert white logo to black on light backgrounds */
+[data-color-scheme="light"] img[data-component="logo-mark"],
+[data-color-scheme="light"] img[data-component="logo-splash"] {
+  filter: invert(1);
+}

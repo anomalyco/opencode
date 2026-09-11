@@ -2,19 +2,20 @@ import { Popover as Kobalte } from "@kobalte/core/popover"
 import { Component, ComponentProps, createEffect, createMemo, For, JSX, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@argus-ai/ui/context/dialog"
 import { popularProviders } from "@/hooks/use-providers"
-import { Button } from "@opencode-ai/ui/button"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { Tag } from "@opencode-ai/ui/tag"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { List } from "@opencode-ai/ui/list"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { Icon } from "@opencode-ai/ui/v2/icon"
-import { Tag as TagV2 } from "@opencode-ai/ui/v2/badge-v2"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { Button } from "@argus-ai/ui/button"
+import { IconButton } from "@argus-ai/ui/icon-button"
+import { ScrollView } from "@argus-ai/ui/scroll-view"
+import { Tag } from "@argus-ai/ui/tag"
+import { Dialog } from "@argus-ai/ui/dialog"
+import { List } from "@argus-ai/ui/list"
+import { Tooltip } from "@argus-ai/ui/tooltip"
+import { Icon } from "@argus-ai/ui/v2/icon"
+import { Tag as TagV2 } from "@argus-ai/ui/v2/badge-v2"
+import { MenuV2 } from "@argus-ai/ui/v2/menu-v2"
+import { TooltipV2 } from "@argus-ai/ui/v2/tooltip-v2"
+import { ProviderLogo } from "@argus-ai/ui/provider-logo"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 import { decode64 } from "@/utils/base64"
@@ -24,7 +25,7 @@ import { createEventListener } from "@solid-primitives/event-listener"
 import { matchesModelSearch } from "./dialog-select-model-search"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
-  provider === "opencode" && (!cost || cost.input === 0)
+  provider === "argus" && (!cost || cost.input === 0)
 
 type ModelState = ReturnType<typeof useLocal>["model"]
 type ModelItem = ReturnType<ModelState["list"]>[number]
@@ -98,7 +99,8 @@ const ModelList: Component<{
       }}
     >
       {(i) => (
-        <div class="w-full flex items-center gap-x-2 text-13-regular">
+        <div class="w-full flex items-center gap-x-1.5 text-13-regular">
+          <ProviderLogo id={i.provider.id} class="size-4 shrink-0" />
           <span class="truncate">{i.name}</span>
           <Show when={isFree(i.provider.id, i.cost)}>
             <Tag>{language.t("model.tag.free")}</Tag>
@@ -482,7 +484,10 @@ function ModelSelectorPopoverV2View(props: {
                                 }}
                                 onSelect={() => selectModel(item)}
                               >
-                                <span class="min-w-0 truncate leading-5">{item.name}</span>
+                                <span class="flex min-w-0 flex-1 items-center gap-1.5 leading-5">
+                                  <ProviderLogo id={item.provider.id} class="size-4 shrink-0" />
+                                  <span class="min-w-0 truncate">{item.name}</span>
+                                </span>
                                 <Show when={isFree(item.provider.id, item.cost)}>
                                   <TagV2 class="shrink-0">{language.t("model.tag.free")}</TagV2>
                                 </Show>

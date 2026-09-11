@@ -5,12 +5,13 @@ import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
 import { AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
 import { RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers"
 import { RestrictToElement } from "@dnd-kit/dom/modifiers"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { ScrollView } from "@argus-ai/ui/scroll-view"
+import { ProjectAvatar } from "@argus-ai/ui/v2/project-avatar-v2"
+import { Icon } from "@argus-ai/ui/icon"
+import { Icon as IconV2 } from "@argus-ai/ui/v2/icon"
+import { IconButtonV2 } from "@argus-ai/ui/v2/icon-button-v2"
+import { MenuV2 } from "@argus-ai/ui/v2/menu-v2"
+import { TooltipV2 } from "@argus-ai/ui/v2/tooltip-v2"
 import { getProjectAvatarVariant, type HomeProjectSelection, type LocalProject } from "@/context/layout"
 import { ServerConnection } from "@/context/server"
 import { useLanguage } from "@/context/language"
@@ -28,6 +29,8 @@ const projectContextMenuID = (server: ServerConnection.Any, directory: string) =
   `project:${ServerConnection.key(server)}:${directory}`
 
 export type HomeProjectsViewProps = {
+  sidebar?: boolean
+  showUtility?: boolean
   language: ReturnType<typeof useLanguage>
   servers: Accessor<ServerConnection.Any[]>
   projects: Accessor<LocalProject[]>
@@ -69,8 +72,11 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
   return (
     <aside
       class={`
-        mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden
-        lg:sticky lg:top-14 lg:mt-14 lg:h-[calc(100cqh-56px)] lg:self-start lg:pt-[52px]
+        ${
+          props.sidebar
+            ? "flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden"
+            : "mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden lg:sticky lg:top-14 lg:mt-14 lg:h-[calc(100cqh-56px)] lg:self-start lg:pt-[52px]"
+        }
       `}
       aria-label={props.language.t("home.projects")}
       onWheel={(event) => {
@@ -144,12 +150,14 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
           </div>
         </Show>
       </ScrollView>
-      <HomeUtilityNav
-        class="mb-8 mt-4 hidden shrink-0 lg:flex"
-        onOpenSettings={props.onOpenSettings}
-        onOpenHelp={props.onOpenHelp}
-        language={props.language}
-      />
+      <Show when={props.showUtility !== false}>
+        <HomeUtilityNav
+          class="mb-8 mt-4 hidden shrink-0 lg:flex"
+          onOpenSettings={props.onOpenSettings}
+          onOpenHelp={props.onOpenHelp}
+          language={props.language}
+        />
+      </Show>
     </aside>
   )
 }
@@ -175,7 +183,7 @@ export function HomeUtilityNav(props: {
         class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
         onClick={props.onOpenHelp}
       >
-        <IconV2 name="help" size="small" />
+        <Icon name="help" size="small" />
         <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.help")}</span>
       </HomeProjectNavButton>
     </div>

@@ -1,4 +1,4 @@
-import type { Message, Part } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part } from "@argus-ai/sdk/v2/client"
 
 export type SessionContextBreakdownKey = "system" | "user" | "assistant" | "tool" | "other"
 

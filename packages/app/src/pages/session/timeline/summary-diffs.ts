@@ -1,4 +1,4 @@
-import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
+import type { SnapshotFileDiff } from "@argus-ai/sdk/v2"
 import type { SummaryDiff } from "./timeline-row"
 
 export function uniqueSummaryDiffs(diffs: SnapshotFileDiff[] | undefined) {
