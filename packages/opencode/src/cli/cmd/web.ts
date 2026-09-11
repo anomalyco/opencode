@@ -72,13 +72,21 @@ export const WebCommand = effectCmd({
       }
 
       // Open localhost in browser
-      open(localhostUrl).catch(() => {})
+      openBrowser(localhostUrl)
     } else {
       const displayUrl = server.url.toString()
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, displayUrl)
-      open(displayUrl).catch(() => {})
+      openBrowser(displayUrl)
     }
 
     yield* Effect.never
   }),
 })
+
+export const hasBrowserOpener = (platform: NodeJS.Platform, xdgOpen: string | null) =>
+  platform !== "linux" || xdgOpen !== null
+
+function openBrowser(url: string) {
+  if (!hasBrowserOpener(process.platform, Bun.which("xdg-open"))) return
+  open(url).catch(() => {})
+}
