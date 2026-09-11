@@ -1,6 +1,8 @@
 import { useCommand, type CommandOption } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLocal, type ModelSelection } from "@/context/local"
+import { useSettings } from "@/context/settings"
+import { showToast } from "@/utils/toast"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { getCursorPosition, setCursorPosition } from "@/components/prompt-input/editor-dom"
 import { useSessionLayout } from "./session-layout"
@@ -18,11 +20,26 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
   const dialog = useDialog()
   const language = useLanguage()
   const local = useLocal()
+  const settings = useSettings()
   const { sessionKey } = useSessionLayout()
   const sessionOwnership = createSessionOwnership(sessionKey)
   const model = input.model ?? local.model
   const modelCommand = withCategory(language.t("command.category.model"))
   const agentCommand = withCategory(language.t("command.category.agent"))
+  const sessionCommand = withCategory(language.t("command.category.session"))
+
+  // /thinking — client-side toggle of the showReasoningSummaries setting,
+  // which controls whether the model's reasoning is surfaced in the timeline.
+  // Mirrors the TUI's /thinking command; it is NOT a server command, so the
+  // prompt-input submit path also intercepts "/thinking".
+  const toggleThinking = () => {
+    const next = !settings.general.showReasoningSummaries()
+    settings.general.setShowReasoningSummaries(next)
+    showToast({
+      title: language.t(next ? "prompt.toast.thinkingOn.title" : "prompt.toast.thinkingOff.title"),
+      description: language.t(next ? "prompt.toast.thinkingOn.description" : "prompt.toast.thinkingOff.description"),
+    })
+  }
 
   const chooseModel = async () => {
     const owner = sessionOwnership.capture()
@@ -78,6 +95,13 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
       keybind: "shift+mod+.",
       disabled: !local.agent.visible(),
       onSelect: () => local.agent.move(-1),
+    }),
+    sessionCommand({
+      id: "thinking.toggle",
+      title: language.t("command.thinking.toggle"),
+      description: language.t("command.thinking.toggle.description"),
+      slash: "thinking",
+      onSelect: toggleThinking,
     }),
   ])
 }
