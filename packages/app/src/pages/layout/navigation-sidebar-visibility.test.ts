@@ -80,7 +80,7 @@ describe("navigation sidebar visibility", () => {
   test("days of zero keeps every session visible", () => {
     const ancient = session({ id: "ancient", directory: "/src/a", time: { created: 0, updated: 0, archived: undefined } })
     const result = partitionSidebarRecords({
-      records: [{ session: ancient, project: project("/src/a"), name: "a" }],
+      records: [{ key: ancient.id, session: ancient, project: project("/src/a"), name: "a" }],
       pinned: () => false,
       days: 0,
       now: NOW,
@@ -90,8 +90,10 @@ describe("navigation sidebar visibility", () => {
   })
 
   test("matchesSidebarFilter checks project name and session title", () => {
+    const filtered = session({ id: "1", directory: "/src/a", title: "Fix login bug" })
     const record = {
-      session: session({ id: "1", directory: "/src/a", title: "Fix login bug" }),
+      key: filtered.id,
+      session: filtered,
       project: project("/src/a"),
       name: "Web App",
     }
