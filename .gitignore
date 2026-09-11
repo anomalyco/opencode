@@ -26,6 +26,9 @@ target
 .scripts
 .direnv/
 
+# Notebook memory artifacts
+**/.note.yaml
+
 # Local dev files
 opencode-dev
 UPCOMING_CHANGELOG.md

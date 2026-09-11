@@ -196,12 +196,14 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             const permission = props.request.permission
             const data = input()
 
-            if (permission === "edit") {
+            if (permission === "edit" || permission === "write-notes") {
               const raw = props.request.metadata?.filepath
               const filepath = typeof raw === "string" ? raw : ""
+              const rawTitle = props.request.metadata?.title
+              const title = typeof rawTitle === "string" && rawTitle ? rawTitle : `Edit ${pathFormatter.format(filepath)}`
               return {
                 icon: "→",
-                title: `Edit ${pathFormatter.format(filepath)}`,
+                title,
                 body: <EditBody request={props.request} />,
               }
             }

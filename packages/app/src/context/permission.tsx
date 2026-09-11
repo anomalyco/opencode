@@ -319,6 +319,7 @@ function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }
     current: () => boolean = () => true,
   ) {
     if (!current() || !isPending(permission)) return
+    if (permission.permission === "write-notes") return
     if (!(await shouldAutoRespondResolved(permission, directory))) return
     if (meta.disposed || !current() || !isPending(permission)) return
     respondOnce(permission, directory)

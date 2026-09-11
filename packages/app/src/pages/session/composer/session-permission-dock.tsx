@@ -19,6 +19,11 @@ export function SessionPermissionDock(props: {
     return value
   }
 
+  const notebookDiff = () =>
+    props.request.permission === "write-notes" && typeof props.request.metadata?.diff === "string"
+      ? props.request.metadata.diff
+      : ""
+
   return (
     <DockPrompt
       kind="permission"
@@ -67,6 +72,13 @@ export function SessionPermissionDock(props: {
               {(pattern) => <code class="text-12-regular text-text-base break-all">{pattern}</code>}
             </For>
           </div>
+        </div>
+      </Show>
+
+      <Show when={notebookDiff()}>
+        <div data-slot="permission-row" data-variant="align-start">
+          <span data-slot="permission-spacer" aria-hidden="true" />
+          <pre data-slot="permission-diff">{notebookDiff()}</pre>
         </div>
       </Show>
     </DockPrompt>
