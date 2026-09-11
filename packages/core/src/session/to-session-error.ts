@@ -55,6 +55,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
     cause instanceof SessionRunnerModel.ModelUnavailableError ||
     cause instanceof SessionRunnerModel.VariantUnavailableError ||
     cause instanceof SessionRunnerModel.UnsupportedPackageError ||
+    cause instanceof SessionRunnerModel.ModelConfigurationError ||
     cause instanceof SessionRunnerModel.ModelInitializationError ||
     cause instanceof SessionRunnerModel.UnresolvedProviderVariablesError
   )

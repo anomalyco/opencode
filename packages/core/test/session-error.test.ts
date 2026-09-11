@@ -140,17 +140,27 @@ describe("toSessionError", () => {
     })
   })
 
-  test("preserves provider initialization errors", () => {
-    const error = new ModelResolver.ModelInitializationError({
+  test("preserves provider configuration and initialization errors", () => {
+    const configuration = new ModelResolver.ModelConfigurationError({
       providerID: Provider.ID.make("azure"),
       modelID: ID.make("gpt-5.4-nano"),
       package: "aisdk:@ai-sdk/azure",
-      phase: "construct",
       detail: "Azure requires resourceName or baseURL",
     })
-    expect(toSessionError(error)).toEqual({
+    expect(toSessionError(configuration)).toEqual({
       type: "provider.no-route",
       message: "Cannot initialize azure/gpt-5.4-nano: Azure requires resourceName or baseURL",
+    })
+    const initialization = new ModelResolver.ModelInitializationError({
+      providerID: Provider.ID.make("custom"),
+      modelID: ID.make("model"),
+      package: "@opencode/ai/providers/custom",
+      phase: "load",
+      detail: "Provider package @opencode/ai/providers/custom is broken",
+    })
+    expect(toSessionError(initialization)).toEqual({
+      type: "provider.no-route",
+      message: "Cannot initialize custom/model: Provider package @opencode/ai/providers/custom is broken",
     })
   })
 

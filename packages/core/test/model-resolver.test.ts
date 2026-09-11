@@ -1412,14 +1412,32 @@ describe("ModelResolver", () => {
       ).pipe(Effect.flip)
 
       expect(failure).toMatchObject({
-        _tag: "SessionRunnerModel.ModelInitializationError",
+        _tag: "SessionRunnerModel.ModelConfigurationError",
         providerID: "azure",
         modelID: "test-model",
         package: "aisdk:@ai-sdk/azure",
-        phase: "construct",
         detail: "Azure requires resourceName or baseURL",
       })
       expect(failure.message).toBe("Cannot initialize azure/test-model: Azure requires resourceName or baseURL")
+    }),
+  )
+
+  it.effect("distinguishes unexpected constructor failures from configuration errors", () =>
+    Effect.gen(function* () {
+      const failure = yield* ModelResolver.fromCatalogModel(model("@opencode/ai/providers/custom"), undefined, {
+        loadPackage: () =>
+          Effect.succeed({
+            model: () => {
+              throw new Error("custom provider crashed")
+            },
+          }),
+      }).pipe(Effect.flip)
+
+      expect(failure).toMatchObject({
+        _tag: "SessionRunnerModel.ModelInitializationError",
+        phase: "construct",
+        detail: "custom provider crashed",
+      })
     }),
   )
 
