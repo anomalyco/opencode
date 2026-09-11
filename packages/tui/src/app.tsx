@@ -1171,10 +1171,12 @@ function App(props: { pair?: DialogPairCredentials }) {
       {
         name: "permission.mode",
         title:
-          local.permission.mode === "auto" ? "Disable auto-approve permissions" : "Enable auto-approve permissions",
-        category: "System",
+          local.permission.mode === "autoaccept"
+            ? "Disable auto-approve permissions"
+            : "Enable auto-approve permissions",
+        category: "Session",
         run: () => {
-          local.permission.toggle()
+          void local.permission.toggle().catch(toast.error)
           dialog.clear()
         },
       },

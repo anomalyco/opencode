@@ -1,15 +1,24 @@
 import { createStore } from "solid-js/store"
+import { createEffect } from "solid-js"
+import { useConfig } from "../config"
 import { useArgs } from "./args"
 import { createSimpleContext } from "./helper"
 
-export type PermissionMode = "auto" | "normal"
+export type PermissionMode = "prompt" | "autoaccept"
 
 export const { use: usePermission, provider: PermissionProvider } = createSimpleContext({
   name: "Permission",
   init: () => {
     const args = useArgs()
-    const [store, setStore] = createStore<{ mode: PermissionMode }>({
-      mode: args.auto ? "auto" : "normal",
+    const config = useConfig()
+    const [store, setStore] = createStore<{ mode: PermissionMode; configured: PermissionMode }>({
+      mode: args.auto ? "autoaccept" : config.data.session.permissions,
+      configured: config.data.session.permissions,
+    })
+    createEffect(() => {
+      const mode = config.data.session.permissions
+      if (mode === store.configured) return
+      setStore({ mode, configured: mode })
     })
     return {
       get mode() {
@@ -17,9 +26,12 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       },
       set(mode: PermissionMode) {
         setStore("mode", mode)
+        return config.update((draft) => {
+          draft.session = { ...draft.session, permissions: mode }
+        })
       },
       toggle() {
-        setStore("mode", (mode) => (mode === "auto" ? "normal" : "auto"))
+        return this.set(store.mode === "autoaccept" ? "prompt" : "autoaccept")
       },
     }
   },
