@@ -24,7 +24,13 @@ import {
   Show,
   on,
 } from "solid-js"
-import { TuiPathsProvider, TuiStartupProvider, TuiTerminalEnvironmentProvider, useTuiStartup } from "./context/runtime"
+import {
+  TuiPathsProvider,
+  TuiStartupProvider,
+  TuiStdinProvider,
+  TuiTerminalEnvironmentProvider,
+  useTuiStartup,
+} from "./context/runtime"
 import { DialogProvider, useDialog } from "./ui/dialog"
 import { DialogProvider as DialogProviderList } from "./component/dialog-provider"
 import { ErrorComponent } from "./component/error-component"
@@ -149,6 +155,7 @@ export type TuiInput = {
   headers?: RequestInit["headers"]
   events?: EventSource
   pluginHost: TuiPluginHost
+  stdin?: NodeJS.ReadStream
 }
 
 function errorMessage(error: unknown) {
@@ -203,6 +210,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
               consoleOptions: {
                 keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
               },
+              ...(input.stdin ? { stdin: input.stdin } : {}),
             }),
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
         }),
@@ -211,7 +219,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             destroyRenderer(renderer)
           }),
       )
-      win32DisableProcessedInput()
+      win32DisableProcessedInput(input.stdin)
       const keymap = createDefaultOpenTuiKeymap(renderer)
       yield* Effect.acquireRelease(
         Effect.sync(() => registerOpencodeKeymap(keymap, renderer, input.config)),
@@ -315,10 +323,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                               <PromptRefProvider>
                                                                 <EditorContextProvider>
                                                                   <LocationProvider>
-                                                                    <App
-                                                                      onSnapshot={input.onSnapshot}
-                                                                      pluginHost={input.pluginHost}
-                                                                    />
+                                                                    <TuiStdinProvider value={input.stdin}>
+                                                                      <App
+                                                                        onSnapshot={input.onSnapshot}
+                                                                        pluginHost={input.pluginHost}
+                                                                      />
+                                                                    </TuiStdinProvider>
                                                                   </LocationProvider>
                                                                 </EditorContextProvider>
                                                               </PromptRefProvider>
@@ -355,7 +365,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     }),
   )
   yield* Effect.sync(() => {
-    win32FlushInputBuffer()
+    win32FlushInputBuffer(input.stdin)
     if (result.reason !== undefined)
       process.stderr.write((cliErrorMessage(result.reason) ?? errorFormat(result.reason)) + "\n")
     if (result.epilogue) process.stdout.write(result.epilogue + "\n")
