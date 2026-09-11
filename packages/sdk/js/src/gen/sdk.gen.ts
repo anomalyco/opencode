@@ -65,6 +65,9 @@ import type {
   SessionTodoData,
   SessionTodoResponses,
   SessionTodoErrors,
+  SessionTodoUpdateData,
+  SessionTodoUpdateResponses,
+  SessionTodoUpdateErrors,
   SessionInitData,
   SessionInitResponses,
   SessionInitErrors,
@@ -514,6 +517,20 @@ class Session extends _HeyApiClient {
     return (options.client ?? this._client).get<SessionTodoResponses, SessionTodoErrors, ThrowOnError>({
       url: "/session/{id}/todo",
       ...options,
+    })
+  }
+
+  /**
+   * Update the todo list for a session
+   */
+  public todoUpdate<ThrowOnError extends boolean = false>(options: Options<SessionTodoUpdateData, ThrowOnError>) {
+    return (options.client ?? this._client).patch<SessionTodoUpdateResponses, SessionTodoUpdateErrors, ThrowOnError>({
+      url: "/session/{id}/todo",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
     })
   }
 

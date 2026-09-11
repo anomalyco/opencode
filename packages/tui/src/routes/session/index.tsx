@@ -49,6 +49,7 @@ import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
+import { DialogTodo } from "../../component/dialog-todo"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
@@ -512,6 +513,17 @@ export function Session() {
       },
       run: () => {
         dialog.replace(() => <DialogSessionRename session={route.sessionID} />)
+      },
+    },
+    {
+      title: "Manage todos",
+      value: "session.todo",
+      category: "Session",
+      slash: {
+        name: "todo",
+      },
+      run: () => {
+        dialog.replace(() => <DialogTodo sessionID={route.sessionID} />)
       },
     },
     {
