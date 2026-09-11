@@ -178,6 +178,7 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "فورک به جلسه جدید",
   "ui.message.revertMessage": "پیام را برگردانید",
   "ui.message.copyResponse": "پاسخ را کپی کنید",
+  "ui.message.saveLearnings": "ذخیره‌ی یادگیری‌ها",
   "ui.message.copied": "کپی شد",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
