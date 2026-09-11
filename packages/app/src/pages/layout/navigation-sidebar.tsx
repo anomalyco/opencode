@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, startTransition } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { useQuery } from "@tanstack/solid-query"
 import type { GlobalSession } from "@opencode-ai/sdk/v2/client"
 import { Binary } from "@opencode-ai/core/util/binary"
@@ -84,6 +84,10 @@ const ROW_ACTIONS =
   "hover-reveal absolute end-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-[6px] bg-v2-background-bg-layer-02 p-0.5 opacity-0 shadow-[var(--v2-elevation-raised)] group-hover/row:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
 const COUNT = "absolute end-2 top-1/2 -translate-y-1/2 text-xs text-v2-text-text-faint"
 const NAME = "flex min-w-0 flex-1 items-center gap-1.5"
+
+function sectionKey(item: SettledGroup | SidebarProjectSection | SidebarSessionRecord) {
+  return "key" in item ? item.key : item.session.id
+}
 
 function titleOf(session: { title?: string; parentID?: string; time: { created: number } }) {
   return sessionTitle(session.title) ?? withTimestampedFallback(session)
@@ -237,7 +241,7 @@ export function NavigationSidebar() {
     void sessionIndex.refetch()
   })
 
-  const groups = createMemo((): SidebarProjectSection[] => {
+  const computedSections = createMemo((): SidebarProjectSection[] => {
     const records = buildSidebarRecords({ sessions: sessions(), projects: home.project.list() }).filter((record) =>
       matchesSidebarFilter(record, filter()),
     )
@@ -257,8 +261,7 @@ export function NavigationSidebar() {
         hidden: parts.hidden,
       }
     })
-    // Open projects without any visible thread yet (freshly added, everything settled) still
-    // deserve a row so adding a project gives immediate feedback in the sidebar.
+    // Projects added during this session keep an empty row until their first thread exists.
     const known = new Set(grouped.map((group) => group.key))
     const opened = home.project.list().flatMap((project): SidebarProjectSection[] => {
       const key = pathKey(project.worktree)
@@ -268,10 +271,20 @@ export function NavigationSidebar() {
     return [...grouped, ...opened]
   })
 
-  const settled = createMemo(() => groups().flatMap((group) => group.hidden))
+  // reconcile keeps group/record object identity stable across recomputes so Solid's For does
+  // not destroy and recreate every row component on each streaming event (which orphaned open
+  // menu/tooltip portals and rebuilt the whole subtree constantly).
+  const [sections, setSections] = createStore<SidebarProjectSection[]>([])
+  createEffect(() => {
+    setSections(
+      reconcile(computedSections(), { key: sectionKey }),
+    )
+  })
+
+  const settled = createMemo(() => sections.flatMap((group) => group.hidden))
   const visibleGroups = createMemo(() => {
-    if (filter()) return groups().filter((group) => group.visible.length > 0)
-    return groups()
+    if (filter()) return sections.filter((group) => group.visible.length > 0)
+    return sections
   })
   const empty = createMemo(() => visibleGroups().length === 0 && settled().length === 0)
 
@@ -291,17 +304,21 @@ export function NavigationSidebar() {
     staleTime: 300_000,
   }))
 
-  const settledGroups = createMemo((): SettledGroup[] => {
-    const groups = new Map<string, SettledGroup>()
+  const computedSettledGroups = createMemo((): SettledGroup[] => {
+    const map = new Map<string, SettledGroup>()
     const push = (record: SidebarSessionRecord, kind: "local" | "archived") => {
       const key = pathKey(record.project.worktree)
-      const group = groups.get(key) ?? { key, project: record.project, name: record.name, local: [], archived: [] }
+      const group = map.get(key) ?? { key, project: record.project, name: record.name, local: [], archived: [] }
       group[kind].push(record)
-      groups.set(key, group)
+      map.set(key, group)
     }
     settled().forEach((record) => push(record, "local"))
     ;(archived.data ?? []).forEach((session) => push(archivedRecord(session), "archived"))
-    return [...groups.values()]
+    return [...map.values()]
+  })
+  const [settledGroups, setSettledGroups] = createStore<SettledGroup[]>([])
+  createEffect(() => {
+    setSettledGroups(reconcile(computedSettledGroups(), { key: sectionKey }))
   })
   const settledCount = createMemo(() => settled().length + (archived.data ?? []).length)
 
@@ -733,7 +750,7 @@ export function NavigationSidebar() {
                   <Spinner class="size-3.5 shrink-0" />
                 </div>
               </Show>
-              <For each={settledGroups()}>
+              <For each={settledGroups}>
                 {(group) => (
                   <SidebarSettledGroup
                     group={group}
