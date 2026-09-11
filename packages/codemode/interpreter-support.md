@@ -74,6 +74,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [ ] Destructuring a key that member access resolves through the owning built-in, such as
       `const { constructor } = error`, reads `undefined`.
 - [ ] Member expressions as `for...in` targets (`for (x.y in obj)`).
+- [ ] `IteratorClose` during destructuring should throw a `TypeError` when `return()` yields a non-object.
 
 ## Statements and control flow
 
@@ -125,8 +126,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [ ] A named function expression's name is not bound inside its own body.
 - [ ] Redeclaring a function in the same scope is rejected; in JavaScript the last declaration wins.
 - [ ] A line terminator between `async function` and the function name.
-- [ ] Async generator functions evaluate parameter defaults and destructuring at the first `next()` rather than at the
-      call, so their errors are not thrown synchronously.
+- [ ] Generator and async generator functions evaluate parameter defaults and destructuring at the first `next()`
+      rather than at the call, so their errors are not thrown synchronously.
 - [x] Synchronous and async generator declarations/expressions, `yield`, and `yield*`, including lazy bodies,
       `next(value)`, `return(value)`, `throw(value)`, exhaustion, promise adoption, async request ordering,
       `try`/`catch`/`finally`, and sync/async iterator symbols. Async `yield*` awaits values while adapting a sync
@@ -170,8 +171,12 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Plain, arithmetic, bitwise, and logical assignment operators.
 - [x] Property deletion on plain data objects and arrays, including computed and optional forms; deleting an array index
       creates a hole without changing its length.
-- [ ] Operators, `switch` discriminants, and coercion helpers such as `String` and `isNaN` applied to functions and
-      namespaces; JavaScript coerces them, the interpreter rejects non-data operands.
+- [ ] Operators, `switch` discriminants, template interpolation, and coercion helpers such as `String` and `isNaN`
+      applied to functions and namespaces; JavaScript coerces them, the interpreter rejects non-data operands.
+- [ ] ToPrimitive on object operands: operators, `Error(message)`, `Date` arguments, and `parseInt` radix should call
+      `valueOf`/`toString` in spec order and surface their throws.
+- [ ] Property keys follow ToPropertyKey: `x[null]`, `x[true]`, and objects (via `toString`) become string keys; only
+      strings and numbers are accepted.
 
 ## Promises and tools
 
@@ -244,7 +249,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `Object.is` for supported data values.
 - [x] `Object.groupBy` over finite collections and custom synchronous iterators/generators, with string-key coercion
       and null-prototype results.
-- [ ] `Object.prototype` methods on values: `toString`, `toLocaleString`, `valueOf`, and `hasOwnProperty`.
+- [ ] `Object.prototype` methods on values: `toString`, `toLocaleString`, `valueOf`, `hasOwnProperty`, and
+      `propertyIsEnumerable`.
 
 ## Arrays
 
@@ -294,6 +300,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       `repeat` still requires a finite non-negative count.
 - [x] Native no-argument parity for `match()`, `matchAll()`, and `search()`; all behave as an empty pattern. Present
       arguments must still be a regular expression or string pattern.
+- [ ] `String.raw`.
+- [ ] `match`, `search`, and `split` accept any value and coerce it (objects via `toString`), like JavaScript.
 
 ## Numbers and Math
 
@@ -348,6 +356,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `Date.prototype.toUTCString` and its `toGMTString` alias.
 - [x] `toDateString` and `toTimeString` in the host's local timezone.
 - [x] Native one-argument Date coercion for supported values, including booleans, null, arrays, and plain objects.
+- [ ] Date setters and multi-argument construction coerce object arguments through `valueOf`/`toString` and surface
+      their throws.
 - [x] Native Date loose-equality and default primitive-coercion semantics, using CodeMode's deterministic ISO string
       representation for the string primitive.
 - [x] Native `RangeError` branding for invalid `toISOString()` calls.

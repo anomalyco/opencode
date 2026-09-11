@@ -1,3 +1,26 @@
+built-ins/Array/15.4.5.1-5-1.js  # Only data fields may be assigned.
+built-ins/Array/15.4.5.1-5-2.js  # Only data fields may be assigned.
+built-ins/Array/S15.4.5.1_A2.1_T1.js  # Only data fields may be assigned.
+built-ins/Array/S15.4.5.2_A1_T2.js  # Only data fields may be assigned.
+built-ins/Array/S15.4.5.2_A3_T1.js  # Array length cannot be assigned.
+built-ins/Array/S15.4.5.2_A3_T3.js  # Array length cannot be assigned.
+built-ins/Array/S15.4_A1.1_T5.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+built-ins/Array/S15.4_A1.1_T9.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+built-ins/Array/from/items-is-arraybuffer.js  # Unknown identifier '…'.
+built-ins/Array/from/items-is-null-throws.js  # Array.from(null) throws a TypeError exception Expected a TypeError but got a Error
+built-ins/Array/from/source-object-without.js  # Array.from expects an array, string, Map, Set, or array-like value, received a data object.
+built-ins/Array/isArray/15.4.3.2-0-2.js  # The value of Array.isArray.length is expected to be 1 Expected SameValue(«undefined», «1») to be tru
+built-ins/Array/length/15.4.5.1-3.d-1.js  # [].length = 4294967296 throws a RangeError exception Expected a RangeError but got a Error
+built-ins/Array/length/15.4.5.1-3.d-2.js  # [].length = 4294967297 throws a RangeError exception Expected a RangeError but got a Error
+built-ins/Array/length/15.4.5.1-3.d-3.js  # Array length cannot be assigned.
+built-ins/Array/length/S15.4.5.1_A1.1_T1.js  # The result of evaluating (e instanceof RangeError) is expected to be true Expected SameValue(«false»
+built-ins/Array/length/S15.4.5.1_A1.1_T2.js  # The result of evaluating (e instanceof RangeError) is expected to be true Expected SameValue(«false»
+built-ins/Array/length/S15.4.5.1_A1.2_T1.js  # Array length cannot be assigned.
+built-ins/Array/length/S15.4.5.1_A1.3_T2.js  # Array length cannot be assigned.
+built-ins/Array/length/S15.4.5.2_A3_T4.js  # Array length cannot be assigned.
+built-ins/Array/property-cast-boolean-primitive.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+built-ins/Array/property-cast-nan-infinity.js  # Only data fields may be assigned.
+built-ins/Array/property-cast-number.js  # Only data fields may be assigned.
 built-ins/Array/prototype/concat/create-ctor-non-object.js  # Only data fields may be assigned.
 built-ins/Array/prototype/copyWithin/coerced-values-end.js  # Array.copyWithin expects end to be a number.
 built-ins/Array/prototype/copyWithin/coerced-values-start-change-target.js  # Array length cannot be assigned.
@@ -104,6 +127,1335 @@ built-ins/Array/prototype/toString/S15.4.4.2_A1_T3.js  # .toString is not a func
 built-ins/Array/prototype/toString/S15.4.4.2_A1_T4.js  # .toString is not a function.
 built-ins/Array/prototype/values/iteration-mutable.js  # .next is not a function.
 built-ins/Array/prototype/values/iteration.js  # .next is not a function.
+built-ins/Boolean/S15.6.3_A1.js  # .hasOwnProperty is not a function.
+built-ins/Boolean/S15.6.3_A3.js  # .hasOwnProperty is not a function.
+built-ins/Boolean/prototype/S15.6.3.1_A4.js  # .propertyIsEnumerable is not a function.
+built-ins/Date/S15.9.4_A1.js  # .hasOwnProperty is not a function.
+built-ins/Date/S15.9.4_A2.js  # .hasOwnProperty is not a function.
+built-ins/Date/S15.9.4_A3.js  # .hasOwnProperty is not a function.
+built-ins/Date/S15.9.4_A5.js  # .hasOwnProperty is not a function.
+built-ins/Date/UTC/coercion-errors.js  # year Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/Date/UTC/coercion-order.js  # Expected SameValue(«""», «"yearmonthdatehoursminutessecondsms"») to be true
+built-ins/Date/coercion-errors.js  # year Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/Date/coercion-order.js  # Expected SameValue(«""», «"yearmonthdatehoursminutessecondsms"») to be true
+built-ins/Date/construct_with_date.js  # Only data fields may be assigned.
+built-ins/Date/now/15.9.4.4-0-2.js  # Date.now.length Expected SameValue(«undefined», «0») to be true
+built-ins/Date/prototype/setDate/date-value-read-before-tonumber-when-date-is-invalid.js  # time updated in valueOf Expected SameValue(«NaN», «0») to be true
+built-ins/Date/prototype/setHours/date-value-read-before-tonumber-when-date-is-invalid.js  # time updated in valueOf Expected SameValue(«NaN», «0») to be true
+built-ins/Date/prototype/setMilliseconds/date-value-read-before-tonumber-when-date-is-invalid.js  # time updated in valueOf Expected SameValue(«NaN», «0») to be true
+built-ins/Date/prototype/setMinutes/date-value-read-before-tonumber-when-date-is-invalid.js  # time updated in valueOf Expected SameValue(«NaN», «0») to be true
+built-ins/Date/prototype/setMonth/date-value-read-before-tonumber-when-date-is-invalid.js  # time updated in valueOf Expected SameValue(«NaN», «0») to be true
+built-ins/Date/prototype/setSeconds/date-value-read-before-tonumber-when-date-is-invalid.js  # time updated in valueOf Expected SameValue(«NaN», «0») to be true
+built-ins/Date/prototype/setUTCDate/date-value-read-before-tonumber-when-date-is-invalid.js  # time updated in valueOf Expected SameValue(«NaN», «0») to be true
+built-ins/Date/prototype/setUTCHours/date-value-read-before-tonumber-when-date-is-invalid.js  # time updated in valueOf Expected SameValue(«NaN», «0») to be true
+built-ins/Date/prototype/setUTCMilliseconds/date-value-read-before-tonumber-when-date-is-invalid.js  # time updated in valueOf Expected SameValue(«NaN», «0») to be true
+built-ins/Date/prototype/setUTCMinutes/date-value-read-before-tonumber-when-date-is-invalid.js  # time updated in valueOf Expected SameValue(«NaN», «0») to be true
+built-ins/Date/prototype/setUTCMonth/date-value-read-before-tonumber-when-date-is-invalid.js  # time updated in valueOf Expected SameValue(«NaN», «0») to be true
+built-ins/Date/prototype/setUTCSeconds/date-value-read-before-tonumber-when-date-is-invalid.js  # time updated in valueOf Expected SameValue(«NaN», «0») to be true
+built-ins/Date/prototype/toString/format.js  # Expected SameValue(«null», «null») to be false
+built-ins/Error/error-message-tostring-toprimitive.js  # Error should throw a TypeError in its ToPrimitive step Expected a TypeError to be thrown but no exce
+built-ins/Error/isError/errors.js  # .isError is not a function.
+built-ins/Error/isError/name.js  # Cannot access a property on a non-object value.
+built-ins/Error/isError/non-error-objects.js  # .isError is not a function.
+built-ins/Error/isError/primitives.js  # .isError is not a function.
+built-ins/Error/length.js  # The value of err1.constructor.length is 1 Expected SameValue(«undefined», «1») to be true
+built-ins/Error/prototype/S15.11.3.1_A2_T1.js  # .hasOwnProperty is not a function.
+built-ins/Error/prototype/S15.11.3.1_A4_T1.js  # .hasOwnProperty is not a function.
+built-ins/Error/prototype/toString/15.11.4.4-10-1.js  # .toString is not a function.
+built-ins/Error/prototype/toString/15.11.4.4-6-1.js  # .toString is not a function.
+built-ins/Error/prototype/toString/15.11.4.4-6-2.js  # .toString is not a function.
+built-ins/Error/prototype/toString/15.11.4.4-8-1.js  # .toString is not a function.
+built-ins/Error/prototype/toString/15.11.4.4-8-2.js  # .toString is not a function.
+built-ins/Error/prototype/toString/15.11.4.4-9-1.js  # .toString is not a function.
+built-ins/Error/prototype/toString/S15.11.4.4_A2.js  # The called value is not a function.
+built-ins/JSON/15.12-0-3.js  # Expected a TypeError but got a Error
+built-ins/JSON/parse/text-negative-zero.js  # JSON.parse expects a string.
+built-ins/JSON/parse/text-object.js  # JSON.parse expects a string.
+built-ins/JSON/rawJSON/basic.js  # .rawJSON is not a function.
+built-ins/JSON/rawJSON/illegal-empty-and-start-end-chars.js  # Expected a SyntaxError but got a TypeError
+built-ins/JSON/stringify/replacer-function-tojson.js  # JSON.stringify value must contain plain objects only.
+built-ins/JSON/stringify/value-array-circular.js  # Array.push result contains a circular value.
+built-ins/JSON/stringify/value-function.js  # JSON.stringify value must contain plain objects only.
+built-ins/JSON/stringify/value-tojson-array-circular.js  # Only data fields may be assigned.
+built-ins/JSON/stringify/value-tojson-object-circular.js  # Expected a TypeError but got a Error
+built-ins/Map/prototype/clear/map-data-list-is-preserved.js  # .next is not a function.
+built-ins/Map/prototype/delete/does-not-break-iterators.js  # .next is not a function.
+built-ins/Map/prototype/entries/returns-iterator-empty.js  # .next is not a function.
+built-ins/Map/prototype/entries/returns-iterator.js  # .next is not a function.
+built-ins/Map/prototype/forEach/deleted-values-during-foreach.js  # Expected SameValue(«2», «1») to be true
+built-ins/Map/prototype/forEach/iterates-values-added-after-foreach-begins.js  # Expected SameValue(«2», «3») to be true
+built-ins/Map/prototype/forEach/iterates-values-deleted-then-readded.js  # Expected SameValue(«2», «3») to be true
+built-ins/Map/prototype/getOrInsert/returns-value-normalized-zero-key.js  # .getOrInsert is not a function.
+built-ins/Map/prototype/getOrInsertComputed/callbackfn-throws.js  # Expected a Error but got a TypeError
+built-ins/Map/prototype/getOrInsertComputed/canonical-key-passed-to-callback.js  # .getOrInsertComputed is not a function.
+built-ins/Map/prototype/getOrInsertComputed/check-state-after-callback-fn-throws.js  # Expected a Error but got a TypeError
+built-ins/Map/prototype/getOrInsertComputed/overwrites-mutation-from-callbackfn.js  # .getOrInsertComputed is not a function.
+built-ins/Map/prototype/getOrInsertComputed/returns-value-normalized-zero-key.js  # .getOrInsertComputed is not a function.
+built-ins/Map/prototype/keys/returns-iterator-empty.js  # .next is not a function.
+built-ins/Map/prototype/keys/returns-iterator.js  # .next is not a function.
+built-ins/Map/prototype/values/returns-iterator-empty.js  # .next is not a function.
+built-ins/Map/prototype/values/returns-iterator.js  # .next is not a function.
+built-ins/Math/hypot/Math.hypot_ToNumberErr.js  # Math.hypot propagates an abrupt completion from coercing an argument to Number Expected a Test262Err
+built-ins/Math/log10/Log10-specialVals.js  # Math.log10 expects number arguments.
+built-ins/Math/log2/log2-basicTests.js  # Math.log2 expects number arguments.
+built-ins/Math/max/15.8.2.11-1.js  # Math.max expects number arguments.
+built-ins/Math/max/Math.max_each-element-coerced.js  # Math.max expects number arguments.
+built-ins/Math/max/S15.8.2.11_A4.js  # The value of typeof Math.max.length is not "undefined" Expected SameValue(«"undefined"», «"undefined
+built-ins/Math/min/15.8.2.12-1.js  # Math.min expects number arguments.
+built-ins/Math/min/Math.min_each-element-coerced.js  # Math.min expects number arguments.
+built-ins/Math/min/S15.8.2.12_A4.js  # The value of typeof Math.min.length is not "undefined" Expected SameValue(«"undefined"», «"undefined
+built-ins/Math/sumPrecise/takes-iterable.js  # Only data fields may be assigned.
+built-ins/Math/sumPrecise/throws-on-non-number.js  # Expected a TypeError but got a Error
+built-ins/NativeErrors/nativeerror-tostring-message-throws-toprimitive.js  # EvalError should throw a TypeError in its ToPrimitive step Expected a TypeError to be thrown but no 
+built-ins/Number/MAX_VALUE/S15.7.3.2_A4.js  # .propertyIsEnumerable is not a function.
+built-ins/Number/MIN_VALUE/S15.7.3.3_A4.js  # .propertyIsEnumerable is not a function.
+built-ins/Number/S15.7.3_A1.js  # .hasOwnProperty is not a function.
+built-ins/Number/S15.7.3_A2.js  # .hasOwnProperty is not a function.
+built-ins/Number/S15.7.3_A3.js  # .hasOwnProperty is not a function.
+built-ins/Number/S15.7.3_A4.js  # .hasOwnProperty is not a function.
+built-ins/Number/S15.7.3_A5.js  # .hasOwnProperty is not a function.
+built-ins/Number/S15.7.3_A6.js  # .hasOwnProperty is not a function.
+built-ins/Number/S15.7.3_A8.js  # .hasOwnProperty is not a function.
+built-ins/Number/S8.12.8_A3.js  # #1.2: var __obj = {toNumber: function() {return "1"}, valueOf: function() {return new Object();}}; N
+built-ins/Number/S8.12.8_A4.js  # The result of evaluating (e instanceof TypeError) is expected to be true Expected SameValue(«false»,
+built-ins/Number/S9.1_A1_T1.js  # Number input must contain plain objects only.
+built-ins/Number/prototype/toExponential/return-abrupt-tointeger-fractiondigits.js  # valueOf Expected a Test262Error but got a Error
+built-ins/Number/prototype/toExponential/tointeger-fractiondigits.js  # Number.toExponential expects a number argument.
+built-ins/Number/prototype/toFixed/S15.7.4.5_A1.3_T02.js  # Number.toFixed expects a number argument.
+built-ins/Number/prototype/toPrecision/tointeger-precision.js  # Number.toPrecision expects a number argument.
+built-ins/Number/prototype/toString/numeric-literal-tostring-radix-1.js  # Expected a RangeError but got a Error
+built-ins/Number/prototype/toString/numeric-literal-tostring-radix-37.js  # Expected a RangeError but got a Error
+built-ins/Number/prototype/toString/numeric-literal-tostring-radix-poisoned.js  # Expected a Test262Error but got a Error
+built-ins/Object/S15.2.1.1_A2_T1.js  # Object(boolean) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.1.1_A2_T13.js  # Object(boolean) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.1.1_A2_T2.js  # Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.1.1_A2_T3.js  # Object(string) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.1.1_A2_T5.js  # Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.1.1_A2_T6.js  # Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.1.1_A2_T7.js  # Object(string) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.1.1_A3_T3.js  # Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A3_T1.js  # Object(string) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A3_T2.js  # Object(string) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A4_T1.js  # Object(boolean) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A4_T2.js  # Object(boolean) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A4_T3.js  # Object(boolean) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A5_T1.js  # Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A5_T2.js  # Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A5_T3.js  # Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A6_T3.js  # Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.3_A1.js  # .hasOwnProperty is not a function.
+built-ins/Object/assign/OnlyOneArgument.js  # Object.assign expects a data object or array target, received a string.
+built-ins/Object/assign/Target-Boolean.js  # Object.assign expects a data object or array target, received a boolean.
+built-ins/Object/assign/Target-Number.js  # Object.assign expects a data object or array target, received a number.
+built-ins/Object/assign/Target-String.js  # Object.assign expects a data object or array target, received a string.
+built-ins/Object/assign/target-Array.js  # Object.assign cannot assign '…' to an array: only array indexes may be assigned.
+built-ins/Object/entries/tamper-with-object-keys.js  # Only data fields may be assigned.
+built-ins/Object/fromEntries/evaluation-order.js  # Only init object properties are supported.
+built-ins/Object/fromEntries/iterator-closed-for-throwing-entry-key-accessor.js  # Expected a program function but got a Error
+built-ins/Object/fromEntries/iterator-closed-for-throwing-entry-key-tostring.js  # Expected a program function but got a TypeError
+built-ins/Object/fromEntries/iterator-closed-for-throwing-entry-value-accessor.js  # Expected a program function but got a Error
+built-ins/Object/fromEntries/iterator-not-closed-for-throwing-next.js  # Expected a program function but got a TypeError
+built-ins/Object/hasOwn/hasown.js  # Expected true but got false
+built-ins/Object/internals/DefineOwnProperty/consistent-value-function-caller.js  # Unknown identifier '…'.
+built-ins/Object/internals/DefineOwnProperty/consistent-value-regexp-dollar1.js  # Unknown identifier '…'.
+built-ins/Object/internals/DefineOwnProperty/consistent-writable-regexp-dollar1.js  # Unknown identifier '…'.
+built-ins/Object/keys/15.2.3.14-0-2.js  # Object.keys.length Expected SameValue(«undefined», «1») to be true
+built-ins/Object/keys/15.2.3.14-3-2.js  # Cannot read properties of a function; only data values expose properties.
+built-ins/Object/keys/15.2.3.14-5-11.js  # .hasOwnProperty is not a function.
+built-ins/Object/keys/15.2.3.14-5-b-1.js  # .hasOwnProperty is not a function.
+built-ins/Object/keys/15.2.3.14-6-1.js  # .hasOwnProperty is not a function.
+built-ins/Object/keys/15.2.3.14-6-2.js  # .hasOwnProperty is not a function.
+built-ins/Object/keys/15.2.3.14-6-5.js  # Only data fields may be assigned.
+built-ins/Object/prototype/S15.2.3.1_A2.js  # .propertyIsEnumerable is not a function.
+built-ins/Object/prototype/hasOwnProperty/8.12.1-1_1.js  # .hasOwnProperty is not a function.
+built-ins/Object/prototype/hasOwnProperty/8.12.1-1_2.js  # .hasOwnProperty is not a function.
+built-ins/Object/values/tamper-with-object-keys.js  # Only data fields may be assigned.
+built-ins/Promise/all/invoke-resolve-error-close.js  # Only data fields may be assigned.
+built-ins/Promise/all/invoke-resolve-error-reject.js  # Only data fields may be assigned.
+built-ins/Promise/all/resolve-not-callable-reject-with-typeerror.js  # Only data fields may be assigned.
+built-ins/Promise/allSettled/invoke-resolve-error-close.js  # Only data fields may be assigned.
+built-ins/Promise/allSettled/invoke-resolve-error-reject.js  # Only data fields may be assigned.
+built-ins/Promise/allSettled/invoke-then-error-close.js  # Only data fields may be assigned.
+built-ins/Promise/allSettled/invoke-then-error-reject.js  # Only data fields may be assigned.
+built-ins/Promise/allSettled/resolve-not-callable-reject-with-typeerror.js  # Only data fields may be assigned.
+built-ins/Promise/any/invoke-resolve-error-reject.js  # Only data fields may be assigned.
+built-ins/Promise/any/invoke-then-error-reject.js  # Only data fields may be assigned.
+built-ins/Promise/any/resolve-not-callable-reject-with-typeerror.js  # Only data fields may be assigned.
+built-ins/Promise/prototype/then/ctor-null.js  # This value is an un-awaited Promise; await it first - e.g. `const result = await tools.ns.tool(...)`
+built-ins/Promise/prototype/then/ctor-undef.js  # This value is an un-awaited Promise; await it first - e.g. `const result = await tools.ns.tool(...)`
+built-ins/Promise/prototype/then/resolve-pending-fulfilled-prms-cstm-then.js  # Only data fields may be assigned.
+built-ins/Promise/prototype/then/resolve-pending-rejected-prms-cstm-then.js  # Only data fields may be assigned.
+built-ins/Promise/prototype/then/resolve-settled-fulfilled-prms-cstm-then.js  # Only data fields may be assigned.
+built-ins/Promise/prototype/then/resolve-settled-rejected-prms-cstm-then.js  # Only data fields may be assigned.
+built-ins/Promise/race/invoke-resolve-error-close.js  # Only data fields may be assigned.
+built-ins/Promise/race/invoke-then-error-close.js  # Only data fields may be assigned.
+built-ins/Promise/race/invoke-then-error-reject.js  # Only data fields may be assigned.
+built-ins/Promise/race/resolve-prms-cstm-then.js  # Only data fields may be assigned.
+built-ins/Promise/race/resolve-self.js  # Only data fields may be assigned.
+built-ins/Promise/resolve-prms-cstm-then-deferred.js  # Only data fields may be assigned.
+built-ins/Promise/resolve-prms-cstm-then-immed.js  # Only data fields may be assigned.
+built-ins/Promise/resolve/arg-uniq-ctor.js  # This value is an un-awaited Promise; await it first - e.g. `const result = await tools.ns.tool(...)`
+built-ins/Promise/resolve/resolve-prms-cstm-then.js  # Only data fields may be assigned.
+built-ins/Promise/try/promise.js  # Promise.try is not available. Available: Promise.all, Promise.allSettled, Promise.race, Promise.any,
+built-ins/Promise/withResolvers/promise.js  # Promise.withResolvers is not available. Available: Promise.all, Promise.allSettled, Promise.race, Pr
+built-ins/Promise/withResolvers/resolvers.js  # Promise.withResolvers is not available. Available: Promise.all, Promise.allSettled, Promise.race, Pr
+built-ins/RegExp/S15.10.2.13_A1_T10.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A1_T11.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A1_T12.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A1_T13.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A1_T14.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A1_T15.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A1_T3.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A1_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A1_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A1_T6.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A1_T8.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A1_T9.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A2_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A2_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A2_T3.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A2_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A2_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A2_T7.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A2_T8.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A3_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A3_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A3_T3.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.13_A3_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.3_A1_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.3_A1_T10.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.3_A1_T11.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.3_A1_T12.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.3_A1_T13.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.3_A1_T14.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.3_A1_T15.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.3_A1_T16.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.3_A1_T17.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.3_A1_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.3_A1_T3.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.3_A1_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.3_A1_T6.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.3_A1_T8.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.3_A1_T9.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.5_A1_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.5_A1_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.5_A1_T3.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.5_A1_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.5_A1_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A1_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A1_T3.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A1_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A1_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A2_T10.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A2_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A2_T3.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A2_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A2_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A2_T6.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A2_T9.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A3_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A3_T10.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A3_T11.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A3_T12.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A3_T14.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A3_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A3_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A3_T6.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A3_T7.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A3_T8.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A4_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A4_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A4_T3.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A4_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A4_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A4_T6.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A4_T7.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A4_T8.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A5_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A5_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A6_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A6_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A6_T3.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.6_A6_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A1_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A1_T10.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A1_T11.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A1_T12.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A1_T3.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A1_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A1_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A1_T6.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A1_T7.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A1_T8.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A2_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A2_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A2_T3.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A3_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A3_T11.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A3_T12.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A3_T13.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A3_T14.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A3_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A3_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A3_T6.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A3_T7.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A3_T8.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A3_T9.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T10.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T11.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T12.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T13.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T14.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T15.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T16.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T17.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T18.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T19.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T20.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T3.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T6.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T7.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A4_T9.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A5_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A5_T10.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A5_T11.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A5_T12.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A5_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A5_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A5_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A5_T6.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A5_T7.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A5_T8.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A5_T9.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A6_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A6_T3.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A6_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A6_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.7_A6_T6.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A1_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A1_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A1_T3.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A1_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A2_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A2_T10.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A2_T11.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A2_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A2_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A2_T6.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A2_T7.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A2_T9.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T10.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T11.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T12.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T13.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T14.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T15.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T16.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T17.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T19.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T20.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T21.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T22.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T23.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T24.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T25.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T26.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T27.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T28.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T29.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T30.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T31.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T32.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T33.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T6.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T7.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T8.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A3_T9.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A4_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A4_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A4_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A4_T6.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A4_T7.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A4_T8.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A4_T9.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A5_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.8_A5_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.9_A1_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.9_A1_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.9_A1_T3.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.2.9_A1_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.3.1_A1_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.3.1_A1_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.3.1_A1_T3.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.3.1_A1_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.3.1_A1_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/S15.10.3.1_A3_T2.js  # The value of __instance.source is expected to be "[a-c]*" Expected SameValue(«"[object Object]"», «"
+built-ins/RegExp/S15.10.4.1_A8_T12.js  # The value of e is expected to be "invalof" Expected SameValue(«SyntaxError: RegExp flags must be a s
+built-ins/RegExp/S15.10.4.1_A8_T13.js  # The value of e is expected to be "intostr" Expected SameValue(«SyntaxError: RegExp flags must be a s
+built-ins/RegExp/S15.10.4.1_A8_T4.js  # RegExp flags must be a string of flag characters (e.g. "g", "gi"), not object.
+built-ins/RegExp/S15.10.4.1_A8_T6.js  # The value of e is expected to be "intostr" Expected SameValue(«Test262Error: #1.1: new RegExp({toStr
+built-ins/RegExp/S15.10.4.1_A8_T7.js  # The value of e is expected to be "invalof" Expected SameValue(«Test262Error: #1.1: new RegExp({toStr
+built-ins/RegExp/S15.10.4.1_A8_T8.js  # The value of e is expected to be "intostr" Expected SameValue(«SyntaxError: new RegExp(...) received
+built-ins/RegExp/S15.10.5_A1.js  # The value of RegExp.length is expected to be 2 Expected SameValue(«undefined», «2») to be true
+built-ins/RegExp/S15.10.7_A1_T1.js  # The result of evaluating (e instanceof TypeError) is expected to be true Expected SameValue(«false»,
+built-ins/RegExp/S15.10.7_A1_T2.js  # The result of evaluating (e instanceof TypeError) is expected to be true Expected SameValue(«false»,
+built-ins/RegExp/call_with_regexp_not_same_constructor.js  # Only data fields may be assigned.
+built-ins/RegExp/match-indices/no-indices-array.js  # .hasOwnProperty is not a function.
+built-ins/RegExp/named-groups/unicode-match.js  # Actual object and expected object should have the same contents. 
+built-ins/RegExp/prototype/S15.10.5.1_A1.js  # .hasOwnProperty is not a function.
+built-ins/RegExp/prototype/S15.10.5.1_A2.js  # .hasOwnProperty is not a function.
+built-ins/RegExp/prototype/exec/15.10.6.2-9-e-1.js  # The called value is not a function.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T10.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T12.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T13.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T14.js  # new Boolean(...) is not supported; call Boolean(...) without new instead.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T15.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T17.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T18.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T19.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T20.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T21.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T6.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T7.js  # The value of e is expected to be "intostr" Expected SameValue(«Test262Error: #1.1: /[a-z]/.exec({toS
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T8.js  # The value of e is expected to be "invalof" Expected SameValue(«Test262Error: #1.1: /[a-z]/.exec({toS
+built-ins/RegExp/prototype/exec/S15.10.6.2_A4_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A4_T10.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A4_T11.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A4_T12.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A4_T2.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A4_T3.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A4_T4.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A4_T5.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A4_T6.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A4_T7.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A4_T8.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A4_T9.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/S15.10.6.2_A5_T1.js  # Only data fields may be assigned.
+built-ins/RegExp/prototype/exec/failure-g-lastindex-reset.js  # Expected SameValue(«["a"]», «null») to be true
+built-ins/RegExp/prototype/exec/failure-lastindex-access.js  # Expected SameValue(«0», «1») to be true
+built-ins/RegExp/prototype/exec/success-g-lastindex-no-access.js  # Expected SameValue(«0», «1») to be true
+built-ins/RegExp/prototype/exec/success-lastindex-access.js  # Expected SameValue(«0», «1») to be true
+built-ins/RegExp/prototype/test/S15.10.6.3_A1_T14.js  # new Boolean(...) is not supported; call Boolean(...) without new instead.
+built-ins/RegExp/prototype/test/S15.10.6.3_A1_T7.js  # The value of e is expected to be "intostr" Expected SameValue(«Test262Error: #1.1: /[a-z]/.test({toS
+built-ins/RegExp/prototype/test/S15.10.6.3_A1_T8.js  # The value of e is expected to be "invalof" Expected SameValue(«Test262Error: #1.1: /[a-z]/.test({toS
+built-ins/Set/prototype/difference/size-is-a-number.js  # Literal must contain data only.
+built-ins/Set/prototype/entries/returns-iterator-empty.js  # .next is not a function.
+built-ins/Set/prototype/entries/returns-iterator.js  # .next is not a function.
+built-ins/Set/prototype/forEach/iterates-values-added-after-foreach-begins.js  # The value of `expects.length` is `0` Expected SameValue(«2», «0») to be true
+built-ins/Set/prototype/forEach/iterates-values-deleted-then-readded.js  # Expected SameValue(«2», «3») to be true
+built-ins/Set/prototype/forEach/iterates-values-revisits-after-delete-re-add.js  # The value of `expects.length` is `0` Expected SameValue(«1», «0») to be true
+built-ins/Set/prototype/intersection/size-is-a-number.js  # Literal must contain data only.
+built-ins/Set/prototype/isDisjointFrom/size-is-a-number.js  # Literal must contain data only.
+built-ins/Set/prototype/isSubsetOf/size-is-a-number.js  # Literal must contain data only.
+built-ins/Set/prototype/isSupersetOf/size-is-a-number.js  # Literal must contain data only.
+built-ins/Set/prototype/symmetricDifference/size-is-a-number.js  # Literal must contain data only.
+built-ins/Set/prototype/union/size-is-a-number.js  # Literal must contain data only.
+built-ins/Set/prototype/values/returns-iterator-empty.js  # .next is not a function.
+built-ins/Set/prototype/values/returns-iterator.js  # .next is not a function.
+built-ins/Set/prototype/values/values-iteration-mutable.js  # .next is not a function.
+built-ins/Set/set-iterator-next-failure.js  # Expected a program function but got a TypeError
+built-ins/String/S15.5.2.1_A1_T1.js  # new String(...) is not supported; call String(...) without new instead.
+built-ins/String/S15.5.3_A1.js  # String has length property whose value is 1. Actual: String.length===undefined
+built-ins/String/S15.5.5_A1_T1.js  # new String(...) is not supported; call String(...) without new instead.
+built-ins/String/S15.5.5_A1_T2.js  # #1.1: Exception is instance of TypeError. Actual: exception is Error: Only tools are callable here.
+built-ins/String/S8.12.8_A1.js  # #1.2: var __obj = {toString: function() {return new Object();}}; String(__obj) throw TypeError. Actu
+built-ins/String/S8.12.8_A2.js  # #1.2: var __obj = {toString: function() {return new Object();}, valueOf: function() {return 1;}}; St
+built-ins/String/S9.1_A1_T2.js  # String input must contain plain objects only.
+built-ins/String/fromCharCode/S15.5.3.2_A1.js  # .hasOwnProperty is not a function.
+built-ins/String/fromCharCode/S15.5.3.2_A3_T2.js  # Only data fields may be deleted.
+built-ins/String/fromCharCode/S15.5.3.2_A4.js  # Only data fields may be deleted.
+built-ins/String/fromCharCode/S9.7_A3.1_T4.js  # String.fromCharCode expects number arguments.
+built-ins/String/fromCharCode/touint16-tonumber-throws-valueof.js  # ToNumber throws when its argument's ToPrimitive step calls a throwing valueOf, and String.fromCharCo
+built-ins/String/fromCodePoint/argument-is-not-integer.js  # Expected a RangeError but got a Error
+built-ins/String/fromCodePoint/to-number-conversions.js  # String.fromCodePoint expects number arguments.
+built-ins/String/prototype/S15.5.3.1_A1.js  # .hasOwnProperty is not a function.
+built-ins/String/prototype/S15.5.3.1_A2.js  # .hasOwnProperty is not a function.
+built-ins/String/prototype/charAt/S15.5.4.4_A1_T10.js  # String.charAt expects argument 1 to be a data value.
+built-ins/String/prototype/charCodeAt/S15.5.4.5_A1_T10.js  # String.charCodeAt expects argument 1 to be a data value.
+built-ins/String/prototype/codePointAt/return-abrupt-from-object-pos-to-integer.js  # Expected a Test262Error but got a Error
+built-ins/String/prototype/concat/S15.5.4.6_A1_T10.js  # String.concat expects argument 1 to be a data value.
+built-ins/String/prototype/endsWith/return-abrupt-from-position.js  # Expected a Test262Error but got a Error
+built-ins/String/prototype/endsWith/return-abrupt-from-searchstring.js  # Expected a Test262Error but got a Error
+built-ins/String/prototype/includes/String.prototype.includes_lengthProp.js  # Cannot read properties of a function; only data values expose properties.
+built-ins/String/prototype/includes/return-abrupt-from-position.js  # Expected a Test262Error but got a Error
+built-ins/String/prototype/includes/return-abrupt-from-searchstring.js  # Expected a Test262Error but got a Error
+built-ins/String/prototype/indexOf/S15.5.4.7_A1_T10.js  # String.indexOf expects argument 1 to be a data value.
+built-ins/String/prototype/indexOf/S15.5.4.7_A1_T8.js  # String input must contain plain objects only.
+built-ins/String/prototype/indexOf/S15.5.4.7_A4_T1.js  # #1.1: Exception === "intointeger". Actual: Error: String.indexOf expects argument 1 to be a data val
+built-ins/String/prototype/indexOf/S15.5.4.7_A4_T3.js  # String.indexOf expects argument 1 to be a data value.
+built-ins/String/prototype/lastIndexOf/S15.5.4.8_A1_T10.js  # String.lastIndexOf expects argument 1 to be a data value.
+built-ins/String/prototype/lastIndexOf/S15.5.4.8_A1_T8.js  # String input must contain plain objects only.
+built-ins/String/prototype/lastIndexOf/S15.5.4.8_A4_T1.js  # #1.1: Exception === "intointeger". Actual: Error: String.lastIndexOf expects argument 1 to be a data
+built-ins/String/prototype/lastIndexOf/S15.5.4.8_A4_T3.js  # String.lastIndexOf expects argument 1 to be a data value.
+built-ins/String/prototype/match/S15.5.4.10_A1_T10.js  # String.match expects a regular expression (a /pattern/flags literal or new RegExp(...)) or a string 
+built-ins/String/prototype/match/S15.5.4.10_A1_T11.js  # #1.1: Exception === "intostr". Actual: Error: String.match expects a regular expression (a /pattern/
+built-ins/String/prototype/match/S15.5.4.10_A1_T13.js  # String.match expects a regular expression (a /pattern/flags literal or new RegExp(...)) or a string 
+built-ins/String/prototype/match/S15.5.4.10_A1_T5.js  # String.match expects a regular expression (a /pattern/flags literal or new RegExp(...)) or a string 
+built-ins/String/prototype/match/S15.5.4.10_A1_T8.js  # String input must contain plain objects only.
+built-ins/String/prototype/match/S15.5.4.10_A2_T1.js  # String.match expects a regular expression (a /pattern/flags literal or new RegExp(...)) or a string 
+built-ins/String/prototype/match/S15.5.4.10_A2_T6.js  # #6: __string = "Boston, Mass. 02134"; __string.match(/([\d]{5})([-\ ]?[\d]{4})?$/).input ===__string
+built-ins/String/prototype/normalize/return-abrupt-from-form.js  # Expected a Test262Error but got a Error
+built-ins/String/prototype/normalize/return-normalized-string-from-coerced-form.js  # String.normalize expects argument 1 to be a data value.
+built-ins/String/prototype/repeat/count-coerced-to-zero-returns-empty-string.js  # String.repeat expects a finite non-negative count.
+built-ins/String/prototype/repeat/return-abrupt-from-count.js  # Expected a Test262Error but got a Error
+built-ins/String/prototype/replace/S15.5.4.11_A1_T10.js  # String.replace expects argument 1 to be a data value.
+built-ins/String/prototype/replace/S15.5.4.11_A1_T11.js  # #1.1: Exception === "insearchValue". Actual: Error: String.replace expects argument 1 to be a data v
+built-ins/String/prototype/replace/S15.5.4.11_A1_T13.js  # #1.1: Exception === "inreplaceValue". Actual: Error: String.replace expects argument 1 to be a data 
+built-ins/String/prototype/replace/S15.5.4.11_A1_T8.js  # String input must contain plain objects only.
+built-ins/String/prototype/replace/replaceValue-evaluation-order.js  # String.replace expects argument 2 to be a data value.
+built-ins/String/prototype/search/S15.5.4.12_A1_T10.js  # String.search expects a regular expression (a /pattern/flags literal or new RegExp(...)) or a string
+built-ins/String/prototype/search/S15.5.4.12_A1_T11.js  # #1.1: Exception === "intostr". Actual: Error: String.search expects a regular expression (a /pattern
+built-ins/String/prototype/search/S15.5.4.12_A1_T13.js  # String.search expects a regular expression (a /pattern/flags literal or new RegExp(...)) or a string
+built-ins/String/prototype/search/S15.5.4.12_A1_T5.js  # String.search expects a regular expression (a /pattern/flags literal or new RegExp(...)) or a string
+built-ins/String/prototype/search/S15.5.4.12_A1_T8.js  # String input must contain plain objects only.
+built-ins/String/prototype/slice/S15.5.4.13_A1_T10.js  # String.slice expects argument 1 to be a data value.
+built-ins/String/prototype/slice/S15.5.4.13_A1_T11.js  # #1.1: Exception === "instart". Actual: Error: String.slice expects argument 1 to be a data value.
+built-ins/String/prototype/slice/S15.5.4.13_A1_T13.js  # #1.1: Exception === "inend". Actual: Error: String.slice expects argument 1 to be a data value.
+built-ins/String/prototype/slice/S15.5.4.13_A1_T8.js  # String input must contain plain objects only.
+built-ins/String/prototype/split/argument-is-void-0-and-instance-is-string-object-object-have-overrided-to-string-function.js  # String input must contain plain objects only.
+built-ins/String/prototype/split/instance-is-new-string.js  # new String(...) is not supported; call String(...) without new instead.
+built-ins/String/prototype/split/separator-override-tostring-limit-override-valueof-throws.js  # The value of `e` is "intointeger" Expected SameValue(«Error: String.split expects argument 2 to be a
+built-ins/String/prototype/split/separator-override-tostring-limit-override-valueof-tostring.js  # String.split expects argument 2 to be a data value.
+built-ins/String/prototype/split/separator-override-tostring-limit-override-valueof.js  # String.split expects argument 2 to be a data value.
+built-ins/String/prototype/split/separator-undef-limit-custom.js  # String.split expects argument 2 to be a data value.
+built-ins/String/prototype/split/separator-undef-limit-zero.js  # String.split expects argument 2 to be a data value.
+built-ins/String/prototype/split/valueOf-is-called-for-limit-argument.js  # Expected a Test262Error but got a Error
+built-ins/String/prototype/startsWith/return-abrupt-from-position.js  # Expected a Test262Error but got a Error
+built-ins/String/prototype/startsWith/return-abrupt-from-searchstring.js  # Expected a Test262Error but got a Error
+built-ins/String/prototype/substring/S15.5.4.15_A1_T10.js  # String.substring expects argument 1 to be a data value.
+built-ins/String/prototype/substring/S15.5.4.15_A1_T11.js  # #1.1: Exception === "instart". Actual: Error: String.substring expects argument 1 to be a data value
+built-ins/String/prototype/substring/S15.5.4.15_A1_T13.js  # #1.1: Exception === "inend". Actual: Error: String.substring expects argument 1 to be a data value.
+built-ins/String/prototype/substring/S15.5.4.15_A1_T8.js  # String input must contain plain objects only.
+built-ins/String/prototype/toLocaleLowerCase/Final_Sigma_U180E.js  # The called value is not a function.
+built-ins/String/prototype/toLocaleLowerCase/S15.5.4.17_A1_T4.js  # The called value is not a function.
+built-ins/String/prototype/toLocaleLowerCase/S15.5.4.17_A1_T5.js  # The called value is not a function.
+built-ins/String/prototype/toLocaleLowerCase/special_casing.js  # The called value is not a function.
+built-ins/String/prototype/toLocaleLowerCase/special_casing_conditional.js  # The called value is not a function.
+built-ins/String/prototype/toLocaleLowerCase/supplementary_plane.js  # The called value is not a function.
+built-ins/String/prototype/toLocaleUpperCase/S15.5.4.19_A1_T4.js  # The called value is not a function.
+built-ins/String/prototype/toLocaleUpperCase/S15.5.4.19_A1_T5.js  # The called value is not a function.
+built-ins/String/prototype/toLocaleUpperCase/special_casing.js  # The called value is not a function.
+built-ins/String/prototype/toLocaleUpperCase/supplementary_plane.js  # The called value is not a function.
+built-ins/String/raw/return-empty-string-from-empty-array-length.js  # .raw is not a function.
+built-ins/String/raw/return-empty-string-if-length-is-negative-infinity.js  # .raw is not a function.
+built-ins/String/raw/return-empty-string-if-length-is-not-defined.js  # .raw is not a function.
+built-ins/String/raw/return-empty-string-if-length-is-undefined.js  # .raw is not a function.
+built-ins/String/raw/return-empty-string-if-length-is-zero-NaN.js  # .raw is not a function.
+built-ins/String/raw/return-empty-string-if-length-is-zero-boolean.js  # .raw is not a function.
+built-ins/String/raw/return-empty-string-if-length-is-zero-null.js  # .raw is not a function.
+built-ins/String/raw/return-empty-string-if-length-is-zero-or-less-number.js  # .raw is not a function.
+built-ins/String/raw/return-empty-string-if-length-is-zero-or-less-string.js  # .raw is not a function.
+built-ins/String/raw/return-the-string-value-from-template.js  # unsupported syntax TaggedTemplateExpression
+built-ins/String/raw/return-the-string-value.js  # .raw is not a function.
+built-ins/String/raw/returns-abrupt-from-next-key-toString.js  # Expected a Test262Error but got a TypeError
+built-ins/String/raw/returns-abrupt-from-substitution.js  # Expected a Test262Error but got a TypeError
+built-ins/String/raw/special-characters.js  # unsupported syntax TaggedTemplateExpression
+built-ins/String/raw/substitutions-are-appended-on-same-index.js  # .raw is not a function.
+built-ins/String/raw/substitutions-are-limited-to-template-raw-length.js  # .raw is not a function.
+built-ins/String/raw/template-substitutions-are-appended-on-same-index.js  # unsupported syntax TaggedTemplateExpression
+built-ins/String/raw/zero-literal-segments.js  # unsupported syntax TaggedTemplateExpression
+built-ins/decodeURI/S15.1.3.1_A1.10_T1.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURI/S15.1.3.1_A1.11_T1.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURI/S15.1.3.1_A1.11_T2.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURI/S15.1.3.1_A1.12_T1.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURI/S15.1.3.1_A1.12_T2.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURI/S15.1.3.1_A1.12_T3.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURI/S15.1.3.1_A1.2_T1.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURI/S15.1.3.1_A1.2_T2.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURI/S15.1.3.1_A5.1.js  # .propertyIsEnumerable is not a function.
+built-ins/decodeURI/S15.1.3.1_A5.2.js  # .hasOwnProperty is not a function.
+built-ins/decodeURI/S15.1.3.1_A5.4.js  # #1: decodeURI.length === 1. Actual: undefined
+built-ins/decodeURI/S15.1.3.1_A6_T1.js  # decodeURI input must contain plain objects only.
+built-ins/decodeURIComponent/S15.1.3.2_A1.10_T1.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURIComponent/S15.1.3.2_A1.11_T1.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURIComponent/S15.1.3.2_A1.11_T2.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURIComponent/S15.1.3.2_A1.12_T1.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURIComponent/S15.1.3.2_A1.12_T2.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURIComponent/S15.1.3.2_A1.12_T3.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURIComponent/S15.1.3.2_A1.2_T1.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURIComponent/S15.1.3.2_A1.2_T2.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURIComponent/S15.1.3.2_A5.1.js  # .propertyIsEnumerable is not a function.
+built-ins/decodeURIComponent/S15.1.3.2_A5.2.js  # .hasOwnProperty is not a function.
+built-ins/decodeURIComponent/S15.1.3.2_A5.4.js  # #1: decodeURIComponent.length === 1. Actual: undefined
+built-ins/decodeURIComponent/S15.1.3.2_A6_T1.js  # decodeURIComponent input must contain plain objects only.
+built-ins/encodeURI/S15.1.3.3_A5.1.js  # .propertyIsEnumerable is not a function.
+built-ins/encodeURI/S15.1.3.3_A5.2.js  # .hasOwnProperty is not a function.
+built-ins/encodeURI/S15.1.3.3_A5.4.js  # #1: encodeURI.length === 1. Actual: undefined
+built-ins/encodeURI/S15.1.3.3_A6_T1.js  # encodeURI input must contain plain objects only.
+built-ins/encodeURIComponent/S15.1.3.4_A5.1.js  # .propertyIsEnumerable is not a function.
+built-ins/encodeURIComponent/S15.1.3.4_A5.2.js  # .hasOwnProperty is not a function.
+built-ins/encodeURIComponent/S15.1.3.4_A5.4.js  # #1: encodeURIComponent.length === 1. Actual: undefined
+built-ins/encodeURIComponent/S15.1.3.4_A6_T1.js  # encodeURIComponent input must contain plain objects only.
+built-ins/isFinite/return-abrupt-from-tonumber-number.js  # valueOf Expected a Test262Error but got a Error
+built-ins/isNaN/return-abrupt-from-tonumber-number.js  # valueOf Expected a Test262Error but got a Error
+built-ins/parseFloat/S15.1.2.3_A1_T7.js  # parseFloat input must contain plain objects only.
+built-ins/parseInt/S15.1.2.2_A1_T7.js  # parseInt input must contain plain objects only.
+built-ins/parseInt/S15.1.2.2_A3.1_T1.js  # parseInt expects a numeric radix.
+built-ins/parseInt/S15.1.2.2_A3.1_T2.js  # parseInt expects a numeric radix.
+built-ins/parseInt/S15.1.2.2_A3.1_T3.js  # parseInt expects a numeric radix.
+built-ins/parseInt/S15.1.2.2_A3.1_T7.js  # parseInt expects a numeric radix.
+language/expressions/addition/S11.6.1_A2.2_T1.js  # Binary operators require data values.
+language/expressions/addition/S11.6.1_A2.2_T3.js  # Binary operators require data values.
+language/expressions/addition/S11.6.1_A2.3_T1.js  # #1.3: var x = { valueOf: function () { throw "x"; } }; var y = { valueOf: function () { throw "y"; }
+language/expressions/addition/S11.6.1_A3.2_T1.2.js  # Binary operators require data values.
+language/expressions/arrow-function/arrow/concisebody-lookahead-assignmentexpression-1.js  # Execution result must contain plain objects only.
+language/expressions/arrow-function/arrow/concisebody-lookahead-assignmentexpression-2.js  # Execution result must contain plain objects only.
+language/expressions/arrow-function/dflt-params-trailing-comma.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/dstr/ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/dstr/ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/dstr/ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/dstr/ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
+language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
+language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
+language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
+language/expressions/arrow-function/dstr/dflt-obj-init-null.js  # Expected a TypeError but got a Error
+language/expressions/arrow-function/dstr/dflt-obj-init-undefined.js  # Expected a TypeError but got a Error
+language/expressions/arrow-function/dstr/dflt-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/dstr/dflt-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/dstr/dflt-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/dstr/dflt-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/dstr/dflt-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
+language/expressions/arrow-function/dstr/dflt-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error
+language/expressions/arrow-function/dstr/obj-init-null.js  # Expected a TypeError but got a Error
+language/expressions/arrow-function/dstr/obj-init-undefined.js  # Expected a TypeError but got a Error
+language/expressions/arrow-function/dstr/obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/dstr/obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/dstr/obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/dstr/obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/dstr/obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
+language/expressions/arrow-function/dstr/obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error
+language/expressions/arrow-function/params-trailing-comma-multiple.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/params-trailing-comma-single.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/arrow-function/rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
+language/expressions/arrow-function/syntax/early-errors/asi-restriction-invalid-parenless-parameters-expression-body.js  # expected SyntaxError but the program ran
+language/expressions/arrow-function/syntax/early-errors/asi-restriction-invalid-parenless-parameters.js  # expected SyntaxError but the program ran
+language/expressions/arrow-function/syntax/early-errors/asi-restriction-invalid.js  # expected SyntaxError but the program ran
+language/expressions/assignment/11.13.1-4-14-s.js  # Expected a TypeError but got a Error
+language/expressions/assignment/11.13.1-4-28gs.js  # Expected a TypeError but got a Error
+language/expressions/assignment/11.13.1-4-29gs.js  # Expected a TypeError but got a Error
+language/expressions/assignment/S11.13.1_A7_T4.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/assignment/dstr/array-elem-iter-rtrn-close-err.js  # Iterator next must be a function.
+language/expressions/assignment/dstr/array-elem-iter-rtrn-close-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/assignment/dstr/array-elem-iter-thrw-close-err.js  # Expected SameValue(«1», «0») to be true
+language/expressions/assignment/dstr/array-elem-nested-obj-null.js  # Expected a TypeError but got a Error
+language/expressions/assignment/dstr/array-elem-nested-obj-undefined-hole.js  # Expected a TypeError but got a Error
+language/expressions/assignment/dstr/array-elem-nested-obj-undefined-own.js  # Expected a TypeError but got a Error
+language/expressions/assignment/dstr/array-elem-nested-obj-undefined.js  # Expected a TypeError but got a Error
+language/expressions/assignment/dstr/array-elem-trlg-iter-list-rtrn-close-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/assignment/dstr/array-elem-trlg-iter-list-rtrn-close-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/assignment/dstr/array-elem-trlg-iter-list-thrw-close-err.js  # Expected SameValue(«1», «0») to be true
+language/expressions/assignment/dstr/array-elem-trlg-iter-rest-rtrn-close-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/assignment/dstr/array-elem-trlg-iter-rest-rtrn-close-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/assignment/dstr/array-elem-trlg-iter-rest-thrw-close-err.js  # Expected SameValue(«11», «1») to be true
+language/expressions/assignment/dstr/array-rest-iter-rtrn-close-err.js  # Iterator next must be a function.
+language/expressions/assignment/dstr/array-rest-iter-rtrn-close-null.js  # Iterator next must be a function.
+language/expressions/assignment/dstr/array-rest-iter-thrw-close-err.js  # Expected SameValue(«11», «0») to be true
+language/expressions/assignment/dstr/array-rest-lref-err.js  # Expected SameValue(«1», «0») to be true
+language/expressions/assignment/dstr/obj-empty-bool.js  # Object destructuring requires a data object or array value, received a boolean.
+language/expressions/assignment/dstr/obj-empty-null.js  # Expected a TypeError but got a Error
+language/expressions/assignment/dstr/obj-empty-num.js  # Object destructuring requires a data object or array value, received a number.
+language/expressions/assignment/dstr/obj-empty-string.js  # Object destructuring requires a data object or array value, received a string.
+language/expressions/assignment/dstr/obj-empty-undef.js  # Expected a TypeError but got a Error
+language/expressions/assignment/dstr/obj-prop-name-evaluation-error.js  # Expected a TypeError but got a Error
+language/expressions/assignment/dstr/obj-prop-nested-obj-null.js  # Expected a TypeError but got a Error
+language/expressions/assignment/dstr/obj-prop-nested-obj-undefined-own.js  # Expected a TypeError but got a Error
+language/expressions/assignment/dstr/obj-prop-nested-obj-undefined.js  # Expected a TypeError but got a Error
+language/expressions/assignment/dstr/obj-rest-number.js  # Object destructuring requires a data object or array value, received a number.
+language/expressions/assignment/dstr/obj-rest-str-val.js  # Object destructuring requires a data object or array value, received a string.
+language/expressions/assignment/dstr/obj-rest-val-null.js  # Expected a TypeError but got a Error
+language/expressions/assignment/dstr/obj-rest-val-undefined.js  # Expected a TypeError but got a Error
+language/expressions/assignment/target-member-computed-reference-null.js  # Expected a program function but got a TypeError
+language/expressions/assignment/target-member-computed-reference-undefined.js  # Expected a program function but got a TypeError
+language/expressions/assignment/target-member-computed-reference.js  # Expected a program function but got a TypeError
+language/expressions/assignment/target-member-identifier-reference-null.js  # Expected a TypeError but got a Error
+language/expressions/assignment/target-member-identifier-reference-undefined.js  # Expected a TypeError but got a Error
+language/expressions/assignmenttargettype/simple-basic-identifierreference-await.js  # Failed to parse TypeScript: Expression expected.
+language/expressions/async-arrow-function/dflt-params-trailing-comma.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-arrow-function/params-trailing-comma-multiple.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-arrow-function/params-trailing-comma-single.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-arrow-function/rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
+language/expressions/async-function/named-dflt-params-trailing-comma.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-function/named-params-trailing-comma-multiple.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-function/named-params-trailing-comma-single.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-function/named-rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
+language/expressions/async-function/nameless-dflt-params-trailing-comma.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-function/nameless-params-trailing-comma-multiple.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-function/nameless-params-trailing-comma-single.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-function/nameless-rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
+language/expressions/async-generator/dflt-params-abrupt.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dflt-params-ref-later.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dflt-params-ref-self.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dflt-params-trailing-comma.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/ary-ptrn-elem-obj-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/ary-ptrn-elision-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/ary-ptrn-rest-id-elision-next-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/dflt-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/dflt-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/dflt-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/dflt-ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-ary-ptrn-elision-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-ary-ptrn-rest-id-elision-next-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/dflt-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/dflt-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/dflt-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/dflt-obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-obj-ptrn-prop-ary-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-obj-ptrn-prop-eval-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-obj-ptrn-prop-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-obj-ptrn-prop-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/named-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/named-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/named-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/named-ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-ary-ptrn-elision-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-ary-ptrn-rest-id-elision-next-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/named-dflt-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/named-dflt-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/named-dflt-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/named-dflt-ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-ary-ptrn-elision-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-ary-ptrn-rest-id-elision-next-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/named-dflt-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/named-dflt-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/named-dflt-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/named-dflt-obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-obj-ptrn-prop-ary-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-obj-ptrn-prop-eval-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-obj-ptrn-prop-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-obj-ptrn-prop-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/named-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/named-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/named-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/named-obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-obj-ptrn-prop-ary-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-obj-ptrn-prop-eval-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-obj-ptrn-prop-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-obj-ptrn-prop-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/dstr/obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/obj-ptrn-prop-ary-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/obj-ptrn-prop-eval-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/obj-ptrn-prop-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/obj-ptrn-prop-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/named-dflt-params-abrupt.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/async-generator/named-dflt-params-ref-later.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/async-generator/named-dflt-params-ref-self.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/async-generator/named-dflt-params-trailing-comma.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/named-params-trailing-comma-multiple.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/named-params-trailing-comma-single.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/named-rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
+language/expressions/async-generator/params-trailing-comma-multiple.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/params-trailing-comma-single.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/async-generator/rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
+language/expressions/await/await-in-global.js  # Failed to parse TypeScript: Expression expected.
+language/expressions/await/await-in-nested-function.js  # Failed to parse TypeScript: Expression expected.
+language/expressions/await/await-in-nested-generator.js  # Failed to parse TypeScript: Expression expected.
+language/expressions/bitwise-and/S11.10.1_A2.2_T1.js  # Binary operators require data values.
+language/expressions/bitwise-and/S11.10.1_A2.3_T1.js  # #1.3: var x = { valueOf: function () { throw "x"; } }; var y = { valueOf: function () { throw "y"; }
+language/expressions/bitwise-and/S11.10.1_A3_T1.5.js  # Binary operators require data values.
+language/expressions/bitwise-not/S11.4.8_A2.2_T1.js  # Unary operators require data values.
+language/expressions/bitwise-not/S11.4.8_A3_T5.js  # Unary operators require data values.
+language/expressions/bitwise-not/S9.5_A3.1_T4.js  # Unary operators require data values.
+language/expressions/bitwise-or/S11.10.3_A2.2_T1.js  # Binary operators require data values.
+language/expressions/bitwise-or/S11.10.3_A2.3_T1.js  # #1.3: var x = { valueOf: function () { throw "x"; } }; var y = { valueOf: function () { throw "y"; }
+language/expressions/bitwise-or/S11.10.3_A3_T1.5.js  # Binary operators require data values.
+language/expressions/bitwise-xor/S11.10.2_A2.2_T1.js  # Binary operators require data values.
+language/expressions/bitwise-xor/S11.10.2_A2.3_T1.js  # #1.3: var x = { valueOf: function () { throw "x"; } }; var y = { valueOf: function () { throw "y"; }
+language/expressions/bitwise-xor/S11.10.2_A3_T1.5.js  # Binary operators require data values.
+language/expressions/call/11.2.3-3_3.js  # Expected a TypeError but got a Error
+language/expressions/call/S11.2.3_A3_T1.js  # #1.2: true() throw TypeError. Actual: Error: Only tools are callable here.
+language/expressions/call/S11.2.3_A3_T2.js  # #1.2: 1() throw TypeError. Actual: Error: Only tools are callable here.
+language/expressions/call/S11.2.3_A3_T3.js  # #1.2: "1"() throw TypeError. Actual: Error: Only tools are callable here.
+language/expressions/call/S11.2.3_A4_T5.js  # #1.2: Math() throw TypeError. Actual: Error: Only tools are callable here.
+language/expressions/compound-assignment/S11.13.2_A7.10_T1.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.10_T2.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.10_T3.js  # Expected a program function but got a Error
+language/expressions/compound-assignment/S11.13.2_A7.10_T4.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/compound-assignment/S11.13.2_A7.11_T1.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.11_T2.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.11_T3.js  # Expected a program function but got a Error
+language/expressions/compound-assignment/S11.13.2_A7.11_T4.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/compound-assignment/S11.13.2_A7.1_T1.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.1_T2.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.1_T3.js  # Expected a program function but got a Error
+language/expressions/compound-assignment/S11.13.2_A7.1_T4.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/compound-assignment/S11.13.2_A7.2_T1.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.2_T2.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.2_T3.js  # Expected a program function but got a Error
+language/expressions/compound-assignment/S11.13.2_A7.2_T4.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/compound-assignment/S11.13.2_A7.3_T1.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.3_T2.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.3_T3.js  # Expected a program function but got a Error
+language/expressions/compound-assignment/S11.13.2_A7.3_T4.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/compound-assignment/S11.13.2_A7.4_T1.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.4_T2.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.4_T3.js  # Expected a program function but got a Error
+language/expressions/compound-assignment/S11.13.2_A7.4_T4.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/compound-assignment/S11.13.2_A7.5_T1.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.5_T2.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.5_T3.js  # Expected a program function but got a Error
+language/expressions/compound-assignment/S11.13.2_A7.5_T4.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/compound-assignment/S11.13.2_A7.6_T1.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.6_T2.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.6_T3.js  # Expected a program function but got a Error
+language/expressions/compound-assignment/S11.13.2_A7.6_T4.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/compound-assignment/S11.13.2_A7.7_T1.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.7_T2.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.7_T3.js  # Expected a program function but got a Error
+language/expressions/compound-assignment/S11.13.2_A7.7_T4.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/compound-assignment/S11.13.2_A7.8_T1.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.8_T2.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.8_T3.js  # Expected a program function but got a Error
+language/expressions/compound-assignment/S11.13.2_A7.8_T4.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/compound-assignment/S11.13.2_A7.9_T1.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.9_T2.js  # Expected a program function but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.9_T3.js  # Expected a program function but got a Error
+language/expressions/compound-assignment/S11.13.2_A7.9_T4.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/delete/11.4.1-2-2.js  # Only data fields may be deleted.
+language/expressions/delete/11.4.1-4.a-10.js  # Only data fields may be deleted.
+language/expressions/delete/11.4.1-4.a-14.js  # Only data fields may be assigned.
+language/expressions/delete/11.4.1-4.a-15.js  # Only data fields may be assigned.
+language/expressions/delete/11.4.1-4.a-9-s.js  # Expected a TypeError but got a Error
+language/expressions/delete/11.4.1-5-a-28-s.js  # Only data fields may be deleted.
+language/expressions/delete/S11.4.1_A2.1.js  # Only data fields may be deleted.
+language/expressions/delete/S11.4.1_A2.2_T2.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
+language/expressions/delete/S11.4.1_A3.2_T2.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/delete/S11.4.1_A3.2_T3.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
+language/expressions/delete/S11.4.1_A3.3_T2.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/delete/S11.4.1_A3.3_T3.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
+language/expressions/delete/delete-unresolvable-base-object-reference-throws-typeerror.js  # Expected a TypeError but got a Error
+language/expressions/delete/member-computed-reference-null.js  # Expected a TypeError but got a Error
+language/expressions/delete/member-computed-reference-undefined.js  # Expected a TypeError but got a Error
+language/expressions/delete/member-identifier-reference-null.js  # Expected a TypeError but got a Error
+language/expressions/delete/member-identifier-reference-undefined.js  # Expected a TypeError but got a Error
+language/expressions/delete/non-reference-return-true.js  # Only data fields may be deleted.
+language/expressions/delete/super-property-topropertykey.js  # Expected a ReferenceError but got a Error
+language/expressions/delete/white-space-line-terminator-between-delete-unaryexpression-allowed.js  # Only data fields may be deleted.
+language/expressions/division/S11.5.2_A2.2_T1.js  # Binary operators require data values.
+language/expressions/division/S11.5.2_A2.3_T1.js  # #1.3: var x = { valueOf: function () { throw "x"; } }; var y = { valueOf: function () { throw "y"; }
+language/expressions/division/S11.5.2_A3_T1.5.js  # Binary operators require data values.
+language/expressions/does-not-equals/S11.9.2_A7.8.js  # Binary operators require data values.
+language/expressions/does-not-equals/S11.9.2_A7.9.js  # Binary operators require data values.
+language/expressions/equals/S11.9.1_A7.8.js  # Binary operators require data values.
+language/expressions/equals/S11.9.1_A7.9.js  # Binary operators require data values.
+language/expressions/equals/S9.1_A1_T3.js  # Binary operators require data values.
+language/expressions/exponentiation/exp-operator-evaluation-order.js  # Binary operators require data values.
+language/expressions/exponentiation/exp-operator-precedence-unary-expression-semantics.js  # Unary operators require data values.
+language/expressions/function/dflt-params-trailing-comma.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/dstr/ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/dstr/ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/dstr/ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/dstr/ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/dstr/ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
+language/expressions/function/dstr/ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
+language/expressions/function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/dstr/dflt-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
+language/expressions/function/dstr/dflt-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
+language/expressions/function/dstr/dflt-obj-init-null.js  # Expected a TypeError but got a Error
+language/expressions/function/dstr/dflt-obj-init-undefined.js  # Expected a TypeError but got a Error
+language/expressions/function/dstr/dflt-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/dstr/dflt-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/dstr/dflt-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/dstr/dflt-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/dstr/dflt-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
+language/expressions/function/dstr/dflt-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error
+language/expressions/function/dstr/obj-init-null.js  # Expected a TypeError but got a Error
+language/expressions/function/dstr/obj-init-undefined.js  # Expected a TypeError but got a Error
+language/expressions/function/dstr/obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/dstr/obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/dstr/obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/dstr/obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/dstr/obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
+language/expressions/function/dstr/obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error
+language/expressions/function/named-strict-error-reassign-fn-name-in-body-in-arrow.js  # Expected a TypeError but got a ReferenceError
+language/expressions/function/named-strict-error-reassign-fn-name-in-body.js  # Expected a TypeError but got a ReferenceError
+language/expressions/function/params-trailing-comma-multiple.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/params-trailing-comma-single.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/function/rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
+language/expressions/function/scope-name-var-close.js  # Expected SameValue(«"outside"», «program function») to be true
+language/expressions/function/scope-name-var-open-strict.js  # inner binding value (from parameters) Expected SameValue(«null», «program function») to be true
+language/expressions/generators/dflt-params-abrupt.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dflt-params-ref-later.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/generators/dflt-params-ref-self.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/generators/dflt-params-trailing-comma.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/dstr/ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/dstr/ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/dstr/ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/dstr/ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/dstr/ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/ary-ptrn-elem-obj-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/ary-ptrn-elision-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/ary-ptrn-rest-id-elision-next-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/dstr/dflt-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/dstr/dflt-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/dstr/dflt-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/dstr/dflt-ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-ary-ptrn-elision-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-ary-ptrn-rest-id-elision-next-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/dstr/dflt-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/dstr/dflt-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/dstr/dflt-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/dstr/dflt-obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-obj-ptrn-prop-ary-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-obj-ptrn-prop-eval-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-obj-ptrn-prop-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-obj-ptrn-prop-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/dstr/obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/dstr/obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/dstr/obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/dstr/obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/obj-ptrn-prop-ary-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/obj-ptrn-prop-eval-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/obj-ptrn-prop-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/obj-ptrn-prop-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/has-instance.js  # The right-hand side of '…' must be a supported constructor: Error (or a specific error type like Typ
+language/expressions/generators/implicit-name.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/named-strict-error-reassign-fn-name-in-body-in-arrow.js  # Expected a TypeError but got a ReferenceError
+language/expressions/generators/named-strict-error-reassign-fn-name-in-body.js  # Expected a TypeError but got a ReferenceError
+language/expressions/generators/no-name.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/params-trailing-comma-multiple.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/params-trailing-comma-single.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/generators/rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
+language/expressions/generators/scope-name-var-close.js  # Expected SameValue(«"outside"», «program function») to be true
+language/expressions/generators/scope-name-var-open-strict.js  # inner binding value (from parameters) Expected SameValue(«null», «program function») to be true
+language/expressions/greater-than-or-equal/S11.8.4_A2.2_T1.js  # Binary operators require data values.
+language/expressions/greater-than-or-equal/S11.8.4_A2.3_T1.js  # #1.3: var x = { valueOf: function () { throw "x"; } }; var y = { valueOf: function () { throw "y"; }
+language/expressions/greater-than-or-equal/S11.8.4_A3.2_T1.2.js  # Binary operators require data values.
+language/expressions/greater-than/11.8.2-1.js  # Binary operators require data values.
+language/expressions/greater-than/11.8.2-2.js  # Binary operators require data values.
+language/expressions/greater-than/11.8.2-3.js  # Binary operators require data values.
+language/expressions/greater-than/11.8.2-4.js  # Binary operators require data values.
+language/expressions/greater-than/S11.8.2_A2.2_T1.js  # Binary operators require data values.
+language/expressions/greater-than/S11.8.2_A2.3_T1.js  # #1.3: Failed with: Error: Binary operators require data values.
+language/expressions/greater-than/S11.8.2_A3.2_T1.2.js  # Binary operators require data values.
+language/expressions/in/S11.8.7_A2.1_T1.js  # Binary operators require data values.
+language/expressions/in/S11.8.7_A2.4_T1.js  # Binary operators require data values.
+language/expressions/in/S11.8.7_A3.js  # #1: "toString" in true throw TypeError
+language/expressions/in/S8.12.6_A2_T1.js  # #1: var __obj={}; "valueOf" in __obj
+language/expressions/instanceof/S11.8.6_A3.js  # #1: true instanceof true throw TypeError
+language/expressions/instanceof/S11.8.6_A4_T1.js  # new Boolean(...) is not supported; call Boolean(...) without new instead.
+language/expressions/instanceof/S11.8.6_A4_T2.js  # new Number(...) is not supported; call Number(...) without new instead.
+language/expressions/instanceof/S11.8.6_A4_T3.js  # new String(...) is not supported; call String(...) without new instead.
+language/expressions/instanceof/S11.8.6_A6_T2.js  # #1: 1 instanceof Math throw TypeError
+language/expressions/left-shift/S11.7.1_A2.2_T1.js  # Binary operators require data values.
+language/expressions/left-shift/S11.7.1_A2.3_T1.js  # #1.3: var x = { valueOf: function () { throw "x"; } }; var y = { valueOf: function () { throw "y"; }
+language/expressions/left-shift/S11.7.1_A3_T1.5.js  # Binary operators require data values.
+language/expressions/less-than-or-equal/11.8.3-1.js  # Binary operators require data values.
+language/expressions/less-than-or-equal/11.8.3-2.js  # Binary operators require data values.
+language/expressions/less-than-or-equal/11.8.3-3.js  # Binary operators require data values.
+language/expressions/less-than-or-equal/11.8.3-4.js  # Binary operators require data values.
+language/expressions/less-than-or-equal/S11.8.3_A2.2_T1.js  # Binary operators require data values.
+language/expressions/less-than-or-equal/S11.8.3_A2.3_T1.js  # #1.3: Failed with: Error: Binary operators require data values.
+language/expressions/less-than-or-equal/S11.8.3_A3.2_T1.2.js  # Binary operators require data values.
+language/expressions/less-than/S11.8.1_A2.2_T1.js  # Binary operators require data values.
+language/expressions/less-than/S11.8.1_A2.3_T1.js  # #1.3: var x = { valueOf: function () { throw "x"; } }; var y = { valueOf: function () { throw "y"; }
+language/expressions/less-than/S11.8.1_A3.2_T1.2.js  # Binary operators require data values.
+language/expressions/logical-assignment/lgcl-and-assignment-operator-lhs-before-rhs.js  # Expected a program function but got a TypeError
+language/expressions/logical-assignment/lgcl-and-assignment-operator-namedevaluation-arrow-function.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/logical-assignment/lgcl-and-assignment-operator-namedevaluation-function.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/logical-assignment/lgcl-nullish-assignment-operator-lhs-before-rhs.js  # Expected a program function but got a TypeError
+language/expressions/logical-assignment/lgcl-nullish-assignment-operator-namedevaluation-arrow-function.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/logical-assignment/lgcl-nullish-assignment-operator-namedevaluation-function.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/logical-assignment/lgcl-or-assignment-operator-lhs-before-rhs.js  # Expected a program function but got a TypeError
+language/expressions/logical-assignment/lgcl-or-assignment-operator-namedevaluation-arrow-function.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/logical-assignment/lgcl-or-assignment-operator-namedevaluation-function.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/member-expression/computed-reference-null-or-undefined.js  # Expected a TypeError but got a Error
+language/expressions/modulus/S11.5.3_A2.2_T1.js  # Binary operators require data values.
+language/expressions/modulus/S11.5.3_A2.3_T1.js  # #1.3: var x = { valueOf: function () { throw "x"; } }; var y = { valueOf: function () { throw "y"; }
+language/expressions/modulus/S11.5.3_A3_T1.5.js  # Binary operators require data values.
+language/expressions/multiplication/S11.5.1_A2.2_T1.js  # Binary operators require data values.
+language/expressions/multiplication/S11.5.1_A2.3_T1.js  # #1.3: var x = { valueOf: function () { throw "x"; } }; var y = { valueOf: function () { throw "y"; }
+language/expressions/multiplication/S11.5.1_A3_T1.5.js  # Binary operators require data values.
+language/expressions/new/ctorExpr-isCtor-after-args-eval.js  # Expected SameValue(«object», «Array») to be true
+language/expressions/new/spread-err-mult-err-expr-throws.js  # Expected a Test262Error but got a TypeError
+language/expressions/new/spread-err-mult-err-itr-get-call.js  # Expected a Test262Error but got a TypeError
+language/expressions/new/spread-err-mult-err-itr-step.js  # Expected a Test262Error but got a TypeError
+language/expressions/new/spread-err-mult-err-obj-unresolvable.js  # Expected a ReferenceError but got a TypeError
+language/expressions/new/spread-err-mult-err-unresolvable.js  # Expected a ReferenceError but got a TypeError
+language/expressions/new/spread-err-sngl-err-expr-throws.js  # Expected a Test262Error but got a TypeError
+language/expressions/new/spread-err-sngl-err-itr-get-call.js  # Expected a Test262Error but got a TypeError
+language/expressions/new/spread-err-sngl-err-itr-step.js  # Expected a Test262Error but got a TypeError
+language/expressions/new/spread-err-sngl-err-obj-unresolvable.js  # Expected a ReferenceError but got a TypeError
+language/expressions/new/spread-err-sngl-err-unresolvable.js  # Expected a ReferenceError but got a TypeError
+language/expressions/new/spread-mult-obj-null.js  # The called value cannot be constructed: user-defined constructors and classes are not supported. Cal
+language/expressions/new/spread-mult-obj-undefined.js  # The called value cannot be constructed: user-defined constructors and classes are not supported. Cal
+language/expressions/new/spread-obj-mult-spread.js  # The called value cannot be constructed: user-defined constructors and classes are not supported. Cal
+language/expressions/new/spread-obj-null.js  # The called value cannot be constructed: user-defined constructors and classes are not supported. Cal
+language/expressions/new/spread-obj-overrides-prev-properties.js  # The called value cannot be constructed: user-defined constructors and classes are not supported. Cal
+language/expressions/new/spread-obj-undefined.js  # The called value cannot be constructed: user-defined constructors and classes are not supported. Cal
+language/expressions/object/__proto__-permitted-dup-shorthand.js  # .hasOwnProperty is not a function.
+language/expressions/object/accessor-name-literal-string-line-continuation.js  # Only init object properties are supported.
+language/expressions/object/computed-property-name-topropertykey-before-value-evaluation.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/object/cpn-obj-lit-computed-property-name-from-arrow-function-expression.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/object/cpn-obj-lit-computed-property-name-from-async-arrow-function-expression.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/object/cpn-obj-lit-computed-property-name-from-function-declaration.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/object/cpn-obj-lit-computed-property-name-from-function-expression.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/object/cpn-obj-lit-computed-property-name-from-generator-function-declaration.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/object/cpn-obj-lit-computed-property-name-from-null.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/object/cpn-obj-lit-computed-property-name-from-yield-expression.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/object/dstr/async-gen-meth-ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/async-gen-meth-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/async-gen-meth-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/async-gen-meth-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/async-gen-meth-ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-ary-ptrn-elision-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-ary-ptrn-rest-id-elision-next-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-elision-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-rest-id-elision-next-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-prop-ary-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-prop-eval-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-prop-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-prop-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/async-gen-meth-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/async-gen-meth-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/async-gen-meth-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/async-gen-meth-obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-obj-ptrn-prop-ary-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-obj-ptrn-prop-eval-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-obj-ptrn-prop-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-obj-ptrn-prop-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/gen-meth-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/gen-meth-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/gen-meth-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/gen-meth-ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-ary-ptrn-elision-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-ary-ptrn-rest-id-elision-next-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-elision-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-rest-id-elision-next-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-prop-ary-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-prop-eval-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-prop-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-prop-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/gen-meth-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/gen-meth-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/gen-meth-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/gen-meth-obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-obj-ptrn-prop-ary-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-obj-ptrn-prop-eval-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-obj-ptrn-prop-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-obj-ptrn-prop-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/meth-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/meth-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/meth-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/meth-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/meth-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
+language/expressions/object/dstr/meth-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
+language/expressions/object/dstr/meth-dflt-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/meth-dflt-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/meth-dflt-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/meth-dflt-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/meth-dflt-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
+language/expressions/object/dstr/meth-dflt-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
+language/expressions/object/dstr/meth-dflt-obj-init-null.js  # Expected a TypeError but got a Error
+language/expressions/object/dstr/meth-dflt-obj-init-undefined.js  # Expected a TypeError but got a Error
+language/expressions/object/dstr/meth-dflt-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/meth-dflt-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/meth-dflt-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/meth-dflt-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/meth-dflt-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
+language/expressions/object/dstr/meth-dflt-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error
+language/expressions/object/dstr/meth-obj-init-null.js  # Expected a TypeError but got a Error
+language/expressions/object/dstr/meth-obj-init-undefined.js  # Expected a TypeError but got a Error
+language/expressions/object/dstr/meth-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/meth-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/meth-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/meth-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/dstr/meth-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
+language/expressions/object/dstr/meth-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error
+language/expressions/object/method-definition/async-gen-meth-dflt-params-abrupt.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/method-definition/async-gen-meth-dflt-params-ref-later.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/object/method-definition/async-gen-meth-dflt-params-ref-self.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/object/method-definition/async-gen-meth-dflt-params-trailing-comma.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/method-definition/async-gen-meth-params-trailing-comma-multiple.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/method-definition/async-gen-meth-params-trailing-comma-single.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/method-definition/async-gen-meth-rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
+language/expressions/object/method-definition/async-meth-dflt-params-trailing-comma.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/method-definition/async-meth-params-trailing-comma-multiple.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/method-definition/async-meth-params-trailing-comma-single.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/method-definition/async-meth-rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
+language/expressions/object/method-definition/gen-meth-dflt-params-abrupt.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/object/method-definition/gen-meth-dflt-params-ref-later.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/object/method-definition/gen-meth-dflt-params-ref-self.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/expressions/object/method-definition/gen-meth-dflt-params-trailing-comma.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/method-definition/gen-meth-params-trailing-comma-multiple.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/method-definition/gen-meth-params-trailing-comma-single.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/method-definition/gen-meth-rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
+language/expressions/object/method-definition/meth-dflt-params-trailing-comma.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/method-definition/meth-params-trailing-comma-multiple.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/method-definition/meth-params-trailing-comma-single.js  # Cannot read properties of a function; only data values expose properties.
+language/expressions/object/method-definition/meth-rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
+language/expressions/object/prop-def-invalid-async-prefix.js  # expected SyntaxError but the program ran
+language/expressions/optional-chaining/early-errors-tail-position-null-op-template-string-esi.js  # expected SyntaxError but the program ran
+language/expressions/optional-chaining/early-errors-tail-position-null-op-template-string.js  # expected SyntaxError but the program ran
+language/expressions/optional-chaining/early-errors-tail-position-op-template-string-esi.js  # expected SyntaxError but the program ran
+language/expressions/optional-chaining/early-errors-tail-position-op-template-string.js  # expected SyntaxError but the program ran
+language/expressions/optional-chaining/optional-chain-expression-optional-expression.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/optional-chaining/optional-chain-prod-expression.js  # Only data fields may be assigned.
+language/expressions/postfix-decrement/S11.3.2_A2.2_T1.js  # '…' requires a data value.
+language/expressions/postfix-decrement/S11.3.2_A3_T5.js  # '…' requires a data value.
+language/expressions/postfix-decrement/S11.3.2_A4_T5.js  # '…' requires a data value.
+language/expressions/postfix-decrement/S11.3.2_A6_T1.js  # Expected a program function but got a TypeError
+language/expressions/postfix-decrement/S11.3.2_A6_T2.js  # Expected a program function but got a TypeError
+language/expressions/postfix-decrement/S11.3.2_A6_T3.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/postfix-increment/S11.3.1_A2.2_T1.js  # '…' requires a data value.
+language/expressions/postfix-increment/S11.3.1_A3_T5.js  # '…' requires a data value.
+language/expressions/postfix-increment/S11.3.1_A4_T5.js  # '…' requires a data value.
+language/expressions/postfix-increment/S11.3.1_A6_T1.js  # Expected a program function but got a TypeError
+language/expressions/postfix-increment/S11.3.1_A6_T2.js  # Expected a program function but got a TypeError
+language/expressions/postfix-increment/S11.3.1_A6_T3.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/prefix-decrement/S11.4.5_A2.2_T1.js  # '…' requires a data value.
+language/expressions/prefix-decrement/S11.4.5_A3_T5.js  # '…' requires a data value.
+language/expressions/prefix-decrement/S11.4.5_A4_T5.js  # '…' requires a data value.
+language/expressions/prefix-decrement/S11.4.5_A6_T1.js  # Expected a program function but got a TypeError
+language/expressions/prefix-decrement/S11.4.5_A6_T2.js  # Expected a program function but got a TypeError
+language/expressions/prefix-decrement/S11.4.5_A6_T3.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/prefix-increment/S11.4.4_A2.2_T1.js  # '…' requires a data value.
+language/expressions/prefix-increment/S11.4.4_A3_T5.js  # '…' requires a data value.
+language/expressions/prefix-increment/S11.4.4_A4_T5.js  # '…' requires a data value.
+language/expressions/prefix-increment/S11.4.4_A6_T1.js  # Expected a program function but got a TypeError
+language/expressions/prefix-increment/S11.4.4_A6_T2.js  # Expected a program function but got a TypeError
+language/expressions/prefix-increment/S11.4.4_A6_T3.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+language/expressions/property-accessors/S11.2.1_A3_T4.js  # #1.2: undefined.toString() throw TypeError. Actual: Error: Cannot access a property on a non-object 
+language/expressions/property-accessors/S11.2.1_A3_T5.js  # #1.2: null.toString() throw TypeError. Actual: Error: Cannot access a property on a non-object value
+language/expressions/relational/S9.1_A1_T4.js  # Binary operators require data values.
+language/expressions/right-shift/S11.7.2_A2.2_T1.js  # Binary operators require data values.
+language/expressions/right-shift/S11.7.2_A2.3_T1.js  # #1.3: var x = { valueOf: function () { throw "x"; } }; var y = { valueOf: function () { throw "y"; }
+language/expressions/right-shift/S11.7.2_A3_T1.5.js  # Binary operators require data values.
+language/expressions/subtraction/S11.6.2_A2.2_T1.js  # Binary operators require data values.
+language/expressions/subtraction/S11.6.2_A2.3_T1.js  # #1.3: var x = { valueOf: function () { throw "x"; } }; var y = { valueOf: function () { throw "y"; }
+language/expressions/subtraction/S11.6.2_A3_T1.5.js  # Binary operators require data values.
+language/expressions/super/prop-expr-obj-err.js  # unsupported syntax Super
+language/expressions/super/prop-expr-obj-key-err.js  # unsupported syntax Super
+language/expressions/super/prop-expr-obj-unresolvable.js  # Expected SameValue(«Error», «ReferenceError») to be true
+language/expressions/tagged-template/cache-different-functions-same-site.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/tagged-template/cache-differing-expressions.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/tagged-template/cache-differing-raw-strings.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/tagged-template/cache-differing-string-count.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/tagged-template/cache-identical-source.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/tagged-template/cache-same-site-top-level.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/tagged-template/cache-same-site.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/tagged-template/chained-application.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/tagged-template/constructor-invocation.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/tagged-template/invalid-escape-sequences.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/tagged-template/template-object-frozen-strict.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/tagged-template/template-object-template-map.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/template-literal/evaluation-order.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/template-literal/literal-expr-obj.js  # Template interpolation must contain plain objects only.
+language/expressions/template-literal/literal-expr-tostr-error.js  # Expected a Test262Error but got a Error
+language/expressions/template-literal/middle-list-many-expr-obj.js  # Template interpolation must contain plain objects only.
+language/expressions/template-literal/middle-list-many-expr-tostr-error.js  # Expected a Test262Error but got a Error
+language/expressions/template-literal/middle-list-one-expr-obj.js  # Template interpolation must contain plain objects only.
+language/expressions/template-literal/middle-list-one-expr-tostr-error.js  # Expected a Test262Error but got a Error
+language/expressions/template-literal/tv-character-escape-sequence.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/template-literal/tv-hex-escape-sequence.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/template-literal/tv-line-continuation.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/template-literal/tv-line-terminator-sequence.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/template-literal/tv-no-substitution.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/template-literal/tv-null-character-escape-sequence.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/template-literal/tv-template-character.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/template-literal/tv-template-characters.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/template-literal/tv-template-head.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/template-literal/tv-template-middle.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/template-literal/tv-template-tail.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/template-literal/tv-utf16-escape-sequence.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/template-literal/tv-zwnbsp.js  # unsupported syntax TaggedTemplateExpression
+language/expressions/typeof/built-in-ordinary-objects-no-call.js  # typeof Reflect === "object" Expected SameValue(«"undefined"», «"object"») to be true
+language/expressions/unary-minus/S11.4.7_A2.2_T1.js  # Unary operators require data values.
+language/expressions/unary-minus/S11.4.7_A3_T5.js  # Unary operators require data values.
+language/expressions/unary-plus/S11.4.6_A2.2_T1.js  # Unary operators require data values.
+language/expressions/unary-plus/S11.4.6_A3_T5.js  # Unary operators require data values.
+language/expressions/unsigned-right-shift/S11.7.3_A2.2_T1.js  # Binary operators require data values.
+language/expressions/unsigned-right-shift/S11.7.3_A2.3_T1.js  # #1.3: var x = { valueOf: function () { throw "x"; } }; var y = { valueOf: function () { throw "y"; }
+language/expressions/unsigned-right-shift/S11.7.3_A3_T1.5.js  # Binary operators require data values.
+language/expressions/unsigned-right-shift/S9.6_A3.1_T4.js  # Binary operators require data values.
+language/expressions/yield/star-iterable.js  # First result `done` flag Expected SameValue(«false», «undefined») to be true
 language/statements/async-function/dflt-params-trailing-comma.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/async-function/params-trailing-comma-multiple.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/async-function/params-trailing-comma-single.js  # Cannot read properties of a function; only data values expose properties.

@@ -7,7 +7,7 @@ import { caughtErrorValue } from "../../src/interpreter/errors.js"
 import { executeProgram } from "../../src/interpreter/execute.js"
 import type { Host } from "../../src/interpreter/globals.js"
 import { HostFunction } from "../../src/interpreter/host.js"
-import { ProgramThrow } from "../../src/interpreter/model.js"
+import { CodeModeFunction, ProgramThrow } from "../../src/interpreter/model.js"
 import { createErrorValue, errorBrandName } from "../../src/stdlib/value.js"
 import { ToolRuntime } from "../../src/tool-runtime.js"
 
@@ -156,6 +156,7 @@ const show = (value: unknown): string => {
   if (Object.is(value, -0)) return "-0"
   if (Array.isArray(value)) return `[${value.map(show).join(", ")}]`
   if (value instanceof HostFunction) return value.name
+  if (value instanceof CodeModeFunction) return "program function"
   if (value === null || typeof value !== "object") return String(value)
   const message = (value as { message?: unknown }).message
   return typeof message === "string" ? `${errorBrandName(value) ?? "object"}: ${message}` : "object"
