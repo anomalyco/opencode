@@ -84,7 +84,7 @@ describe("normalizeProviderList", () => {
     expect(result.all.get("openai")?.models["gpt-5"]).toMatchObject({
       id: "gpt-5",
       providerID: "openai",
-      capabilities: { toolcall: true, attachment: true },
+      capabilities: { toolcall: true, attachment: true, reasoning: true },
       cost: { input: 1, output: 2 },
       variants: { high: {} },
     })

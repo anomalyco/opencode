@@ -75,7 +75,7 @@ export function normalizeProviderList(
       family: model.family,
       capabilities: {
         temperature: false,
-        reasoning: false,
+        reasoning: model.variants.length > 0,
         attachment: model.capabilities.input.some((item) => item !== "text"),
         toolcall: model.capabilities.tools,
         input: {
