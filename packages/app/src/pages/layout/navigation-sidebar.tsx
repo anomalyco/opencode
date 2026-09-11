@@ -236,15 +236,22 @@ export function NavigationSidebar() {
     const records = buildSidebarRecords({ sessions: sessions(), projects: home.project.list() }).filter((record) =>
       matchesSidebarFilter(record, filter()),
     )
-    return groupSidebarRecords(records).map((group) => ({
-      ...group,
-      ...partitionSidebarRecords({
+    return groupSidebarRecords(records).map((group) => {
+      const parts = partitionSidebarRecords({
         records: group.records,
         pinned: (record) => alwaysVisible(record),
         days: settings.general.sidebarSessionDays() ?? 3,
         now: now(),
-      }),
-    }))
+      })
+      return {
+        ...group,
+        // Pinned threads stay at the top of their project regardless of recency.
+        visible: [...parts.visible].sort(
+          (a, b) => Number(isPinned(b.session.id)) - Number(isPinned(a.session.id)),
+        ),
+        hidden: parts.hidden,
+      }
+    })
   })
 
   const settled = createMemo(() => groups().flatMap((group) => group.hidden))
@@ -978,10 +985,11 @@ function SidebarSessionRow(props: {
   const title = createMemo(() => titleOf(props.record.session))
   const live = createMemo(() => {
     if (props.settled) return undefined
+    // A pending question or permission outranks the working timer so the user notices input is needed.
+    if (status.attention()) return { kind: "attention" as const, label: language.t("sidebar.status.attention") }
     const started = props.started?.()
     if (started !== undefined && props.working?.())
       return { kind: "working" as const, label: language.t("sidebar.status.working"), time: elapsed(started) }
-    if (status.attention()) return { kind: "attention" as const, label: language.t("sidebar.status.attention") }
     const done = props.done?.()
     if (done !== undefined) return { kind: "done" as const, label: language.t("sidebar.status.done") }
     return undefined
