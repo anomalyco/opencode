@@ -1,4 +1,5 @@
 export const dict = {
+  ...STORAGE_FALLBACK,
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "ファイル",
   "desktop.menu.edit": "編集",
@@ -1167,3 +1168,4 @@ export const dict = {
   "titlebar.update": "アップデート",
   "titlebar.updateVersion": "アップデート {{version}}",
 }
+import { STORAGE_FALLBACK } from "./storage"

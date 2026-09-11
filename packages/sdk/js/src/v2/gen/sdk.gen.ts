@@ -223,6 +223,20 @@ import type {
   SessionUnshareResponses,
   SessionUpdateErrors,
   SessionUpdateResponses,
+  StorageAnalyzeErrors,
+  StorageAnalyzeResponses,
+  StorageBackupErrors,
+  StorageBackupResponses,
+  StorageCheckpointErrors,
+  StorageCheckpointResponses,
+  StorageCompactErrors,
+  StorageCompactResponses,
+  StorageProgressErrors,
+  StorageProgressResponses,
+  StorageStatusErrors,
+  StorageStatusResponses,
+  StorageVacuumErrors,
+  StorageVacuumResponses,
   SubtaskPartInput,
   SyncHistoryListErrors,
   SyncHistoryListResponses,
@@ -1379,6 +1393,140 @@ export class Global extends HeyApiClient {
   private _config?: Config
   get config(): Config {
     return (this._config ??= new Config({ client: this.client }))
+  }
+}
+
+export class Storage extends HeyApiClient {
+  /**
+   * Get database storage status
+   *
+   * Get the database, WAL, shared-memory, allocation, and reusable-page sizes.
+   */
+  public status<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<StorageStatusResponses, StorageStatusErrors, ThrowOnError>({
+      url: "/global/storage",
+      ...options,
+    })
+  }
+
+  /**
+   * Get storage maintenance progress
+   *
+   * Get the current maintenance phase, completed work, total work, and worker count.
+   */
+  public progress<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<StorageProgressResponses, StorageProgressErrors, ThrowOnError>({
+      url: "/global/storage/progress",
+      ...options,
+    })
+  }
+
+  /**
+   * Analyze event history cleanup
+   *
+   * Analyze replay-safe superseded event snapshots without changing session history.
+   */
+  public analyze<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<StorageAnalyzeResponses, StorageAnalyzeErrors, ThrowOnError>({
+      url: "/global/storage/analyze",
+      ...options,
+    })
+  }
+
+  /**
+   * Create database backup
+   *
+   * Create and verify a consistent SQLite backup next to the active database.
+   */
+  public backup<ThrowOnError extends boolean = false>(
+    parameters?: {
+      confirmed?: true
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "confirmed" }] }])
+    return (options?.client ?? this.client).post<StorageBackupResponses, StorageBackupErrors, ThrowOnError>({
+      url: "/global/storage/backup",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Compact event history
+   *
+   * Create a verified backup, then replace replay-safe superseded event snapshots with checkpoints.
+   */
+  public compact<ThrowOnError extends boolean = false>(
+    parameters?: {
+      confirmed?: true
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "confirmed" }] }])
+    return (options?.client ?? this.client).post<StorageCompactResponses, StorageCompactErrors, ThrowOnError>({
+      url: "/global/storage/compact",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Checkpoint database WAL
+   *
+   * Checkpoint committed WAL frames and truncate the WAL when no reader prevents it.
+   */
+  public checkpoint<ThrowOnError extends boolean = false>(
+    parameters?: {
+      confirmed?: true
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "confirmed" }] }])
+    return (options?.client ?? this.client).post<StorageCheckpointResponses, StorageCheckpointErrors, ThrowOnError>({
+      url: "/global/storage/checkpoint",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Reclaim database file space
+   *
+   * Create a verified backup, rebuild the active SQLite database, and verify its integrity.
+   */
+  public vacuum<ThrowOnError extends boolean = false>(
+    parameters?: {
+      confirmed?: true
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "confirmed" }] }])
+    return (options?.client ?? this.client).post<StorageVacuumResponses, StorageVacuumErrors, ThrowOnError>({
+      url: "/global/storage/vacuum",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
   }
 }
 
@@ -7100,6 +7248,11 @@ export class OpencodeClient extends HeyApiClient {
   private _global?: Global
   get global(): Global {
     return (this._global ??= new Global({ client: this.client }))
+  }
+
+  private _storage?: Storage
+  get storage(): Storage {
+    return (this._storage ??= new Storage({ client: this.client }))
   }
 
   private _event?: Event
