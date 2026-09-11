@@ -344,6 +344,28 @@ describe("server session", () => {
     expect(store.data.session_message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
   })
 
+  test("projects summarized patches into the authoritative legacy message store", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const client = messageClient(response([{ info: user, parts: [] }]))
+    const store = createServerSession(client, {} as SessionApi, {} as MessageApi, { protocol: Promise.resolve("v1") })
+    store.remember(session("root"))
+    await store.sync("root")
+
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PATCH-CONTENT" }],
+      },
+    })
+
+    expect(store.data.message.root[0]?.role === "user" ? store.data.message.root[0].summary?.diffs[0]?.patch : undefined).toBe(
+      "PATCH-CONTENT",
+    )
+    expect(store.data.session_message.root[0]).toMatchObject({ id: user.id, type: "user" })
+  })
+
   test("backfills an assistant-only initial page through its user root", async () => {
     const user = userMessage("message-1")
     const assistants = [assistantMessage("message-2", user.id), assistantMessage("message-3", user.id)]

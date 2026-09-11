@@ -1060,6 +1060,22 @@ export function createServerSession(
           })
         return
       }
+      case "message.diff.updated": {
+        const props = event.properties as { sessionID: string; messageID: string; diffs: FileDiffInfo[] }
+        if (removedMessages.get(props.sessionID)?.has(props.messageID)) return
+        const messages = data.message[props.sessionID]
+        const index = messages?.findIndex((message) => message.id === props.messageID) ?? -1
+        const current = index >= 0 ? messages?.[index] : undefined
+        if (!current || current.role !== "user") {
+          void sync(props.sessionID, { force: true }).catch(() => {})
+          return
+        }
+        const info = cleanMessage({ ...current, summary: { ...current.summary, diffs: props.diffs } })
+        indexLegacyMessage(info)
+        messageLoads.get(props.sessionID)?.touchedMessages.add(props.messageID)
+        setData("message", props.sessionID, index, reconcile(info))
+        return
+      }
       case "message.removed": {
         const props = event.properties as { sessionID: string; messageID: string }
         setData("session_message", props.sessionID, (messages) =>
