@@ -40,6 +40,7 @@
     "./util/locale": "./src/util/locale.ts",
     "./util/persistence": "./src/util/persistence.ts",
     "./util/record": "./src/util/record.ts",
+    "./util/stdio-guard": "./src/util/stdio-guard.ts",
     "./logo": "./src/logo.ts",
     "./ui/dialog": "./src/ui/dialog.tsx",
     "./ui/spinner": "./src/ui/spinner.ts",

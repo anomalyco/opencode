@@ -1,15 +1,22 @@
-import { Server } from "@/server/server"
-import { InstanceRuntime } from "@/project/instance-runtime"
-import { Rpc } from "@/util/rpc"
+import { writeHeapSnapshot } from "node:v8"
+import path from "path"
+import { Effect } from "effect"
+import { Global } from "@opencode-ai/core/global"
+import { installStdioFileGuard } from "@opencode-ai/tui/util/stdio-guard"
+import { GlobalBus } from "@/bus/global"
+import { Heap } from "@/cli/heap"
 import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
-import { GlobalBus } from "@/bus/global"
-import { ServerAuth } from "@/server/auth"
-import { writeHeapSnapshot } from "node:v8"
-import { Heap } from "@/cli/heap"
 import { AppRuntime } from "@/effect/app-runtime"
-import { Effect } from "effect"
+import { InstanceRuntime } from "@/project/instance-runtime"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
+import { Server } from "@/server/server"
+import { ServerAuth } from "@/server/auth"
+import { Rpc } from "@/util/rpc"
+
+// Worker realms get their own `process` but share the terminal descriptors with the TUI on the main
+// thread, so server or plugin writes here would corrupt the frame. Lives as long as the worker.
+const restoreStdio = installStdioFileGuard(path.join(Global.Path.log, "stdio-worker.log"), { truncate: true })
 
 Heap.start()
 
@@ -74,6 +81,7 @@ export const rpc = {
     if (server) await server.stop(true)
     process.off("unhandledRejection", onUnhandledRejection)
     process.off("uncaughtException", onUncaughtException)
+    restoreStdio()
   },
 }
 
