@@ -1,7 +1,57 @@
 import { expect, test } from "@playwright/test"
 import { fixture } from "../performance/timeline/session-timeline-stress.fixture"
-import { mockStressTimeline, stressSessionHref } from "../performance/timeline/timeline-test-helpers"
+import {
+  installStressSessionTabs,
+  mockStressTimeline,
+  stressSessionHref,
+} from "../performance/timeline/timeline-test-helpers"
 import { openWithDirection } from "../utils/direction"
+
+for (const custom of [false, true]) {
+  test(`summary tooltip and ${custom ? "custom" : "default"} shortcut follow the active session`, async ({ page }) => {
+    await mockStressTimeline(page)
+    await installStressSessionTabs(page)
+    if (custom) {
+      await page.addInitScript(() => {
+        const settings = JSON.parse(localStorage.getItem("settings.v3") ?? "{}")
+        localStorage.setItem(
+          "settings.v3",
+          JSON.stringify({ ...settings, keybinds: { ...settings.keybinds, "session.summary.toggle": "f8" } }),
+        )
+      })
+    }
+    await page.goto(stressSessionHref(fixture.sourceID))
+    const trigger = page.getByRole("button", { name: "Session details", exact: true })
+    const summary = page.getByRole("dialog", { name: "Session details", exact: true })
+    await expect(trigger).toBeEnabled()
+    await trigger.hover()
+    const tooltip = page.getByRole("tooltip")
+    await expect(tooltip).toBeVisible()
+    await expect(tooltip).toContainText("Summary")
+    const mac = await page.evaluate(() => /(Mac|iPod|iPhone|iPad)/.test(navigator.platform))
+    const shortcut = custom ? "F8" : mac ? "Meta+Shift+Y" : "Control+Shift+Y"
+    await expect(tooltip.locator('[data-slot="keybind-v2-label"]')).toHaveText(
+      custom ? ["F8"] : mac ? ["⇧", "⌘", "Y"] : ["Ctrl", "Shift", "Y"],
+    )
+    for (const id of [fixture.sourceID, fixture.targetID, fixture.sourceID]) {
+      await page.locator(`[data-titlebar-tab-link][href="${stressSessionHref(id)}"]`).click()
+      await expect(
+        page.locator(
+          `[data-timeline-row="UserMessage"][data-message-id="${id === fixture.sourceID ? fixture.expected.sourceMessageIDs.at(-1) : fixture.expected.targetMessageIDs.at(-1)}"]`,
+        ),
+      ).toBeInViewport()
+      await page.keyboard.press(shortcut)
+      await expect(trigger).toHaveAttribute("aria-expanded", "true")
+      await expect(summary.getByRole("button", { name: "Server", exact: true })).toBeVisible()
+      await expect.poll(() => summary.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+      await expect(tooltip).toBeHidden()
+      await page.keyboard.press(shortcut)
+      await expect(trigger).toHaveAttribute("aria-expanded", "false")
+      await expect(summary).toBeHidden()
+      await expect(trigger).toBeFocused()
+    }
+  })
+}
 
 for (const layout of ["horizontal", "vertical"] as const) {
   test(`summary persists both disclosures across sessions with ${layout} tabs`, async ({ page }, testInfo) => {
