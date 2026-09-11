@@ -880,7 +880,10 @@ export function CurrentFileToolGroup(props: {
     props.tools.some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
   const render = ToolRegistry.render("patch") ?? GenericTool
-  const tool = createMemo(() => (props.tools[0]?.name === "edit" ? "edit" : "patch"))
+  const tool = createMemo(() => {
+    const name = props.tools[0]?.name
+    return name === "edit" || name === "write" ? name : "patch"
+  })
 
   return (
     <div
@@ -995,7 +998,7 @@ export const ToolRegistry = {
   render: getTool,
 }
 
-function FileTool(props: ToolProps & { title: string; count: number; children: JSX.Element }) {
+function FileTool(props: ToolProps & { title: string; count: number; children?: JSX.Element }) {
   const i18n = useI18n()
   return (
     <BasicTool
@@ -1979,6 +1982,13 @@ ToolRegistry.register({
     const fileComponent = useFileComponent()
     const files = createMemo(() => patchFileGroups(props.metadata.files))
     const [expanded, setExpanded] = createSignal<string[]>([])
+    const title = createMemo(() =>
+      props.tool === "edit"
+        ? i18n.t("ui.messagePart.title.edit")
+        : props.tool === "write"
+          ? i18n.t("ui.messagePart.title.write")
+          : i18n.t("ui.tool.patch"),
+    )
     const open = createMemo(() => {
       if (!props.fileOpen) return expanded()
       return files().flatMap((file) => (props.fileOpen?.(file.path) === true ? [file.path] : []))
@@ -1994,7 +2004,7 @@ ToolRegistry.register({
 
     return (
       <div data-component="apply-patch-tool">
-        <Show when={files().length > 0}>
+        <Show when={files().length > 0} fallback={<FileTool {...props} title={title()} count={0} />}>
           <FileAccordionGroup>
             <Index each={files()}>
               {(file) => {
