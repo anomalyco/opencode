@@ -1,4 +1,4 @@
-import { Context, Duration, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Context, Duration, Effect, Fiber, Layer, Ref, Schema, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
@@ -44,6 +44,8 @@ export interface RunResult {
   readonly outputTruncated?: boolean
   readonly stdoutTruncated: boolean
   readonly stderrTruncated: boolean
+  /** Set when the run settled because the timeout elapsed; buffers then hold whatever was captured before it. */
+  readonly timedOut?: boolean
 }
 
 export type Interface = ChildProcessSpawner["Service"] & {
@@ -136,6 +138,24 @@ export const collectStream = (stream: Stream.Stream<Uint8Array, PlatformError>, 
     },
   ).pipe(Effect.map((x) => ({ buffer: Buffer.concat(x.chunks), truncated: x.truncated })))
 
+const recordChunk = (
+  state: { chunks: Uint8Array[]; bytes: number; truncated: boolean },
+  chunk: Uint8Array,
+  maxOutputBytes: number | undefined,
+) => {
+  const chunks = [...state.chunks]
+  let bytes = state.bytes
+  if (maxOutputBytes === undefined) {
+    chunks.push(chunk)
+    bytes += chunk.length
+    return { chunks, bytes, truncated: state.truncated }
+  }
+  const remaining = maxOutputBytes - bytes
+  if (remaining > 0) chunks.push(remaining >= chunk.length ? chunk : chunk.slice(0, remaining))
+  bytes += chunk.length
+  return { chunks, bytes, truncated: state.truncated || bytes > maxOutputBytes }
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -147,20 +167,53 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const handle = yield* spawner.spawn(command)
           if (options?.combineOutput) {
-            const [output, exitCode] = yield* Effect.all(
-              [collectStream(handle.all, options.maxOutputBytes), handle.exitCode],
+            // Mirror every captured chunk into a ref so a timeout settlement can
+            // still report the output produced before the deadline.
+            const partial = yield* Ref.make({ chunks: [] as Uint8Array[], bytes: 0, truncated: false })
+            const finish = Effect.all(
+              [
+                collectStream(
+                  Stream.tap(handle.all, (chunk) =>
+                    Ref.update(partial, (state) => recordChunk(state, chunk, options.maxOutputBytes)),
+                  ),
+                  options.maxOutputBytes,
+                ),
+                handle.exitCode,
+              ],
               { concurrency: "unbounded" },
+            ).pipe(
+              Effect.map(
+                ([output, exitCode]) =>
+                  ({
+                    command: description,
+                    exitCode,
+                    output: output.buffer,
+                    stdout: Buffer.alloc(0),
+                    stderr: Buffer.alloc(0),
+                    outputTruncated: output.truncated,
+                    stdoutTruncated: false,
+                    stderrTruncated: false,
+                  }) satisfies RunResult,
+              ),
             )
-            return {
-              command: description,
-              exitCode,
-              output: output.buffer,
-              stdout: Buffer.alloc(0),
-              stderr: Buffer.alloc(0),
-              outputTruncated: output.truncated,
-              stdoutTruncated: false,
-              stderrTruncated: false,
-            } satisfies RunResult
+            if (!options.timeout) return yield* finish
+            const expired = Effect.andThen(Effect.sleep(options.timeout), () =>
+              Effect.map(Ref.get(partial), (state) => {
+                const output = Buffer.concat(state.chunks)
+                return {
+                  command: description,
+                  exitCode: -1,
+                  output,
+                  stdout: Buffer.alloc(0),
+                  stderr: Buffer.alloc(0),
+                  outputTruncated: state.truncated,
+                  stdoutTruncated: false,
+                  stderrTruncated: false,
+                  timedOut: true,
+                } satisfies RunResult
+              }),
+            )
+            return yield* Effect.raceFirst(finish, expired)
           }
           const [stdout, stderr, exitCode] = yield* Effect.all(
             [
@@ -180,12 +233,13 @@ const layer = Layer.effect(
           } satisfies RunResult
         }),
       )
-      const timed = options?.timeout
-        ? Effect.timeoutOrElse(collect, {
-            duration: options.timeout,
-            orElse: () => Effect.fail(new AppProcessError({ command: description, cause: new Error("Timed out") })),
-          })
-        : collect
+      const timed =
+        options?.timeout && !options.combineOutput
+          ? Effect.timeoutOrElse(collect, {
+              duration: options.timeout,
+              orElse: () => Effect.fail(new AppProcessError({ command: description, cause: new Error("Timed out") })),
+            })
+          : collect
       const aborted = options?.signal
         ? timed.pipe(
             Effect.raceFirst(
