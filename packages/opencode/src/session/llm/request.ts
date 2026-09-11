@@ -98,18 +98,22 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   }
   if (isOpenaiOauth) options.instructions = system.join("\n")
 
-  const messages =
-    isOpenaiOauth || input.isWorkflow
-      ? input.messages
-      : [
-          ...system.map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
-          ),
-          ...input.messages,
+  const systemMessages =
+    input.model.api.npm === "@ai-sdk/openai-compatible" && system.length > 1
+      ? [
+          {
+            role: "system" as const,
+            content: system.join("\n"),
+          },
         ]
+      : system.map(
+          (x): ModelMessage => ({
+            role: "system",
+            content: x,
+          }),
+        )
+
+  const messages = isOpenaiOauth || input.isWorkflow ? input.messages : [...systemMessages, ...input.messages]
 
   const params = yield* input.plugin.trigger(
     "chat.params",
