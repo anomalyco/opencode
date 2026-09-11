@@ -5,6 +5,7 @@ export const dict = {
   "command.category.provider": "Udbyder",
   "command.category.server": "Server",
   "command.category.session": "Session",
+  "command.category.session.archived": "Arkiverede",
   "command.category.theme": "Tema",
   "command.category.language": "Sprog",
   "command.category.file": "Fil",
@@ -34,6 +35,7 @@ export const dict = {
   "command.session.previous.unseen": "Forrige ulæste session",
   "command.session.next.unseen": "Næste ulæste session",
   "command.session.archive": "Arkivér session",
+  "command.session.unarchive": "Fjern session fra arkiv",
 
   "command.palette": "Kommandopalette",
 
@@ -748,6 +750,7 @@ export const dict = {
   "common.export": "Eksportér",
   "common.reset": "Nulstil",
   "common.archive": "Arkivér",
+  "common.unarchive": "Fjern fra arkiv",
   "common.delete": "Slet",
   "common.close": "Luk",
   "common.edit": "Rediger",

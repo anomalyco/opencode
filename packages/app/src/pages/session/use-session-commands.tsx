@@ -76,6 +76,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (!id) return
     return sync().session.get(id)
   }
+  // ArchivedTimestamp permits 0 and negative values, so test presence.
+  const isArchived = () => typeof info()?.time?.archived === "number"
   const hasReview = () => !!params.id
   const normalizeTab = (tab: string) => {
     if (!tab.startsWith("file://")) return tab
@@ -503,10 +505,21 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       id: "session.archive",
       title: language.t("command.session.archive"),
       keybind: "mod+shift+backspace",
-      disabled: !params.id,
+      // Only one of archive/unarchive applies to the current session, so the
+      // palette offers whichever matches its state rather than both.
+      disabled: !params.id || isArchived(),
       onSelect: () => {
         const id = params.id
         if (id) void sessionArchive.archive(id)
+      },
+    }),
+    sessionCommand({
+      id: "session.unarchive",
+      title: language.t("command.session.unarchive"),
+      disabled: !params.id || !isArchived(),
+      onSelect: () => {
+        const id = params.id
+        if (id) void sessionArchive.unarchive(id)
       },
     }),
   ]

@@ -146,9 +146,11 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
     server: ServerConnection.key(serverSDK.server),
     opened: serverCtx.projects.list,
     stored: () => serverCtx.sync.data.project,
-    load: (search, signal) => serverSDK.api.session.list({ parentID: null, search, limit: 50 }, { signal }),
+    load: (search, signal) =>
+      serverSDK.api.session.list({ parentID: null, search, limit: 50, archived: true }, { signal }),
     untitled: () => language.t("command.session.new"),
     category: () => language.t("command.category.session"),
+    archivedCategory: () => language.t("command.category.session.archived"),
   })
 
   const highlight = (item: CommandPaletteEntry | undefined) => {
@@ -223,6 +225,7 @@ export function createServerSessionEntries(props: {
   load: (search: string, signal: AbortSignal) => Promise<{ data: SessionInfo[] }>
   untitled: () => string
   category: () => string
+  archivedCategory: () => string
 }) {
   let abort: AbortController | undefined
 
@@ -258,23 +261,27 @@ export function createServerSessionEntries(props: {
       .then((result) =>
         result.data
           .map(normalizeSessionInfo)
-          .filter((session) => !session.time.archived)
           .map((session) => {
             const project =
               projectForSession(session, opened, openedByID) ?? projectForSession(session, stored, storedByID)
+            const archived = typeof session.time.archived === "number" ? session.time.archived : undefined
             return {
               id: `session:${props.server}:${session.id}`,
               type: "session" as const,
               title: session.title || props.untitled(),
               description: project ? displayName(project) : getFilename(session.directory),
-              category: props.category(),
+              category: archived ? props.archivedCategory() : props.category(),
               directory: session.directory,
               sessionID: session.id,
               server: props.server,
               project,
               updated: session.time.updated,
+              archived,
             }
-          }),
+          })
+          // Keep archived matches after active ones so a search never buries a
+          // live session beneath restored-from-archive results.
+          .sort((a, b) => Number(!!a.archived) - Number(!!b.archived)),
       )
       .catch(() => [] as CommandPaletteEntry[])
   }

@@ -70,5 +70,20 @@ export function useSessionArchive() {
       })
   }
 
-  return { archive, navigateAfterRemoval }
+  const unarchive = async (sessionID: string) => {
+    if ((await sdk().protocol) !== "v1") return
+
+    // Omitting `archived` clears the timestamp. The request body serializes to
+    // {"time":{}}, which the server reads as "clear the archive state".
+    await sdk()
+      .client.session.update({ sessionID, directory: sdk().directory, time: {} })
+      .catch((err) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: errorMessage(err, language.t("common.requestFailed")),
+        })
+      })
+  }
+
+  return { archive, unarchive, navigateAfterRemoval }
 }

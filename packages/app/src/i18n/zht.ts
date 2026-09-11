@@ -107,6 +107,7 @@ export const dict = {
   "command.category.provider": "提供者",
   "command.category.server": "伺服器",
   "command.category.session": "工作階段",
+  "command.category.session.archived": "已封存",
   "command.category.theme": "主題",
   "command.category.language": "語言",
   "command.category.file": "檔案",
@@ -137,6 +138,7 @@ export const dict = {
   "command.session.previous.unseen": "上一個未讀工作階段",
   "command.session.next.unseen": "下一個未讀工作階段",
   "command.session.archive": "封存工作階段",
+  "command.session.unarchive": "取消封存工作階段",
 
   "command.palette": "命令面板",
 
@@ -851,6 +853,7 @@ export const dict = {
   "common.export": "匯出",
   "common.reset": "重設",
   "common.archive": "封存",
+  "common.unarchive": "取消封存",
   "common.delete": "刪除",
   "common.close": "關閉",
   "common.edit": "編輯",

@@ -1546,9 +1546,18 @@ export function MessageTimeline(props: {
                                 <DropdownMenu.Item onSelect={() => exportSession(id)}>
                                   <DropdownMenu.ItemLabel>{language.t("common.export")}</DropdownMenu.ItemLabel>
                                 </DropdownMenu.Item>
-                                <DropdownMenu.Item onSelect={() => void sessionArchive.archive(id)}>
-                                  <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
-                                </DropdownMenu.Item>
+                                <Show
+                                  when={typeof info()?.time?.archived === "number"}
+                                  fallback={
+                                    <DropdownMenu.Item onSelect={() => void sessionArchive.archive(id)}>
+                                      <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
+                                    </DropdownMenu.Item>
+                                  }
+                                >
+                                  <DropdownMenu.Item onSelect={() => void sessionArchive.unarchive(id)}>
+                                    <DropdownMenu.ItemLabel>{language.t("common.unarchive")}</DropdownMenu.ItemLabel>
+                                  </DropdownMenu.Item>
+                                </Show>
                                 <DropdownMenu.Separator />
                                 <DropdownMenu.Item
                                   onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id} />)}
@@ -1620,9 +1629,18 @@ export function MessageTimeline(props: {
                               <MenuV2.Item onSelect={() => exportSession(id)}>
                                 {language.t("common.export")}...
                               </MenuV2.Item>
-                              <MenuV2.Item onSelect={() => void sessionArchive.archive(id)}>
-                                {language.t("common.archive")}
-                              </MenuV2.Item>
+                              <Show
+                                when={typeof info()?.time?.archived === "number"}
+                                fallback={
+                                  <MenuV2.Item onSelect={() => void sessionArchive.archive(id)}>
+                                    {language.t("common.archive")}
+                                  </MenuV2.Item>
+                                }
+                              >
+                                <MenuV2.Item onSelect={() => void sessionArchive.unarchive(id)}>
+                                  {language.t("common.unarchive")}
+                                </MenuV2.Item>
+                              </Show>
                               <MenuV2.Separator />
                               <MenuV2.Item onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id} />)}>
                                 {language.t("common.delete")}...

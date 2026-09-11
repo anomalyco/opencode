@@ -107,6 +107,7 @@ export const dict = {
   "command.category.provider": "Leverandør",
   "command.category.server": "Server",
   "command.category.session": "Sesjon",
+  "command.category.session.archived": "Arkivert",
   "command.category.theme": "Tema",
   "command.category.language": "Språk",
   "command.category.file": "Fil",
@@ -134,6 +135,7 @@ export const dict = {
   "command.session.previous.unseen": "Forrige uleste sesjon",
   "command.session.next.unseen": "Neste uleste sesjon",
   "command.session.archive": "Arkiver sesjon",
+  "command.session.unarchive": "Hent økt fra arkiv",
 
   "command.palette": "Kommandopalett",
 
@@ -736,6 +738,7 @@ export const dict = {
   "common.export": "Eksporter",
   "common.reset": "Tilbakestill",
   "common.archive": "Arkiver",
+  "common.unarchive": "Hent fra arkiv",
   "common.delete": "Slett",
   "common.close": "Lukk",
   "common.edit": "Rediger",
