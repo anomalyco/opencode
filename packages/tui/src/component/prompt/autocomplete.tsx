@@ -12,7 +12,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiPaths } from "../../context/runtime"
 import { useConfig } from "../../config"
 import { useLocation } from "../../context/location"
-import { useTheme, useThemes } from "../../context/theme"
+import { useTheme } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "../../util/locale"
@@ -44,7 +44,7 @@ export type AutocompleteOption = {
   path?: string
   absolute?: string
   destructive?: { id: string; confirm: string; run: () => void }
-  kind?: "skill" | "agent" | "file" | "directory" | "reference" | "resource"
+  kind?: "skill" | "agent" | "file" | "directory" | "reference"
   queueable?: boolean
 }
 
@@ -78,7 +78,6 @@ export function Autocomplete(props: {
   const keymap = Keymap.use()
   const keymapCommands = Keymap.useCommands()
   const theme = useTheme("overlay")
-  const themes = useThemes()
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
   const config = useConfig().data
@@ -407,36 +406,6 @@ export function Autocomplete(props: {
     return { options: [], failed: false, query: "", resolved: false }
   })
 
-  const mcpResources = createMemo(() => {
-    if (store.visible !== "reference") return []
-
-    const options: AutocompleteOption[] = []
-    const width = props.anchor().width - 4
-
-    for (const res of data.location.mcp.resource.list(location.current) ?? []) {
-      options.push({
-        display: Locale.truncateMiddle(res.name, width),
-        kind: "resource",
-        // Match the name only; matching the URI caused unrelated fuzzy hits.
-        value: res.name,
-        description: res.description,
-        onSelect: () => {
-          insertPart(res.name, {
-            type: "file",
-            value: {
-              uri: res.uri,
-              name: res.name,
-              description: res.description,
-              mention: { start: 0, end: 0, text: "" },
-            },
-          })
-        },
-      })
-    }
-
-    return options
-  })
-
   const agents = createMemo(() => {
     return (data.location.agent.list() ?? [])
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
@@ -585,7 +554,7 @@ export function Autocomplete(props: {
     const fileOptions: AutocompleteOption[] = store.visible === "reference" ? fileSearch.options : []
     const nonFileOptions: AutocompleteOption[] =
       store.visible === "reference"
-        ? [...skillOptions(), ...referenceAliasesValue, ...agentsValue, ...mcpResources()]
+        ? [...skillOptions(), ...referenceAliasesValue, ...agentsValue]
         : store.index === 0
           ? [...commandsValue]
           : []
@@ -893,7 +862,6 @@ export function Autocomplete(props: {
     file: "File",
     directory: "Dir",
     reference: "Reference",
-    resource: "MCP",
   }
 
   return (
@@ -931,12 +899,6 @@ export function Autocomplete(props: {
             const label = () => {
               const kind = option().kind
               return kind ? labels[kind] : undefined
-            }
-            const labelColor = () => {
-              if (index === store.selected) return theme.text.action.primary.focused
-              const kind = option().kind
-              const scope = kind === "skill" ? "extmark.skill" : kind === "agent" ? "extmark.agent" : "extmark.file"
-              return themes.currentSyntax().getStyle(scope)?.fg ?? theme.text.subdued
             }
             const contentWidth = () => {
               const text = label()
@@ -990,7 +952,10 @@ export function Autocomplete(props: {
                 </Show>
                 <Show when={!confirmingAction() && label()}>
                   <box flexGrow={1} minWidth={2} />
-                  <text flexShrink={0} fg={labelColor()}>
+                  <text
+                    flexShrink={0}
+                    fg={index === store.selected ? theme.text.action.primary.focused : theme.text.subdued}
+                  >
                     {label()}
                   </text>
                 </Show>
