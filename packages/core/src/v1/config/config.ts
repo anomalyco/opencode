@@ -127,6 +127,20 @@ export const Info = Schema.Struct({
   layout: Schema.optional(ConfigLayoutV1.Layout).annotate({ description: "@deprecated Always uses stretch layout." }),
   permission: Schema.optional(ConfigPermissionV1.Info),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
+  websearch: Schema.optional(
+    Schema.Struct({
+      enabled: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Enable the native websearch tool for all model providers (default: true). Set to false to hide the tool entirely",
+      }),
+      provider: Schema.optional(Schema.Literals(["auto", "exa", "parallel"])).annotate({
+        description:
+          "Web search backend. 'auto' picks a backend per session; 'exa' or 'parallel' pins that backend for every call",
+      }),
+    }),
+  ).annotate({
+    description: "Native web search tool configuration, see https://opencode.ai/docs/tools",
+  }),
   attachment: Schema.optional(ConfigAttachmentV1.Info).annotate({
     description: "Attachment processing configuration, including image size limits and resizing behavior",
   }),
