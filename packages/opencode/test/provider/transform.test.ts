@@ -625,6 +625,47 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
     expect(result.textVerbosity).toBeUndefined()
   })
+
+  test("gpt-6-astra should have textVerbosity set to low (dotless gpt-6+ id)", () => {
+    const model = createGpt5Model("gpt-6-astra")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBe("low")
+  })
+
+  test("gpt-5.6-luna should have textVerbosity set to low (dotted path unchanged)", () => {
+    const model = createGpt5Model("gpt-5.6-luna")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBe("low")
+  })
+
+  test("gpt-5-pro should NOT have textVerbosity set (no minor version)", () => {
+    const model = createGpt5Model("gpt-5-pro")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+
+  test("gpt-5.3-codex-spark should NOT have textVerbosity set (codex models excluded)", () => {
+    const model = createGpt5Model("gpt-5.3-codex-spark")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+
+  test("gpt-6-chat should NOT have textVerbosity set (chat excluded, same as gpt-5-chat)", () => {
+    const model = createGpt5Model("gpt-6-chat")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+
+  // gpt-6-pro DOES get textVerbosity: the "-pro" guard only withholds the
+  // inner reasoningEffort/reasoningSummary/include options, never
+  // textVerbosity. This matches the existing gpt-5.2-pro precedent (a dotted
+  // -pro id also gets textVerbosity="low"); only the dotless gpt-5-pro lacks
+  // it, because it has no minor version at all.
+  test("gpt-6-pro should have textVerbosity set to low (matches dotted -pro precedent)", () => {
+    const model = createGpt5Model("gpt-6-pro")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBe("low")
+  })
 })
 
 describe("ProviderTransform.options - gpt-5 reasoningEffort", () => {
@@ -714,6 +755,42 @@ describe("ProviderTransform.options - gpt-5 reasoningEffort", () => {
 
     expect(result.reasoningEffort).toBe("medium")
   })
+
+  // Pins the gpt version gate outcomes for dotless ids (e.g. gpt-6-astra) alongside
+  // the existing dotted ids, so a future family only shifts the ids it should.
+  // Only gpt-6-astra changes: azure+useCompletionUrls medium true->false,
+  // responses-path medium false->true.
+  // gpt-6-chat and gpt-6-pro pin the generalized (major-templated) chat/pro
+  // exclusions: both are correctly excluded from the responses-path block,
+  // same as gpt-5-chat/gpt-5-pro. Their completions-path value differs from
+  // the 5.x rows because isGpt55OrNewer (a separate, already-correct gate)
+  // is true for any major > 5.
+  test.each([
+    ["gpt-6-astra", false, true],
+    ["gpt-5.6-luna", false, true],
+    ["gpt-5.3-codex-spark", true, true],
+    ["gpt-5-pro", true, false],
+    ["gpt-5-chat", true, false],
+    ["gpt-6-chat", false, false],
+    ["gpt-6-pro", false, false],
+  ])(
+    "%s: azure completions medium=%s, responses medium=%s",
+    (apiId, completionsSetsMedium, responsesSetsMedium) => {
+      const completionsResult = ProviderTransform.options({
+        model: createModel(apiId),
+        sessionID,
+        providerOptions: { useCompletionUrls: true },
+      })
+      expect(completionsResult.reasoningEffort === "medium").toBe(completionsSetsMedium)
+
+      const responsesResult = ProviderTransform.options({
+        model: createModel(apiId),
+        sessionID,
+        providerOptions: {},
+      })
+      expect(responsesResult.reasoningEffort === "medium").toBe(responsesSetsMedium)
+    },
+  )
 })
 
 describe("ProviderTransform.options - gateway", () => {
