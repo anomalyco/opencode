@@ -1,4 +1,4 @@
-Control a headless Chromium browser. Use it to open pages (including local dev servers), see what they look like, and interact with them the way a user would be able to. Screenshots are returned as image attachments so you can actually look at the page.
+Control a Chromium browser (Chrome, Chromium, or Edge). Use it to open pages (including local dev servers), see what they look like, and interact with them the way a user would be able to. Screenshots are returned as image attachments so you can actually look at the page.
 
 Typical loop while building or reviewing a UI:
 1. Start the dev server with bash.
@@ -17,4 +17,6 @@ Actions:
 - `back` / `forward` / `reload`: navigate the current page.
 - `close`: close the browser. It also shuts down automatically after 10 minutes of inactivity.
 
-Every action that changes the page returns a new screenshot. The browser is headless and runs in its own temporary profile, so it does not touch the profile of any browser you have open. Chrome, Chromium, or Edge must be installed; set `OPENCODE_BROWSER_PATH` to use a specific binary.
+Every action that changes the page returns a new screenshot. The browser runs in its own temporary profile, so it does not touch the profile of any browser you have open.
+
+By default the browser opens with a visible window when a display is available, so the user can watch it work. Pass `headless: true` to run without a window, or set `OPENCODE_BROWSER_HEADLESS=1` to always run headless. Chrome, Chromium, or Edge must be installed; set `OPENCODE_BROWSER_PATH` to use a specific binary.

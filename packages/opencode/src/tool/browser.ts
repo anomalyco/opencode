@@ -42,6 +42,10 @@ export const Parameters = Schema.Struct({
   fullPage: Schema.optional(Schema.Boolean).annotate({
     description: "Capture the full scrollable page with `screenshot`",
   }),
+  headless: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Hide the browser window. Defaults to false when a display is available, true otherwise. `OPENCODE_BROWSER_HEADLESS=1` forces headless.",
+  }),
   deltaX: Schema.optional(Schema.Number).annotate({ description: "Horizontal scroll amount for `scroll`" }),
   deltaY: Schema.optional(Schema.Number).annotate({
     description: "Vertical scroll amount for `scroll` (default 500)",
@@ -68,6 +72,7 @@ interface Browser {
   directory: string
   connection: Connection
   session: string
+  headless: boolean
   idle: ReturnType<typeof setTimeout> | undefined
 }
 
@@ -118,6 +123,18 @@ export function normalizeUrl(input: string) {
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(value) || /^(about|data|blob|view-source):/i.test(value)) return value
   if (value.startsWith("/")) return `file://${value}`
   return `http://${value}`
+}
+
+export function resolveHeadless(
+  input?: boolean,
+  env: Record<string, string | undefined> = process.env,
+  platform: NodeJS.Platform = process.platform,
+) {
+  if (input !== undefined) return input
+  const configured = env.OPENCODE_BROWSER_HEADLESS
+  if (configured !== undefined) return configured !== "0" && configured.toLowerCase() !== "false"
+  if (platform === "linux") return !(env.DISPLAY || env.WAYLAND_DISPLAY)
+  return false
 }
 
 const KEYS: Record<string, { code: string; keyCode: number; key?: string; text?: string }> = {
@@ -252,13 +269,13 @@ function connect(url: string) {
   })
 }
 
-async function launch(): Promise<Browser> {
+async function launch(headless: boolean): Promise<Browser> {
   const binary = resolveBrowser()
   const directory = await mkdtemp(path.join(os.tmpdir(), "opencode-browser-"))
   const child = Bun.spawn(
     [
       binary,
-      "--headless=new",
+      ...(headless ? ["--headless=new"] : []),
       "--disable-gpu",
       "--disable-dev-shm-usage",
       "--disable-extensions",
@@ -306,20 +323,29 @@ async function launch(): Promise<Browser> {
     targetId: target.targetId,
     flatten: true,
   })
-  const browser: Browser = { process: child, directory, connection, session: attached.sessionId, idle: undefined }
+  const browser: Browser = {
+    process: child,
+    directory,
+    connection,
+    session: attached.sessionId,
+    headless,
+    idle: undefined,
+  }
   await page(browser, "Page.enable")
   await page(browser, "Runtime.enable")
   return browser
 }
 
-async function ensureBrowser(): Promise<Browser> {
-  if (current && !current.connection.closed) {
+async function ensureBrowser(headless?: boolean): Promise<Browser> {
+  // Reuse the running browser unless the caller explicitly asks for a
+  // different mode, so a session does not bounce between windowed and hidden.
+  if (current && !current.connection.closed && (headless === undefined || current.headless === headless)) {
     touch(current)
     return current
   }
-  current = undefined
+  if (current) await shutdown(current)
   if (!launching) {
-    launching = launch().finally(() => {
+    launching = launch(headless ?? resolveHeadless()).finally(() => {
       launching = undefined
     })
   }
@@ -577,7 +603,7 @@ export const BrowserTool = Tool.define(
               if (params.action === "close" && !current) {
                 return { title: "Browser closed", output: "No browser was running.", metadata: {} }
               }
-              const browser = await ensureBrowser()
+              const browser = await ensureBrowser(params.headless)
               return execute(browser, params)
             },
             catch: (error) => (error instanceof Error ? error : new Error(String(error))),

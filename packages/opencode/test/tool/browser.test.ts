@@ -5,7 +5,7 @@ import path from "path"
 import { Effect } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { Truncate } from "@/tool/truncate"
-import { BrowserTool, browserCandidates, normalizeUrl, parseKey } from "../../src/tool/browser"
+import { BrowserTool, browserCandidates, normalizeUrl, parseKey, resolveHeadless } from "../../src/tool/browser"
 import { MessageID, SessionID } from "../../src/session/schema"
 import type { Tool } from "../../src/tool/tool"
 import { testEffect } from "../lib/effect"
@@ -97,6 +97,24 @@ describe("tool.browser", () => {
     )
   })
 
+  test("resolveHeadless prefers the explicit argument", () => {
+    expect(resolveHeadless(true, {})).toBe(true)
+    expect(resolveHeadless(false, { OPENCODE_BROWSER_HEADLESS: "1" })).toBe(false)
+  })
+
+  test("resolveHeadless honors the environment override", () => {
+    expect(resolveHeadless(undefined, { OPENCODE_BROWSER_HEADLESS: "1" })).toBe(true)
+    expect(resolveHeadless(undefined, { OPENCODE_BROWSER_HEADLESS: "0" })).toBe(false)
+    expect(resolveHeadless(undefined, { OPENCODE_BROWSER_HEADLESS: "false" })).toBe(false)
+  })
+
+  test("resolveHeadless shows the window when a display is available", () => {
+    expect(resolveHeadless(undefined, {}, "darwin")).toBe(false)
+    expect(resolveHeadless(undefined, { DISPLAY: ":0" }, "linux")).toBe(false)
+    expect(resolveHeadless(undefined, { WAYLAND_DISPLAY: "wayland-0" }, "linux")).toBe(false)
+    expect(resolveHeadless(undefined, {}, "linux")).toBe(true)
+  })
+
   const integration = hasBrowser ? it.instance : it.instance.skip
   integration(
     "opens a page, reads it, and captures screenshots",
@@ -105,7 +123,7 @@ describe("tool.browser", () => {
         const info = yield* BrowserTool
         const tool = yield* info.init()
         const page = "data:text/html,<title>Hello</title><h1>Hi there</h1><a href=%22about:blank%22>link</a>"
-        const opened = yield* tool.execute({ action: "open", url: page }, ctx)
+        const opened = yield* tool.execute({ action: "open", url: page, headless: true }, ctx)
         expect(opened.attachments?.length).toBe(1)
         expect(opened.attachments?.[0].mime).toBe("image/jpeg")
         expect(opened.attachments?.[0].url.startsWith("data:image/jpeg;base64,")).toBe(true)
