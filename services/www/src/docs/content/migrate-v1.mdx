@@ -399,7 +399,10 @@ See [Models](/models) for the complete native model shape.
 ### Supported fields without direct native equivalents
 
 Most fields that keep the same shape, including `shell`, `model`, `default_agent`, `watcher`, `formatter`,
-`lsp`, `instructions`, `enterprise`, and `tool_output`, require no migration.
+`instructions`, `enterprise`, and `tool_output`, require no migration.
+
+V2 accepts and preserves `lsp` configuration, but it does not run language servers, expose LSP tools, or produce LSP
+diagnostics. Replace workflows that depend on those capabilities with the project's lint, typecheck, or compiler commands.
 
 The V1 provider filters do not have one-to-one native V2 config fields, but their behavior remains supported:
 
