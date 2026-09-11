@@ -16,6 +16,7 @@ import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migrat
 import contextEpochAgentMigration from "@opencode-ai/core/database/migration/20260605042240_add_context_epoch_agent"
 import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
 import simplifySessionInputMigration from "@opencode-ai/core/database/migration/20260622202450_simplify_session_input"
+import restoreWorkspaceProjectIdMigration from "@opencode-ai/core/database/migration/20260812235900_restore_workspace_project_id"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -157,6 +158,52 @@ describe("DatabaseMigration", () => {
           { name: "session_message_session_seq_idx" },
           { name: "session_message_session_time_created_id_idx" },
           { name: "session_message_session_type_seq_idx" },
+        ])
+      }),
+    )
+  })
+
+  test("rebuilds workspace tables that are missing project_id", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`
+          CREATE TABLE workspace (
+            id text PRIMARY KEY,
+            provider text NOT NULL,
+            binding text NOT NULL,
+            created_at integer NOT NULL,
+            last_used_at integer NOT NULL
+          )
+        `)
+
+        yield* DatabaseMigration.applyOnly(db, [restoreWorkspaceProjectIdMigration])
+
+        expect(
+          (yield* db.all<{ name: string }>(sql`PRAGMA table_info(workspace)`)).map((column) => column.name),
+        ).toEqual(["id", "type", "name", "branch", "directory", "extra", "project_id", "time_used"])
+      }),
+    )
+  })
+
+  test("leaves workspace tables that already have project_id unchanged", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`
+          CREATE TABLE workspace (
+            id text PRIMARY KEY,
+            type text NOT NULL,
+            project_id text NOT NULL,
+            time_used integer NOT NULL
+          )
+        `)
+        yield* db.run(sql`INSERT INTO workspace (id, type, project_id, time_used) VALUES ('wrk', 'local', 'proj', 1)`)
+
+        yield* DatabaseMigration.applyOnly(db, [restoreWorkspaceProjectIdMigration])
+
+        expect(yield* db.all(sql`SELECT id, type, project_id FROM workspace`)).toEqual([
+          { id: "wrk", type: "local", project_id: "proj" },
         ])
       }),
     )
