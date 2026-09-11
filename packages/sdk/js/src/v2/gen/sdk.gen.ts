@@ -6,6 +6,10 @@ import type {
   AgentPartInput,
   AppAgentsErrors,
   AppAgentsResponses,
+  AppDisableSkillErrors,
+  AppDisableSkillResponses,
+  AppEnableSkillErrors,
+  AppEnableSkillResponses,
   AppLogErrors,
   AppLogResponses,
   AppSkillsErrors,
@@ -608,6 +612,70 @@ export class App extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<AppSkillsResponses, AppSkillsErrors, ThrowOnError>({
       url: "/skill",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Enable skill
+   *
+   * Enable a skill by name.
+   */
+  public enableSkill<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<AppEnableSkillResponses, AppEnableSkillErrors, ThrowOnError>({
+      url: "/skill/{name}/enable",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Disable skill
+   *
+   * Disable a skill by name.
+   */
+  public disableSkill<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<AppDisableSkillResponses, AppDisableSkillErrors, ThrowOnError>({
+      url: "/skill/{name}/disable",
       ...options,
       ...params,
     })

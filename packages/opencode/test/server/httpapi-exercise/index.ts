@@ -142,6 +142,60 @@ const scenarios: Scenario[] = [
   http.protected.get("/command", "command.list").json(200, array, "status"),
   http.protected.get("/agent", "app.agents").json(200, array, "status"),
   http.protected.get("/skill", "app.skills").json(200, array, "status"),
+  // Note: seed as an external skill (`.claude/skills`) rather than a project
+  // skill (`.opencode/skills`): the project config directory list is snapshotted
+  // when the instance boots (before the seed runs), while external skills are
+  // scanned on first access and pick up the seeded file.
+  http.protected
+    .post("/skill/{name}/disable", "app.disableSkill")
+    .mutating()
+    .seeded((ctx) =>
+      ctx.file(
+        ".claude/skills/exercise-skill/SKILL.md",
+        `---
+name: exercise-skill
+description: A skill for the exercise harness.
+---
+
+# Exercise Skill
+`,
+      ),
+    )
+    .at((ctx) => ({ path: route("/skill/{name}/disable", { name: "exercise-skill" }), headers: ctx.headers() }))
+    .json(
+      200,
+      (body) => {
+        check(body === true, "disabling an existing skill should return true")
+      },
+      "status",
+    ),
+  http.protected
+    .post("/skill/{name}/enable", "app.enableSkill")
+    .mutating()
+    .seeded((ctx) =>
+      ctx.file(
+        ".claude/skills/exercise-skill/SKILL.md",
+        `---
+name: exercise-skill
+description: A skill for the exercise harness.
+---
+
+# Exercise Skill
+`,
+      ),
+    )
+    .at((ctx) => ({ path: route("/skill/{name}/enable", { name: "exercise-skill" }), headers: ctx.headers() }))
+    .json(
+      200,
+      (body) => {
+        check(body === true, "enabling an existing skill should return true")
+      },
+      "status",
+    ),
+  http.protected
+    .post("/skill/{name}/disable", "app.disableSkill.missing")
+    .at((ctx) => ({ path: route("/skill/{name}/disable", { name: "httpapi-missing" }), headers: ctx.headers() }))
+    .json(404, object, "status"),
   http.protected.get("/lsp", "lsp.status").json(200, array),
   http.protected.get("/formatter", "formatter.status").json(200, array),
   http.protected.get("/config", "config.get").json(200, undefined, "status"),
