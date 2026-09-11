@@ -164,5 +164,5 @@ test("multiple desktop connections show the session's server name", async ({ pag
     "aria-expanded",
     "true",
   )
-  await expect(summary.getByRole("button", { name: "Server", exact: true })).toHaveCount(0)
+  await expect(summary.getByRole("button", { name: "Extensions", exact: true })).toHaveCount(0)
 })

@@ -3,10 +3,10 @@ import { fixture } from "../performance/timeline/session-timeline-stress.fixture
 import { mockStressTimeline, stressSessionHref } from "../performance/timeline/timeline-test-helpers"
 
 const services = [
-  { name: "MCP", path: "/api/mcp", empty: "No MCP servers configured yet", item: "summary-mcp" },
-  { name: "Plugins", path: "/api/plugin", empty: "No plugins configured yet", item: "summary-plugin" },
-  { name: "Skills", path: "/api/skill", empty: "No skills configured yet", item: "summary-skill" },
-  { name: "LSP", path: "/api/config", empty: "No LSP servers explicitly configured", item: "summary-lsp" },
+  { name: "MCP", path: "/api/mcp", empty: "No MCP servers configured", item: "summary-mcp" },
+  { name: "Plugins", path: "/api/plugin", empty: "No plugins configured", item: "summary-plugin" },
+  { name: "Skills", path: "/api/skill", empty: "No skills configured", item: "summary-skill" },
+  { name: "LSP", path: "/api/config", empty: "No LSP servers configured", item: "summary-lsp" },
 ] as const
 
 for (const service of services) {
@@ -56,15 +56,16 @@ for (const service of services) {
       const content = menu.getByText(empty ? service.empty : service.item, { exact: true })
       await expect(content).toBeVisible()
       await expect(menu).toHaveAttribute("aria-busy", "false")
-      await expect(menu).toHaveCSS("width", empty ? "200px" : "280px")
+      await expect(menu).toHaveCSS("width", empty ? "232px" : "280px")
       if (empty) {
         const message = menu.locator(".session-service-empty")
-        await expect(message).toHaveCSS("padding", "8px 12px")
-        await expect(message).toHaveCSS("gap", "8px")
-        await expect(message).toHaveCSS("font-size", "11px")
+        await expect(message).toHaveCSS("padding", "0px")
+        await expect(message).toHaveCSS("gap", "0px")
+        await expect(message.locator("strong")).toHaveCSS("padding", "8px 12px")
+        await expect(message).toHaveCSS("font-size", "13px")
         await expect(message).toHaveCSS("line-height", "16px")
         await expect(message.locator("strong")).toHaveCSS("font-weight", "530")
-        await expect(message.locator("p")).toHaveCSS("font-weight", "440")
+        await expect(message.locator(".session-service-footer")).toHaveCSS("font-weight", "440")
         await testInfo.attach(`${service.name}-empty`, { body: await menu.screenshot(), contentType: "image/png" })
       }
       await page.keyboard.press("Escape")
@@ -79,7 +80,7 @@ for (const service of services) {
         await expect(menu).toHaveAttribute("aria-busy", "true")
         await expect(content).toBeVisible()
         await expect(menu.getByRole("status")).toHaveCount(0)
-        await expect(menu).toHaveCSS("width", empty ? "200px" : "280px")
+        await expect(menu).toHaveCSS("width", empty ? "232px" : "280px")
         await expect(summary).toBeVisible()
       } finally {
         response.resolve()
@@ -110,16 +111,16 @@ test("prefetching plugins does not suspend the summary or report an empty catalo
   try {
     await expect.poll(() => state.requested).toBe(true)
     await expect(summary.getByRole("button", { name: fixture.project.name, exact: true })).toBeVisible()
-    await expect(summary.getByRole("button", { name: "Server", exact: true })).toBeVisible()
+    await expect(summary.getByRole("button", { name: "Extensions", exact: true })).toBeVisible()
     await summary.getByRole("button", { name: "Plugins", exact: true }).click()
     const menu = page.getByRole("dialog", { name: "Plugins", exact: true })
     await expect(menu.getByRole("status")).toContainText("Loading")
-    await expect(menu.getByText("No plugins configured yet", { exact: true })).toHaveCount(0)
+    await expect(menu.getByText("No plugins configured", { exact: true })).toHaveCount(0)
     await expect(summary).toBeVisible()
   } finally {
     response.resolve()
   }
   await expect(
-    page.getByRole("dialog", { name: "Plugins", exact: true }).getByText("No plugins configured yet", { exact: true }),
+    page.getByRole("dialog", { name: "Plugins", exact: true }).getByText("No plugins configured", { exact: true }),
   ).toBeVisible()
 })

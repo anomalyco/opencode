@@ -58,7 +58,7 @@ export function SessionSummaryPanel(props: {
             <span dir="auto" class="session-summary-label">
               {location()}
             </span>
-            <Icon name="fill-triangle-down" class="shrink-0 text-v2-icon-icon-muted" />
+            <Icon name="fill-triangle-down" class="session-summary-menu-indicator shrink-0 text-v2-icon-icon-muted" />
           </SessionWorkspaceMenu>
           <div class="session-summary-row">
             <Icon name="branch" class="shrink-0 text-v2-icon-icon-muted" />
@@ -87,15 +87,29 @@ export function SessionSummaryPanel(props: {
           </div>
           <button type="button" class="session-summary-row" onClick={props.onReview}>
             <Icon name="review" class="shrink-0 text-v2-icon-icon-muted" />
-            <Show when={props.diffs} fallback={<span>{language.t("session.review.loadingChanges")}</span>}>
-              {(diffs) => (
-                <Show when={diffs().length > 0} fallback={<span>{language.t("session.review.noChanges")}</span>}>
-                  <span>{language.plural("ui.sessionTurn.diffs.changed", diffs().length)}</span>
-                  <span class="text-v2-text-text-muted">·</span>
-                  <DiffChanges appearance="standard" changes={diffs()} />
-                </Show>
-              )}
-            </Show>
+            <span class="session-summary-label flex items-center gap-2">
+              <Show
+                when={props.diffs}
+                fallback={
+                  <span class="truncate text-v2-text-text-muted">{language.t("session.review.loadingChanges")}</span>
+                }
+              >
+                {(diffs) => (
+                  <Show
+                    when={diffs().length > 0}
+                    fallback={
+                      <span class="truncate text-v2-text-text-muted">{language.t("session.review.noChanges")}</span>
+                    }
+                  >
+                    <span class="min-w-0 truncate">
+                      {language.plural("ui.sessionTurn.diffs.changed", diffs().length)}
+                    </span>
+                    <span class="shrink-0 text-v2-text-text-muted">·</span>
+                    <DiffChanges appearance="standard" changes={diffs()} />
+                  </Show>
+                )}
+              </Show>
+            </span>
           </button>
           <BackgroundWorkSummary tasks={props.backgroundTasks} mobile={props.mobile} />
         </ProjectSummaryCard>

@@ -6,6 +6,7 @@ import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { MockApi, MockBadRequest, MockNotFound } from "./mock-api"
 
 export interface MockServerConfig {
+  server?: string
   provider: unknown | (() => unknown)
   integrationMethods?: Record<string, unknown[]>
   onConnectKey?: (input: { integrationID: string; body: unknown }) => void
@@ -50,7 +51,9 @@ type MockStreamWindow = Window & {
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
-  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
+  const server =
+    config.server ??
+    `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
   await page.addInitScript(
     ({ server, retry }) => {

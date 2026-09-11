@@ -33,12 +33,10 @@ export function ProjectSummaryCard(
             variant={getProjectAvatarVariant(props.project.icon?.color)}
           />
         )}
-        <span class="session-summary-heading-label">
-          <span dir="auto" class="min-w-0 truncate">
-            {displayName(props.project)}
-          </span>
-          <Icon name="fill-triangle-down" class="session-summary-disclosure" />
+        <span dir="auto" class="session-summary-label">
+          {displayName(props.project)}
         </span>
+        <Icon name="chevron-down" size="small" class="session-summary-disclosure" />
       </button>
       <Show when={expanded()}>
         <div id={contentID} class="session-summary-rows">

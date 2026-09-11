@@ -127,7 +127,7 @@ export function PromptWorkspaceSelector(props: {
             <Icon
               name={summary() ? "fill-triangle-down" : "chevron-down"}
               size={summary() ? "normal" : "small"}
-              class="shrink-0 text-v2-icon-icon-muted"
+              class="session-summary-menu-indicator shrink-0 text-v2-icon-icon-muted"
             />
           </Menu.Trigger>
           <Menu.Portal>
@@ -294,7 +294,7 @@ export function PromptWorkspaceSelector(props: {
               <Icon
                 name={summary() ? "fill-triangle-down" : "chevron-down"}
                 size={summary() ? "normal" : "small"}
-                class="shrink-0 text-v2-icon-icon-muted"
+                class="session-summary-menu-indicator shrink-0 text-v2-icon-icon-muted"
               />
             </Menu.Trigger>
             <Menu.Portal>

@@ -6,6 +6,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { Show, type ParentProps } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useCommand } from "@/shell/commands/command"
+import "./summary.css"
 
 export function SummaryPopover(
   props: ParentProps<{ active?: boolean; open: boolean; onOpenChange: (open: boolean) => void }>,
@@ -28,8 +29,9 @@ export function SummaryPopover(
   )
   const keybind = () => command.keybindParts("session.summary.toggle")
   return (
-    <Popover open={props.open} placement="bottom-end" gutter={2} overflowPadding={16} onOpenChange={props.onOpenChange}>
-      <Popover.Anchor class="pointer-events-none absolute end-3 top-0 h-12 w-0" aria-hidden="true" />
+    <Popover open={props.open} placement="bottom-end" gutter={8} overflowPadding={16} onOpenChange={props.onOpenChange}>
+      {/* Match the button's vertical bounds; the 8px gutter plus 4px content padding gives a 12px card gap. */}
+      <Popover.Anchor class="pointer-events-none absolute end-3 top-2.5 h-7 w-0" aria-hidden="true" />
       <Tooltip
         placement="bottom"
         value={
@@ -53,7 +55,7 @@ export function SummaryPopover(
       </Tooltip>
       <Popover.Portal>
         <Popover.Content
-          class="z-50 max-h-[calc(100dvh-96px)] overflow-y-auto border-0 bg-transparent p-1 outline-none"
+          class="session-summary-popover z-50 max-h-[calc(100dvh-96px)] overflow-y-auto border-0 bg-transparent p-1 outline-none"
           aria-label={language.t("session.summary.title")}
         >
           {props.children}

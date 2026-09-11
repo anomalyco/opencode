@@ -94,7 +94,7 @@ for (const direction of ["ltr", "rtl"] as const) {
     await expect(trigger).toBeFocused()
 
     await trigger.click()
-    await expect(summary.getByRole("button", { name: "Server", exact: true })).toBeVisible()
+    await expect(summary.getByRole("button", { name: "Extensions", exact: true })).toBeVisible()
     // Cross the actual chat-panel breakpoint, including any surrounding shell width.
     const shell = 1440 - (await panel.boundingBox())!.width
     await page.setViewportSize({ width: 1320 + shell, height: 900 })
@@ -121,6 +121,53 @@ for (const direction of ["ltr", "rtl"] as const) {
     await page.keyboard.press("Escape")
     await expect(content).toHaveCSS("translate", "none")
     await expect.poll(async () => Math.abs((await row.boundingBox())!.x - before!.x)).toBeLessThan(1)
+  })
+}
+
+for (const direction of ["ltr", "rtl"] as const) {
+  test(`summary truncates long copy before the indicator column in ${direction}`, async ({ page }) => {
+    const branch = `feature/${"long-branch-name-".repeat(12)}`
+    await mockStressTimeline(page)
+    await page.route(
+      (url) => url.pathname === "/api/vcs",
+      (route) => {
+        if (route.request().method() === "OPTIONS") return route.fallback()
+        return route.fulfill({
+          json: { location: { directory: fixture.directory }, data: { branch: { current: branch, default: "main" } } },
+        })
+      },
+    )
+    await openWithDirection(page, stressSessionHref(fixture.targetID), direction)
+    await expect(page.locator("html")).toHaveAttribute("dir", direction)
+    await expect(page.locator("html")).toHaveAttribute("lang", "en")
+    await page.getByRole("button", { name: "Session details", exact: true }).click()
+    const summary = page.getByRole("dialog", { name: "Session details", exact: true })
+    const text = summary.getByText(branch, { exact: true })
+    await expect(text).toBeVisible()
+    await expect(text).toHaveCSS("text-overflow", "ellipsis")
+    await expect.poll(() => text.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
+    const arrow = summary
+      .getByRole("button", { name: "Local repository", exact: true })
+      .locator(".session-summary-menu-indicator")
+    await expect
+      .poll(async () => {
+        const label = await text.boundingBox()
+        const icon = await arrow.boundingBox()
+        if (!label || !icon) return 0
+        return direction === "ltr" ? icon.x - label.x - label.width : label.x - icon.x - icon.width
+      })
+      .toBeGreaterThanOrEqual(12)
+    for (const name of ["Local repository", "MCP", "Plugins", "Skills", "LSP"]) {
+      const row = summary.getByRole("button", { name, exact: true })
+      await expect
+        .poll(async () => {
+          const label = await row.locator(".session-summary-label").boundingBox()
+          const icon = await row.locator(".session-summary-menu-indicator").boundingBox()
+          if (!label || !icon) return 0
+          return direction === "ltr" ? icon.x - label.x - label.width : label.x - icon.x - icon.width
+        })
+        .toBeGreaterThanOrEqual(12)
+    }
   })
 }
 

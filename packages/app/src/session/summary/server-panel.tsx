@@ -1,6 +1,8 @@
 import { Popover } from "@kobalte/core/popover"
 import { Icon } from "@opencode/ui/icon"
 import { Switch } from "@opencode/ui/switch"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { getDirectory } from "@opencode/util/path"
 import {
   createEffect,
   createMemo,
@@ -15,11 +17,13 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import { useData, useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { ServerConnection, serverName } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useSettings } from "@/settings/model"
+import { showToast } from "@/shell/notifications/toast"
 import { pluginLabel } from "@/providers/catalog/plugin"
 import { useMcpToggle, type McpControls } from "@/providers/connect/mcp"
 import { configuredLsps } from "./configured-lsp"
@@ -27,8 +31,8 @@ import { configuredLsps } from "./configured-lsp"
 const services = [
   { type: "mcp", icon: "mcp", label: "session.summary.mcp" },
   { type: "plugins", icon: "cube", label: "session.summary.plugins" },
-  { type: "skills", icon: "post-skill", label: "session.summary.skills" },
-  { type: "lsp", icon: "code", label: "session.summary.lsp" },
+  { type: "skills", icon: "graduation-cap", label: "session.summary.skills" },
+  { type: "lsp", icon: "code-slash", label: "session.summary.lsp" },
 ] as const
 
 type Service = (typeof services)[number]["type"]
@@ -68,12 +72,10 @@ export function SessionServerPanel(props: { directory: string; shown: boolean; m
         onClick={() => settings.sessionSummary.setServerExpanded(!expanded())}
       >
         <Icon name="server" class="shrink-0 text-v2-icon-icon-muted" />
-        <span class="session-summary-heading-label">
-          <span dir="auto" class="min-w-0 truncate">
-            {name()}
-          </span>
-          <Icon name="fill-triangle-down" class="session-summary-disclosure" />
+        <span dir="auto" class="session-summary-label">
+          {name()}
         </span>
+        <Icon name="chevron-down" size="small" class="session-summary-disclosure" />
       </button>
       <Show when={expanded() ? props.directory : undefined} keyed>
         {(directory) => (
@@ -131,13 +133,10 @@ function LspMenu(props: ServiceMenuProps) {
       <Show
         when={names().length}
         fallback={
-          <ServiceEmpty
-            title={language.t("session.summary.lsp.empty")}
-            description={language.t("session.summary.lsp.manage")}
-          />
+          <ServiceEmpty title={language.t("session.summary.lsp.empty")} directory={props.directory} service="lsp" />
         }
       >
-        <div class="session-service-message">{language.t("session.summary.lsp.configured")}</div>
+        <h3 class="session-service-title">{language.t("session.summary.lsp.configured")}</h3>
         <For each={names()}>
           {(name) => (
             <div class="session-service-row">
@@ -147,7 +146,9 @@ function LspMenu(props: ServiceMenuProps) {
             </div>
           )}
         </For>
-        <div class="session-service-message">{language.t("session.summary.lsp.manage")}</div>
+        <div class="session-service-footer">
+          <ServiceConfigLink directory={props.directory} service="lsp" />
+        </div>
       </Show>
     </ServicePopover>
   )
@@ -197,12 +198,10 @@ function McpMenu(props: ServiceMenuProps) {
       <Show
         when={servers().length}
         fallback={
-          <ServiceEmpty
-            title={language.t("session.summary.mcp.empty")}
-            description={language.t("session.summary.mcp.add")}
-          />
+          <ServiceEmpty title={language.t("session.summary.mcp.empty")} directory={props.directory} service="mcp" />
         }
       >
+        <h3 class="session-service-title">{language.t("session.summary.mcp.title")}</h3>
         <Show when={props.mcp?.preview}>
           <div class="session-service-message" data-slot="mcp-preview-hint">
             {language.t("session.summary.mcp.onCreation")}
@@ -267,6 +266,9 @@ function McpMenu(props: ServiceMenuProps) {
             )
           }}
         </Index>
+        <div class="session-service-footer">
+          <ServiceConfigLink directory={props.directory} service="mcp" />
+        </div>
       </Show>
     </ServicePopover>
   )
@@ -335,17 +337,18 @@ function ServiceCatalog(props: ServiceMenuProps) {
             title={language.t(
               props.service.type === "plugins" ? "session.summary.plugins.empty" : "session.summary.skills.empty",
             )}
-            description={language.t(
-              props.service.type === "plugins" ? "session.summary.plugins.add" : "session.summary.skills.add",
-            )}
+            directory={props.directory}
+            service={props.service.type}
           />
         }
       >
-        <div class="session-service-message">
+        <h3 class="session-service-title">
           {language.t(
-            props.service.type === "plugins" ? "session.summary.plugins.manage" : "session.summary.skills.manage",
+            props.service.type === "plugins"
+              ? "session.summary.plugins.configured"
+              : "session.summary.skills.configured",
           )}
-        </div>
+        </h3>
         <For each={list()}>
           {(item) => (
             <div class="session-service-row" title={item.error ?? item.name}>
@@ -359,6 +362,9 @@ function ServiceCatalog(props: ServiceMenuProps) {
             </div>
           )}
         </For>
+        <div class="session-service-footer">
+          <ServiceConfigLink directory={props.directory} service={props.service.type} />
+        </div>
       </Show>
     </ServicePopover>
   )
@@ -393,7 +399,7 @@ function ServicePopover(
       <Popover.Trigger as="button" type="button" class="session-summary-row">
         <Icon name={props.service.icon} class="shrink-0 text-v2-icon-icon-muted" />
         <span class="session-summary-label">{language.t(props.service.label)}</span>
-        <Icon name="fill-triangle-down" class="shrink-0 text-v2-icon-icon-muted" />
+        <Icon name="fill-triangle-down" class="session-summary-menu-indicator shrink-0 text-v2-icon-icon-muted" />
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
@@ -431,11 +437,100 @@ function ServicePopover(
   )
 }
 
-function ServiceEmpty(props: { title: string; description: string }) {
+function ServiceConfigLink(props: { directory: string; service: Service }) {
+  const language = useLanguage()
+  const platform = usePlatform()
+  const server = useServer()
+  const sdk = useServerSDK()
+  const [store, setStore] = createStore({ opening: false, copied: false })
+  const label = () => language.t(server.isLocal ? "session.summary.configure" : "session.summary.copyConfigPath")
+  createEffect(() => {
+    if (!store.copied) return
+    const timeout = setTimeout(() => setStore("copied", false), 2000)
+    onCleanup(() => clearTimeout(timeout))
+  })
+  const activate = async () => {
+    const revealPath = platform.revealPath
+    if (store.opening || (server.isLocal && !revealPath)) return
+    setStore({ opening: true, copied: false })
+    const directory = props.directory
+    await sdk.api.config
+      .get({ location: { directory } })
+      .then(async (entries) => {
+        const documents = entries
+          .filter((entry) => entry.type === "document")
+          .filter((entry) => entry.path !== undefined && /\.jsonc?$/.test(entry.path))
+        const path =
+          documents.findLast((entry) => entry.info[props.service] !== undefined)?.path ?? documents.at(-1)?.path
+        if (!server.isLocal) {
+          if (!path) throw new Error(language.t("session.summary.configFileMissing"))
+          await (platform.writeClipboardText?.(path) ?? navigator.clipboard.writeText(path))
+          setStore("copied", true)
+          return
+        }
+        if (path && (await revealPath?.(path))) return
+        await platform.openPath?.(path ? getDirectory(path) : directory)
+      })
+      .catch((error: unknown) =>
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: error instanceof Error ? error.message : String(error),
+        }),
+      )
+      .finally(() => setStore("opening", false))
+  }
+  return (
+    <>
+      <span class="session-service-config-separator" role="separator" />
+      <Show
+        when={!server.isLocal || platform.revealPath}
+        fallback={
+          <span class="session-service-row">
+            <Icon name="settings-gear" class="shrink-0 text-v2-icon-icon-muted" />
+            {label()}
+          </span>
+        }
+      >
+        <Tooltip
+          inactive={server.isLocal}
+          value={language.t(store.copied ? "ui.message.copied" : "ui.message.copy")}
+          placement="top"
+          getAnchorRect={(anchor) => anchor?.querySelector("svg")?.getBoundingClientRect()}
+          forceOpen={store.copied ? true : undefined}
+          class="w-full"
+        >
+          <button
+            type="button"
+            class="session-service-config"
+            disabled={store.opening}
+            onMouseDown={(event) => {
+              if (!server.isLocal) event.preventDefault()
+            }}
+            onClick={() => void activate()}
+          >
+            <Icon
+              name={server.isLocal ? "settings-gear" : store.copied ? "check" : "outline-copy"}
+              class="shrink-0 text-v2-icon-icon-muted"
+            />
+            <span class="session-summary-label">{label()}</span>
+            <Show when={server.isLocal}>
+              <Icon name="arrow-up-right" class="session-service-config-arrow shrink-0" />
+            </Show>
+          </button>
+        </Tooltip>
+      </Show>
+    </>
+  )
+}
+
+function ServiceEmpty(props: { title: string; directory: string; service: Service }) {
   return (
     <div class="session-service-empty">
       <strong>{props.title}</strong>
-      <p>{props.description}</p>
+      <div class="session-service-footer">
+        <ServiceConfigLink directory={props.directory} service={props.service} />
+      </div>
     </div>
   )
 }

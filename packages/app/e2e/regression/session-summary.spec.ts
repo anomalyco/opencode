@@ -42,7 +42,7 @@ for (const custom of [false, true]) {
       ).toBeInViewport()
       await page.keyboard.press(shortcut)
       await expect(trigger).toHaveAttribute("aria-expanded", "true")
-      await expect(summary.getByRole("button", { name: "Server", exact: true })).toBeVisible()
+      await expect(summary.getByRole("button", { name: "Extensions", exact: true })).toBeVisible()
       await expect.poll(() => summary.evaluate((element) => element.contains(document.activeElement))).toBe(true)
       await expect(tooltip).toBeHidden()
       await page.keyboard.press(shortcut)
@@ -74,14 +74,14 @@ for (const layout of ["horizontal", "vertical"] as const) {
     await trigger.click()
     const summary = page.getByRole("dialog", { name: "Session details", exact: true })
     const project = summary.getByRole("button", { name: fixture.project.name, exact: true })
-    const server = summary.getByRole("button", { name: "Server", exact: true })
+    const server = summary.getByRole("button", { name: "Extensions", exact: true })
     await expect(project).toHaveAttribute("aria-expanded", "true")
     await expect(server).toHaveAttribute("aria-expanded", "true")
     for (const heading of [project, server]) {
       await expect(heading).toHaveCSS("column-gap", "8px")
-      await expect(heading.locator(".session-summary-heading-label")).toHaveCSS("column-gap", "4px")
-      await expect(heading.locator(".session-summary-disclosure")).toHaveAttribute("width", "16")
-      await expect(heading.locator(".session-summary-disclosure")).toHaveAttribute("height", "16")
+      await expect(heading.locator(".session-summary-label")).toHaveCSS("flex-grow", "0")
+      await expect(heading.locator(".session-summary-disclosure")).toHaveAttribute("width", "14")
+      await expect(heading.locator(".session-summary-disclosure")).toHaveAttribute("height", "14")
     }
     await expect(summary.getByRole("button", { name: "MCP", exact: true })).toBeVisible()
     await testInfo.attach(`summary-${layout}`, { body: await page.screenshot(), contentType: "image/png" })
@@ -134,7 +134,7 @@ for (const direction of ["ltr", "rtl"] as const) {
     await mcp.hover()
     await expect(submenu).toHaveCount(0)
     await mcp.click()
-    await expect(submenu.getByText("No MCP servers configured yet", { exact: true })).toBeVisible()
+    await expect(submenu.getByText("No MCP servers configured", { exact: true })).toBeVisible()
     await expect(summary).toBeVisible()
     await expect
       .poll(async () => {
@@ -150,20 +150,20 @@ for (const direction of ["ltr", "rtl"] as const) {
     await expect(summary).toBeVisible()
     await expect(mcp).toBeFocused()
     await mcp.press("Enter")
-    await expect(submenu.getByText("Add servers in opencode.json")).toBeVisible()
+    await expect(submenu.getByText("Configuration file")).toBeVisible()
     await mcp.click()
     await expect(submenu).toBeHidden()
 
     for (const [name, text] of [
-      ["Plugins", "No plugins configured yet"],
-      ["Skills", "No skills configured yet"],
-      ["LSP", "No LSP servers explicitly configured"],
+      ["Plugins", "No plugins configured"],
+      ["Skills", "No skills configured"],
+      ["LSP", "No LSP servers configured"],
     ]) {
       await summary.getByRole("button", { name, exact: true }).click()
       await expect(page.getByRole("dialog", { name, exact: true }).getByText(text, { exact: true })).toBeVisible()
       await expect(submenu).toBeHidden()
     }
-    await summary.getByRole("button", { name: "Server", exact: true }).click()
+    await summary.getByRole("button", { name: "Extensions", exact: true }).click()
     await expect(page.getByRole("dialog", { name: "LSP", exact: true })).toBeHidden()
     await page.keyboard.press("Escape")
     await expect(summary).toBeHidden()
@@ -269,7 +269,7 @@ test("catalog submenus show project plugins and skills, refresh on reopen, and d
   await summary.getByRole("button", { name: "Plugins", exact: true }).click()
   const plugins = page.getByRole("dialog", { name: "Plugins", exact: true })
   await expect(plugins.getByRole("alert")).toContainText("Request failed")
-  await expect(plugins.getByText("No plugins configured yet", { exact: true })).toHaveCount(0)
+  await expect(plugins.getByText("No plugins configured", { exact: true })).toHaveCount(0)
   state.fail = false
   await plugins.getByRole("button", { name: "Retry", exact: true }).click()
   await expect(plugins.getByText("supermemory", { exact: true })).toBeVisible()

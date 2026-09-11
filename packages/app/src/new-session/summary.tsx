@@ -24,7 +24,7 @@ export function NewSessionSummary(props: {
           <div class="session-summary-card">
             <button type="button" class="session-summary-row" onClick={props.onChooseProject}>
               <Icon name="folder" class="text-v2-icon-icon-muted" />
-              {language.t("session.summary.chooseProject")}
+              <span class="session-summary-label">{language.t("session.summary.chooseProject")}</span>
             </button>
           </div>
         }
