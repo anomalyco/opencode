@@ -33,11 +33,12 @@ const http = Layer.succeed(
   HttpClient.make((request, _url, signal) =>
     Effect.sync(() => {
       signals.push(signal)
-      if (request.body._tag !== "Uint8Array") throw new Error(`Unexpected request body: ${request.body._tag}`)
+      if (request.body._tag !== "Uint8Array" && request.body._tag !== "Empty")
+        throw new Error(`Unexpected request body: ${request.body._tag}`)
       requests.push({
         url: request.url,
         headers: request.headers,
-        body: JSON.parse(new TextDecoder().decode(request.body.body)),
+        body: request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : undefined,
       })
       return HttpClientResponse.fromWeb(request, new Response(responseBody, { status: responseStatus }))
     }),
