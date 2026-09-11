@@ -5,6 +5,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useServerSync } from "./server-sync"
 import { useServerSDK } from "./server-sdk"
+import { trackProjectMoves } from "./project-moves"
 import { RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
 import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
@@ -513,6 +514,34 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       })
     })
 
+    // A moved or renamed project folder keeps its identity through the
+    // repo-local id, and the server adopts the new path the next time the
+    // project is opened from its new location. Open-project entries are
+    // keyed by path, so follow the move: relocate the old entry instead of
+    // leaving it at the dead location while the new path shows up as a
+    // separate project.
+    const seenWorktrees = new Map<string, string>()
+    createEffect(() => {
+      const moves = trackProjectMoves(seenWorktrees, serverSync().data.project)
+      if (moves.length === 0) return
+
+      batch(() => {
+        for (const move of moves) {
+          const open = server.projects.list()
+          const entry = open.find((project) => project.worktree === move.from)
+          if (!entry) continue
+          const index = open.indexOf(entry)
+
+          server.projects.remove(move.from)
+          server.projects.open(move.to)
+          server.projects.move(move.to, index)
+          if (entry.expanded) server.projects.expand(move.to)
+          else server.projects.collapse(move.to)
+          if (server.projects.last() === move.from) server.projects.touch(move.to)
+        }
+      })
+    })
+
     const enriched = createMemo(() => server.projects.list().map(enrich))
     const list = createMemo(() => {
       const projects = enriched()
@@ -642,6 +671,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         }),
         open(directory: string) {
           const root = rootFor(directory)
+          // Always touch the server, even when an entry for this path is
+          // already listed: the entry may be stale (its folder moved away and
+          // back, or another checkout re-homed here). Touching re-identifies
+          // the directory server-side and emits the project.updated event
+          // that reconciles the sidebar.
+          void serverSync().project.touch(root)
           if (server.projects.list().find((x) => x.worktree === root)) return
           void serverSync().project.loadSessions(root)
           server.projects.open(root)

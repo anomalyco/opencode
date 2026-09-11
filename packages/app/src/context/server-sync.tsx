@@ -649,6 +649,15 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
 
   const projectApi = {
     loadSessions,
+    // Ask the server to (re)identify a directory. Instance-scoped, so a stale
+    // cached instance revalidates and a moved checkout re-homes its project,
+    // emitting the project.updated event that reconciles the sidebar.
+    touch(directory: string) {
+      return sdkFor(directory)
+        .project.current()
+        .then(() => undefined)
+        .catch(() => undefined)
+    },
     meta(directory: string, patch: ProjectMeta) {
       children.projectMeta(directory, patch)
     },

@@ -1488,6 +1488,10 @@ export type GlobalEvent = {
           commands?: ProjectCommands
           time: ProjectTime
           sandboxes: Array<string>
+          /**
+           * Repo-level grouping key shared by all clones of the same repository (legacy identity derivation: normalized remote hash, falling back to root commit). Informational only — never used as identity.
+           */
+          repoHash?: string
         }
       }
     | {
@@ -1771,13 +1775,9 @@ export type ProviderConfig = {
       temperature?: boolean
       tool_call?: boolean
       interleaved?:
-        | boolean
-        | "reasoning"
-        | "reasoning_content"
-        | "reasoning_text"
-        | string
+        | true
         | {
-            field: "reasoning" | "reasoning_content" | "reasoning_text" | string
+            field: "reasoning" | "reasoning_content" | "reasoning_details"
           }
       cost?: {
         input: number
@@ -1935,7 +1935,6 @@ export type Config = {
   model?: string
   small_model?: string
   default_agent?: string
-  subagent_depth?: number
   username?: string
   mode?: {
     build?: AgentConfig
@@ -2064,7 +2063,7 @@ export type Model = {
     interleaved:
       | boolean
       | {
-          field: "reasoning" | "reasoning_content" | "reasoning_text" | string
+          field: "reasoning" | "reasoning_content" | "reasoning_details"
         }
   }
   cost: {
@@ -2433,6 +2432,10 @@ export type Project = {
   commands?: ProjectCommands
   time: ProjectTime
   sandboxes: Array<string>
+  /**
+   * Repo-level grouping key shared by all clones of the same repository (legacy identity derivation: normalized remote hash, falling back to root commit). Informational only — never used as identity.
+   */
+  repoHash?: string
 }
 
 export type ProjectNotFoundError = {
@@ -5910,6 +5913,10 @@ export type ProjectUpdated = {
     commands?: ProjectCommands
     time: ProjectTime
     sandboxes: Array<string>
+    /**
+     * Repo-level grouping key shared by all clones of the same repository (legacy identity derivation: normalized remote hash, falling back to root commit). Informational only — never used as identity.
+     */
+    repoHash?: string
   }
 }
 
@@ -6928,6 +6935,10 @@ export type EventProjectUpdated = {
     commands?: ProjectCommands
     time: ProjectTime
     sandboxes: Array<string>
+    /**
+     * Repo-level grouping key shared by all clones of the same repository (legacy identity derivation: normalized remote hash, falling back to root commit). Informational only — never used as identity.
+     */
+    repoHash?: string
   }
 }
 
