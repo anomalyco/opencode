@@ -141,16 +141,30 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner
 
+    const DRAIN_GRACE_MS = 2000
+    // Bounded drain: exit already arrived, don't wait for close/EOF forever
+    // when a detached grandchild holds an inherited pipe (win32
+    // Start-Process single-side redirect, adb server, python sink).
+    const drainOrEmpty = <A, E, R>(stream: Effect.Effect<A, E, R>): Effect.Effect<A, never, R> =>
+      stream.pipe(
+        Effect.timeoutOrElse({
+          duration: Duration.millis(DRAIN_GRACE_MS),
+          orElse: () => Effect.succeed({ buffer: Buffer.alloc(0), truncated: true } as unknown as A),
+        }),
+        Effect.catch(() => Effect.succeed({ buffer: Buffer.alloc(0), truncated: true } as unknown as A)),
+      )
     const runCommand = (command: ChildProcess.Command, options?: RunOptions) => {
       const description = describeCommand(command)
       const collect = Effect.scoped(
         Effect.gen(function* () {
           const handle = yield* spawner.spawn(command)
           if (options?.combineOutput) {
-            const [output, exitCode] = yield* Effect.all(
-              [collectStream(handle.all, options.maxOutputBytes), handle.exitCode],
-              { concurrency: "unbounded" },
-            )
+            // exit-first: don't let a leaked pipe block exitCode (close vs exit).
+            const exitCode = yield* handle.exitCode
+            const output = (yield* drainOrEmpty(collectStream(handle.all, options.maxOutputBytes))) as unknown as {
+              buffer: Buffer
+              truncated: boolean
+            }
             return {
               command: description,
               exitCode,
@@ -162,14 +176,15 @@ const layer = Layer.effect(
               stderrTruncated: false,
             } satisfies RunResult
           }
-          const [stdout, stderr, exitCode] = yield* Effect.all(
+          // exit-first + bounded drain (see above).
+          const exitCode = yield* handle.exitCode
+          const [stdout, stderr] = (yield* Effect.all(
             [
-              collectStream(handle.stdout, options?.maxOutputBytes),
-              collectStream(handle.stderr, options?.maxErrorBytes),
-              handle.exitCode,
+              drainOrEmpty(collectStream(handle.stdout, options?.maxOutputBytes)),
+              drainOrEmpty(collectStream(handle.stderr, options?.maxErrorBytes)),
             ],
             { concurrency: "unbounded" },
-          )
+          )) as unknown as [{ buffer: Buffer; truncated: boolean }, { buffer: Buffer; truncated: boolean }]
           return {
             command: description,
             exitCode,
@@ -259,3 +274,4 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [CrossSpawnSpawner.node] })
 
 export * as AppProcess from "./process"
+
