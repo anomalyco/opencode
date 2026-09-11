@@ -424,42 +424,26 @@ export function fromOaCompatibleChunk(chunk: string): CommonChunk | string {
     object: "chat.completion.chunk",
     created: json.created ?? Math.floor(Date.now() / 1000),
     model: json.model ?? "",
-    choices: [],
-  }
-
-  if (delta.content) {
-    result.choices.push({
-      index: choice.index ?? 0,
-      delta: { content: delta.content },
-      finish_reason: null,
-    })
-  }
-
-  if (delta.tool_calls) {
-    for (const toolCall of delta.tool_calls) {
-      result.choices.push({
+    choices: [
+      {
         index: choice.index ?? 0,
         delta: {
-          tool_calls: [
-            {
-              index: toolCall.index ?? 0,
-              id: toolCall.id,
-              type: toolCall.type ?? "function",
-              function: toolCall.function,
-            },
-          ],
+          ...(delta.role ? { role: delta.role } : {}),
+          ...(delta.content ? { content: delta.content } : {}),
+          ...(Array.isArray(delta.tool_calls)
+            ? {
+                tool_calls: delta.tool_calls.map((toolCall: any) => ({
+                  index: toolCall.index ?? 0,
+                  id: toolCall.id,
+                  type: toolCall.type ?? "function",
+                  function: toolCall.function,
+                })),
+              }
+            : {}),
         },
-        finish_reason: null,
-      })
-    }
-  }
-
-  if (choice.finish_reason) {
-    result.choices.push({
-      index: choice.index ?? 0,
-      delta: {},
-      finish_reason: choice.finish_reason,
-    })
+        finish_reason: choice.finish_reason ?? null,
+      },
+    ],
   }
 
   if (json.usage) {
@@ -492,49 +476,24 @@ export function toOaCompatibleChunk(chunk: CommonChunk): string {
 
   const choice = chunk.choices[0]
   const delta = choice.delta
-
-  if (delta?.role) {
-    result.choices.push({
-      index: choice.index,
-      delta: { role: delta.role },
-      finish_reason: null,
-    })
-  }
-
-  if (delta?.content) {
-    result.choices.push({
-      index: choice.index,
-      delta: { content: delta.content },
-      finish_reason: null,
-    })
-  }
-
-  if (delta?.tool_calls) {
-    for (const tc of delta.tool_calls) {
-      result.choices.push({
-        index: choice.index,
-        delta: {
-          tool_calls: [
-            {
+  result.choices.push({
+    index: choice.index,
+    delta: {
+      ...(delta?.role ? { role: delta.role } : {}),
+      ...(delta?.content ? { content: delta.content } : {}),
+      ...(delta?.tool_calls
+        ? {
+            tool_calls: delta.tool_calls.map((tc) => ({
               index: tc.index,
               id: tc.id,
               type: tc.type,
               function: tc.function,
-            },
-          ],
-        },
-        finish_reason: null,
-      })
-    }
-  }
-
-  if (choice.finish_reason) {
-    result.choices.push({
-      index: choice.index,
-      delta: {},
-      finish_reason: choice.finish_reason,
-    })
-  }
+            })),
+          }
+        : {}),
+    },
+    finish_reason: choice.finish_reason ?? null,
+  })
 
   if (chunk.usage) {
     result.usage = {
