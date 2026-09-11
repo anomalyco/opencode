@@ -98,9 +98,15 @@ if (!(root instanceof HTMLElement) && import.meta.env.DEV) {
 
 const getCurrentUrl = () => {
   if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
-  if (import.meta.env.DEV)
-    return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
-  return location.origin
+  const url = new URL(
+    import.meta.env.DEV
+      ? `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
+      : location.origin,
+  )
+  url.pathname = import.meta.env.VITE_OPENCODE_SERVER_BASE_URL ?? ""
+  // Stripping the trailing slash since some consumer code is sensitive to it.
+  // For example, ~18 tests (e.g. e2e/regression/legacy-new-session.spec.ts) fail on "http://127.0.0.1:4096/", but succeed on "http://127.0.0.1:4096".
+  return url.href.replace(/\/$/, "")
 }
 
 const getDefaultUrl = () => {
