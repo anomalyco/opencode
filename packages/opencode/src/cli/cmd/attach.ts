@@ -3,6 +3,7 @@ import { UI } from "@/cli/ui"
 import { errorMessage } from "@opencode-ai/tui/util/error"
 import { validateSession } from "../tui/validate-session"
 import { ServerAuth } from "@/server/auth"
+import { installConsoleGuard } from "@/util/console-guard"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -60,6 +61,8 @@ export const AttachCommand = cmd({
         describe: "cap visible mini replay to the newest N messages",
       }),
   handler: async (args) => {
+    // The TUI renders on the alternate screen; console output must go to the log file.
+    installConsoleGuard()
     if (args.replay === true) {
       UI.error("--replay is not supported; replay is enabled by default")
       process.exitCode = 1
