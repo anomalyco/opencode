@@ -1,0 +1,15 @@
+Launch multiple agents in parallel to handle several independent subtasks at once, then wait for all of them to finish and return a combined summary.
+
+Use this instead of the Task tool when you have a large task that can be split into 2-5 independent subtasks that do not depend on each other. Each subtask runs in its own subagent session concurrently, so the total wall-clock time is roughly the longest subtask instead of the sum of all of them.
+
+Each subtask must:
+- Be independent (no subtask needs the output of another subtask to start)
+- Have a clear, self-contained prompt describing exactly what to do and what to return
+- Specify a subagent_type for the specialized agent to use
+
+Usage notes:
+1. Keep the number of subtasks small (2-5). Too many parallel agents risk rate limits and conflicting edits.
+2. Do NOT launch subtasks that write to the same files — parallel edits to shared files conflict.
+3. Each subtask starts with a fresh context. Be detailed and explicit about what each subtask should produce and return.
+4. The result is a combined summary of every subtask's outcome (completed / failed), so you can integrate them in your next step.
+5. If a subtask is better served by a single focused agent, prefer the Task tool instead.
