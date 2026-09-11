@@ -277,7 +277,6 @@ jobs:
   sign-cli-windows:
     needs:
       - sign-cli-macos
-      - build-node-cli
     runs-on: blacksmith-4vcpu-windows-2025
     if: github.repository == 'anomalyco/opencode' && (github.ref_name == 'v2' || github.ref_name == 'beta')
     env:
@@ -295,12 +294,6 @@ jobs:
           name: opencode-preview-cli-macos
           path: packages/cli/dist
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          pattern: opencode-node-cli-*
-          path: packages/cli/dist/node
-          merge-multiple: true
-
       - name: Azure login
         uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
         with:
@@ -317,8 +310,6 @@ jobs:
             ${{ github.workspace }}\packages\cli\dist\cli-windows-arm64\bin\opencode.exe
             ${{ github.workspace }}\packages\cli\dist\cli-windows-x64\bin\opencode.exe
             ${{ github.workspace }}\packages\cli\dist\cli-windows-x64-baseline\bin\opencode.exe
-            ${{ github.workspace }}\packages\cli\dist\node\cli-node-windows-arm64\bin\opencode2-node.exe
-            ${{ github.workspace }}\packages\cli\dist\node\cli-node-windows-x64\bin\opencode2-node.exe
           exclude-environment-credential: true
           exclude-workload-identity-credential: true
           exclude-managed-identity-credential: true
@@ -336,9 +327,7 @@ jobs:
           $files = @(
             "${{ github.workspace }}\packages\cli\dist\cli-windows-arm64\bin\opencode.exe",
             "${{ github.workspace }}\packages\cli\dist\cli-windows-x64\bin\opencode.exe",
-            "${{ github.workspace }}\packages\cli\dist\cli-windows-x64-baseline\bin\opencode.exe",
-            "${{ github.workspace }}\packages\cli\dist\node\cli-node-windows-arm64\bin\opencode2-node.exe",
-            "${{ github.workspace }}\packages\cli\dist\node\cli-node-windows-x64\bin\opencode2-node.exe"
+            "${{ github.workspace }}\packages\cli\dist\cli-windows-x64-baseline\bin\opencode.exe"
           )
 
           foreach ($file in $files) {
@@ -352,12 +341,6 @@ jobs:
         with:
           name: opencode-preview-cli
           path: packages/cli/dist/cli-*
-          if-no-files-found: error
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: opencode-node-cli-signed
-          path: packages/cli/dist/node/cli-node-*
           if-no-files-found: error
 
   build-electron:
@@ -611,17 +594,11 @@ jobs:
           path: packages/cli/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: needs.build-node-cli.result == 'success' && github.ref_name != 'v2' && github.ref_name != 'beta'
+        if: needs.build-node-cli.result == 'success'
         with:
           pattern: opencode-node-cli-*
           path: packages/cli/dist/node
           merge-multiple: true
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: needs.build-node-cli.result == 'success' && (github.ref_name == 'v2' || github.ref_name == 'beta')
-        with:
-          name: opencode-node-cli-signed
-          path: packages/cli/dist/node
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         if: needs.version.outputs.release
