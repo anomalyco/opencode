@@ -136,6 +136,10 @@ if (existsSync(path.join(root, "node"))) {
 
 if ((Script.channel === "beta" || Script.channel === "latest") && Script.release) {
   await $`bun ./script/publish-aur.ts ${dryRun ? ["--dry-run"] : []}`.env({ ...process.env, OPENCODE_CLI_DIST: root })
+  await $`bun ./script/publish-homebrew.ts ${dryRun ? ["--dry-run"] : []}`.env({
+    ...process.env,
+    OPENCODE_CLI_DIST: root,
+  })
 }
 
 async function archive(bin: string, target: string, binary: string, directory: string) {
