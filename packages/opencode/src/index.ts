@@ -29,8 +29,11 @@ import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
+import { ConfigManaged } from "./config/managed"
 
 const args = hideBin(process.argv)
+
+await ConfigManaged.init()
 
 function show(out: string) {
   const text = out.trimStart()

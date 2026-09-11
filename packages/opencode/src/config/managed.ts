@@ -4,6 +4,7 @@ import { existsSync } from "fs"
 import os from "os"
 import path from "path"
 import { Process } from "@/util/process"
+import { parse as parseJsonc } from "jsonc-parser"
 
 const MANAGED_PLIST_DOMAIN = "ai.opencode.managed"
 
@@ -66,4 +67,57 @@ export async function readManagedPreferences() {
   }
 
   return
+}
+
+type Telemetry = {
+  endpoint?: string
+  headers?: string
+  resourceAttributes?: string
+}
+
+const ENV = {
+  endpoint: "OTEL_EXPORTER_OTLP_ENDPOINT",
+  headers: "OTEL_EXPORTER_OTLP_HEADERS",
+  resourceAttributes: "OTEL_RESOURCE_ATTRIBUTES",
+} as const
+
+function telemetry(input: unknown): Telemetry | undefined {
+  if (!input || typeof input !== "object") return
+  const root = input as Record<string, unknown>
+  if (!root.telemetry || typeof root.telemetry !== "object") return
+  const value = (root.telemetry as Record<string, unknown>).otlp
+  if (!value || typeof value !== "object") return
+  const otlp = value as Record<string, unknown>
+  return {
+    endpoint: typeof otlp.endpoint === "string" ? otlp.endpoint : undefined,
+    headers: typeof otlp.headers === "string" ? otlp.headers : undefined,
+    resourceAttributes: typeof otlp.resourceAttributes === "string" ? otlp.resourceAttributes : undefined,
+  }
+}
+
+export async function readManagedTelemetry(): Promise<Telemetry | undefined> {
+  let result: Telemetry | undefined
+  const dir = managedConfigDir()
+  for (const name of ["opencode.json", "opencode.jsonc"]) {
+    const file = path.join(dir, name)
+    if (!existsSync(file)) continue
+    const value = telemetry(parseJsonc(await Bun.file(file).text()))
+    if (value) result = { ...result, ...value }
+  }
+  const managed = await readManagedPreferences()
+  if (!managed) return result
+  return { ...result, ...telemetry(JSON.parse(managed.text)) }
+}
+
+export function applyManagedTelemetry(value?: Telemetry) {
+  if (!value) return
+  for (const key of Object.keys(ENV) as Array<keyof typeof ENV>) {
+    const setting = value[key]
+    if (setting === undefined) continue
+    process.env[ENV[key]] = setting
+  }
+}
+
+export async function init() {
+  applyManagedTelemetry(await readManagedTelemetry())
 }

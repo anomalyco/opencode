@@ -4,10 +4,9 @@ import { Flag } from "../flag/flag"
 import { InstallationChannel, InstallationVersion } from "../installation/version"
 import { runID } from "./shared"
 
-const endpoint = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
-
-const headers = Flag.OTEL_EXPORTER_OTLP_HEADERS
-  ? Flag.OTEL_EXPORTER_OTLP_HEADERS.split(",").reduce(
+const headers = () =>
+  Flag.OTEL_EXPORTER_OTLP_HEADERS
+    ? Flag.OTEL_EXPORTER_OTLP_HEADERS.split(",").reduce(
       (acc, entry) => {
         const [key, ...value] = entry.split("=")
         acc[key] = value.join("=")
@@ -15,7 +14,7 @@ const headers = Flag.OTEL_EXPORTER_OTLP_HEADERS
       },
       {} as Record<string, string>,
     )
-  : undefined
+    : undefined
 
 function resourceAttributes() {
   const value = process.env.OTEL_RESOURCE_ATTRIBUTES
@@ -48,11 +47,13 @@ export function resource(): { serviceName: string; serviceVersion: string; attri
 }
 
 export function loggers() {
+  const endpoint = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
   if (!endpoint) return []
-  return [OtlpLogger.make({ url: `${endpoint}/v1/logs`, resource: resource(), headers })]
+  return [OtlpLogger.make({ url: `${endpoint}/v1/logs`, resource: resource(), headers: headers() })]
 }
 
 export async function tracingLayer() {
+  const endpoint = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
   if (!endpoint) return Layer.empty
   const NodeSdk = await import("@effect/opentelemetry/NodeSdk")
   const OTLP = await import("@opentelemetry/exporter-trace-otlp-http")
@@ -70,7 +71,7 @@ export async function tracingLayer() {
     spanProcessor: new SdkBase.BatchSpanProcessor(
       new OTLP.OTLPTraceExporter({
         url: `${endpoint}/v1/traces`,
-        headers,
+        headers: headers(),
       }),
     ),
   }))
