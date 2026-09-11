@@ -9,6 +9,10 @@ import { WorkspaceEvent } from "../src/workspace-event"
 
 describe("public event manifest", () => {
   test("owns the complete public event surface", () => {
+    // These counts move +4 versus the previous assertions (55/85/85/32): `dev`
+    // already registered three definitions the stale test did not count, and this
+    // branch adds `message.diff.updated` as the fourth. The final values are the
+    // actual manifest sizes, not a hand-adjusted delta.
     expect(EventManifest.ServerDefinitions.length).toBe(59)
     expect(EventManifest.Definitions.length).toBe(89)
     expect(SessionV1.Event.Definitions).toEqual([

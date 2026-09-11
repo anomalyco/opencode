@@ -12,6 +12,7 @@ describe("legacy public event schemas", () => {
       "session.updated",
       "session.deleted",
       "message.updated",
+      "message.diff.updated",
       "message.removed",
       "message.part.updated",
       "message.part.removed",
@@ -20,7 +21,7 @@ describe("legacy public event schemas", () => {
       "session.error",
     ])
     const durable = SessionV1.Event.Definitions.filter((event) => event.durable !== undefined)
-    expect(durable).toHaveLength(7)
+    expect(durable).toHaveLength(8)
     expect(durable.every((event) => event.durable?.aggregate === "sessionID")).toBe(true)
     expect(durable.every((event) => event.durable?.version === 1)).toBe(true)
   })
