@@ -176,7 +176,6 @@ test("accepts every v2-only named command ID", () => {
     "diff.mark_reviewed",
     "opencode.settings",
     "service.restart",
-    "permission.mode",
     "session.cd",
     "app.scrap",
   ]

@@ -173,7 +173,6 @@ const appBindingCommands = [
   "app.toggle.file_context",
   "app.toggle.diffwrap",
   "app.toggle.paste_summary",
-  "permission.mode",
 ] as const
 
 export type TuiInput = {
@@ -1165,18 +1164,6 @@ function App(props: { pair?: DialogPairCredentials }) {
               draft.prompt = { ...draft.prompt, paste: pasteSummaryEnabled() ? "full" : "compact" }
             })
             .catch(toast.error)
-          dialog.clear()
-        },
-      },
-      {
-        name: "permission.mode",
-        title:
-          local.permission.mode === "autoaccept"
-            ? "Disable auto-approve permissions"
-            : "Enable auto-approve permissions",
-        category: "Session",
-        run: () => {
-          void local.permission.toggle().catch(toast.error)
           dialog.clear()
         },
       },
