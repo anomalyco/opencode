@@ -603,6 +603,24 @@ function isAfter(info: Info, other?: Info) {
   return info.id > other.id
 }
 
+
+function readHttpStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") return undefined
+  const record = error as Record<string, unknown>
+  const candidates = [record.statusCode, record.status]
+  const cause = record.cause
+  if (cause && typeof cause === "object") {
+    const nested = cause as Record<string, unknown>
+    candidates.push(nested.statusCode, nested.status)
+  }
+  for (const value of candidates) {
+    if (typeof value === "number" && value >= 100 && value <= 599) return value
+  }
+  const message = typeof record.message === "string" ? record.message : errorMessage(error)
+  const match = message.match(/\b(401|403|408|429|500|502|503|504)\b/)
+  return match ? Number(match[1]) : undefined
+}
+
 export function fromError(
   e: unknown,
   ctx: { providerID: ProviderV2.ID; aborted?: boolean },
@@ -702,8 +720,20 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
-    case e instanceof Error:
+    case e instanceof Error: {
+      const statusCode = readHttpStatus(e)
+      if (statusCode !== undefined) {
+        return new APIError(
+          {
+            message: errorMessage(e),
+            statusCode,
+            isRetryable: statusCode >= 500 || statusCode === 408 || statusCode === 429,
+          },
+          { cause: e },
+        ).toObject()
+      }
       return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
+    }
     default:
       try {
         const parsed = ProviderError.parseStreamError(e)
