@@ -1,6 +1,7 @@
 import path from "path"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
+import { Config } from "@/config/config"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { assertExternalDirectoryEffect } from "./external-directory"
@@ -46,8 +47,14 @@ export const GlobTool = Tool.define(
             kind: "directory",
           })
 
+          const configSvc = yield* Effect.serviceOption(Config.Service)
+          const cfg = Option.isNone(configSvc)
+            ? undefined
+            : yield* configSvc.value.get().pipe(Effect.catch(() => Effect.succeed(undefined)))
+          const follow = cfg?.follow_symlinks ?? false
+
           const limit = 100
-          const files = yield* ripgrep.glob({ cwd: search, pattern: params.pattern, limit })
+          const files = yield* ripgrep.glob({ cwd: search, pattern: params.pattern, limit, follow })
           const truncated = files.length === limit
 
           const output = []
