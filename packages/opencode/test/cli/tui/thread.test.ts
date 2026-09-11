@@ -98,4 +98,13 @@ describe("tui thread", () => {
       expect(result.stderr).toContain("--port cannot be used with --mini")
     }),
   )
+
+  cliIt.live("rejects empty non-interactive stdin", ({ opencode }) =>
+    Effect.gen(function* () {
+      const result = yield* opencode.spawn([], { timeoutMs: 5_000 })
+
+      opencode.expectExit(result, 1)
+      expect(result.stderr).toContain("TUI requires an interactive terminal")
+    }),
+  )
 })
