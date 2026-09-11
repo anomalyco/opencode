@@ -19,7 +19,6 @@ type DatabaseService = Database.Interface["db"]
 
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
 const encodeMessage = Schema.encodeSync(SessionMessage.Message)
-const decodeInfo = Schema.decodeUnknownSync(SessionV1.Info)
 
 export class SessionAlreadyProjected extends Error {}
 
@@ -79,21 +78,28 @@ function messageData(
   info: (typeof SessionV1.Event.MessageUpdated.Type)["data"]["info"],
   current?: typeof MessageTable.$inferSelect.data,
 ): typeof MessageTable.$inferInsert.data {
+  const { id: _, sessionID: __, ...rest } = info
   const summary = current?.summary
-  const value =
-    info.role === "user" && info.summary?.diffs === undefined
-      ? decodeInfo({
-          ...info,
-          summary: {
-            ...info.summary,
-            diffs:
-              current?.role === "user" && typeof summary === "object" && summary.diffs !== undefined
-                ? summary.diffs
-                : [],
-          },
-        })
-      : decodeInfo(info)
-  const { id: _, sessionID: __, ...rest } = value
+  if (
+    info.role === "user" &&
+    info.summary?.diffs !== undefined &&
+    current?.role === "user" &&
+    typeof summary === "object" &&
+    summary.diffs !== undefined &&
+    info.summary.diffs.length === summary.diffs.length &&
+    info.summary.diffs.every((item, index) => {
+      const stored = summary.diffs[index]
+      return (
+        item.patch === undefined &&
+        item.file === stored?.file &&
+        item.additions === stored?.additions &&
+        item.deletions === stored?.deletions &&
+        item.status === stored?.status
+      )
+    })
+  ) {
+    return { ...rest, summary: { ...info.summary, diffs: summary.diffs } } as DeepMutable<typeof rest>
+  }
   return rest as DeepMutable<typeof rest>
 }
 
@@ -279,7 +285,7 @@ const layer = Layer.effectDiscard(
         const id = event.data.info.id
         const sessionID = event.data.info.sessionID
         const current =
-          event.data.info.role === "user" && event.data.info.summary?.diffs === undefined
+          event.data.info.role === "user" && event.data.info.summary?.diffs?.some((item) => item.patch === undefined)
             ? yield* db
                 .select({ data: MessageTable.data })
                 .from(MessageTable)

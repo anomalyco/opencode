@@ -631,15 +631,23 @@ const layer: Layer.Layer<
         const existing =
           msg.role === "user" && msg.summary?.diffs !== undefined
             ? yield* db
-                .select({ type: sql<string>`json_type(${MessageTable.data}, '$.summary.diffs')` })
+                .select({
+                  matches: sql<number>`json_extract(${MessageTable.data}, '$.summary.diffs') = json(${JSON.stringify(msg.summary.diffs)})`,
+                })
                 .from(MessageTable)
                 .where(and(eq(MessageTable.id, msg.id), eq(MessageTable.session_id, msg.sessionID)))
                 .get()
                 .pipe(Effect.orDie)
             : undefined
         const info =
-          existing?.type === "array" && msg.role === "user"
-            ? { ...msg, summary: { ...msg.summary, diffs: undefined } }
+          existing?.matches === 1 && msg.role === "user" && msg.summary?.diffs !== undefined
+            ? {
+                ...msg,
+                summary: {
+                  ...msg.summary,
+                  diffs: msg.summary.diffs.map(({ patch: _, ...item }) => item),
+                },
+              }
             : msg
         yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID: msg.sessionID, info })
         return msg

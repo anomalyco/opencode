@@ -13,15 +13,20 @@
 import { afterEach, describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
+import path from "path"
 import { SessionPaths } from "@/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { MessageID } from "@/session/schema"
+import { MessageID, PartID } from "@/session/schema"
+import { SessionSummary } from "@/session/summary"
+import { Snapshot } from "@/snapshot"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Database } from "@opencode-ai/core/database/database"
-import { EventTable } from "@opencode-ai/core/event/sql"
+import { EventV2 } from "@opencode-ai/core/event"
+import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
+import { MessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { and, eq, sql } from "drizzle-orm"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
@@ -29,7 +34,12 @@ import { testEffect } from "../lib/effect"
 import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
 const it = testEffect(
-  Layer.mergeAll(LayerNode.compile(LayerNode.group([Database.node, Session.node, Storage.node])), httpApiLayer),
+  Layer.mergeAll(
+    LayerNode.compile(
+      LayerNode.group([Database.node, EventV2.node, Session.node, SessionSummary.node, Snapshot.node, Storage.node]),
+    ),
+    httpApiLayer,
+  ),
 )
 
 afterEach(async () => {
@@ -151,6 +161,126 @@ describe("session diff with missing patch (#26574)", () => {
 
         expect(response.status).toBe(200)
         expect(yield* response.json).toEqual([diff])
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "persists changed turn diffs through a fresh event replay",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* withSession({ title: "changed-turn-diff" })
+        const messageID = MessageID.ascending()
+        const message = {
+          id: messageID,
+          sessionID: session.id,
+          role: "user" as const,
+          time: { created: Date.now() },
+          agent: "build",
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("model") },
+        } satisfies SessionV1.User
+        yield* Session.use.updateMessage(message)
+        const assistant = yield* Session.use.updateMessage({
+          id: MessageID.ascending(),
+          sessionID: session.id,
+          role: "assistant",
+          time: { created: Date.now() },
+          parentID: messageID,
+          agent: "build",
+          modelID: ModelV2.ID.make("model"),
+          providerID: ProviderV2.ID.make("test"),
+          mode: "build",
+          path: { cwd: test.directory, root: test.directory },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        } satisfies SessionV1.Assistant)
+        const snapshot = yield* Snapshot.Service
+        const summary = yield* SessionSummary.Service
+        const start = yield* snapshot.track()
+        if (!start) return yield* Effect.die("expected initial snapshot")
+        yield* Effect.promise(() => Bun.write(path.join(test.directory, "first.ts"), "first"))
+        const first = yield* snapshot.track()
+        if (!first) return yield* Effect.die("expected first snapshot")
+        yield* Session.use.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "step-start",
+          snapshot: start,
+        })
+        yield* Session.use.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "step-finish",
+          reason: "stop",
+          snapshot: first,
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        })
+        yield* summary.summarize({ sessionID: session.id, messageID })
+
+        yield* Effect.promise(() => Bun.write(path.join(test.directory, "second.ts"), "second"))
+        const second = yield* snapshot.track()
+        if (!second) return yield* Effect.die("expected second snapshot")
+        yield* Session.use.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "step-finish",
+          reason: "stop",
+          snapshot: second,
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        })
+        yield* summary.summarize({ sessionID: session.id, messageID })
+
+        const { db } = yield* Database.Service
+        const before = yield* db
+          .select({ data: MessageTable.data })
+          .from(MessageTable)
+          .where(eq(MessageTable.id, messageID))
+          .get()
+          .pipe(Effect.orDie)
+        expect(before?.data).toMatchObject({
+          role: "user",
+          summary: { diffs: [{ file: "first.ts" }, { file: "second.ts" }] },
+        })
+
+        const events = yield* db
+          .select()
+          .from(EventTable)
+          .where(eq(EventTable.aggregate_id, session.id))
+          .orderBy(EventTable.seq)
+          .all()
+          .pipe(Effect.orDie)
+        yield* db.delete(MessageTable).where(eq(MessageTable.session_id, session.id)).run().pipe(Effect.orDie)
+        yield* db.delete(EventTable).where(eq(EventTable.aggregate_id, session.id)).run().pipe(Effect.orDie)
+        yield* db.delete(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, session.id)).run().pipe(Effect.orDie)
+        yield* db.delete(SessionTable).where(eq(SessionTable.id, session.id)).run().pipe(Effect.orDie)
+
+        const event = yield* EventV2.Service
+        yield* event.replayAll(
+          events.map((item) => ({
+            id: item.id,
+            type: item.type,
+            data: item.data,
+            seq: item.seq,
+            aggregateID: item.aggregate_id,
+          })),
+        )
+
+        const after = yield* db
+          .select({ data: MessageTable.data })
+          .from(MessageTable)
+          .where(eq(MessageTable.id, messageID))
+          .get()
+          .pipe(Effect.orDie)
+        expect(after?.data).toMatchObject({
+          role: "user",
+          summary: { diffs: [{ file: "first.ts" }, { file: "second.ts" }] },
+        })
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
