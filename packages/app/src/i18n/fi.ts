@@ -87,6 +87,10 @@ export const dict = {
   "command.session.unshare.description": "Lopeta tämän istunnon jakaminen",
   "command.session.export": "Vie istunto",
   "command.session.export.description": "Vie istunnon koko transkriptio JSON-muodossa",
+  "command.session.thinking": "Toggle reasoning",
+  "command.session.thinking.description": "Show or hide model reasoning in the session",
+  "toast.session.thinking.on": "Reasoning shown",
+  "toast.session.thinking.off": "Reasoning hidden",
 
   "palette.search.placeholder": "Hae tiedostoja, komentoja ja istuntoja",
   "palette.search.placeholder.home": "Hae komentoja ja istuntoja",

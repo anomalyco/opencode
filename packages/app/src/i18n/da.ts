@@ -94,6 +94,10 @@ export const dict = {
 
   "command.session.export": "Eksportér session",
   "command.session.export.description": "Eksportér hele sessionsudskriften som JSON",
+  "command.session.thinking": "Toggle reasoning",
+  "command.session.thinking.description": "Show or hide model reasoning in the session",
+  "toast.session.thinking.on": "Reasoning shown",
+  "toast.session.thinking.off": "Reasoning hidden",
 
   "palette.search.placeholder": "Søg i filer, kommandoer og sessioner",
   "palette.search.placeholder.home": "Søg i kommandoer og sessioner",
