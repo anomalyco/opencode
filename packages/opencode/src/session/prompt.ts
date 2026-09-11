@@ -841,9 +841,11 @@ const layer = Layer.effect(
                       let r: LSP.Range | undefined
                       if ("range" in symbol) r = symbol.range
                       else if ("location" in symbol) r = symbol.location.range
-                      if (r?.start?.line && r?.start?.line === start) {
-                        start = r.start.line
-                        end = r?.end?.line ?? start
+                      // URL line numbers are 1-based; LSP ranges are 0-based and end-exclusive.
+                      if (r?.start?.line != null && r.start.line + 1 === start) {
+                        const lineCount = Math.max(1, (r.end?.line ?? r.start.line) - r.start.line)
+                        start = r.start.line + 1
+                        end = start + lineCount - 1
                         break
                       }
                     }
