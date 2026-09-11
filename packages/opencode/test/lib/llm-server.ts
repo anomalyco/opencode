@@ -36,6 +36,7 @@ type Sse = {
   type: "sse"
   head: unknown[]
   tail: unknown[]
+  contentType?: string | false
   wait?: PromiseLike<unknown>
   hang?: boolean
   error?: unknown
@@ -427,7 +428,10 @@ function send(item: Sse) {
   if (item.error) end = Stream.concat(empty, Stream.fail(item.error))
   else if (item.hang) end = Stream.concat(empty, Stream.never)
 
-  return HttpServerResponse.stream(Stream.concat(body, end), { contentType: "text/event-stream" })
+  return HttpServerResponse.stream(
+    Stream.concat(body, end),
+    item.contentType === false ? undefined : { contentType: item.contentType ?? "text/event-stream" },
+  )
 }
 
 const reset = Effect.fn("TestLLMServer.reset")(function* (item: Sse) {
@@ -577,6 +581,7 @@ export function raw(input: {
   chunks?: unknown[]
   head?: unknown[]
   tail?: unknown[]
+  contentType?: string | false
   wait?: PromiseLike<unknown>
   hang?: boolean
   error?: unknown
@@ -586,6 +591,7 @@ export function raw(input: {
     type: "sse",
     head: input.head ?? input.chunks ?? [],
     tail: input.tail ?? [],
+    contentType: input.contentType,
     wait: input.wait,
     hang: input.hang,
     error: input.error,
