@@ -76,7 +76,9 @@ async function metadata(version: string, files: Record<string, { url: string }>)
       ] as const
     }),
   )
-  if (entries.some((entry) => entry === undefined)) throw new Error("Desktop update metadata is incomplete")
+  // Stable V2 releases temporarily omit Windows while its signing identity is configured.
+  if (entries.slice(Script.channel === "latest" ? 1 : 0).some((entry) => entry === undefined))
+    throw new Error("Desktop update metadata is incomplete")
   const manifests = Object.fromEntries(entries.filter((entry) => entry !== undefined))
   return { manifests }
 }

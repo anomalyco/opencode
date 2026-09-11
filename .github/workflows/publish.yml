@@ -417,6 +417,7 @@ jobs:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: runner.os != 'Windows' || github.ref_name != 'v2'
         with:
           name: opencode-preview-cli
           path: packages/cli/dist
@@ -433,11 +434,12 @@ jobs:
         run: echo "${{ secrets.APPLE_API_KEY_PATH }}" > $RUNNER_TEMP/apple-api-key.p8
 
       - uses: ./.github/actions/setup-bun
+        if: runner.os != 'Windows' || github.ref_name != 'v2'
         with:
           install-flags: ${{ matrix.settings.bun_install_flags }}
 
       - name: Azure login
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.ref_name != 'v2'
         uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
         with:
           client-id: ${{ env.AZURE_CLIENT_ID }}
@@ -445,6 +447,7 @@ jobs:
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: runner.os != 'Windows' || github.ref_name != 'v2'
         with:
           node-version: "24"
 
@@ -466,6 +469,7 @@ jobs:
           sudo chmod -R a+rw ~/apt-cache
 
       - name: Setup git committer
+        if: runner.os != 'Windows' || github.ref_name != 'v2'
         id: committer
         uses: ./.github/actions/setup-git-committer
         with:
@@ -473,6 +477,7 @@ jobs:
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Prepare
+        if: runner.os != 'Windows' || github.ref_name != 'v2'
         run: bun ./scripts/prepare.ts
         working-directory: packages/desktop
         env:
@@ -482,6 +487,7 @@ jobs:
           OPENCODE_CLI_DIST: ${{ github.workspace }}/packages/cli/dist
 
       - name: Build
+        if: runner.os != 'Windows' || github.ref_name != 'v2'
         run: bun run build
         working-directory: packages/desktop
         env:
@@ -499,7 +505,7 @@ jobs:
           OPENCODE_CLI_DIST: ${{ github.workspace }}/packages/cli/dist
 
       - name: Package
-        if: needs.version.outputs.release
+        if: needs.version.outputs.release && (runner.os != 'Windows' || github.ref_name != 'v2')
         run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish never --config electron-builder.config.ts
         working-directory: packages/desktop
         timeout-minutes: 60
@@ -512,7 +518,7 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
 
       - name: Package (no publish)
-        if: ${{ !needs.version.outputs.release }}
+        if: ${{ !needs.version.outputs.release && (runner.os != 'Windows' || github.ref_name != 'v2') }}
         run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish never --config electron-builder.config.ts
         working-directory: packages/desktop
         timeout-minutes: 60
@@ -541,7 +547,7 @@ jobs:
           tar -czf "$OUT_NAME" -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
 
       - name: Verify signed Windows Electron artifacts
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.ref_name != 'v2'
         shell: pwsh
         run: |
           $files = @()
@@ -557,12 +563,13 @@ jobs:
           }
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: runner.os != 'Windows' || github.ref_name != 'v2'
         with:
           name: opencode-desktop-${{ matrix.settings.target }}
           path: packages/desktop/dist/*
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: needs.version.outputs.release
+        if: needs.version.outputs.release && (runner.os != 'Windows' || github.ref_name != 'v2')
         with:
           name: latest-yml-${{ matrix.settings.target }}
           path: packages/desktop/dist/latest*.yml
