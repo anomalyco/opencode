@@ -3,6 +3,9 @@ import { model } from "@opencode/ai/providers/openai"
 import { LLM } from "../src/index.js"
 import { Endpoint } from "../src/route/endpoint.js"
 
+const configuration = (provider: string, message: string) =>
+  expect.objectContaining({ _tag: "ProviderConfiguration", provider, message })
+
 describe("provider package entrypoints", () => {
   test("semantic API aliases expose the same contract", async () => {
     const modules = await Promise.all([
@@ -322,7 +325,7 @@ describe("provider package entrypoints", () => {
     const AnthropicCompatible = await import("@opencode/ai/providers/anthropic-compatible")
     expect(() =>
       Reflect.apply(AnthropicCompatible.model, undefined, ["compatible-model", { apiKey: "fixture" }]),
-    ).toThrow("Anthropic-compatible providers require a baseURL")
+    ).toThrow(configuration("anthropic-compatible", "Anthropic-compatible providers require a baseURL"))
   })
 
   test("rejects conflicting Anthropic-compatible auth settings at runtime", async () => {
@@ -337,10 +340,10 @@ describe("provider package entrypoints", () => {
           baseURL: "https://messages.example.test/v1",
         },
       ]),
-    ).toThrow("Anthropic-compatible apiKey cannot be combined with authToken")
+    ).toThrow(configuration("anthropic-compatible", "Anthropic-compatible apiKey cannot be combined with authToken"))
     expect(() =>
       Reflect.apply(Anthropic.model, undefined, ["claude-sonnet-4-6", { apiKey: "fixture", authToken: "token" }]),
-    ).toThrow("Anthropic apiKey cannot be combined with authToken")
+    ).toThrow(configuration("anthropic", "Anthropic apiKey cannot be combined with authToken"))
   })
 
   test("maps legacy OpenAI organization and project settings to headers", () => {
@@ -490,43 +493,45 @@ describe("provider package entrypoints", () => {
         "gemini-3.5-flash",
         { accessToken: "token", apiKey: "fixture", project: "vertex-project" },
       ]),
-    ).toThrow("Google Vertex apiKey cannot be combined with accessToken or auth")
+    ).toThrow(configuration("google-vertex", "Google Vertex apiKey cannot be combined with accessToken or auth"))
     const configured = Reflect.apply(GoogleVertex.configure, undefined, [
       { accessToken: "token", auth: {}, project: "vertex-project" },
     ])
-    expect(() => configured.model("gemini-3.5-flash")).toThrow("Google Vertex accessToken cannot be combined with auth")
+    expect(() => configured.model("gemini-3.5-flash")).toThrow(
+      configuration("google-vertex", "Google Vertex accessToken cannot be combined with auth"),
+    )
     expect(() =>
       Reflect.apply(GoogleVertexMessages.model, undefined, [
         "claude-sonnet-4-6",
         { apiKey: "fixture", project: "vertex-project" },
       ]),
-    ).toThrow("Google Vertex Messages does not support API keys")
+    ).toThrow(configuration("google-vertex", "Google Vertex Messages does not support API keys"))
     expect(() =>
       Reflect.apply(Providers.GoogleVertexMessages.configure, undefined, [
         { apiKey: "fixture", project: "vertex-project" },
       ]),
-    ).toThrow("Google Vertex Messages does not support API keys")
+    ).toThrow(configuration("google-vertex", "Google Vertex Messages does not support API keys"))
     expect(() =>
       Reflect.apply(GoogleVertexChat.model, undefined, [
         "deepseek-ai/deepseek-v3.2-maas",
         { apiKey: "fixture", project: "vertex-project" },
       ]),
-    ).toThrow("Google Vertex Chat does not support API keys")
+    ).toThrow(configuration("google-vertex", "Google Vertex Chat does not support API keys"))
     expect(() =>
       Reflect.apply(Providers.GoogleVertexChat.configure, undefined, [
         { apiKey: "fixture", project: "vertex-project" },
       ]),
-    ).toThrow("Google Vertex Chat does not support API keys")
+    ).toThrow(configuration("google-vertex", "Google Vertex Chat does not support API keys"))
     expect(() =>
       Reflect.apply(GoogleVertexResponses.model, undefined, [
         "xai/grok-4.20-reasoning",
         { apiKey: "fixture", project: "vertex-project" },
       ]),
-    ).toThrow("Google Vertex Responses does not support API keys")
+    ).toThrow(configuration("google-vertex", "Google Vertex Responses does not support API keys"))
     expect(() =>
       Reflect.apply(Providers.GoogleVertexResponses.configure, undefined, [
         { apiKey: "fixture", project: "vertex-project" },
       ]),
-    ).toThrow("Google Vertex Responses does not support API keys")
+    ).toThrow(configuration("google-vertex", "Google Vertex Responses does not support API keys"))
   })
 })

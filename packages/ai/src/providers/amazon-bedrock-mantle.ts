@@ -4,7 +4,7 @@ import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { BedrockAuth, type Credentials } from "../protocols/utils/bedrock-auth.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("amazon-bedrock")
@@ -79,9 +79,12 @@ const defaults = (input: Config) => {
 
 export const configure = (input: Config = {}) => {
   if (input.auth === "bearer" && input.apiKey === undefined && process.env.AWS_BEARER_TOKEN_BEDROCK === undefined)
-    throw new Error("Amazon Bedrock Mantle bearer auth requires apiKey")
+    throw new ProviderConfigurationError({ provider: id, message: "Amazon Bedrock Mantle bearer auth requires apiKey" })
   if (input.auth === "sigv4" && input.apiKey !== undefined)
-    throw new Error("Amazon Bedrock Mantle SigV4 auth does not accept apiKey")
+    throw new ProviderConfigurationError({
+      provider: id,
+      message: "Amazon Bedrock Mantle SigV4 auth does not accept apiKey",
+    })
   const configuredResponsesRoute = configuredRoute(responsesRoute, input)
   const configuredChatRoute = configuredRoute(chatRoute, input)
   const modelDefaults = defaults(input)
