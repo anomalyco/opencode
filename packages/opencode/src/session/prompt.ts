@@ -1083,6 +1083,10 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        // At most one reactive overflow recovery per executed loop body. The allowance is spent
+        // at the dispatch point and never restored inside the same body; a later body (a new run
+        // after idle) gets a fresh one.
+        let reactiveAvailable = true
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1126,6 +1130,18 @@ const layer = Layer.effect(
               })
             }
             yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
+            break
+          }
+
+          // A failed turn is never re-prompted: an assistant with a durable error, no finish, and
+          // no tool parts awaiting a result has nothing to send back, so re-entry returns the
+          // original failure. Only the loop exits here — idle is published by the runner's onIdle.
+          if (
+            lastAssistant?.error &&
+            !lastAssistant.finish &&
+            !hasToolCalls &&
+            lastAssistant.parentID === lastUser.id
+          ) {
             break
           }
 
@@ -1182,6 +1198,11 @@ const layer = Layer.effect(
             Effect.provideService(FSUtil.Service, fsys),
             Effect.provideService(Session.Service, sessions),
           )
+
+          // Admission is a pre-attempt predicate, not a branch at the dispatch point: an attempt
+          // that cannot be followed by a recovery must settle its overflow as terminal instead of
+          // running one. Read-only here — the allowance itself is spent at the dispatch point.
+          const reactiveAllowed = reactiveAvailable && (yield* compaction.admissible(msgs, lastUser.id))
 
           const msg: SessionV1.Assistant = {
             id: MessageID.ascending(),
@@ -1269,21 +1290,24 @@ const layer = Layer.effect(
             ]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
-            const result = yield* handle.process({
-              user: lastUser,
-              agent,
-              permission: session.permission,
-              sessionID,
-              parentSessionID: session.parentID,
-              system,
-              messages: [
-                ...modelMsgs,
-                ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }] : []),
-              ],
-              tools,
-              model,
-              toolChoice: format.type === "json_schema" ? "required" : undefined,
-            })
+            const result = yield* handle.process(
+              {
+                user: lastUser,
+                agent,
+                permission: session.permission,
+                sessionID,
+                parentSessionID: session.parentID,
+                system,
+                messages: [
+                  ...modelMsgs,
+                  ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }] : []),
+                ],
+                tools,
+                model,
+                toolChoice: format.type === "json_schema" ? "required" : undefined,
+              },
+              reactiveAllowed,
+            )
 
             if (structured !== undefined) {
               handle.message.structured = structured
@@ -1318,6 +1342,10 @@ const layer = Layer.effect(
 
             if (result === "stop") return "break" as const
             if (result === "compact") {
+              // Pure consumption: a vetoed attempt cannot report "compact", so reaching this
+              // point means the recovery was admitted and the allowance is now spent. An attempt
+              // that settled on usage keeps its finish, so it neither spends nor restores it.
+              if (!handle.message.finish) reactiveAvailable = false
               yield* compaction.create({
                 sessionID,
                 agent: lastUser.agent,
