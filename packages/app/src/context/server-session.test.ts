@@ -1639,4 +1639,57 @@ describe("server session", () => {
     expect(ctx.store.data.message.active?.map((message) => message.id)).toEqual(["message"])
     expect(ctx.store.data.session_status["session-0"]).toBeUndefined()
   })
+
+  test("preserves streamed parts when a refresh page returns none", async () => {
+    const message = userMessage("message")
+    const streamed = textPart(message.id, { text: "streamed" })
+    const store = createServerSession(
+      messageClient(
+        response([{ info: message, parts: [streamed] }]),
+        response([{ info: message, parts: [] }]),
+      ),
+    )
+    await store.sync("child")
+    store.apply({ type: "message.part.updated", properties: { sessionID: "child", part: streamed, time: 1 } })
+    await store.sync("child", { force: true })
+
+    expect(store.data.part[message.id]).toEqual([streamed])
+  })
+
+  test("refreshes with a full page after the session outgrows its first page", async () => {
+    const first = userMessage("first", { time: { created: 1 } })
+    const second = userMessage("second", { time: { created: 2 } })
+    let loads = 0
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: async (input: unknown) => {
+          const limit = (input as { limit?: number }).limit ?? 20
+          loads += 1
+          const available = loads === 1 ? [first] : [first, second]
+          return response(available.slice(0, limit).map((info) => ({ info, parts: [] })))
+        },
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    await store.sync("child")
+    await store.sync("child", { force: true })
+
+    expect(store.data.message.child).toEqual([first, second])
+    expect(store.data.session_message.child.map((message) => message.id)).toEqual(["first", "second"])
+  })
+
+  test("does not shrink the fetched page limit on refresh", async () => {
+    const a = userMessage("a", { time: { created: 1 } })
+    const b = userMessage("b", { time: { created: 2 } })
+    const client = messageClient(
+      response([{ info: a, parts: [] }, { info: b, parts: [] }]),
+      response([{ info: a, parts: [] }, { info: b, parts: [] }]),
+    )
+    const store = createServerSession(client)
+    await store.sync("child")
+    await store.sync("child", { force: true })
+
+    expect((client.requests[1] as { limit?: number }).limit).toBe(20)
+  })
 })
