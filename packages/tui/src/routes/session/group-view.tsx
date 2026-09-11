@@ -7,6 +7,7 @@ import { reasoningSummary } from "../../context/thinking"
 import { SplitBorder } from "../../ui/border"
 import { Locale } from "../../util/locale"
 import { EntryAnchor, GroupAnchor, visitEntries } from "./anchor-view"
+import { groupID } from "./anchors"
 import type { PartRef, SessionEntry, SessionGroup, SessionNode } from "./grouping/session"
 import { InlineToolRow, reasoningContent, toolDisplay } from "./message-parts"
 import { use } from "./render-context"
@@ -21,18 +22,19 @@ type Renderers = {
 
 type GroupProps = Renderers & {
   node: Extract<SessionNode, { type: "group" }>
-  path: readonly number[]
+  level: number
   completed: boolean
   pending: readonly PartRef[]
   pendingOutside?: boolean
   imagesOutside?: boolean
 }
 
-export function SessionGroupView(props: Renderers & { row: SessionGroup; path: readonly number[] }) {
+export function SessionGroupView(props: Renderers & { row: SessionGroup }) {
   return (
     <Group
       {...props}
       node={props.row}
+      level={0}
       completed={props.row.completed}
       pending={props.row.kind === "exploration" ? props.row.pending : []}
     />
@@ -40,8 +42,7 @@ export function SessionGroupView(props: Renderers & { row: SessionGroup; path: r
 }
 
 function Group(props: GroupProps) {
-  // Reconciliation can change a group's kind in place. Each kind keeps its own
-  // disclosure lifetime, matching the former separate group components.
+  // Keep kind-specific hover/title state isolated during reconciliation.
   return (
     <Show when={props.node.kind} keyed>
       {(_kind) => <GroupContent {...props} />}
@@ -53,15 +54,20 @@ function GroupContent(props: GroupProps) {
   const ctx = use()
   const theme = useTheme()
   const renderer = useRenderer()
-  const [expanded, setExpanded] = createSignal(false)
+  const id = createMemo(() => groupID(props.node, props.level))
+  const expanded = () => {
+    const key = id()
+    return key ? (ctx.groupExpanded(key) ?? false) : false
+  }
   const [hover, setHover] = createSignal(false)
-  const refs = createMemo(() => {
-    const result: PartRef[] = []
-    visitEntries(props.node.children, props.path, (entry) => {
-      if (entry.type === "part" && !isPending(entry, props.pending)) result.push(entry.ref)
-    })
+  const entries = createMemo(() => {
+    const result: SessionEntry[] = []
+    visitEntries(props.node.children, (entry) => result.push(entry))
     return result
   })
+  const refs = createMemo(() =>
+    entries().flatMap((entry) => (entry.type === "part" && !isPending(entry, props.pending) ? [entry.ref] : [])),
+  )
   const thoughts = createMemo(() =>
     props.node.kind !== "reasoning"
       ? []
@@ -117,7 +123,8 @@ function GroupContent(props: GroupProps) {
   })
   const toggle = () => {
     if (renderer.getSelection()?.getSelectedText()) return
-    setExpanded((value) => !value)
+    const key = id()
+    if (key) ctx.setGroupExpanded(key, !expanded())
   }
   const children = (mode: "normal" | "thought" | "tool") => (
     <Children {...props} nodes={props.node.children} mode={mode} />
@@ -125,14 +132,8 @@ function GroupContent(props: GroupProps) {
 
   return (
     <GroupAnchor
-      nodes={props.node.children}
-      path={props.path}
-      message={props.message}
-      reveal={() => {
-        if (!grouped() || expanded()) return false
-        setExpanded(true)
-        return true
-      }}
+      groupID={id()}
+      active={grouped() && (props.node.kind === "reasoning" ? thoughts().length > 0 : tools().length > 0)}
     >
       <Show
         when={props.node.kind === "reasoning"}
@@ -195,21 +196,13 @@ function GroupContent(props: GroupProps) {
         <For each={props.pending}>
           {(ref) => {
             const leaf = createMemo(() => {
-              let found: { entry: SessionEntry; path: readonly number[] } | undefined
-              visitEntries(props.node.children, props.path, (entry, path) => {
-                if (entry.type === "part" && entry.ref.messageID === ref.messageID && entry.ref.partID === ref.partID)
-                  found ??= { entry, path }
-              })
-              return found
+              return entries().find(
+                (entry) =>
+                  entry.type === "part" && entry.ref.messageID === ref.messageID && entry.ref.partID === ref.partID,
+              )
             })
             return (
-              <Show when={leaf()}>
-                {(item) => (
-                  <EntryAnchor entry={item().entry} path={item().path} message={props.message}>
-                    {props.entry(item().entry)}
-                  </EntryAnchor>
-                )}
-              </Show>
+              <Show when={leaf()}>{(item) => <EntryAnchor entry={item()}>{props.entry(item())}</EntryAnchor>}</Show>
             )
           }}
         </For>
@@ -222,7 +215,6 @@ function Children(props: GroupProps & { nodes: readonly SessionNode[]; mode: "no
   return (
     <For each={props.nodes}>
       {(node, index) => {
-        const path = () => [...props.path, index()]
         return (
           <Switch>
             <Match when={node.type === "group" ? node : undefined}>
@@ -230,7 +222,7 @@ function Children(props: GroupProps & { nodes: readonly SessionNode[]; mode: "no
                 <Group
                   {...props}
                   node={node()}
-                  path={path()}
+                  level={props.level + 1}
                   pendingOutside
                   imagesOutside={props.imagesOutside || props.mode === "tool"}
                   completed={
@@ -249,12 +241,12 @@ function Children(props: GroupProps & { nodes: readonly SessionNode[]; mode: "no
                   <Show
                     when={props.mode === "thought"}
                     fallback={
-                      <EntryAnchor entry={node().entry} path={path()} message={props.message}>
+                      <EntryAnchor entry={node().entry}>
                         {props.entry(node().entry, props.mode === "tool" ? false : undefined)}
                       </EntryAnchor>
                     }
                   >
-                    <ThoughtEntry entry={node().entry} path={path()} message={props.message} />
+                    <ThoughtEntry entry={node().entry} message={props.message} />
                   </Show>
                 </Show>
               )}
@@ -266,7 +258,7 @@ function Children(props: GroupProps & { nodes: readonly SessionNode[]; mode: "no
   )
 }
 
-function ThoughtEntry(props: { entry: SessionEntry; path: readonly number[]; message: Renderers["message"] }) {
+function ThoughtEntry(props: { entry: SessionEntry; message: Renderers["message"] }) {
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
@@ -288,7 +280,7 @@ function ThoughtEntry(props: { entry: SessionEntry; path: readonly number[]; mes
   })
   return (
     <Show when={content()}>
-      <EntryAnchor entry={props.entry} path={props.path} message={props.message} marginTop={1}>
+      <EntryAnchor entry={props.entry} marginTop={1}>
         <box
           border={["left"]}
           customBorderChars={SplitBorder.customBorderChars}

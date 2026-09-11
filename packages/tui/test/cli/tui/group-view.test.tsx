@@ -7,16 +7,17 @@ import type { SessionMessageAssistant } from "@opencode/client"
 import { ConfigProvider } from "../../../src/config"
 import { ThemeProvider } from "../../../src/context/theme"
 import { SessionGroupView } from "../../../src/routes/session/group-view"
-import { createMessageAnchors } from "../../../src/routes/session/message-anchors"
+import { createTimelineAnchors, groupID, type AnchorTarget } from "../../../src/routes/session/anchors"
 import { context } from "../../../src/routes/session/render-context"
 import type { SessionGroup } from "../../../src/routes/session/grouping/session"
 import { emptyThemeSource } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
-test("reveals two collapsed ancestors and registers the leaf's measured position", async () => {
+test("retains nested expansion state and registers exact headers and parts", async () => {
   addDefaultParsers(parsers.parsers)
-  const anchors = createMessageAnchors()
+  const anchors = createTimelineAnchors()
+  const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
   const config = createTuiResolvedConfig({ animations: false })
   const messages = new Map<string, SessionMessageAssistant>(
     ["a", "b"].map((id) => [
@@ -70,6 +71,8 @@ test("reveals two collapsed ancestors and registers the leaf's measured position
                 terminal: { width: 40, height: 24 },
                 sessionID: "fixture",
                 anchors,
+                groupExpanded: (id) => expanded[id],
+                setGroupExpanded: (id, value) => setExpanded(id, value),
                 thinkingMode: () => "hide",
                 markdownMode: () => "rendered",
                 groupExploration: () => true,
@@ -84,7 +87,6 @@ test("reveals two collapsed ancestors and registers the leaf's measured position
               <box paddingTop={2}>
                 <SessionGroupView
                   row={row}
-                  path={[0]}
                   message={(id) => messages.get(id)}
                   images={() => <text>Image previews</text>}
                   entry={(entry) =>
@@ -104,27 +106,40 @@ test("reveals two collapsed ancestors and registers the leaf's measured position
     { width: 40, height: 24 },
   )
   app.renderer.start()
+  const outerID = groupID(row, 0)
+  const inner = row.children[0]
+  if (inner.type !== "group") throw new Error("Missing nested group")
+  const innerID = groupID(inner, 1)
+  if (!outerID || !innerID) throw new Error("Missing group IDs")
+  const outer: AnchorTarget = { type: "group", groupID: outerID }
+  const nested: AnchorTarget = { type: "group", groupID: innerID }
+  const a: AnchorTarget = { type: "part", ref: { messageID: "a", partID: "read-a" } }
+  const b: AnchorTarget = { type: "part", ref: { messageID: "b", partID: "read-b" } }
   try {
     await app.waitForFrame((frame) => frame.includes("Explored"))
     expect(app.captureCharFrame()).not.toContain("Target B")
-    expect(anchors.get("b")?.path()).toEqual([0, 0, 1])
-    const headerY = anchors.get("b")?.target.y ?? -1
-    expect(anchors.get("b")?.reveal?.()).toBe(true)
+    expect(anchors.get(b)).toBeUndefined()
+    expect(anchors.get(nested)).toBeUndefined()
+    await app.mockMouse.click(4, anchors.get(outer)?.node.y ?? -1)
     await app.renderOnce()
     expect(app.captureCharFrame()).not.toContain("Target B")
-    expect(anchors.get("b")?.level).toBe(2)
-    expect(anchors.get("b")?.reveal?.()).toBe(true)
+    expect(expanded[outerID]).toBe(true)
+    expect(anchors.get(outer)).toBeDefined()
+    await app.mockMouse.click(4, anchors.get(nested)?.node.y ?? -1)
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("Target B")
-    expect(anchors.get("b")?.reveal).toBeUndefined()
-    expect(anchors.get("b")?.target.y).toBe(target?.y)
-    expect(anchors.get("b")?.target.y).toBeGreaterThan(anchors.get("a")?.target.y ?? Infinity)
+    expect(expanded[innerID]).toBe(true)
+    expect(anchors.get(b)?.node.y).toBe(target?.y)
+    expect(anchors.get(b)?.node.y).toBeGreaterThan(anchors.get(a)?.node.y ?? Infinity)
+    expect(anchors.get(nested)).toBeDefined()
     expect(app.captureCharFrame().match(/Image previews/g)?.length).toBe(1)
-    await app.mockMouse.click(4, headerY)
+    setExpanded(outerID, false)
     await app.renderOnce()
     expect(app.captureCharFrame()).not.toContain("Target B")
-    expect(anchors.get("b")?.level).toBe(1)
-    anchors.get("b")?.reveal?.()
+    expect(anchors.get(b)).toBeUndefined()
+    expect(anchors.get(outer)).toBeDefined()
+    expect(expanded[innerID]).toBe(true)
+    setExpanded(outerID, true)
     await app.renderOnce()
     setRow(
       reconcile({
@@ -141,7 +156,7 @@ test("reveals two collapsed ancestors and registers the leaf's measured position
     )
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("Target B")
-    expect(anchors.get("b")?.path()).toEqual([0, 1])
+    expect(anchors.get(b)?.node.y).toBe(target?.y)
     setRow(
       reconcile({
         type: "group",
@@ -157,7 +172,9 @@ test("reveals two collapsed ancestors and registers the leaf's measured position
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("Thought")
     expect(app.captureCharFrame()).not.toContain("Reset thought body")
-    expect(anchors.get("b")?.reveal?.()).toBe(true)
+    const thinkingID = groupID(row, 0)
+    if (!thinkingID) throw new Error("Missing thinking group ID")
+    setExpanded(thinkingID, true)
     await app.waitForFrame((frame) => frame.includes("Reset thought body"))
     expect(app.captureCharFrame()).toContain("Reset thought body")
   } finally {

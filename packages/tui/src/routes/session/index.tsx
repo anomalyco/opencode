@@ -100,7 +100,7 @@ import { findMessageBoundary, messageNavigationSlack } from "./message-navigatio
 import { stringWidth } from "../../util/string-width"
 import { useArgs } from "../../context/args"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
-import { useSessionTabs } from "../../context/session-tabs"
+import { useSessionTabs, type ScrollAnchor } from "../../context/session-tabs"
 import { createSingleFlight } from "../../util/single-flight"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 import { createDelayedPresence } from "../../util/delayed-presence"
@@ -111,8 +111,8 @@ import { context, use, type PendingAction } from "./render-context"
 import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
 import type { SessionEntry } from "./grouping/session"
 import { SessionGroupView } from "./group-view"
-import { entryMessageID, useEntryAnchor, visitEntries } from "./anchor-view"
-import { createMessageAnchors } from "./message-anchors"
+import { useEntryAnchor } from "./anchor-view"
+import { containsAnchor, createTimelineAnchors } from "./anchors"
 export { InlineToolRow } from "./message-parts"
 export { toolDisplay } from "./message-parts"
 
@@ -263,7 +263,7 @@ export function Session(props: {
     },
   )
   const boundaries = createMemo(() => messageBoundaryIDs(rows, messages()))
-  const anchors = createMessageAnchors()
+  const anchors = createTimelineAnchors()
   const [navigationMessage, setNavigationMessage] = createSignal<string>()
   const [navigationSlack, setNavigationSlack] = createSignal(0)
   const [firstJump, setFirstJump] = createSignal<() => void>()
@@ -272,13 +272,11 @@ export function Session(props: {
   const [awayFromBottom, setAwayFromBottom] = createSignal(false)
   const [latestHovered, setLatestHovered] = createSignal(false)
   let ensureAllRowsPending: (() => void)[] | undefined
-  let anchorRequest = 0
   createEffect(() => {
     if (!awayFromBottom()) setLatestHovered(false)
   })
 
   const clearMessageNavigation = () => {
-    anchorRequest++
     ensureAllRowsPending?.splice(0)
     prependHistory.cancel()
     firstJump()?.()
@@ -455,24 +453,15 @@ export function Session(props: {
     })
   }
 
-  function revealMessage(messageID: string, continuation: (target: { y: number }) => void) {
-    const request = ++anchorRequest
-    const reveal = () => {
-      if (request !== anchorRequest || !scroll || scroll.isDestroyed) return
-      const anchor = anchors.get(messageID)
-      if (!anchor) return
-      if (anchor.reveal?.()) {
-        scroll.stickyScroll = false
-        afterLayout(reveal)
-        return
-      }
-      continuation(anchor.target)
-    }
-    reveal()
-  }
-
   function isAwayFromBottom() {
-    if (revealingOlderRows || revealingNewerRows || ensureAllRowsPending || navigationMessage() || firstJump())
+    if (
+      revealingOlderRows ||
+      revealingNewerRows ||
+      ensureAllRowsPending ||
+      navigationMessage() ||
+      navigationSlack() ||
+      firstJump()
+    )
       return true
     if (visibleEnd() < rows.length) return true
     return scroll.scrollTop < Math.max(0, scroll.scrollHeight - scroll.viewport.height)
@@ -504,16 +493,19 @@ export function Session(props: {
       sessionTabs.setScrollAnchor(sessionID, undefined)
       return
     }
-    let first: { messageID: string; screenY: number; reveal: boolean } | undefined
-    let anchor: { messageID: string; screenY: number; reveal: boolean } | undefined
+    let first: ScrollAnchor | undefined
+    let anchor: ScrollAnchor | undefined
     for (const child of mounted) {
       const item = {
-        messageID: child.messageID,
-        screenY: child.target.y - scroll.viewport.y,
-        reveal: child.reveal === undefined,
+        target: child.target,
+        screenY: child.node.y - scroll.viewport.y,
       }
       first ??= item
-      const inset = data.session.message.get(sessionID, item.messageID)?.type === "assistant" ? 1 : 0
+      const inset =
+        item.target.type === "group" ||
+        data.session.message.get(sessionID, item.target.ref.messageID)?.type === "assistant"
+          ? 1
+          : 0
       if (item.screenY <= inset && (!anchor || item.screenY > anchor.screenY)) anchor = item
     }
     anchor ??= first
@@ -522,16 +514,7 @@ export function Session(props: {
   }
   function restoreScrollPosition() {
     const anchor = sessionTabs.scrollAnchor(sessionID)
-    const index = anchor
-      ? rows.findIndex((row) => {
-          if (row.type !== "group") return entryMessageID(row) === anchor.messageID
-          let found = false
-          visitEntries(row.children, [], (entry) => {
-            if (entryMessageID(entry) === anchor.messageID) found = true
-          })
-          return found
-        })
-      : -1
+    const index = anchor ? rows.findIndex((row) => containsAnchor(row, anchor.target)) : -1
     if (!anchor || index === -1) {
       scroll.scrollTo(scroll.scrollHeight)
       setAwayFromBottom(false)
@@ -543,7 +526,7 @@ export function Session(props: {
     scroll.stickyScroll = false
     const restore = () =>
       afterLayout(() => {
-        const boundary = anchors.get(anchor.messageID)
+        const boundary = anchors.get(anchor.target)
         if (!boundary) {
           sessionTabs.setScrollAnchor(sessionID, undefined)
           scroll.stickyScroll = true
@@ -551,24 +534,29 @@ export function Session(props: {
           setAwayFromBottom(false)
           return
         }
-        const position = (boundary: { y: number }) => {
-          const contentY = scroll.scrollTop + boundary.y - scroll.viewport.y
-          const target = contentY - anchor.screenY
-          const maximum = Math.max(0, scroll.scrollHeight - scroll.viewport.height)
-          if (target > maximum && visibleEnd() < rows.length) {
-            const next = Math.min(rows.length, visibleEnd() + TRANSCRIPT_BACKFILL_CHUNK)
-            setVisibleRowsEnd(next === rows.length ? undefined : next)
-            restore()
-            return
-          }
-          scroll.scrollTo(target)
-          updateAwayFromBottom()
-        }
-        if (anchor.reveal) {
-          revealMessage(anchor.messageID, position)
+        const contentY = scroll.scrollTop + boundary.node.y - scroll.viewport.y
+        const target = contentY - anchor.screenY
+        const maximum = Math.max(0, scroll.scrollHeight - scroll.viewport.height)
+        if (target > maximum && visibleEnd() < rows.length) {
+          const next = Math.min(rows.length, visibleEnd() + TRANSCRIPT_BACKFILL_CHUNK)
+          setVisibleRowsEnd(next === rows.length ? undefined : next)
+          restore()
           return
         }
-        position(boundary.target)
+        if (target > maximum) {
+          setNavigationSlack(
+            messageNavigationSlack({
+              top: target,
+              viewportHeight: scroll.viewport.height,
+              scrollHeight: scroll.scrollHeight,
+              currentSlack: scroll.getRenderable(NAVIGATION_SLACK_ID)?.height ?? 0,
+            }),
+          )
+          restore()
+          return
+        }
+        scroll.scrollTo(target)
+        updateAwayFromBottom()
       })
     restore()
   }
@@ -659,7 +647,7 @@ export function Session(props: {
     ensureAllRows(() => {
       const target = findMessageBoundary({
         direction,
-        children: anchors.list().map((anchor) => ({ id: anchor.messageID, y: anchor.target.y })),
+        children: anchors.messagePositions(),
         messages: messages(),
         scrollTop: scroll.scrollTop,
         viewportY: scroll.viewport.y,
@@ -681,11 +669,11 @@ export function Session(props: {
 
   const jumpToMessage = (messageID: string) =>
     ensureAllRows(() => {
-      revealMessage(messageID, (child) => {
-        const y = scroll.scrollTop + child.y - scroll.viewport.y
-        const message = data.session.message.get(route.sessionID, messageID)
-        alignMessage(messageID, Math.max(0, y - (message?.type === "assistant" ? 1 : 0)))
-      })
+      const child = anchors.forMessage(messageID)
+      if (!child) return
+      const y = scroll.scrollTop + child.node.y - scroll.viewport.y
+      const message = data.session.message.get(route.sessionID, messageID)
+      alignMessage(messageID, Math.max(0, y - (message?.type === "assistant" ? 1 : 0)))
     })
 
   function toBottom() {
@@ -1288,6 +1276,11 @@ export function Session(props: {
     <context.Provider
       value={{
         anchors,
+        groupExpanded: (groupID) => sessionTabs.groupExpanded(sessionID, groupID),
+        setGroupExpanded: (groupID, expanded) => {
+          sessionTabs.setGroupExpanded(sessionID, groupID, expanded)
+          afterLayout(saveScrollAnchor)
+        },
         get width() {
           return contentWidth()
         },
@@ -1338,7 +1331,7 @@ export function Session(props: {
                     foregroundColor: theme.border.default,
                   },
                 }}
-                stickyScroll={!navigationMessage()}
+                stickyScroll={!navigationMessage() && !navigationSlack()}
                 stickyStart="bottom"
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
@@ -1353,7 +1346,6 @@ export function Session(props: {
                   {(row, index) => (
                     <SessionRowView
                       row={row}
-                      index={index() + hidden()}
                       message={(messageID) => data.session.message.get(route.sessionID, messageID)}
                       boundaryID={boundaries()[index() + hidden()]}
                     />
@@ -1470,7 +1462,6 @@ export function Session(props: {
 
 type SessionRowViewProps = {
   row: SessionRow
-  index: number
   message: (messageID: string) => SessionMessageInfo | undefined
   boundaryID?: string
 }
@@ -1479,9 +1470,7 @@ function SessionRowView(props: SessionRowViewProps) {
   const [target, setTarget] = createSignal<BoxRenderable>()
   useEntryAnchor({
     entry: () => (props.row.type === "group" ? undefined : props.row),
-    path: () => [props.index],
-    target,
-    message: props.message,
+    node: target,
   })
   return (
     <box ref={setTarget} id={sessionRowID(props.row, props.boundaryID)} marginTop={1} flexShrink={0}>
@@ -1490,7 +1479,6 @@ function SessionRowView(props: SessionRowViewProps) {
           {(row) => (
             <SessionGroupView
               row={row()}
-              path={[props.index]}
               message={props.message}
               entry={(entry, images) => <SessionEntryView row={entry} message={props.message} images={images} />}
               images={(parts) => <ToolImages parts={parts} />}

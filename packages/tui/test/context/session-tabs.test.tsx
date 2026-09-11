@@ -592,18 +592,21 @@ test("keeps scroll anchors for open session tabs", async () => {
   try {
     await wait(() => setup.tabs.current() === "first")
     await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "first"))
-    setup.tabs.setScrollAnchor("first", { messageID: "msg_1", screenY: -3 })
-
-    expect(setup.tabs.scrollAnchor("first")).toEqual({ messageID: "msg_1", screenY: -3 })
-
-    setup.tabs.setScrollAnchor("first", { messageID: "msg_1", screenY: -3, reveal: true })
-    expect(setup.tabs.scrollAnchor("first")?.reveal).toBe(true)
-    setup.tabs.setScrollAnchor("first", { messageID: "msg_1", screenY: -3, reveal: false })
-    expect(setup.tabs.scrollAnchor("first")?.reveal).toBe(false)
+    const target = { type: "part" as const, ref: { messageID: "msg_1", partID: "text:0" } }
+    setup.tabs.setScrollAnchor("first", { target, screenY: -3 })
+    expect(setup.tabs.scrollAnchor("first")).toEqual({ target, screenY: -3 })
+    const group = { type: "group" as const, groupID: "group-1" }
+    setup.tabs.setScrollAnchor("first", { target: group, screenY: -3 })
+    expect(setup.tabs.scrollAnchor("first")?.target).toEqual(group)
+    setup.tabs.setGroupExpanded("first", group.groupID, true)
+    expect(setup.tabs.groupExpanded("first", group.groupID)).toBe(true)
+    setup.tabs.setGroupExpanded("first", group.groupID, false)
+    expect(setup.tabs.groupExpanded("first", group.groupID)).toBe(false)
 
     setup.tabs.close("first")
     await wait(() => setup.tabs.tabs().every((tab) => tab.sessionID !== "first"))
     expect(setup.tabs.scrollAnchor("first")).toBeUndefined()
+    expect(setup.tabs.groupExpanded("first", group.groupID)).toBeUndefined()
   } finally {
     await setup.destroy()
   }
@@ -617,8 +620,11 @@ test("keeps parent and subagent scroll anchors independent", async () => {
 
   try {
     await wait(() => setup.data.session.get("child") !== undefined)
-    const parent = { messageID: "msg_parent", screenY: -3 }
-    const child = { messageID: "msg_child", screenY: -5 }
+    const parent = {
+      target: { type: "part" as const, ref: { messageID: "msg_parent", partID: "message" } },
+      screenY: -3,
+    }
+    const child = { target: { type: "part" as const, ref: { messageID: "msg_child", partID: "message" } }, screenY: -5 }
     setup.tabs.setScrollAnchor("root", parent)
 
     // A short subagent transcript is at the bottom, so it saves no anchor.
