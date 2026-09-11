@@ -44,8 +44,8 @@ posix(
     const home = path.join(dir, "home with ' quotes")
     yield* fs.makeDirectory(path.join(home, ".opencode/bin"), { recursive: true })
     yield* fs.makeDirectory(path.join(dir, "bin"))
-    const managed = path.join(home, ".opencode/bin/opencode2")
-    const external = path.join(dir, "bin/opencode2")
+    const managed = path.join(home, ".opencode/bin/opencode")
+    const external = path.join(dir, "bin/opencode")
     yield* fs.writeFileString(managed, "#!/bin/sh\nprintf 'OpenCode v2.0.0\\n'\n", { mode: 0o755 })
     yield* fs.writeFileString(external, "#!/bin/sh\nprintf 'OpenCode v2.1.0\\n'\n", { mode: 0o755 })
     const run = (script: string) =>
@@ -79,7 +79,7 @@ posix(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const dir = yield* fs.makeTempDirectoryScoped({ prefix: "remote-install-" })
     yield* fs.makeDirectory(path.join(dir, "package/bin"), { recursive: true })
-    yield* fs.writeFileString(path.join(dir, "package/bin/opencode2"), "#!/bin/sh\nprintf 'OpenCode v2.0.0\\n'\n", {
+    yield* fs.writeFileString(path.join(dir, "package/bin/opencode"), "#!/bin/sh\nprintf 'OpenCode v2.0.0\\n'\n", {
       mode: 0o755,
     })
     const archive = path.join(dir, "archive.tgz")
@@ -101,13 +101,13 @@ posix(
         }),
       )
     expect(yield* run({ version: "2.0.0", source: { type: "download", url: server.url.href } })).toBe(0)
-    expect(yield* fs.readFileString(path.join(dir, ".opencode/bin/opencode2"))).toContain("2.0.0")
+    expect(yield* fs.readFileString(path.join(dir, ".opencode/bin/opencode"))).toContain("2.0.0")
     expect(
       yield* run({ version: "2.0.0", directory: ".opencode/desktop-ssh/2.0.0", source: { type: "archive" } }),
     ).toBe(0)
-    expect(yield* fs.readFileString(path.join(dir, ".opencode/desktop-ssh/2.0.0/opencode2"))).toContain("2.0.0")
+    expect(yield* fs.readFileString(path.join(dir, ".opencode/desktop-ssh/2.0.0/opencode"))).toContain("2.0.0")
     expect(yield* run({ version: "2.1.0", source: { type: "archive" } })).not.toBe(0)
-    expect(yield* fs.readFileString(path.join(dir, ".opencode/bin/opencode2"))).toContain("2.0.0")
-    expect(yield* fs.readDirectory(path.join(dir, ".opencode/bin"))).toEqual(["opencode2"])
+    expect(yield* fs.readFileString(path.join(dir, ".opencode/bin/opencode"))).toContain("2.0.0")
+    expect(yield* fs.readDirectory(path.join(dir, ".opencode/bin"))).toEqual(["opencode"])
   }),
 )

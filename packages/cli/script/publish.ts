@@ -29,6 +29,8 @@ async function publish(dir: string, name: string, version: string) {
 async function publishDistribution(input: {
   root: string
   name: string
+  command: string
+  legacyCommand?: string
   binary: string
   packagePrefix: string
   artifact: string
@@ -48,7 +50,7 @@ async function publishDistribution(input: {
 
   await $`mkdir -p ${input.root}/${input.name}/bin`
   await $`cp ./script/postinstall.mjs ${input.root}/${input.name}/postinstall.mjs`
-  await Bun.file(`${input.root}/${input.name}/bin/${input.binary}.exe`).write(
+  await Bun.file(`${input.root}/${input.name}/bin/${input.command}.exe`).write(
     [
       `echo "Error: ${input.name}'s postinstall script was not run." >&2`,
       'echo "" >&2',
@@ -58,11 +60,19 @@ async function publishDistribution(input: {
       "",
     ].join("\n"),
   )
+  if (input.legacyCommand)
+    await Bun.file(`${input.root}/${input.name}/bin/${input.legacyCommand}.cjs`).write(
+      `#!/usr/bin/env node\n\nconsole.log(${JSON.stringify(`opencode2 is now just opencode. run ${input.command}`)})\nprocess.exit(1)\n`,
+    )
   await Bun.file(`${input.root}/${input.name}/package.json`).write(
     JSON.stringify(
       {
         name: input.name,
-        bin: { [input.binary]: `./bin/${input.binary}.exe` },
+        bin: {
+          [input.command]: `./bin/${input.command}.exe`,
+          ...(input.legacyCommand ? { [input.legacyCommand]: `./bin/${input.legacyCommand}.cjs` } : {}),
+        },
+        ...(input.command !== input.binary ? { opencodeSourceBinary: input.binary } : {}),
         scripts: { postinstall: "node ./postinstall.mjs" },
         version,
         license: pkg.license,
@@ -120,7 +130,9 @@ async function publishDistribution(input: {
 await publishDistribution({
   root,
   name: pkg.name,
-  binary: "opencode2",
+  command: "opencode",
+  legacyCommand: "opencode2",
+  binary: "opencode",
   packagePrefix: "@opencode/cli-",
   artifact: "cli",
 })
@@ -128,13 +140,14 @@ if (existsSync(path.join(root, "node"))) {
   await publishDistribution({
     root: path.join(root, "node"),
     name: "@opencode/cli-node",
+    command: "opencode2-node",
     binary: "opencode2-node",
     packagePrefix: "@opencode/cli-node-",
     artifact: "cli-node",
   })
 }
 
-if ((Script.channel === "beta" || Script.channel === "latest") && Script.release) {
+if (Script.channel === "beta" && Script.release) {
   await $`bun ./script/publish-aur.ts ${dryRun ? ["--dry-run"] : []}`.env({ ...process.env, OPENCODE_CLI_DIST: root })
 }
 

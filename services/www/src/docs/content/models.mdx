@@ -32,7 +32,7 @@ Availability is project-specific:
 Use `--model` to choose a model for one command-line run without changing the configured default:
 
 ```bash
-opencode2 run --model anthropic/claude-sonnet-4-5 "Refactor parseToken"
+opencode run --model anthropic/claude-sonnet-4-5 "Refactor parseToken"
 ```
 
 Agents and commands can also choose their own model. See [Agents](/agents) and [Commands](/commands).
@@ -63,7 +63,7 @@ Variants are named options for one model, often used for reasoning effort or tok
 one for a run, session, agent, or command:
 
 ```bash
-opencode2 run --model openai/gpt-5.2#high "Review this migration plan"
+opencode run --model openai/gpt-5.2#high "Review this migration plan"
 ```
 
 Variant names come from the selected model's current catalog metadata. Names such as `low`, `high`, and `max` are not

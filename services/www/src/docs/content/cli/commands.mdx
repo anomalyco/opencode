@@ -1,548 +1,548 @@
 ---
 title: "Commands"
-description: "Reference for the opencode2 command line."
+description: "Reference for the opencode command line."
 ---
 
-Every command accepts `--help` for its full flag list, for example `opencode2 run --help`. Commands that talk to a server also accept `--standalone` to run a private server and `--server <url>` to target a specific one.
+Every command accepts `--help` for its full flag list, for example `opencode run --help`. Commands that talk to a server also accept `--standalone` to run a private server and `--server <url>` to target a specific one.
 
 ## run
 
-`opencode2 run` sends a message and prints the reply without opening the interactive interface.
+`opencode run` sends a message and prints the reply without opening the interactive interface.
 
 ```bash
-$ opencode2 run "Explain this repository"
+$ opencode run "Explain this repository"
 ```
 
 Choose a model.
 
 ```bash
-$ opencode2 run --model anthropic/claude-sonnet-4-5 "Refactor parseToken"
+$ opencode run --model anthropic/claude-sonnet-4-5 "Refactor parseToken"
 ```
 
 Continue the last session.
 
 ```bash
-$ opencode2 run --continue "Now handle the expired case"
+$ opencode run --continue "Now handle the expired case"
 ```
 
 Emit newline-delimited JSON for scripts.
 
 ```bash
-$ opencode2 run --format json "List the TODO comments"
+$ opencode run --format json "List the TODO comments"
 ```
 
 Attach files to the message.
 
 ```bash
-$ opencode2 run --file src/server.ts --file src/client.ts "Review these for bugs"
+$ opencode run --file src/server.ts --file src/client.ts "Review these for bugs"
 ```
 
 Run with a specific agent.
 
 ```bash
-$ opencode2 run --agent build "Fix the failing test"
+$ opencode run --agent build "Fix the failing test"
 ```
 
 View all subcommands and flags.
 
 ```bash
-$ opencode2 run --help
+$ opencode run --help
 ```
 
 ## mini
 
-`opencode2 mini` starts the minimal interactive interface instead of the full-screen TUI.
+`opencode mini` starts the minimal interactive interface instead of the full-screen TUI.
 
 ```bash
-$ opencode2 mini
+$ opencode mini
 ```
 
 Continue the last session.
 
 ```bash
-$ opencode2 mini --continue
+$ opencode mini --continue
 ```
 
 Start with a model and an initial prompt.
 
 ```bash
-$ opencode2 mini --model anthropic/claude-sonnet-4-5 --prompt "Summarize this repository"
+$ opencode mini --model anthropic/claude-sonnet-4-5 --prompt "Summarize this repository"
 ```
 
 View all subcommands and flags.
 
 ```bash
-$ opencode2 mini --help
+$ opencode mini --help
 ```
 
 ## session
 
-`opencode2 session` manages sessions.
+`opencode session` manages sessions.
 
 ```bash
-$ opencode2 session list
+$ opencode session list
 ```
 
 Limit the list and print JSON.
 
 ```bash
-$ opencode2 session list --max-count 20 --format json
+$ opencode session list --max-count 20 --format json
 ```
 
 Delete a session and its child sessions.
 
 ```bash
-$ opencode2 session delete ses_9c1b08
+$ opencode session delete ses_9c1b08
 ```
 
 Export session data as JSON.
 
 ```bash
-$ opencode2 session export ses_4f2a1c
+$ opencode session export ses_4f2a1c
 ```
 
 Redact sensitive transcript and file data when exporting.
 
 ```bash
-$ opencode2 session export ses_4f2a1c --sanitize
+$ opencode session export ses_4f2a1c --sanitize
 ```
 
 Import session data from a JSON file or URL.
 
 ```bash
-$ opencode2 session import session.json
+$ opencode session import session.json
 ```
 
 Import into a specific directory.
 
 ```bash
-$ opencode2 session import session.json --directory ~/code/project
+$ opencode session import session.json --directory ~/code/project
 ```
 
 View all subcommands and flags.
 
 ```bash
-$ opencode2 session --help
+$ opencode session --help
 ```
 
 ## auth
 
-`opencode2 auth` manages AI providers and credentials.
+`opencode auth` manages AI providers and credentials.
 
 ```bash
-$ opencode2 auth list
+$ opencode auth list
 ```
 
 List them as JSON.
 
 ```bash
-$ opencode2 auth list --format json
+$ opencode auth list --format json
 ```
 
 Log in to a provider.
 
 ```bash
-$ opencode2 auth login anthropic
+$ opencode auth login anthropic
 ```
 
 Log in with a specific authentication method.
 
 ```bash
-$ opencode2 auth login anthropic --method api-key
+$ opencode auth login anthropic --method api-key
 ```
 
 Log out of a saved account.
 
 ```bash
-$ opencode2 auth logout anthropic work
+$ opencode auth logout anthropic work
 ```
 
 Switch the active account for an integration.
 
 ```bash
-$ opencode2 auth switch anthropic work
+$ opencode auth switch anthropic work
 ```
 
 View all subcommands and flags.
 
 ```bash
-$ opencode2 auth --help
+$ opencode auth --help
 ```
 
 ## models
 
-`opencode2 models` lists every available model.
+`opencode models` lists every available model.
 
 ```bash
-$ opencode2 models
+$ opencode models
 ```
 
 View all subcommands and flags.
 
 ```bash
-$ opencode2 models --help
+$ opencode models --help
 ```
 
 ## mcp
 
-`opencode2 mcp` manages MCP (Model Context Protocol) servers.
+`opencode mcp` manages MCP (Model Context Protocol) servers.
 
 ```bash
-$ opencode2 mcp list
+$ opencode mcp list
 ```
 
 Add a remote server.
 
 ```bash
-$ opencode2 mcp add context7 --url https://mcp.context7.com/mcp
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp
 ```
 
 Add a local server to the global config.
 
 ```bash
-$ opencode2 mcp add everything --global -- npx -y @modelcontextprotocol/server-everything
+$ opencode mcp add everything --global -- npx -y @modelcontextprotocol/server-everything
 ```
 
 Add a local server with an environment variable.
 
 ```bash
-$ opencode2 mcp add everything --env LOG_LEVEL=debug -- npx -y @modelcontextprotocol/server-everything
+$ opencode mcp add everything --env LOG_LEVEL=debug -- npx -y @modelcontextprotocol/server-everything
 ```
 
 Add a remote server with a header.
 
 ```bash
-$ opencode2 mcp add context7 --url https://mcp.context7.com/mcp --header CONTEXT7_API_KEY=secret
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp --header CONTEXT7_API_KEY=secret
 ```
 
 Authenticate with an OAuth-capable remote server.
 
 ```bash
-$ opencode2 mcp auth sentry
+$ opencode mcp auth sentry
 ```
 
 Remove stored OAuth credentials for a server.
 
 ```bash
-$ opencode2 mcp logout sentry
+$ opencode mcp logout sentry
 ```
 
 View all subcommands and flags.
 
 ```bash
-$ opencode2 mcp --help
+$ opencode mcp --help
 ```
 
 ## plugin
 
-`opencode2 plugin` manages plugins.
+`opencode plugin` manages plugins.
 
 ```bash
-$ opencode2 plugin list
+$ opencode plugin list
 ```
 
 Include built-in server plugins.
 
 ```bash
-$ opencode2 plugin list --builtin
+$ opencode plugin list --builtin
 ```
 
 Install a plugin and add it to the global configuration.
 
 ```bash
-$ opencode2 plugin add @example/opencode-tui
+$ opencode plugin add @example/opencode-tui
 ```
 
 Check package plugins for updates.
 
 ```bash
-$ opencode2 plugin check
+$ opencode plugin check
 ```
 
 Update package plugins.
 
 ```bash
-$ opencode2 plugin update
+$ opencode plugin update
 ```
 
 Remove a plugin from global configuration.
 
 ```bash
-$ opencode2 plugin remove @example/opencode-tui
+$ opencode plugin remove @example/opencode-tui
 ```
 
 View all subcommands and flags.
 
 ```bash
-$ opencode2 plugin --help
+$ opencode plugin --help
 ```
 
 ## stats
 
-`opencode2 stats` shows shareable usage statistics.
+`opencode stats` shows shareable usage statistics.
 
 ```bash
-$ opencode2 stats
+$ opencode stats
 ```
 
 Show the last 7 days.
 
 ```bash
-$ opencode2 stats --days 7
+$ opencode stats --days 7
 ```
 
 Show model usage.
 
 ```bash
-$ opencode2 stats --models
+$ opencode stats --models
 ```
 
 Show cost and token details.
 
 ```bash
-$ opencode2 stats --cost
+$ opencode stats --cost
 ```
 
 Print JSON instead of a report.
 
 ```bash
-$ opencode2 stats --json
+$ opencode stats --json
 ```
 
 View all subcommands and flags.
 
 ```bash
-$ opencode2 stats --help
+$ opencode stats --help
 ```
 
 ## serve
 
-`opencode2 serve` starts the API and web server. See [Web](/cli/web).
+`opencode serve` starts the API and web server. See [Web](/cli/web).
 
 ```bash
-$ opencode2 serve
+$ opencode serve
 ```
 
 Bind to all interfaces on a fixed port.
 
 ```bash
-$ opencode2 serve --hostname 0.0.0.0 --port 4096
+$ opencode serve --hostname 0.0.0.0 --port 4096
 ```
 
 Allow a browser client from another origin.
 
 ```bash
-$ opencode2 serve --cors https://app.example.com
+$ opencode serve --cors https://app.example.com
 ```
 
 View all subcommands and flags.
 
 ```bash
-$ opencode2 serve --help
+$ opencode serve --help
 ```
 
 ## pair
 
-`opencode2 pair` shows server pairing information, including URLs, credentials, and a QR code.
+`opencode pair` shows server pairing information, including URLs, credentials, and a QR code.
 
 ```bash
-$ opencode2 pair
+$ opencode pair
 ```
 
 Advertise an external URL in the QR code.
 
 ```bash
-$ opencode2 pair --url https://dev.example.com
+$ opencode pair --url https://dev.example.com
 ```
 
 View all subcommands and flags.
 
 ```bash
-$ opencode2 pair --help
+$ opencode pair --help
 ```
 
 ## service
 
-`opencode2 service` manages the background server. See [Web](/cli/web).
+`opencode service` manages the background server. See [Web](/cli/web).
 
 ```bash
-$ opencode2 service start
+$ opencode service start
 ```
 
 Restart it.
 
 ```bash
-$ opencode2 service restart
+$ opencode service restart
 ```
 
 Show its status.
 
 ```bash
-$ opencode2 service status
+$ opencode service status
 ```
 
 Stop it.
 
 ```bash
-$ opencode2 service stop
+$ opencode service stop
 ```
 
 Read a setting.
 
 ```bash
-$ opencode2 service get hostname
+$ opencode service get hostname
 ```
 
 Set a setting.
 
 ```bash
-$ opencode2 service set hostname 0.0.0.0
+$ opencode service set hostname 0.0.0.0
 ```
 
 Allow an extra CORS origin.
 
 ```bash
-$ opencode2 service set cors https://app.example.com
+$ opencode service set cors https://app.example.com
 ```
 
 Pass an environment variable to the server process.
 
 ```bash
-$ opencode2 service set env OPENCODE_LOG_LEVEL DEBUG
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
 ```
 
 Reset a setting to its default.
 
 ```bash
-$ opencode2 service unset hostname
+$ opencode service unset hostname
 ```
 
 View all subcommands and flags.
 
 ```bash
-$ opencode2 service --help
+$ opencode service --help
 ```
 
 ## api
 
-`opencode2 api` makes a request to the running server.
+`opencode api` makes a request to the running server.
 
 ```bash
-$ opencode2 api GET /api/session
+$ opencode api GET /api/session
 ```
 
 Call an operation ID with a query parameter.
 
 ```bash
-$ opencode2 api v2.session.list --param limit=10
+$ opencode api v2.session.list --param limit=10
 ```
 
 Send a JSON body.
 
 ```bash
-$ opencode2 api v2.session.create --data '{"title": "New session"}'
+$ opencode api v2.session.create --data '{"title": "New session"}'
 ```
 
 Add a request header.
 
 ```bash
-$ opencode2 api GET /api/session -H "accept: application/json"
+$ opencode api GET /api/session -H "accept: application/json"
 ```
 
 View all subcommands and flags.
 
 ```bash
-$ opencode2 api --help
+$ opencode api --help
 ```
 
 ## acp
 
-`opencode2 acp` starts an Agent Client Protocol server over stdin and stdout for editor integrations. It runs until the client closes the connection.
+`opencode acp` starts an Agent Client Protocol server over stdin and stdout for editor integrations. It runs until the client closes the connection.
 
 ```bash
-$ opencode2 acp
+$ opencode acp
 ```
 
 View all subcommands and flags.
 
 ```bash
-$ opencode2 acp --help
+$ opencode acp --help
 ```
 
 ## debug
 
-`opencode2 debug` provides debugging and troubleshooting tools.
+`opencode debug` provides debugging and troubleshooting tools.
 
 ```bash
-$ opencode2 debug agents
+$ opencode debug agents
 ```
 
 List configuration sources.
 
 ```bash
-$ opencode2 debug config
+$ opencode debug config
 ```
 
 Show global paths.
 
 ```bash
-$ opencode2 debug paths
+$ opencode debug paths
 ```
 
 Print a single path.
 
 ```bash
-$ opencode2 debug paths db
+$ opencode debug paths db
 ```
 
 View all subcommands and flags.
 
 ```bash
-$ opencode2 debug --help
+$ opencode debug --help
 ```
 
 ## upgrade
 
-`opencode2 upgrade` upgrades OpenCode to the latest or a specific version. Alias: `update`.
+`opencode upgrade` upgrades OpenCode to the latest or a specific version. Alias: `update`.
 
 ```bash
-$ opencode2 upgrade
+$ opencode upgrade
 ```
 
 Upgrade to a specific version with a specific package manager.
 
 ```bash
-$ opencode2 upgrade 1.18.15 --method bun
+$ opencode upgrade 1.18.15 --method bun
 ```
 
 View all subcommands and flags.
 
 ```bash
-$ opencode2 upgrade --help
+$ opencode upgrade --help
 ```
 
 ## uninstall
 
-`opencode2 uninstall` removes OpenCode and all related files.
+`opencode uninstall` removes OpenCode and all related files.
 
 ```bash
-$ opencode2 uninstall
+$ opencode uninstall
 ```
 
 Preview what would be removed.
 
 ```bash
-$ opencode2 uninstall --dry-run
+$ opencode uninstall --dry-run
 ```
 
 Keep configuration and session data.
 
 ```bash
-$ opencode2 uninstall --keep-config --keep-data
+$ opencode uninstall --keep-config --keep-data
 ```
 
 View all subcommands and flags.
 
 ```bash
-$ opencode2 uninstall --help
+$ opencode uninstall --help
 ```

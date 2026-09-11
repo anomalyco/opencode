@@ -105,7 +105,7 @@ const make = Effect.gen(function* () {
       global.home,
       ".opencode",
       "bin",
-      process.platform === "win32" ? "opencode2.exe" : "opencode2",
+      process.platform === "win32" ? "opencode.exe" : "opencode",
     )
     if (path.resolve(process.execPath) === path.resolve(binary)) return "curl"
     if (!installedPackage) return
@@ -186,7 +186,10 @@ const make = Effect.gen(function* () {
         "npm",
         "install",
         "--global",
-        ...(installedPackage && packageName !== installedPackage ? ["--force"] : []),
+        ...((OPENCODE_ARTIFACT === "cli" && !installedPackage?.endsWith("/cli-node")) ||
+        (installedPackage && packageName !== installedPackage)
+          ? ["--force"]
+          : []),
         target,
       ],
       pnpm: ["pnpm", "add", "--global", `--allow-build=${packageName}`, target],

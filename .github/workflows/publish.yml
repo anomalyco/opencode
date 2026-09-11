@@ -168,7 +168,7 @@ jobs:
           fi
 
           found=0
-          for file in packages/cli/dist/cli-darwin-*/bin/opencode2; do
+          for file in packages/cli/dist/cli-darwin-*/bin/opencode; do
             if [ ! -f "$file" ]; then
               continue
             fi
