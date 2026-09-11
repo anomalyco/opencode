@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { convertToModelMessages } from "ai"
 import { Effect } from "effect"
 import { ProviderTransform } from "@/provider/transform"
 import { LLMRequestPrep } from "@/session/llm/request"
@@ -2530,6 +2531,55 @@ describe("ProviderTransform.message - empty image handling", () => {
       type: "text",
       text: "ERROR: Image file is empty or corrupted. Please provide a valid image.",
     })
+  })
+
+  test("should replace an empty image attachment that arrives as a file part", async () => {
+    const msgs = await convertToModelMessages([
+      {
+        id: "m1",
+        role: "user",
+        parts: [
+          { type: "text", text: "What is in this image?" },
+          { type: "file", url: "data:image/png;base64,", mediaType: "image/png", filename: "empty.png" },
+        ],
+      },
+    ] as any)
+
+    expect((msgs[0].content as any[])[1].type).toBe("file")
+
+    const result = ProviderTransform.message(msgs, mockModel, {})
+
+    expect(result[0].content).toHaveLength(2)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "What is in this image?" })
+    expect(result[0].content[1]).toEqual({
+      type: "text",
+      text: "ERROR: Image file is empty or corrupted. Please provide a valid image.",
+    })
+  })
+
+  test("should keep a non-empty image attachment that arrives as a file part", async () => {
+    const validBase64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    const msgs = await convertToModelMessages([
+      {
+        id: "m1",
+        role: "user",
+        parts: [
+          { type: "text", text: "What is in this image?" },
+          {
+            type: "file",
+            url: `data:image/png;base64,${validBase64}`,
+            mediaType: "image/png",
+            filename: "ok.png",
+          },
+        ],
+      },
+    ] as any)
+
+    const result = ProviderTransform.message(msgs, mockModel, {})
+
+    expect(result[0].content).toHaveLength(2)
+    expect((result[0].content as any[])[1].type).toBe("file")
   })
 })
 

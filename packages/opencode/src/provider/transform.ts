@@ -413,21 +413,18 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
     const filtered = msg.content.map((part) => {
       if (part.type !== "file" && part.type !== "image") return part
 
-      // Check for empty base64 image data
-      if (part.type === "image") {
-        const imageStr = String(part.image)
-        if (imageStr.startsWith("data:")) {
-          const match = imageStr.match(/^data:([^;]+);base64,(.*)$/)
-          if (match && (!match[2] || match[2].length === 0)) {
-            return {
-              type: "text" as const,
-              text: "ERROR: Image file is empty or corrupted. Please provide a valid image.",
-            }
-          }
+      const mime = part.type === "image" ? String(part.image).split(";")[0].replace("data:", "") : part.mediaType
+
+      // Check for empty base64 image data. convertToModelMessages emits an attachment as a
+      // "file" part, so reading only part.image would never see a real one.
+      const data = part.type === "image" ? part.image : part.data
+      if (mime.startsWith("image/") && typeof data === "string" && /^data:[^;]+;base64,$/.test(data)) {
+        return {
+          type: "text" as const,
+          text: "ERROR: Image file is empty or corrupted. Please provide a valid image.",
         }
       }
 
-      const mime = part.type === "image" ? String(part.image).split(";")[0].replace("data:", "") : part.mediaType
       const filename = part.type === "file" ? part.filename : undefined
       const modality = mimeToModality(mime)
       if (!modality) return part
