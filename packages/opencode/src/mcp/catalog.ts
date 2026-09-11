@@ -40,11 +40,13 @@ export function defs(client: Client, timeout?: number) {
 }
 
 export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: number): Tool {
+  const source = mcpTool.inputSchema as JSONSchema7
   const inputSchema: JSONSchema7 = {
-    ...(mcpTool.inputSchema as JSONSchema7),
+    ...source,
     type: "object",
-    properties: (mcpTool.inputSchema.properties ?? {}) as JSONSchema7["properties"],
+    properties: (source.properties ?? {}) as JSONSchema7["properties"],
     additionalProperties: false,
+    required: Array.isArray(source.required) ? source.required : [],
   }
 
   return dynamicTool({
