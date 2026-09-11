@@ -1,9 +1,15 @@
-import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
+import { createMemo, createRenderEffect, createSignal, on, onCleanup } from "solid-js"
 import { sessionNotFoundError } from "@/runtime/server/errors"
 
 type SessionStore<T> = {
   get: (id: string) => T | undefined
   sync: (id: string, options?: { children?: boolean }) => Promise<unknown>
+  message: {
+    sync: (id: string) => Promise<unknown>
+  }
+  pending: {
+    sync: (id: string) => Promise<unknown>
+  }
 }
 
 type Resolution<T> = { id: string; store: SessionStore<T> } & (
@@ -31,7 +37,7 @@ type Resolution<T> = { id: string; store: SessionStore<T> } & (
 export function createSessionResolution<T>(
   sessionID: () => string | undefined,
   sessions: () => SessionStore<T>,
-  options?: { children?: boolean },
+  options?: { children?: boolean; connected?: () => boolean },
 ) {
   const cached = createMemo(() => {
     const id = sessionID()
@@ -40,14 +46,21 @@ export function createSessionResolution<T>(
   })
   const [status, setStatus] = createSignal<Resolution<T>>()
 
-  createEffect(
-    on([sessionID, sessions] as const, ([id, store]) => {
-      if (!id) return
+  // Start independent reads before constructing the selected view, including
+  // when its metadata is cached but its transcript has never been loaded.
+  createRenderEffect(
+    on([sessionID, sessions, () => options?.connected?.() ?? true] as const, ([id, store, connected]) => {
+      if (!id || !connected) return
       let stale = false
       onCleanup(() => {
         stale = true
       })
-      if (cached() && !options?.children) {
+      // The timeline owns message errors; metadata resolution stays independent. Queued inputs
+      // ride along so a reconnect refreshes them with the transcript instead of leaving the
+      // pre-disconnect queue on screen.
+      void store.message.sync(id).catch(() => undefined)
+      void store.pending.sync(id).catch(() => undefined)
+      if (cached() && !options?.children && !options?.connected) {
         setStatus({ id, store, state: "settled" })
         return
       }

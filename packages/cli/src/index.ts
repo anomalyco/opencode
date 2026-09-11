@@ -4,33 +4,38 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Effect } from "effect"
 import { Commands } from "./commands/commands"
 import { Runtime } from "./framework/runtime"
-import { Observability } from "@opencode-ai/util/observability"
+import { Observability } from "@opencode/util/observability"
 import { Updater } from "./services/updater"
-import { OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "./version"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Global } from "@opencode-ai/util/global"
-import { AppProcess } from "@opencode-ai/util/process"
+import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "./version"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Global } from "@opencode/util/global"
+import { AppProcess } from "@opencode/util/process"
 import { Config } from "./config"
-import { Npm } from "@opencode-ai/util/npm"
+import { Npm } from "@opencode/util/npm"
 import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
 
+if (process.env.OPENCODE_SSH_ASKPASS_PORT) {
+  const { askpass } = await import("./ssh-askpass")
+  process.exit(await Effect.runPromise(askpass.pipe(Effect.provide(NodeServices.layer))))
+}
+
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
+  upgrade: () => import("./commands/handlers/upgrade"),
+  uninstall: () => import("./commands/handlers/uninstall"),
   acp: () => import("./commands/handlers/acp"),
   api: () => import("./commands/handlers/api"),
   auth: {
     list: () => import("./commands/handlers/auth/list"),
     login: () => import("./commands/handlers/auth/login"),
     logout: () => import("./commands/handlers/auth/logout"),
+    switch: () => import("./commands/handlers/auth/switch"),
   },
   debug: {
     agents: () => import("./commands/handlers/debug/agents"),
     config: () => import("./commands/handlers/debug/config"),
     paths: () => import("./commands/handlers/debug/paths"),
-  },
-  console: {
-    login: () => import("./commands/handlers/console/login"),
   },
   mcp: {
     list: () => import("./commands/handlers/mcp/list"),
@@ -41,15 +46,21 @@ const Handlers = Runtime.handlers(Commands, {
   plugin: {
     list: () => import("./commands/handlers/plugin/list"),
     add: () => import("./commands/handlers/plugin/add"),
+    check: () => import("./commands/handlers/plugin/check"),
+    update: () => import("./commands/handlers/plugin/update"),
     remove: () => import("./commands/handlers/plugin/remove"),
   },
   models: () => import("./commands/handlers/models"),
   stats: () => import("./commands/handlers/stats"),
-  export: () => import("./commands/handlers/export"),
-  import: () => import("./commands/handlers/import"),
   mini: () => import("./commands/handlers/mini"),
   run: () => import("./commands/handlers/run"),
   pair: () => import("./commands/handlers/pair"),
+  session: {
+    list: () => import("./commands/handlers/session/list"),
+    delete: () => import("./commands/handlers/session/delete"),
+    export: () => import("./commands/handlers/session/export"),
+    import: () => import("./commands/handlers/session/import"),
+  },
   service: {
     start: () => import("./commands/handlers/service/start"),
     restart: () => import("./commands/handlers/service/restart"),
@@ -98,18 +109,19 @@ Effect.gen(function* () {
   Effect.provide(Config.layer),
   Effect.provide(Updater.layer),
   Effect.provide(
-    LayerNode.compile(LayerNode.group([Global.node, AppProcess.node, Npm.node]), [
-      [
-        Global.node,
-        Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
+    LayerNode.compile(LayerNode.group([Global.node, AppProcess.node, Npm.node]), {
+      replacements: [
+        Global.node.replace(
+          Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
+        ),
       ],
-    ]),
+    }),
   ),
   Effect.provide(
     Observability.layer({
       endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
       headers: process.env.OTEL_EXPORTER_OTLP_HEADERS,
-      client: process.env.OPENCODE_CLIENT ?? "cli",
+      client: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
       version: OPENCODE_VERSION,
       channel: OPENCODE_CHANNEL,
     }),

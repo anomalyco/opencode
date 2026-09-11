@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import type { OpenCodeEvent } from "@opencode-ai/client"
+import type { OpenCodeEvent } from "@opencode/client"
 import { testRender } from "@opentui/solid"
 import { mkdirSync, watch } from "fs"
 import path from "path"
@@ -39,9 +39,10 @@ async function renderSessionTabs(
     sessionTimes?: Record<string, { idle?: number; viewed?: number }>
     sessionOutcomes?: Record<string, "succeeded" | "failed" | "interrupted">
     newLocation?: "launch" | "inherit"
+    launchDirectory?: string
     tabsEnabled?: boolean
     viewFailures?: number
-    preview?: boolean
+    experimental?: Record<string, boolean>
   },
 ) {
   const temporary = options?.state ? undefined : await tmpdir()
@@ -135,7 +136,7 @@ async function renderSessionTabs(
   let config!: ReturnType<typeof useConfig>
   let configuration = {
     tabs: { enabled: options?.tabsEnabled ?? true },
-    experimental: options?.preview ? { "session-preview-tabs": true } : undefined,
+    experimental: options?.experimental,
     session: { new_location: options?.newLocation ?? "launch" },
   }
 
@@ -168,7 +169,7 @@ async function renderSessionTabs(
               initialRoute={options?.home ? { type: "home" } : { type: "session", sessionID: initialSessionID }}
             >
               <ClientProvider api={createApi(calls.fetch)}>
-                <DataProvider>
+                <DataProvider directory={options?.launchDirectory ?? directory}>
                   <LocationProvider>
                     <SessionTabsProvider>
                       <Probe />
@@ -201,10 +202,10 @@ async function renderSessionTabs(
     focus: () => app.renderer.emit("focus"),
     blur: () => app.renderer.emit("blur"),
     flush: () => storage.flush(),
-    setPreviews: (enabled: boolean) =>
+    setTabsEnabled: (enabled: boolean) =>
       config.update((draft) => {
-        draft.experimental ??= {}
-        draft.experimental["session-preview-tabs"] = enabled
+        draft.tabs ??= {}
+        draft.tabs.enabled = enabled
       }),
     async destroy() {
       app.renderer.destroy()
@@ -264,6 +265,23 @@ test("loads VCS metadata for each persisted tab location", async () => {
   }
 })
 
+test("opens a background tab without changing the current session", async () => {
+  const setup = await renderSessionTabs("first")
+
+  try {
+    await wait(() => setup.tabs.current() === "first" && setup.tabs.tabs().some((tab) => tab.sessionID === "first"))
+    setup.tabs.open("background")
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "background"))
+
+    expect(setup.tabs.current()).toBe("first")
+    expect(setup.tabs.isPreview("background")).toBe(false)
+    setup.tabs.move("background", 0)
+    await wait(() => setup.tabs.tabs()[0]?.sessionID === "background")
+  } finally {
+    await setup.destroy()
+  }
+})
+
 test("loads location metadata when an open session moves", async () => {
   const destination = `${directory}/moved-worktree`
   const setup = await renderSessionTabs("first")
@@ -290,8 +308,11 @@ test("loads location metadata when an open session moves", async () => {
   }
 })
 
-test("replaces session previews without replacing permanent tabs or opening existing tabs again", async () => {
-  const setup = await renderSessionTabs("first", { persisted: ["first", "permanent"], preview: true })
+test.each([undefined, true, false])("replaces previews with legacy experiment setting %s", async (preview) => {
+  const setup = await renderSessionTabs("first", {
+    persisted: ["first", "permanent"],
+    experimental: preview === undefined ? undefined : { "session-preview-tabs": preview },
+  })
 
   try {
     await wait(() => setup.tabs.tabs().length === 2)
@@ -329,7 +350,7 @@ test("replaces session previews without replacing permanent tabs or opening exis
 })
 
 test("server-wide prompt admissions do not promote a local session preview", async () => {
-  const setup = await renderSessionTabs("preview", { preview: true })
+  const setup = await renderSessionTabs("preview")
 
   try {
     await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "preview") && setup.tabs.isPreview("preview"))
@@ -359,7 +380,7 @@ test("server-wide prompt admissions do not promote a local session preview", asy
 })
 
 test("promotes a local preview before its tab has finished persisting", async () => {
-  const setup = await renderSessionTabs("permanent", { persisted: ["permanent"], preview: true })
+  const setup = await renderSessionTabs("permanent", { persisted: ["permanent"] })
 
   try {
     await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "permanent"))
@@ -381,7 +402,7 @@ test("promotes a local preview before its tab has finished persisting", async ()
 })
 
 test("reopens a previously permanent session as a preview after a user prompt", async () => {
-  const setup = await renderSessionTabs("permanent", { persisted: ["permanent"], preview: true })
+  const setup = await renderSessionTabs("permanent", { persisted: ["permanent"] })
 
   try {
     await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "permanent"))
@@ -400,7 +421,7 @@ test("reopens a previously permanent session as a preview after a user prompt", 
 })
 
 test("keeps an explicitly promoted home session permanent when admission arrives before navigation", async () => {
-  const setup = await renderSessionTabs("created", { home: true, preview: true })
+  const setup = await renderSessionTabs("created", { home: true })
 
   try {
     setup.tabs.promote("created")
@@ -415,7 +436,7 @@ test("keeps an explicitly promoted home session permanent when admission arrives
 })
 
 test("stores preview tab membership without persisting preview identity", async () => {
-  const setup = await renderSessionTabs("preview", { preview: true })
+  const setup = await renderSessionTabs("preview")
 
   try {
     await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "preview") && setup.tabs.isPreview("preview"))
@@ -432,7 +453,7 @@ test("stores preview tab membership without persisting preview identity", async 
 })
 
 test("unrelated user admissions do not pre-promote an unopened local session", async () => {
-  const setup = await renderSessionTabs("remote", { home: true, preview: true })
+  const setup = await renderSessionTabs("remote", { home: true })
 
   try {
     setup.emit(admitted("remote", "msg_1"))
@@ -452,11 +473,11 @@ test("each client replaces only its own preview in shared tab storage", async ()
   const clients: Awaited<ReturnType<typeof renderSessionTabs>>[] = []
 
   try {
-    const first = await renderSessionTabs("first", { state: temporary.path, preview: true })
+    const first = await renderSessionTabs("first", { state: temporary.path })
     clients.push(first)
     await wait(() => first.tabs.tabs().some((tab) => tab.sessionID === "first"))
 
-    const second = await renderSessionTabs("first", { state: temporary.path, preview: true })
+    const second = await renderSessionTabs("first", { state: temporary.path })
     clients.push(second)
     expect(second.tabs.isPreview("first")).toBe(false)
 
@@ -477,7 +498,7 @@ test("each client replaces only its own preview in shared tab storage", async ()
 })
 
 test("reopening a closed preview makes it permanent without replacing the current preview", async () => {
-  const setup = await renderSessionTabs("permanent", { persisted: ["permanent"], preview: true })
+  const setup = await renderSessionTabs("permanent", { persisted: ["permanent"] })
 
   try {
     await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "permanent"))
@@ -503,7 +524,7 @@ test("reopening a closed preview makes it permanent without replacing the curren
 })
 
 test("moving a preview promotes it before opening another preview", async () => {
-  const setup = await renderSessionTabs("first", { persisted: ["first", "last"], preview: true })
+  const setup = await renderSessionTabs("first", { persisted: ["first", "last"] })
 
   try {
     await wait(() => setup.tabs.tabs().length === 2)
@@ -524,16 +545,16 @@ test("moving a preview promotes it before opening another preview", async () => 
   }
 })
 
-test("disabling previews clears local identity and prevents stale replacement after re-enabling", async () => {
-  const setup = await renderSessionTabs("first", { preview: true })
+test("disabling tabs clears local preview identity and prevents stale replacement after re-enabling", async () => {
+  const setup = await renderSessionTabs("first")
 
   try {
     await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "first") && setup.tabs.isPreview("first"))
 
-    await setup.setPreviews(false)
+    await setup.setTabsEnabled(false)
     expect(setup.tabs.isPreview("first")).toBe(false)
 
-    await setup.setPreviews(true)
+    await setup.setTabsEnabled(true)
     expect(setup.tabs.isPreview("first")).toBe(false)
     setup.route.navigate({ type: "session", sessionID: "next" })
     await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "next"))
@@ -578,6 +599,41 @@ test("keeps scroll anchors for open session tabs", async () => {
     setup.tabs.close("first")
     await wait(() => setup.tabs.tabs().every((tab) => tab.sessionID !== "first"))
     expect(setup.tabs.scrollAnchor("first")).toBeUndefined()
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("keeps parent and subagent scroll anchors independent", async () => {
+  const setup = await renderSessionTabs("root", {
+    persisted: ["root"],
+    sessionParents: { child: "root" },
+  })
+
+  try {
+    await wait(() => setup.data.session.get("child") !== undefined)
+    const parent = { messageID: "msg_parent", screenY: -3 }
+    const child = { messageID: "msg_child", screenY: -5 }
+    setup.tabs.setScrollAnchor("root", parent)
+
+    // A short subagent transcript is at the bottom, so it saves no anchor.
+    setup.tabs.setScrollAnchor("child", undefined)
+    expect(setup.tabs.scrollAnchor("root")).toEqual(parent)
+    expect(setup.tabs.scrollAnchor("child")).toBeUndefined()
+
+    setup.tabs.setScrollAnchor("child", child)
+    expect(setup.tabs.scrollAnchor("root")).toEqual(parent)
+    expect(setup.tabs.scrollAnchor("child")).toEqual(child)
+
+    setup.tabs.setScrollAnchor("root", undefined)
+    expect(setup.tabs.scrollAnchor("child")).toEqual(child)
+
+    setup.tabs.close("root")
+    await wait(() => setup.tabs.tabs().length === 0)
+    setup.route.navigate({ type: "session", sessionID: "root" })
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "root"))
+    expect(setup.tabs.scrollAnchor("root")).toBeUndefined()
+    expect(setup.tabs.scrollAnchor("child")).toBeUndefined()
   } finally {
     await setup.destroy()
   }
@@ -752,6 +808,64 @@ test("ignores subagent unread state on the root tab", async () => {
   }
 })
 
+test("distinguishes family questions and permissions without clearing them on selection", async () => {
+  const setup = await renderSessionTabs("root", {
+    home: true,
+    persisted: ["root"],
+    sessionParents: { child: "root" },
+  })
+  try {
+    await wait(() => setup.data.session.get("child") !== undefined)
+    expect(setup.tabs.status("root").attention).toBe(false)
+
+    setup.emit({
+      id: "evt_question",
+      created: 1,
+      type: "form.created",
+      data: {
+        form: {
+          id: "frm_question",
+          sessionID: "child",
+          title: "Choose an approach",
+          fields: [{ key: "approach", type: "string", title: "Approach" }],
+        },
+      },
+    })
+    await wait(() => setup.tabs.status("root").attention === "question")
+
+    setup.tabs.select("root")
+    await wait(() => setup.tabs.current() === "root")
+    expect(setup.tabs.status("root").attention).toBe("question")
+
+    setup.emit({
+      id: "evt_permission",
+      created: 2,
+      type: "permission.asked",
+      data: { id: "per_command", sessionID: "root", action: "shell", resources: ["bun run test"] },
+    })
+    await wait(() => setup.tabs.status("root").attention === "permission")
+    expect(setup.tabs.status("child").attention).toBe("permission")
+
+    setup.emit({
+      id: "evt_permission_reply",
+      created: 3,
+      type: "permission.replied",
+      data: { sessionID: "root", requestID: "per_command", reply: "once" },
+    })
+    await wait(() => setup.tabs.status("root").attention === "question")
+
+    setup.emit({
+      id: "evt_question_reply",
+      created: 4,
+      type: "form.replied",
+      data: { sessionID: "child", id: "frm_question", answer: {} },
+    })
+    await wait(() => setup.tabs.status("root").attention === false)
+  } finally {
+    await setup.destroy()
+  }
+})
+
 test("concurrent TUIs do not alternate shared tab titles from divergent session caches", async () => {
   await using temporary = await tmpdir()
   const state = temporary.path
@@ -805,27 +919,39 @@ test("closing a tab is not undone by another TUI viewing the same session", asyn
     clients.push(first)
     const second = await renderSessionTabs("shared", { state: temporary.path })
     clients.push(second)
-    await wait(() => first.tabs.tabs().some((tab) => tab.sessionID === "shared"))
-    await wait(() => second.tabs.tabs().some((tab) => tab.sessionID === "shared"))
-    first.tabs.close()
-    await wait(() => first.route.data.type === "home")
-    await wait(() => !second.tabs.tabs().some((tab) => tab.sessionID === "shared"))
+    await wait(() => first.tabs.tabs().some((tab) => tab.sessionID === "shared"), 2_000, "first tab to open")
+    await wait(() => second.tabs.tabs().some((tab) => tab.sessionID === "shared"), 2_000, "second tab to open")
     await Promise.all([first.flush(), second.flush()])
+    first.tabs.close()
+    await wait(() => first.route.data.type === "home", 2_000, "first client to navigate home")
+    await first.flush()
+    await wait(
+      () => !second.tabs.tabs().some((tab) => tab.sessionID === "shared"),
+      2_000,
+      "second client to observe close",
+    )
+    await second.flush()
 
     const stored = await Bun.file(path.join(temporary.path, "test", "tui", "tabs.json")).json()
     expect(stored.cwd[directory].tabs).toEqual([])
 
     second.route.navigate({ type: "home" })
-    await wait(() => second.route.data.type === "home")
+    await wait(() => second.route.data.type === "home", 2_000, "second client to navigate home")
     second.route.navigate({ type: "session", sessionID: "shared" })
-    await wait(() => first.tabs.tabs().some((tab) => tab.sessionID === "shared"))
+    await wait(() => second.tabs.tabs().some((tab) => tab.sessionID === "shared"), 2_000, "second client to reopen tab")
+    await second.flush()
+    await wait(
+      () => first.tabs.tabs().some((tab) => tab.sessionID === "shared"),
+      2_000,
+      "first client to observe reopen",
+    )
   } finally {
     await Promise.allSettled(clients.map((client) => client.destroy()))
   }
 })
 
 test("user prompt admissions pulse an already-busy background tab", async () => {
-  const setup = await renderSessionTabs("background")
+  const setup = await renderSessionTabs("background", { persisted: ["background"] })
 
   try {
     await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "background"))
@@ -862,7 +988,7 @@ test("user prompt admissions pulse an already-busy background tab", async () => 
 })
 
 test("tracks a temporary new session tab across close and creation", async () => {
-  const setup = await renderSessionTabs("first")
+  const setup = await renderSessionTabs("first", { persisted: ["first"] })
 
   try {
     await wait(() => setup.tabs.current() === "first")
@@ -881,6 +1007,7 @@ test("tracks a temporary new session tab across close and creation", async () =>
 
     setup.route.navigate({ type: "home" })
     await wait(() => setup.tabs.newTab())
+    setup.tabs.promote("third")
     setup.route.navigate({ type: "session", sessionID: "third" })
     expect(setup.tabs.newTab()).toBe(true)
     await wait(() => setup.tabs.current() === "third" && setup.tabs.tabs().some((tab) => tab.sessionID === "third"))
@@ -892,13 +1019,17 @@ test("tracks a temporary new session tab across close and creation", async () =>
   }
 })
 
-test("add opens the new session tab in the launch directory by default", async () => {
-  const setup = await renderSessionTabs("first", { sessionDirectories: { first: `${directory}/worktree` } })
+test("add opens the new session tab in the resolved server launch directory", async () => {
+  const launchDirectory = `${directory}/server`
+  const setup = await renderSessionTabs("first", {
+    launchDirectory,
+    sessionDirectories: { first: `${directory}/worktree` },
+  })
 
   try {
     await wait(() => setup.tabs.current() === "first" && setup.data.session.get("first") !== undefined)
     setup.tabs.add()
-    expect(setup.route.data).toEqual({ type: "home", location: { directory } })
+    expect(setup.route.data).toEqual({ type: "home", location: { directory: launchDirectory } })
     await wait(() => setup.tabs.newTab())
     expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first"])
   } finally {

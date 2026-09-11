@@ -18,6 +18,21 @@ describe("client paths", () => {
     expect(getDirectory("")).toBe("")
   })
 
+  test.each([
+    ["/repo/src/index.ts///", "index.ts"],
+    ["C:\\repo\\src\\index.ts", "index.ts"],
+    ["C:\\repo/src\\file", "file"],
+    ["C:/repo\\src/file/\\", "file"],
+    ["/", ""],
+    ["\\", ""],
+    ["/\\/\\", ""],
+    ["C:\\", "C:"],
+    ["file", "file"],
+    ["", ""],
+  ])("reads the filename from %j", (path, filename) => {
+    expect(getFilename(path)).toBe(filename)
+  })
+
   test("keeps filename truncation stable", () => {
     expect(getFilenameTruncated("/repo/long-component-name.tsx", 16)).toBe("long-compon….tsx")
     expect(truncateMiddle("abcdefghijklmnop", 9)).toBe("abcd…mnop")

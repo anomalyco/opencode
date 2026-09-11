@@ -7,7 +7,7 @@ import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
-import type { McpServer } from "@opencode-ai/client"
+import type { McpServer } from "@opencode/client"
 import { useToast } from "../ui/toast"
 import { DialogErrorDetails } from "./dialog-error-details"
 import { DialogIntegration } from "./dialog-integration"
@@ -157,6 +157,9 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
           <DialogErrorDetails
             title={`MCP server: ${server().name}`}
             error={statusError(server().status) ?? "Unknown MCP connection error"}
+            context={`Status: failed\nConfiguration: mcp.servers.${server().name}${
+              server().integrationID ? `\nIntegration: ${server().integrationID}` : ""
+            }`}
             onBack={() => {
               setDetail(undefined)
               dialog.setSize("medium")

@@ -1,18 +1,18 @@
 export * as ServerWorkerd from "./workerd"
 
 import { Effect, Layer } from "effect"
-import { ConfigPluginSource } from "@opencode-ai/core/config/plugin/source"
-import { Database } from "@opencode-ai/core/database/database"
-import { sqliteLayer } from "@opencode-ai/core/database/sqlite.workerd"
-import type { DurableObjectStorage } from "@opencode-ai/core/database/sqlite.workerd"
-import { EnvironmentUnavailable } from "@opencode-ai/core/environment/unavailable"
-import { FileSystem } from "@opencode-ai/core/filesystem"
-import { FileSystemSearch } from "@opencode-ai/core/filesystem/search"
-import { Pty } from "@opencode-ai/core/pty"
-import { Snapshot } from "@opencode-ai/core/snapshot"
-import { Vcs } from "@opencode-ai/core/vcs"
-import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
-import type { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { ConfigPluginSource } from "@opencode/core/config/plugin/source"
+import { Database } from "@opencode/core/database/database"
+import { sqliteLayer } from "@opencode/core/database/sqlite.workerd"
+import type { DurableObjectStorage } from "@opencode/core/database/sqlite.workerd"
+import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
+import { FileSystem } from "@opencode/core/filesystem"
+import { FileSystemSearch } from "@opencode/core/filesystem/search"
+import { Pty } from "@opencode/core/pty"
+import { Snapshot } from "@opencode/core/snapshot"
+import { Vcs } from "@opencode/core/vcs"
+import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
+import type { LayerNode } from "@opencode/util/effect/layer-node"
 import { ServerFetch } from "./fetch"
 import type { ServerOptions } from "./options"
 
@@ -75,16 +75,16 @@ export function serverOptions(options: Options): ServerOptions {
 /** The workerd replacement graph, applied after the standard server replacements. */
 export function replacements(options: Options): LayerNode.Replacements {
   return [
-    [Database.node, Database.configuredClient(sqliteLayer({ storage: options.storage }))],
-    [CrossSpawnSpawner.node, EnvironmentUnavailable.layer],
-    [Snapshot.node, Snapshot.noopLayer],
-    [Vcs.node, vcsLayer],
-    [FileSystem.node, fileSystemLayer],
-    [FileSystemSearch.node, fileSystemSearchLayer],
-    [Pty.node, ptyLayer],
+    Database.node.replace(Database.configuredClient(sqliteLayer({ storage: options.storage }))),
+    CrossSpawnSpawner.node.replace(EnvironmentUnavailable.layer),
+    Snapshot.node.replace(Snapshot.noopLayer),
+    Vcs.node.replace(vcsLayer),
+    FileSystem.node.replace(fileSystemLayer),
+    FileSystemSearch.node.replace(fileSystemSearchLayer),
+    Pty.node.replace(ptyLayer),
     // Precompiled (internal and SDK) plugins only: no plugin-directory scan, npm
     // install, or import of plugin code from disk.
-    [ConfigPluginSource.node, ConfigPluginSource.empty],
+    ConfigPluginSource.node.replace(ConfigPluginSource.empty),
   ]
 }
 
@@ -95,6 +95,7 @@ const unavailable = (what: string) => Effect.die(new Error(`${what} is unavailab
 const vcsLayer = Layer.succeed(
   Vcs.Service,
   Vcs.Service.of({
+    base: () => Effect.succeed(null),
     transform: () => Effect.succeed({ dispose: Effect.void }),
     reload: () => Effect.void,
     info: () => Effect.succeed({ branch: {} }),

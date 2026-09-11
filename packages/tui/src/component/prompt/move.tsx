@@ -1,34 +1,45 @@
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
-import path from "path"
 import { useTuiPaths } from "../../context/runtime"
 import { errorMessage } from "../../util/error"
 import { useDialog } from "../../ui/dialog"
 import { useClient } from "../../context/client"
 import { useToast } from "../../ui/toast"
-import { DialogMoveSession, type MoveSessionSelection } from "../dialog-move-session"
+import { DialogWorkspaces, type WorkspaceSelection } from "../dialog-workspaces"
 import { useData } from "../../context/data"
+import { useLocation } from "../../context/location"
+import { useRoute } from "../../context/route"
 
 export function usePromptMove(input: { projectID: () => string | undefined; sessionID: () => string | undefined }) {
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
   const data = useData()
+  const currentLocation = useLocation()
+  const route = useRoute()
   const paths = useTuiPaths()
   const [creating, setCreating] = createSignal(false)
   const [creatingDots, setCreatingDots] = createSignal(3)
   const [progress, setProgress] = createSignal<string>()
-  const [destination, setDestination] = createSignal<MoveSessionSelection>()
+  const [destination, setDestination] = createSignal<WorkspaceSelection>()
+
+  function homeLocation() {
+    const location = currentLocation.ref ?? data.location.default()
+    return { ...location, directory: location.directory || paths.cwd }
+  }
 
   async function create(name: string) {
-    const projectID = await resolveProjectID()
-    if (!projectID) return
     setCreating(true)
     setProgress("Creating worktree")
     try {
+      const sessionID = input.sessionID()
+      const session = sessionID ? await resolveSession(sessionID) : undefined
+      if (sessionID && !session) throw new Error("Unable to determine current session location")
+      const location = session?.location ?? homeLocation()
+      if (!data.location.info(location)) await data.location.syncInfo(location)
+      const project = data.location.info(location)?.project
+      if (!project) throw new Error("Unable to determine current project")
       const result = await client.api.worktree.create({
-        projectID,
-        strategy: "git",
-        directory: path.join(paths.worktree, projectID.slice(0, 6)),
+        location: { directory: location.directory, workspace: location.workspaceID },
         name,
       })
       const directory = result.directory
@@ -59,8 +70,9 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     const sessionID = input.sessionID()
     const session = sessionID ? await resolveSession(sessionID) : undefined
     dialog.replace(() => (
-      <DialogMoveSession
+      <DialogWorkspaces
         projectID={projectID}
+        location={session?.location ?? homeLocation()}
         current={
           destination() ??
           (session
@@ -71,25 +83,24 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
               }
             : {
                 type: "directory",
-                directory: data.location.default().directory,
-                subdirectory: data.location.default().directory !== data.location.info()?.project.directory,
+                directory: homeLocation().directory,
+                subdirectory: homeLocation().directory !== data.location.info(homeLocation())?.project.directory,
               })
         }
         onCurrentChange={setDestination}
         onSelect={(selection) => {
-          const sessionID = input.sessionID()
-          if (!sessionID) {
+          if (!input.sessionID() && selection.type === "new") {
             setDestination(selection)
             dialog.clear()
             return
           }
-          void moveExistingSession(sessionID, selection)
+          void selectWorkspace(selection)
         }}
       />
     ))
   }
 
-  async function moveExistingSession(sessionID: string, selection: MoveSessionSelection) {
+  async function selectWorkspace(selection: WorkspaceSelection) {
     dialog.clear()
     const directory = selection.type === "new" ? await create(selection.name) : selection.directory
     if (!directory) {
@@ -97,28 +108,18 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       dialog.clear()
       return
     }
-    setProgress("Moving session")
-    try {
-      await client.api.session.move({ sessionID, directory })
-      dialog.clear()
-    } catch (error) {
-      toast.error(error)
-      dialog.clear()
-    } finally {
-      setProgress(undefined)
-      setCreating(false)
-    }
+    finishSubmit()
+    route.navigate({ type: "home", location: { directory } })
   }
 
   async function resolveProjectID() {
-    const projectID = input.projectID()
-    if (projectID) return projectID
     const sessionID = input.sessionID()
-    if (sessionID) return (await resolveSession(sessionID))?.projectID
-    const current = data.location.info()
+    if (sessionID) return input.projectID() ?? (await resolveSession(sessionID))?.projectID
+    const location = homeLocation()
+    const current = data.location.info(location)
     if (current) return current.project.id
     return client.api.project
-      .current({ location: { directory: data.location.default().directory || paths.cwd } })
+      .current({ location: { directory: location.directory, workspace: location.workspaceID } })
       .then((project) => project.id)
       .catch(() => undefined)
   }

@@ -6,7 +6,7 @@ import { Auth } from "../route/auth.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
-import { ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 
 export interface GeminiOptionsInput extends Gemini.OptionsInput {
@@ -68,7 +68,7 @@ const protocol = {
 const route = Route.make({
   id: "google-vertex-gemini",
   provider: id,
-  providerMetadataKey: "google",
+  providerMetadataKey: "vertex",
   protocol,
   endpoint: Endpoint.path(({ request }) => {
     const model = String(request.model.id)
@@ -93,7 +93,10 @@ const configuredRoute = (input: Config, modelID: string | ModelID) => {
   const apiKey = GoogleVertexShared.apiKey(input)
   const endpointModel = String(modelID).startsWith("endpoints/")
   if (apiKey !== undefined && endpointModel)
-    throw new Error("Google Vertex tuned models do not support Express Mode API keys")
+    throw new ProviderConfigurationError({
+      provider: id,
+      message: "Google Vertex tuned models do not support Express Mode API keys",
+    })
   const location = GoogleVertexShared.location(inputLocation, "us-central1")
   const project = GoogleVertexShared.project(inputProject)
   const endpoint =
@@ -123,7 +126,10 @@ export const provider = {
 }
 export const model: ProviderPackage.Definition<Settings, GeminiProviderOptionsInput>["model"] = (modelID, settings) => {
   if (settings.apiKey !== undefined && settings.accessToken !== undefined)
-    throw new Error("Google Vertex apiKey cannot be combined with accessToken or auth")
+    throw new ProviderConfigurationError({
+      provider: id,
+      message: "Google Vertex apiKey cannot be combined with accessToken or auth",
+    })
   return configure({
     ...(settings.apiKey === undefined ? { accessToken: settings.accessToken } : { apiKey: settings.apiKey }),
     baseURL: settings.baseURL,

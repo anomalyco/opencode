@@ -27,7 +27,7 @@ describe("desktop renderer initialization", () => {
   })
 
   test("returns initialized sidecar data", () => {
-    const sidecar = { url: "http://127.0.0.1:1234", username: "opencode", password: "secret" }
+    const sidecar = { url: "http://127.0.0.1:1234" }
 
     expect(initializationData(Object.assign(() => sidecar, { error: undefined }))).toBe(sidecar)
   })
@@ -47,7 +47,7 @@ describe("desktop renderer initialization", () => {
   })
 
   test("refreshes the managed sidecar endpoint", async () => {
-    const sidecar = { url: "http://127.0.0.1:4321", username: "opencode", password: "next" }
+    const sidecar = { url: "http://127.0.0.1:4321" }
     const updates: (typeof sidecar)[] = []
     const resolve = createSidecarResolver({
       api: { reconnectService: async () => sidecar },
@@ -60,7 +60,7 @@ describe("desktop renderer initialization", () => {
   })
 
   test("keeps the current sidecar when reconnection resolves the same endpoint", async () => {
-    const sidecar = { url: "http://127.0.0.1:4321", username: "opencode", password: "same" }
+    const sidecar = { url: "http://127.0.0.1:4321" }
     const updates: (typeof sidecar)[] = []
     const resolve = createSidecarResolver({
       api: { reconnectService: async () => ({ ...sidecar }) },
@@ -73,7 +73,7 @@ describe("desktop renderer initialization", () => {
   })
 
   test("does not publish a sidecar resolved after cancellation", async () => {
-    const sidecar = { url: "http://127.0.0.1:4321", username: "opencode", password: "next" }
+    const sidecar = { url: "http://127.0.0.1:4321" }
     const pending = Promise.withResolvers<typeof sidecar>()
     const updates: (typeof sidecar)[] = []
     const resolve = createSidecarResolver({

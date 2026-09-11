@@ -1,11 +1,13 @@
-import { createMemo, createResource, createSignal } from "solid-js"
-import type { SessionInfo } from "@opencode-ai/client"
+import { batch, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
+import type { OpenCodeEvent, SessionInfo } from "@opencode/client"
+import path from "path"
 import { useTerminalDimensions } from "@opentui/solid"
 import type { RGBA } from "@opentui/core"
 import { dialogWidth, useDialog } from "../ui/dialog"
-import { DialogSelect, dialogSelectContentWidth } from "../ui/dialog-select"
+import { DialogSelect, dialogSelectContentWidth, type DialogSelectRef } from "../ui/dialog-select"
+import { DialogPrompt } from "../ui/dialog-prompt"
 import { useRoute } from "../context/route"
-import { useData } from "../context/data"
+import { locationKey, useData } from "../context/data"
 import { useClient } from "../context/client"
 import { useLocation } from "../context/location"
 import { useSessionTabs } from "../context/session-tabs"
@@ -15,34 +17,32 @@ import { Locale } from "../util/locale"
 import { abbreviateHome } from "../runtime"
 import { useTuiPaths } from "../context/runtime"
 import { truncateFilePath } from "../ui/file-path"
+import { useToast } from "../ui/toast"
+import { errorMessage } from "../util/error"
 import { stringWidth } from "../util/string-width"
-import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
+import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { Spinner } from "./spinner"
 import { projectName } from "../util/project"
 
 const RECENT_LIMIT = 8
 export const DialogOpenKey = Symbol("DialogOpen")
 
-type OpenTarget = { type: "session"; sessionID: string } | { type: "project"; directory: string }
+type OpenTarget =
+  | { type: "session"; sessionID: string }
+  | { type: "project"; directory: string; workspaceID?: string; projectID?: string }
 
-export async function loadDialogOpen(data: ReturnType<typeof useData>, client: ReturnType<typeof useClient>) {
-  const [, sessions] = await Promise.all([
-    data.project.sync().catch(() => {}),
-    client.api.session
-      .list({ limit: 50, order: "desc", parentID: null })
-      .then((response) => response.data)
-      .catch(() => [] as SessionInfo[]),
-  ])
-  return sessions
-}
+type OpenView = { type: "projects" } | { type: "worktrees"; projectID: string; workspaceID?: string }
 
-export function DialogOpen(props: { sessions: SessionInfo[] }) {
+type OpenSelection = { view: OpenView; filter: string; selected?: OpenTarget }
+
+export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: SessionInfo[]) => void }) {
   const dialog = useDialog()
   const route = useRoute()
   const data = useData()
   const client = useClient()
   const location = useLocation()
   const sessionTabs = useSessionTabs()
+  const toast = useToast()
   const themes = useThemes()
   const theme = useTheme("elevated")
   const mode = themes.mode
@@ -51,6 +51,94 @@ export function DialogOpen(props: { sessions: SessionInfo[] }) {
   const shortcuts = Keymap.useShortcuts()
   const [filter, setFilter] = createSignal("")
   const [selectionMoved, setSelectionMoved] = createSignal(false)
+  let closed = false
+  onCleanup(() => {
+    closed = true
+  })
+  const [recent] = createResource(() => {
+    // A late read must not overwrite deletion or placement facts observed in flight.
+    const changed = new Map<string, Extract<OpenCodeEvent, { type: "session.deleted" | "session.moved" }>>()
+    const unsubscribe = client.event.listen((message) => {
+      const event = message.details
+      if (event.type === "session.deleted" || event.type === "session.moved") changed.set(event.data.sessionID, event)
+    })
+    onCleanup(unsubscribe)
+    return client.api.session
+      .list({ limit: 50, order: "desc", parentID: null })
+      .then((response) => {
+        if (!closed)
+          props.onLoad(
+            response.data.flatMap((session) => {
+              const event = changed.get(session.id)
+              if (!event) return [session]
+              if (event.type === "session.deleted") return []
+              return [moveOpenSession(props.sessions.find((entry) => entry.id === session.id) ?? session, event)]
+            }),
+          )
+        return true
+      })
+      .catch(() => false)
+      .finally(unsubscribe)
+  })
+  const [projects] = createResource(() =>
+    data.project.sync().then(
+      () => true,
+      () => false,
+    ),
+  )
+  const [view, setView] = createSignal<OpenView>({ type: "projects" })
+  const projectID = () => {
+    const current = view()
+    return current.type === "worktrees" ? current.projectID : undefined
+  }
+  const [focus, setFocus] = createSignal<OpenTarget>()
+  const [creation, setCreation] = createSignal<OpenSelection>()
+  const [creating, setCreating] = createSignal(false)
+  let projectsSelection: OpenSelection | undefined
+  let select: DialogSelectRef<OpenTarget> | undefined
+  let pending: OpenSelection | undefined
+  function snapshot(): OpenSelection {
+    return { view: view(), filter: select?.filter ?? "", selected: select?.selected?.value }
+  }
+  function restore(next: OpenSelection) {
+    batch(() => {
+      setView(next.view)
+      setSelectionMoved(false)
+      setFocus(next.selected)
+      select?.setFilter(next.filter)
+    })
+    if (next.selected) select?.moveTo(next.selected)
+  }
+  function back() {
+    if (projectsSelection) restore(projectsSelection)
+  }
+  function newWorktree() {
+    if (!projectID()) return
+    setCreation(snapshot())
+  }
+  function cancelCreation() {
+    pending = creation()
+    setCreation(undefined)
+  }
+  const workspaceID = () => {
+    const current = view()
+    return current.type === "worktrees" ? current.workspaceID : undefined
+  }
+  const [worktrees] = createResource(
+    () => (view().type === "worktrees" ? view() : undefined),
+    () =>
+      client.api.worktree
+        .list({
+          location: {
+            directory: data.project.get(projectID()!)!.canonical,
+            workspace: workspaceID(),
+          },
+        })
+        .catch((error: unknown) => {
+          toast.show({ title: "Loading worktrees failed", message: errorMessage(error), variant: "error" })
+          return []
+        }),
+  )
 
   const [matched] = createResource(
     () => {
@@ -95,15 +183,20 @@ export function DialogOpen(props: { sessions: SessionInfo[] }) {
     const sessionOptions = recent.map((session) => {
       const project = data.project.get(session.projectID)
       const name = projectName(project)
+      const basename = path.basename(session.location.directory)
+      const label =
+        name && session.location.directory !== project?.canonical && name.toLowerCase() !== basename.toLowerCase()
+          ? `${name} · ${basename}`
+          : name || basename
       const running =
         data.session.status(session.id) === "running" ||
         data.session.family(session.id).some((id) => data.session.status(id) === "running")
       return {
         title: withTimestampedFallback(session),
-        searchText: session.id,
+        searchText: `${session.id} ${session.location.directory}`,
         value: { type: "session", sessionID: session.id } as OpenTarget,
         category: "Sessions",
-        footer: `${name ? `${Locale.truncate(name, 20)} · ` : ""}${timeAgo(session.time.updated)}`,
+        footer: `${label ? `${Locale.truncate(label, 30)} · ` : ""}${timeAgo(session.time.updated)}`,
         onSelect: () => location.set(session.location),
         gutter: running
           ? (color: RGBA) => <Spinner color={color} />
@@ -113,28 +206,54 @@ export function DialogOpen(props: { sessions: SessionInfo[] }) {
       }
     })
 
-    const current = location.current?.project
+    const current = location.ref ?? data.location.default()
     const seen = new Set<string>()
-    const projectOptions = data.project
-      .list()
-      .filter((project) => {
-        if (project.canonical === "/" || seen.has(project.canonical)) return false
-        seen.add(project.canonical)
+    const projectOptions = [
+      ...data.project.list().flatMap((project) =>
+        [project.canonical, ...project.sandboxes].map((directory) => ({
+          directory,
+          workspaceID: current.workspaceID,
+          project,
+        })),
+      ),
+      ...sessions().map((session) => ({
+        directory: session.location.directory,
+        workspaceID: session.location.workspaceID,
+        project: data.project.get(session.projectID),
+      })),
+    ]
+      .filter((item) => {
+        const key = locationKey(item)
+        if (item.directory === "/" || seen.has(key)) return false
+        seen.add(key)
         return true
       })
-      .map((project) => {
-        const title = projectName(project) ?? project.canonical
-        const footer = abbreviateHome(project.canonical, paths.home)
+      .map((item) => {
+        const title =
+          item.directory === item.project?.canonical
+            ? (projectName(item.project) ?? path.basename(item.directory))
+            : path.basename(item.directory)
+        const footer = abbreviateHome(item.directory, paths.home)
+        const git = item.project?.vcs === "git"
         const width =
-          dialogSelectContentWidth(Math.min(dialogWidth("large"), dimensions().width - 2)) - stringWidth(title)
+          dialogSelectContentWidth(Math.min(dialogWidth("large"), dimensions().width - 2)) -
+          stringWidth(title) -
+          (git ? 2 : 0)
         return {
           title,
-          footer: truncateFilePath(footer, width),
-          searchText: footer,
-          value: { type: "project", directory: project.canonical } as OpenTarget,
+          footer: `${truncateFilePath(footer, width)}${git ? " →" : ""}`,
+          searchText: `${footer} ${projectName(item.project) ?? ""}`,
+          value: {
+            type: "project",
+            directory: item.directory,
+            ...(item.workspaceID ? { workspaceID: item.workspaceID } : {}),
+            ...(git ? { projectID: item.project!.id } : {}),
+          } as OpenTarget,
           category: "Projects",
           gutter:
-            project.canonical === current?.canonical
+            item.workspaceID === current.workspaceID &&
+            (item.directory === current.directory ||
+              (item.directory === location.current?.project.canonical && !seen.has(locationKey(current))))
               ? () => <text fg={theme.text.formfield.selected}>●</text>
               : undefined,
         }
@@ -143,38 +262,233 @@ export function DialogOpen(props: { sessions: SessionInfo[] }) {
     return [...sessionOptions, ...projectOptions]
   })
 
-  return (
-    <DialogSelect
-      title="Open"
-      placeholder="Search sessions and projects…"
-      options={options()}
-      current={currentSessionID() ? ({ type: "session", sessionID: currentSessionID()! } as OpenTarget) : undefined}
-      focusCurrent={false}
-      sectionNavigation={true}
-      preserveSelection={selectionMoved()}
-      onMove={() => setSelectionMoved(true)}
-      onFilter={setFilter}
-      noMatchView={
-        <box paddingLeft={4} paddingRight={4}>
-          <text fg={theme.text.subdued}>
-            {shortcuts.get("session.list")
-              ? `No matches · search all sessions with ${shortcuts.get("session.list")}`
-              : "No matches"}
-          </text>
-        </box>
-      }
-      onSelect={(option) => {
-        dialog.clear()
-        if (option.value.type === "session") {
-          route.navigate({ type: "session", sessionID: option.value.sessionID })
-          return
+  const worktreeOptions = createMemo(() => {
+    const id = projectID()
+    if (!id) return []
+    const project = data.project.get(id)
+    if (!project) return []
+    const current = location.ref ?? data.location.default()
+    const directories = [
+      project.canonical,
+      ...(worktrees.loading ? [] : (worktrees() ?? [])).map((worktree) => worktree.directory),
+    ]
+    const width = Math.max(
+      0,
+      dialogSelectContentWidth(Math.min(dialogWidth("large"), dimensions().width - 2)) -
+        Math.max(
+          ...directories.map((directory) =>
+            stringWidth(
+              directory === project.canonical
+                ? (projectName(project) ?? path.basename(directory))
+                : path.basename(directory),
+            ),
+          ),
+        ),
+    )
+    return directories
+      .filter((directory, index) => directories.indexOf(directory) === index)
+      .toSorted((a, b) => {
+        if (a === project.canonical) return -1
+        if (b === project.canonical) return 1
+        if (a === current.directory) return -1
+        if (b === current.directory) return 1
+        return 0
+      })
+      .map((directory) => {
+        const title =
+          directory === project.canonical
+            ? (projectName(project) ?? path.basename(directory))
+            : path.basename(directory)
+        const footer = truncateFilePath(abbreviateHome(directory, paths.home), width)
+        return {
+          title,
+          footer: footer + " ".repeat(Math.max(0, width - stringWidth(footer))),
+          value: { type: "project", directory, ...(workspaceID() ? { workspaceID: workspaceID() } : {}) } as OpenTarget,
+          gutter:
+            directory === current.directory && workspaceID() === current.workspaceID
+              ? () => <text fg={theme.text.formfield.selected}>●</text>
+              : undefined,
         }
-        const target = { directory: option.value.directory }
-        route.navigate({ type: "home", location: target })
-        location.set(target)
-      }}
-    />
+      })
+  })
+
+  return (
+    <box>
+      <Show
+        when={creation()}
+        fallback={
+          <DialogSelect
+            ref={(value) => {
+              select = value
+              dialog.setSize("large")
+              if (!pending) return
+              const previous = pending
+              pending = undefined
+              restore(previous)
+            }}
+            title={projectID() ? `${projectName(data.project.get(projectID()!)) ?? "Project"} / Worktrees` : "Open"}
+            placeholder={projectID() ? "Search worktrees…" : "Search sessions and projects…"}
+            options={projectID() ? worktreeOptions() : options()}
+            current={
+              currentSessionID() ? ({ type: "session", sessionID: currentSessionID()! } as OpenTarget) : undefined
+            }
+            focusTarget={focus()}
+            focusCurrent={focus() !== undefined}
+            sectionNavigation={true}
+            preserveSelection={selectionMoved()}
+            onMove={() => {
+              setSelectionMoved(true)
+            }}
+            onCancel={view().type === "projects" ? undefined : back}
+            onFilter={setFilter}
+            emptyView={
+              <Show when={!recent.loading && !projects.loading}>
+                <box paddingLeft={4} paddingRight={4}>
+                  <text fg={theme.text.subdued}>No recent sessions or projects</text>
+                </box>
+              </Show>
+            }
+            footer={
+              <Show
+                when={
+                  projectID()
+                    ? worktrees.loading
+                    : recent.loading || projects.loading || recent() === false || projects() === false
+                }
+              >
+                <box>
+                  <Show when={projectID() && worktrees.loading}>
+                    <Spinner color={theme.text.subdued}>Loading worktrees…</Spinner>
+                  </Show>
+                  <Show when={!projectID() && (recent.loading || projects.loading)}>
+                    <Spinner color={theme.text.subdued}>Refreshing sessions and projects…</Spinner>
+                  </Show>
+                  <Show when={!projectID() && (recent() === false || projects() === false)}>
+                    <text fg={theme.text.feedback.error.default}>
+                      Could not refresh{" "}
+                      {recent() === false ? (projects() === false ? "sessions and projects" : "sessions") : "projects"}.
+                    </text>
+                  </Show>
+                </box>
+              </Show>
+            }
+            bindings={[
+              ...(!projectID()
+                ? [
+                    {
+                      bind: "right",
+                      title: "Show project worktrees",
+                      group: "Dialog",
+                      run: () => {
+                        const target = select?.selected?.value
+                        if (target?.type !== "project" || !target.projectID) return
+                        projectsSelection = snapshot()
+                        restore({
+                          view: { type: "worktrees", projectID: target.projectID, workspaceID: target.workspaceID },
+                          filter: "",
+                          selected: {
+                            type: "project",
+                            directory: target.directory,
+                            ...(target.workspaceID ? { workspaceID: target.workspaceID } : {}),
+                          },
+                        })
+                      },
+                    },
+                  ]
+                : []),
+              ...(projectID()
+                ? [
+                    {
+                      bind: "left",
+                      title: "Return to projects",
+                      group: "Dialog",
+                      run: back,
+                    },
+                    { bind: "ctrl+n", title: "New worktree", group: "Dialog", run: newWorktree },
+                  ]
+                : []),
+            ]}
+            footerHints={[...(projectID() ? [{ title: "new worktree", label: "ctrl+n" }] : [])]}
+            noMatchView={
+              <box paddingLeft={4} paddingRight={4}>
+                <text fg={theme.text.subdued}>
+                  {projectID()
+                    ? worktrees.loading
+                      ? "Loading worktrees…"
+                      : "No matching worktrees"
+                    : recent.loading || projects.loading || matched.loading
+                      ? "Searching sessions and projects…"
+                      : shortcuts.get("session.list")
+                        ? `No matches · search all sessions with ${shortcuts.get("session.list")}`
+                        : "No matches"}
+                </text>
+              </box>
+            }
+            onSelect={(option) => {
+              dialog.clear()
+              if (option.value.type === "session") {
+                route.navigate({ type: "session", sessionID: option.value.sessionID })
+                return
+              }
+              const target = {
+                directory: option.value.directory,
+                ...(option.value.workspaceID ? { workspaceID: option.value.workspaceID } : {}),
+              }
+              route.navigate({ type: "home", location: target })
+              location.set(target)
+            }}
+          />
+        }
+      >
+        <DialogPrompt
+          size="large"
+          title={`${projectName(data.project.get(projectID()!)) ?? "Project"} / New worktree`}
+          placeholder="Worktree name (optional)"
+          description={() => <text fg={theme.text.subdued}>Leave blank for a random name.</text>}
+          busy={creating()}
+          busyText="Creating worktree…"
+          onCancel={cancelCreation}
+          onConfirm={(value) => {
+            const id = projectID()!
+            const previous = creation()
+            setCreating(true)
+            void client.api.worktree
+              .create({
+                location: {
+                  directory: data.project.get(id)!.canonical,
+                  workspace: workspaceID(),
+                },
+                ...(value.trim() ? { name: value.trim() } : {}),
+              })
+              .then((created) => {
+                if (closed || creation() !== previous) return
+                const target = {
+                  directory: created.directory,
+                  ...(workspaceID() ? { workspaceID: workspaceID() } : {}),
+                }
+                dialog.clear()
+                route.navigate({ type: "home", location: target })
+                location.set(target)
+              })
+              .catch((error: unknown) =>
+                toast.show({ title: "Creating worktree failed", message: errorMessage(error), variant: "error" }),
+              )
+              .finally(() => setCreating(false))
+          }}
+        />
+      </Show>
+    </box>
   )
+}
+
+export function moveOpenSession(session: SessionInfo, event: Extract<OpenCodeEvent, { type: "session.moved" }>) {
+  return {
+    ...session,
+    location: event.data.location,
+    projectID: event.data.projectID ?? session.projectID,
+    subpath: event.data.subpath,
+    time: { ...session.time, updated: Math.max(session.time.updated, event.created) },
+  }
 }
 
 function timeAgo(timestamp: number) {

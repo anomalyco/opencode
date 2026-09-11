@@ -158,12 +158,12 @@ const __filename = import.meta.filename
 const __dirname = import.meta.dirname
 const require = __cjs_mod__.createRequire(import.meta.url)
 const __ocPluginModules = ${JSON.stringify({
-    "@opencode-ai/plugin": "opencode:plugin-v2",
-    "@opencode-ai/plugin/promise/plugin": "opencode:plugin-promise-plugin",
-    "@opencode-ai/plugin/promise/tool": "opencode:plugin-promise-tool",
-    "@opencode-ai/plugin/effect": "opencode:plugin-v2-effect",
-    "@opencode-ai/plugin/effect/plugin": "opencode:plugin-v2-effect-plugin",
-    "@opencode-ai/plugin/effect/tool": "opencode:plugin-v2-effect-tool",
+    "@opencode/plugin": "opencode:plugin-v2",
+    "@opencode/plugin/promise/plugin": "opencode:plugin-promise-plugin",
+    "@opencode/plugin/promise/tool": "opencode:plugin-promise-tool",
+    "@opencode/plugin/effect": "opencode:plugin-v2-effect",
+    "@opencode/plugin/effect/plugin": "opencode:plugin-v2-effect-plugin",
+    "@opencode/plugin/effect/tool": "opencode:plugin-v2-effect-tool",
   })}
 const __ocPluginSources = ${JSON.stringify({
     "opencode:plugin-v2": promiseModule,
@@ -268,6 +268,7 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
       OPENCODE_VERSION: JSON.stringify(input.version),
       OPENCODE_CLI_NAME: JSON.stringify("opencode2-node"),
       OPENCODE_CHANNEL: JSON.stringify(input.channel),
+      OPENCODE_ARTIFACT: JSON.stringify("cli-node"),
       OPENCODE_LIBC: input.target.platform === "linux" ? JSON.stringify("glibc") : "undefined",
       FFF_LIBC: input.target.platform === "linux" ? JSON.stringify("gnu") : "undefined",
       "process.env.WS_NO_BUFFER_UTIL": JSON.stringify("1"),

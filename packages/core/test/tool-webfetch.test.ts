@@ -2,15 +2,15 @@ import { describe, expect, test } from "bun:test"
 import { Duration, Effect, Fiber, Layer, Schema } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
-import { Permission } from "@opencode-ai/core/permission"
-import { Session } from "@opencode-ai/core/session"
-import { Tool } from "@opencode-ai/core/tool"
-import { WebFetchTool } from "@opencode-ai/core/tool/plugin/webfetch"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Image } from "@opencode-ai/core/image"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
+import { Permission } from "@opencode/core/permission"
+import { Session } from "@opencode/core/session"
+import { Tool } from "@opencode/core/tool"
+import { WebFetchTool } from "@opencode/core/tool/plugin/webfetch"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { Image } from "@opencode/core/image"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
@@ -42,11 +42,11 @@ const http = Layer.succeed(
 const permission = permissionLayer({ assert: (input) => Effect.sync(() => assertions.push(input)) })
 const toolLayer = (replacements: LayerNode.Replacements = []) =>
   AppNodeBuilder.build(LayerNode.group([Tool.node, webFetchToolNode]), [
-    [Permission.node, permission],
-    [Image.node, imagePassthrough],
+    Permission.node.replace(permission),
+    Image.node.replace(imagePassthrough),
     ...replacements,
   ])
-const it = testEffect(toolLayer([[LayerNodePlatform.httpClient, http]]))
+const it = testEffect(toolLayer([LayerNodePlatform.httpClient.replace(http)]))
 const live = testEffect(toolLayer())
 
 const reset = () => {
@@ -90,6 +90,53 @@ describe("WebFetchTool helpers", () => {
     )
   })
 
+  test.each([
+    ["`x`", "`` `x` ``"],
+    ["`x", "`` `x ``"],
+    ["x`", "`` x` ``"],
+    ["`", "`` ` ``"],
+    ["``", "``` `` ```"],
+    ["``x`", "``` ``x` ```"],
+    ["say(`x`)", "``say(`x`)``"],
+    ["a``b`c", "```a``b`c```"],
+    ["x", "`x`"],
+    [" x ", "`  x  `"],
+    [" x", "`  x `"],
+    ["x ", "` x  `"],
+    ["   ", "`   `"],
+    [" ` ", "``  `  ``"],
+  ])("preserves inline code boundaries for %j", (content, expected) => {
+    expect(WebFetchTool.convertHTMLToMarkdown(`<p>Use <code>${content}</code>.</p>`)).toBe(`Use ${expected}.`)
+  })
+
+  test.each([
+    ["discarded trailing backtick after ASCII", "x`", 7, "``x``"],
+    ["discarded trailing backtick after Unicode", "😀`", 10, "``😀``"],
+    ["discarded trailing backtick with spare room", "x`", 9, "``x``"],
+    ["retained trailing backtick", "x`", 10, "`` x` ``"],
+    ["new trailing backtick from an internal run", "x`y", 8, "``x``"],
+    ["leading backtick without padding room", "`x", 8, ""],
+    ["leading backtick alone fits", "`x", 9, "`` ` ``"],
+    ["leading backtick with payload fits", "`x", 10, "`` `x ``"],
+    ["all backticks truncated", "``", 11, "``` ` ```"],
+    ["all backticks fit", "``", 12, "``` `` ```"],
+    ["mixed internal runs truncated", "a``b`c", 11, "```a```"],
+    ["Unicode code point cannot fit", "😀`", 9, ""],
+    ["ordinary payload cannot fit", "x", 3, ""],
+    ["spaces cannot fit", "   ", 4, ""],
+    ["space-only prefix fits", "   ", 5, "` `"],
+    ["truncated prefix becomes space-only", " x", 6, "` `"],
+    ["discarded trailing space", "x ", 5, "`x`"],
+  ] as const)("fits inline code to its emitted boundaries: %s", (_name, content, spare, expected) => {
+    const prefix = "x".repeat(WebFetchTool.MAX_RESPONSE_BYTES - 64 * 1024 - spare)
+    const html = `<p>${prefix}<code>${content}</code></p>`
+    expect(Buffer.byteLength(html)).toBeLessThanOrEqual(WebFetchTool.MAX_RESPONSE_BYTES)
+    const output = WebFetchTool.convertHTMLToMarkdown(html)
+    expect(output.slice(0, prefix.length)).toBe(prefix)
+    expect(output.slice(prefix.length)).toBe(expected)
+    expect(Buffer.byteLength(output)).toBeLessThanOrEqual(WebFetchTool.MAX_RESPONSE_BYTES)
+  })
+
   test("keeps nested ordered and unordered lists structurally readable", () => {
     const html = `<ol start="3"><li>alpha<ul><li>nested <strong>item</strong></li></ul></li><li><p>beta first</p><p>beta second</p></li></ol>`
     expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(
@@ -114,18 +161,33 @@ describe("WebFetchTool helpers", () => {
     expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe("before after")
   })
 
-  test("is deterministic and bounded for malformed maximum-size input", () => {
-    const html = `<main><p>${"visible &amp; text ".repeat(250_000)}</main></p></unknown>`
+  test("is deterministic and bounded for malformed input across parser chunks", () => {
+    const html = `<main><p>${"visible &amp; text ".repeat(4_096)}</main></p></unknown>`
     const first = WebFetchTool.convertHTMLToMarkdown(html)
     expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(first)
     expect(first.startsWith("visible & text visible & text")).toBe(true)
     expect(first.length).toBeLessThanOrEqual(html.length)
   })
 
+  test("defaults to the production byte budget with room for closing syntax", () => {
+    const output = WebFetchTool.convertHTMLToMarkdown("x".repeat(WebFetchTool.MAX_RESPONSE_BYTES))
+    expect(WebFetchTool.MAX_RESPONSE_BYTES).toBe(5 * 1024 * 1024)
+    expect(output).toHaveLength(WebFetchTool.MAX_RESPONSE_BYTES - 64 * 1024)
+  })
+
+  test.each(["x", "\u00e9", "\u{1f600}"])("preserves UTF-8 boundaries at the content limit for %s", (character) => {
+    const budget = WebFetchTool.MAX_RESPONSE_BYTES - 64 * 1024
+    const fitting = "aa" + character.repeat(Math.floor((budget - 2) / Buffer.byteLength(character)))
+    expect(WebFetchTool.convertHTMLToMarkdown(fitting)).toBe(fitting)
+    const truncated = WebFetchTool.convertHTMLToMarkdown(fitting + character)
+    expect(truncated).toBe(fitting)
+    expect(Buffer.byteLength(truncated)).toBe(Buffer.byteLength(fitting))
+  })
+
   test("bounds deeply nested list output and fragmented code fences", () => {
     const lists = `${"<ul><li>item".repeat(2_000)}${"</li></ul>".repeat(2_000)}`
     const quotes = `${"<blockquote><p>item".repeat(2_000)}${"</p></blockquote>".repeat(2_000)}`
-    const code = `<pre>${"` x ".repeat(250_000)}</pre>`
+    const code = `<pre>${"` x ".repeat(4_096)}</pre>`
     expect(WebFetchTool.convertHTMLToMarkdown(lists).length).toBeLessThan(lists.length * 4)
     expect(WebFetchTool.convertHTMLToMarkdown(quotes).length).toBeLessThan(quotes.length * 4)
     expect(() => WebFetchTool.convertHTMLToMarkdown(code)).not.toThrow()
@@ -250,46 +312,35 @@ describe("WebFetchTool helpers", () => {
     expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(`| a\\|b next | \`x\\|y\` |\n| --- | --- |`)
   })
 
-  test("keeps each near-boundary inline construct closed and UTF-8-safe", () => {
-    const payload = "😀".repeat(WebFetchTool.MAX_RESPONSE_BYTES / 4)
+  test("preserves Unicode in inline constructs", () => {
+    const payload = "😀".repeat(16)
     const cases = [
-      [`<strong>${payload}</strong>`, /^\*\*[\s\S]*\*\*$/],
-      [`<a href="/docs">${payload}</a>`, /^\[[\s\S]*\]\(\/docs\)$/],
-      [`<img src="image.png" alt="${payload}">`, /^!\[[\s\S]*\]\(image\.png\)$/],
-      [`<code>${payload}</code>`, /^`[\s\S]*`$/],
+      [`<strong>${payload}</strong>`, `**${payload}**`],
+      [`<a href="/docs">${payload}</a>`, `[${payload}](/docs)`],
+      [`<img src="image.png" alt="${payload}">`, `![${payload}](image.png)`],
+      [`<code>${payload}</code>`, `\`${payload}\``],
     ] as const
-    for (const [html, pattern] of cases) {
-      const output = WebFetchTool.convertHTMLToMarkdown(html)
-      expect(Buffer.byteLength(output)).toBeLessThanOrEqual(WebFetchTool.MAX_RESPONSE_BYTES)
-      expect(output).not.toContain("�")
-      expect(output).toMatch(pattern)
+    for (const [html, expected] of cases) {
+      expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(expected)
     }
   })
 
-  test("keeps near-boundary block constructs syntactically complete", () => {
-    const payload = "x".repeat(WebFetchTool.MAX_RESPONSE_BYTES)
+  test("preserves block content and following lists", () => {
+    const payload = "x".repeat(256)
     const table = WebFetchTool.convertHTMLToMarkdown(
       `<table><tr><th>Name</th></tr><tr><td>${payload}</td></tr></table>`,
     )
-    const list = WebFetchTool.convertHTMLToMarkdown(`<ul><li>${payload}</li></ul><ul><li>nested</li></ul>`)
+    const list = WebFetchTool.convertHTMLToMarkdown(`<ul><li>${payload}</li></ul><ul><li>next</li></ul>`)
     const code = WebFetchTool.convertHTMLToMarkdown(`<pre>${payload}</pre>`)
-    for (const output of [table, list, code]) {
-      expect(Buffer.byteLength(output)).toBeLessThanOrEqual(WebFetchTool.MAX_RESPONSE_BYTES)
-      expect(output).not.toContain("�")
-    }
-    expect(table).toMatch(/^\| Name \|\n\| --- \|\n\| [\s\S]* \|$/)
-    expect(list).toMatch(/^- [\s\S]*$/)
-    expect(list.includes("nested")).toBe(false)
-    expect(code.match(/^(`{3,}|~{3,})$/gm)).toHaveLength(2)
+    expect(table).toBe(`| Name |\n| --- |\n| ${payload} |`)
+    expect(list).toBe(`- ${payload}\n\n- next`)
+    expect(code).toBe(`\`\`\`\n${payload}\n\`\`\``)
   })
 
-  test("keeps quoted code within budget with a safe closed fence", () => {
-    const html = `<blockquote><pre>${"`".repeat(32)}${"~".repeat(32)}${"x".repeat(WebFetchTool.MAX_RESPONSE_BYTES)}</pre></blockquote>`
-    const output = WebFetchTool.convertHTMLToMarkdown(html)
-    expect(Buffer.byteLength(output)).toBeLessThanOrEqual(WebFetchTool.MAX_RESPONSE_BYTES)
-    const lines = output.split("\n")
-    expect(lines[0]).toMatch(/^> (`{33}|~{33})$/)
-    expect(lines.at(-1)).toBe(lines[0])
+  test("keeps quoted code with long delimiter runs inside a safe closed fence", () => {
+    const payload = `${"`".repeat(32)}${"~".repeat(32)}${"x".repeat(64)}`
+    const output = WebFetchTool.convertHTMLToMarkdown(`<blockquote><pre>${payload}</pre></blockquote>`)
+    expect(output).toBe(`> ${"`".repeat(33)}\n> ${payload}\n> ${"`".repeat(33)}`)
   })
 
   test("separates reconstructed tables from adjacent inline and quoted content", () => {
@@ -299,13 +350,9 @@ describe("WebFetchTool helpers", () => {
     )
   })
 
-  test("keeps multiline quoted code closed at the content budget", () => {
-    const html = `<blockquote><pre>${"x\n".repeat(WebFetchTool.MAX_RESPONSE_BYTES / 2)}</pre></blockquote><p>tail</p>`
-    const output = WebFetchTool.convertHTMLToMarkdown(html)
-    expect(Buffer.byteLength(output)).toBeLessThanOrEqual(WebFetchTool.MAX_RESPONSE_BYTES)
-    expect((output.match(/(`{3}|~{3})/g) ?? []).length).toBe(2)
-    expect(output.includes("\uFFFD")).toBe(false)
-    expect(output.endsWith("tail")).toBe(true)
+  test("keeps multiline quoted code closed before following prose", () => {
+    const html = `<blockquote><pre>${"x\n".repeat(16)}</pre></blockquote><p>tail</p>`
+    expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(`> \`\`\`\n${"> x\n".repeat(16)}> \`\`\`\n\ntail`)
   })
 
   test("keeps active content suppressed when depth fallback begins", () => {
@@ -579,6 +626,22 @@ describe("WebFetchTool registration", () => {
       expect(requests).toHaveLength(2)
       expect(requests[0]?.headers["user-agent"]).toBe(webFetchUserAgent)
       expect(requests[1]?.headers["user-agent"]).toBe("opencode")
+    }),
+  )
+
+  it.effect("does not retry ordinary 403 responses", () =>
+    Effect.gen(function* () {
+      reset()
+      respond = () => Effect.succeed(new Response("forbidden", { status: 403 }))
+      const registry = yield* Tool.Service
+      const url = "https://example.com/forbidden"
+
+      expect(yield* executeTool(registry, call({ url, format: "text" }))).toEqual({
+        status: "error",
+        error: { type: "unknown", message: `StatusCode: non 2xx status code (403 GET ${url})` },
+      })
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.headers["user-agent"]).toBe(webFetchUserAgent)
     }),
   )
 

@@ -18,7 +18,8 @@ describe("auth command", () => {
     expect(auth.stdout).toContain("manage AI providers and credentials")
     expect(auth.stdout).toContain("list providers and credentials")
     expect(auth.stdout).toContain("log in to a provider")
-    expect(auth.stdout).toContain("log out from a configured provider")
+    expect(auth.stdout).toContain("log out of a saved account")
+    expect(auth.stdout).toContain("switch the active account for an integration")
     expect(auth.stdout).not.toContain("connect")
     expect(list.exitCode).toBe(0)
     expect(list.stdout).toContain("opencode auth list [flags]")
@@ -28,7 +29,7 @@ describe("auth command", () => {
     expect(login.stdout).toContain("Integration ID, name, or well-known provider URL")
     expect(login.stdout).toContain("--method")
     expect(logout.exitCode).toBe(0)
-    expect(logout.stdout).toContain("opencode auth logout [flags] [<target>]")
+    expect(logout.stdout).toContain("opencode auth logout [flags] [<target>] [<credential>]")
   })
 
   test("lists stored and environment connections", async () => {
@@ -66,6 +67,36 @@ describe("auth command", () => {
       },
     ])
     expect(requests.indexOf("/api/model/default")).toBeLessThan(requests.indexOf("/api/integration"))
+  })
+
+  test("lists OpenCode Go before Zen and preserves the remaining integration order", async () => {
+    using server = authServer((request, url) => {
+      if (url.pathname === "/api/integration") {
+        return Response.json(
+          located(
+            [
+              { id: "opencode", name: "OpenCode Zen" },
+              { id: "anthropic", name: "Anthropic" },
+              { id: "opencode-go", name: "OpenCode Go" },
+            ].map((integration) => ({
+              ...integration,
+              methods: [],
+              connections: [{ type: "env", name: "TEST_API_KEY" }],
+            })),
+          ),
+        )
+      }
+      return new Response("Not found", { status: 404 })
+    })
+
+    const result = await cli(["auth", "list", "--server", server.url.toString()])
+    expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({ exitCode: 0, stderr: "" })
+    expect(
+      result.stdout
+        .trim()
+        .split("\n")
+        .map((line) => line.split(/\s{2,}/)[0]),
+    ).toEqual(["OpenCode Go", "OpenCode Zen", "Anthropic"])
   })
 
   test("runs command authentication without interactive input", async () => {
@@ -190,7 +221,7 @@ describe("auth command", () => {
     expect(result.stdout).not.toContain("\n    at ")
   })
 
-  test("removes stored credentials", async () => {
+  test("removes a selected stored credential", async () => {
     const removed: string[] = []
     using server = authServer((request, url) => {
       if (url.pathname === "/api/integration") {
@@ -212,9 +243,9 @@ describe("auth command", () => {
       return new Response("Not found", { status: 404 })
     })
 
-    const result = await cli(["auth", "logout", "anthropic", "--server", server.url.toString()])
+    const result = await cli(["auth", "logout", "anthropic", "cred_test", "--server", server.url.toString()])
     expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({ exitCode: 0, stderr: "" })
-    expect(result.stdout).toContain("Disconnected from Anthropic")
+    expect(result.stdout).toContain("Removed account from Anthropic")
     expect(removed).toEqual(["cred_test"])
   })
 

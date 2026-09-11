@@ -1,26 +1,31 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type ComponentProps, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useData } from "../context"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useI18n } from "@opencode-ai/ui/context/i18n"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { useI18n } from "@opencode/ui/context/i18n"
 import { Markdown } from "../components/markdown"
-import { ImagePreview } from "@opencode-ai/ui/image-preview"
-import { getFilename } from "@opencode-ai/util/path"
+import { ImagePreview } from "@opencode/ui/image-preview"
+import { getFilename } from "@opencode/util/path"
 import { AttachmentCard } from "./attachment-card"
 import { CommentCard } from "./comment-card"
 import { TimelineSeparator } from "../components/timeline-separator"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Button } from "@opencode-ai/ui/button"
-import { Card } from "@opencode-ai/ui/card"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Icon } from "@opencode/ui/icon"
+import { Button } from "@opencode/ui/button"
+import { TextReveal } from "@opencode/ui/text-reveal"
+import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { BasicTool } from "../components/basic-tool"
+import { reasoningHeading } from "../timeline/projection"
+import { Card } from "@opencode/ui/card"
 import type {
   PromptAgentAttachment,
   PromptFileAttachment,
   SessionMessageAssistant,
+  SessionMessageAssistantReasoning,
   SessionMessageCompaction,
   SessionMessageUser,
-} from "@opencode-ai/client/promise"
+} from "@opencode/client/promise"
 import type { SessionUserActions, SessionUserComment } from "../actions"
 import { typeLabel } from "../components/message-file"
 
@@ -367,7 +372,18 @@ function CurrentHighlightedText(props: {
     if (last < props.text.length) result.push({ text: props.text.slice(last) })
     return result
   })
-  return <For each={segments()}>{(segment) => <span data-highlight={segment.type}>{segment.text}</span>}</For>
+  return (
+    <For each={segments()}>
+      {(segment) => (
+        <span data-highlight={segment.type}>
+          <Show when={segment.type && segment.text.startsWith("@")} fallback={segment.text}>
+            <span data-slot="user-message-mention-prefix">@</span>
+            {segment.text.slice(1)}
+          </Show>
+        </span>
+      )}
+    </For>
+  )
 }
 
 type HighlightSegment = { text: string; type?: "file" | "agent" }
@@ -376,14 +392,40 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
   const i18n = useI18n()
   const summary = () => (props.message.status === "failed" ? "" : props.message.summary)
   const error = () => {
-    if (props.message.status !== "failed" || props.message.error.type === "aborted") return ""
+    if (props.message.status !== "failed") return ""
+    if (props.message.error.type === "aborted" || props.message.error.type === "compaction.interrupted") return ""
     return props.error
   }
+  const compact = createMemo(
+    () => new Intl.NumberFormat(i18n.locale(), { notation: "compact", maximumFractionDigits: 1 }),
+  )
+  // Usage of the compaction request itself; the resulting context size only shows on the next assistant step.
+  const usage = () => {
+    if (props.message.status === "running" || !props.message.tokens) return ""
+    const tokens = props.message.tokens
+    const input = tokens.input + tokens.cache.read + tokens.cache.write
+    const output = tokens.output + tokens.reasoning
+    if (input + output <= 0) return ""
+    return i18n.t("ui.messagePart.compaction.usage", {
+      input: compact().format(input),
+      output: compact().format(output),
+    })
+  }
+  const outcome = () => {
+    if (props.message.status !== "failed")
+      return props.message.status === "completed" && props.message.providerContext
+        ? "ui.messagePart.providerCompaction"
+        : "ui.messagePart.compaction"
+    if (props.message.error.type === "aborted") return "ui.messagePart.compaction.cancelled"
+    if (props.message.error.type === "compaction.interrupted") return "ui.messagePart.compaction.interrupted"
+    return "ui.messagePart.compaction.failed"
+  }
+  const label = createMemo(() => [i18n.t(outcome()), usage()].filter(Boolean).join(" · "))
 
   return (
     <div data-component="session-compaction-message">
       <div class="py-2">
-        <TimelineSeparator label={i18n.t("ui.messagePart.compaction")} />
+        <TimelineSeparator label={i18n.t("ui.messagePart.compaction.started")} />
       </div>
       <Show when={summary().trim()}>
         <div data-component="text-part" data-timeline-part-id={props.message.id}>
@@ -394,6 +436,22 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
               streaming={props.message.status === "running"}
             />
           </div>
+        </div>
+      </Show>
+      <Show when={props.message.status === "running"}>
+        <div role="status" class="py-2">
+          <BasicTool
+            icon="archive"
+            trigger={{ title: i18n.t("ui.messagePart.compaction.running") }}
+            status="running"
+            locked
+            hideDetails
+          />
+        </div>
+      </Show>
+      <Show when={props.message.status !== "running"}>
+        <div class="py-2">
+          <TimelineSeparator label={label()} />
         </div>
       </Show>
       <Show when={error()}>
@@ -490,12 +548,72 @@ export function AssistantTextContent(props: {
   )
 }
 
-export function AssistantReasoningContent(props: { id: string; text: string; streaming: boolean }) {
+export function AssistantReasoningContent(props: {
+  id: string
+  content: SessionMessageAssistantReasoning
+  streaming: boolean
+  defaultOpen?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  onContentRendered?: () => void
+}) {
+  const i18n = useI18n()
+  const [state, setState] = createStore<{ open?: boolean }>({})
+  const open = () => props.open ?? state.open ?? props.defaultOpen ?? false
+  const heading = createMemo(() => (props.streaming ? reasoningHeading(props.content.text) : ""))
+  const duration = createMemo(() => {
+    const time = props.content.time
+    if (time?.completed === undefined) return undefined
+    const total = Math.max(0, Math.round((time.completed - time.created) / 1000))
+    const numfmt = new Intl.NumberFormat(i18n.locale())
+    if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt.format(total) })
+    return i18n.t("ui.message.duration.minutesSeconds", {
+      minutes: numfmt.format(Math.floor(total / 60)),
+      seconds: numfmt.format(total % 60),
+    })
+  })
   return (
-    <Show when={props.text}>
-      <div data-component="reasoning-part" data-timeline-part-id={props.id}>
-        <PacedMarkdown text={props.text} cacheKey={props.id} streaming={props.streaming} />
-      </div>
-    </Show>
+    <div data-component="reasoning-part" data-timeline-part-id={props.id}>
+      <BasicTool
+        icon="mcp"
+        status={props.streaming ? "running" : "completed"}
+        compact
+        hasContent
+        allowOpenWhilePending
+        hideDetails={!props.content.text.trim()}
+        open={open()}
+        onOpenChange={(value) => {
+          setState("open", value)
+          props.onOpenChange?.(value)
+          props.onContentRendered?.()
+        }}
+        trigger={
+          <div data-slot="basic-tool-tool-info-structured">
+            <div data-slot="basic-tool-tool-info-main">
+              <span data-slot="basic-tool-tool-title">
+                <TextShimmer
+                  text={i18n.t(props.streaming ? "ui.sessionTurn.status.thinking" : "ui.message.thought")}
+                  active={props.streaming}
+                />
+              </span>
+              <Show
+                when={props.streaming && !open()}
+                fallback={
+                  <Show when={!props.streaming && duration()}>
+                    {(value) => <span data-slot="basic-tool-tool-subtitle">{value()}</span>}
+                  </Show>
+                }
+              >
+                <span data-slot="basic-tool-tool-subtitle">
+                  <TextReveal text={heading()} />
+                </span>
+              </Show>
+            </div>
+          </div>
+        }
+      >
+        <PacedMarkdown text={props.content.text} cacheKey={props.id} streaming={props.streaming} />
+      </BasicTool>
+    </div>
   )
 }

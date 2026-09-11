@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test"
-import { CodeModeTool } from "@opencode-ai/core/codemode/tool"
-import { Tool } from "@opencode-ai/core/tool"
-import { execute } from "@opencode-ai/core/tool/runtime"
-import { Agent } from "@opencode-ai/schema/agent"
-import { Session } from "@opencode-ai/schema/session"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
-import type { Info } from "@opencode-ai/schema/tool"
+import { CodeModeTool } from "@opencode/core/codemode/tool"
+import { Tool } from "@opencode/core/tool"
+import { execute } from "@opencode/core/tool/runtime"
+import { Agent } from "@opencode/schema/agent"
+import { Session } from "@opencode/schema/session"
+import { SessionMessage } from "@opencode/schema/session-message"
+import type { Info } from "@opencode/schema/tool"
 import { Effect, Schema } from "effect"
 
 const context = {
@@ -17,14 +17,14 @@ const context = {
 }
 
 const createCodeMode = (tools: ReadonlyMap<string, Info>) =>
-  CodeModeTool.create(tools, (_, tool, input, context) => execute(tool, input, context))
+  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context))
 
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
     [
       "Run JavaScript in a confined Code Mode runtime to orchestrate tool calls and compose their results.",
       "Imports, direct filesystem access, and timers are unavailable. Do not use `fetch`; all external access goes through `tools`.",
-      "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by `search`. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
+      "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
       'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
       "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
       "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.all`.",
@@ -105,11 +105,9 @@ test("foreign typed failures settle as Tool.Error at the untrusted boundary", as
     execute: () => new ForeignFailure({ message: "transport died" }) as never,
   }
 
-  const exit = await Effect.runPromiseExit(execute(lying, {}, context))
-  expect(exit._tag).toBe("Failure")
-  const error = exit._tag === "Failure" ? exit.cause.reasons.find((reason) => "error" in reason)?.error : undefined
+  const error = await Effect.runPromise(execute(lying, {}, context).pipe(Effect.flip))
   expect(error).toBeInstanceOf(Tool.Error)
-  expect((error as Tool.Error).message).toBe("transport died")
+  expect(error.message).toBe("transport died")
 })
 
 test("execute supports callable namespace tools", async () => {

@@ -2,15 +2,15 @@ import { createEffect, createMemo, createSignal, Match, on, onCleanup, Switch } 
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import type { FileSearchHandle } from "@opencode-ai/session-ui/file"
-import { useFileComponent } from "@opencode-ai/ui/context/file"
-import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
-import { createLineCommentControllerV2 } from "@opencode-ai/session-ui/v2/line-comment-annotations-v2"
-import { sampledChecksum } from "@opencode-ai/util/encode"
-import { LineCommentOverflowIcon } from "@opencode-ai/ui/line-comment"
-import { Menu } from "@opencode-ai/ui/menu"
-import { Tabs } from "@opencode-ai/ui/tabs"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
+import type { FileSearchHandle } from "@opencode/session-ui/file"
+import { useFileComponent } from "@opencode/ui/context/file"
+import { cloneSelectedLineRange, previewSelectedLines } from "@opencode/session-ui/pierre/selection-bridge"
+import { createLineCommentControllerV2 } from "@opencode/session-ui/v2/line-comment-annotations-v2"
+import { sampledChecksum } from "@opencode/util/encode"
+import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
+import { Menu } from "@opencode/ui/menu"
+import { Tabs } from "@opencode/ui/tabs"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { showToast } from "@/shell/notifications/toast"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/workspaces/files/model"
 import { useComments } from "@/composer/comments"
@@ -456,7 +456,7 @@ export function SessionFileView(props: SessionFileViewProps) {
         <Switch>
           <Match when={state()?.loaded}>{renderFile(contents())}</Match>
           <Match when={state()?.loading}>
-            <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
+            <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}…</div>
           </Match>
           <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
         </Switch>

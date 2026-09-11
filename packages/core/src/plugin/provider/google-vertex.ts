@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
 
 function resolveProject(options: Record<string, any>) {
@@ -80,9 +80,6 @@ export const GoogleVertexPlugin = define({
             location,
             ...(typeof provider.settings?.baseURL === "string"
               ? { baseURL: replaceVertexVars(provider.settings.baseURL, project, location) }
-              : {}),
-            ...(Provider.packageName(provider.package)?.includes("@ai-sdk/openai-compatible")
-              ? { fetch: authFetch(provider.settings?.fetch) }
               : {}),
           }
         })

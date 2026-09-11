@@ -1,0 +1,125 @@
+id: no-effect-catch-fail
+snapshots:
+  Effect.catch(effect, (error) => Effect.fail(transform(error))):
+    fixed: Effect.mapError(effect, (error) => transform(error))
+    labels:
+      - source: Effect.catch(effect, (error) => Effect.fail(transform(error)))
+        style: primary
+        start: 0
+        end: 62
+  Effect.catch(effect, error => { return Effect.fail(transform(error)) }):
+    fixed: Effect.mapError(effect, (error) => transform(error))
+    labels:
+      - source: Effect.catch(effect, error => { return Effect.fail(transform(error)) })
+        style: primary
+        start: 0
+        end: 71
+  Stream.catch(stream, (error) => Stream.fail(transform(error))):
+    fixed: Stream.mapError(stream, (error) => transform(error))
+    labels:
+      - source: Stream.catch(stream, (error) => Stream.fail(transform(error)))
+        style: primary
+        start: 0
+        end: 62
+  ? |
+    effect.pipe(
+      Effect.catch((error) =>
+        Effect.fail(transform(error)),
+      ),
+    )
+  : fixed: |
+      effect.pipe(
+        Effect.mapError((error) => transform(error),),
+      )
+    labels:
+      - source: |-
+          Effect.catch((error) =>
+              Effect.fail(transform(error)),
+            )
+        style: primary
+        start: 15
+        end: 77
+  effect.pipe(Effect.catch((error) => Effect.fail(transform(error)))):
+    fixed: effect.pipe(Effect.mapError((error) => transform(error)))
+    labels:
+      - source: Effect.catch((error) => Effect.fail(transform(error)))
+        style: primary
+        start: 12
+        end: 66
+  effect.pipe(Effect.catch((error) => { return Effect.fail(transform(error)) })):
+    fixed: effect.pipe(Effect.mapError((error) => transform(error)))
+    labels:
+      - source: Effect.catch((error) => { return Effect.fail(transform(error)) })
+        style: primary
+        start: 12
+        end: 77
+  "effect.pipe(Effect.catch((error): Effect.Effect<never, Wrapped> => Effect.fail(transform(error))))":
+    fixed: "effect.pipe(Effect.mapError((error): Wrapped => transform(error)))"
+    labels:
+      - source: "Effect.catch((error): Effect.Effect<never, Wrapped> => Effect.fail(transform(error)))"
+        style: primary
+        start: 12
+        end: 97
+  "effect.pipe(Effect.catch((error: Error) => Effect.fail(transform(error))))":
+    fixed: "effect.pipe(Effect.mapError((error: Error) => transform(error)))"
+    labels:
+      - source: "Effect.catch((error: Error) => Effect.fail(transform(error)))"
+        style: primary
+        start: 12
+        end: 73
+  "effect.pipe(Effect.catch((error: Error): Effect.Effect<never, Wrapped, Scope> => { return Effect.fail(transform(error)) }))":
+    fixed: "effect.pipe(Effect.mapError((error: Error): Wrapped => transform(error)))"
+    labels:
+      - source: "Effect.catch((error: Error): Effect.Effect<never, Wrapped, Scope> => { return Effect.fail(transform(error)) })"
+        style: primary
+        start: 12
+        end: 122
+  effect.pipe(Effect.catch(error => Effect.fail(new Wrapped(error)))):
+    fixed: effect.pipe(Effect.mapError((error) => new Wrapped(error)))
+    labels:
+      - source: Effect.catch(error => Effect.fail(new Wrapped(error)))
+        style: primary
+        start: 12
+        end: 66
+  stream.pipe(Stream.catch((error) => Stream.fail(transform(error)))):
+    fixed: stream.pipe(Stream.mapError((error) => transform(error)))
+    labels:
+      - source: Stream.catch((error) => Stream.fail(transform(error)))
+        style: primary
+        start: 12
+        end: 66
+  stream.pipe(Stream.catch((error) => { return Stream.fail(transform(error)) })):
+    fixed: stream.pipe(Stream.mapError((error) => transform(error)))
+    labels:
+      - source: Stream.catch((error) => { return Stream.fail(transform(error)) })
+        style: primary
+        start: 12
+        end: 77
+  "stream.pipe(Stream.catch((error): Stream.Stream<string, Wrapped> => Stream.fail(transform(error))))":
+    fixed: "stream.pipe(Stream.mapError((error): Wrapped => transform(error)))"
+    labels:
+      - source: "Stream.catch((error): Stream.Stream<string, Wrapped> => Stream.fail(transform(error)))"
+        style: primary
+        start: 12
+        end: 98
+  "stream.pipe(Stream.catch((error: Error) => Stream.fail(transform(error))))":
+    fixed: "stream.pipe(Stream.mapError((error: Error) => transform(error)))"
+    labels:
+      - source: "Stream.catch((error: Error) => Stream.fail(transform(error)))"
+        style: primary
+        start: 12
+        end: 73
+  "stream.pipe(Stream.catch((error: Error): Stream.Stream<string, Wrapped, Scope> => { return Stream.fail(transform(error)) }))":
+    fixed: "stream.pipe(Stream.mapError((error: Error): Wrapped => transform(error)))"
+    labels:
+      - source: "Stream.catch((error: Error): Stream.Stream<string, Wrapped, Scope> => { return Stream.fail(transform(error)) })"
+        style: primary
+        start: 12
+        end: 123
+  stream.pipe(Stream.catch(error => Stream.fail(new Wrapped(error)))):
+    fixed: stream.pipe(Stream.mapError((error) => new Wrapped(error)))
+    labels:
+      - source: Stream.catch(error => Stream.fail(new Wrapped(error)))
+        style: primary
+        start: 12
+        end: 66

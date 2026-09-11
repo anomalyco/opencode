@@ -1,0 +1,331 @@
+---
+title: "Providers"
+---
+
+OpenCode includes a provider and model catalog from [models.dev](https://models.dev). For most providers, connect an
+account first, then select a model.
+
+## Setup
+
+Run `/connect`, choose a provider, and enter its credentials. Then run `/models` to select one of its models.
+
+```text
+/connect
+/models
+```
+
+## Go
+
+[OpenCode Go](/console/go) is an optional subscription for coding models tested by the OpenCode team. Subscribe in the
+[console](https://console.opencode.ai), copy your API key, then connect it as **OpenCode Go**.
+
+```text
+/connect
+# Select OpenCode Go, then paste your API key.
+/models
+```
+
+See the [Go guide](/console/go) for usage limits, endpoints, and privacy details.
+
+## Custom
+
+Add a provider when its API is not already in the catalog. This OpenAI-compatible example defines the credential,
+runtime package, endpoint, and first model together.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "name": "Acme",
+      "env": ["ACME_API_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.acme.example/v1",
+      },
+      "models": {
+        "qwen3-coder": {
+          "name": "Qwen 3 Coder",
+        },
+      },
+    },
+  },
+}
+```
+
+The `providers` object is keyed by the provider ID used in model references, such as `acme/qwen3-coder`.
+
+| Field | Purpose |
+| --- | --- |
+| `name` | Display name. |
+| `env` | Ordered environment variable names that can provide the credential. |
+| `package` | Runtime provider package. |
+| `canonical` | Built-in provider ID whose catalog defaults this provider inherits. |
+| `settings` | JSON options passed to the runtime package. |
+| `headers` | String-valued HTTP headers added to requests. |
+| `body` | JSON fields merged into request bodies. |
+| `models` | Models to add or override, keyed by the OpenCode model ID. |
+| `websocket` | Provider-level WebSocket policy for supported routes. |
+| `compaction` | Local or provider [compaction](/compaction) policy. |
+
+## Endpoint
+
+Override `settings.baseURL` to send a catalog provider through a proxy or compatible endpoint. Its existing package,
+models, and connection still apply.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "baseURL": "https://llm-proxy.example.com/anthropic",
+      },
+    },
+  },
+}
+```
+
+`settings` is package-specific. A field only has an effect when the selected package supports it.
+
+## Requests
+
+Use `headers` for additional HTTP headers and `body` for JSON fields that should be merged into every request body.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+      "body": {
+        "metadata": {
+          "application": "opencode",
+        },
+      },
+    },
+  },
+}
+```
+
+Both fields can also be set on a model or variant when only part of a provider's traffic needs the override.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-5.2": {
+          "headers": { "X-Model-Tier": "coding" },
+          "variants": [
+            {
+              "id": "batch",
+              "body": { "service_tier": "flex" },
+            },
+          ],
+        },
+      },
+    },
+  },
+}
+```
+
+## Packages
+
+The `package` field selects the runtime that communicates with a provider. Use the compatible runtime for APIs that
+implement the OpenAI request format.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.acme.example/v1",
+      },
+      "models": {
+        "qwen3-coder": {},
+      },
+    },
+  },
+}
+```
+
+Native package options include:
+
+- `@opencode/ai/providers/openai`
+- `@opencode/ai/providers/openai/chat`
+- `@opencode/ai/providers/openai/responses`
+- `@opencode/ai/providers/openai-compatible`
+- `@opencode/ai/providers/openai-compatible/responses`
+- `@opencode/ai/providers/anthropic`
+- `@opencode/ai/providers/anthropic-compatible`
+- `@opencode/ai/providers/google`
+- `@opencode/ai/providers/google-vertex`
+- `@opencode/ai/providers/google-vertex/gemini`
+- `@opencode/ai/providers/google-vertex/chat`
+- `@opencode/ai/providers/google-vertex/responses`
+- `@opencode/ai/providers/google-vertex/messages`
+- `@opencode/ai/providers/azure`
+- `@opencode/ai/providers/azure/chat`
+- `@opencode/ai/providers/azure/responses`
+- `@opencode/ai/providers/amazon-bedrock`
+- `@opencode/ai/providers/amazon-bedrock/mantle`
+- `@opencode/ai/providers/amazon-bedrock/mantle/chat`
+- `@opencode/ai/providers/amazon-bedrock/mantle/responses`
+- `@opencode/ai/providers/openrouter`
+- `@opencode/ai/providers/xai`
+
+You can also use an npm package such as `@acme/opencode-provider` or an absolute `file://` URL for a local package.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "package": "@acme/opencode-provider",
+      "models": { "acme-coder": {} },
+    },
+  },
+}
+```
+
+## Models
+
+Add or override models in a provider's `models` map. The map key is the model ID used by OpenCode; `modelID` changes the
+ID sent to the provider.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/coding",
+  "providers": {
+    "openai": {
+      "models": {
+        "coding": {
+          "modelID": "gpt-5.2",
+          "name": "GPT-5.2 Coding",
+        },
+      },
+    },
+  },
+}
+```
+
+| Field | Purpose |
+| --- | --- |
+| `modelID` | Model or deployment ID sent to the provider. |
+| `name` | Display name. |
+| `family` | Model family used for grouping related models. |
+| `package` | Runtime override for this model. |
+| `settings` | Package-specific JSON settings. |
+| `headers` | Additional string-valued request headers. |
+| `body` | Additional JSON request body fields. |
+| `capabilities` | Tool support plus accepted input and output media types. |
+| `compatibility` | Request and response compatibility overrides. |
+| `variants` | Named variants with their own `settings`, `headers`, and `body`. |
+| `cost` | Input, output, and optional cache pricing per million tokens. |
+| `limit` | Context, input, and output token limits. |
+| `disabled` | Removes the model from selection when `true`. |
+| `websocket` | Model-level WebSocket policy; overrides the provider policy. |
+| `compaction` | Model-level [compaction](/compaction) policy; overrides the provider policy. |
+
+See [Models](/models) for selection, defaults, capabilities, limits, costs, and variants.
+
+## Azure
+
+Azure supports either an API key or the Microsoft Entra ID session from the Azure CLI. To use Entra ID, install the
+[Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) and sign in before connecting.
+
+```bash
+az login
+```
+
+For a resource in another tenant or subscription, select both explicitly.
+
+```bash
+az login --tenant TENANT_ID
+az account set --subscription NAME_OR_ID
+```
+
+Find the **Resource name** in the [Azure portal](https://portal.azure.com/) or
+[Microsoft Foundry](https://ai.azure.com/). It is also the first part of endpoints such as
+`https://my-models.openai.azure.com/` and `https://my-models.services.ai.azure.com/`.
+
+```bash
+az cognitiveservices account list \
+  --query "[].{name:name,resourceGroup:resourceGroup}" \
+  --output table
+```
+
+In OpenCode, select **Azure**, then **Microsoft Entra ID (Azure CLI)**. Enter the resource name when prompted;
+`AZURE_RESOURCE_NAME` skips that prompt when already set.
+
+```text
+/connect
+/models
+```
+
+OpenCode does not query Azure management APIs or discover deployments. If a deployment does not match its catalog
+model name, map an OpenCode model ID to the deployment with `modelID`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "azure": {
+      "models": {
+        "gpt-5-mini": {
+          "modelID": "gpt-production",
+        },
+      },
+    },
+  },
+}
+```
+
+Your identity needs one of these roles:
+
+- **Cognitive Services OpenAI User** for Azure OpenAI models.
+- **Cognitive Services User** for other Foundry models.
+
+If a request uses a token from the wrong tenant, sign in again with the required tenant.
+
+```bash
+az login --tenant TENANT_ID
+```
+
+## WebSockets
+
+OpenAI, xAI, and supported Azure Responses models can keep one WebSocket connection open per session. Consecutive steps
+reuse the unchanged request prefix and only send content added since the previous response, reducing uploads in long
+sessions.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "websocket": false,
+      "models": {
+        "gpt-5.5": { "websocket": true },
+      },
+    },
+  },
+}
+```
+
+WebSocket behavior follows these rules:
+
+- Built-in providers opt supported models in according to their own policy.
+- `websocket: true` enables a supported provider or model; `false` disables it.
+- A model value overrides its provider value.
+- OpenAI provider compaction uses the same connection.
+- xAI continues from stored responses only. With its default `store: false`, each step is sent in full over the reused
+  connection.
+- A closed socket reconnects on the next step. If the connection cannot open, the session continues over HTTP.
+- Provider plugins with `http.request` or `http.response` hooks stay on HTTP so each request remains observable.

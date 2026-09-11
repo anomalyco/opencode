@@ -2,7 +2,7 @@ export * as WslIpc from "./ipc"
 
 import { app } from "electron"
 import type { WebContents } from "electron"
-import type { WslServerConfig, WslServersState } from "@opencode-ai/app/wsl/types"
+import type { WslServerConfig, WslServersState } from "@opencode/app/wsl/types"
 import { Effect } from "effect"
 import { WslServersChanged } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"

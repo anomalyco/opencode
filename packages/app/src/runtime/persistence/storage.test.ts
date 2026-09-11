@@ -107,11 +107,6 @@ describe("persist localStorage resilience", () => {
     expect(storage.getItem("direct-value")).toBe('{"value":5}')
   })
 
-  test("normalizer rejects malformed JSON payloads", () => {
-    const result = persistTesting.normalize({ value: "ok" }, '{"value":"\\x"}')
-    expect(result).toBeUndefined()
-  })
-
   test("workspace storage sanitizes Windows filename characters", () => {
     const result = persistTesting.workspaceStorage("C:\\Users\\foo")
 

@@ -1,6 +1,6 @@
 import { createMemo, type Accessor } from "solid-js"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
-import { sessionPermissionRequest, sessionQuestionForm } from "@/session/requests/session-request-tree"
+import { sessionPermissionRequest, sessionFormRequest } from "@/session/requests/session-request-tree"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useSettings } from "@/settings/model"
 
@@ -29,12 +29,12 @@ export function useSessionTabAvatarState(
     if (!ctx) return false
     return !!sessionPermissionRequest(sessions(), ctx.data.session.permission.list, sessionId())
   })
-  const hasQuestions = createMemo(() => {
+  const hasForms = createMemo(() => {
     const data = serverCtx()?.data
     if (!data) return false
-    return !!sessionQuestionForm(sessions(), data.session.form.list, sessionId())
+    return !!sessionFormRequest(sessions(), data.session.form.list, sessionId())
   })
-  const needsAttention = createMemo(() => hasPermissions() || hasQuestions())
+  const needsAttention = createMemo(() => hasPermissions() || hasForms())
   const unread = createMemo(
     () => needsAttention() || (serverCtx()?.notification.session.unseenCount(sessionId()) ?? 0) > 0,
   )
@@ -42,6 +42,10 @@ export function useSessionTabAvatarState(
     const data = serverCtx()?.data
     if (!data) return false
     if (needsAttention()) return false
+    if (root?.())
+      return data.session
+        .list()
+        .some((session) => data.session.root(session.id) === sessionId() && data.session.status(session.id) === "running")
     return data.session.status(sessionId()) === "running"
   })
   return { unread, loading }

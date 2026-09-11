@@ -1,5 +1,5 @@
 diff --git a/dist/cjs/index.cjs b/dist/cjs/index.cjs
-index e470032a9572b3ced764ca02238a8c6be435a9d4..93770cdc02c570ce6aaa2ce256792b940c25e4d3 100644
+index e470032a9572b3ced764ca02238a8c6be435a9d4..84a7bfca638f70e32a9567bc732a84b83578af4e 100644
 --- a/dist/cjs/index.cjs
 +++ b/dist/cjs/index.cjs
 @@ -289,7 +289,7 @@ class Virtualizer {
@@ -106,6 +106,19 @@ index e470032a9572b3ced764ca02238a8c6be435a9d4..93770cdc02c570ce6aaa2ce256792b94
            lanes,
            // Pass the typed array so binary search + forward-walk can read
            // start/end directly from Float64Array, skipping the Proxy traps.
+@@ -1095,8 +1108,10 @@ class Virtualizer {
+       const snapshot = [];
+       if (this.itemSizeCache.size === 0) return snapshot;
+       const m = this.getMeasurements();
+-      for (const item of m) {
+-        if (item && this.itemSizeCache.has(item.key)) {
++      for (let index = 0; index < m.length; index++) {
++        if (!this.itemSizeCache.has(this.options.getItemKey(index))) continue;
++        const item = m[index];
++        if (item) {
+           snapshot.push({
+             index: item.index,
+             key: item.key,
 diff --git a/dist/cjs/index.d.cts b/dist/cjs/index.d.cts
 index cc1001b8a14d06aa73a3a9e8f59870557ee9e7d6..70b202ed436ce1f3283a8465a81faf2e6e2e7983 100644
 --- a/dist/cjs/index.d.cts
@@ -133,7 +146,7 @@ index 6b43c0aea7ed9eeef75cbfb1351fcbd243913bdd..7be2680967934ddfbc4583a210a3d11e
      getVirtualIndexes: {
          (): number[];
 diff --git a/dist/esm/index.js b/dist/esm/index.js
-index 2495b26cf2c3589213546b3958eaadf2eb6b751d..dc062edd6438f315bd8dddcf231986ad72158477 100644
+index 2495b26cf2c3589213546b3958eaadf2eb6b751d..accd38a89bee766fd568aa8cec9bb90c6789277a 100644
 --- a/dist/esm/index.js
 +++ b/dist/esm/index.js
 @@ -287,7 +287,7 @@ class Virtualizer {
@@ -240,8 +253,21 @@ index 2495b26cf2c3589213546b3958eaadf2eb6b751d..dc062edd6438f315bd8dddcf231986ad
            lanes,
            // Pass the typed array so binary search + forward-walk can read
            // start/end directly from Float64Array, skipping the Proxy traps.
+@@ -1093,8 +1106,10 @@ class Virtualizer {
+       const snapshot = [];
+       if (this.itemSizeCache.size === 0) return snapshot;
+       const m = this.getMeasurements();
+-      for (const item of m) {
+-        if (item && this.itemSizeCache.has(item.key)) {
++      for (let index = 0; index < m.length; index++) {
++        if (!this.itemSizeCache.has(this.options.getItemKey(index))) continue;
++        const item = m[index];
++        if (item) {
+           snapshot.push({
+             index: item.index,
+             key: item.key,
 diff --git a/src/index.ts b/src/index.ts
-index dc6f1010c4d4758de9c46fb8d69209e582e47171..5d8bf755e285e4d0688d5e41ed768c60e4267131 100644
+index dc6f1010c4d4758de9c46fb8d69209e582e47171..2578338abb5d9237624dd6d96bb50546c6dc3e68 100644
 --- a/src/index.ts
 +++ b/src/index.ts
 @@ -567,7 +567,7 @@ export class Virtualizer<
@@ -382,3 +408,22 @@ index dc6f1010c4d4758de9c46fb8d69209e582e47171..5d8bf755e285e4d0688d5e41ed768c60
          lanes,
          // Pass the typed array so binary search + forward-walk can read
          // start/end directly from Float64Array, skipping the Proxy traps.
+@@ -1937,12 +1957,13 @@ export class Virtualizer<
+   takeSnapshot = (): Array<VirtualItem> => {
+     const snapshot: Array<VirtualItem> = []
+     if (this.itemSizeCache.size === 0) return snapshot
+-    // Iterate measurementsCache only for indices whose key is in itemSizeCache
+-    // (i.e., have been measured). We build VirtualItem objects with the
+-    // current start/size/end so they can be persisted as plain data.
++    // Check the key before reading a lazy entry so unmeasured history is
++    // not materialized merely to discard it from the snapshot.
+     const m = this.getMeasurements()
+-    for (const item of m) {
+-      if (item && this.itemSizeCache.has(item.key)) {
++    for (let index = 0; index < m.length; index++) {
++      if (!this.itemSizeCache.has(this.options.getItemKey(index))) continue
++      const item = m[index]
++      if (item) {
+         // Force materialization (lazy path) and copy plain fields.
+         snapshot.push({
+           index: item.index,

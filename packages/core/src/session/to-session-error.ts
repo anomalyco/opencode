@@ -1,6 +1,6 @@
-import { AIError, ToolFailure } from "@opencode-ai/ai"
-import { Tool } from "@opencode-ai/schema/tool"
-import { SessionError } from "@opencode-ai/schema/session-error"
+import { AIError, ToolFailure } from "@opencode/ai"
+import { Tool } from "@opencode/schema/tool"
+import { SessionError } from "@opencode/schema/session-error"
 import { Permission } from "../permission.js"
 import { Integration } from "../integration.js"
 import { AgentNotFoundError, StepFailedError, UserInterruptedError } from "./error.js"
@@ -25,6 +25,8 @@ export function toSessionError(cause: unknown): SessionError.Error {
         return providerError("provider.invalid-output", cause.reason)
       case "InvalidRequest":
         return providerError("provider.invalid-request", cause.reason)
+      case "UnsupportedOperation":
+        return providerError("provider.unsupported-operation", cause.reason)
       case "NoRoute":
         return providerError("provider.no-route", cause.reason)
       case "UnknownProvider":
@@ -44,6 +46,8 @@ export function toSessionError(cause: unknown): SessionError.Error {
     return unwrapped.message === "" ? { ...unwrapped, type: "tool.execution", message: cause.message } : unwrapped
   }
   if (cause instanceof StepFailedError) return cause.error
+  if (cause instanceof SessionRunnerModel.UnsupportedCompactionError)
+    return { type: "provider.unsupported-operation", message: cause.message }
   if (cause instanceof AgentNotFoundError) return { type: "unknown", message: cause.message }
   if (cause instanceof UserInterruptedError) return { type: "aborted", message: cause.message }
   if (
@@ -59,7 +63,6 @@ export function toSessionError(cause: unknown): SessionError.Error {
 }
 
 function providerError(type: string, reason: AIError["reason"]): SessionError.Error {
-  const status =
-    ("http" in reason ? reason.http?.response?.status : undefined) ?? ("status" in reason ? reason.status : undefined)
+  const status = reason.http?.status
   return { type, message: reason.message, ...(status === undefined ? {} : { status }) }
 }

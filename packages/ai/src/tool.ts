@@ -1,5 +1,5 @@
 import { Effect, JsonSchema, Schema } from "effect"
-import { Tool } from "@opencode-ai/schema/tool"
+import { Tool } from "@opencode/schema/tool"
 import type {
   ToolCallPart,
   ToolDefinition as ToolDefinitionClass,
@@ -16,6 +16,7 @@ export type ToolSchema<T> = Schema.Codec<T, any, never, never>
 export interface ToolExecuteContext {
   readonly id: ToolCallPart["id"]
   readonly name: ToolCallPart["name"]
+  readonly namespace?: ToolCallPart["namespace"]
 }
 
 export type ToolExecute<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>> = (

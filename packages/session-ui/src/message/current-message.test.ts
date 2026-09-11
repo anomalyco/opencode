@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { JsonValue, SessionMessageAssistantTool } from "@opencode-ai/client/promise"
+import type { JsonValue, SessionMessageAssistantTool } from "@opencode/client/promise"
 import { currentContentDefaultOpen } from "./current-tool-state"
 
 function tool(name: string, files: JsonValue[] = []): SessionMessageAssistantTool {
@@ -26,7 +26,8 @@ describe("current content default open", () => {
   test("uses the file-change disclosure preference", () => {
     expect(currentContentDefaultOpen(tool("edit"), false, true)).toBe(true)
     expect(currentContentDefaultOpen(tool("write"), false, false)).toBe(false)
-    expect(currentContentDefaultOpen(tool("patch"), false, false)).toBe(true)
+    expect(currentContentDefaultOpen(tool("patch"), false, false)).toBe(false)
+    expect(currentContentDefaultOpen(tool("patch"), false, true)).toBe(true)
   })
 
   test("collapses errored tools regardless of disclosure preferences", () => {

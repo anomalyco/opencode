@@ -1,11 +1,12 @@
-import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Switch } from "@opencode-ai/ui/switch"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TextInput } from "@opencode-ai/ui/text-input"
+import { useFilteredList } from "@opencode/ui/hooks"
+import { ProviderIcon } from "@opencode/ui/provider-icon"
+import { Switch } from "@opencode/ui/switch"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { TextInput } from "@opencode/ui/text-input"
 import { type Component, For, Show } from "solid-js"
-import { createStore } from "solid-js/store"
+import { Schema } from "effect"
+import { Persistence } from "@/runtime/persistence/schema"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useModels } from "@/providers/models/models"
 import { useServerSDK } from "@/runtime/server/client"
@@ -20,13 +21,18 @@ type ModelItem = ReturnType<ReturnType<typeof useModels>["list"]>[number]
 
 const PROVIDER_ICON_SIZE = 16
 
+export const ModelProvidersSchema = Schema.Struct({
+  collapsed: Persistence.record(Persistence.fallback(Schema.Boolean, () => false)),
+})
+
 export const SettingsModels: Component = () => {
   const language = useLanguage()
   const models = useModels()
   const serverSdk = useServerSDK()
   const [store, setStore] = persisted(
     Persist.serverGlobal(serverSdk.scope, "settings-v2.models.providers"),
-    createStore({ collapsed: {} as Record<string, boolean> }),
+    ModelProvidersSchema,
+    { collapsed: {} },
   )
 
   const list = useFilteredList<ModelItem>({

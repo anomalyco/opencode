@@ -29,5 +29,5 @@ it.live("boots the workerd profile over durable object storage", () =>
 
     const body: unknown = yield* Effect.promise(() => health.json())
     expect(body).toMatchObject({ healthy: true, version: "workerd-test" })
-  }).pipe(Effect.scoped),
+  }),
 )

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { WslServersState } from "@opencode-ai/app/wsl/types"
+import type { WslServersState } from "@opencode/app/wsl/types"
 import { availableStartupServer, readyWslConnections } from "./connections"
 
 const state = (kind: "starting" | "ready" | "failed" | "stopped"): WslServersState => ({
@@ -19,7 +19,7 @@ const state = (kind: "starting" | "ready" | "failed" | "stopped"): WslServersSta
 })
 
 function runtime(kind: "starting" | "ready" | "failed" | "stopped") {
-  if (kind === "ready") return { kind, url: "http://127.0.0.1:4096", username: "opencode", password: "secret" }
+  if (kind === "ready") return { kind, url: "http://127.0.0.1:4096", password: "secret" }
   if (kind === "failed") return { kind, message: "boom" }
   return { kind }
 }
@@ -30,7 +30,14 @@ describe("WSL desktop connections", () => {
     expect(readyWslConnections(state("failed"))).toEqual([])
     expect(readyWslConnections(state("stopped"))).toEqual([])
     expect(readyWslConnections(state("ready"))).toEqual([
-      expect.objectContaining({ displayName: "Debian", label: "WSL" }),
+      {
+        displayName: "Debian",
+        label: "WSL",
+        type: "sidecar",
+        variant: "wsl",
+        distro: "Debian",
+        http: { url: "http://127.0.0.1:4096", password: "secret" },
+      },
     ])
   })
 
