@@ -38,6 +38,15 @@ function hasProviderWithFetch(input: unknown, key: "all" | "providers") {
   return "providers" in input && providerListHasFetch(input.providers)
 }
 
+function providerIDs(input: unknown) {
+  return providerList(input, "all").flatMap((provider) => (isRecord(provider) ? [String(provider.id)] : []))
+}
+
+function connectedIDs(input: unknown) {
+  if (!isRecord(input) || !Array.isArray(input.connected)) return []
+  return input.connected.map(String)
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
@@ -376,6 +385,34 @@ describe("provider HttpApi", () => {
       expect(hasNonZeroModelCost(configBody, "providers", "google")).toBe(true)
     }),
     { ...projectOptions, init: writeFunctionOptionsPlugin },
+  )
+
+  it.instance(
+    "serves only connected providers when asked, and the full catalog otherwise",
+    Effect.gen(function* () {
+      const directory = (yield* TestInstance).directory
+      const headers = { "x-opencode-directory": directory }
+
+      const connectedResponse = yield* request("/provider?connected=true", { headers })
+      const fullResponse = yield* request("/provider", { headers })
+      expect(connectedResponse.status).toBe(200)
+      expect(fullResponse.status).toBe(200)
+
+      const connectedBody = yield* connectedResponse.json
+      const fullBody = yield* fullResponse.json
+
+      // The catalog holds every provider models.dev knows about; the connected view holds only
+      // what is usable right now. That difference is the whole point of the parameter.
+      expect(providerIDs(connectedBody).length).toBeGreaterThan(0)
+      expect(providerIDs(fullBody).length).toBeGreaterThan(providerIDs(connectedBody).length)
+
+      // The connected view lists exactly the providers it returns.
+      expect(providerIDs(connectedBody).sort()).toEqual(connectedIDs(connectedBody).sort())
+
+      // Whatever the connected view returns must also be in the catalog — same shape, fewer rows.
+      for (const id of providerIDs(connectedBody)) expect(providerIDs(fullBody)).toContain(id)
+    }),
+    projectOptions,
   )
 
   it.instance(
