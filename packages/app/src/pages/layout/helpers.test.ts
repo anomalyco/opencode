@@ -1,10 +1,16 @@
 import { describe, expect, test } from "bun:test"
 import {
+  collectExistingSessionDeepLinks,
   collectNewSessionDeepLinks,
   collectOpenProjectDeepLinks,
   drainPendingDeepLinks,
+  enqueueDeepLink,
+  existingSessionDeepLink,
+  lastDeepLink,
   parseDeepLink,
+  parseExistingSessionDeepLink,
   parseNewSessionDeepLink,
+  takePendingDeepLink,
 } from "./deep-links"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import {
@@ -100,6 +106,36 @@ describe("layout deep links", () => {
     expect(result).toEqual([{ directory: "/a" }, { directory: "/c", prompt: "ship it" }])
   })
 
+  test("generates and parses existing-session deep links", () => {
+    const link = existingSessionDeepLink(serverKey("https://example.com:4096"), "ses_1")
+    expect(link).toBe("opencode://open-session?server=https%3A%2F%2Fexample.com%3A4096&session=ses_1")
+    expect(parseExistingSessionDeepLink(link)).toEqual({ server: "https://example.com:4096", session: "ses_1" })
+    expect(parseExistingSessionDeepLink(existingSessionDeepLink(serverKey("sidecar"), "ses_2"))).toEqual({
+      server: "sidecar",
+      session: "ses_2",
+    })
+  })
+
+  test("ignores invalid existing-session deep links", () => {
+    expect(parseExistingSessionDeepLink("opencode://open-session?server=sidecar")).toBeUndefined()
+    expect(parseExistingSessionDeepLink("opencode://open-session?session=ses_1")).toBeUndefined()
+    expect(parseExistingSessionDeepLink("opencode://open-session/path?server=sidecar&session=ses_1")).toBeUndefined()
+    expect(parseExistingSessionDeepLink("https://open-session?server=sidecar&session=ses_1")).toBeUndefined()
+  })
+
+  test("collects only valid existing-session links", () => {
+    expect(
+      collectExistingSessionDeepLinks([
+        "opencode://open-session?server=sidecar&session=ses_1",
+        "opencode://open-project?directory=/tmp/demo",
+        "opencode://open-session?server=wsl%3AUbuntu&session=ses_2",
+      ]),
+    ).toEqual([
+      { server: "sidecar", session: "ses_1" },
+      { server: "wsl:Ubuntu", session: "ses_2" },
+    ])
+  })
+
   test("drains global deep links once", () => {
     const target = {
       __OPENCODE__: {
@@ -109,6 +145,55 @@ describe("layout deep links", () => {
 
     expect(drainPendingDeepLinks(target)).toEqual(["opencode://open-project?directory=/a"])
     expect(drainPendingDeepLinks(target)).toEqual([])
+  })
+
+  test("selects only the last supported pending deep link", () => {
+    const target = {
+      __OPENCODE__: {
+        deepLinks: [
+          "opencode://open-project?directory=/a",
+          "opencode://open-session?server=sidecar&session=ses_1",
+          "opencode://unsupported",
+        ],
+      },
+    } as unknown as Window & { __OPENCODE__?: { deepLinks?: string[] } }
+
+    expect(takePendingDeepLink(target, (url) => !!parseDeepLink(url))).toBeUndefined()
+    expect(takePendingDeepLink(target, (url) => !!parseExistingSessionDeepLink(url))).toBe(
+      "opencode://open-session?server=sidecar&session=ses_1",
+    )
+    expect(drainPendingDeepLinks(target)).toEqual([])
+  })
+
+  test("uses the last supported deep link in a batch", () => {
+    expect(
+      lastDeepLink([
+        "opencode://open-session?server=sidecar&session=ses_1",
+        "opencode://unsupported",
+        "opencode://open-project?directory=/a",
+      ]),
+    ).toBe("opencode://open-project?directory=/a")
+  })
+
+  test("processes deep links in delivery order", async () => {
+    const result: string[] = []
+    let release = () => {}
+    const first = enqueueDeepLink(() =>
+      new Promise<void>((resolve) => {
+        release = resolve
+      }).then(() => {
+        result.push("first")
+      }),
+    )
+    const second = enqueueDeepLink(() => {
+      result.push("second")
+    })
+
+    await Promise.resolve()
+    expect(result).toEqual([])
+    release()
+    await Promise.all([first, second])
+    expect(result).toEqual(["first", "second"])
   })
 })
 

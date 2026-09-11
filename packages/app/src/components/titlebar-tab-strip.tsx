@@ -17,9 +17,12 @@ import { useTabs } from "@/context/tabs"
 import { createTabPromptState } from "@/context/prompt"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { showToast } from "@/utils/toast"
+import { usePlatform } from "@/context/platform"
+import { existingSessionDeepLink } from "@/pages/layout/deep-links"
 import { canStartTabDrag, isTabCloseTarget } from "./titlebar-tab-gesture"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./titlebar-tab-order"
 import type { Session } from "@opencode-ai/sdk/v2"
+import { useParams } from "@solidjs/router"
 
 function SessionTabSlot(props: {
   tab: SessionTab
@@ -33,6 +36,8 @@ function SessionTabSlot(props: {
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
 }) {
+  const platform = usePlatform()
+  const params = useParams<{ id?: string }>()
   const sortable = useSortable({
     get id() {
       return props.id
@@ -55,7 +60,11 @@ function SessionTabSlot(props: {
         ref={(el) => {
           ref = el
         }}
-        href={tabHref(props.tab)}
+        href={
+          platform.platform === "desktop"
+            ? existingSessionDeepLink(props.tab.server, props.active() && params.id ? params.id : props.tab.sessionId)
+            : tabHref(props.tab)
+        }
         server={props.tab.server}
         session={props.session}
         fallbackTitle={props.fallbackTitle}

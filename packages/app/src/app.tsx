@@ -33,6 +33,7 @@ import {
   type JSX,
   lazy,
   onCleanup,
+  onMount,
   type ParentProps,
   Show,
 } from "solid-js"
@@ -64,6 +65,14 @@ import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 import { legacySessionHref, legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
 import { createSessionLineage } from "@/pages/session/session-lineage"
+import {
+  deepLinkEvent,
+  drainPendingDeepLinks,
+  enqueueDeepLink,
+  lastDeepLink,
+  parseExistingSessionDeepLink,
+  takePendingDeepLink,
+} from "@/pages/layout/deep-links"
 
 import { SessionPage, SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
 import { NewHome } from "@/pages/home"
@@ -378,6 +387,49 @@ function NewAppLayout(props: ParentProps<{ serverScoped?: JSX.Element }>) {
   )
 }
 
+function ExistingSessionDeepLinkHandler() {
+  const global = useGlobal()
+  const server = useServer()
+  const navigate = useNavigate()
+
+  const open = async (url: string) => {
+    const link = parseExistingSessionDeepLink(url)
+    if (!link) return
+    const key = ServerConnection.Key.make(link.server)
+    const conn = global.servers.list().find((item) => ServerConnection.key(item) === key)
+    if (!conn) return
+    const lineage = await global
+      .ensureServerCtx(conn)
+      .sync.session.lineage.resolve(link.session)
+      .catch(() => undefined)
+    if (!lineage) return
+    server.setActive(key)
+    navigate(sessionHref(key, lineage.session.id))
+  }
+
+  onMount(() => {
+    const enqueue = (url: string | undefined) => {
+      if (!url) return
+      void enqueueDeepLink(() => open(url)).catch(() => {})
+    }
+    enqueue(takePendingDeepLink(window, (url) => !!parseExistingSessionDeepLink(url)))
+    queueMicrotask(() => drainPendingDeepLinks(window))
+    makeEventListener(window, deepLinkEvent, (event) => {
+      const detail = (event as CustomEvent<{ urls: string[] }>).detail
+      const selected = lastDeepLink(detail?.urls ?? [])
+      if (!selected) drainPendingDeepLinks(window)
+      if (!parseExistingSessionDeepLink(selected ?? "")) {
+        queueMicrotask(() => drainPendingDeepLinks(window))
+        return
+      }
+      drainPendingDeepLinks(window)
+      enqueue(selected)
+    })
+  })
+
+  return null
+}
+
 // The draft page only renders the prompt composer, so it drops TerminalProvider.
 // FileProvider and CommentsProvider stay because PromptInput uses file search and comment context.
 function DraftProviders(props: ParentProps) {
@@ -590,6 +642,7 @@ export function AppInterface(props: {
                 component={props.router ?? Router}
                 root={(routerProps) => (
                   <TabsProvider>
+                    <ExistingSessionDeepLinkHandler />
                     <PermissionProvider>
                       <NotificationProvider>
                         <ServerShell>
