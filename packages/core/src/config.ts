@@ -155,7 +155,7 @@ const layer = Layer.effect(
       const info = Option.getOrUndefined(
         ConfigMigrateV1.isV1(input)
           ? decodeV1Info(input).pipe(Option.map(ConfigMigrateV1.migrate), Option.flatMap(decodeInfo))
-          : decodeInfo(input),
+          : decodeInfo(ConfigMigrateV1.normalizeMcp(input)),
       )
       if (!info) return
       return new Document({ type: "document", path: filepath, info })

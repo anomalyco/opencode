@@ -76,6 +76,65 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("does not treat a flat mcp map as a v1 marker", () =>
+    Effect.sync(() => {
+      expect(ConfigMigrateV1.isV1({ mcp: { local: { type: "local", command: ["node"] } } })).toBe(false)
+      expect(ConfigMigrateV1.isV1({ mcp: { remote: { type: "remote", url: "https://mcp.example.com" } } })).toBe(false)
+    }),
+  )
+
+  it.effect("normalizes a legacy mcp block onto the v2 shape", () =>
+    Effect.sync(() => {
+      expect(
+        ConfigMigrateV1.normalizeMcp({
+          model: "anthropic/claude",
+          mcp: {
+            local: { type: "local", command: ["node", "server.js"], enabled: false },
+            remote: { type: "remote", url: "https://mcp.example.com", enabled: true },
+          },
+        }),
+      ).toEqual({
+        model: "anthropic/claude",
+        mcp: {
+          servers: {
+            local: { type: "local", command: ["node", "server.js"], disabled: true },
+            remote: { type: "remote", url: "https://mcp.example.com", disabled: false },
+          },
+        },
+      })
+    }),
+  )
+
+  it.effect("leaves a non-legacy or malformed mcp block untouched", () =>
+    Effect.sync(() => {
+      const native = {
+        permissions: [{ action: "bash", resource: "*", effect: "deny" }],
+        snapshots: false,
+        mcp: { servers: { local: { type: "local", command: ["node"] } }, timeout: { request: 5000 } },
+      }
+      expect(ConfigMigrateV1.normalizeMcp(native)).toBe(native)
+      // A legacy server named `timeout` migrates, but a native timeout wins.
+      const nativeTimeout = { mcp: { timeout: { request: 5000, type: "local", command: ["node"] } } }
+      expect(ConfigMigrateV1.normalizeMcp(nativeTimeout)).toBe(nativeTimeout)
+      expect(
+        ConfigMigrateV1.normalizeMcp({ mcp: { timeout: { type: "local", command: ["node", "server.js"] } } }),
+      ).toEqual({
+        mcp: { servers: { timeout: { type: "local", command: ["node", "server.js"] } } },
+      })
+      // Enabled-only entries carry no server definition and are not overridden.
+      const enabledOnly = { mcp: { disabled: { enabled: false } } }
+      expect(ConfigMigrateV1.normalizeMcp(enabledOnly)).toBe(enabledOnly)
+      // Malformed or non-record MCP values stay on the v2 decode path.
+      expect(ConfigMigrateV1.normalizeMcp({ mcp: { local: { type: "local" } } })).toEqual({
+        mcp: { local: { type: "local" } },
+      })
+      expect(ConfigMigrateV1.normalizeMcp({ mcp: {} })).toEqual({ mcp: {} })
+      expect(ConfigMigrateV1.normalizeMcp({ mcp: null })).toEqual({ mcp: null })
+      expect(ConfigMigrateV1.normalizeMcp({ mcp: ["local"] })).toEqual({ mcp: ["local"] })
+      expect(ConfigMigrateV1.normalizeMcp("nope")).toBe("nope")
+    }),
+  )
+
   it.effect("migrates arbitrary v1 configuration into valid v2 configuration", () =>
     Effect.sync(() => {
       FastCheck.assert(
@@ -488,6 +547,310 @@ describe("Config", () => {
     ),
   )
 
+  it.live("migrates a flat mcp map when no other v1-only key is present", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({
+                $schema: "https://opencode.ai/config.json",
+                mcp: {
+                  local: { type: "local", command: ["node", "./mcp/server.js"], enabled: true },
+                  remote: { type: "remote", url: "https://mcp.example.com/mcp", enabled: false },
+                },
+              }),
+            ),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+
+            expect(documents).toHaveLength(1)
+            expect(documents[0]?.info.mcp).toEqual({
+              servers: {
+                local: { type: "local", command: ["node", "./mcp/server.js"], disabled: false },
+                remote: { type: "remote", url: "https://mcp.example.com/mcp", disabled: true },
+              },
+            })
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("preserves native v2 fields while normalizing a flat mcp map", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all(
+              ["opencode.json", "opencode.jsonc"].map((name) =>
+                fs.writeFile(
+                  path.join(tmp.path, name),
+                  JSON.stringify({
+                    permissions: [{ action: "bash", resource: "*", effect: "deny" }],
+                    agents: { build: { disabled: true } },
+                    snapshots: false,
+                    providers: { custom: provider },
+                    plugins: ["opencode-helicone-session"],
+                    // Without skills, v1 decoding succeeds but drops the v2 fields.
+                    // With a native skills array, v1 decoding fails instead.
+                    skills: name === "opencode.jsonc" ? ["./skills"] : undefined,
+                    compaction: { auto: true, prune: false, keep: { tokens: 2000 }, buffer: 10000 },
+                    mcp: {
+                      local: { type: "local", command: ["node", "server.js"], enabled: false },
+                      remote: { type: "remote", url: "https://mcp.example.com", enabled: true },
+                    },
+                  }),
+                ),
+              ),
+            ),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+
+            expect(documents).toHaveLength(2)
+            documents.forEach((document) => {
+              expect(document.info.permissions).toEqual([{ action: "bash", resource: "*", effect: "deny" }])
+              expect(document.info.agents?.build?.disabled).toBe(true)
+              expect(document.info.snapshots).toBe(false)
+              expect(document.info.providers?.custom).toMatchObject(provider)
+              expect(document.info.plugins).toEqual(["opencode-helicone-session"])
+              expect(document.info.compaction).toEqual({
+                auto: true,
+                prune: false,
+                keep: { tokens: 2000 },
+                buffer: 10000,
+              })
+              expect(document.info.mcp).toEqual({
+                servers: {
+                  local: { type: "local", command: ["node", "server.js"], disabled: true },
+                  remote: { type: "remote", url: "https://mcp.example.com", disabled: false },
+                },
+              })
+            })
+            expect(documents[0]?.info.skills).toBeUndefined()
+            expect(documents[1]?.info.skills).toEqual(["./skills"])
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("preserves native mcp timeouts with legacy-looking metadata", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({
+                mcp: {
+                  timeout: { startup: 1000, request: 5000, type: "local", command: ["node", "server.js"] },
+                },
+              }),
+            ),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+
+            expect(documents).toHaveLength(1)
+            expect(documents[0]?.info.mcp).toEqual({ timeout: { startup: 1000, request: 5000 } })
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("keeps a legacy server named servers", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({
+                mcp: { servers: { type: "local", command: ["node", "server.js"] } },
+              }),
+            ),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+
+            expect(documents).toHaveLength(1)
+            expect(documents[0]?.info.mcp).toEqual({
+              servers: { servers: { type: "local", command: ["node", "server.js"] } },
+            })
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("keeps a legacy server named timeout", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({
+                mcp: { timeout: { type: "local", command: ["node", "server.js"] } },
+              }),
+            ),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+
+            expect(documents).toHaveLength(1)
+            expect(documents[0]?.info.mcp).toEqual({
+              servers: { timeout: { type: "local", command: ["node", "server.js"] } },
+            })
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("retains a real server beside an enabled-only entry", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({
+                mcp: {
+                  probe: { type: "local", command: ["node", "server.js"] },
+                  disabled: { enabled: false },
+                },
+              }),
+            ),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+
+            expect(documents).toHaveLength(1)
+            expect(documents[0]?.info.mcp).toEqual({
+              servers: { probe: { type: "local", command: ["node", "server.js"] } },
+            })
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("keeps native v2 settings when a flat mcp block is malformed or mixed", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              fs.writeFile(
+                path.join(tmp.path, "opencode.json"),
+                JSON.stringify({
+                  model: "anthropic/claude",
+                  snapshots: false,
+                  mcp: { local: { type: "local", command: ["node", "server.js"] }, timeout: { request: 5000 } },
+                }),
+              ),
+              fs.writeFile(
+                path.join(tmp.path, "opencode.jsonc"),
+                JSON.stringify({
+                  model: "anthropic/claude",
+                  snapshots: false,
+                  mcp: { probe: { type: "typo", command: [] } },
+                }),
+              ),
+            ]),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+
+            expect(documents).toHaveLength(2)
+            expect(documents[0]?.info.mcp).toEqual({ timeout: { request: 5000 } })
+            expect(documents[1]?.info.mcp).toEqual({})
+            expect(documents.map((document) => document.info.model)).toEqual(["anthropic/claude", "anthropic/claude"])
+            expect(documents.map((document) => document.info.snapshots)).toEqual([false, false])
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("keeps the rest of a config when a flat mcp entry is malformed", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({
+                model: "anthropic/claude",
+                permissions: [{ action: "bash", resource: "*", effect: "deny" }],
+                agents: { build: { disabled: true } },
+                snapshots: false,
+                // tagged `local`, but missing the required `command`
+                mcp: { local: { type: "local" } },
+              }),
+            ),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+
+            expect(documents).toHaveLength(1)
+            expect(documents[0]?.info.model).toBe("anthropic/claude")
+            expect(documents[0]?.info.permissions).toEqual([{ action: "bash", resource: "*", effect: "deny" }])
+            expect(documents[0]?.info.agents?.build?.disabled).toBe(true)
+            expect(documents[0]?.info.snapshots).toBe(false)
+            expect(documents[0]?.info.mcp).toEqual({})
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
   it.live("migrates v1 configuration when a v1-only key is present", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
@@ -660,6 +1023,31 @@ describe("Config", () => {
                 },
               },
             })
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("rejects an invalid explicit-v1 file without falling back to v2", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({ snapshot: false, tools: { bash: "invalid" } }),
+            ),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+
+            expect(documents).toHaveLength(0)
           }).pipe(Effect.provide(testLayer(tmp.path)))
         }),
       ),
