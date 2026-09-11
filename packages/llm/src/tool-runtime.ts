@@ -34,9 +34,34 @@ export const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<Dispat
   )
 }
 
+// Effect's toJsonSchema (tool.ts line 183) emits bare properties for single-field structs
+// and $defs/$ref for multi-field ones — resolve whichever shape is present.
+const resolveProperties = (parameters: Record<string, unknown> | undefined): Record<string, unknown> | undefined => {
+  if (parameters?.properties) return parameters.properties as Record<string, unknown>
+  if (typeof parameters?.$ref === "string" && parameters.$defs) {
+    const refName = parameters.$ref.split("/").pop()
+    if (refName) {
+      const def = (parameters.$defs as Record<string, unknown>)[refName]
+      if (def && typeof def === "object") return (def as Record<string, unknown>).properties as Record<string, unknown>
+    }
+  }
+  return undefined
+}
+
+const schemaErrorMessage = (name: string, input: unknown, parameters: Record<string, unknown> | undefined, schemaError: string) => {
+  const expected = resolveProperties(parameters)
+  const expectedKeys = expected ? Object.keys(expected) : undefined
+  const receivedKeys = input !== null && typeof input === "object" ? Object.keys(input as Record<string, unknown>) : undefined
+  if (!expectedKeys && !receivedKeys) return `Invalid tool input for "${name}": ${schemaError}`
+  const parts = [`Invalid tool input for "${name}": ${schemaError}`]
+  if (expectedKeys) parts.push(`Expected keys: [${expectedKeys.join(", ")}]`)
+  if (receivedKeys) parts.push(`Received keys: [${receivedKeys.join(", ")}]`)
+  return parts.join(". ")
+}
+
 const decodeAndExecute = (tool: AnyTool, call: ToolCallPart): Effect.Effect<ToolSettlement, ToolFailure> =>
   tool._decode(call.input).pipe(
-    Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
+    Effect.mapError((error) => new ToolFailure({ message: schemaErrorMessage(call.name, call.input, tool._definition.inputSchema as Record<string, unknown> | undefined, error.message) })),
     Effect.flatMap((decoded) =>
       tool.execute!(decoded, { id: call.id, name: call.name }).pipe(
         Effect.flatMap((value) =>
@@ -47,15 +72,15 @@ const decodeAndExecute = (tool: AnyTool, call: ToolCallPart): Effect.Effect<Tool
                   message: `Tool returned an invalid value for its success schema: ${error.message}`,
                 }),
             ),
+            Effect.map((encoded) => {
+              if (tool._legacyResult && ToolResultValue.is(encoded))
+                return { result: encoded, output: ToolOutput.fromResultValue(encoded) }
+              const output = tool._project(decoded, call.id, encoded)
+              const result = ToolOutput.toResultValue(output)
+              return result.type === "error" ? { result } : { result, output }
+            }),
           ),
         ),
-        Effect.map((encoded) => {
-          if (tool._legacyResult && ToolResultValue.is(encoded))
-            return { result: encoded, output: ToolOutput.fromResultValue(encoded) }
-          const output = tool._project(decoded, call.id, encoded)
-          const result = ToolOutput.toResultValue(output)
-          return result.type === "error" ? { result } : { result, output }
-        }),
       ),
     ),
   )
