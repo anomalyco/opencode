@@ -516,7 +516,16 @@ const layer = Layer.effect(
                 return
               }
 
-              const result = yield* create(key, mcp)
+              const timeoutMs = mcp.timeout ?? DEFAULT_TIMEOUT
+              const result = yield* create(key, mcp).pipe(
+                Effect.timeoutOrElse({
+                  duration: timeoutMs,
+                  orElse: () =>
+                    Effect.succeed<CreateResult>({
+                      status: { status: "failed", error: "Failed to connect" },
+                    }),
+                }),
+              )
               s.status[key] = result.status
               if (result.mcpClient) {
                 s.clients[key] = result.mcpClient
