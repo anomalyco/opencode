@@ -3,6 +3,7 @@ type Definition = {
 }
 
 export function listen(rpc: Definition) {
+  let _pp = null; try { _pp = !!require("worker_threads").parentPort } catch (e) { _pp = "err:" + e.code }
   onmessage = async (evt) => {
     const parsed = JSON.parse(evt.data)
     if (parsed.type === "rpc.request") {

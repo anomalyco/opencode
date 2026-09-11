@@ -9,7 +9,7 @@ export type ClipboardService = Readonly<{
 const clipboard = { read, write }
 const ClipboardContext = createContext<ClipboardService>(clipboard)
 
-export function ClipboardProvider(props: { value?: ClipboardService; children: JSX.Element }) {
+export function ClipboardProvider(props: { value?: ClipboardService; children: JSX.Element }) { process.stderr.write("CLIP-BODY\n")
   return <ClipboardContext.Provider value={props.value ?? clipboard}>{props.children}</ClipboardContext.Provider>
 }
 

@@ -11,7 +11,7 @@ export function StartupLoading(props: { ready: () => boolean }) {
   let stamp = 0
 
   createEffect(() => {
-    if (props.ready()) {
+        if (props.ready()) {
       if (wait) {
         clearTimeout(wait)
         wait = undefined
@@ -42,6 +42,7 @@ export function StartupLoading(props: { ready: () => boolean }) {
     wait = setTimeout(() => {
       wait = undefined
       stamp = Date.now()
+      process.stderr.write("STARTUP-SHOW\n")
       setShow(true)
     }, 500).unref()
   })
