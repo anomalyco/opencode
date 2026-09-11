@@ -7,7 +7,7 @@ import { invokeURLMethod, uriArgument } from "../stdlib/url.js"
 import { coerceToNumber, coerceToString } from "../stdlib/value.js"
 import { compareText } from "../tool-runtime.js"
 import { Values } from "../values.js"
-import { type AstNode, IntrinsicReference, InterpreterRuntimeError } from "./model.js"
+import { type AstNode, InterpreterRuntimeError, IntrinsicReference, rangeError } from "./model.js"
 import { get, ProgramArray, ProgramObject, record } from "./objects.js"
 import { containsOpaqueReference, rejectCircularInsertion, typeofValue } from "./references.js"
 import { applyCollectionCallback, isSupportedCallback, type Runner, toPrimitive } from "./runner.js"
@@ -111,7 +111,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
       throw new InterpreterRuntimeError(
         `String.${name} cannot take a regular expression; use regex.test(string) or String.search instead.`,
         node,
-      ).as("TypeError")
+      )
     }
   }
 
@@ -143,10 +143,10 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
       try {
         result = value.normalize(form)
       } catch {
-        throw new InterpreterRuntimeError(
+        throw rangeError(
           `String.normalize expects the form "NFC", "NFD", "NFKC", or "NFKD" (got ${JSON.stringify(form)}).`,
           node,
-        ).as("RangeError")
+        )
       }
       break
     }
@@ -233,7 +233,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
     case "repeat": {
       const count = num(0)
       if (!Number.isFinite(count) || count < 0)
-        throw new InterpreterRuntimeError("String.repeat expects a finite non-negative count.", node).as("RangeError")
+        throw rangeError("String.repeat expects a finite non-negative count.", node)
       result = value.repeat(count)
       break
     }
@@ -519,19 +519,17 @@ const loadSetRecord = <R>(runner: Runner<R>, source: unknown, name: string, node
     })
   }
   if (!(source instanceof ProgramObject)) {
-    throw new InterpreterRuntimeError(`Set.${name} expects a Set-like object.`, node).as("TypeError")
+    throw new InterpreterRuntimeError(`Set.${name} expects a Set-like object.`, node)
   }
   return Effect.gen(function* () {
     const size = yield* coerceNumericArgument(runner, get(source, "size"), node)
     if (Number.isNaN(size)) {
-      throw new InterpreterRuntimeError(`Set.${name} received a Set-like object with an invalid size.`, node).as(
-        "TypeError",
-      )
+      throw new InterpreterRuntimeError(`Set.${name} received a Set-like object with an invalid size.`, node)
     }
     const has = get(source, "has")
     const keys = get(source, "keys")
     if (!isSupportedCallback(has) || !isSupportedCallback(keys)) {
-      throw new InterpreterRuntimeError(`Set.${name} expects callable 'has' and 'keys' methods.`, node).as("TypeError")
+      throw new InterpreterRuntimeError(`Set.${name} expects callable 'has' and 'keys' methods.`, node)
     }
     return {
       size: Math.max(Math.trunc(size), 0),
@@ -539,7 +537,7 @@ const loadSetRecord = <R>(runner: Runner<R>, source: unknown, name: string, node
       keys: () =>
         Effect.flatMap(runner.invokeCallable(keys, [], node), (result) => {
           if (result instanceof ProgramArray) return Effect.succeed(result.items)
-          throw new InterpreterRuntimeError(`Set.${name} expected 'keys' to return an iterator.`, node).as("TypeError")
+          throw new InterpreterRuntimeError(`Set.${name} expected 'keys' to return an iterator.`, node)
         }),
     }
   })
@@ -558,7 +556,7 @@ const invokeURLSearchParamsMethod = <R>(
       throw new InterpreterRuntimeError(
         `URLSearchParams.${name} requires ${count} argument${count === 1 ? "" : "s"}.`,
         node,
-      ).as("TypeError")
+      )
     }
   }
   switch (name) {
@@ -690,7 +688,7 @@ const invokeArrayMethod = <R>(
       const index = optNumber(args[0], "index") ?? 0
       const resolved = index < 0 ? target.length + index : index
       if (resolved < 0 || resolved >= target.length) {
-        throw new InterpreterRuntimeError("Array.with index is out of range.", node)
+        throw rangeError("Array.with index is out of range.", node)
       }
       const copied = [...target]
       copied[resolved] = args[1]
@@ -820,9 +818,7 @@ const invokeArrayMethod = <R>(
         if (args.length < 2) {
           while (start < length && !(start in target)) start += 1
           if (start === length)
-            throw new InterpreterRuntimeError("Array.reduce of an empty array with no initial value.", node).as(
-              "TypeError",
-            )
+            throw new InterpreterRuntimeError("Array.reduce of an empty array with no initial value.", node)
           accumulator = target[start]
           start += 1
         }
@@ -838,9 +834,7 @@ const invokeArrayMethod = <R>(
         if (args.length < 2) {
           while (start >= 0 && !(start in target)) start -= 1
           if (start < 0)
-            throw new InterpreterRuntimeError("Array.reduceRight of an empty array with no initial value.", node).as(
-              "TypeError",
-            )
+            throw new InterpreterRuntimeError("Array.reduceRight of an empty array with no initial value.", node)
           accumulator = target[start]
           start -= 1
         }

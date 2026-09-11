@@ -1,5 +1,5 @@
 import { sync, syncCall } from "../interpreter/host.js"
-import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+import { type AstNode, InterpreterRuntimeError, syntaxError } from "../interpreter/model.js"
 import { ProgramArray, record, set } from "../interpreter/objects.js"
 import { Values } from "../values.js"
 import { coerceToNumber, coerceToString } from "./value.js"
@@ -34,10 +34,10 @@ export const toHostRegex = (arg: unknown, method: string, node: AstNode, extraFl
     try {
       return new RegExp(arg, extraFlags)
     } catch (error) {
-      throw new InterpreterRuntimeError(
+      throw syntaxError(
         `String.${method} received the string ${JSON.stringify(arg)}, which is not a valid regular expression pattern (${regexFailureReason(error)}). ${escapeRegexHint}`,
         node,
-      ).as("SyntaxError")
+      )
     }
   }
   throw new InterpreterRuntimeError(
@@ -60,22 +60,22 @@ export const constructRegExp = (args: Array<unknown>, node: AstNode): Values.Reg
   const pattern = first instanceof Values.RegExp ? first.regex.source : first === undefined ? "" : coerceToString(first)
   const flagsArg = args[1]
   if (flagsArg !== undefined && typeof flagsArg !== "string") {
-    throw new InterpreterRuntimeError(
+    throw syntaxError(
       `RegExp flags must be a string of flag characters (e.g. "g", "gi"), not ${flagsArg === null ? "null" : typeof flagsArg}.`,
       node,
-    ).as("SyntaxError")
+    )
   }
   const flags = flagsArg ?? (first instanceof Values.RegExp ? first.regex.flags : "")
   try {
     return new Values.RegExp(pattern, flags)
   } catch (error) {
     const reason = regexFailureReason(error)
-    throw new InterpreterRuntimeError(
+    throw syntaxError(
       /flag/i.test(reason)
         ? `new RegExp(...) received invalid flags ${JSON.stringify(flags)} (${reason}). Valid flags are d, g, i, m, s, u, v, and y.`
         : `new RegExp(...) received ${JSON.stringify(pattern)}, which is not a valid regular expression pattern (${reason}). ${escapeRegexHint}`,
       node,
-    ).as("SyntaxError")
+    )
   }
 }
 
@@ -86,7 +86,7 @@ export const regexpGlobal = sync("RegExp", constructRegExp, {
   members: {
     escape: sync("RegExp.escape", (args, node) => {
       if (typeof args[0] !== "string") {
-        throw new InterpreterRuntimeError("RegExp.escape expects a string.", node).as("TypeError")
+        throw new InterpreterRuntimeError("RegExp.escape expects a string.", node)
       }
       return RegExp.escape(args[0])
     }),

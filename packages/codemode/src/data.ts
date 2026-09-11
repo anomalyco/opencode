@@ -2,9 +2,11 @@ export * as Data from "./data.js"
 
 import type { DiagnosticKind } from "./codemode.js"
 import {
+  get,
   ownEntries,
   parseArrayIndex,
   ProgramArray,
+  ProgramError,
   ProgramFunction,
   ProgramObject,
   set,
@@ -120,6 +122,11 @@ const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Se
   }
   if (value instanceof ProgramObject) {
     const copied: Record<string, unknown> = {}
+    // Errors serialize as { name, message, ...own }: both may be inherited, and neither is enumerable in JS.
+    if (value instanceof ProgramError) {
+      define(copied, "name", copy(get(value, "name"), label, mode, depth + 1, seen))
+      define(copied, "message", copy(get(value, "message"), label, mode, depth + 1, seen))
+    }
     for (const [key, item] of ownEntries(value)) {
       const next = copy(item, label, mode, depth + 1, seen)
       if (next === undefined && mode === "json") continue

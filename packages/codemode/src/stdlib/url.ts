@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { toProgram } from "../data.js"
 import { HostFunction, requiresNew, sync, syncCall } from "../interpreter/host.js"
-import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+import { type AstNode, InterpreterRuntimeError, uriError } from "../interpreter/model.js"
 import { ownEntries, ProgramObject } from "../interpreter/objects.js"
 import { isRuntimeReference } from "../interpreter/references.js"
 import { preserveConsumerError, type Runner } from "../interpreter/runner.js"
@@ -68,10 +68,10 @@ export const uriGlobal = (name: UriFunction) =>
     try {
       return uriFunctions[name](value)
     } catch (error) {
-      throw new InterpreterRuntimeError(
+      throw uriError(
         `${name} received malformed URI data: ${error instanceof Error ? error.message : String(error)}`,
         node,
-      ).as("URIError")
+      )
     }
   })
 
@@ -81,7 +81,7 @@ export const urlArgument = (value: unknown, label: string): string =>
 const urlStatic = (name: "canParse" | "parse") =>
   sync(`URL.${name}`, (args, node) => {
     if (args.length === 0) {
-      throw new InterpreterRuntimeError(`URL.${name} requires a URL argument.`, node).as("TypeError")
+      throw new InterpreterRuntimeError(`URL.${name} requires a URL argument.`, node)
     }
     const input = urlArgument(args[0], `URL.${name} input`)
     const base = args[1] === undefined ? undefined : urlArgument(args[1], `URL.${name} base`)
@@ -95,9 +95,7 @@ const urlStatic = (name: "canParse" | "parse") =>
 
 const constructURL = (args: Array<unknown>, node: AstNode): Values.URL => {
   if (args.length === 0) {
-    throw new InterpreterRuntimeError("new URL(...) requires a URL string and an optional base URL.", node).as(
-      "TypeError",
-    )
+    throw new InterpreterRuntimeError("new URL(...) requires a URL string and an optional base URL.", node)
   }
   const input = urlArgument(args[0], "new URL input")
   const base = args[1] === undefined ? undefined : urlArgument(args[1], "new URL base")
@@ -107,7 +105,7 @@ const constructURL = (args: Array<unknown>, node: AstNode): Values.URL => {
     throw new InterpreterRuntimeError(
       `new URL(...) received an invalid URL${base === undefined ? "" : " or base URL"}.`,
       node,
-    ).as("TypeError")
+    )
   }
 }
 
@@ -127,9 +125,7 @@ const readURLSearchParamsPair = <R>(
   Effect.gen(function* () {
     const cursor = yield* runner.syncIterator(value, node)
     if (cursor === undefined) {
-      throw new InterpreterRuntimeError("new URLSearchParams(...) expects iterable [name, value] pairs.", node).as(
-        "TypeError",
-      )
+      throw new InterpreterRuntimeError("new URLSearchParams(...) expects iterable [name, value] pairs.", node)
     }
     const items: Array<string> = []
     while (true) {
@@ -165,10 +161,7 @@ const constructURLSearchParams = <R>(
         const step = yield* cursor.next
         if (step.done) {
           if (entries.some((entry) => entry.length !== 2)) {
-            throw new InterpreterRuntimeError(
-              "new URLSearchParams(...) expects iterable [name, value] pairs.",
-              node,
-            ).as("TypeError")
+            throw new InterpreterRuntimeError("new URLSearchParams(...) expects iterable [name, value] pairs.", node)
           }
           return new Values.URLSearchParams(
             new URLSearchParams(entries.map((entry): [string, string] => [entry[0] ?? "", entry[1] ?? ""])),
@@ -181,14 +174,14 @@ const constructURLSearchParams = <R>(
       throw new InterpreterRuntimeError(
         "new URLSearchParams(...) expects a query string, data object, or synchronous iterable pairs.",
         node,
-      ).as("TypeError")
+      )
     }
     if (Values.isValue(init)) return new Values.URLSearchParams(new URLSearchParams())
     if (!(init instanceof ProgramObject)) {
       throw new InterpreterRuntimeError(
         "new URLSearchParams(...) expects a query string, data object, iterable pairs, or URLSearchParams.",
         node,
-      ).as("TypeError")
+      )
     }
     return new Values.URLSearchParams(
       new URLSearchParams(Object.fromEntries(ownEntries(init).map(([key, value]) => [key, coerceToString(value)]))),

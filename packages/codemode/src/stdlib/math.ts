@@ -42,7 +42,7 @@ const sumPrecise = <R>(runner: Runner<R>) =>
       Effect.gen(function* () {
         const cursor = yield* runner.syncIterator(args[0], node)
         if (cursor === undefined) {
-          throw new InterpreterRuntimeError("Math.sumPrecise expects a synchronous iterable.", node).as("TypeError")
+          throw new InterpreterRuntimeError("Math.sumPrecise expects a synchronous iterable.", node)
         }
         const numbers: Array<number> = []
         while (true) {
@@ -52,9 +52,7 @@ const sumPrecise = <R>(runner: Runner<R>) =>
             cursor,
             Effect.sync(() => {
               if (typeof step.value !== "number") {
-                throw new InterpreterRuntimeError("Math.sumPrecise expects an iterable of numbers.", node).as(
-                  "TypeError",
-                )
+                throw new InterpreterRuntimeError("Math.sumPrecise expects an iterable of numbers.", node)
               }
               numbers.push(step.value)
             }),

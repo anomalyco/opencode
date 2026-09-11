@@ -1,37 +1,10 @@
 import { type HostFunction, sync, type SyncOptions } from "../interpreter/host.js"
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
 import { toProgram } from "../data.js"
-import { get, ProgramArray, ProgramError, set } from "../interpreter/objects.js"
+import { get, ProgramArray, ProgramError } from "../interpreter/objects.js"
 import { Values } from "../values.js"
 
-export const errorConstructors = new Set([
-  "Error",
-  "TypeError",
-  "RangeError",
-  "SyntaxError",
-  "ReferenceError",
-  "EvalError",
-  "URIError",
-  "AggregateError",
-])
-
 export const compoundOperators = new Set(["+=", "-=", "*=", "/=", "%=", "**=", "&=", "|=", "^=", "<<=", ">>=", ">>>="])
-
-export const createErrorValue = (name: string, message: string): ProgramError => {
-  const value = new ProgramError(name)
-  set(value, "name", name)
-  set(value, "message", message)
-  return value
-}
-
-export const createAggregateErrorValue = (errors: Array<unknown>, message: string): ProgramError => {
-  const value = createErrorValue("AggregateError", message)
-  set(value, "errors", new ProgramArray(errors))
-  return value
-}
-
-export const errorBrandName = (value: unknown): string | undefined =>
-  value instanceof ProgramError ? value.errorName : undefined
 
 export const coerceToString = (value: unknown): string => {
   if (value === null) return "null"

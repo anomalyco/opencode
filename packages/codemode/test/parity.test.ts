@@ -392,11 +392,35 @@ describe("Error values and instanceof", () => {
     ])
   })
 
-  test("diagnostics without a specific real-JS analogue are named plain Error", async () => {
-    expect(await value(`try { JSON.parse(5) } catch (e) { return [e.name, e instanceof Error] }`)).toEqual([
-      "Error",
+  test("interpreter failures are TypeErrors; unsupported syntax is a SyntaxError", async () => {
+    expect(await value(`try { null.x } catch (e) { return [e.name, e instanceof TypeError] }`)).toEqual([
+      "TypeError",
       true,
     ])
+    expect(await value(`try { tools + 1 } catch (e) { return e.name }`)).toBe("TypeError")
+    expect(await value(`try { class A {} } catch (e) { return [e.name, e instanceof SyntaxError] }`)).toEqual([
+      "SyntaxError",
+      true,
+    ])
+  })
+
+  test("errors inherit constructor and instanceof through a real prototype chain", async () => {
+    expect(
+      await value(`
+        const { constructor } = new RangeError("r")
+        let caught
+        try { const { a } = null } catch (e) { caught = e }
+        return [
+          constructor === RangeError,
+          new RangeError("r") instanceof Error,
+          new RangeError("r") instanceof TypeError,
+          caught.constructor === TypeError,
+          ({ ...caught }).constructor === Object,
+          "constructor" in caught,
+          Object.keys(new RangeError("r")),
+        ]
+      `),
+    ).toEqual([true, true, false, true, true, true, ["message"]])
   })
 
   test("Promise.allSettled rejection reasons are Error values", async () => {
@@ -421,15 +445,19 @@ describe("Error values and instanceof", () => {
     ])
   })
 
-  test("error values still serialize as plain { name, message } data", async () => {
+  test("errors serialize as { name, message } by brand; name is inherited and message is own", async () => {
     expect(await value(`return new Error("m")`)).toEqual({ name: "Error", message: "m" })
     expect(await value(`return JSON.stringify(new Error("m"))`)).toBe('{"name":"Error","message":"m"}')
-    expect(await value(`try { throw new Error("m") } catch (e) { return Object.keys(e) }`)).toEqual(["name", "message"])
+    expect(await value(`try { throw new Error("m") } catch (e) { return [Object.keys(e), e.name] }`)).toEqual([
+      ["message"],
+      "Error",
+    ])
+    expect(await value(`return Object.keys(new Error())`)).toEqual([])
   })
 
   test("spreading an error loses the brand, like losing the prototype in JS", async () => {
     expect(await value(`const e = new Error("m"); return ({ ...e }) instanceof Error`)).toBe(false)
-    expect(await value(`const e = new Error("m"); return { ...e }`)).toEqual({ name: "Error", message: "m" })
+    expect(await value(`const e = new Error("m"); return { ...e }`)).toEqual({ message: "m" })
   })
 
   test("typeof Error is function; an unknown instanceof right-hand side is a catchable error", async () => {

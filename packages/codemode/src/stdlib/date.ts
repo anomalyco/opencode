@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { HostFunction, sync } from "../interpreter/host.js"
-import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+import { type AstNode, InterpreterRuntimeError, rangeError } from "../interpreter/model.js"
 import { type Runner, toPrimitive } from "../interpreter/runner.js"
 import { Values } from "../values.js"
 import { coerceToNumber, coerceToString } from "./value.js"
@@ -99,7 +99,7 @@ export const invokeDateMethod = (
     case "valueOf":
       return value.time
     case "toISOString":
-      if (!Number.isFinite(value.time)) throw new InterpreterRuntimeError("Invalid time value.", node).as("RangeError")
+      if (!Number.isFinite(value.time)) throw rangeError("Invalid time value.", node)
       return hosted.toISOString()
     case "toJSON":
       return Number.isFinite(value.time) ? hosted.toISOString() : null

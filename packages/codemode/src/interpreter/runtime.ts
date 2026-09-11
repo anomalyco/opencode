@@ -51,19 +51,21 @@ import {
   CodeModeGenerator,
   ComputedValue,
   GeneratorMethodReference,
-  GeneratorReturn,
   type GeneratorRequestKind,
-  IntrinsicReference,
+  GeneratorReturn,
   InterpreterRuntimeError,
+  IntrinsicReference,
   IteratorSymbol,
   type MemberReference,
   OptionalShortCircuit,
-  PromiseInstanceMethodReference,
   ProgramThrow,
+  PromiseInstanceMethodReference,
+  rangeError,
   type StatementResult,
   unsupportedSyntax,
 } from "./model.js"
 import { caughtErrorValue } from "./errors.js"
+import { createIntrinsics } from "./intrinsics.js"
 import { globals, type Host } from "./globals.js"
 import { HostFunction, HostNamespace } from "./host.js"
 import { invokeIntrinsic } from "./methods.js"
@@ -97,7 +99,7 @@ import { constructRegExp, regexpMethods, regexpProperties } from "../stdlib/rege
 import { stringMethods } from "../stdlib/string.js"
 import { uriArgument, urlMethods, urlProperties, urlSearchParamsMethods, urlWritableProperties } from "../stdlib/url.js"
 import { enumerableSource } from "../stdlib/object.js"
-import { coerceToNumber, coerceToString, compoundOperators, errorBrandName } from "../stdlib/value.js"
+import { coerceToNumber, coerceToString, compoundOperators } from "../stdlib/value.js"
 import { Values } from "../values.js"
 
 // What a loop does with its body's result: exit with a StatementResult, or undefined to keep iterating.
@@ -141,7 +143,7 @@ const constructorName = (value: unknown): string | undefined => {
   if (value instanceof Values.URLSearchParams) return "URLSearchParams"
   if (value instanceof Values.Promise) return "Promise"
   if (!(value instanceof ProgramObject) || value instanceof ProgramFunction) return undefined
-  return errorBrandName(value) ?? "Object"
+  return "Object"
 }
 
 const instanceofValue = (lhs: unknown, rhs: unknown, node: AstNode): boolean => {
@@ -295,6 +297,7 @@ export class Runtime<R> {
       invokeCallable: (callable, args, node) => this.root.invokeCallable(callable, args, node),
       settlePromise: (promise) => this.root.settlePromise(promise),
       syncIterator: (value, node) => this.root.syncIterator(value, node),
+      intrinsics: createIntrinsics(),
     }
     this.builtins = new Map([...globals(this), ...extraGlobals(this)])
     for (const [name, value] of this.builtins) globalScope.set(name, { mutable: false, value })
@@ -647,7 +650,7 @@ class Frame<R> {
         throw new InterpreterRuntimeError(
           `${awaiting ? "for await...of" : "for...of"} requires an array, string, Map, Set, or URLSearchParams, or custom iterator value.`,
           node,
-        ).as("TypeError")
+        )
       }
       const close = () =>
         iterator
@@ -871,7 +874,7 @@ class Frame<R> {
 
   private requireIteratorObject(value: unknown, context: string, node: AstNode): ProgramObject {
     if (value instanceof ProgramObject) return value
-    throw new InterpreterRuntimeError(`${context} must be an object.`, node).as("TypeError")
+    throw new InterpreterRuntimeError(`${context} must be an object.`, node)
   }
 
   private requireIterator(value: unknown, node: AstNode): ProgramObject | CodeModeGenerator {
@@ -882,7 +885,7 @@ class Frame<R> {
 
   private requireIteratorMethod(value: unknown, context: string, node: AstNode): unknown {
     if (typeofValue(value) === "function") return value
-    throw new InterpreterRuntimeError(`${context} must be a function.`, node).as("TypeError")
+    throw new InterpreterRuntimeError(`${context} must be a function.`, node)
   }
 
   // for...in over null/undefined iterates nothing, like JS.
@@ -994,7 +997,7 @@ class Frame<R> {
           return Effect.failCause(cause)
         }
 
-        const caught = caughtErrorValue(Cause.squash(cause))
+        const caught = caughtErrorValue(self.runtime.runner, Cause.squash(cause))
         const parameter = handler.param
         self.scopes.push()
         return Effect.gen(function* () {
@@ -1179,9 +1182,7 @@ class Frame<R> {
     return Effect.gen(function* () {
       const cursor = yield* self.syncIterator(value, pattern)
       if (cursor === undefined) {
-        throw new InterpreterRuntimeError("Array destructuring requires a supported iterable value.", pattern).as(
-          "TypeError",
-        )
+        throw new InterpreterRuntimeError("Array destructuring requires a supported iterable value.", pattern)
       }
       let done = false
       for (const element of pattern.elements) {
@@ -1314,7 +1315,7 @@ class Frame<R> {
             : callee instanceof HostFunction
               ? `new ${name}(...) is not supported; call ${name}(...) without new instead.`
               : `${name} is not a constructor.`
-        throw new InterpreterRuntimeError(message, node).as("TypeError")
+        throw new InterpreterRuntimeError(message, node)
       }
       const args = yield* self.evaluateCallArguments(node.arguments)
       return yield* construct(args, node)
@@ -1609,9 +1610,7 @@ class Frame<R> {
       }
       if (callable instanceof HostFunction) return yield* (callable as HostFunction<R>).call(args, node)
       if (callable === undefined || callable === null) {
-        throw new InterpreterRuntimeError(`${calleeDescription(callee)} is not a function.`, callee ?? node).as(
-          "TypeError",
-        )
+        throw new InterpreterRuntimeError(`${calleeDescription(callee)} is not a function.`, callee ?? node)
       }
       throw new InterpreterRuntimeError("Only tools are callable here.", callee ?? node)
     })
@@ -1628,9 +1627,7 @@ class Frame<R> {
           const spread = yield* self.evaluateExpression(argNode.argument)
           const cursor = yield* self.syncIterator(spread, argNode)
           if (cursor === undefined)
-            throw new InterpreterRuntimeError("Spread arguments require a synchronous iterable.", argNode).as(
-              "TypeError",
-            )
+            throw new InterpreterRuntimeError("Spread arguments require a synchronous iterable.", argNode)
           while (true) {
             const step = yield* cursor.next
             if (step.done) break
@@ -1695,7 +1692,7 @@ class Frame<R> {
     const generator = new CodeModeGenerator(asynchronous, (kind, value, node) => {
       const request = { kind, value, response: Deferred.makeUnsafe<unknown, unknown>() }
       if (!asynchronous && state.active) {
-        return Effect.fail(new InterpreterRuntimeError("Generator is already running.", node).as("TypeError"))
+        return Effect.fail(new InterpreterRuntimeError("Generator is already running.", node))
       }
       if (asynchronous && (state.completed || (!state.started && kind !== "next"))) {
         state.started = true
@@ -1865,17 +1862,14 @@ class Frame<R> {
           }
           if (error instanceof ProgramThrow) {
             yield* cursor.close
-            throw new InterpreterRuntimeError("The delegated iterator does not provide a throw() method.", node).as(
-              "TypeError",
-            )
+            throw new InterpreterRuntimeError("The delegated iterator does not provide a throw() method.", node)
           }
           return yield* Effect.failCause(resumed.cause)
         }
       }
 
       const iterator = yield* self.customIterator(value, node, self.generatorAsync)
-      if (!iterator)
-        throw new InterpreterRuntimeError("yield* requires a compatible iterable value.", node).as("TypeError")
+      if (!iterator) throw new InterpreterRuntimeError("yield* requires a compatible iterable value.", node)
       let kind: GeneratorRequestKind = "next"
       let input: unknown = undefined
       while (true) {
@@ -1888,9 +1882,7 @@ class Frame<R> {
         if (method === undefined || method === null) {
           if (kind === "return") return yield* Effect.fail(new GeneratorReturn(input))
           yield* self.closeIterator(iterator, node, self.generatorAsync)
-          throw new InterpreterRuntimeError("The delegated iterator does not provide a throw() method.", node).as(
-            "TypeError",
-          )
+          throw new InterpreterRuntimeError("The delegated iterator does not provide a throw() method.", node)
         }
         const called = yield* self.invokeCallable(
           self.requireIteratorMethod(method, `Iterator ${kind}`, node),
@@ -1986,7 +1978,7 @@ class Frame<R> {
           const spread = yield* self.evaluateExpression(element.argument)
           const cursor = yield* self.syncIterator(spread, element)
           if (cursor === undefined)
-            throw new InterpreterRuntimeError("Array spread requires a synchronous iterable.", element).as("TypeError")
+            throw new InterpreterRuntimeError("Array spread requires a synchronous iterable.", element)
           while (true) {
             const step = yield* cursor.next
             if (step.done) break
@@ -2262,7 +2254,7 @@ class Frame<R> {
     if (reference.target instanceof Values.URL) {
       const property = key as string
       if (!urlWritableProperties.has(property)) {
-        throw new InterpreterRuntimeError(`URL.${property} is read-only.`, node).as("TypeError")
+        throw new InterpreterRuntimeError(`URL.${property} is read-only.`, node)
       }
       try {
         const url = reference.target.url as unknown as Record<string, string>
@@ -2270,7 +2262,7 @@ class Frame<R> {
         return
       } catch (error) {
         if (error instanceof InterpreterRuntimeError || error instanceof ToolRuntimeError) throw error
-        throw new InterpreterRuntimeError(`URL.${property} received an invalid value.`, node).as("TypeError")
+        throw new InterpreterRuntimeError(`URL.${property} received an invalid value.`, node)
       }
     }
     if (reference.target instanceof Values.RegExp) {
@@ -2285,8 +2277,8 @@ class Frame<R> {
       node,
     )
     if (set(target, key, next)) return
-    if (target instanceof ProgramArray) throw new InterpreterRuntimeError("Invalid array length", node).as("RangeError")
-    throw new InterpreterRuntimeError(`Cannot assign to read only property '${String(key)}'.`, node).as("TypeError")
+    if (target instanceof ProgramArray) throw rangeError("Invalid array length", node)
+    throw new InterpreterRuntimeError(`Cannot assign to read only property '${String(key)}'.`, node)
   }
 
   private toPropertyKey(value: unknown, node: AstNode): PropertyKey {

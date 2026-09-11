@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { HostFunction, HostNamespace } from "../interpreter/host.js"
 import { applyCollectionCallback, type Runner } from "../interpreter/runner.js"
-import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+import { type AstNode, InterpreterRuntimeError, syntaxError } from "../interpreter/model.js"
 import { typeofValue } from "../interpreter/references.js"
 import { fromData, toData, toProgram } from "../data.js"
 import { get, ownKeys, ProgramArray, ProgramObject, record, remove, set } from "../interpreter/objects.js"
@@ -21,10 +21,10 @@ const parse = <R>(runner: Runner<R>, args: Array<unknown>, node: AstNode): Effec
     try {
       return fromData(JSON.parse(text), "JSON.parse result")
     } catch (error) {
-      throw new InterpreterRuntimeError(
+      throw syntaxError(
         `JSON.parse received invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
         node,
-      ).as("SyntaxError")
+      )
     }
   })()
   if (typeofValue(args[1]) !== "function") return Effect.succeed(parsed)
@@ -72,8 +72,7 @@ const stringify = <R>(runner: Runner<R>, args: Array<unknown>, node: AstNode): E
       if (typeof value === "number") return Number.isFinite(value) ? value : null
       if (value === null || typeof value === "string" || typeof value === "boolean") return value
       if (!(value instanceof ProgramObject)) return {}
-      if (stack.has(value))
-        throw new InterpreterRuntimeError("Converting circular structure to JSON.", node).as("TypeError")
+      if (stack.has(value)) throw new InterpreterRuntimeError("Converting circular structure to JSON.", node)
       stack.add(value)
       if (value instanceof ProgramArray) {
         const result: Array<unknown> = []

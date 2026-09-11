@@ -1,7 +1,13 @@
 import { Effect } from "effect"
 import { toProgram } from "../data.js"
 import { HostFunction, sync, syncCall } from "../interpreter/host.js"
-import { type AstNode, AsyncIteratorSymbol, InterpreterRuntimeError, IteratorSymbol } from "../interpreter/model.js"
+import {
+  type AstNode,
+  AsyncIteratorSymbol,
+  InterpreterRuntimeError,
+  IteratorSymbol,
+  rangeError,
+} from "../interpreter/model.js"
 import { getOwn, hasOwn, ownEntries, ownKeys, ProgramArray, ProgramObject, set } from "../interpreter/objects.js"
 import {
   containsOpaqueReference,
@@ -18,9 +24,7 @@ import { coerceToString } from "./value.js"
 // ToObject for enumeration.
 export const enumerableSource = (label: string, value: unknown, node: AstNode): ProgramObject => {
   if (value === null || value === undefined) {
-    throw new InterpreterRuntimeError(`${label} cannot convert ${describeValue(value)} to an object.`, node).as(
-      "TypeError",
-    )
+    throw new InterpreterRuntimeError(`${label} cannot convert ${describeValue(value)} to an object.`, node)
   }
   if (value instanceof Values.Promise) {
     throw new InterpreterRuntimeError(
@@ -48,7 +52,7 @@ export const objectAssign = (args: Array<unknown>, node: AstNode): unknown => {
     throw new InterpreterRuntimeError(
       `Object.assign expects a data object or array target, received ${describeValue(target)}.`,
       node,
-    ).as("TypeError")
+    )
   }
   const seen = new Set<object>()
   for (const source of args.slice(1)) {
@@ -58,7 +62,7 @@ export const objectAssign = (args: Array<unknown>, node: AstNode): unknown => {
       if (typeof key === "symbol" && key !== AsyncIteratorSymbol && key !== IteratorSymbol) continue
       rejectCircularInsertion(target, getOwn(from, key), "Object.assign result", node, seen)
       if (!set(target, key, getOwn(from, key))) {
-        throw new InterpreterRuntimeError("Invalid array length", node).as("RangeError")
+        throw rangeError("Invalid array length", node)
       }
     }
   }
@@ -74,9 +78,7 @@ const objectFromEntries = <R>(
   return Effect.gen(function* () {
     const cursor = yield* runner.syncIterator(source, node)
     if (cursor === undefined) {
-      throw new InterpreterRuntimeError("Object.fromEntries expects a synchronous iterable of entries.", node).as(
-        "TypeError",
-      )
+      throw new InterpreterRuntimeError("Object.fromEntries expects a synchronous iterable of entries.", node)
     }
     while (true) {
       const step = yield* cursor.next
@@ -85,9 +87,7 @@ const objectFromEntries = <R>(
         cursor,
         Effect.sync(() => {
           if (!(step.value instanceof ProgramObject) || containsOpaqueReference(step.value)) {
-            throw new InterpreterRuntimeError("Object.fromEntries expects [key, value] entry objects.", node).as(
-              "TypeError",
-            )
+            throw new InterpreterRuntimeError("Object.fromEntries expects [key, value] entry objects.", node)
           }
           set(out, coerceToString(getOwn(step.value, 0)), getOwn(step.value, 1))
         }),

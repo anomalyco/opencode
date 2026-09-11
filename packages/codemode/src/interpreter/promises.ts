@@ -3,9 +3,8 @@ import type { Diagnostic } from "../codemode.js"
 import { type AstNode, InterpreterRuntimeError, ProgramThrow, PromiseInstanceMethodReference } from "./model.js"
 import { get, ProgramArray, ProgramFunction, ProgramObject, record } from "./objects.js"
 import { HostFunction, requiresNew, sync } from "./host.js"
-import { caughtErrorValue, normalizeError } from "./errors.js"
+import { caughtErrorValue, createAggregateErrorValue, normalizeError } from "./errors.js"
 import { typeofValue } from "./references.js"
-import { createAggregateErrorValue } from "../stdlib/value.js"
 import { Values } from "../values.js"
 import { applyCollectionCallback, isSupportedCallback, type Runner, type SupportedCallback } from "./runner.js"
 
@@ -95,7 +94,7 @@ export class PromiseRuntime<R> {
 }
 
 export const selfResolutionError = (node?: AstNode): InterpreterRuntimeError =>
-  new InterpreterRuntimeError("Chaining cycle detected: a promise cannot resolve with itself.", node).as("TypeError")
+  new InterpreterRuntimeError("Chaining cycle detected: a promise cannot resolve with itself.", node)
 
 export const resolvePromiseValue = <R>(
   runner: Runner<R>,
@@ -154,9 +153,7 @@ const invokePromiseMethod = <R>(
     Effect.gen(function* () {
       const cursor = yield* runner.syncIterator(args[0], node)
       if (cursor === undefined) {
-        throw new InterpreterRuntimeError(`Promise.${name} expects an array or other synchronous iterable.`, node).as(
-          "TypeError",
-        )
+        throw new InterpreterRuntimeError(`Promise.${name} expects an array or other synchronous iterable.`, node)
       }
       const items: Array<Values.Promise> = []
       while (true) {
@@ -186,7 +183,7 @@ const invokePromiseMethod = <R>(
             continue
           }
           if (Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause)
-          outcomes.push(record({ status: "rejected", reason: caughtErrorValue(Cause.squash(exit.cause)) }))
+          outcomes.push(record({ status: "rejected", reason: caughtErrorValue(runner, Cause.squash(exit.cause)) }))
         }
         yield* Effect.yieldNow
         return new ProgramArray(outcomes)
@@ -204,13 +201,13 @@ const invokePromiseMethod = <R>(
         Effect.flatMap(promises.await(item), (exit) => {
           if (Exit.isSuccess(exit)) return Effect.fail(new PromiseAnyFulfilled(exit.value))
           if (Cause.hasInterruptsOnly(exit.cause)) return Effect.failCause(exit.cause)
-          return Effect.succeed(caughtErrorValue(Cause.squash(exit.cause)))
+          return Effect.succeed(caughtErrorValue(runner, Cause.squash(exit.cause)))
         }),
       )
       return yield* settleAfterTurn(
         Effect.all(flipped, { concurrency: "unbounded" }).pipe(
           Effect.flatMap((reasons) =>
-            Effect.fail(new ProgramThrow(createAggregateErrorValue(reasons, "All promises were rejected"))),
+            Effect.fail(new ProgramThrow(createAggregateErrorValue(runner, reasons, "All promises were rejected"))),
           ),
           Effect.catch((error) =>
             error instanceof PromiseAnyFulfilled ? Effect.succeed(error.value) : Effect.fail(error),
@@ -248,7 +245,7 @@ const constructPromise = <R>(
     throw new InterpreterRuntimeError(
       "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... })).",
       node,
-    ).as("TypeError")
+    )
   }
   return Effect.gen(function* () {
     const deferred = Deferred.makeUnsafe<unknown, unknown>()
@@ -311,7 +308,7 @@ const chainReaction = <R>(
       const exit = yield* reactionExit(promises, source)
       const handler = Exit.isSuccess(exit) ? onFulfilled : onRejected
       if (handler === undefined) return yield* exit
-      const input = Exit.isSuccess(exit) ? exit.value : caughtErrorValue(Cause.squash(exit.cause))
+      const input = Exit.isSuccess(exit) ? exit.value : caughtErrorValue(runner, Cause.squash(exit.cause))
       const result = yield* applyCollectionCallback(runner, handler, method, node)([input])
       return yield* resolvePromiseValue(runner, result, node, self)
     }),

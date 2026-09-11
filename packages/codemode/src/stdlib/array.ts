@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { HostFunction, sync, syncCall } from "../interpreter/host.js"
-import { type AstNode, CodeModeGenerator, InterpreterRuntimeError } from "../interpreter/model.js"
+import { type AstNode, CodeModeGenerator, InterpreterRuntimeError, rangeError } from "../interpreter/model.js"
 import { get, ProgramArray, ProgramObject } from "../interpreter/objects.js"
 import { describeValue } from "../interpreter/references.js"
 import { applyCollectionCallback, preserveConsumerError, type Runner } from "../interpreter/runner.js"
@@ -10,7 +10,7 @@ const constructArray = (args: Array<unknown>, node: AstNode): ProgramArray => {
   const first = args[0]
   if (typeof first !== "number") return new ProgramArray([first])
   if (!Number.isInteger(first) || first < 0 || first > 4294967295) {
-    throw new InterpreterRuntimeError("Invalid array length.", node).as("RangeError")
+    throw rangeError("Invalid array length.", node)
   }
   // Sparse like JS: Array(3) has holes, and combinator loops already skip them.
   return new ProgramArray(new Array(first))
@@ -41,9 +41,7 @@ const arrayFrom = <R>(runner: Runner<R>, args: Array<unknown>, node: AstNode): E
     const cursor = yield* runner.syncIterator(source, node)
     if (cursor === undefined) {
       if (source instanceof CodeModeGenerator) {
-        throw new InterpreterRuntimeError("Array.from expects a synchronous iterable or array-like value.", node).as(
-          "TypeError",
-        )
+        throw new InterpreterRuntimeError("Array.from expects a synchronous iterable or array-like value.", node)
       }
       const arrayLike = arrayLikeSource(source, node)
       const values: Array<unknown> = []

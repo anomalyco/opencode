@@ -89,15 +89,13 @@ export const groupBy = <R>(runner: Runner<R>, namespace: "Map" | "Object") =>
     call: (args, node) => {
       const source = args[0]
       if (source === null || source === undefined) {
-        throw new InterpreterRuntimeError(`${namespace}.groupBy expects an iterable collection.`, node).as("TypeError")
+        throw new InterpreterRuntimeError(`${namespace}.groupBy expects an iterable collection.`, node)
       }
       const apply = applyCollectionCallback(runner, args[1], `${namespace}.groupBy`, node)
       return Effect.gen(function* () {
         const cursor = yield* runner.syncIterator(source, node)
         if (cursor === undefined) {
-          throw new InterpreterRuntimeError(`${namespace}.groupBy expects an iterable collection.`, node).as(
-            "TypeError",
-          )
+          throw new InterpreterRuntimeError(`${namespace}.groupBy expects an iterable collection.`, node)
         }
         if (namespace === "Map") {
           const result = new Values.Map()
@@ -139,10 +137,7 @@ const constructMap = <R>(runner: Runner<R>, init: unknown, node: AstNode) => {
   return Effect.gen(function* () {
     const cursor = yield* runner.syncIterator(init, node)
     if (cursor === undefined) {
-      throw new InterpreterRuntimeError(
-        "new Map(...) expects an iterable of [key, value] pairs or no argument.",
-        node,
-      ).as("TypeError")
+      throw new InterpreterRuntimeError("new Map(...) expects an iterable of [key, value] pairs or no argument.", node)
     }
     while (true) {
       const step = yield* cursor.next
@@ -151,9 +146,7 @@ const constructMap = <R>(runner: Runner<R>, init: unknown, node: AstNode) => {
         cursor,
         Effect.sync(() => {
           if (!(step.value instanceof ProgramObject)) {
-            throw new InterpreterRuntimeError("new Map(...) expects [key, value] pairs as entry objects.", node).as(
-              "TypeError",
-            )
+            throw new InterpreterRuntimeError("new Map(...) expects [key, value] pairs as entry objects.", node)
           }
           target.map.set(getOwn(step.value, 0), getOwn(step.value, 1))
         }),
@@ -168,9 +161,7 @@ const constructSet = <R>(runner: Runner<R>, init: unknown, node: AstNode) => {
   return Effect.gen(function* () {
     const cursor = yield* runner.syncIterator(init, node)
     if (cursor === undefined) {
-      throw new InterpreterRuntimeError("new Set(...) expects a synchronous iterable or no argument.", node).as(
-        "TypeError",
-      )
+      throw new InterpreterRuntimeError("new Set(...) expects a synchronous iterable or no argument.", node)
     }
     while (true) {
       const step = yield* cursor.next

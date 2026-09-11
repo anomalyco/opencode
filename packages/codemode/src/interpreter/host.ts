@@ -75,5 +75,5 @@ export const requiresNew =
   (name: string): HostCall<never> =>
   (_, node) =>
     Effect.sync(() => {
-      throw new InterpreterRuntimeError(`Constructor ${name} requires 'new'.`, node).as("TypeError")
+      throw new InterpreterRuntimeError(`Constructor ${name} requires 'new'.`, node)
     })

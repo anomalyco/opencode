@@ -13,11 +13,8 @@ export class ProgramArray extends ProgramObject {
   }
 }
 
-export class ProgramError extends ProgramObject {
-  constructor(readonly errorName: string) {
-    super()
-  }
-}
+/** An object with the [[ErrorData]] slot: what `Error.prototype.toString` and the host boundary recognize as an error. */
+export class ProgramError extends ProgramObject {}
 
 export class ProgramFunction extends ProgramObject {
   readonly length: number
@@ -76,6 +73,13 @@ export const get = (target: ProgramObject, key: PropertyKey): unknown => {
     if (hasOwn(current, key)) return getOwn(current, key)
   }
   return undefined
+}
+
+export const hasPrototype = (value: unknown, proto: ProgramObject): boolean => {
+  for (let current = value instanceof ProgramObject ? value.proto : null; current !== null; current = current.proto) {
+    if (current === proto) return true
+  }
+  return false
 }
 
 export const has = (target: ProgramObject, key: PropertyKey): boolean => {

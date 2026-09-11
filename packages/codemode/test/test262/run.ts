@@ -8,8 +8,8 @@ import { executeProgram } from "../../src/interpreter/execute.js"
 import type { Host } from "../../src/interpreter/globals.js"
 import { HostFunction } from "../../src/interpreter/host.js"
 import { ProgramThrow } from "../../src/interpreter/model.js"
-import { get, ProgramArray, ProgramObject } from "../../src/interpreter/objects.js"
-import { createErrorValue, errorBrandName } from "../../src/stdlib/value.js"
+import { createErrorValue } from "../../src/interpreter/intrinsics.js"
+import { get, hasPrototype, ProgramArray, ProgramObject, set } from "../../src/interpreter/objects.js"
 import { ToolRuntime } from "../../src/tool-runtime.js"
 
 export const root = import.meta.dir
@@ -65,7 +65,11 @@ export const run = async (file: string): Promise<Outcome> => {
 }
 
 const harness = <R>(host: Host<R>, onDone: (error: unknown) => void): ReadonlyArray<readonly [string, unknown]> => {
-  const fail = (message: string) => Effect.fail(new ProgramThrow(createErrorValue("Test262Error", message)))
+  const test262Prototype = new ProgramObject()
+  set(test262Prototype, "name", "Test262Error")
+  const test262 = (args: Array<unknown>) =>
+    createErrorValue(test262Prototype, args[0] === undefined ? "" : String(args[0]))
+  const fail = (message: string) => Effect.fail(new ProgramThrow(test262([message])))
   const prefix = (message: unknown) => (message === undefined ? "" : `${String(message)} `)
   const compare = (a: unknown, b: unknown) =>
     a instanceof ProgramArray &&
@@ -74,11 +78,12 @@ const harness = <R>(host: Host<R>, onDone: (error: unknown) => void): ReadonlyAr
     a.items.every((value, i) => Object.is(value, b.items[i]))
   const test262Error = new HostFunction<R>({
     name: "Test262Error",
-    call: (args) => Effect.succeed(createErrorValue("Test262Error", args[0] === undefined ? "" : String(args[0]))),
-    construct: (args) => Effect.succeed(createErrorValue("Test262Error", args[0] === undefined ? "" : String(args[0]))),
-    instanceOf: (value) => errorBrandName(value) === "Test262Error",
+    call: (args) => Effect.succeed(test262(args)),
+    construct: (args) => Effect.succeed(test262(args)),
+    instanceOf: (value) => hasPrototype(value, test262Prototype),
     members: { thrower: new HostFunction<R>({ name: "Test262Error.thrower", call: (args) => fail(String(args[0])) }) },
   })
+  set(test262Prototype, "constructor", test262Error)
   const compareArray = new HostFunction<R>({
     name: "compareArray",
     call: (args) => Effect.succeed(compare(args[0], args[1])),
@@ -124,13 +129,11 @@ const harness = <R>(host: Host<R>, onDone: (error: unknown) => void): ReadonlyAr
             Effect.matchCauseEffect({
               onFailure: (cause) => {
                 if (cause.reasons.some(Cause.isInterruptReason)) return Effect.failCause(cause)
-                const thrown = caughtErrorValue(Cause.squash(cause))
-                if (thrown === null || typeof thrown !== "object") {
-                  return fail(`${prefix(args[2])}Thrown value was not an object!`)
-                }
-                const actual = errorBrandName(thrown)
-                if (actual === expected) return Effect.void
-                return fail(`${prefix(args[2])}Expected a ${expected} but got a ${actual ?? "non-error object"}`)
+                const thrown = caughtErrorValue(host.runner, Cause.squash(cause))
+                if (!(thrown instanceof ProgramObject)) return fail(`${prefix(args[2])}Thrown value was not an object!`)
+                const actual = get(thrown, "constructor")
+                if (actual === args[0]) return Effect.void
+                return fail(`${prefix(args[2])}Expected a ${expected} but got a ${show(actual)}`)
               },
               onSuccess: () =>
                 fail(`${prefix(args[2])}Expected a ${expected} to be thrown but no exception was thrown at all`),
@@ -162,5 +165,5 @@ const show = (value: unknown): string => {
   if (value instanceof HostFunction) return value.name
   if (!(value instanceof ProgramObject)) return String(value)
   const message = get(value, "message")
-  return typeof message === "string" ? `${errorBrandName(value) ?? "object"}: ${message}` : "object"
+  return typeof message === "string" ? `${String(get(value, "name") ?? "object")}: ${message}` : "object"
 }

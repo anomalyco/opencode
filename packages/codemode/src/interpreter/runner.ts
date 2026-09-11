@@ -3,6 +3,7 @@ import { Values } from "../values.js"
 import { coerceToString } from "../stdlib/value.js"
 import { HostFunction } from "./host.js"
 import { type AstNode, InterpreterRuntimeError, IntrinsicReference } from "./model.js"
+import type { Intrinsics } from "./intrinsics.js"
 import { get, has, ProgramFunction, ProgramObject } from "./objects.js"
 import { typeofValue } from "./references.js"
 
@@ -11,7 +12,7 @@ export type IteratorCursor<R> = {
   readonly close: Effect.Effect<void, unknown, R>
 }
 
-/** Everything a host function needs to call back into the program. */
+/** Everything a host function needs from the realm: calling back into the program and its intrinsic objects. */
 export type Runner<R> = {
   readonly invokeFunction: (fn: ProgramFunction, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
   readonly invokeCallable: (
@@ -21,6 +22,7 @@ export type Runner<R> = {
   ) => Effect.Effect<unknown, unknown, R>
   readonly settlePromise: (promise: Values.Promise) => Effect.Effect<unknown, unknown, never>
   readonly syncIterator: (value: unknown, node: AstNode) => Effect.Effect<IteratorCursor<R> | undefined, unknown, R>
+  readonly intrinsics: Intrinsics
 }
 
 export const preserveConsumerError = <A, R>(
@@ -53,7 +55,7 @@ export const toPrimitive = <R>(
       const result = yield* runner.invokeCallable(callable, [], node)
       if (result === null || (typeof result !== "object" && typeof result !== "function")) return result
     }
-    throw new InterpreterRuntimeError("Cannot convert object to primitive value.", node).as("TypeError")
+    throw new InterpreterRuntimeError("Cannot convert object to primitive value.", node)
   })
 }
 
@@ -81,7 +83,7 @@ export const applyCollectionCallback = <R>(
         node,
       )
     }
-    throw new InterpreterRuntimeError(`${name} expects a function callback.`, node).as("TypeError")
+    throw new InterpreterRuntimeError(`${name} expects a function callback.`, node)
   }
   return (callbackArgs) => runner.invokeCallable(callback, callbackArgs, node)
 }
