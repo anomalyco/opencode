@@ -891,6 +891,15 @@ export const dict = {
   "sidebar.project.clearNotifications": "Očisti obavijesti",
   "sidebar.empty.title": "Nema otvorenih projekata",
   "sidebar.empty.description": "Otvori projekat za početak",
+  "sidebar.settled": "Odložene",
+  "sidebar.settle": "Odloži nit",
+  "sidebar.unsettle": "Vrati nit",
+  "sidebar.thread.new": "Nova nit",
+  "sidebar.thread.pin": "Prikvači nit",
+  "sidebar.thread.unpin": "Otkvači nit",
+  "sidebar.status.working": "U toku",
+  "sidebar.status.done": "Gotovo",
+  "sidebar.status.attention": "Potreban unos",
 
   "app.name.desktop": "OpenCode Desktop",
 
@@ -912,6 +921,12 @@ export const dict = {
 
   "settings.general.row.language.title": "Jezik",
   "settings.general.row.language.description": "Promijeni jezik prikaza u OpenCode-u",
+  "settings.general.row.navigation.description": "Koristite kartice u traci naslova ili stalnu bočnu traku",
+  "settings.general.row.navigation.tabs": "Kartice",
+  "settings.general.row.navigation.sidebar": "Bočna traka",
+  "settings.general.row.sidebarSessions.title": "Odloži neaktivne niti nakon",
+  "settings.general.row.sidebarSessions.description": "Neaktivne niti prelaze u odložene. Aktivne niti ostaju vidljive.",
+  "settings.general.row.sidebarSessions.always": "Uvijek prikaži",
   "settings.general.row.shell.title": "Shell terminala",
   "settings.general.row.shell.description":
     "Odaberi shell koji se koristi za terminal. Kompatibilni shellovi koriste se i za pozive alata agenta.",

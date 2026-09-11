@@ -896,6 +896,15 @@ export const dict = {
   "sidebar.project.clearNotifications": "Borrar notificaciones",
   "sidebar.empty.title": "No hay proyectos abiertos",
   "sidebar.empty.description": "Abre un proyecto para empezar",
+  "sidebar.settled": "Finalizados",
+  "sidebar.settle": "Finalizar hilo",
+  "sidebar.unsettle": "Reactivar hilo",
+  "sidebar.thread.new": "Nuevo hilo",
+  "sidebar.thread.pin": "Fijar hilo",
+  "sidebar.thread.unpin": "Desfijar hilo",
+  "sidebar.status.working": "Trabajando",
+  "sidebar.status.done": "Listo",
+  "sidebar.status.attention": "Requiere entrada",
 
   "app.name.desktop": "OpenCode Desktop",
 
@@ -917,6 +926,12 @@ export const dict = {
 
   "settings.general.row.language.title": "Idioma",
   "settings.general.row.language.description": "Cambiar el idioma de visualización para OpenCode",
+  "settings.general.row.navigation.description": "Usa pestañas en la barra de título o una barra lateral persistente",
+  "settings.general.row.navigation.tabs": "Pestañas",
+  "settings.general.row.navigation.sidebar": "Barra lateral",
+  "settings.general.row.sidebarSessions.title": "Finalizar hilos inactivos después de",
+  "settings.general.row.sidebarSessions.description": "Los hilos inactivos pasan a Finalizados. Los hilos activos siguen visibles.",
+  "settings.general.row.sidebarSessions.always": "Mostrar siempre",
   "settings.general.row.shell.title": "Shell del terminal",
   "settings.general.row.shell.description": "Shell que usan el terminal y las herramientas del agente",
   "settings.general.row.shell.autoDefault": "Automático (predeterminado)",

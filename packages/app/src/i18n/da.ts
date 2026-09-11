@@ -768,6 +768,15 @@ export const dict = {
   "sidebar.project.clearNotifications": "Ryd notifikationer",
   "sidebar.empty.title": "Ingen åbne projekter",
   "sidebar.empty.description": "Åbn et projekt for at komme i gang",
+  "sidebar.settled": "Afsluttede",
+  "sidebar.settle": "Afslut tråd",
+  "sidebar.unsettle": "Genåbn tråd",
+  "sidebar.thread.new": "Ny tråd",
+  "sidebar.thread.pin": "Fastgør tråd",
+  "sidebar.thread.unpin": "Frigør tråd",
+  "sidebar.status.working": "Arbejder",
+  "sidebar.status.done": "Færdig",
+  "sidebar.status.attention": "Kræver input",
 
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "Desktop",
@@ -788,6 +797,12 @@ export const dict = {
 
   "settings.general.row.language.title": "Sprog",
   "settings.general.row.language.description": "Ændr visningssproget for OpenCode",
+  "settings.general.row.navigation.description": "Brug faner i titellinjen eller et fast sidepanel",
+  "settings.general.row.navigation.tabs": "Faner",
+  "settings.general.row.navigation.sidebar": "Sidepanel",
+  "settings.general.row.sidebarSessions.title": "Afslut inaktive tråde efter",
+  "settings.general.row.sidebarSessions.description": "Inaktive tråde flyttes til Afsluttede. Aktive tråde forbliver synlige.",
+  "settings.general.row.sidebarSessions.always": "Vis altid",
   "settings.general.row.shell.title": "Terminalshell",
   "settings.general.row.shell.description":
     "Vælg den shell, der bruges i din terminal. Kompatible shells bruges også til agentens værktøjskald.",
