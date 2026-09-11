@@ -1,13 +1,13 @@
 import { Cause, Context, Duration, Effect, Layer, Option, Schedule, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { ModelsDev } from "@opencode-ai/schema/models-dev"
-import { Money } from "@opencode-ai/schema/money"
+import { ModelsDev } from "@opencode/schema/models-dev"
+import { Money } from "@opencode/schema/money"
 import { App } from "./app.js"
-import { Hash } from "@opencode-ai/util/hash"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Hash } from "@opencode/util/hash"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "./bus.js"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { httpClient } from "@opencode/util/effect/app-node-platform"
 import { Model } from "./model.js"
 import { Provider } from "./provider.js"
 import { KV } from "./kv.js"
@@ -519,7 +519,7 @@ function modelInfo(
   }
 }
 
-export { Event } from "@opencode-ai/schema/models-dev"
+export { Event } from "@opencode/schema/models-dev"
 
 export interface Interface {
   readonly get: () => Effect.Effect<readonly Snapshot[]>

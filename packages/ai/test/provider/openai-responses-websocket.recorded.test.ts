@@ -34,7 +34,7 @@ const observationFrame = (observation: ChannelObservation) => {
 
 const terminal = (observation: ChannelObservation) => observation.type !== "frame"
 
-// This deliberately models only sequential test traffic. Core owns production connection pooling and recovery.
+// This channel fixture supports sequential test traffic.
 const makeChannel = Effect.gen(function* () {
   const constructor = yield* Socket.WebSocketConstructor
   let connection: WebSocketConnection | undefined
@@ -171,7 +171,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
         instructions: "Follow the user's exact reply instruction.",
         input: [
           { role: "user", content: [{ type: "input_text", text: "Reply exactly: Alpha." }] },
-          { role: "assistant", content: [{ type: "output_text", text: "Alpha." }] },
+          { role: "assistant", status: "completed", content: [{ type: "output_text", text: "Alpha." }] },
           { role: "user", content: [{ type: "input_text", text: "Reply exactly: Beta." }] },
         ],
       })
@@ -208,7 +208,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
         instructions: "Follow the user's exact reply instruction.",
         input: [
           { role: "user", content: [{ type: "input_text", text: "Reply exactly: Ready." }] },
-          { role: "assistant", content: [{ type: "output_text", text: "Ready." }] },
+          { role: "assistant", status: "completed", content: [{ type: "output_text", text: "Ready." }] },
           { role: "user", content: [{ type: "input_text", text: "Reply exactly: Recovered." }] },
         ],
       })

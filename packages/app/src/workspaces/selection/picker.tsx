@@ -1,8 +1,8 @@
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { ServerConnection } from "@/runtime/server/registry"
 import { usePlatform } from "@/runtime/platform/platform"
 import { lazy } from "solid-js"
-import type { LocationRef } from "@opencode-ai/client/promise"
+import type { LocationRef } from "@opencode/client/promise"
 import { directoryPickerKind } from "./policy"
 
 const DirectoryPickerDialog = lazy(() =>

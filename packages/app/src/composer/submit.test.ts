@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import type { ModelSelection } from "@/providers/models/selection"
-import type { SessionMessageUser } from "@opencode-ai/client/promise"
-import { Skill } from "@opencode-ai/schema/skill"
+import type { SessionMessageUser } from "@opencode/client/promise"
+import { Skill } from "@opencode/schema/skill"
+import { AbsolutePath } from "@opencode/schema/schema"
 import type { ActiveComposerAdapter, ComposerControls, ComposerSession, NewSessionComposerAdapter } from "./adapter"
 import { createMemoryComposerState } from "./state"
 import { createComposerSubmit } from "./submit"
@@ -31,6 +32,16 @@ const selection = {
   },
 } satisfies ModelSelection
 
+const slashSkill = Skill.Info.make({
+  id: Skill.ID.make("show-me"),
+  name: Skill.Name.make("Show Me"),
+  description: "Explain visually",
+  slash: true,
+  autoinvoke: false,
+  location: AbsolutePath.make("/skills/show-me/SKILL.md"),
+  content: "Explain visually",
+})
+
 function controls(): ComposerControls {
   return {
     agents: {
@@ -53,11 +64,13 @@ function submitInput(
   notify = { missingSelection() {}, failed(_kind: "shell" | "command" | "prompt", _error: unknown) {} },
   mode: "normal" | "shell" = "normal",
   commands: () => readonly { name: string }[] | undefined = () => [],
+  skills: () => readonly Skill.Info[] | undefined = () => [],
 ) {
   return createComposerSubmit({
     adapter,
     mode: () => mode,
     commands,
+    skills,
     editor: () => undefined,
     queueScroll() {},
     addToHistory() {},
@@ -78,6 +91,8 @@ function session(input: {
   admitted?: (messageID: string) => boolean
   shell?: () => Promise<unknown>
   command?: ComposerSession["api"]["command"]
+  switchAgent?: ComposerSession["api"]["switchAgent"]
+  switchModel?: ComposerSession["api"]["switchModel"]
 }): ComposerSession {
   return {
     id: "session-1",
@@ -86,12 +101,16 @@ function session(input: {
     current: input.current ?? (() => undefined),
     admitted: input.admitted ?? (() => false),
     api: {
-      switchAgent: async () => {
-        input.calls.push("switch-agent")
-      },
-      switchModel: async () => {
-        input.calls.push("switch-model")
-      },
+      switchAgent:
+        input.switchAgent ??
+        (async () => {
+          input.calls.push("switch-agent")
+        }),
+      switchModel:
+        input.switchModel ??
+        (async () => {
+          input.calls.push("switch-model")
+        }),
       shell: input.shell ?? (async () => undefined),
       command: input.command ?? (async () => undefined),
     },
@@ -109,6 +128,247 @@ function session(input: {
 }
 
 describe("Composer submission", () => {
+  test("applies the captured agent and model before a custom command without passing over its overrides", async () => {
+    const state = createMemoryComposerState({ prompt: "/review changes" }).capture()
+    const calls: string[] = []
+    const selected = controls()
+    const agent = Promise.withResolvers<void>()
+    const started = Promise.withResolvers<void>()
+    const committed = Promise.withResolvers<void>()
+    const completed = Promise.withResolvers<void>()
+    const target = session({
+      calls,
+      prompt: async () => {
+        throw new Error("command must not call prompt")
+      },
+      switchAgent: async (request) => {
+        expect(request.agent).toBe("build")
+        calls.push("agent")
+        started.resolve()
+        await agent.promise
+      },
+      switchModel: async (request) => {
+        expect(request.model).toEqual({ providerID: "provider-1", id: "model-1", variant: "balanced" })
+        calls.push("model")
+        await committed.promise
+      },
+      command: async (request) => {
+        expect(request).toMatchObject({ command: "review", text: "changes", delivery: "steer" })
+        expect(request).not.toHaveProperty("model")
+        expect(request).not.toHaveProperty("agent")
+        calls.push("command")
+        completed.resolve()
+      },
+    })
+    selected.model.selection = {
+      ...selection,
+      trackSessionCommit: (_id, value) => {
+        expect(value).toEqual({
+          agent: "build",
+          model: { providerID: "provider-1", modelID: "model-1" },
+          variant: "balanced",
+        })
+        calls.push("track")
+        return () => calls.push("cancel")
+      },
+    }
+    const adapter: ActiveComposerAdapter = {
+      kind: "active-session",
+      state,
+      ready: () => true,
+      controls: () => selected,
+      working: () => false,
+      session: () => target,
+      interrupt: async () => undefined,
+      submitted() {},
+      setEditor() {},
+    }
+    await submitInput(adapter, undefined, "normal", () => [{ name: "review" }]).submit(new Event("submit"))
+    await started.promise
+    expect(calls).toEqual(["track", "agent"])
+    selected.agents.current = "plan"
+    selected.model.selection = { ...selection, variant: { ...selection.variant, current: () => "high" } }
+    agent.resolve()
+    committed.resolve()
+    await completed.promise
+    expect(calls).toEqual(["track", "agent", "model", "command"])
+  })
+
+  test("commits the model even when cached session state already matches", async () => {
+    const state = createMemoryComposerState({ prompt: "continue" }).capture()
+    const calls: string[] = []
+    const done = Promise.withResolvers<void>()
+    const target = session({
+      calls,
+      current: () => ({ agent: "build", model: { providerID: "provider-1", id: "model-1", variant: "balanced" } }),
+      prompt: async () => done.resolve(),
+    })
+    const adapter: ActiveComposerAdapter = {
+      kind: "active-session",
+      state,
+      ready: () => true,
+      controls,
+      working: () => false,
+      session: () => target,
+      interrupt: async () => undefined,
+      submitted() {},
+      setEditor() {},
+    }
+    await submitInput(adapter).submit(new Event("submit"))
+    await done.promise
+    expect(calls).toEqual(["switch-model", "prompt"])
+  })
+
+  test("cancels selection tracking and does not execute a command when selection fails", async () => {
+    const state = createMemoryComposerState({ prompt: "/review changes" }).capture()
+    const calls: string[] = []
+    const selected = controls()
+    const failed = Promise.withResolvers<unknown>()
+    const error = new Error("model unavailable")
+    const target = session({
+      calls,
+      prompt: async () => {
+        calls.push("prompt")
+      },
+      switchModel: async () => {
+        throw error
+      },
+      command: async () => {
+        calls.push("command")
+      },
+    })
+    selected.model.selection = {
+      ...selection,
+      trackSessionCommit: () => {
+        calls.push("track")
+        return () => {
+          calls.push("cancel")
+        }
+      },
+    }
+    const adapter: ActiveComposerAdapter = {
+      kind: "active-session",
+      state,
+      ready: () => true,
+      controls: () => selected,
+      working: () => false,
+      session: () => target,
+      interrupt: async () => undefined,
+      submitted() {},
+      setEditor() {},
+    }
+    await submitInput(
+      adapter,
+      { missingSelection() {}, failed: (_kind, error) => failed.resolve(error) },
+      "normal",
+      () => [{ name: "review" }],
+    ).submit(new Event("submit"))
+    expect(await failed.promise).toBe(error)
+    expect(calls).toEqual(["track", "switch-agent", "cancel"])
+    expect(state.current()[0]).toMatchObject({ content: "/review changes" })
+  })
+
+  test("submits a slash skill with its trailing text and attachments", async () => {
+    const state = createMemoryComposerState({ prompt: "/show-me explain " }).capture()
+    state.set([
+      { type: "text", content: "/show-me explain ", start: 0, end: 17 },
+      { type: "file", path: "src/cache.ts", content: "@src/cache.ts", start: 17, end: 30 },
+    ])
+    const admitted = Promise.withResolvers<Parameters<ComposerSession["data"]["session"]["prompt"]>[0]>()
+    const target = session({ calls: [], prompt: async (value) => admitted.resolve(value) })
+    const adapter: ActiveComposerAdapter = {
+      kind: "active-session",
+      state,
+      ready: () => true,
+      controls,
+      working: () => false,
+      session: () => target,
+      interrupt: async () => undefined,
+      submitted() {},
+      setEditor() {},
+    }
+
+    await submitInput(
+      adapter,
+      undefined,
+      "normal",
+      () => [],
+      () => [slashSkill],
+    ).submit(new Event("submit"))
+    const request = await admitted.promise
+    expect(request.text).toBe("/show-me explain @src/cache.ts")
+    expect(request.skills).toEqual([
+      expect.objectContaining({ id: "show-me", mention: { start: 0, end: 8, text: "/show-me" } }),
+    ])
+    expect(request.files).toEqual([
+      { uri: "file:///C:/repo/src/cache.ts", name: "cache.ts", mention: { start: 17, end: 30, text: "@src/cache.ts" } },
+    ])
+  })
+
+  test.each([
+    { text: "/show-me", slash: true, expected: ["show-me"] },
+    { text: "/show-me\nexplain caching", slash: true, expected: ["show-me"] },
+    { text: "/show-me\texplain caching", slash: true, expected: ["show-me"] },
+    { text: "/show-me", slash: false, expected: [] },
+    { text: "/show-me", slash: undefined, expected: [] },
+    { text: "/show-me-extra", slash: true, expected: [] },
+    { text: "Explain /show-me", slash: true, expected: [] },
+  ])("resolves raw slash skill input $text with slash=$slash", async ({ text, slash, expected }) => {
+    const state = createMemoryComposerState({ prompt: text }).capture()
+    const admitted = Promise.withResolvers<Parameters<ComposerSession["data"]["session"]["prompt"]>[0]>()
+    const target = session({ calls: [], prompt: async (value) => admitted.resolve(value) })
+    const adapter: ActiveComposerAdapter = {
+      kind: "active-session",
+      state,
+      ready: () => true,
+      controls,
+      working: () => false,
+      session: () => target,
+      interrupt: async () => undefined,
+      submitted() {},
+      setEditor() {},
+    }
+    await submitInput(
+      adapter,
+      undefined,
+      "normal",
+      () => [],
+      () => [{ ...slashSkill, slash }],
+    ).submit(new Event("submit"))
+    const request = await admitted.promise
+    expect(request.text).toBe(text)
+    expect(request.skills?.map((skill) => skill.id)).toEqual([...expected])
+  })
+
+  test("captures slash skills before creating a session in a new worktree", async () => {
+    const state = createMemoryComposerState({ prompt: "/show-me" }).capture()
+    let skills: readonly Skill.Info[] | undefined = [slashSkill]
+    const admitted = Promise.withResolvers<Parameters<ComposerSession["data"]["session"]["prompt"]>[0]>()
+    const target = session({ calls: [], prompt: async (value) => admitted.resolve(value) })
+    const adapter: NewSessionComposerAdapter = {
+      kind: "new-session",
+      state,
+      ready: () => true,
+      controls,
+      working: () => false,
+      submitted() {},
+      async start() {
+        skills = undefined
+        return { session: target, cleanupReady: Promise.resolve() }
+      },
+    }
+    await submitInput(
+      adapter,
+      undefined,
+      "normal",
+      () => [],
+      () => skills,
+    ).submit(new Event("submit"))
+    expect((await admitted.promise).skills).toEqual([
+      expect.objectContaining({ id: "show-me", mention: { start: 0, end: 8, text: "/show-me" } }),
+    ])
+  })
+
   test("sends one captured value with explicit delivery after selection switches", async () => {
     const state = createMemoryComposerState({ prompt: "ship it" }).capture()
     const calls: string[] = []
@@ -357,8 +617,8 @@ describe("Composer submission", () => {
     expect(promoted.mode.current()).toBe("shell")
   })
 
-  test("reuses the message ID when an unacknowledged admission is retried", async () => {
-    const state = createMemoryComposerState({ prompt: "retry me" }).capture()
+  test.each(["retry me", "/show-me retry me"])("restores and retries an unacknowledged admission: %s", async (text) => {
+    const state = createMemoryComposerState({ prompt: text }).capture()
     const attempts: string[] = []
     const statuses: ("idle" | "running")[] = []
     const first = Promise.withResolvers<void>()
@@ -368,6 +628,7 @@ describe("Composer submission", () => {
       statuses,
       prompt: async (value) => {
         attempts.push(value.id ?? "")
+        expect(value.skills?.map((skill) => skill.id)).toEqual(text.startsWith("/") ? ["show-me"] : [])
         throw new Error("network unavailable")
       },
     })
@@ -386,7 +647,13 @@ describe("Composer submission", () => {
       missingSelection() {},
       failed: () => (attempts.length === 2 ? first.resolve() : second.resolve()),
     }
-    const submission = submitInput(adapter, notify)
+    const submission = submitInput(
+      adapter,
+      notify,
+      "normal",
+      () => [],
+      () => [slashSkill],
+    )
 
     await submission.submit(new Event("submit"))
     await first.promise
@@ -396,7 +663,7 @@ describe("Composer submission", () => {
     expect(attempts).toHaveLength(4)
     expect(new Set(attempts).size).toBe(1)
     expect(statuses).toEqual(["running", "idle", "running", "idle"])
-    expect(state.current()).toMatchObject([{ type: "text", content: "retry me" }])
+    expect(state.current()).toMatchObject([{ type: "text", content: text }])
   })
 
   test("forwards structured mentions to custom commands", async () => {
@@ -472,7 +739,13 @@ describe("Composer submission", () => {
       },
     }
 
-    await submitInput(adapter, undefined, "normal", () => catalog).submit(new Event("submit"))
+    await submitInput(
+      adapter,
+      undefined,
+      "normal",
+      () => catalog,
+      () => [{ ...slashSkill, id: Skill.ID.make("review") }],
+    ).submit(new Event("submit"))
 
     expect(await sent.promise).toBe("command")
     expect(requests).toEqual([

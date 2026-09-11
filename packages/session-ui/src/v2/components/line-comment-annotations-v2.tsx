@@ -8,9 +8,9 @@ import {
   type LineCommentShape,
   type LineCommentStateProps,
 } from "../../components/line-comment-annotations"
-import { useI18n } from "@opencode-ai/ui/context/i18n"
+import { useI18n } from "@opencode/ui/context/i18n"
 import { cloneSelectedLineRange, formatSelectedLineLabel } from "../../pierre/selection-bridge"
-import { LineCommentEditor, LineComment, type LineCommentEditorMention } from "@opencode-ai/ui/line-comment"
+import { LineCommentEditor, LineComment, type LineCommentEditorMention } from "@opencode/ui/line-comment"
 
 type LineCommentControllerV2Props<T extends LineCommentShape> = {
   comments: Accessor<T[]>

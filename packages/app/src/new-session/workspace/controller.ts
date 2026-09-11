@@ -1,5 +1,5 @@
 import { debounce } from "@solid-primitives/scheduled"
-import { createEffect, createMemo, createResource } from "solid-js"
+import { createEffect, createMemo, createResource, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServerSDK } from "@/runtime/server/client"
@@ -11,8 +11,8 @@ import { normalizeProjectInfo } from "@/runtime/server/global-sync/utils"
 import {
   isWorkspaceDirectory,
   isWorkspaceSelection,
+  sameDirectory,
   workspaceDefaultSelection,
-  workspaceDirectories,
   workspaceSelectionDestination,
 } from "@/workspaces/paths"
 
@@ -56,6 +56,55 @@ export function createNewSessionWorkspaceController(input: {
     const current = projectID ? data.project.get(projectID) : undefined
     return current ? normalizeProjectInfo(current) : undefined
   })
+  const worktreeSource = createMemo(
+    () => {
+      const project = currentProject()
+      return project ? { projectID: project.id, directory: project.worktree } : undefined
+    },
+    undefined,
+    { equals: (a, b) => a?.projectID === b?.projectID && a?.directory === b?.directory },
+  )
+  const [worktrees, worktreeActions] = createResource(worktreeSource, async (source) => ({
+    projectID: source.projectID,
+    items: await serverSDK.api.worktree
+      .list({ location: { directory: source.directory } })
+      .catch(() => (currentProject()?.id === source.projectID ? currentProject()?.worktrees : undefined) ?? []),
+  }))
+  onCleanup(
+    serverSDK.event.listen((event) => {
+      if (event.type === "worktree.updated") void worktreeActions.refetch()
+    }),
+  )
+  // `latest` only skips Suspense once the resource has resolved at least once. Before that it
+  // behaves like a plain read, which holds the transition that opens the New Session tab until
+  // the worktree list returns.
+  const worktreesLoaded = () => worktrees.state === "ready" || worktrees.state === "refreshing"
+  const worktreeItems = createMemo(() => {
+    const project = currentProject()
+    if (!project) return []
+    if (!worktreesLoaded()) return project.worktrees
+    const loaded = worktrees.latest
+    return loaded?.projectID === project.id ? loaded.items : project.worktrees
+  })
+  const worktreeDirectories = createMemo(() => {
+    const project = currentProject()
+    if (!project) return []
+    const directories = [
+      ...worktreeItems().map((item) => item.directory),
+      ...project.worktrees.map((item) => item.directory),
+      ...(project.sandboxes ?? []),
+    ]
+    return directories
+      .filter((directory) => !sameDirectory(project.worktree, directory))
+      .filter((directory, index, items) => items.findIndex((item) => sameDirectory(item, directory)) === index)
+  })
+  const managedWorktrees = createMemo(() => {
+    const project = currentProject()
+    if (!project) return 0
+    return worktreeItems().filter(
+      (item) => item.strategy !== undefined && !sameDirectory(project.worktree, item.directory),
+    ).length
+  })
   const visible = createMemo(() =>
     resolveNewSessionGit({
       projectVcs: currentProject()?.vcs,
@@ -66,7 +115,11 @@ export function createNewSessionWorkspaceController(input: {
     const project = currentProject()
     const worktree = input.selectedWorktree()
     if (!project || !worktree) return
-    return isWorkspaceSelection(project, worktree) ? worktree : undefined
+    if (isWorkspaceSelection(project, worktree)) return worktree
+    // A saved choice may only exist in the server inventory. Keep it until the list can confirm it,
+    // otherwise the selector falls back to Local while loading and a submit would target the wrong directory.
+    if (!worktreesLoaded()) return worktree
+    return worktreeDirectories().some((item) => sameDirectory(item, worktree)) ? worktree : undefined
   })
   const fallback = createMemo(() => {
     const project = currentProject()
@@ -93,12 +146,19 @@ export function createNewSessionWorkspaceController(input: {
         .catch(() => ({ directory, search, data: [] })),
   )
   createEffect(() => {
-    void Promise.all([data.location.syncInfo({ directory: sdk().directory }), data.project.sync()]).catch(
-      () => undefined,
-    )
-    const project = currentProject()
-    const directories = project ? [project.worktree, ...workspaceDirectories(project)] : [sdk().directory]
-    directories.forEach((directory) => void data.location.vcs.sync({ directory }).catch(() => undefined))
+    void Promise.all([
+      data.location.syncInfo({ directory: sdk().directory }),
+      data.project.sync(),
+      data.location.vcs.sync({ directory: sdk().directory }),
+    ]).catch(() => undefined)
+  })
+  // Only the selected worktree feeds the branch label. Syncing every worktree in the inventory boots
+  // each one on the server, which then emits `agent.updated` and makes the client run the full
+  // catalog fan-out for every directory.
+  createEffect(() => {
+    const selection = value()
+    if (selection === "main" || selection === "create") return
+    void data.location.vcs.sync({ directory: selection }).catch(() => undefined)
   })
   const branch = createMemo(() =>
     resolveNewSessionBranch({
@@ -122,7 +182,10 @@ export function createNewSessionWorkspaceController(input: {
       workspace: createMemo(() => {
         const project = currentProject()
         const current = value()
-        return current === "create" || (!!project && isWorkspaceDirectory(project, current))
+        if (current === "create") return true
+        if (current === "main" || !project) return false
+        if (isWorkspaceDirectory(project, current) || !worktreesLoaded()) return true
+        return worktreeDirectories().some((item) => sameDirectory(item, current))
       }),
       reset: () => {
         input.setSelectedWorktree(undefined)
@@ -142,10 +205,8 @@ export function createNewSessionWorkspaceController(input: {
     },
     project: {
       root: projectRoot,
-      workspaces: () => {
-        const project = currentProject()
-        return project ? workspaceDirectories(project) : []
-      },
+      workspaces: worktreeDirectories,
+      managed: managedWorktrees,
       git: visible,
       branches: () => {
         const current = data.location.vcs.info({ directory: sdk().directory })?.branch.current

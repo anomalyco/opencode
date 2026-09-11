@@ -1,7 +1,7 @@
 import path from "node:path"
 import { $ } from "bun"
 import { expect } from "bun:test"
-import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
+import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { Effect, Layer, Schedule } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"

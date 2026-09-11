@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { OpenCodeEvent } from "@opencode-ai/client/promise"
-import { base64Encode } from "@opencode-ai/util/encode"
+import type { OpenCodeEvent } from "@opencode/client/promise"
+import { base64Encode } from "@opencode/util/encode"
 import { currentSession, mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible } from "../utils/waits"
 
@@ -490,20 +490,24 @@ async function openDraft(
   page.on("request", (request) => {
     if (request.method() !== "POST") return
     const path = new URL(request.url()).pathname
-    if (path === `/api/worktree/${projectID}`) {
+    if (path === "/api/worktree") {
+      expect(new URL(request.url()).searchParams.get("location[directory]")).toBe(directory)
       calls.push("worktree")
       worktreeRequests.push(request.postDataJSON())
     }
     if (path === "/api/session") calls.push("session")
     if (/^\/api\/session\/[^/]+\/prompt$/.test(path)) calls.push("prompt")
   })
-  await page.route(`**/api/worktree/${projectID}`, async (route) => {
-    if (route.request().method() !== "POST") return route.fallback()
-    // Keep the real HTTP response pending until the test has checked the preview.
-    const response = await worktree.promise
-    if (response.status === 200) project.sandboxes.push(workspace)
-    await route.fulfill({ ...response, headers })
-  })
+  await page.route(
+    (url) => url.pathname === "/api/worktree",
+    async (route) => {
+      if (route.request().method() !== "POST") return route.fallback()
+      // Keep the real HTTP response pending until the test has checked the preview.
+      const response = await worktree.promise
+      if (response.status === 200) project.sandboxes.push(workspace)
+      await route.fulfill({ ...response, headers })
+    },
+  )
   await page.route("**/api/session", async (route) => {
     if (route.request().method() !== "POST") return route.fallback()
     const body: Record<string, unknown> = route.request().postDataJSON()

@@ -1,7 +1,7 @@
 export * as Instructions from "./index.js"
 
 import { createHash } from "crypto"
-import { Instruction } from "@opencode-ai/schema/instruction"
+import { Instruction } from "@opencode/schema/instruction"
 import { Data, Effect, Option, Schema } from "effect"
 
 export const Key = Instruction.Key

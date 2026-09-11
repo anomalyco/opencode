@@ -1,16 +1,16 @@
 import { describe, expect } from "bun:test"
-import { OpenAIChat } from "@opencode-ai/ai/protocols"
-import { Agent } from "@opencode-ai/schema/agent"
-import { Money } from "@opencode-ai/schema/money"
-import { Session } from "@opencode-ai/schema/session"
-import type { SessionRequestKind } from "@opencode-ai/plugin/effect/session"
-import { Location } from "@opencode-ai/core/location"
-import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
-import { Project } from "@opencode-ai/core/project"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
-import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
-import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
+import { OpenAIChat } from "@opencode/ai/protocols"
+import { Agent } from "@opencode/schema/agent"
+import { Money } from "@opencode/schema/money"
+import { Session } from "@opencode/schema/session"
+import type { SessionRequestKind } from "@opencode/plugin/effect/session"
+import { Location } from "@opencode/core/location"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { Project } from "@opencode/core/project"
+import { AbsolutePath } from "@opencode/core/schema"
+import { SessionModelRequest } from "@opencode/core/session/model-request"
+import { SessionModelTransport } from "@opencode/core/session/model-transport"
+import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { DateTime, Effect } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { testEffect } from "./lib/effect"
@@ -57,10 +57,12 @@ describe("SessionModelRequest HTTP hooks", () => {
       const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
 
       for (const kind of KINDS) {
-        const prepared = yield* requests.prepare({
-          kind,
-          scope: { session, agentID: Agent.ID.make("build"), model },
-          transcript: { system: [], messages: [] },
+        const prepared = yield* requests[kind]({
+          session,
+          agent: Agent.ID.make("build"),
+          model,
+          system: [],
+          messages: [],
         })
         const http = prepared.options.http
         if (!http) throw new Error(`Expected HTTP middleware for ${kind}`)

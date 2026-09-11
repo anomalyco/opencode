@@ -3,17 +3,17 @@ export * as V1Migration from "./v1-migration.js"
 import { Cause, Effect, Layer, Option, Schema, Semaphore } from "effect"
 import { Database } from "./database.js"
 import { SessionMessageTable, SessionTable } from "../session/sql.js"
-import { SessionV1 } from "@opencode-ai/schema/session-v1"
+import { SessionV1 } from "@opencode/schema/session-v1"
 import { SessionMessage } from "../session/message.js"
 import { SessionSchema } from "../session/schema.js"
 import { KVTable } from "../kv/sql.js"
 import { EventSequenceTable } from "../event/sql.js"
 import { eq, sql } from "drizzle-orm"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { existsSync } from "node:fs"
 import path from "node:path"
 import type { Database as SQLiteDatabase } from "bun:sqlite"
-import { Project } from "@opencode-ai/schema/project"
+import { Project } from "@opencode/schema/project"
 
 export type SourceMessage = {
   readonly id: string
@@ -600,7 +600,7 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
                     id, ${projectID}, workspace_id, parent_id, slug, directory, path, title, version, share_url,
                     summary_additions, summary_deletions, summary_files, summary_diffs, metadata, cost,
                     tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write,
-                    revert, permission, agent, model, time_created, time_updated, time_compacting, time_archived
+                    revert, NULL, agent, model, time_created, time_updated, time_compacting, time_archived
                   FROM session
                   WHERE id = ${nextID.id}
                 `)

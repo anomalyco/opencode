@@ -1,7 +1,7 @@
 export * as ConfigMigrateV1 from "./migrate.js"
 
-import { Info } from "@opencode-ai/schema/config"
-import { ConfigAgent } from "@opencode-ai/schema/config/agent"
+import { Info } from "@opencode/schema/config"
+import { ConfigAgent } from "@opencode/schema/config/agent"
 import { Schema } from "effect"
 import { ConfigV1 } from "./config.js"
 import { ConfigAgentV1 } from "./agent.js"
@@ -29,9 +29,11 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
         update:
           info.autoupdate === false
             ? "disable"
-            : info.autoupdate === "notify" || info.autoupdate === true
+            : info.autoupdate === "notify"
               ? "notify"
-              : undefined,
+              : info.autoupdate === true
+                ? "auto"
+                : undefined,
         share: info.share ?? (info.autoshare ? "auto" : undefined),
         enterprise: info.enterprise,
         username: info.username,

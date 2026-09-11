@@ -6,6 +6,7 @@
 import type {
   AgentInfo,
   CommandInfo,
+  ConfigEntry,
   FormCancelInput,
   FormInfo,
   FormReplyInput,
@@ -37,9 +38,9 @@ import type {
   OpenCodeClient,
   WebSearchProvider,
 } from "../promise"
-import { Worktree } from "@opencode-ai/schema/worktree"
-import { SessionID } from "@opencode-ai/schema/session-id"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
+import { Worktree } from "@opencode/schema/worktree"
+import { SessionID } from "@opencode/schema/session-id"
+import { SessionMessage } from "@opencode/schema/session-message"
 import {
   isFormAlreadySettledError,
   isFormNotFoundError,
@@ -47,7 +48,7 @@ import {
   type SessionPromptInput,
 } from "../promise"
 import { createStore, produce, reconcile } from "solid-js/store"
-import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
+import type { SessionInbox } from "@opencode/schema/session-inbox"
 import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
@@ -56,6 +57,8 @@ type OpenCodeEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent
 export type CreateDataInput = {
   readonly api: () => OpenCodeClient
   readonly directory: string
+  /** Raw-message window used for an initial transcript read. Older pages retain their normal size. */
+  readonly initialMessageLimit?: () => number
   readonly event: {
     readonly on: <Type extends OpenCodeEvent["type"]>(
       type: Type,
@@ -72,6 +75,8 @@ export type CreateDataInput = {
 
 const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
 const messagePageLimit = 20
+// Trailing window for event bursts that each ask for the same refetch.
+export const settleMs = 150
 
 // Global MCP elicitations temporarily use "global" instead of a real session ID, so the
 // server cannot recover their Location when settling them. Preserve the event Location
@@ -84,6 +89,7 @@ type LocationData = {
   vcs?: VcsInfo
   agent?: AgentInfo[]
   command?: CommandInfo[]
+  config?: ConfigEntry[]
   integration?: IntegrationInfo[]
   mcpServer?: McpServer[]
   mcpResource?: McpResource[]
@@ -139,12 +145,18 @@ function formRequestOptions(sessionID: string, ref?: LocationRef) {
 }
 
 function createSync() {
-  type Pending = { promise: Promise<void>; invalidated: boolean }
+  // `started` is false while a reload waits for the load it replaces. Invalidations that land in
+  // that window are already covered, since the reload has not read anything yet.
+  type Pending = { promise: Promise<void>; invalidated: boolean; started: boolean }
   const state = new Map<string, true | Pending>()
   const start = (key: string, load: () => Promise<void>, wait?: Promise<void>) => {
-    const entry: Pending = { promise: Promise.resolve(), invalidated: false }
+    const entry: Pending = { promise: Promise.resolve(), invalidated: false, started: !wait }
     state.set(key, entry)
-    entry.promise = (wait ? wait.catch(() => undefined).then(load) : load())
+    const run = () => {
+      entry.started = true
+      return load()
+    }
+    entry.promise = (wait ? wait.catch(() => undefined).then(run) : run())
       .then(() => {
         if (state.get(key) === entry && !entry.invalidated) state.set(key, true)
       })
@@ -176,12 +188,12 @@ function createSync() {
       if (key) {
         const active = state.get(key)
         if (active === true) state.delete(key)
-        if (active !== undefined && active !== true) active.invalidated = true
+        if (active !== undefined && active !== true && active.started) active.invalidated = true
         return
       }
       state.forEach((active, current) => {
         if (active === true) state.delete(current)
-        if (active !== true) active.invalidated = true
+        if (active !== true && active.started) active.invalidated = true
       })
     },
   }
@@ -199,6 +211,20 @@ export function createData(config: CreateDataInput) {
       if (config.onError) return config.onError(error)
       console.error("Failed to refresh client data", error)
     })
+  }
+
+  // Runs `load` once a burst of same-key events goes quiet, so N events cost one refetch.
+  const settling = new Map<string, ReturnType<typeof setTimeout>>()
+  onCleanup(() => settling.forEach((timer) => clearTimeout(timer)))
+  function settle(key: string, load: () => Promise<unknown>) {
+    clearTimeout(settling.get(key))
+    settling.set(
+      key,
+      setTimeout(() => {
+        settling.delete(key)
+        refresh(load)
+      }, settleMs),
+    )
   }
 
   const [store, setStore] = createStore<Store>({
@@ -669,6 +695,10 @@ export function createData(config: CreateDataInput) {
         })
         return
       }
+      case "session.permissions.updated":
+        if (store.session.info[event.data.sessionID])
+          setStore("session", "info", event.data.sessionID, "permissions", event.data.permissions)
+        return
       case "session.moved": {
         const current = store.session.info[event.data.sessionID]
         if (current) {
@@ -803,16 +833,6 @@ export function createData(config: CreateDataInput) {
           match.time.completed = event.created
         })
         return
-      case "session.message.content.updated": {
-        if (store.session.message[event.data.sessionID])
-          message.editAssistant(event.data.sessionID, event.data.messageID, (assistant) => {
-            assistant.content = [...event.data.content]
-          })
-        if (!sync.pending(`session.message:${event.data.sessionID}`)) return
-        result.session.message.invalidate(event.data.sessionID)
-        refresh(() => result.session.message.sync(event.data.sessionID))
-        return
-      }
       case "session.step.started":
         message.update(event.data.sessionID, (draft, index) => {
           const position = index.get(event.data.assistantMessageID)
@@ -1059,8 +1079,11 @@ export function createData(config: CreateDataInput) {
               reason: event.data.reason,
               model: event.data.model,
               providerState: event.data.providerState,
+              providerContext: event.data.providerContext,
               summary: event.data.text,
               recent: event.data.recent,
+              cost: event.data.cost,
+              tokens: event.data.tokens,
             })
             return
           }
@@ -1071,8 +1094,11 @@ export function createData(config: CreateDataInput) {
             reason: event.data.reason,
             model: event.data.model,
             providerState: event.data.providerState,
+            providerContext: event.data.providerContext,
             summary: event.data.text,
             recent: event.data.recent,
+            cost: event.data.cost,
+            tokens: event.data.tokens,
             time: { created: event.created },
           })
         })
@@ -1092,6 +1118,8 @@ export function createData(config: CreateDataInput) {
               message: "Compaction failed before recording an error",
             },
             metadata: current?.type === "compaction" ? current.metadata : event.metadata,
+            cost: event.data.cost,
+            tokens: event.data.tokens,
             time: current?.type === "compaction" ? current.time : { created: event.created },
           }
           if (current?.type === "compaction") {
@@ -1215,14 +1243,20 @@ export function createData(config: CreateDataInput) {
         )
         break
       case "config.updated":
+        result.location.config.invalidate(location)
+        if (result.location.config.list(location) !== undefined || sync.has(`location.config:${locationKey(location)}`))
+          refresh(() => result.location.config.sync(location))
+        refresh(() => result.location.websearch.refresh(location))
+        break
       case "websearch.updated":
         refresh(() => result.location.websearch.refresh(location))
         break
       // Authenticating an MCP integration reconnects its server, which emits mcp.status.changed,
-      // so the mcp list syncs here rather than off integration.updated.
+      // so the mcp list syncs here rather than off integration.updated. The server emits one event
+      // per MCP server as each settles, so a location booting nine servers emitted nine refetches.
       case "mcp.status.changed":
         result.location.mcp.server.invalidate(location)
-        refresh(() => result.location.mcp.server.sync(location))
+        settle(`mcp.status:${locationKey(location)}`, () => result.location.mcp.server.sync(location))
         break
       case "mcp.resources.changed":
         result.location.mcp.resource.invalidate(location)
@@ -1541,7 +1575,11 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.message:${sessionID}`, async () => {
-            const response = await api().message.list({ sessionID, limit: messagePageLimit, order: "desc" })
+            const response = await api().message.list({
+              sessionID,
+              limit: config.initialMessageLimit?.() ?? messagePageLimit,
+              order: "desc",
+            })
             const fetched = response.data.toReversed()
             // Same protection as the pending sync: a re-fetch racing an
             // admission must not wipe its local transcript row.
@@ -1555,9 +1593,11 @@ export function createData(config: CreateDataInput) {
               (item) => !ids.has(item.id) && (outbox.has(item.id) || admitted.has(item.id)),
             )
             const messages = local.length === 0 ? fetched : [...fetched, ...local]
-            messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
-            setStore("session", "message", sessionID, reconcile(messages))
-            setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)
+            batch(() => {
+              messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
+              setStore("session", "message", sessionID, reconcile(messages))
+              setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)
+            })
           })
         },
         more(sessionID: string) {
@@ -1790,6 +1830,7 @@ export function createData(config: CreateDataInput) {
         result.location.vcs.invalidate(location)
         result.location.agent.invalidate(location)
         result.location.command.invalidate(location)
+        result.location.config.invalidate(location)
         result.location.integration.invalidate(location)
         result.location.mcp.server.invalidate(location)
         result.location.mcp.resource.invalidate(location)
@@ -1803,6 +1844,10 @@ export function createData(config: CreateDataInput) {
       vcs: { info: vcs.list, sync: vcs.sync, invalidate: vcs.invalidate },
       agent: locationResource("agent", (location) => api().agent.list({ location })),
       command: locationResource("command", (location) => api().command.list({ location })),
+      config: locationResource("config", async (location) => ({
+        location: { directory: location.directory, workspaceID: location.workspace },
+        data: await api().config.get({ location }),
+      })),
       integration: locationResource("integration", (location) => api().integration.list({ location })),
       mcp: {
         server: locationResource("mcpServer", (location) => api().mcp.list({ location })),

@@ -1,21 +1,21 @@
 import { describe, expect } from "bun:test"
 import { Cause, Deferred, Effect, Fiber, Layer } from "effect"
-import { Agent } from "@opencode-ai/core/agent"
-import { Database } from "@opencode-ai/core/database/database"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
-import { Location } from "@opencode-ai/core/location"
-import { Permission } from "@opencode-ai/core/permission"
-import { PermissionTable } from "@opencode-ai/core/permission/sql"
-import { PermissionSaved } from "@opencode-ai/core/permission/saved"
-import { Project } from "@opencode-ai/core/project"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Session } from "@opencode-ai/core/session"
-import { SessionTable } from "@opencode-ai/core/session/sql"
-import { SessionStore } from "@opencode-ai/core/session/store"
-import { ShellParse } from "@opencode-ai/core/shell/parse"
+import { Agent } from "@opencode/core/agent"
+import { Database } from "@opencode/core/database/database"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { Location } from "@opencode/core/location"
+import { Permission } from "@opencode/core/permission"
+import { PermissionTable } from "@opencode/core/permission/sql"
+import { PermissionSaved } from "@opencode/core/permission/saved"
+import { Project } from "@opencode/core/project"
+import { ProjectTable } from "@opencode/core/project/sql"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Session } from "@opencode/core/session"
+import { SessionTable } from "@opencode/core/session/sql"
+import { SessionStore } from "@opencode/core/session/store"
+import { ShellParse } from "@opencode/core/shell/parse"
 import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
@@ -221,6 +221,34 @@ describe("Permission", () => {
       yield* setRules([])
       expect(yield* service.ask(bash)).toEqual({ id: Permission.ID.create("per_test"), effect: "ask" })
       expect(yield* service.get(Permission.ID.create("per_test"))).toBeDefined()
+    }),
+  )
+
+  it.effect("merges session rules after agent rules and before saved approvals", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "*", resource: "*", effect: "allow" }])
+      const { db } = yield* Database.Service
+      const service = yield* Permission.Service
+      const setSession = (permission: Permission.Ruleset) =>
+        db
+          .update(SessionTable)
+          .set({ permission })
+          .where(eq(SessionTable.id, Session.ID.make("ses_test")))
+          .run()
+          .pipe(Effect.orDie)
+
+      yield* setSession([{ action: "edit", resource: "/original/**", effect: "deny" }])
+      expect(yield* service.ask(assertion({ action: "edit", resources: ["/original/src/index.ts"] }))).toMatchObject({
+        effect: "deny",
+      })
+
+      yield* setRules([])
+      const saved = yield* PermissionSaved.Service
+      yield* saved.add({ projectID: Project.ID.global, action: "bash", resources: ["pwd"] })
+      yield* setSession([{ action: "bash", resource: "*", effect: "deny" }])
+      expect(yield* service.ask(assertion({ action: "bash", resources: ["pwd"] }))).toMatchObject({ effect: "deny" })
+      yield* setSession([{ action: "bash", resource: "*", effect: "ask" }])
+      expect(yield* service.ask(assertion({ action: "bash", resources: ["pwd"] }))).toMatchObject({ effect: "allow" })
     }),
   )
 

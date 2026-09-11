@@ -1,7 +1,8 @@
 import type { ProviderPackage } from "../provider-package.js"
-import { OpenAICompatibleResponses } from "../protocols/openai-compatible-responses.js"
-import type { RouteDefaultsInput } from "../route/client.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { OpenResponses } from "../protocols/open-responses.js"
+import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Endpoint } from "../route/endpoint.js"
+import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
@@ -24,18 +25,21 @@ export interface Settings extends ProviderPackage.Settings {
   readonly providerOptions?: OpenResponsesProviderOptionsInput
 }
 
-const route = OpenAICompatibleResponses.route.with({
+const route = Route.make({
   id: "google-vertex-responses",
   provider: id,
   providerMetadataKey: "vertex",
-  providerOptions: { store: false },
+  protocol: OpenResponses.protocol,
+  endpoint: Endpoint.path(OpenResponses.PATH),
+  transport: OpenResponses.httpTransport,
+  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
 export const routes = [route]
 
 const configuredRoute = (input: Config) => {
   if ("apiKey" in input && input.apiKey !== undefined)
-    throw new Error("Google Vertex Responses does not support API keys")
+    throw new ProviderConfigurationError({ provider: id, message: "Google Vertex Responses does not support API keys" })
   const {
     accessToken: _accessToken,
     auth: _auth,
@@ -75,7 +79,8 @@ export const model: ProviderPackage.Definition<Settings, OpenResponsesProviderOp
   modelID,
   settings,
 ) => {
-  if (settings.apiKey !== undefined) throw new Error("Google Vertex Responses does not support API keys")
+  if (settings.apiKey !== undefined)
+    throw new ProviderConfigurationError({ provider: id, message: "Google Vertex Responses does not support API keys" })
   return configure({
     accessToken: settings.accessToken,
     baseURL: settings.baseURL,

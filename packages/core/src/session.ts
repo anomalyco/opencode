@@ -2,14 +2,14 @@ export * as Session from "./session.js"
 export * from "./session/schema.js"
 
 import { Effect, Layer, Schema, Context, Stream } from "effect"
-import { LLMClient } from "@opencode-ai/ai"
-import { ListAnchor } from "@opencode-ai/schema/session"
+import { LLMClient } from "@opencode/ai"
+import { ListAnchor } from "@opencode/schema/session"
 import { and, desc, eq } from "drizzle-orm"
 import { Project } from "./project.js"
-import { Model } from "@opencode-ai/schema/model"
+import { Model } from "@opencode/schema/model"
 import { Location } from "./location.js"
 import { SessionMessage } from "./session/message.js"
-import { PromptInput } from "@opencode-ai/schema/prompt-input"
+import { PromptInput } from "@opencode/schema/prompt-input"
 import { Bus } from "./bus.js"
 import { Instance } from "./instance/service.js"
 import { Database } from "./database/database.js"
@@ -17,7 +17,8 @@ import { SessionProjector } from "./session/projector.js"
 import { SessionMessageTable } from "./session/sql.js"
 import { SessionSchema } from "./session/schema.js"
 import { RelativePath } from "./schema.js"
-import { Agent } from "@opencode-ai/schema/agent"
+import { Agent } from "@opencode/schema/agent"
+import type { Permission } from "@opencode/schema/permission"
 import { App } from "./app.js"
 import { Slug } from "./util/slug.js"
 import path from "path"
@@ -31,17 +32,14 @@ import {
   ForkEmptyError,
   InboxConflictError,
   MessageDecodeError,
-  MessageIncompleteError,
-  MessageNotAssistantError,
   MessageNotFoundError,
-  MessageToolIncompleteError,
   NotFoundError,
   PromptConflictError,
   SkillNotFoundError,
   SyntheticConflictError,
 } from "./session/error.js"
-import { Node } from "@opencode-ai/util/effect/app-node"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Node } from "@opencode/util/effect/app-node"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { SessionEvent } from "./session/event.js"
 import { SessionInbox } from "./session/inbox.js"
 import { InstructionState } from "./session/instruction-state.js"
@@ -57,8 +55,8 @@ import { SessionModelTransport } from "./session/model-transport.js"
 import { llmClient } from "./effect/app-node-platform.js"
 import { Snapshot } from "./snapshot.js"
 import { Session } from "./session/session.js"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import type { EventLog } from "@opencode-ai/schema/event-log"
+import { FSUtil } from "@opencode/util/fs-util"
+import type { EventLog } from "@opencode/schema/event-log"
 import { Job } from "./job.js"
 import type { Command } from "./command.js"
 import { SessionEnvironment } from "./session/environment.js"
@@ -84,6 +82,7 @@ type CreateBaseInput = {
   agent?: Agent.ID
   model?: Model.Ref
   metadata?: SessionSchema.Metadata
+  permissions?: Permission.Ruleset
 }
 type CreateInput = CreateBaseInput &
   ({ location: Location.Ref; parentID?: never } | { parentID: SessionSchema.ID; location?: never })
@@ -101,10 +100,7 @@ export {
   CompactionConflictError,
   InboxConflictError,
   MessageDecodeError,
-  MessageIncompleteError,
-  MessageNotAssistantError,
   MessageNotFoundError,
-  MessageToolIncompleteError,
   NotFoundError,
   PromptConflictError,
   SkillNotFoundError,
@@ -136,9 +132,6 @@ export interface Interface {
     sessionID: SessionSchema.ID
     messageID: SessionMessage.ID
   }) => Effect.Effect<SessionMessage.Info | undefined>
-  readonly updateMessage: (
-    input: Parameters<Session.Handle["updateMessage"]>[0] & { readonly sessionID: SessionSchema.ID },
-  ) => ReturnType<Session.Handle["updateMessage"]>
   readonly context: (
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
@@ -166,6 +159,10 @@ export interface Interface {
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: Agent.ID }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: { sessionID: SessionSchema.ID; model: Model.Ref }) => Effect.Effect<void, NotFoundError>
   readonly rename: (input: { sessionID: SessionSchema.ID; title: string }) => Effect.Effect<void, NotFoundError>
+  readonly setPermissions: (input: {
+    sessionID: SessionSchema.ID
+    permissions: Permission.Ruleset
+  }) => Effect.Effect<void, NotFoundError>
   readonly move: SessionMove.Interface["move"]
   readonly prompt: (
     input: Parameters<Session.Handle["prompt"]>[0] & { sessionID: SessionSchema.ID },
@@ -257,9 +254,10 @@ const layer = Layer.effect(
               subpath: RelativePath.make(path.relative(project.directory, location.directory).replaceAll("\\", "/")),
               title: input.title,
               agent: input.agent,
-              // Children inherit metadata the way they inherit location, so
-              // host policies that read it treat the family uniformly.
+              // Children inherit metadata and permissions the way they inherit
+              // location, so host policies that read them treat the family uniformly.
               metadata: input.metadata ?? parent?.metadata,
+              permissions: input.permissions ?? parent?.permissions,
               model: input.model
                 ? {
                     id: Model.ID.make(input.model.id),
@@ -357,7 +355,6 @@ const layer = Layer.effect(
         return yield* store.messages(input)
       }),
       message: (input) => sessions.forSession(input.sessionID).message(input.messageID),
-      updateMessage: (input) => sessions.forSession(input.sessionID).updateMessage(input),
       context: Effect.fn("Session.context")(function* (sessionID) {
         yield* result.get(sessionID)
         return yield* store.context(sessionID)
@@ -397,6 +394,7 @@ const layer = Layer.effect(
       switchAgent: (input) => sessions.forSession(input.sessionID).switchAgent(input),
       switchModel: (input) => sessions.forSession(input.sessionID).switchModel(input),
       rename: (input) => sessions.forSession(input.sessionID).rename(input),
+      setPermissions: (input) => sessions.forSession(input.sessionID).setPermissions(input),
       move: moves.move,
       compact: (input) => sessions.forSession(input.sessionID).compact(input),
       wait: (sessionID) => sessions.forSession(sessionID).wait(),

@@ -1,6 +1,6 @@
 export * as ConfigToolOutputPlugin from "./tool-output.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Effect } from "effect"
 import { Config } from "../../config.js"
 import { ToolOutput } from "../../tool-output.js"

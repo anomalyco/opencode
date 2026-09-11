@@ -3,26 +3,76 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { and, eq, isNull } from "drizzle-orm"
-import { Effect, Fiber, Stream } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Git } from "@opencode-ai/core/git"
-import { Database } from "@opencode-ai/core/database/database"
-import { Bus } from "@opencode-ai/core/bus"
-import { Project } from "@opencode-ai/core/project"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { Worktree } from "@opencode-ai/core/worktree"
-import { WorktreeDirectory } from "@opencode-ai/core/worktree/directory"
-import { WorktreeTable } from "@opencode-ai/core/worktree/sql"
+import { Context, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Git } from "@opencode/core/git"
+import { Database } from "@opencode/core/database/database"
+import { Bus } from "@opencode/core/bus"
+import { Project } from "@opencode/core/project"
+import { ProjectTable } from "@opencode/core/project/sql"
+import { Worktree } from "@opencode/core/worktree"
+import { WorktreeDirectory } from "@opencode/core/worktree/directory"
+import { WorktreeTable } from "@opencode/core/worktree/sql"
+import { WorktreeGit } from "@opencode/core/worktree/git"
+import { Location } from "@opencode/core/location"
+import { Global } from "@opencode/util/global"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Config } from "@opencode/core/config"
+import { ConfigWorktreePlugin } from "@opencode/core/config/plugin/worktree"
+import { ConfigNormalize } from "@opencode/core/config/normalize"
+import { Document, Event, Info } from "@opencode/schema/config"
+import { EventManifest } from "@opencode/schema/event-manifest"
+import { Workspace } from "@opencode/schema/workspace"
+import { host } from "./plugin/host"
 import { initRepo } from "./fixture/git"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Worktree.node, Database.node, Bus.node])))
-const projectIt = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Project.node, Worktree.node, Database.node, Bus.node])),
+class Fixture extends Context.Service<Fixture, Effect.Success<ReturnType<typeof makeFixture>>>()("WorktreeFixture") {}
+
+const infrastructure = AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, Bus.node]))
+const it = testEffect(
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const input = yield* makeFixture()
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      return Layer.mergeAll(
+        Layer.succeed(Fixture, input),
+        Config.testLayer(),
+        worktreeLayer(input.sourceDirectory, input.projectID, database, bus, input.root.path),
+      )
+    }),
+  ).pipe(Layer.provideMerge(infrastructure)),
 )
+const projectIt = it
+
+function worktreeLayer(
+  directory: AbsolutePath,
+  projectID: Project.ID,
+  database: Database.Interface,
+  bus: Bus.Interface,
+  data: string,
+  workspaceID?: Workspace.ID,
+) {
+  return AppNodeBuilder.build(LayerNode.group([Worktree.node, Git.node, FSUtil.node, Location.node, Global.node]), [
+    Database.node.replace(Layer.succeed(Database.Service, database)),
+    Bus.node.replace(Layer.succeed(Bus.Service, bus)),
+    Global.node.replace(Global.layerWith({ data })),
+    Location.node.replace(
+      Layer.succeed(
+        Location.Service,
+        Location.Service.of({
+          directory,
+          workspaceID,
+          project: { id: projectID, directory, canonical: directory },
+        }),
+      ),
+    ),
+  ]).pipe(Layer.fresh)
+}
 
 function abs(input: string) {
   return AbsolutePath.make(input)
@@ -30,7 +80,11 @@ function abs(input: string) {
 
 const gitWorktree = Worktree.StrategyID.make("git")
 
-function setup() {
+const setup = Effect.fnUntraced(function* () {
+  return yield* Fixture
+})
+
+function makeFixture() {
   return Effect.gen(function* () {
     const root = yield* Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
@@ -107,7 +161,6 @@ describe("Worktree", () => {
       const unavailable = Worktree.StrategyID.make("acme/missing")
       const error = yield* worktree
         .create({
-          projectID: input.projectID,
           strategy: unavailable,
           from: input.sourceDirectory,
           directory: abs(`${input.root.path}-missing-strategy`),
@@ -131,7 +184,6 @@ describe("Worktree", () => {
 
       const error = yield* worktree
         .create({
-          projectID: input.projectID,
           strategy: gitWorktree,
           from: input.sourceDirectory,
           directory: abs(`${input.root.path}-missing-source`),
@@ -159,7 +211,6 @@ describe("Worktree", () => {
       yield* Effect.yieldNow
 
       const created = yield* worktree.create({
-        projectID: input.projectID,
         strategy: gitWorktree,
         directory: parent,
         name: "worktree",
@@ -173,10 +224,36 @@ describe("Worktree", () => {
       )
       expect((yield* Fiber.join(fiber))[0]?.data).toEqual({ projectID: input.projectID })
 
-      yield* worktree.remove({ projectID: input.projectID, directory: created.directory, force: false })
+      yield* worktree.remove({ directory: created.directory, force: false })
 
       expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, strategy: null }])
       expect(yield* Effect.promise(() => Bun.file(target).exists())).toBe(false)
+    }),
+  )
+
+  it.live("defaults to the TUI worktree directory and suffixes duplicate names", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktree = yield* Worktree.Service
+      const global = yield* Global.Service
+      const parent = path.join(global.data, "worktree", "worktr")
+
+      const created = yield* worktree.create({
+        strategy: gitWorktree,
+        from: input.sourceDirectory,
+        name: "task",
+      })
+      const duplicate = yield* worktree.create({
+        strategy: gitWorktree,
+        from: input.sourceDirectory,
+        name: "task",
+      })
+
+      expect(created.directory).toBe(abs(path.join(parent, "task")))
+      expect(duplicate.directory).toBe(abs(path.join(parent, "task-2")))
+      expect(yield* Effect.promise(() => Bun.file(path.join(created.directory, ".git")).exists())).toBe(true)
+      yield* worktree.remove({ directory: created.directory, force: false })
+      yield* worktree.remove({ directory: duplicate.directory, force: false })
     }),
   )
 
@@ -199,7 +276,6 @@ describe("Worktree", () => {
         .run()
         .pipe(Effect.orDie)
       const created = yield* worktree.create({
-        projectID: input.projectID,
         strategy: gitWorktree,
         directory: parent,
         name: "worktree",
@@ -210,7 +286,7 @@ describe("Worktree", () => {
         created.directory,
         created.directory,
       ])
-      yield* worktree.remove({ projectID: input.projectID, directory: created.directory, force: true })
+      yield* worktree.remove({ directory: created.directory, force: true })
     }),
   )
 
@@ -233,9 +309,21 @@ describe("Worktree", () => {
           .quiet()
       })
       const projects = yield* Project.Service
-      const worktrees = yield* Worktree.Service
       const initial = yield* projects.resolve(main)
       const selected = yield* projects.resolve(clone)
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const context = yield* Layer.build(worktreeLayer(selected.directory, selected.id, database, bus, root.path))
+      const worktrees = Context.get(context, Worktree.Service)
+      const config = yield* Config.Test
+      yield* config.setEntries([
+        new Document({
+          type: "document",
+          path: abs(path.join(root.path, "global/opencode.json")),
+          info: new Info({ worktree: { directory: ".lane/trees" } }),
+        }),
+      ])
+      yield* ConfigWorktreePlugin.Plugin.effect(host()).pipe(Effect.provide(context))
       yield* projects.update({
         projectID: initial.id,
         commands: {
@@ -245,14 +333,13 @@ describe("Worktree", () => {
       })
 
       const created = yield* worktrees.create({
-        projectID: selected.id,
         strategy: gitWorktree,
         from: selected.canonical,
-        directory: abs(path.join(root.path, "worktrees")),
         name: "selected-clone",
       })
 
       expect(selected.id).toBe(initial.id)
+      expect(created.directory).toBe(abs(path.join(clone, ".lane/trees/selected-clone")))
       expect((yield* projects.list()).find((project) => project.id === initial.id)?.canonical).toBe(main)
       expect(yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(created.directory).text())).toBe(
         yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(clone).text()),
@@ -276,7 +363,6 @@ describe("Worktree", () => {
       })
 
       const created = yield* worktree.create({
-        projectID: input.projectID,
         strategy: gitWorktree,
         branch: "feature-base",
         directory: parent,
@@ -300,7 +386,6 @@ describe("Worktree", () => {
 
       const error = yield* worktree
         .create({
-          projectID: input.projectID,
           strategy: gitWorktree,
           branch: "--no-checkout",
           directory: parent,
@@ -321,7 +406,6 @@ describe("Worktree", () => {
 
       const error = yield* worktree
         .create({
-          projectID: input.projectID,
           strategy: gitWorktree,
           from: abs(path.join(temp, "does-not-exist")),
           directory: abs(`${input.root.path}-missing-directory`),
@@ -347,7 +431,6 @@ describe("Worktree", () => {
         ]).pipe(Effect.asVoid),
       )
       const source = yield* worktree.create({
-        projectID: input.projectID,
         strategy: gitWorktree,
         from: input.sourceDirectory,
         directory: sourceParent,
@@ -360,7 +443,6 @@ describe("Worktree", () => {
         .pipe(Effect.orDie)
 
       const created = yield* worktree.create({
-        projectID: input.projectID,
         strategy: gitWorktree,
         from: source.directory,
         directory: targetParent,
@@ -368,8 +450,8 @@ describe("Worktree", () => {
       })
 
       expect(created.directory).toBe(abs(path.join(targetParent, "target")))
-      yield* worktree.remove({ projectID: input.projectID, directory: created.directory, force: false })
-      yield* worktree.remove({ projectID: input.projectID, directory: source.directory, force: false })
+      yield* worktree.remove({ directory: created.directory, force: false })
+      yield* worktree.remove({ directory: source.directory, force: false })
     }),
   )
 
@@ -381,7 +463,6 @@ describe("Worktree", () => {
       const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-dirty"))
       yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
       const created = yield* worktree.create({
-        projectID: input.projectID,
         strategy: gitWorktree,
         from: input.sourceDirectory,
         directory: parent,
@@ -389,9 +470,7 @@ describe("Worktree", () => {
       })
       yield* Effect.promise(() => Bun.write(path.join(created.directory, "dirty.txt"), "dirty"))
 
-      const error = yield* worktree
-        .remove({ projectID: input.projectID, directory: created.directory, force: false })
-        .pipe(Effect.flip)
+      const error = yield* worktree.remove({ directory: created.directory, force: false }).pipe(Effect.flip)
 
       expect(error).toBeInstanceOf(Git.WorktreeError)
       if (error instanceof Git.WorktreeError) {
@@ -401,7 +480,7 @@ describe("Worktree", () => {
       expect(yield* stored(input.projectID)).toContainEqual({ directory: created.directory, strategy: "git" })
       expect(yield* Effect.promise(() => Bun.file(path.join(created.directory, "dirty.txt")).exists())).toBe(true)
 
-      yield* worktree.remove({ projectID: input.projectID, directory: created.directory, force: true })
+      yield* worktree.remove({ directory: created.directory, force: true })
       expect(yield* Effect.promise(() => Bun.file(created.directory).exists())).toBe(false)
     }),
   )
@@ -419,9 +498,7 @@ describe("Worktree", () => {
         .run()
         .pipe(Effect.orDie)
 
-      const error = yield* worktree
-        .remove({ projectID: input.projectID, directory: unavailable, force: false })
-        .pipe(Effect.flip)
+      const error = yield* worktree.remove({ directory: unavailable, force: false }).pipe(Effect.flip)
 
       expect(error).toBeInstanceOf(Worktree.StrategyUnavailableError)
       expect(yield* stored(input.projectID)).toContainEqual({ directory: unavailable, strategy: "acme/missing" })
@@ -440,7 +517,6 @@ describe("Worktree", () => {
       yield* Effect.promise(() => fs.mkdir(path.join(parent, "worktree-2")))
 
       const created = yield* worktree.create({
-        projectID: input.projectID,
         strategy: gitWorktree,
         from: input.sourceDirectory,
         directory: parent,
@@ -455,7 +531,7 @@ describe("Worktree", () => {
         yield* Effect.promise(() => fs.stat(path.join(parent, "worktree-2")).then((item) => item.isDirectory())),
       ).toBe(true)
 
-      yield* worktree.remove({ projectID: input.projectID, directory: created.directory, force: false })
+      yield* worktree.remove({ directory: created.directory, force: false })
     }),
   )
 
@@ -476,7 +552,6 @@ describe("Worktree", () => {
 
       const error = yield* worktree
         .create({
-          projectID: input.projectID,
           strategy: gitWorktree,
           from: input.sourceDirectory,
           directory: parent,
@@ -492,7 +567,6 @@ describe("Worktree", () => {
 
   it.live("does not publish an event when refresh finds no directory changes", () =>
     Effect.gen(function* () {
-      const input = yield* setup()
       const worktree = yield* Worktree.Service
       const bus = yield* Bus.Service
       const event = yield* bus.subscribe(Worktree.Event.Updated).pipe(
@@ -502,7 +576,7 @@ describe("Worktree", () => {
         Effect.flatMap((fiber) =>
           Effect.gen(function* () {
             yield* Effect.yieldNow
-            yield* worktree.refresh({ projectID: input.projectID })
+            yield* worktree.refresh()
             return yield* Fiber.join(fiber).pipe(Effect.timeoutOption("50 millis"))
           }),
         ),
@@ -541,7 +615,7 @@ describe("Worktree", () => {
 
       const discovered = abs(yield* Effect.promise(() => fs.realpath(target)))
       const existing = abs(yield* Effect.promise(() => fs.realpath(unchanged)))
-      expect(yield* worktree.refresh({ projectID: input.projectID })).toEqual({ updated: [discovered], removed: [] })
+      expect(yield* worktree.refresh()).toEqual({ updated: [discovered], removed: [] })
 
       expect(yield* stored(input.projectID)).toEqual(
         [
@@ -554,7 +628,7 @@ describe("Worktree", () => {
 
       yield* Effect.promise(() => $`git worktree remove --force ${target}`.cwd(input.root.path).quiet())
       yield* Effect.promise(() => $`git worktree remove --force ${unchanged}`.cwd(input.root.path).quiet())
-      expect(yield* worktree.refresh({ projectID: input.projectID })).toEqual({
+      expect(yield* worktree.refresh()).toEqual({
         updated: [],
         removed: [discovered, existing].toSorted(),
       })
@@ -575,7 +649,7 @@ describe("Worktree", () => {
         yield* Effect.promise(() => fs.rm(stale, { recursive: true, force: true }))
         yield* Effect.promise(() => $`git worktree add --detach ${target} HEAD`.cwd(input.root.path).quiet())
 
-        yield* worktree.refresh({ projectID: input.projectID })
+        yield* worktree.refresh()
 
         const discovered = abs(yield* Effect.promise(() => fs.realpath(target)))
         expect(yield* stored(input.projectID)).toEqual(
@@ -594,7 +668,7 @@ describe("Worktree", () => {
       yield* Effect.promise(() => fs.rm(path.join(input.sourceDirectory, ".git"), { recursive: true }))
       const worktree = yield* Worktree.Service
 
-      yield* worktree.refresh({ projectID: input.projectID })
+      yield* worktree.refresh()
 
       expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, strategy: null }])
     }),
@@ -602,9 +676,15 @@ describe("Worktree", () => {
 
   it.live("refresh with no roots is a no-op", () =>
     Effect.gen(function* () {
+      const input = yield* setup()
+      yield* input.db
+        .delete(WorktreeTable)
+        .where(eq(WorktreeTable.project_id, input.projectID))
+        .run()
+        .pipe(Effect.orDie)
       const worktree = yield* Worktree.Service
 
-      expect(yield* worktree.refresh({ projectID: Project.ID.make("missing-project") })).toEqual({
+      expect(yield* worktree.refresh()).toEqual({
         updated: [],
         removed: [],
       })
@@ -622,9 +702,295 @@ describe("Worktree", () => {
         .pipe(Effect.orDie)
       const worktree = yield* Worktree.Service
 
-      expect(yield* worktree.refresh({ projectID: input.projectID })).toEqual({ updated: [], removed: [missing] })
+      expect(yield* worktree.refresh()).toEqual({ updated: [], removed: [missing] })
 
       expect(yield* stored(input.projectID)).not.toContainEqual({ directory: missing, strategy: null })
+    }),
+  )
+
+  it.live("defaults to Git and configured directory without depending on Config", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktrees = yield* Worktree.Service
+      const parent = abs(path.join(input.root.path, "configured"))
+      const registration = yield* worktrees.transform((editor) => editor.configure({ directory: parent }))
+      const created = yield* worktrees.create({ name: "configured" })
+      expect(created.directory).toBe(abs(path.join(parent, "configured")))
+      expect(yield* worktrees.list()).toContainEqual({
+        directory: created.directory,
+        strategy: "git",
+      })
+      yield* registration.dispose
+      const fallback = yield* worktrees.create({ name: "default" })
+      expect(fallback.directory).toBe(
+        abs(path.join(input.root.path, "worktree", input.projectID.slice(0, 6), "default")),
+      )
+    }),
+  )
+
+  it.live("selects the last active registration and restores earlier strategies on disposal", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktrees = yield* Worktree.Service
+      const git = yield* WorktreeGit.make
+      const parent = abs(path.join(input.root.path, "strategies"))
+      const first = yield* worktrees.transform((editor) =>
+        editor.add({ ...git, id: Worktree.StrategyID.make("first") }),
+      )
+      const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void))
+      const second = yield* worktrees
+        .transform((editor) => editor.add({ ...git, id: Worktree.StrategyID.make("second") }))
+        .pipe(Effect.provideService(Scope.Scope, scope))
+      yield* worktrees.transform((editor) => editor.configure({ directory: parent }))
+      const created = yield* worktrees.create({ name: "second" })
+      expect(yield* stored(input.projectID)).toContainEqual({ directory: created.directory, strategy: "second" })
+      yield* Scope.close(scope, Exit.void)
+      yield* second.dispose
+      const earlier = yield* worktrees.create({ name: "first" })
+      expect(yield* stored(input.projectID)).toContainEqual({ directory: earlier.directory, strategy: "first" })
+      yield* first.dispose
+      const fallback = yield* worktrees.create({ name: "git" })
+      expect(yield* stored(input.projectID)).toContainEqual({ directory: fallback.directory, strategy: "git" })
+      const error = yield* worktrees.remove({ directory: created.directory, force: false }).pipe(Effect.flip)
+      expect(error).toBeInstanceOf(Worktree.StrategyUnavailableError)
+      yield* worktrees.refresh()
+      expect(yield* stored(input.projectID)).toContainEqual({ directory: created.directory, strategy: "second" })
+    }),
+  )
+
+  it.live("does not fall back to Git when a registered strategy fails", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktrees = yield* Worktree.Service
+      const git = yield* WorktreeGit.make
+      yield* worktrees.transform((editor) =>
+        editor.add({
+          ...git,
+          id: Worktree.StrategyID.make("broken"),
+          create: () => Effect.fail(new Error("backend failed")),
+        }),
+      )
+      const parent = abs(path.join(input.root.path, "failures"))
+      const error = yield* worktrees.create({ directory: parent, name: "failure" }).pipe(Effect.flip)
+      expect(error).toBeInstanceOf(Worktree.OperationError)
+      expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, strategy: null }])
+      const explicit = yield* worktrees.create({
+        directory: parent,
+        name: "explicit",
+        strategy: gitWorktree,
+      })
+      expect(yield* stored(input.projectID)).toContainEqual({ directory: explicit.directory, strategy: "git" })
+    }),
+  )
+
+  it.live("rejects a source override belonging to another project", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktrees = yield* Worktree.Service
+      const projects = yield* Project.Service
+      const other = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
+      yield* Effect.promise(() => initRepo(other.path))
+      const resolved = yield* projects.resolve(abs(other.path))
+      expect(resolved.id).not.toBe(input.projectID)
+      const error = yield* worktrees.create({ from: abs(other.path), name: "nope" }).pipe(Effect.flip)
+      expect(error).toBeInstanceOf(Worktree.SourceDirectoryNotFoundError)
+      if (error instanceof Worktree.SourceDirectoryNotFoundError) expect(error.projectID).toBe(input.projectID)
+    }),
+  )
+
+  it.live("cannot remove a worktree from another project through the current location", () =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktree.Service
+      const projects = yield* Project.Service
+      const other = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
+      yield* Effect.promise(() => initRepo(other.path))
+      const linked = abs(path.join(other.path, "linked"))
+      yield* Effect.promise(() => $`git worktree add --detach ${linked} HEAD`.cwd(other.path).quiet())
+      const resolved = yield* projects.resolve(linked)
+      const error = yield* worktrees.remove({ directory: linked, force: true }).pipe(Effect.flip)
+      expect(error).toBeInstanceOf(Worktree.InvalidDirectoryError)
+      expect(yield* stored(resolved.id)).toContainEqual({ directory: linked, strategy: "git" })
+      expect(yield* Effect.promise(() => fs.stat(linked).then((item) => item.isDirectory()))).toBe(true)
+    }),
+  )
+
+  it.live("rejects workspace-qualified locations before running worktree operations", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const fs = yield* FSUtil.Service
+      const context = yield* Layer.build(
+        worktreeLayer(
+          input.sourceDirectory,
+          input.projectID,
+          database,
+          bus,
+          input.root.path,
+          Workspace.ID.make("wrk_remote"),
+        ),
+      )
+      const worktrees = Context.get(context, Worktree.Service)
+      const directory = abs(path.join(input.root.path, "not-created"))
+      const errors = yield* Effect.all([
+        worktrees.list().pipe(Effect.flip),
+        worktrees.create({ directory, name: "task" }).pipe(Effect.flip),
+        worktrees.remove({ directory: input.sourceDirectory, force: true }).pipe(Effect.flip),
+        worktrees.refresh().pipe(Effect.flip),
+      ])
+      for (const error of errors) expect(error).toBeInstanceOf(Worktree.UnsupportedLocationError)
+      expect(yield* fs.existsSafe(directory)).toBe(false)
+      expect(yield* fs.isDir(input.sourceDirectory)).toBe(true)
+    }),
+  )
+
+  it.live("list invokes the location's strategies before returning inventory", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktrees = yield* Worktree.Service
+      const git = yield* WorktreeGit.make
+      const directory = abs(path.join(input.root.path, "discovered"))
+      yield* Effect.promise(() => fs.mkdir(directory))
+      const sources: AbsolutePath[] = []
+      yield* worktrees.transform((editor) =>
+        editor.add({
+          ...git,
+          id: Worktree.StrategyID.make("discovered-copy"),
+          list: (sourceDirectory) =>
+            Effect.sync(() => {
+              sources.push(sourceDirectory)
+              return [{ directory, type: "worktree" as const }]
+            }),
+        }),
+      )
+      expect(yield* worktrees.list()).toContainEqual({ directory, strategy: "discovered-copy" })
+      expect(sources).toEqual([input.sourceDirectory])
+      expect(yield* stored(input.projectID)).toContainEqual({ directory, strategy: "discovered-copy" })
+      yield* Effect.promise(() => fs.rmdir(directory))
+      expect(yield* worktrees.list()).not.toContainEqual({ directory, strategy: "discovered-copy" })
+      expect(sources).toEqual([input.sourceDirectory, input.sourceDirectory])
+    }),
+  )
+
+  it.live("list surfaces strategy discovery failures", () =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktree.Service
+      const git = yield* WorktreeGit.make
+      yield* worktrees.transform((editor) =>
+        editor.add({
+          ...git,
+          id: Worktree.StrategyID.make("broken-discovery"),
+          list: () => Effect.fail(new Error("Cannot enumerate worktrees")),
+        }),
+      )
+      const error = yield* worktrees.list().pipe(Effect.flip)
+      expect(error).toBeInstanceOf(Worktree.OperationError)
+      if (error instanceof Worktree.OperationError) expect(error.message).toContain("Cannot enumerate worktrees")
+    }),
+  )
+
+  it.live("applies directory config through the adapter and restores defaults after config removal", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const config = yield* Config.Test
+      const worktrees = yield* Worktree.Service
+      const bus = yield* Bus.Service
+      const reloaded = yield* Queue.unbounded<void>()
+      const documents = [
+        new Document({
+          type: "document",
+          path: abs(path.join(input.root.path, "opencode.json")),
+          info: new Info({ worktree: { directory: "outer" } }),
+        }),
+        new Document({
+          type: "document",
+          path: abs(path.join(input.root.path, "nested/opencode.json")),
+          info: new Info({ worktree: { directory: "copies" } }),
+        }),
+      ]
+      yield* config.setEntries(documents)
+      const git = yield* WorktreeGit.make
+      yield* worktrees.transform((editor) => editor.add({ ...git, id: Worktree.StrategyID.make("custom") }))
+      yield* ConfigWorktreePlugin.Plugin.effect(
+        host({ event: { subscribe: () => bus.subscribe().pipe(Stream.filter(EventManifest.isServer)) } }),
+      ).pipe(
+        Effect.provideService(Worktree.Service, {
+          ...worktrees,
+          reload: () => worktrees.reload().pipe(Effect.tap(() => Queue.offer(reloaded, undefined))),
+        }),
+      )
+      const first = yield* worktrees.create({ name: "one" })
+      expect(first.directory).toBe(abs(path.join(input.root.path, "copies/one")))
+      expect(yield* stored(input.projectID)).toContainEqual({ directory: first.directory, strategy: "custom" })
+      yield* config.setEntries(documents.slice(0, 1))
+      yield* bus.publish(Event.Updated, {})
+      yield* Queue.take(reloaded)
+      const second = yield* worktrees.create({ name: "two" })
+      expect(second.directory).toBe(abs(path.join(input.root.path, "outer/two")))
+      yield* config.setEntries([])
+      yield* bus.publish(Event.Updated, {})
+      yield* Queue.take(reloaded)
+      const third = yield* worktrees.create({ name: "three" })
+      expect(third.directory).toBe(abs(path.join(input.root.path, "worktree", input.projectID.slice(0, 6), "three")))
+    }),
+  )
+  ;["relative", "absolute", "home"].forEach((mode) => {
+    it.live(`resolves ${mode} global directory config from a linked checkout's subdirectory`, () =>
+      Effect.gen(function* () {
+        const input = yield* setup()
+        const config = yield* Config.Test
+        const projects = yield* Project.Service
+        const global = yield* Global.Service
+        const worktrees = yield* Worktree.Service
+        const linked = abs(path.join(input.root.path, "linked"))
+        const nested = abs(path.join(linked, "src"))
+        const home = abs(path.join(input.root.path, "home"))
+        yield* Effect.promise(async () => {
+          await $`git worktree add ${linked} -b linked`.cwd(input.sourceDirectory).quiet()
+          await fs.mkdir(nested)
+        })
+        const project = yield* projects.resolve(nested)
+        const directory =
+          mode === "relative" ? ".lane/trees" : mode === "home" ? "~/copies" : path.join(home, "absolute")
+        yield* config.setEntries([
+          new Document({
+            type: "document",
+            path: abs(path.join(home, ".config/opencode/opencode.json")),
+            info: new Info({ worktree: { directory } }),
+          }),
+        ])
+        yield* ConfigWorktreePlugin.Plugin.effect(host()).pipe(
+          Effect.provideService(Location.Service, { directory: nested, project }),
+          Effect.provideService(Global.Service, { ...global, home }),
+        )
+
+        const created = yield* worktrees.create({ name: "task" })
+
+        expect(project.directory).toBe(linked)
+        expect(project.canonical).toBe(input.sourceDirectory)
+        expect(created.directory).toBe(
+          abs(
+            mode === "relative"
+              ? path.join(input.sourceDirectory, ".lane/trees/task")
+              : path.join(home, mode === "home" ? "copies/task" : "absolute/task"),
+          ),
+        )
+      }),
+    )
+  })
+
+  it.effect("normalization retains worktree directory and rejects invalid configuration", () =>
+    Effect.sync(() => {
+      expect(ConfigNormalize.normalize({ worktree: { directory: "./copies" } })).toMatchObject({
+        type: "normalized",
+        encoded: { worktree: { directory: "./copies" } },
+        diagnostics: [],
+      })
+      for (const worktree of [{ directory: " " }, { directory: 12 }, {}]) {
+        const result = ConfigNormalize.normalize({ worktree })
+        expect(result.diagnostics.length).toBeGreaterThan(0)
+        if (result.type === "normalized") expect(result.encoded).not.toHaveProperty("worktree")
+      }
     }),
   )
 })

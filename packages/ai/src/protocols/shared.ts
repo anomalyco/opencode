@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer"
-import { Tool } from "@opencode-ai/schema/tool"
+import { Tool } from "@opencode/schema/tool"
 import { Effect, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { Headers, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"

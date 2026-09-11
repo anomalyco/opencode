@@ -3,12 +3,12 @@ export * as SkillDiscovery from "./discovery.js"
 import path from "path"
 import { Context, Effect, Layer, Schedule, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Global } from "@opencode-ai/util/global"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { httpClient } from "@opencode/util/effect/app-node-platform"
 import { AbsolutePath } from "../schema.js"
-import { Hash } from "@opencode-ai/util/hash"
+import { Hash } from "@opencode/util/hash"
 
 const skillConcurrency = 4
 const fileConcurrency = 8

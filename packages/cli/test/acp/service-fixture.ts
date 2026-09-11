@@ -8,7 +8,7 @@ import {
   type SessionInfo,
   type SkillInfo,
   type TokenUsageInfo,
-} from "@opencode-ai/client/promise"
+} from "@opencode/client/promise"
 import { ACPService } from "../../src/acp/service"
 
 export type FixtureRequest = {

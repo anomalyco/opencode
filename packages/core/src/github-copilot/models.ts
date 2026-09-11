@@ -1,6 +1,6 @@
 export * as CopilotModels from "./models.js"
 
-import { Money } from "@opencode-ai/schema/money"
+import { Money } from "@opencode/schema/money"
 import { Option, Schema } from "effect"
 import { Model } from "../model.js"
 import { Provider } from "../provider.js"
@@ -203,7 +203,7 @@ function variants(remote: UsableModel, messages: boolean): Model.Info["variants"
       settings: {
         thinking: {
           type: "adaptive",
-          ...(remote.id.includes("opus-4.7") ? { display: "summarized" } : {}),
+          display: "summarized",
         },
         effort,
       },

@@ -1,15 +1,16 @@
 export * as SessionRunnerRetry from "./retry.js"
 
-import { AIError } from "@opencode-ai/ai"
-import { Agent } from "@opencode-ai/schema/agent"
-import { Model } from "@opencode-ai/schema/model"
-import { SessionError } from "@opencode-ai/schema/session-error"
+import { AIError, isContextOverflowFailure } from "@opencode/ai"
+import { Agent } from "@opencode/schema/agent"
+import { Model } from "@opencode/schema/model"
+import { SessionError } from "@opencode/schema/session-error"
 import { Clock, Duration, Effect, Pull, Schedule } from "effect"
 import { Bus } from "../../bus.js"
 import type { PluginHooks } from "../../plugin/hooks.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
+import { toSessionError } from "../to-session-error.js"
 
 interface Input {
   readonly cause: AIError
@@ -34,8 +35,10 @@ export function isRetryable(error: AIError) {
     case "RateLimit":
     case "ProviderInternal":
       return true
+    // HTTP transport errors carry no delivery and always retry. WebSocket marks accepted and rejected
+    // requests as final; not-sent and ambiguous (no frame observed) are still pre-output.
     case "Transport":
-      return error.reason.delivery === undefined || error.reason.delivery === "not-sent"
+      return error.reason.delivery !== "accepted" && error.reason.delivery !== "rejected"
     case "InvalidProviderOutput":
       return error.reason.classification === "incomplete-stream"
     // Unrecognized failures retry: classification records affirmative
@@ -105,6 +108,24 @@ export const policy = (sessionID: SessionSchema.ID) =>
         return { retry: true as const, attempt, delay: normalized }
       })
   })
+
+/**
+ * Retries one auxiliary request's transient failures under a shared `policy` allowance, letting the
+ * session retry hook adjust each decision. Context overflow is never transient: callers recover it.
+ */
+export const transient =
+  (decide: Effect.Success<ReturnType<typeof policy>>, input: Pick<Input, "agent" | "model" | "hook">) =>
+  <A, R>(effect: Effect.Effect<A, AIError, R>) =>
+    Effect.retry(effect, {
+      while: (cause) =>
+        Effect.gen(function* () {
+          if (isContextOverflowFailure(cause)) return false
+          const decision = yield* decide({ ...input, cause, error: toSessionError(cause), retry: isRetryable(cause) })
+          if (!decision.retry) return false
+          yield* Effect.sleep(decision.delay)
+          return true
+        }),
+    })
 
 export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID) =>
   Effect.gen(function* () {

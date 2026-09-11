@@ -1,19 +1,21 @@
 export * as ServerProcess from "./server-process"
 
 import { NodeServices } from "@effect/platform-node"
-import { Service, type DiscoverOptions } from "@opencode-ai/client/effect/service"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Global } from "@opencode-ai/util/global"
+import { Service, type DiscoverOptions } from "@opencode/client/effect/service"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Global } from "@opencode/util/global"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
-import { AppProcess } from "@opencode-ai/util/process"
+import { AppProcess } from "@opencode/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
 import { Effect, Option, Redacted, Schedule, Schema } from "effect"
-import { PersistentPty } from "@opencode-ai/schema/persistent-pty"
+import { PersistentPty } from "@opencode/schema/persistent-pty"
 import { HttpServer } from "effect/unstable/http"
 import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
 import { ServiceRegistration } from "./services/service-registration"
+import { Updater } from "./services/updater"
 import { WebUi } from "./services/web-ui"
+import { databasePath } from "./database-path"
 
 export type Mode = "default" | "service" | "stdio"
 
@@ -63,7 +65,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           ? yield* Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
           : undefined
       if (incumbent !== undefined) return
-      const { start } = yield* Effect.promise(() => import("@opencode-ai/server/process"))
+      const { start } = yield* Effect.promise(() => import("@opencode/server/process"))
       const environmentPassword = yield* Env.password
       // Keep the lease credential out of the environment inherited by tools.
       if (options.mode === "stdio") {
@@ -93,13 +95,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           pty: { handoff },
           simulation: truthy(process.env.OPENCODE_SIMULATE),
           database: {
-            path:
-              process.env.OPENCODE_DB ??
-              (["latest", "dev", "beta", "next", "prod"].includes(OPENCODE_CHANNEL) ||
-              process.env.OPENCODE_DISABLE_CHANNEL_DB === "1" ||
-              process.env.OPENCODE_DISABLE_CHANNEL_DB === "true"
-                ? "opencode.db"
-                : `opencode-${OPENCODE_CHANNEL.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`),
+            path: databasePath(global.data),
           },
           models: {
             url: process.env.OPENCODE_MODELS_URL,
@@ -163,6 +159,21 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const url = HttpServer.formatAddress(server.address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
       if (foreground && !environmentPassword) console.log(`server password ${password}`)
+      yield* Updater.Service.pipe(
+        Effect.flatMap((updater) =>
+          Updater.pollUpdates({
+            check: updater.run().pipe(
+              Effect.flatMap((result) => {
+                if (!result) return Effect.void
+                if (result.type === "available") return server.updateAvailable(result.version)
+                return server.updated(result.version)
+              }),
+            ),
+          }),
+        ),
+        Effect.provide(Updater.layer),
+        Effect.forkScoped,
+      )
       return yield* options.mode === "service"
         ? server.shutdown
         : options.mode === "stdio"

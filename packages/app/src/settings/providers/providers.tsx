@@ -1,7 +1,7 @@
-import { Button } from "@opencode-ai/ui/button"
-import { Badge } from "@opencode-ai/ui/badge"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { Button } from "@opencode/ui/button"
+import { Badge } from "@opencode/ui/badge"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { ProviderIcon } from "@opencode/ui/provider-icon"
 import { showToast } from "@/shell/notifications/toast"
 import { popularProviders, useProviders } from "@/providers/catalog/providers"
 import { useIntegrations } from "@/providers/catalog/integrations"
@@ -58,6 +58,7 @@ export const SettingsProviders: Component<{
         (provider) =>
           provider.id !== "opencode" || Object.values(provider.models).some((model) => model.cost.input > 0),
       )
+      .toSorted((a, b) => Number(b.id === "opencode-go") - Number(a.id === "opencode-go"))
   })
 
   const popular = createMemo(() => {

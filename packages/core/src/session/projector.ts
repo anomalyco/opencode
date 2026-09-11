@@ -5,22 +5,22 @@ import { DateTime, Effect, Layer, Schema, Stream } from "effect"
 import path from "path"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Agent } from "@opencode-ai/schema/agent"
-import { Model } from "@opencode-ai/schema/model"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { Agent } from "@opencode/schema/agent"
+import { Model } from "@opencode/schema/model"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 import { SessionMessageUpdater } from "./message-updater.js"
 import { SessionInbox } from "./inbox.js"
-import { Workspace } from "@opencode-ai/schema/workspace"
+import { Workspace } from "@opencode/schema/workspace"
 import { InstructionState } from "./instruction-state.js"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { InstructionEntry } from "./instruction-entry.js"
 import { Slug } from "../util/slug.js"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Money } from "@opencode-ai/schema/money"
-import { Worktree } from "@opencode-ai/schema/worktree"
-import { Project } from "@opencode-ai/schema/project"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Money } from "@opencode/schema/money"
+import { Worktree } from "@opencode/schema/worktree"
+import { Project } from "@opencode/schema/project"
 import { AbsolutePath, RelativePath } from "../schema.js"
 import type { SessionSchema } from "./schema.js"
 import { ProjectTable } from "../project/sql.js"
@@ -160,6 +160,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       agent: parent.agent,
       model: parent.model,
       metadata: parent.metadata,
+      permission: parent.permission,
       version: parent.version,
       cost: 0,
       tokens_input: 0,
@@ -450,6 +451,7 @@ const layer = Layer.effectDiscard(
             agent: event.data.agent,
             model: event.data.model,
             metadata: event.data.metadata,
+            permission: event.data.permissions,
             version: event.data.version,
             time_created: event.created,
             time_updated: event.created,
@@ -567,6 +569,14 @@ const layer = Layer.effectDiscard(
       db
         .update(SessionTable)
         .set({ title: event.data.title, time_updated: event.created })
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie),
+    )
+    yield* bus.project(SessionEvent.PermissionsUpdated, (event) =>
+      db
+        .update(SessionTable)
+        .set({ permission: event.data.permissions, time_updated: event.created })
         .where(eq(SessionTable.id, event.data.sessionID))
         .run()
         .pipe(Effect.orDie),

@@ -1,5 +1,5 @@
-import type { PluginInfo } from "@opencode-ai/client"
-import { Plugin } from "@opencode-ai/plugin/tui"
+import type { PluginInfo } from "@opencode/client"
+import { Plugin } from "@opencode/plugin/tui"
 import path from "path"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { DialogErrorDetails } from "../../component/dialog-error-details"
@@ -224,6 +224,15 @@ export function PluginsDialog(props: {
                 onTrigger: check,
               },
               {
+                title: "view error",
+                command: "dialog.plugins.error",
+                hidden: !pluginError(focusedTui()),
+                onTrigger: (option) => {
+                  const entry = entries().find((entry) => entry.key === option.value)
+                  if (pluginError(entry)) setDetail(entry)
+                },
+              },
+              {
                 title: toggleTitle(),
                 command: "plugins.toggle",
                 side: "right",
@@ -239,7 +248,7 @@ export function PluginsDialog(props: {
               },
             ]}
             footer={
-              <Show when={pluginError(focusedEntry())}>
+              <Show when={pluginError(focusedEntry()) && !focusedTui()}>
                 <text>
                   <span style={{ fg: props.context.theme.text.default }}>
                     <b>enter</b>

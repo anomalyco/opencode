@@ -1,22 +1,22 @@
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Money } from "@opencode-ai/schema/money"
+import { Money } from "@opencode/schema/money"
 import { Context, Effect, Exit, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Integration } from "@opencode-ai/core/integration"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
-import { Location } from "@opencode-ai/core/location"
-import { Model } from "@opencode-ai/core/model"
-import { ModelsDev } from "@opencode-ai/core/models-dev"
-import { ModelsDevPlugin } from "@opencode-ai/core/plugin/models-dev"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
-import { Provider } from "@opencode-ai/core/provider"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Catalog } from "@opencode/core/catalog"
+import { Integration } from "@opencode/core/integration"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { Location } from "@opencode/core/location"
+import { Model } from "@opencode/core/model"
+import { ModelsDev } from "@opencode/core/models-dev"
+import { ModelsDevPlugin } from "@opencode/core/plugin/models-dev"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { ProviderPlugins } from "@opencode/core/plugin/provider"
+import { Provider } from "@opencode/core/provider"
+import { AbsolutePath } from "@opencode/core/schema"
 import { withEnv } from "../fixture/env"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
@@ -1079,7 +1079,7 @@ describe("ModelsDevPlugin", () => {
 
       const bedrock = yield* catalog.model.get(
         Provider.ID.make("amazon-bedrock"),
-        Model.ID.make("amazon.nova-2-lite-v1:0"),
+        Model.ID.make("us.amazon.nova-2-lite-v1:0"),
       )
       expect(bedrock?.variants).toEqual([
         {

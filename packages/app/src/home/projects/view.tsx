@@ -6,12 +6,14 @@ import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
 import { AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
 import { RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers"
 import { RestrictToElement } from "@dnd-kit/dom/modifiers"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { ProjectAvatar } from "@opencode-ai/ui/project-avatar"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Menu } from "@opencode-ai/ui/menu"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { ScrollView } from "@opencode/ui/scroll-view"
+import { ProjectAvatar } from "@opencode/ui/project-avatar"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Button } from "@opencode/ui/button"
+import { Spinner } from "@opencode/ui/spinner"
+import { Menu } from "@opencode/ui/menu"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { getProjectAvatarVariant, type HomeProjectSelection, type LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -47,6 +49,7 @@ export type HomeProjectsViewProps = {
   onWheel: (event: WheelEvent) => void
   onChooseProject: (server: ServerConnection.Any) => void
   onFocusServer: (server: ServerConnection.Any) => void
+  onAuthenticateServer?: (server: ServerConnection.Any) => void
   onToggleCollapsed: (server: ServerConnection.Any) => void
   onEditServer: (server: ServerConnection.Http) => void
   onSetDefaultServer: (server: ServerConnection.Any | undefined) => void
@@ -123,6 +126,10 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
                 props.onFocusServer(server)
                 setState("open", false)
               }}
+              onAuthenticateServer={(server) => {
+                setState("open", false)
+                props.onAuthenticateServer?.(server)
+              }}
               onChooseProject={(server) => {
                 setState("open", false)
                 props.onChooseProject(server)
@@ -197,28 +204,37 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
           </HomeProjectNavButton>
         </Show>
         <Show
-          when={props.servers.length > 1}
+          when={
+            props.servers.length > 1 ||
+            props.servers.some(
+              (server) => server.type === "ssh" && (server.authenticationRequired || server.connecting),
+            )
+          }
           fallback={
-            <div class={props.dropdown ? "" : "pr-3"}>
-              <Show
-                when={props.projects.length > 0}
-                fallback={<HomeProjectEmpty {...props} server={props.servers[0]} items={props.recentlyClosed} />}
-              >
-                <HomeProjectList {...props} {...contextMenuProps} server={props.servers[0]} items={props.projects} />
-                <Show when={props.dropdown}>
-                  <HomeProjectNavButton
-                    type="button"
-                    data-action="home-add-project-row"
-                    class="mt-1 disabled:opacity-60"
-                    disabled={props.serverHealth(props.servers[0])?.healthy === false}
-                    onClick={() => props.onChooseProject(props.servers[0])}
+            <Show when={props.servers[0]}>
+              {(server) => (
+                <div class={props.dropdown ? "" : "pr-3"}>
+                  <Show
+                    when={props.projects.length > 0}
+                    fallback={<HomeProjectEmpty {...props} server={server()} items={props.recentlyClosed} />}
                   >
-                    <Icon name="folder-add-left" size="small" />
-                    <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("home.project.add")}</span>
-                  </HomeProjectNavButton>
-                </Show>
-              </Show>
-            </div>
+                    <HomeProjectList {...props} {...contextMenuProps} server={server()} items={props.projects} />
+                    <Show when={props.dropdown}>
+                      <HomeProjectNavButton
+                        type="button"
+                        data-action="home-add-project-row"
+                        class="mt-1 disabled:opacity-60"
+                        disabled={props.serverHealth(server())?.healthy === false}
+                        onClick={() => props.onChooseProject(server())}
+                      >
+                        <Icon name="folder-add-left" size="small" />
+                        <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("home.project.add")}</span>
+                      </HomeProjectNavButton>
+                    </Show>
+                  </Show>
+                </div>
+              )}
+            </Show>
           }
         >
           <div class={`flex min-w-0 flex-col ${props.dropdown ? "gap-1" : "gap-4 pr-3"}`}>
@@ -228,6 +244,8 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
                 const healthy = () => !!props.serverHealth(item)?.healthy
                 const hasProjects = () => projects().length > 0
                 const collapsed = () => props.collapsed(item)
+                const authentication = () => item.type === "ssh" && item.authenticationRequired
+                const connecting = () => item.type === "ssh" && item.connecting
                 return (
                   <div class="flex min-w-0 flex-col gap-1">
                     <HomeServerRow
@@ -238,7 +256,26 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
                       collapsed={collapsed()}
                       health={props.serverHealth(item)}
                     />
-                    <Show when={healthy() && hasProjects() && !collapsed()}>
+                    <Show when={authentication() || connecting()}>
+                      <div class="mx-3 h-px bg-v2-border-border-base" />
+                      <div class="px-1.5 py-1">
+                        <Button
+                          data-action="home-server-authenticate"
+                          class="w-full"
+                          size="small"
+                          variant="neutral"
+                          disabled={connecting()}
+                          aria-busy={!!connecting()}
+                          onClick={() => props.onAuthenticateServer?.(item)}
+                        >
+                          <Show when={connecting()}>
+                            <Spinner class="size-3.5" />
+                          </Show>
+                          {props.language.t(connecting() ? "ssh.stage.connecting" : "ssh.action.authenticate")}
+                        </Button>
+                      </div>
+                    </Show>
+                    <Show when={healthy() && !authentication() && !connecting() && hasProjects() && !collapsed()}>
                       <div class="mx-3 h-px bg-v2-border-border-base" />
                       <HomeProjectList {...props} {...contextMenuProps} server={item} items={projects()} />
                     </Show>
@@ -311,6 +348,7 @@ function HomeServerRow(props: {
   health: ServerHealth | undefined
 }) {
   const healthy = () => !!props.health?.healthy
+  const authentication = () => props.server.type === "ssh" && props.server.authenticationRequired
   const incompatible = () => !!props.health?.incompatible
   const canToggle = () => healthy() && props.projectsForServer(props.server).length > 0
   const contextMenuID = () => serverContextMenuID(props.server)
@@ -323,8 +361,12 @@ function HomeServerRow(props: {
       appearance="standard"
       placement="top"
       class="flex h-7 w-full min-w-0"
-      inactive={!incompatible()}
-      value={props.language.t("server.row.incompatible", { version: props.health?.version ?? "1" })}
+      inactive={!incompatible() && !authentication()}
+      value={
+        authentication()
+          ? props.language.t("ssh.stage.authentication")
+          : props.language.t("server.row.incompatible", { version: props.health?.version ?? "1" })
+      }
     >
       <div
         class="group/server relative flex h-7 w-full min-w-0 items-center rounded-[6px]"
@@ -334,9 +376,8 @@ function HomeServerRow(props: {
       >
         <HomeProjectNavButton
           type="button"
-          classList={{ "opacity-60": !healthy() && !incompatible() }}
           data-selected={props.selected ? "" : undefined}
-          disabled={!healthy()}
+          disabled={!healthy() && !authentication()}
           onClick={() => props.onFocusServer(props.server)}
         >
           <span
@@ -370,9 +411,17 @@ function HomeServerRow(props: {
             />
           </span>
           <div class="flex size-4 shrink-0 items-center justify-center -mr-0.5">
-            <ServerHealthIndicator health={props.health} />
+            <ServerHealthIndicator
+              health={props.health}
+              connecting={props.server.type === "ssh" && props.server.connecting}
+              authenticationRequired={authentication()}
+            />
           </div>
-          <span data-slot="home-row-label" class="flex min-w-0 flex-1 items-center gap-1">
+          <span
+            data-slot="home-row-label"
+            class="flex min-w-0 flex-1 items-center gap-1"
+            classList={{ "opacity-60": !healthy() && !incompatible() }}
+          >
             <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
               {props.server.displayName ?? new URL(props.server.http.url).host}
             </span>
@@ -420,7 +469,7 @@ function HomeServerRow(props: {
               size="small"
               icon={<Icon name="folder-add-left" />}
               aria-label={props.language.t("home.project.add")}
-              disabled={props.health?.healthy === false}
+              disabled={props.health?.healthy === false && !authentication()}
               onClick={() => props.onChooseProject(props.server)}
             />
           </Tooltip>

@@ -1,5 +1,5 @@
-import { getFilename } from "@opencode-ai/util/path"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { getFilename } from "@opencode/util/path"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
 import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"

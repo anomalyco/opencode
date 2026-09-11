@@ -1,9 +1,9 @@
-import { Location } from "@opencode-ai/core/location"
-import { Project } from "@opencode-ai/core/project"
+import { Location } from "@opencode/core/location"
+import { Project } from "@opencode/core/project"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { ProjectNotFoundError } from "@opencode-ai/protocol/errors"
+import { ProjectNotFoundError } from "@opencode/protocol/errors"
 
 export const ProjectHandler = HttpApiBuilder.group(Api, "server.project", (handlers) =>
   handlers

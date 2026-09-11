@@ -1,8 +1,8 @@
 import { Effect, Layer } from "effect"
-import { Config } from "@opencode-ai/core/config"
-import { Location } from "@opencode-ai/core/location"
-import { Mcp } from "@opencode-ai/core/mcp/index"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Config } from "@opencode/core/config"
+import { Location } from "@opencode/core/location"
+import { Mcp } from "@opencode/core/mcp/index"
+import { AbsolutePath } from "@opencode/core/schema"
 import { location } from "./location"
 
 export const emptyMcpLayer = Layer.succeed(

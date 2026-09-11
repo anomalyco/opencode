@@ -1,12 +1,12 @@
-import { Instance } from "@opencode-ai/core/instance/service"
-import { Location } from "@opencode-ai/core/location"
-import { Permission } from "@opencode-ai/core/permission"
-import { PermissionSaved } from "@opencode-ai/core/permission/saved"
-import { Session } from "@opencode-ai/core/session"
+import { Instance } from "@opencode/core/instance/service"
+import { Location } from "@opencode/core/location"
+import { Permission } from "@opencode/core/permission"
+import { PermissionSaved } from "@opencode/core/permission/saved"
+import { Session } from "@opencode/core/session"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { PermissionNotFoundError } from "@opencode-ai/protocol/errors"
+import { PermissionNotFoundError } from "@opencode/protocol/errors"
 import { response, sessionInfo } from "../location"
 import { missingSession } from "./session-error"
 
@@ -80,6 +80,15 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
           yield* owned.permission
             .reply({ requestID: ctx.params.requestID, reply: ctx.payload.reply, message: ctx.payload.message })
             .pipe(Effect.catchTag("Permission.NotFoundError", () => missingRequest(ctx.params.requestID)))
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.permission.rules",
+        Effect.fn(function* (ctx) {
+          yield* sessions
+            .setPermissions({ sessionID: ctx.params.sessionID, permissions: ctx.payload.permissions })
+            .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
           return HttpApiSchema.NoContent.make()
         }),
       )

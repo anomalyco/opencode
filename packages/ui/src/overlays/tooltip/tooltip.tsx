@@ -6,7 +6,7 @@ import "./tooltip.css"
 
 export interface TooltipProps extends ComponentProps<typeof Root> {
   value: JSX.Element
-  appearance?: "standard" | "compact"
+  appearance?: "standard" | "compact" | "large"
   class?: string
   contentClass?: string
   contentStyle?: JSX.CSSProperties

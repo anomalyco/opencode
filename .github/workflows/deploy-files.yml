@@ -1,0 +1,34 @@
+name: deploy-files
+
+on:
+  push:
+    branches:
+      - dev
+      - v2
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-files-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.repository == 'anomalyco/opencode' && (github.ref_name == 'dev' || github.ref_name == 'v2')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Typecheck
+        working-directory: services/files
+        run: bun typecheck
+
+      - name: Deploy
+        working-directory: services/files
+        run: bun run deploy --env ${{ github.ref_name == 'v2' && 'production' || 'dev' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

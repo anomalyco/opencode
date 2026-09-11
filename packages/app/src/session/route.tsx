@@ -1,8 +1,8 @@
 import { ErrorBoundary, createEffect, createMemo, Show, type ParentProps } from "solid-js"
 import { useParams } from "@solidjs/router"
-import { DataProvider } from "@opencode-ai/session-ui/context"
-import { SessionUserMessage } from "@opencode-ai/session-ui/message"
-import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
+import { DataProvider } from "@opencode/session-ui/context"
+import { SessionUserMessage } from "@opencode/session-ui/message"
+import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { CommentsProvider } from "@/composer/comments"
 import { readPromptPresentation } from "@/composer/comment-note"
 import { FileProvider } from "@/workspaces/files/model"
@@ -64,7 +64,7 @@ function PreparingSession(props: { sessionID: string; pending: PendingSession })
           provider: { all: providers.all(), default: providers.default(), connected: [] },
         }}
       >
-        <div data-component="session-preparing" class="min-h-0 flex-1 overflow-y-auto">
+        <div data-component="session-preparing" data-workspace-session class="min-h-0 flex-1 overflow-y-auto">
           <SessionIdentityHeader sessionID={props.sessionID} />
           <div class="mx-auto w-full min-w-0 max-w-[1000px] px-4 pb-5 md:px-5">
             <SessionUserMessage

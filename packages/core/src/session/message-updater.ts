@@ -116,6 +116,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           )
         }),
       "session.renamed": () => Effect.void,
+      "session.permissions.updated": () => Effect.void,
       "session.deleted": () => Effect.void,
       "session.forked": () => Effect.void,
       "session.inbox.delivered": () => Effect.void,
@@ -409,11 +410,15 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
             yield* adapter.updateCompaction({
               ...current,
               status: "completed",
+              metadata: event.metadata ? { ...current.metadata, ...event.metadata } : current.metadata,
               reason: event.data.reason,
               model: event.data.model,
               providerState: event.data.providerState,
               summary: event.data.text,
+              providerContext: event.data.providerContext,
               recent: event.data.recent,
+              cost: event.data.cost,
+              tokens: event.data.tokens,
             })
             return
           }
@@ -427,7 +432,10 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               model: event.data.model,
               providerState: event.data.providerState,
               summary: event.data.text,
+              providerContext: event.data.providerContext,
               recent: event.data.recent,
+              cost: event.data.cost,
+              tokens: event.data.tokens,
               time: { created },
             }),
           )
@@ -442,6 +450,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
             metadata: current?.metadata ?? event.metadata,
             reason: event.data.reason,
             error: event.data.error,
+            cost: event.data.cost,
+            tokens: event.data.tokens,
             time: current?.time ?? { created },
           })
           if (current?.status === "running") return yield* adapter.updateCompaction(failed)

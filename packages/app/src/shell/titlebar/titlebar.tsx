@@ -2,10 +2,10 @@ import { createEffect, createMemo, createResource, Match, Show, Switch, untrack 
 import { createStore, unwrap } from "solid-js/store"
 import { Dynamic, Portal } from "solid-js/web"
 import { useLocation, useNavigate } from "@solidjs/router"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Keybind } from "@opencode-ai/ui/keybind"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Icon } from "@opencode/ui/icon"
+import { Keybind } from "@opencode/ui/keybind"
+import { Tooltip } from "@opencode/ui/tooltip"
 
 import { LayoutRoute, useLayout } from "@/shell/state/layout"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -28,7 +28,7 @@ import { TitlebarRightMount } from "@/shell/titlebar/right-slot"
 import { MobileDrawer, MobileDrawerContent, MobileDrawerLabel, MobileDrawerTrigger } from "@/shell/mobile-drawer"
 import { sessionTabTitle } from "./tab-title"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
-import { SessionProgressIndicatorV2 } from "@opencode-ai/session-ui/v2/session-progress-indicator-v2"
+import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import { projectForSession } from "@/shell/layout/helpers"
 import { useSettingsDialog } from "@/settings/command"
 import devIcon from "../../../../desktop/icons/dev/64x64.png"
@@ -155,11 +155,11 @@ export function Titlebar(props: {
         height:
           platform.platform === "web"
             ? bottom()
-              ? "calc(28px + max(8px, env(safe-area-inset-bottom, 0px)))"
+              ? "calc(28px + max(8px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))))"
               : "calc(28px + max(8px, env(safe-area-inset-top, 0px)))"
             : undefined,
         "padding-top": bottom() ? "0px" : "env(safe-area-inset-top, 0px)",
-        "padding-bottom": bottom() ? "env(safe-area-inset-bottom, 0px)" : "0px",
+        "padding-bottom": bottom() ? "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))" : "0px",
         "min-height": minHeight(),
         // Keep native macOS traffic lights clear even when the desktop window is narrow.
         "padding-left": macTrafficLights() ? `${macTrafficLightsBaseWidth / zoom()}px` : 0,
@@ -356,10 +356,10 @@ export function Titlebar(props: {
                   aria-label={language.t("home.title")}
                   aria-pressed={layout.route().type === "home"}
                 >
-                  <Icon name="grid-plus" />
+                  <Icon name="grid-plus" class="shrink-0" />
                   <span class="min-w-0 truncate">{language.t("home.title")}</span>
                   <span
-                    class="ms-auto shrink-0 whitespace-nowrap text-v2-text-text-faint opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+                    class="ms-auto hidden min-w-0 truncate text-v2-text-text-faint group-hover:block group-focus-visible:block"
                     aria-hidden="true"
                   >
                     <bdi dir="ltr">{command.keybind("home.toggle")}</bdi>
@@ -440,7 +440,7 @@ export function Titlebar(props: {
                 class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2 md:pe-3"
                 classList={{
                   "pt-[max(0px,calc(8px-env(safe-area-inset-top,0px)))]": !bottom() && !windows(),
-                  "pb-[max(0px,calc(8px-env(safe-area-inset-bottom,0px)))]": bottom(),
+                  "pb-[max(0px,calc(8px-var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))))]": bottom(),
                   "pl-4": macTrafficLights(),
                   // Center the 20px app icon over the sidebar's 16px icon column.
                   "ps-3.5": windows(),
@@ -503,7 +503,6 @@ export function Titlebar(props: {
                                     directory={value().location.directory}
                                     sessionId={value().id}
                                     server={tab().server}
-                                    revealProjectOnHover={false}
                                   />
                                 )}
                               </Show>
@@ -654,10 +653,10 @@ export function Titlebar(props: {
                               onClick={openNewTab}
                               aria-label={language.t("command.session.new")}
                             >
-                              <Icon name="edit" />
+                              <Icon name="edit" class="shrink-0" />
                               <span class="min-w-0 truncate">{language.t("command.session.new")}</span>
                               <span
-                                class="ms-auto shrink-0 whitespace-nowrap text-v2-text-text-faint opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+                                class="ms-auto hidden min-w-0 truncate text-v2-text-text-faint group-hover:block group-focus-visible:block"
                                 aria-hidden="true"
                               >
                                 <bdi dir="ltr">{command.keybind("tab.new")}</bdi>
@@ -680,20 +679,11 @@ export function Titlebar(props: {
                                 onReorder={(keys) => tabsStoreActions.reorder(keys)}
                               />
                             </div>
-                            <button
-                              type="button"
-                              data-action="vertical-tabs-settings"
-                              data-state={layout.route().type === "settings" ? "pressed" : undefined}
-                              class="mt-2 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base data-[state=pressed]:bg-v2-background-bg-layer-02 data-[state=pressed]:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02 [app-region:no-drag]"
-                              onClick={openSettings}
-                              aria-label={language.t("sidebar.settings")}
-                              aria-pressed={layout.route().type === "settings"}
-                            >
-                              <Icon name="settings-gear" />
-                              {language.t("sidebar.settings")}
-                            </button>
-                            <div data-slot="vertical-tabs-footer" class="flex w-full shrink-0 items-center gap-1.5">
-                              <TitlebarRightMount />
+                            <div data-slot="vertical-tabs-footer" class="mt-2 flex w-full shrink-0 flex-col gap-2">
+                              <TitlebarRightMount vertical />
+                              <Show when={updateState().visible}>
+                                <TitlebarUpdateIconButton state={updateState()} vertical />
+                              </Show>
                             </div>
                           </Portal>
                         )}
@@ -704,7 +694,9 @@ export function Titlebar(props: {
                 <Show when={!mobile()}>
                   <div class="flex-1" />
                 </Show>
-                <TitlebarRight state={rightState()} mount={!props.verticalTabs} />
+                <Show when={!props.verticalTabs}>
+                  <TitlebarRight state={rightState()} />
+                </Show>
               </div>
             )
           }}
@@ -727,34 +719,52 @@ type TitlebarRightState = {
   update: TitlebarUpdatePillState
 }
 
-function TitlebarRight(props: { state: TitlebarRightState; mount?: boolean }) {
+function TitlebarRight(props: { state: TitlebarRightState }) {
   return (
     <div class="relative z-20 flex shrink-0 items-center justify-end gap-0 overflow-visible">
       <Show when={props.state.update.visible}>
         <TitlebarUpdateIconButton state={props.state.update} />
       </Show>
-      <Show when={props.mount !== false}>
-        <TitlebarRightMount />
-      </Show>
+      <TitlebarRightMount />
     </div>
   )
 }
 
-function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
+function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState; vertical?: boolean }) {
+  const label = () => (
+    <span
+      class="shrink-0 text-[11px] leading-4 text-v2-text-text-accent [font-weight:530] opacity-0 motion-safe:transition-all duration-150 ease-out group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0 motion-reduce:translate-x-0"
+      classList={{
+        "ms-px me-4 -translate-x-2 rtl:translate-x-2": props.vertical,
+        "ms-2 me-px translate-x-2 rtl:-translate-x-2": !props.vertical,
+      }}
+    >
+      {props.state.label}
+    </span>
+  )
   return (
-    <div class="group relative mr-3 h-5 w-5 shrink-0 rounded-full bg-v2-background-bg-deep transition-[width] duration-150 ease-out hover:z-30 hover:w-[68px] focus-within:z-30 focus-within:w-[68px] motion-reduce:transition-none">
+    <div
+      data-slot="titlebar-update"
+      class="group relative shrink-0 rounded-full bg-v2-background-bg-deep transition-[width] duration-150 ease-out hover:z-30 focus-within:z-30 motion-reduce:transition-none"
+      classList={{
+        "h-7 w-7 self-start hover:w-[84px] focus-within:w-[84px]": props.vertical,
+        "me-3 h-5 w-5 hover:w-[68px] focus-within:w-[68px]": !props.vertical,
+      }}
+    >
       <button
         type="button"
-        class="absolute right-0 top-0 z-10 flex h-5 w-5 items-center justify-end overflow-hidden rounded-full bg-v2-icon-icon-accent/20 text-v2-icon-icon-accent transition-[width,background-color] duration-150 ease-out group-hover:w-[68px] group-hover:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] group-focus-within:w-[68px] group-focus-within:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] focus-visible:outline-none disabled:opacity-60 motion-reduce:transition-none"
+        class="absolute top-0 z-10 flex h-full w-full items-center overflow-hidden rounded-full bg-v2-icon-icon-accent/20 text-v2-icon-icon-accent transition-[background-color] duration-150 ease-out group-hover:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] group-focus-within:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] focus-visible:outline-none disabled:opacity-60 motion-reduce:transition-none [app-region:no-drag]"
+        classList={{ "start-0 justify-start": props.vertical, "end-0 justify-end": !props.vertical }}
         onClick={props.state.onInstall}
         disabled={props.state.installing}
         aria-busy={props.state.installing}
         aria-label={props.state.ariaLabel}
       >
-        <span class="shrink-0 ml-[8px] mr-px text-[11px] text-v2-text-text-accent [font-weight:530] opacity-0 translate-x-2 motion-safe:transition-all duration-150 ease-out group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0 motion-reduce:translate-x-0">
-          {props.state.label}
-        </span>
-        <span class="flex size-5 shrink-0 items-center justify-center">
+        <Show when={!props.vertical}>{label()}</Show>
+        <span
+          class="flex shrink-0 items-center justify-center"
+          classList={{ "size-7": props.vertical, "size-5": !props.vertical }}
+        >
           <Show
             when={!props.state.installing}
             fallback={<span data-slot="titlebar-update-loader" aria-hidden="true" />}
@@ -764,6 +774,7 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
             </svg>
           </Show>
         </span>
+        <Show when={props.vertical}>{label()}</Show>
       </button>
     </div>
   )

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { SessionMessageInfo } from "@opencode/client/promise"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { fixture } from "../performance/timeline/session-timeline-stress.fixture"
 import { expected, messages } from "../performance/timeline/session-tab-switch.fixture"

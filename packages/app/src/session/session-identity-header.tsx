@@ -1,10 +1,10 @@
-import type { SessionInfo } from "@opencode-ai/client/promise"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Menu } from "@opencode-ai/ui/menu"
-import { ProjectAvatar } from "@opencode-ai/ui/project-avatar"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import type { SessionInfo } from "@opencode/client/promise"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Menu } from "@opencode/ui/menu"
+import { ProjectAvatar } from "@opencode/ui/project-avatar"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useNavigate } from "@solidjs/router"
 import { createMemo, Show, type ParentProps } from "solid-js"
@@ -91,7 +91,7 @@ export function SessionProjectMenu(props: {
               when={props.showProjectIcon}
               fallback={
                 <span class={props.workspace ? "text-v2-icon-icon-accent" : "text-v2-icon-icon-muted"}>
-                  <Icon name={props.workspace ? "workspace-isolated" : "monitor"} />
+                  <Icon name={props.workspace ? "outline-worktree" : "monitor"} />
                 </span>
               }
             >

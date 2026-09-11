@@ -1,9 +1,27 @@
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Integration } from "@opencode-ai/schema/integration"
-import { Provider } from "@opencode-ai/schema/provider"
+import { define } from "@opencode/plugin/effect/plugin"
+import { Integration } from "@opencode/schema/integration"
+import { Provider } from "@opencode/schema/provider"
 import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { ModelsDev } from "../models-dev.js"
+
+// These catalog entries require inference profiles on Bedrock Runtime.
+// Opus/Sonnet 4.6 support in-region calls in eu-west-2 and must remain available.
+const BEDROCK_PROFILE_ONLY_IDS = [
+  "amazon.nova-2-lite-v1:0",
+  "anthropic.claude-fable-5",
+  "anthropic.claude-fable-5-1",
+  "anthropic.claude-haiku-4-5-20251001-v1:0",
+  "anthropic.claude-opus-4-1-20250805-v1:0",
+  "anthropic.claude-opus-4-5-20251101-v1:0",
+  "anthropic.claude-opus-4-7",
+  "anthropic.claude-opus-4-8",
+  "anthropic.claude-opus-5",
+  "anthropic.claude-sonnet-4-5-20250929-v1:0",
+  "anthropic.claude-sonnet-5",
+  "deepseek.r1-v1:0",
+  "mistral.pixtral-large-2502-v1:0",
+]
 
 export const ModelsDevPlugin = define({
   id: "opencode.models.dev",
@@ -39,6 +57,11 @@ export const ModelsDevPlugin = define({
         })
         for (const model of provider.models) {
           if (model.status === "deprecated") continue
+          if (
+            provider.info.id === Provider.ID.amazonBedrock &&
+            BEDROCK_PROFILE_ONLY_IDS.includes(model.modelID ?? model.id)
+          )
+            continue
           catalog.model.update(provider.info.id, model.id, (draft) => Object.assign(draft, copy(model)))
         }
       }

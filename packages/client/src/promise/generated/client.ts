@@ -86,8 +86,6 @@ import type {
   SessionBackgroundOutput,
   SessionMessageInput,
   SessionMessageOutput,
-  SessionMessageUpdateInput,
-  SessionMessageUpdateOutput,
   SessionEnvironmentInput,
   SessionEnvironmentOutput,
   SessionViewInput,
@@ -177,6 +175,8 @@ import type {
   PermissionGetOutput,
   PermissionReplyInput,
   PermissionReplyOutput,
+  PermissionRulesInput,
+  PermissionRulesOutput,
   FileReadInput,
   FileReadOutput,
   FileListInput,
@@ -278,6 +278,8 @@ export interface ClientOptions {
 export interface RequestOptions {
   readonly signal?: AbortSignal
   readonly headers?: RequestInit["headers"]
+  /** Reports every chunk a streaming response receives, including keepalive comments that yield no event. */
+  readonly onActivity?: () => void
 }
 
 interface RequestDescriptor {
@@ -369,6 +371,7 @@ export function make(options: ClientOptions) {
           } catch (cause) {
             throw new ClientError("Transport", { cause })
           }
+          if (!next.done) requestOptions?.onActivity?.()
           buffer += decoder.decode(next.value, { stream: !next.done })
           if (buffer.length > maxSseEventBytes) throw new ClientError("SseEventTooLarge")
           const trailingCarriageReturn = !next.done && buffer.endsWith("\r")
@@ -564,6 +567,7 @@ export function make(options: ClientOptions) {
               model: input?.["model"],
               location: input?.["location"],
               metadata: input?.["metadata"],
+              permissions: input?.["permissions"],
             },
             successStatus: 200,
             declaredStatuses: [400, 401],
@@ -983,18 +987,6 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      messageUpdate: (input: SessionMessageUpdateInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionMessageUpdateOutput }>(
-          {
-            method: "PATCH",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/message/${encodeURIComponent(input.messageID)}`,
-            body: { content: input["content"] },
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404, 409],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
       environment: (input: SessionEnvironmentInput, requestOptions?: RequestOptions) =>
         request<SessionEnvironmentOutput>(
           {
@@ -1026,7 +1018,7 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/message`,
-            query: { limit: input["limit"], order: input["order"], cursor: input["cursor"] },
+            query: { limit: input["limit"], order: input["order"], cursor: input["cursor"], type: input["type"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 404, 500],
             empty: false,
@@ -1374,7 +1366,12 @@ export function make(options: ClientOptions) {
           {
             method: "PATCH",
             path: `/api/project/${encodeURIComponent(input.projectID)}`,
-            body: { name: input["name"], icon: input["icon"], commands: input["commands"] },
+            body: {
+              canonical: input["canonical"],
+              name: input["name"],
+              icon: input["icon"],
+              commands: input["commands"],
+            },
             successStatus: 200,
             declaredStatuses: [400, 401, 404],
             empty: false,
@@ -1566,6 +1563,18 @@ export function make(options: ClientOptions) {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/permission/${encodeURIComponent(input.requestID)}/reply`,
             body: { reply: input["reply"], message: input["message"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      rules: (input: PermissionRulesInput, requestOptions?: RequestOptions) =>
+        request<PermissionRulesOutput>(
+          {
+            method: "PUT",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/permission/rules`,
+            body: { permissions: input["permissions"] },
             successStatus: 204,
             declaredStatuses: [400, 401, 404],
             empty: true,
@@ -1968,28 +1977,30 @@ export function make(options: ClientOptions) {
         ),
     },
     worktree: {
-      list: (input: WorktreeListInput, requestOptions?: RequestOptions) =>
+      list: (input?: WorktreeListInput, requestOptions?: RequestOptions) =>
         request<WorktreeListOutput>(
           {
             method: "GET",
-            path: `/api/worktree/${encodeURIComponent(input.projectID)}`,
+            path: `/api/worktree`,
+            query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [400, 401],
             empty: false,
           },
           requestOptions,
         ),
-      create: (input: WorktreeCreateInput, requestOptions?: RequestOptions) =>
+      create: (input?: WorktreeCreateInput, requestOptions?: RequestOptions) =>
         request<WorktreeCreateOutput>(
           {
             method: "POST",
-            path: `/api/worktree/${encodeURIComponent(input.projectID)}`,
+            path: `/api/worktree`,
+            query: { location: input?.["location"] },
             body: {
-              strategy: input["strategy"],
-              from: input["from"],
-              branch: input["branch"],
-              directory: input["directory"],
-              name: input["name"],
+              strategy: input?.["strategy"],
+              from: input?.["from"],
+              branch: input?.["branch"],
+              directory: input?.["directory"],
+              name: input?.["name"],
             },
             successStatus: 200,
             declaredStatuses: [400, 401],
@@ -2001,7 +2012,8 @@ export function make(options: ClientOptions) {
         request<WorktreeRemoveOutput>(
           {
             method: "DELETE",
-            path: `/api/worktree/${encodeURIComponent(input.projectID)}`,
+            path: `/api/worktree`,
+            query: { location: input["location"] },
             body: { directory: input["directory"], force: input["force"] },
             successStatus: 204,
             declaredStatuses: [400, 401],
@@ -2009,11 +2021,12 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      refresh: (input: WorktreeRefreshInput, requestOptions?: RequestOptions) =>
+      refresh: (input?: WorktreeRefreshInput, requestOptions?: RequestOptions) =>
         request<WorktreeRefreshOutput>(
           {
             method: "POST",
-            path: `/api/worktree/${encodeURIComponent(input.projectID)}/refresh`,
+            path: `/api/worktree/refresh`,
+            query: { location: input?.["location"] },
             successStatus: 204,
             declaredStatuses: [400, 401],
             empty: true,

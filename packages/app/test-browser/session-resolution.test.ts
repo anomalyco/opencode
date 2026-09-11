@@ -17,9 +17,11 @@ function createFixture(initial: Record<string, Session> = {}) {
   const deferred = new Map<string, PromiseWithResolvers<unknown>>()
   const resolves: string[] = []
   const messages = { syncs: [] as string[], ...Promise.withResolvers<unknown>() }
+  const pending = { syncs: [] as string[] }
   return {
     resolves,
     messages,
+    pending,
     sessions: {
       get: (id: string) => cache()[id],
       sync: (id: string) => {
@@ -32,6 +34,12 @@ function createFixture(initial: Record<string, Session> = {}) {
         sync: (id: string) => {
           messages.syncs.push(id)
           return messages.promise
+        },
+      },
+      pending: {
+        sync: (id: string) => {
+          pending.syncs.push(id)
+          return Promise.resolve()
         },
       },
     },
@@ -86,6 +94,7 @@ test("refreshes the current session on reconnect while keeping cached content vi
     expect(fixture.resolves).toEqual(["ses_a", "ses_a"])
     expect(current()).toEqual(sessionOf("ses_a"))
     expect(fixture.messages.syncs).toEqual(["ses_a", "ses_a"])
+    expect(fixture.pending.syncs).toEqual(["ses_a", "ses_a"])
     fixture.settle("ses_a", "/worktrees/moved")
     await flush()
     expect(current()?.directory).toBe("/worktrees/moved")

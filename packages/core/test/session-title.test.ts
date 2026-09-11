@@ -1,31 +1,40 @@
 import { beforeEach, expect } from "bun:test"
-import { AIError, LLMClient, LLMEvent, LanguageModel, TransportError, type LLMRequest } from "@opencode-ai/ai"
-import { OpenAIChat } from "@opencode-ai/ai/protocols"
-import { Agent } from "@opencode-ai/core/agent"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Database } from "@opencode-ai/core/database/database"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
-import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionMessage } from "@opencode-ai/core/session/message"
-import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
-import { SessionTable } from "@opencode-ai/core/session/sql"
-import { SessionStore } from "@opencode-ai/core/session/store"
-import { SessionTitle } from "@opencode-ai/core/session/title"
-import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
-import { Location } from "@opencode-ai/core/location"
-import { Session } from "@opencode-ai/core/session"
-import { Project } from "@opencode-ai/core/project"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { App } from "@opencode-ai/core/app"
-import { Model } from "@opencode-ai/core/model"
-import { Provider } from "@opencode-ai/core/provider"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Money } from "@opencode-ai/schema/money"
+import {
+  AIError,
+  LLMClient,
+  LLMEvent,
+  LanguageModel,
+  Message,
+  SystemPart,
+  TransportError,
+  type LLMRequest,
+} from "@opencode/ai"
+import { OpenAIChat } from "@opencode/ai/protocols"
+import { Agent } from "@opencode/core/agent"
+import { Catalog } from "@opencode/core/catalog"
+import { Database } from "@opencode/core/database/database"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { llmClient } from "@opencode/core/effect/app-node-platform"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { SessionEvent } from "@opencode/core/session/event"
+import { SessionMessage } from "@opencode/core/session/message"
+import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionRunnerModel } from "@opencode/core/session/runner/model"
+import { SessionTable } from "@opencode/core/session/sql"
+import { SessionStore } from "@opencode/core/session/store"
+import { SessionTitle } from "@opencode/core/session/title"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
+import { Location } from "@opencode/core/location"
+import { Session } from "@opencode/core/session"
+import { Project } from "@opencode/core/project"
+import { ProjectTable } from "@opencode/core/project/sql"
+import { App } from "@opencode/core/app"
+import { Model } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Money } from "@opencode/schema/money"
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
@@ -229,6 +238,62 @@ it.effect("generates a title from the sole user message and renames the session"
     expect(renamed?.title).toBe("Generated Title")
     expect(renamed?.tokens).toEqual({ input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 2 } })
     expect(renamed?.cost).toBeCloseTo(0.0000233)
+  }),
+)
+
+it.effect("runs title hooks instead of context hooks", () =>
+  Effect.gen(function* () {
+    yield* enableTitleAgent
+    const sessionID = Session.ID.make("ses_title_hook")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, "Redact this message")
+
+    const hooks = yield* PluginHooks.Service
+    let contexts = 0
+    yield* hooks.register("session", "context", () => Effect.sync(() => contexts++))
+    yield* hooks.register("session", "title", (event) =>
+      Effect.sync(() => {
+        expect(event.sessionID).toBe(sessionID)
+        expect(event.system.map((part) => part.text)).toEqual(["You are a title generator."])
+        event.system.push(SystemPart.make("Prefer short titles."))
+        event.messages = [Message.user("[redacted]")]
+        event.options.maxTokens = 32
+        event.options.reasoningEffort = "low"
+      }),
+    )
+
+    const title = yield* SessionTitle.Service
+    yield* title.generate(sessionID)
+
+    expect(contexts).toBe(0)
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.system.map((part) => part.text)).toEqual(["You are a title generator.", "Prefer short titles."])
+    expect(JSON.stringify(requests[0]?.messages)).not.toContain("Redact this message")
+    expect(requests[0]?.generation).toEqual(expect.objectContaining({ maxTokens: 32 }))
+    expect(requests[0]?.providerOptions).toEqual({ reasoningEffort: "low" })
+  }),
+)
+
+it.effect("uses a hook-provided title without a model request", () =>
+  Effect.gen(function* () {
+    yield* enableTitleAgent
+    const sessionID = Session.ID.make("ses_title_result")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, "Hello")
+
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "title", (event) =>
+      Effect.sync(() => {
+        event.result = "Plugin Title"
+      }),
+    )
+
+    const title = yield* SessionTitle.Service
+    yield* title.generate(sessionID)
+
+    expect(requests).toHaveLength(0)
+    const store = yield* SessionStore.Service
+    expect((yield* store.get(sessionID))?.title).toBe("Plugin Title")
   }),
 )
 

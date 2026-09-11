@@ -1,6 +1,6 @@
 import { useCommand, type CommandOption } from "@/shell/commands/command"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { previewSelectedLines } from "@opencode/session-ui/pierre/selection-bridge"
 import { useFile, selectionFromLines, type FileSelection, type SelectedLineRange } from "@/workspaces/files/model"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useLayout } from "@/shell/state/layout"
@@ -194,7 +194,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const openTerminal = () => {
     actions.session.layout.view().terminal.open()
-    if (terminal.all().length > 0) terminal.new({ focus: true })
+    if (terminal.all().length > 0) terminal.new()
     if (terminal.all().length === 0) terminal.requestFocus()
   }
 

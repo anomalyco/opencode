@@ -1,9 +1,9 @@
 import { Headers } from "effect/unstable/http"
 import { Auth } from "../route/auth.js"
 import { type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
-import type { Route, RouteDefaultsInput, CompactOperation } from "../route/client.js"
+import type { Route, RouteDefaultsInput, CompactionOperations } from "../route/client.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
 import { ProviderShared } from "../protocols/shared.js"
@@ -39,6 +39,7 @@ export type Settings = ProviderPackage.Settings &
 const resourceBaseURL = (resourceName: string) => `https://${resourceName.trim()}.openai.azure.com/openai`
 
 const responsesRoute = OpenAIResponses.route.with({
+  compact: { endpoint: OpenAIResponses.route.compact.endpoint },
   id: "azure-openai-responses",
   provider: id,
   auth: routeAuth,
@@ -102,7 +103,7 @@ const auth = (input: Config) => {
   )
 }
 
-const configuredRoute = <Body, Prepared, Compact extends CompactOperation | undefined>(
+const configuredRoute = <Body, Prepared, Compact extends CompactionOperations | undefined>(
   route: Route<Body, Prepared, Compact>,
   input: Config,
   modelID: string | ModelID,
@@ -162,13 +163,13 @@ const config = (settings: Settings): Config => {
   }
   if (settings.baseURL !== undefined) return { ...common, baseURL: settings.baseURL }
   if (settings.resourceName !== undefined) return { ...common, resourceName: settings.resourceName }
-  throw new Error("Azure requires resourceName or baseURL")
+  throw new ProviderConfigurationError({ provider: id, message: "Azure requires resourceName or baseURL" })
 }
 
 export const responsesModel: ProviderPackage.Definition<
   Settings,
   OpenAIProviderOptionsInput,
-  CompactOperation
+  typeof responsesRoute.compact
 >["model"] = (modelID, settings) => configure(config(settings)).responses(modelID)
 export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
   modelID,

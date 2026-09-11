@@ -1,6 +1,6 @@
 export * as ConfigEntryObserver from "./entry-observer.js"
 
-import type { EventDomain } from "@opencode-ai/plugin/effect/event"
+import type { EventDomain } from "@opencode/plugin/effect/event"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config.js"
 

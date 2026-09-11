@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test"
-import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode-ai/client"
+import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
 import { createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
-  backgroundToolRowIndex,
   cacheReuseDrop,
   messageBoundaryIDs,
   reduceSessionRows,
@@ -259,63 +258,6 @@ test("assigns stable IDs to tool rows for direct navigation", () => {
   ])
 })
 
-test("finds background tool launch rows for completion navigation", () => {
-  const messages: SessionMessageInfo[] = [
-    assistant("assistant-1", [
-      {
-        type: "tool",
-        id: "shell-1",
-        name: "shell",
-        state: completed({ shellID: "sh_first", status: "running" }),
-        time: { created: 1 },
-      },
-    ]),
-    assistant("assistant-2", [
-      {
-        type: "tool",
-        id: "subagent-1",
-        name: "subagent",
-        state: completed({ sessionID: "child-1", status: "running" }),
-        time: { created: 2 },
-      },
-    ]),
-    {
-      type: "synthetic",
-      id: "completion-1",
-      text: "First background run completed",
-      description: "First run",
-      time: { created: 3 },
-    },
-    assistant("assistant-3", [
-      {
-        type: "tool",
-        id: "subagent-2",
-        name: "subagent",
-        state: completed({ sessionID: "child-1", status: "running" }),
-        time: { created: 4 },
-      },
-      {
-        type: "tool",
-        id: "subagent-foreground",
-        name: "subagent",
-        state: completed({ sessionID: "child-1", status: "completed" }),
-        time: { created: 5 },
-      },
-    ]),
-    {
-      type: "synthetic",
-      id: "completion-2",
-      text: "Second background run completed",
-      description: "Second run",
-      time: { created: 6 },
-    },
-  ]
-  const rows = reduceSessionRows(messages)
-
-  expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "shell-1" }, "completion-2")).toBe(0)
-  expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "sh_first" }, "completion-2")).toBe(0)
-})
-
 test("groups exploration parts across assistant messages until a delimiter", () => {
   const messages: SessionMessageInfo[] = [
     { type: "user", id: "user-1", text: "Explore", time: { created: 0 } },
@@ -338,10 +280,11 @@ test("groups exploration parts across assistant messages until a delimiter", () 
       kind: "exploration",
       pending: [],
       completed: true,
-      refs: [
-        { messageID: "assistant-1", partID: "read-1" },
-        { messageID: "assistant-1", partID: "glob-1" },
-        { messageID: "assistant-2", partID: "grep-1" },
+      size: 3,
+      children: [
+        partChild("assistant-1", "read-1"),
+        partChild("assistant-1", "glob-1"),
+        partChild("assistant-2", "grep-1"),
       ],
     },
     { type: "part", ref: { messageID: "assistant-2", partID: "text:0" } },
@@ -363,7 +306,8 @@ test("keeps non-exploration tools as individual part rows", () => {
       kind: "exploration",
       pending: [],
       completed: true,
-      refs: [{ messageID: "assistant-1", partID: "read-1" }],
+      size: 1,
+      children: [partChild("assistant-1", "read-1")],
     },
     { type: "part", ref: { messageID: "assistant-1", partID: "reasoning:0" } },
     {
@@ -371,7 +315,8 @@ test("keeps non-exploration tools as individual part rows", () => {
       kind: "exploration",
       pending: [],
       completed: false,
-      refs: [{ messageID: "assistant-1", partID: "grep-1" }],
+      size: 1,
+      children: [partChild("assistant-1", "grep-1")],
     },
   ])
 })
@@ -392,14 +337,16 @@ test("assigns stable kind ordinals within an assistant message", () => {
       type: "group",
       kind: "reasoning",
       completed: true,
-      refs: [{ messageID: "assistant-1", partID: "reasoning:0" }],
+      size: 1,
+      children: [partChild("assistant-1", "reasoning:0")],
     },
     { type: "part", ref: { messageID: "assistant-1", partID: "text:1" } },
     {
       type: "group",
       kind: "reasoning",
       completed: false,
-      refs: [{ messageID: "assistant-1", partID: "reasoning:1" }],
+      size: 1,
+      children: [partChild("assistant-1", "reasoning:1")],
     },
   ])
 })
@@ -419,17 +366,16 @@ test("groups adjacent reasoning parts until a visible boundary", () => {
       type: "group",
       kind: "reasoning",
       completed: true,
-      refs: [
-        { messageID: "assistant-1", partID: "reasoning:0" },
-        { messageID: "assistant-1", partID: "reasoning:1" },
-      ],
+      size: 2,
+      children: [partChild("assistant-1", "reasoning:0"), partChild("assistant-1", "reasoning:1")],
     },
     { type: "part", ref: { messageID: "assistant-1", partID: "text:0" } },
     {
       type: "group",
       kind: "reasoning",
       completed: false,
-      refs: [{ messageID: "assistant-1", partID: "reasoning:2" }],
+      size: 1,
+      children: [partChild("assistant-1", "reasoning:2")],
     },
   ])
 })
@@ -451,17 +397,16 @@ test("groups across empty assistant reasoning parts", () => {
       type: "group",
       kind: "reasoning",
       completed: true,
-      refs: [{ messageID: "assistant-1", partID: "reasoning:0" }],
+      size: 1,
+      children: [partChild("assistant-1", "reasoning:0")],
     },
     {
       type: "group",
       kind: "exploration",
       pending: [],
       completed: false,
-      refs: [
-        { messageID: "assistant-1", partID: "read-1" },
-        { messageID: "assistant-2", partID: "grep-1" },
-      ],
+      size: 2,
+      children: [partChild("assistant-1", "read-1"), partChild("assistant-2", "grep-1")],
     },
   ])
 })
@@ -483,7 +428,8 @@ test("completes exploration groups when another row follows", () => {
       kind: "exploration",
       pending: [],
       completed: true,
-      refs: [{ messageID: "assistant-1", partID: "read-1" }],
+      size: 1,
+      children: [partChild("assistant-1", "read-1")],
     },
     { type: "message", messageID: "user-1" },
     {
@@ -491,7 +437,8 @@ test("completes exploration groups when another row follows", () => {
       kind: "exploration",
       pending: [],
       completed: true,
-      refs: [{ messageID: "assistant-2", partID: "grep-1" }],
+      size: 1,
+      children: [partChild("assistant-2", "grep-1")],
     },
     { type: "assistant-footer", messageID: "assistant-2" },
   ])
@@ -526,10 +473,8 @@ test("hides synthetic messages without descriptions", () => {
       kind: "exploration",
       pending: [],
       completed: false,
-      refs: [
-        { messageID: "assistant-1", partID: "read-1" },
-        { messageID: "assistant-2", partID: "grep-1" },
-      ],
+      size: 2,
+      children: [partChild("assistant-1", "read-1"), partChild("assistant-2", "grep-1")],
     },
   ])
   expect(reduceSessionRows(messages, new Set(["synthetic-1"]))).toEqual(rows)
@@ -554,7 +499,8 @@ test("renders synthetic messages with descriptions", () => {
       kind: "exploration",
       pending: [],
       completed: true,
-      refs: [{ messageID: "assistant-1", partID: "read-1" }],
+      size: 1,
+      children: [partChild("assistant-1", "read-1")],
     },
     { type: "message", messageID: "synthetic-1" },
     {
@@ -562,10 +508,15 @@ test("renders synthetic messages with descriptions", () => {
       kind: "exploration",
       pending: [],
       completed: false,
-      refs: [{ messageID: "assistant-2", partID: "grep-1" }],
+      size: 1,
+      children: [partChild("assistant-2", "grep-1")],
     },
   ])
 })
+
+function partChild(messageID: string, partID: string) {
+  return { type: "entry" as const, entry: { type: "part" as const, ref: { messageID, partID } }, size: 1 as const }
+}
 
 test("renders a footer for a pre-output retry assistant after replay", () => {
   const message = assistant("assistant-retry", [])
@@ -619,15 +570,4 @@ function assistant(id: string, content: SessionMessageAssistant["content"]): Ses
 
 function pending() {
   return { status: "streaming" as const, input: "" }
-}
-
-function completed(
-  metadata: Record<string, string>,
-): Extract<SessionMessageAssistantTool["state"], { status: "completed" }> {
-  return {
-    status: "completed",
-    input: {},
-    content: [{ type: "text", text: "Background" }],
-    metadata,
-  }
 }

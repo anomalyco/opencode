@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test"
-import type { WslServerConfig } from "@opencode-ai/app/wsl/types"
-import { Effect } from "effect"
+import type { WslServerConfig } from "@opencode/app/wsl/types"
+import { Effect, FileSystem, Path } from "effect"
+import { NodeServices } from "@effect/platform-node"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { testEffect } from "../../../../core/test/lib/effect"
 import { wslCliInstallCommand } from "./runtime"
 import { createWslServersController } from "./servers"
 
@@ -8,11 +11,42 @@ type ControllerOptions = Parameters<typeof createWslServersController>[0]
 
 let persistedServers: WslServerConfig[] = []
 
-test("passes a local CLI path directly to the V2 installer", () => {
-  expect(wslCliInstallCommand({ version: "local", binary: "C:\\build\\opencode2" })).toBe(
-    `curl -fsSL https://raw.githubusercontent.com/anomalyco/opencode/v2/install | bash -s -- --binary "$(wslpath -a 'C:\\build\\opencode2')"`,
-  )
-})
+const it = testEffect(NodeServices.layer)
+// Execute the Linux-side installer fixture locally rather than requiring a WSL distro.
+const posix = process.platform === "win32" ? it.live.skip : it.live
+
+posix(
+  "installs a local build through the managed installer, including shell PATH setup",
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const dir = yield* fs.makeTempDirectoryScoped({ prefix: "wsl-cli-install-" })
+    const binary = path.join(dir, "local build ' cli")
+    yield* fs.writeFileString(binary, "#!/bin/sh\nprintf 'OpenCode v0.0.0-dev-16365\\n'\n", { mode: 0o755 })
+    yield* fs.writeFileString(path.join(dir, ".bashrc"), "# existing config\n")
+    yield* fs.writeFileString(path.join(dir, "installer"), yield* fs.readFileString(path.resolve("../../install")))
+    yield* fs.writeFileString(path.join(dir, "curl"), '#!/bin/sh\ncat "$HOME/installer"\n', { mode: 0o755 })
+    yield* fs.writeFileString(
+      path.join(dir, "wslpath"),
+      '#!/bin/sh\n[ "$1" = "-a" ] || exit 1\nprintf "%s" "$2" > "$HOME/wslpath-input"\nprintf "%s\\n" "$LOCAL_BINARY"\n',
+      { mode: 0o755 },
+    )
+    const windows = "C:\\local build's\\opencode2"
+    const command = wslCliInstallCommand({ version: "0.0.0-dev-16365", binary: windows })
+    expect(
+      yield* spawner.exitCode(
+        ChildProcess.make("bash", ["-c", command], {
+          env: { HOME: dir, PATH: `${dir}:/usr/bin:/bin`, LOCAL_BINARY: binary, SHELL: "/bin/bash" },
+        }),
+      ),
+    ).toBe(0)
+    expect(yield* fs.readFileString(path.join(dir, "wslpath-input"))).toBe(windows)
+    expect(yield* fs.readFileString(path.join(dir, ".opencode/bin/opencode2"))).toContain("0.0.0-dev-16365")
+    expect(yield* fs.readDirectory(path.join(dir, ".opencode/bin"))).toEqual(["opencode2"])
+    expect(yield* fs.readFileString(path.join(dir, ".bashrc"))).toContain(`export PATH=${dir}/.opencode/bin:$PATH`)
+  }),
+)
 
 test("installs and verifies the bundled CLI version", async () => {
   persistedServers = []

@@ -5,7 +5,7 @@ import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
-import type { LLMRequest, JsonSchema, ToolDefinition, ToolEntry } from "../schema/index.js"
+import { LLMRequest, mergeJsonRecords, type JsonSchema, type ToolDefinition, type ToolEntry } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { OpenAIImage } from "./utils/openai-image.js"
@@ -13,6 +13,7 @@ import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { OpenResponsesChannel } from "./open-responses-channel.js"
 import { ResponsesCompaction } from "./utils/responses-compaction.js"
+import { ResponsesCheckpoint } from "./utils/responses-checkpoint.js"
 
 const ADAPTER = "openai-responses"
 const NAME = "OpenAI Responses"
@@ -114,6 +115,18 @@ const OpenAIResponsesBody = Schema.Struct({
 })
 export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 
+/** Request control, never conversation content. */
+export const CompactionTrigger = Schema.Struct({ type: Schema.Literal("compaction_trigger") })
+const CheckpointBody = Schema.Struct({
+  ...OpenAIResponsesBody.fields,
+  input: Schema.Array(Schema.Union([OpenResponses.InputItem, OpenAIResponsesHostedToolItem, CompactionTrigger])),
+  store: Schema.Literal(false),
+  prompt_cache_retention: optionalNull(Schema.String),
+  prompt_cache_options: optionalNull(
+    Schema.Struct({ mode: Schema.optional(Schema.String), ttl: Schema.optional(Schema.String) }),
+  ),
+})
+
 const adapter = {
   id: ADAPTER,
   name: NAME,
@@ -190,6 +203,35 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
       (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined),
   })
 })
+
+const checkpointBody = {
+  schema: CheckpointBody,
+  from: Effect.fn("OpenAIResponses.checkpointBody")(function* (request: LLMRequest) {
+    const native = yield* fromRequest(LLMRequest.update(request, { toolChoice: undefined }))
+    const overlay = request.http?.body
+    // Complete history is required for stateless replay and SSE recovery. Raw input overrides bypass that contract.
+    if (
+      overlay?.input !== undefined ||
+      overlay?.previous_response_id !== undefined ||
+      overlay?.conversation !== undefined
+    )
+      return yield* ProviderShared.invalidRequest(
+        "Trigger compaction requires complete canonical history, not an input or continuation override",
+      )
+    return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(CheckpointBody))({
+      ...mergeJsonRecords(native, overlay),
+      input: [...native.input, { type: "compaction_trigger" }],
+      stream: true,
+      store: false,
+      parallel_tool_calls: true,
+      tool_choice: undefined,
+      context_management: undefined,
+      text: undefined,
+      max_output_tokens: undefined,
+      max_tool_calls: undefined,
+    })
+  }),
+}
 
 const hostedToolResult = Effect.fn("OpenAIResponses.hostedToolResult")(function* (item: ResponsesHostedTools.Item) {
   const isError = item.error !== undefined && item.error !== null
@@ -268,7 +310,7 @@ export const transport = channelTransport({
 })
 
 export const route = Route.make({
-  compact: ResponsesCompaction.make(adapter),
+  compact: { endpoint: ResponsesCompaction.make(adapter), trigger: ResponsesCheckpoint.make(checkpointBody) },
   id: ADAPTER,
   provider: "openai",
   providerMetadataKey: "openai",

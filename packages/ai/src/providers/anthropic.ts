@@ -2,7 +2,7 @@ import type { RouteDefaultsInput } from "../route/client.js"
 import { Auth } from "../route/auth.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { AnthropicCompatible } from "./anthropic-compatible.js"
 
@@ -57,7 +57,10 @@ export const model: ProviderPackage.Definition<Settings, AnthropicMessages.Provi
   settings,
 ) => {
   if (settings.apiKey !== undefined && settings.authToken !== undefined)
-    throw new Error("Anthropic apiKey cannot be combined with authToken")
+    throw new ProviderConfigurationError({
+      provider: id,
+      message: "Anthropic apiKey cannot be combined with authToken",
+    })
   return configure({
     ...(settings.authToken === undefined ? { apiKey: settings.apiKey } : { auth: Auth.bearer(settings.authToken) }),
     baseURL: settings.baseURL,

@@ -4,16 +4,16 @@ import { directoryColumn, pathColumn } from "../database/path.js"
 import { ProjectTable } from "../project/sql.js"
 import type { SessionMessage } from "./message.js"
 import type { SessionInbox } from "./inbox.js"
-import type { FileDiff } from "@opencode-ai/schema/file-diff"
-import type { PermissionV1 } from "@opencode-ai/schema/permission-v1"
-import type { Project } from "@opencode-ai/schema/project"
+import type { FileDiff } from "@opencode/schema/file-diff"
+import type { Permission } from "@opencode/schema/permission"
+import type { Project } from "@opencode/schema/project"
 import type { SessionSchema } from "./schema.js"
-import type { Workspace } from "@opencode-ai/schema/workspace"
+import type { Workspace } from "@opencode/schema/workspace"
 import { Timestamps } from "../database/schema.sql.js"
-import type { Instruction } from "@opencode-ai/schema/instruction"
-import type { Session } from "@opencode-ai/schema/session"
-import type { CompactionPayload, MovePayload, SyntheticPayload, UserPayload } from "@opencode-ai/schema/session-inbox"
-import type { RevertV1 } from "@opencode-ai/schema/session-revert"
+import type { Instruction } from "@opencode/schema/instruction"
+import type { Session } from "@opencode/schema/session"
+import type { CompactionPayload, MovePayload, SyntheticPayload, UserPayload } from "@opencode/schema/session-inbox"
+import type { RevertV1 } from "@opencode/schema/session-revert"
 import type { Schema } from "effect"
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
@@ -49,7 +49,7 @@ export const SessionTable = sqliteTable(
     tokens_cache_read: integer().notNull().default(0),
     tokens_cache_write: integer().notNull().default(0),
     revert: text({ mode: "json" }).$type<Session.Revert | RevertV1>(),
-    permission: text({ mode: "json" }).$type<PermissionV1.Ruleset>(),
+    permission: text({ mode: "json" }).$type<Permission.Ruleset>(),
     agent: text(),
     model: text({ mode: "json" }).$type<{
       id: string

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import {
   AIError,
+  CompactionPart,
+  CompactionCheckpointResponse,
   HttpContext,
   LLMEvent,
   LLMRequest,
@@ -13,80 +15,82 @@ import {
   InvalidRequestError,
   RateLimitError,
   UnknownProviderError,
-} from "@opencode-ai/ai"
-import { OpenAIChat } from "@opencode-ai/ai/protocols/openai-chat"
-import { AnthropicMessages, OpenAIResponses } from "@opencode-ai/ai/protocols"
-import { compileRequest } from "@opencode-ai/ai/route/client"
-import { TestLLM } from "@opencode-ai/ai/testing"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Database } from "@opencode-ai/core/database/database"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
-import { Event } from "@opencode-ai/schema/event"
-import { App } from "@opencode-ai/core/app"
-import { Permission } from "@opencode-ai/core/permission"
-import { EventTable } from "@opencode-ai/core/event/sql"
-import { Project } from "@opencode-ai/core/project"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { Form } from "@opencode-ai/core/form"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Session } from "@opencode-ai/core/session"
-import { Snapshot } from "@opencode-ai/core/snapshot"
-import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionCompaction } from "@opencode-ai/core/session/compaction"
-import { SessionInbox } from "@opencode-ai/core/session/inbox"
-import { SessionMessage } from "@opencode-ai/core/session/message"
-import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
-import { Money } from "@opencode-ai/schema/money"
-import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
-import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
-import { SessionRunner } from "@opencode-ai/core/session/runner/index"
-import { SessionRunnerLLM } from "@opencode-ai/core/session/runner/llm"
-import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
-import { SessionUsage } from "@opencode-ai/core/session/usage"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
-import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
-import { QuestionTool } from "@opencode-ai/core/tool/plugin/question"
-import { Agent } from "@opencode-ai/core/agent"
-import { Config } from "@opencode-ai/core/config"
-import { Document, Info } from "@opencode-ai/schema/config"
-import { ConfigCompaction } from "@opencode-ai/schema/config/compaction"
-import { Tool } from "@opencode-ai/core/tool"
-import type { Info as ToolInfo } from "@opencode-ai/schema/tool"
+} from "@opencode/ai"
+import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
+import { AnthropicMessages, OpenAIResponses } from "@opencode/ai/protocols"
+import { compileRequest } from "@opencode/ai/route/client"
+import { TestLLM } from "@opencode/ai/testing"
+import type { SessionHooks } from "@opencode/plugin/effect/session"
+import { Catalog } from "@opencode/core/catalog"
+import { Database } from "@opencode/core/database/database"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNodePlatform } from "@opencode/core/effect/app-node-platform"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { Event } from "@opencode/schema/event"
+import { App } from "@opencode/core/app"
+import { Permission } from "@opencode/core/permission"
+import { EventTable } from "@opencode/core/event/sql"
+import { Project } from "@opencode/core/project"
+import { ProjectTable } from "@opencode/core/project/sql"
+import { Form } from "@opencode/core/form"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Session } from "@opencode/core/session"
+import { Snapshot } from "@opencode/core/snapshot"
+import { SessionEvent } from "@opencode/core/session/event"
+import { SessionCompaction } from "@opencode/core/session/compaction"
+import { SessionInbox } from "@opencode/core/session/inbox"
+import { SessionMessage } from "@opencode/core/session/message"
+import { SessionModelTransport } from "@opencode/core/session/model-transport"
+import { SessionProviderContext } from "@opencode/core/session/provider-context"
+import { Money } from "@opencode/schema/money"
+import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionRunCoordinator } from "@opencode/core/session/run-coordinator"
+import { SessionRunner } from "@opencode/core/session/runner/index"
+import { SessionRunnerLLM } from "@opencode/core/session/runner/llm"
+import { SessionRunnerModel } from "@opencode/core/session/runner/model"
+import { SessionUsage } from "@opencode/core/session/usage"
+import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { OptimizePlugin } from "@opencode/core/plugin/optimize"
+import { QuestionTool } from "@opencode/core/tool/plugin/question"
+import { Agent } from "@opencode/core/agent"
+import { Config } from "@opencode/core/config"
+import { Document, Info } from "@opencode/schema/config"
+import { ConfigCompaction } from "@opencode/schema/config/compaction"
+import { Tool } from "@opencode/core/tool"
+import type { Info as ToolInfo } from "@opencode/schema/tool"
 import {
   InstructionStateTable,
   SessionInboxTable,
   SessionMessageTable,
   SessionTable,
-} from "@opencode-ai/core/session/sql"
-import { InstructionEntry } from "@opencode-ai/core/session/instruction-entry"
-import { SessionStore } from "@opencode-ai/core/session/store"
-import { Instructions } from "@opencode-ai/core/instructions/index"
-import { InstructionBuiltIns } from "@opencode-ai/core/instructions/builtins"
-import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
-import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
-import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
-import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
-import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
-import { ID, Model } from "@opencode-ai/core/model"
-import { Location } from "@opencode-ai/core/location"
-import { Provider } from "@opencode-ai/core/provider"
+} from "@opencode/core/session/sql"
+import { InstructionEntry } from "@opencode/core/session/instruction-entry"
+import { SessionStore } from "@opencode/core/session/store"
+import { Instructions } from "@opencode/core/instructions/index"
+import { InstructionBuiltIns } from "@opencode/core/instructions/builtins"
+import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
+import { SkillInstructions } from "@opencode/core/skill/instructions"
+import { ReferenceInstructions } from "@opencode/core/reference/instructions"
+import { McpInstructions } from "@opencode/core/mcp/instructions"
+import { SessionSystemPrompt } from "@opencode/core/session/system-prompt"
+import { ID, Model } from "@opencode/core/model"
+import { Location } from "@opencode/core/location"
+import { Provider } from "@opencode/core/provider"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 import { promptLocationNode } from "./fixture/prompt-location"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, catalogHost, host } from "./plugin/host"
-import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
+import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
 
 const emptyCodeMode = `\n\n${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}`
 type ToolBarrier = {
@@ -192,7 +196,7 @@ test("does not apply an ineligible tier without base pricing", () => {
   ).toBe(Money.USD.zero)
 })
 
-const makeRunnerState = () => {
+const makeRunnerState = (compaction?: SessionRunnerModel.Resolved["compaction"]) => {
   let toolBarrier: ToolBarrier | undefined
   const releaseTools = (barrier: ToolBarrier) =>
     Effect.sync(() => {
@@ -200,6 +204,7 @@ const makeRunnerState = () => {
     }).pipe(Effect.andThen(Deferred.succeed(barrier.release, undefined)), Effect.asVoid)
   return {
     currentModel: model,
+    compaction,
     modelResolveHook: Effect.void,
     systemBaseline: "Initial context",
     systemRemoved: false,
@@ -319,6 +324,7 @@ const layer = Layer.unwrap(
               cost: [],
               limit: modelLimits.get(String(selected.id)) ?? defaultModelLimit,
               variant: session.model?.variant,
+              compaction: state.compaction,
             })
           }),
         ),
@@ -519,7 +525,7 @@ const setup = Effect.gen(function* () {
     catalog: catalogHost(catalog),
     session: { hook: (name, callback) => hooks.register("session", name, callback) },
   })
-  yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
+  yield* Effect.forEach(OptimizePlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
     discard: true,
   })
   yield* agents.transform((editor) =>
@@ -1073,6 +1079,24 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
+  scenario("executes a tool renamed by a session context hook", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        event.tools.renamed_echo = event.tools.echo!
+        delete event.tools.echo
+      }),
+    )
+    yield* s.admit("Use the renamed tool")
+    yield* s.llm.push(TestLLM.tool("call-renamed", "renamed_echo", { text: "renamed" }), [])
+
+    yield* s.resume
+
+    expect(s.requests[0]?.tools.map((tool) => tool.name)).toContain("renamed_echo")
+    expect(s.requests[0]?.tools.map((tool) => tool.name)).not.toContain("echo")
+    expect(s.executions).toEqual(["renamed"])
+  })
+
   scenario("executes the tool advertised before a registry reload", function* (s) {
     const registry = yield* Tool.Service
     const scope = yield* Scope.make()
@@ -1435,6 +1459,92 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.inbox).toEqual([])
   })
 
+  scenario(
+    "restores installed native context with auto disabled and preserves it across fork and revert",
+    function* (s) {
+      const compaction = yield* SessionCompaction.Service
+      yield* compaction.transform((editor) => editor.configure({ auto: false }))
+      yield* s.runPrompt("Original request")
+      s.systemBaseline = "Checkpoint instructions"
+      yield* s.runPrompt("Before checkpoint")
+      const target = SessionProviderContext.provenance({
+        model: s.currentModel,
+        ref: Model.Ref.make({
+          id: Model.ID.make(s.currentModel.id),
+          providerID: Provider.ID.make(s.currentModel.provider),
+        }),
+      })
+      if (!target) throw new Error("Expected concrete fixture endpoint")
+      const replacement = [
+        Message.assistant(CompactionPart.make({ provider: s.currentModel.provider, encrypted: "checkpoint" })),
+      ]
+      const providerContext = SessionProviderContext.encode(target, replacement)
+      yield* s.bus.publish(SessionEvent.Compaction.Ended, {
+        sessionID,
+        reason: "manual",
+        text: "",
+        recent: "",
+        providerContext,
+      })
+      const checkpoint = (yield* s.messages).find((message) => message.type === "compaction")
+      if (!checkpoint) throw new Error("Expected checkpoint")
+
+      s.systemBaseline = "Newest instructions"
+      const after = yield* s.runPrompt("After checkpoint")
+      const continued = s.requests.at(-1)
+      if (!continued) throw new Error("Expected continuation request")
+      expect(continued.messages[0]).toEqual(replacement[0])
+      expect(continued.system.map((part) => part.text)).toContain("Checkpoint instructions")
+      expect(systemTexts(continued)).toEqual(["Newest instructions"])
+
+      const forked = yield* s.session.fork({ sessionID, boundary: { type: "before", messageID: after.id } })
+      yield* s.session.prompt({ sessionID: forked.id, text: "Fork prompt", resume: false })
+      yield* s.session.resume(forked.id)
+      expect(s.requests.at(-1)?.messages[0]).toEqual(replacement[0])
+      expect(s.requests.at(-1)?.system.map((part) => part.text)).toContain("Newest instructions")
+      expect(s.requests.at(-1)?.messages.filter((message) => message.role === "system")).toEqual([
+        Message.system("Newest instructions"),
+      ])
+      expect(
+        (yield* s.session.messages({ sessionID: forked.id })).find((message) => message.type === "compaction"),
+      ).toMatchObject({ providerContext })
+
+      const original = s.currentModel
+      s.currentModel = LanguageModel.update(original, { id: "different-deployment" })
+      yield* s.session.prompt({ sessionID: forked.id, text: "Switched fork", resume: false })
+      yield* s.session.resume(forked.id)
+      expect(s.requests.at(-1)?.messages[0]?.content).toEqual([Message.text("Original request")])
+      expect(s.requests.at(-1)?.messages.filter((message) => message.role === "system")).toEqual([
+        Message.system("Newest instructions"),
+      ])
+      s.currentModel = original
+
+      yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: checkpoint.id })
+      yield* s.runPrompt("After revert")
+      expect(
+        s.requests
+          .at(-1)
+          ?.messages.flatMap((message) => message.content)
+          .some((part) => part.type === "compaction"),
+      ).toBe(false)
+      expect(s.requests.at(-1)?.messages[0]?.content).toEqual([Message.text("Original request")])
+      expect(
+        (yield* s.session.messages({ sessionID: forked.id })).find((message) => message.type === "compaction"),
+      ).toMatchObject({ providerContext })
+
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "model.request", (event) =>
+        Effect.sync(() => {
+          event.baseURL = "https://another-deployment.example/v1"
+        }),
+      )
+      const before = s.requests.length
+      yield* s.session.prompt({ sessionID: forked.id, text: "Changed route", resume: false })
+      expect(yield* s.session.resume(forked.id).pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
+      expect(s.requests).toHaveLength(before)
+    },
+  )
+
   scenario("seeds a fork with the parent's newest instruction values", function* (s) {
     yield* s.runPrompt("First")
     s.systemBaseline = "Changed context"
@@ -1590,7 +1700,6 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
 
     expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([
-      defaultSystem,
       expect.stringContaining("# Delegation"),
       "Initial context",
     ])
@@ -1611,7 +1720,6 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
 
     expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([
-      defaultSystem,
       expect.stringContaining("# Delegation"),
       "Initial context",
     ])
@@ -1836,7 +1944,16 @@ describe("SessionRunnerLLM", () => {
     expect(yield* entries.list(sessionID)).toEqual([{ key: "nullable", value: null }])
   })
 
-  scenario("rejects API instruction entries larger than 8KB", function* () {
+  scenario("accepts API instruction entries up to 256 KiB", function* () {
+    const entries = yield* InstructionEntry.Service
+    const value = "x".repeat(InstructionEntry.MaxValueBytes - 2)
+
+    yield* entries.put({ sessionID, key: "large", value })
+
+    expect(yield* entries.list(sessionID)).toEqual([{ key: "large", value }])
+  })
+
+  scenario("rejects API instruction entries larger than 256 KiB", function* () {
     const entries = yield* InstructionEntry.Service
 
     const exit = yield* entries
@@ -1923,6 +2040,185 @@ describe("SessionRunnerLLM", () => {
     expect(
       (yield* s.session.context(fork.id)).flatMap((message) => (message.type === "system" ? [message.text] : [])),
     ).toEqual(["Replacement context"])
+  })
+
+  for (const order of ["before", "between", "after"] as const) {
+    scenario(`prioritizes manual compaction admitted ${order} two steers at the safe boundary`, function* (s) {
+      s.currentModel = recoveryModel
+      yield* s.llm.push(
+        TestLLM.text("Active complete", "active"),
+        TestLLM.text("## Objective\n- Active work checkpoint", "summary"),
+        TestLLM.text("Steers complete", "steers"),
+      )
+      yield* s.admit("Active work")
+      const active = yield* s.resumePaused
+      const compactID = SessionMessage.ID.create()
+      if (order === "before") yield* s.session.compact({ sessionID, id: compactID })
+      const first = yield* s.admit("STEER_A")
+      if (order === "between") yield* s.session.compact({ sessionID, id: compactID })
+      const second = yield* s.admit("STEER_B")
+      if (order === "after") yield* s.session.compact({ sessionID, id: compactID })
+      expect((yield* s.session.compact({ sessionID })).id).toBe(compactID)
+
+      expect(s.requests).toHaveLength(1)
+      expect(yield* s.inbox).toHaveLength(3)
+      expect((yield* s.messages).some((message) => message.type === "compaction")).toBe(false)
+      yield* active.finish
+
+      expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
+      expect(s.requests).toHaveLength(3)
+      expect(userTexts(s.requests[1])).not.toContain("STEER_A")
+      expect(userTexts(s.requests[1])).not.toContain("STEER_B")
+      expect(userTexts(s.requests[2]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
+      expect(yield* s.inbox).toEqual([])
+      expect((yield* s.messages).filter((message) => message.id === compactID)).toMatchObject([
+        { type: "compaction", status: "completed" },
+      ])
+      expect((yield* s.context).filter((message) => message.type === "user").map((message) => message.id)).toEqual([
+        first.id,
+        second.id,
+      ])
+      // An advisory drain must not redeliver either steer or rerun compaction.
+      const runner = yield* SessionRunner.Service
+      yield* runner.drain({ sessionID, force: false })
+      expect(s.requests).toHaveLength(3)
+    })
+  }
+
+  scenario("waits for active tools before prioritizing compaction over pending steers", function* (s) {
+    yield* s.llm.push(
+      TestLLM.tool("call-active", "echo", { text: "active" }),
+      TestLLM.text("## Objective\n- Tool work checkpoint", "summary"),
+      TestLLM.text("Steers complete", "steers"),
+    )
+    yield* s.admit("Active work")
+    const tools = yield* s.blockTools()
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* tools.started
+    yield* s.admit("STEER_A")
+    yield* s.admit("STEER_B")
+    const compact = yield* s.session.compact({ sessionID })
+    expect(s.requests).toHaveLength(1)
+    expect((yield* s.messages).some((message) => message.id === compact.id)).toBe(false)
+    yield* tools.release
+    yield* Fiber.join(run)
+
+    expect(s.requests).toHaveLength(3)
+    expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
+    expect(s.requests[1].messages.some((message) => message.role === "tool")).toBe(true)
+    expect(userTexts(s.requests[2]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
+    expect(yield* s.inbox).toEqual([])
+  })
+
+  scenario("rechecks compaction admitted during boundary context preparation", function* (s) {
+    yield* s.runPrompt("Earlier work")
+    yield* s.admit("STEER_A")
+    yield* s.admit("STEER_B")
+    const preparing = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    s.systemLoadHook = Deferred.succeed(preparing, undefined).pipe(Effect.andThen(Deferred.await(release)))
+    yield* s.llm.push(
+      TestLLM.text("## Objective\n- Earlier work checkpoint", "summary"),
+      TestLLM.text("Steers complete", "steers"),
+    )
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* Deferred.await(preparing)
+    yield* s.session.compact({ sessionID })
+    yield* Deferred.succeed(release, undefined)
+    yield* Fiber.join(run)
+    expect(s.requests).toHaveLength(3)
+    expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
+    expect(userTexts(s.requests[2]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
+    expect(yield* s.inbox).toEqual([])
+  })
+
+  for (const outcome of ["cancelled", "failed"] as const) {
+    scenario(`preserves both earlier steers when prioritized compaction is ${outcome}`, function* (s) {
+      yield* s.llm.push(TestLLM.text("Active complete", "active"))
+      yield* s.admit("Active work")
+      const active = yield* s.resumePaused
+      const first = yield* s.admit("STEER_A")
+      const second = yield* s.admit("STEER_B")
+      const compact = yield* s.session.compact({ sessionID })
+      if (outcome === "cancelled") yield* s.session.cancelInbox({ sessionID, inboxID: compact.id })
+      if (outcome === "failed") yield* s.llm.push([LLMEvent.providerError({ message: "summary unavailable" })])
+      yield* s.llm.push(TestLLM.text("Steers complete", "steers"))
+      yield* active.finish
+
+      expect(s.requests).toHaveLength(outcome === "cancelled" ? 2 : 3)
+      if (outcome === "failed") {
+        expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
+        expect((yield* s.messages).find((message) => message.id === compact.id)).toMatchObject({
+          status: "failed",
+          error: { type: "provider.error", message: "summary unavailable" },
+        })
+      }
+      if (outcome === "cancelled") expect((yield* s.messages).some((message) => message.id === compact.id)).toBe(false)
+      expect(userTexts(s.requests[s.requests.length - 1]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
+      expect(
+        (yield* s.context)
+          .filter((message) => message.id === first.id || message.id === second.id)
+          .map((message) => message.id),
+      ).toEqual([first.id, second.id])
+      expect(yield* s.inbox).toEqual([])
+    })
+  }
+
+  scenario("keeps steers durable across interrupted priority compaction and replay", function* (s) {
+    yield* s.runPrompt("Earlier work")
+    const first = yield* s.admit("STEER_A")
+    const second = yield* s.admit("STEER_B")
+    yield* s.llm.push(TestLLM.text("## Objective\n- Interrupted checkpoint", "summary"))
+    const summary = yield* s.llm.gate
+    const compact = yield* s.session.compact({ sessionID })
+    yield* summary.started
+    expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
+    expect((yield* s.inbox).map((item) => item.id)).toEqual([first.id, second.id])
+    yield* s.session.interrupt(sessionID)
+    yield* s.session.wait(sessionID)
+    yield* summary.release
+    expect((yield* s.messages).find((message) => message.id === compact.id)).toMatchObject({ status: "failed" })
+    yield* replaySessionProjection(sessionID)
+    expect((yield* s.inbox).map((item) => item.id)).toEqual([first.id, second.id])
+
+    yield* s.llm.push(TestLLM.text("Recovered steers", "steers"))
+    yield* s.resume
+    expect(s.requests).toHaveLength(3)
+    expect(userTexts(s.requests[2]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
+    expect(yield* s.inbox).toEqual([])
+  })
+
+  scenario("does not pull compaction across an earlier move", function* (s) {
+    yield* s.admit("STEER_A")
+    yield* s.sessionInbox.admit({
+      id: SessionMessage.ID.create(),
+      sessionID,
+      item: {
+        type: "move",
+        payload: {
+          location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+          projectID: Project.ID.global,
+        },
+        delivery: "steer",
+      },
+    })
+    yield* s.admit("STEER_B")
+    yield* s.sessionInbox.admitCompaction({ id: SessionMessage.ID.create(), sessionID, delivery: "steer" })
+    yield* s.llm.push(
+      TestLLM.text("First steer complete", "first"),
+      TestLLM.text("## Objective\n- Source work checkpoint", "summary"),
+      TestLLM.text("Second steer complete", "second"),
+    )
+    yield* s.resume
+    expect(s.requests).toHaveLength(3)
+    expect(userTexts(s.requests[0])).toEqual(["STEER_A"])
+    expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
+    expect(userTexts(s.requests[2]).at(-1)).toBe("STEER_B")
+    expect(
+      (yield* recordedEventTypes(sessionID)).filter(
+        (type) => type === "session.moved.1" || type === "session.compaction.started.1",
+      ),
+    ).toEqual(["session.moved.1", "session.compaction.started.1"])
   })
 
   scenario("runs steers before queued compaction and later queued input", function* (s) {
@@ -2125,15 +2421,16 @@ describe("SessionRunnerLLM", () => {
           model: { id: ID.make(s.currentModel.id), providerID: Provider.ID.make(s.currentModel.provider), variant },
         })
         const requestAgents: Agent.ID[] = []
-        yield* hooks.register("session", "context", (event) =>
+        const hook = (event: SessionHooks["context"]) =>
           Effect.sync(() => {
             expect(event.agent).toBe(agentID)
             expect(event.model.variant).toBe(variant)
             event.system.push(SystemPart.make("Hook-provided instructions"))
             event.tools.echo.description = "Hook-provided tool description"
-            event.generation.maxTokens = 4_000
-          }),
-        )
+            event.options.maxTokens = 4_000
+          })
+        yield* hooks.register("session", "context", hook)
+        yield* hooks.register("session", "compaction", hook)
         yield* hooks.register("session", "model.request", (event) =>
           Effect.sync(() => {
             requestAgents.push(event.agent)
@@ -2182,7 +2479,7 @@ describe("SessionRunnerLLM", () => {
           expect(compact[field]).toEqual(normal[field])
         expect(compact.toolChoice).toBeUndefined()
         expect(compact.system.map((part) => part.text)).toContain("Review the project carefully.")
-        expect(requestAgents[2]).toBe(Agent.ID.make("compaction"))
+        expect(requestAgents[2]).toBe(agentID)
         expect(s.executions).toEqual(["x".repeat(4_000)])
         expect((yield* s.messages).find((message) => message.type === "compaction")).toMatchObject({
           model: { id: s.currentModel.id, providerID: s.currentModel.provider, variant },
@@ -2297,7 +2594,7 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(5)
     for (const request of s.requests) expect(request).toEqual(s.requests[0])
     expect(retries.map((event) => event.attempt)).toEqual([2, 3, 4, 5])
-    expect(retries.every((event) => event.sessionID === sessionID && event.agent === "compaction")).toBe(true)
+    expect(retries.every((event) => event.sessionID === sessionID && event.agent === "build")).toBe(true)
     expect(retries[3].decision).toEqual({ retry: true, delay: 60_000 })
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
       status: "completed",
@@ -2499,6 +2796,88 @@ describe("SessionRunnerLLM", () => {
       summary: "## Objective\n- Preserve the updated task",
       recent: `[User]: ${"Newest exact request ".repeat(180)}`,
     })
+  })
+
+  scenario("automatically persists native windows, retains earlier users, and waits for fresh usage", function* (s) {
+    s.currentModel = LanguageModel.make({ id: "native", provider: "openai", route: OpenAIResponses.route })
+    s.compaction = { mode: "provider", threshold: 10_000 }
+    const agents = yield* Agent.Service
+    yield* agents.transform((editor) =>
+      editor.update(Agent.defaultID, (agent) => {
+        agent.steps = 2
+      }),
+    )
+    yield* s.llm.push(TestLLM.textWithUsage("Earlier answer", "before-native", 10_000))
+    yield* s.runPrompt("First real request")
+    const checkpoint = (encrypted: string) =>
+      CompactionCheckpointResponse.make({
+        responseID: `resp_${encrypted}`,
+        checkpoint: { type: "compaction", provider: s.currentModel.provider, encrypted },
+      })
+    yield* s.llm.push(
+      checkpoint("first"),
+      TestLLM.tool("echo-native", "echo", { text: "continue" }),
+      TestLLM.text("No usage yet", "no-usage"),
+    )
+    yield* s.runPrompt("Second real request")
+    expect(s.requests).toHaveLength(4)
+    expect(s.requests[2].toolChoice).not.toEqual({ type: "none" })
+    expect(s.executions).toEqual(["continue"])
+    expect(JSON.stringify(s.requests[2].messages)).toContain("first")
+    const installed = (yield* s.messages).filter((message) => message.type === "compaction")
+    expect(installed).toMatchObject([{ status: "completed", reason: "auto", providerContext: { version: 1 } }])
+    // New input without a post-checkpoint usage anchor must not retrigger compaction.
+    yield* s.llm.push(TestLLM.textWithUsage("Measured", "measured", 10_000))
+    yield* s.runPrompt("Third real request")
+    expect(s.requests).toHaveLength(5)
+    yield* s.llm.push(checkpoint("second"), TestLLM.textWithUsage("Continued", "continued", 10_000))
+    yield* s.runPrompt("Fourth real request")
+    expect(s.requests).toHaveLength(7)
+    expect(userTexts(s.requests[6])).toEqual([
+      "First real request",
+      "Second real request",
+      "Third real request",
+      "Fourth real request",
+    ])
+    expect(JSON.stringify(s.requests[6].messages)).not.toContain('"encrypted":"first"')
+    const compaction = yield* SessionCompaction.Service
+    yield* compaction.transform((editor) => editor.configure({ auto: false }))
+    yield* replaySessionProjection(sessionID)
+    yield* s.llm.push(TestLLM.text("Disabled auto still replays", "disabled"))
+    yield* s.runPrompt("Fifth real request")
+    expect(s.requests).toHaveLength(8)
+    expect(JSON.stringify(s.requests[7].messages)).toContain('"encrypted":"second"')
+  })
+
+  scenario("recovers an overflowing native window locally from original durable history", function* (s) {
+    s.currentModel = LanguageModel.make({ id: "native", provider: "openai", route: OpenAIResponses.route })
+    s.compaction = { mode: "provider", threshold: 10_000 }
+    yield* s.llm.push(TestLLM.textWithUsage("Earlier answer", "before-native", 10_000))
+    yield* s.runPrompt("Original durable request")
+    yield* s.llm.push(
+      CompactionCheckpointResponse.make({
+        responseID: "resp_native",
+        checkpoint: { type: "compaction", provider: s.currentModel.provider, encrypted: "native-window" },
+      }),
+      TestLLM.text("After native", "after-native"),
+    )
+    yield* s.runPrompt("Before native checkpoint")
+    s.requests.length = 0
+    yield* s.llm.push(
+      [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+      TestLLM.text("## Objective\n- Recovered original history", "local-recovery"),
+      TestLLM.text("Recovered", "recovered"),
+    )
+    yield* s.runPrompt("Overflow request")
+    expect(s.requests).toHaveLength(3)
+    expect(JSON.stringify(s.requests[0].messages)).toContain("native-window")
+    expect(JSON.stringify(s.requests[1].messages)).not.toContain("native-window")
+    expect(userTexts(s.requests[1])).toContain("Original durable request")
+    expect(userTexts(s.requests[1]).at(-1)).toBe(SessionCompaction.buildPrompt(false))
+    expect(yield* s.context).toMatchObject([
+      { type: "compaction", summary: "## Objective\n- Recovered original history" },
+      { type: "assistant" },
+    ])
   })
 
   scenario("does not compact immediately when the advertised output limit fills the context", function* (s) {

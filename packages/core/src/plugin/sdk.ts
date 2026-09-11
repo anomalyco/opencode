@@ -1,15 +1,15 @@
 export * as SdkPlugins from "./sdk.js"
 
-import type { Plugin } from "@opencode-ai/plugin/effect/plugin"
+import type { Plugin } from "@opencode/plugin/effect/plugin"
 import { Context, Effect, Layer } from "effect"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "../bus.js"
 import type { Generation } from "../plugin.js"
 
 export const Updated = Bus.ephemeral({ type: "sdk.plugin.updated", schema: {} })
 
 /**
- * Holds the plugins an embedder (the `@opencode-ai/sdk` host) contributes,
+ * Holds the plugins an embedder (the `@opencode/sdk` host) contributes,
  * so the application loader can add them on every Location boot through its
  * ordinary generation path. Registration publishes an unlocated update so every booted Location
  * reloads its plugin generation from the shared store.

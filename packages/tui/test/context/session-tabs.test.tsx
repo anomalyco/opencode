@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import type { OpenCodeEvent } from "@opencode-ai/client"
+import type { OpenCodeEvent } from "@opencode/client"
 import { testRender } from "@opentui/solid"
 import { mkdirSync, watch } from "fs"
 import path from "path"
@@ -260,6 +260,23 @@ test("loads VCS metadata for each persisted tab location", async () => {
   try {
     await wait(() => setup.locations.includes(other))
     await wait(() => setup.vcsLocations.includes(other))
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("opens a background tab without changing the current session", async () => {
+  const setup = await renderSessionTabs("first")
+
+  try {
+    await wait(() => setup.tabs.current() === "first" && setup.tabs.tabs().some((tab) => tab.sessionID === "first"))
+    setup.tabs.open("background")
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "background"))
+
+    expect(setup.tabs.current()).toBe("first")
+    expect(setup.tabs.isPreview("background")).toBe(false)
+    setup.tabs.move("background", 0)
+    await wait(() => setup.tabs.tabs()[0]?.sessionID === "background")
   } finally {
     await setup.destroy()
   }
@@ -582,6 +599,41 @@ test("keeps scroll anchors for open session tabs", async () => {
     setup.tabs.close("first")
     await wait(() => setup.tabs.tabs().every((tab) => tab.sessionID !== "first"))
     expect(setup.tabs.scrollAnchor("first")).toBeUndefined()
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("keeps parent and subagent scroll anchors independent", async () => {
+  const setup = await renderSessionTabs("root", {
+    persisted: ["root"],
+    sessionParents: { child: "root" },
+  })
+
+  try {
+    await wait(() => setup.data.session.get("child") !== undefined)
+    const parent = { messageID: "msg_parent", screenY: -3 }
+    const child = { messageID: "msg_child", screenY: -5 }
+    setup.tabs.setScrollAnchor("root", parent)
+
+    // A short subagent transcript is at the bottom, so it saves no anchor.
+    setup.tabs.setScrollAnchor("child", undefined)
+    expect(setup.tabs.scrollAnchor("root")).toEqual(parent)
+    expect(setup.tabs.scrollAnchor("child")).toBeUndefined()
+
+    setup.tabs.setScrollAnchor("child", child)
+    expect(setup.tabs.scrollAnchor("root")).toEqual(parent)
+    expect(setup.tabs.scrollAnchor("child")).toEqual(child)
+
+    setup.tabs.setScrollAnchor("root", undefined)
+    expect(setup.tabs.scrollAnchor("child")).toEqual(child)
+
+    setup.tabs.close("root")
+    await wait(() => setup.tabs.tabs().length === 0)
+    setup.route.navigate({ type: "session", sessionID: "root" })
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "root"))
+    expect(setup.tabs.scrollAnchor("root")).toBeUndefined()
+    expect(setup.tabs.scrollAnchor("child")).toBeUndefined()
   } finally {
     await setup.destroy()
   }

@@ -7,7 +7,7 @@ import type {
   WslServerRuntime,
   WslServersEvent,
   WslServersState,
-} from "@opencode-ai/app/wsl/types"
+} from "@opencode/app/wsl/types"
 import { Effect } from "effect"
 import { nativeT } from "../native/translations"
 import {

@@ -20,7 +20,7 @@ export interface WebSocketChannelExchange {
   readonly connect: {
     readonly url: string
     readonly headers: Headers.Headers
-    /** Provider-safe connection age after which Core should rotate before sending. */
+    /** Provider-safe connection age after which the channel executor should reconnect before sending. */
     readonly rotateAfterMs?: number
   }
   readonly fallback: () => Stream.Stream<string, AIError>

@@ -1,10 +1,10 @@
 export * as PluginHost from "./host.js"
 
-import { Plugin } from "@opencode-ai/plugin/effect"
-import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
-import { EventManifest } from "@opencode-ai/schema/event-manifest"
-import type { Event } from "@opencode-ai/schema/event"
-import { ServerConfig } from "@opencode-ai/schema/mcp"
+import { Plugin } from "@opencode/plugin/effect"
+import type { IntegrationMethodRegistration } from "@opencode/plugin/effect/integration"
+import { EventManifest } from "@opencode/schema/event-manifest"
+import type { Event } from "@opencode/schema/event"
+import { ServerConfig } from "@opencode/schema/mcp"
 import { App } from "../app.js"
 import { Effect, Schema, Stream } from "effect"
 import { Agent } from "../agent.js"
@@ -30,11 +30,12 @@ import { Tool } from "../tool.js"
 import { Workspace } from "../workspace.js"
 import { Vcs } from "../vcs.js"
 import { WebSearch } from "../websearch.js"
+import { Worktree } from "../worktree.js"
 import { Generate } from "../generate.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "./hooks.js"
 import type { Interface } from "../plugin.js"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
 type RpcEvent = Event.Payload & {
@@ -69,6 +70,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
   const sessions = yield* Session.Service
   const persistentPty = yield* PersistentPty.Service
   const locations = yield* LocationServiceMap.Service
+  const worktrees = yield* Worktree.Service
   const locationInfo = () =>
     new Location.Info({
       directory: location.directory,
@@ -87,6 +89,24 @@ export const make = Effect.fn("PluginHost.make")(function* (
     ref.directory === location.directory && ref.workspaceID === location.workspaceID
   const response = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(Effect.map((data) => ({ location: locationInfo(), data })))
+
+  const atWorktree = <A, E>(
+    ref: Location.Ref | undefined,
+    run: (service: Worktree.Interface) => Effect.Effect<A, E>,
+  ) => {
+    if (ref?.workspaceID) return Effect.fail(new Worktree.UnsupportedLocationError({ directory: ref.directory }))
+    if (!ref || isCurrentLocation(ref)) return run(worktrees)
+    return Effect.gen(function* () {
+      // Defer this import: Plugin's construction depends on this host. Same-location setup calls never wait on themselves.
+      const { Plugin } = yield* Effect.promise(() => import("../plugin.js"))
+      const plugins = yield* Plugin.Service
+      const target = yield* Worktree.Service
+      yield* plugins.awaitActivation
+      return yield* run(target)
+    }).pipe(Effect.provide(locations.get(ref)))
+  }
+  const decodeWorktree = Schema.decodeUnknownEffect(Worktree.Info)
+  const decodeWorktrees = Schema.decodeUnknownEffect(Schema.Array(Worktree.ListEntry))
 
   const listAgents = Effect.fn("PluginHost.listAgents")((ref: Location.Ref) =>
     Effect.gen(function* () {
@@ -384,6 +404,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
                 : Effect.fail(new Error(`Permission request not found: ${input.requestID}`)),
             ),
           ),
+      rules: sessions.setPermissions,
     },
     plugin: {
       list: () => response(plugin.list()),
@@ -462,6 +483,25 @@ export const make = Effect.fn("PluginHost.make")(function* (
           })
         }),
     },
+    worktree: {
+      list: (input) => atWorktree(locationRef(input), (service) => service.list()),
+      create: (input) => atWorktree(locationRef(input), (service) => service.create(input)),
+      refresh: (input) => atWorktree(locationRef(input), (service) => service.refresh()).pipe(Effect.asVoid),
+      remove: (input) => atWorktree(locationRef(input), (service) => service.remove(input)),
+      reload: worktrees.reload,
+      transform: (callback) =>
+        worktrees.transform((editor) =>
+          callback({
+            add: (definition) =>
+              editor.add({
+                id: Worktree.StrategyID.make(definition.id),
+                create: (input) => definition.create(input).pipe(Effect.flatMap(decodeWorktree)),
+                remove: (input) => definition.remove(input),
+                list: (directory) => definition.list(directory).pipe(Effect.flatMap(decodeWorktrees)),
+              }),
+          }),
+        ),
+    },
     session: {
       hook: (name, callback, options) => hooks.register("session", name, callback, options),
       create: (input) =>
@@ -470,6 +510,8 @@ export const make = Effect.fn("PluginHost.make")(function* (
           title: input?.title,
           agent: input?.agent,
           model: input?.model,
+          metadata: input?.metadata,
+          permissions: input?.permissions,
           location:
             input?.location ?? Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
         }),
@@ -510,6 +552,7 @@ export const requirements = LayerNode.group([
   Tool.node,
   Vcs.node,
   WebSearch.node,
+  Worktree.node,
   Generate.node,
   Permission.node,
   PluginHooks.node,
