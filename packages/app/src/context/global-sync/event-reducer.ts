@@ -119,6 +119,7 @@ export function applyDirectoryEvent(input: {
   retainedLimit?: number
   sessionContent?: boolean
   permission?: State["permission"]
+  notifyError?: (message?: string) => void
 }) {
   const event = input.event
   if (input.sessionContent === false && SESSION_CONTENT_EVENTS.has(event.type)) return
@@ -465,6 +466,30 @@ export function applyDirectoryEvent(input: {
           draft.splice(result.index, 1)
         }),
       )
+      break
+    }
+    case "session.error": {
+      const props = event.properties as {
+        sessionID?: string
+        error?: { name?: string; data?: { message?: string }; message?: string }
+      }
+      const sessionID = props.sessionID
+      if (!sessionID) break
+      input.setStore("session_status", sessionID, { type: "idle" })
+      const errorMsg =
+        props.error?.data?.message ?? props.error?.message ?? (typeof props.error === "string" ? props.error : undefined)
+      const messages = input.store.message[sessionID]
+      if (messages && messages.length > 0) {
+        const lastMsg = messages.at(-1)
+        if (lastMsg && lastMsg.role === "assistant") {
+          input.setStore("message", sessionID, messages.length - 1, (msg) => ({
+            ...msg,
+            error: { name: "UnknownError" as const, data: { message: errorMsg ?? "" } },
+            finish: "error",
+          }))
+        }
+      }
+      input.notifyError?.(errorMsg)
       break
     }
     case "lsp.updated": {
