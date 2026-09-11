@@ -226,6 +226,20 @@ export function NavigationSidebar() {
     )
   })
 
+  createEffect(() => {
+    const ids = new Set(sessions().map((session) => session.id))
+    const stale = [...Object.keys(status.started), ...Object.keys(status.done)].filter((id) => !ids.has(id))
+    if (stale.length === 0) return
+    setStatus(
+      produce((draft) => {
+        for (const id of stale) {
+          delete draft.started[id]
+          delete draft.done[id]
+        }
+      }),
+    )
+  })
+
   // Open tabs whose session is missing from the index mean the cache lagged behind a promotion.
   const [missingKey, setMissingKey] = createSignal("")
   createEffect(() => {
