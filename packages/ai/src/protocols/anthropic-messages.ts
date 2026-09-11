@@ -37,7 +37,6 @@ const ADAPTER = "anthropic-messages"
 export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 export const PATH = "/messages"
 export const DEFAULT_MAX_TOKENS = 32_000
-// API default effort; an omitted top-level `output_config.effort` is cache-equivalent to it.
 const DEFAULT_EFFORT = "high"
 
 const SSE_EVENTS = new Set([
@@ -286,7 +285,6 @@ const AnthropicAssistantBlock = Schema.Union([
 type AnthropicAssistantBlock = Schema.Schema.Type<typeof AnthropicAssistantBlock>
 type AnthropicToolResultBlock = Schema.Schema.Type<typeof AnthropicToolResultBlock>
 
-// A system message with empty content and `output_config` is a per-turn effort change.
 const AnthropicMessage = Schema.Union([
   Schema.Struct({ role: Schema.Literal("user"), content: Schema.Array(AnthropicUserBlock) }),
   Schema.Struct({ role: Schema.Literal("assistant"), content: Schema.Array(AnthropicAssistantBlock) }),
@@ -887,8 +885,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
     if (message.role === "system") {
       const update = effortUpdate(message)
       if (update) {
-        // Accepted anywhere, including mid tool loop, and applied from the next user
-        // turn, so text-update placement rules do not apply.
+        // Accepted at any position, so the text-update placement rules do not apply.
         messages.push({ role: "system", content: [], output_config: { effort: update.effort ?? DEFAULT_EFFORT } })
         continue
       }
@@ -1078,7 +1075,6 @@ const supportsThinkingBlockBinding = (model: LLMRequest["model"]) => {
   return version !== undefined && (version.major > 5 || (version.major === 5 && version.minor >= 1))
 }
 
-// Anthropic documents per-message effort as a family capability from Opus 5 and Fable/Mythos 5.1 onward.
 const supportsEffortUpdates = (model: LLMRequest["model"]) => {
   const override = model.compatibility?.supportsEffortUpdates
   if (override !== undefined) return override

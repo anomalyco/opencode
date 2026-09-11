@@ -231,15 +231,12 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
 
 const EFFORT_VARIANTS = new Set<string>(ReasoningEfforts)
 
-// Variant IDs in the effort vocabulary are treated as effort levels even when a catalog reuses the names for
-// budget or toggle variants; the protocol's drift check against the resolved provider option is what guarantees
-// a marker matches a real effort option, falling back to a plain top-level change otherwise.
+// Budget and toggle variants reuse these names; the protocol's drift check catches ones that are not effort options.
 const variantEffort = (variant: Model.VariantID | undefined) => {
   if (variant === undefined || variant === "default") return { effort: undefined }
   return EFFORT_VARIANTS.has(variant) ? { effort: variant } : undefined
 }
 
-// Only an effort switch on the model that keeps running is recorded; model switches leave no trace.
 const modelSwitched = (message: SessionMessage.ModelSelected, model: Model.Ref): Message[] => {
   const previous = message.previous
   if (previous === undefined) return []

@@ -141,9 +141,7 @@ const adapter = {
   restoreHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
 } satisfies OpenResponses.ProviderAdapter
 
-// OpenAI documents `configuration_update` for GPT-6 Astra alone and its model IDs carry no lineage, so the ID is
-// pinned exactly (Anthropic generalises by family version instead). The API also rejects updates alongside
-// automatic `context_management` compaction.
+// Only GPT-6 Astra accepts `configuration_update`, and never alongside automatic `context_management` compaction.
 const supportsEffortUpdates = (request: LLMRequest) => {
   if (request.providerOptions?.contextManagement !== undefined) return false
   const override = request.model.compatibility?.supportsEffortUpdates

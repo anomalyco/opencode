@@ -218,10 +218,7 @@ export const CompactionPart = Object.assign(compactionPartSchema, {
     Schema.decodeUnknownSync(compactionPartSchema)({ type: "compaction", ...input }),
 })
 
-/**
- * A chronological "reasoning effort changed here" fact: `effort` applies from
- * this point on, `previous` applied before it, `undefined` is the model default.
- */
+/** Reasoning effort changed here, from `previous` to `effort`; `undefined` is the model default. */
 export const EffortPart = Schema.Struct({
   type: Schema.Literal("effort"),
   effort: Schema.optional(ReasoningEffort),
@@ -278,7 +275,6 @@ export namespace Message {
    */
   export const system = (content: SystemContentInput) => make({ role: "system", content })
 
-  /** Record that the reasoning effort changed at this chronological point; see `effort-updates.ts`. */
   export const effort = (input: { readonly effort?: ReasoningEffort; readonly previous?: ReasoningEffort }) =>
     make({ role: "system", content: [{ type: "effort", effort: input.effort, previous: input.previous }] })
 
