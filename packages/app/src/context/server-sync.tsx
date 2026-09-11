@@ -202,14 +202,14 @@ function makeQueryOptionsApi(
 }
 export type QueryOptionsApi = ReturnType<typeof makeQueryOptionsApi>
 
-export function createServerSyncContextInner(serverSDK: ServerSDK) {
+export function createServerSyncContextInner(serverSDK: ServerSDK, onProjectUpdated?: (project: Project) => void) {
   const language = useLanguage()
   const owner = getOwner()
   if (!owner) throw new Error("ServerSync must be created within owner")
 
   const sdkCache = new Map<string, OpencodeClient>()
   const booting = new Map<string, Promise<void>>()
-  const sessionLoads = new Map<string, Promise<void>>()
+  const sessionLoads = new Map<string, Promise<boolean>>()
   const sessionMeta = new Map<string, { limit: number }>()
 
   const sdkFor = (directory: string) => {
@@ -330,6 +330,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
         setGlobalStore: setBootStore,
         queryClient,
+        onProjectUpdated,
       })
       bootedAt = Date.now()
       return bootedAt
@@ -387,11 +388,11 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     },
   })
 
-  async function loadSessions(directory: string, options?: { limit?: number }) {
+  async function loadSessions(directory: string, options?: { limit?: number }): Promise<boolean> {
     const key = directoryKey(directory)
     const pending = sessionLoads.get(key)
     if (pending) {
-      await pending
+      if (!(await pending)) return false
       return loadSessions(directory, options)
     }
 
@@ -408,7 +409,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         setStore("session", reconcile(next, { key: "id" }))
       }
       children.unpin(key)
-      return
+      return true
     }
 
     const limit = Math.max(retainedLimit + SESSION_RECENT_LIMIT, SESSION_RECENT_LIMIT)
@@ -446,6 +447,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
                 setStore("session", reconcile(next, { key: "id" }))
               })
               sessionMeta.set(key, { limit })
+              return true
             })
             .catch((err) => {
               console.error("Failed to load sessions", err)
@@ -455,10 +457,9 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
                 title: language.t("toast.session.listFailed.title", { project }),
                 description: formatServerError(err, language.t),
               })
+              return false
             })
-            .then(() => null),
       })
-      .then(() => {})
 
     sessionLoads.set(key, promise)
     void promise.finally(() => {
@@ -554,6 +555,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
           bootstrap.refetch()
         },
         setGlobalProject: setProjects,
+        onProjectUpdated,
       })
       if (
         eventType === "config.updated" ||
@@ -724,8 +726,8 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   }
 }
 
-export function createServerSyncContext(serverSDK: ServerSDK) {
-  const inner = createServerSyncContextInner(serverSDK)
+export function createServerSyncContext(serverSDK: ServerSDK, onProjectUpdated?: (project: Project) => void) {
+  const inner = createServerSyncContextInner(serverSDK, onProjectUpdated)
   return Object.assign(inner, {
     ensureDirSyncContext: createRefCountMap(
       (dir) => createDirSyncContext(dir, inner, serverSDK),

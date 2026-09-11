@@ -11,6 +11,7 @@ type ServerProjectState = {
   projects: Record<string, StoredProject[]>
   lastProject: Record<string, string>
   recentlyClosed: Record<string, string[]>
+  dismissedProjects?: Record<string, string[]>
 }
 const HEALTH_POLL_INTERVAL_MS = 10_000
 // The store retains more history than is displayed. Consumers filter recently closed entries
@@ -43,24 +44,36 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function migrateCanonicalLocalServerState(value: unknown, canonicalLocalServer?: ServerConnection.Key) {
-  if (!canonicalLocalServer || canonicalLocalServer === "local") return value
   if (!isRecord(value)) return value
-  const projects = isRecord(value.projects) ? value.projects : undefined
-  const lastProject = isRecord(value.lastProject) ? value.lastProject : undefined
+  const recentlyClosed = isRecord(value.recentlyClosed) ? value.recentlyClosed : undefined
+  const dismissedProjects = isRecord(value.dismissedProjects) ? value.dismissedProjects : recentlyClosed
+  const seeded = dismissedProjects && !isRecord(value.dismissedProjects) ? { ...value, dismissedProjects } : value
+  if (!canonicalLocalServer || canonicalLocalServer === "local") return seeded
+  const projects = isRecord(seeded.projects) ? seeded.projects : undefined
+  const lastProject = isRecord(seeded.lastProject) ? seeded.lastProject : undefined
   const previousProjects = projects?.[canonicalLocalServer]
   const previousLastProject = lastProject?.[canonicalLocalServer]
-  if (!Array.isArray(previousProjects) && typeof previousLastProject !== "string") return value
+  const previousDismissedProjects = dismissedProjects?.[canonicalLocalServer]
+  if (
+    !Array.isArray(previousProjects) &&
+    typeof previousLastProject !== "string" &&
+    !Array.isArray(previousDismissedProjects)
+  )
+    return seeded
 
-  const next = { ...value }
+  const next = { ...seeded }
   if (projects && Array.isArray(previousProjects)) {
     const local = Array.isArray(projects.local) ? projects.local : []
     const worktrees = new Set(
-      local.flatMap((project) => (isRecord(project) && typeof project.worktree === "string" ? [project.worktree] : [])),
+      local.flatMap((project) =>
+        isRecord(project) && typeof project.worktree === "string" ? [pathKey(project.worktree)] : [],
+      ),
     )
     const migrated = previousProjects.filter((project) => {
       if (!isRecord(project) || typeof project.worktree !== "string") return true
-      if (worktrees.has(project.worktree)) return false
-      worktrees.add(project.worktree)
+      const key = pathKey(project.worktree)
+      if (worktrees.has(key)) return false
+      worktrees.add(key)
       return true
     })
     const nextProjects: Record<string, unknown> = { ...projects, local: [...local, ...migrated] }
@@ -73,6 +86,24 @@ export function migrateCanonicalLocalServerState(value: unknown, canonicalLocalS
     delete nextLastProject[canonicalLocalServer]
     next.lastProject = nextLastProject
   }
+  if (dismissedProjects && Array.isArray(previousDismissedProjects)) {
+    const local = Array.isArray(dismissedProjects.local) ? dismissedProjects.local : []
+    const localKeys = new Set(local.map(pathKey))
+    const nextDismissedProjects: Record<string, unknown> = {
+      ...dismissedProjects,
+      local: [
+        ...local,
+        ...previousDismissedProjects.filter((directory) => {
+          const key = pathKey(directory)
+          if (localKeys.has(key)) return false
+          localKeys.add(key)
+          return true
+        }),
+      ],
+    }
+    delete nextDismissedProjects[canonicalLocalServer]
+    next.dismissedProjects = nextDismissedProjects
+  }
   return next
 }
 
@@ -84,17 +115,32 @@ export function createServerProjects<T extends ServerProjectState>(input: {
   const setStore = input.setStore as unknown as SetStoreFunction<ServerProjectState>
   const current = () => input.store.projects[input.scope()] ?? []
   const currentClosed = () => input.store.recentlyClosed?.[input.scope()] ?? []
+  const currentDismissed = () => input.store.dismissedProjects?.[input.scope()] ?? []
+  const setDismissed = (next: string[]) => {
+    if (input.store.dismissedProjects) {
+      setStore("dismissedProjects", input.scope(), next)
+      return
+    }
+    setStore("dismissedProjects", { [input.scope()]: next })
+  }
   const remove = (directory: string) => {
+    const key = pathKey(directory)
     setStore(
       "projects",
       input.scope(),
-      current().filter((project) => project.worktree !== directory),
+      current().filter((project) => pathKey(project.worktree) !== key),
     )
   }
   return {
     list: current,
     recentlyClosed: currentClosed,
     remove,
+    discover(directory: string) {
+      const key = pathKey(directory)
+      if (current().some((project) => pathKey(project.worktree) === key)) return
+      if (currentDismissed().some((worktree) => pathKey(worktree) === key)) return
+      setStore("projects", input.scope(), [{ worktree: directory, expanded: true }, ...current()])
+    },
     open(directory: string) {
       const scope = input.scope()
       const key = pathKey(directory)
@@ -106,10 +152,14 @@ export function createServerProjects<T extends ServerProjectState>(input: {
           closed.filter((worktree) => pathKey(worktree) !== key),
         )
       }
-      if (current().some((project) => project.worktree === directory)) return
+      const dismissed = currentDismissed()
+      if (dismissed.some((worktree) => pathKey(worktree) === key)) {
+        setDismissed(dismissed.filter((worktree) => pathKey(worktree) !== key))
+      }
+      if (current().some((project) => pathKey(project.worktree) === key)) return
       setStore("projects", scope, [{ worktree: directory, expanded: true }, ...current()])
     },
-    // User-initiated close: removes the project and records it in recently closed.
+    // User-initiated close: removes the project and records recent history and durable suppression.
     // Internal, non-user removals (e.g. sandbox/worktree normalization) should use remove().
     close(directory: string) {
       remove(directory)
@@ -119,17 +169,21 @@ export function createServerProjects<T extends ServerProjectState>(input: {
         RECENTLY_CLOSED_HISTORY_LIMIT,
       )
       setStore("recentlyClosed", input.scope(), closed)
+      setDismissed([directory, ...currentDismissed().filter((worktree) => pathKey(worktree) !== key)])
     },
     expand(directory: string) {
-      const index = current().findIndex((project) => project.worktree === directory)
+      const key = pathKey(directory)
+      const index = current().findIndex((project) => pathKey(project.worktree) === key)
       if (index !== -1) setStore("projects", input.scope(), index, "expanded", true)
     },
     collapse(directory: string) {
-      const index = current().findIndex((project) => project.worktree === directory)
+      const key = pathKey(directory)
+      const index = current().findIndex((project) => pathKey(project.worktree) === key)
       if (index !== -1) setStore("projects", input.scope(), index, "expanded", false)
     },
     move(directory: string, toIndex: number) {
-      const fromIndex = current().findIndex((project) => project.worktree === directory)
+      const key = pathKey(directory)
+      const fromIndex = current().findIndex((project) => pathKey(project.worktree) === key)
       if (fromIndex === -1 || fromIndex === toIndex) return
       const next = [...current()]
       const [item] = next.splice(fromIndex, 1)
@@ -270,6 +324,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
         recentlyClosed: {} as Record<string, string[]>,
+        dismissedProjects: {} as Record<string, string[]>,
       }),
     )
 

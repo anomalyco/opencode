@@ -7,6 +7,7 @@ on:
 
 jobs:
   close:
+    if: github.repository == 'anomalyco/opencode'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -21,4 +22,4 @@ jobs:
       - name: Close stale issues
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: bun script/github/close-issues.ts
+        run: bun script/github/close-issues.ts --repo "${{ github.repository }}"

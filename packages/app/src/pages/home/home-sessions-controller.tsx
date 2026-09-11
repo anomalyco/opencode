@@ -7,6 +7,7 @@ import { type Accessor, createEffect, createMemo, createRoot, type JSX, startTra
 import { produce } from "solid-js/store"
 import { useCommand } from "@/context/command"
 import {
+  discoverHomeSessionDirectories,
   loadHomeSessionIndex,
   retainHomeSessions,
   type HomeSessionEvents,
@@ -79,13 +80,13 @@ export function createHomeSessionsController(home: HomeController) {
     refetchOnMount: true,
     refetchOnReconnect: true,
   }))
-  const indexedSessions = createMemo(() =>
-    retainHomeSessions(
-      homeSessions().sessions(sessionLoad.data, sessionEventLoad.data),
-      HOME_SESSION_LIMIT,
-      Date.now(),
-    ),
-  )
+  const homeSessionIndex = createMemo(() => homeSessions().sessions(sessionLoad.data, sessionEventLoad.data))
+  const indexedSessions = createMemo(() => retainHomeSessions(homeSessionIndex(), HOME_SESSION_LIMIT, Date.now()))
+  createEffect(() => {
+    const ctx = home.server.focusedContext()
+    if (!ctx) return
+    discoverHomeSessionDirectories(homeSessionIndex(), ctx.projects.discover)
+  })
   const allRecords = createMemo(() =>
     buildHomeSessionRecords({
       sessions: indexedSessions,
