@@ -20,12 +20,17 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { MessageID } from "@/session/schema"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Database } from "@opencode-ai/core/database/database"
+import { EventTable } from "@opencode-ai/core/event/sql"
+import { and, eq, sql } from "drizzle-orm"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
-const it = testEffect(Layer.mergeAll(LayerNode.compile(LayerNode.group([Session.node, Storage.node])), httpApiLayer))
+const it = testEffect(
+  Layer.mergeAll(LayerNode.compile(LayerNode.group([Database.node, Session.node, Storage.node])), httpApiLayer),
+)
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -91,6 +96,61 @@ describe("session diff with missing patch (#26574)", () => {
 
         expect(response.status).toBe(200)
         expect(yield* response.json).toEqual([{ file: "turn.ts", additions: 1, deletions: 0, status: "modified" }])
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "keeps stored turn diffs while compacting later message update events",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* withSession({ title: "compact-turn-diff" })
+        const messageID = MessageID.ascending()
+        const diff = {
+          file: "turn.ts",
+          additions: 1,
+          deletions: 0,
+          patch: "x".repeat(262_144),
+          status: "modified" as const,
+        }
+        const message = {
+          id: messageID,
+          sessionID: session.id,
+          role: "user" as const,
+          time: { created: Date.now() },
+          agent: "build",
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("model") },
+          summary: { diffs: [diff] },
+        } satisfies SessionV1.User
+        yield* Session.use.updateMessage(message)
+        yield* Session.use.updateMessage({ ...message, tools: { read: true } })
+
+        const { db } = yield* Database.Service
+        const events = yield* db
+          .select({ bytes: sql<number>`length(${EventTable.data})` })
+          .from(EventTable)
+          .where(
+            and(
+              eq(EventTable.aggregate_id, session.id),
+              eq(EventTable.type, "message.updated.1"),
+            ),
+          )
+          .orderBy(EventTable.seq)
+          .all()
+          .pipe(Effect.orDie)
+
+        expect(events).toHaveLength(2)
+        expect(events[0]?.bytes).toBeGreaterThan(diff.patch.length)
+        expect(events[1]?.bytes).toBeLessThan(1_000)
+
+        const response = yield* requestInDirectory(
+          `${pathFor(SessionPaths.diff, { sessionID: session.id })}?messageID=${messageID}`,
+          test.directory,
+        )
+
+        expect(response.status).toBe(200)
+        expect(yield* response.json).toEqual([diff])
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

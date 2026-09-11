@@ -19,6 +19,7 @@ type DatabaseService = Database.Interface["db"]
 
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
 const encodeMessage = Schema.encodeSync(SessionMessage.Message)
+const decodeInfo = Schema.decodeUnknownSync(SessionV1.Info)
 
 export class SessionAlreadyProjected extends Error {}
 
@@ -76,8 +77,23 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
 
 function messageData(
   info: (typeof SessionV1.Event.MessageUpdated.Type)["data"]["info"],
+  current?: typeof MessageTable.$inferSelect.data,
 ): typeof MessageTable.$inferInsert.data {
-  const { id: _, sessionID: __, ...rest } = info
+  const summary = current?.summary
+  const value =
+    info.role === "user" && info.summary?.diffs === undefined
+      ? decodeInfo({
+          ...info,
+          summary: {
+            ...info.summary,
+            diffs:
+              current?.role === "user" && typeof summary === "object" && summary.diffs !== undefined
+                ? summary.diffs
+                : [],
+          },
+        })
+      : decodeInfo(info)
+  const { id: _, sessionID: __, ...rest } = value
   return rest as DeepMutable<typeof rest>
 }
 
@@ -262,7 +278,16 @@ const layer = Layer.effectDiscard(
         const time_created = event.data.info.time.created
         const id = event.data.info.id
         const sessionID = event.data.info.sessionID
-        const data = messageData(event.data.info)
+        const current =
+          event.data.info.role === "user" && event.data.info.summary?.diffs === undefined
+            ? yield* db
+                .select({ data: MessageTable.data })
+                .from(MessageTable)
+                .where(and(eq(MessageTable.id, id), eq(MessageTable.session_id, sessionID)))
+                .get()
+                .pipe(Effect.orDie)
+            : undefined
+        const data = messageData(event.data.info, current?.data)
         yield* db
           .insert(MessageTable)
           .values({ id, session_id: sessionID, time_created, data })

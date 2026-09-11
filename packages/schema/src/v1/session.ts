@@ -487,8 +487,34 @@ export type Assistant = Omit<Types.DeepMutable<Schema.Schema.Type<typeof Assista
   error?: AssistantError
 }
 
+const UserUpdated = Schema.Struct({
+  ...messageBase,
+  role: Schema.Literal("user"),
+  time: Schema.Struct({
+    created: Timestamp,
+  }),
+  format: Schema.optional(Format),
+  summary: Schema.optional(
+    Schema.Struct({
+      title: Schema.optional(Schema.String),
+      body: Schema.optional(Schema.String),
+      diffs: optional(Schema.Array(FileDiff.Info)),
+    }),
+  ),
+  agent: Schema.String,
+  model: Schema.Struct({
+    providerID: Provider.ID,
+    modelID: Model.ID,
+    variant: Schema.optional(Schema.String),
+  }),
+  system: Schema.optional(Schema.String),
+  tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
+})
+
 export const Info = Schema.Union([User, Assistant]).annotate({ discriminator: "role", identifier: "Message" })
 export type Info = User | Assistant
+
+const MessageUpdatedInfo = Schema.Union([UserUpdated, Assistant]).annotate({ discriminator: "role" })
 
 export const WithParts = Schema.Struct({
   info: Info,
@@ -598,7 +624,7 @@ const events = {
     ...options,
     schema: {
       sessionID: SessionID,
-      info: Info,
+      info: MessageUpdatedInfo,
     },
   }),
   MessageRemoved: define({
