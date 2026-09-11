@@ -285,10 +285,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                 <ToastProvider>
                                   <RouteProvider
                                     initialRoute={
-                                      input.args.continue
+                                      input.args.sessionID && !input.args.fork
                                         ? {
                                             type: "session",
-                                            sessionID: "dummy",
+                                            sessionID: input.args.sessionID,
                                           }
                                         : undefined
                                     }
@@ -518,6 +518,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       } else {
         route.navigate({ type: "session", sessionID: match })
       }
+    } else if (sync.status === "complete") {
+      continued = true
+      toast.show({ message: "No session found to continue", variant: "warning" })
     }
   })
 

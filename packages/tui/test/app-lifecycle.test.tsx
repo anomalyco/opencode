@@ -65,19 +65,22 @@ test("app.exit prints the session epilogue after scoped cleanup", async () => {
   const core = await import("@opentui/core")
   mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   const events = createEventSource()
+  const requestedUrls: string[] = []
   const calls = createFetch((url) => {
+    requestedUrls.push(url.pathname)
     if (url.pathname === "/session")
       return json([
         {
-          id: "dummy",
+          id: "ses_demo",
           title: "Demo session",
-          slug: "dummy",
+          slug: "ses_demo",
           projectID: "project",
           directory,
           version: "0.0.0-test",
           time: { created: 0, updated: 0 },
         },
       ])
+    return undefined
   })
   const originalWrite = process.stdout.write.bind(process.stdout)
   let stdout = ""
@@ -119,9 +122,58 @@ test("app.exit prints the session epilogue after scoped cleanup", async () => {
     await task
 
     expect(stdout).toContain("Demo session")
-    expect(stdout).toContain("opencode -s dummy")
+    expect(stdout).toContain("opencode -s ses_demo")
+    expect(requestedUrls.some((path) => path.includes("dummy"))).toBe(false)
   } finally {
     process.stdout.write = originalWrite
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    mock.restore()
+  }
+})
+
+test("continue without sessions does not crash with dummy session", async () => {
+  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+  const core = await import("@opentui/core")
+  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
+  const events = createEventSource()
+  const requestedUrls: string[] = []
+  const calls = createFetch((url) => {
+    requestedUrls.push(url.pathname)
+    if (url.pathname === "/session") return json([])
+    return undefined
+  })
+  let api: TuiPluginApi | undefined
+  let started!: () => void
+  const ready = new Promise<void>((resolve) => {
+    started = resolve
+  })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        url: "http://test",
+        directory,
+        config: createTuiResolvedConfig({ plugin_enabled: {} }),
+        fetch: calls.fetch,
+        events: events.source,
+        args: { continue: true },
+        pluginHost: {
+          async start(input) {
+            api = input.api
+            started()
+          },
+          async dispose() {},
+        },
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node))),
+    )
+
+    await ready
+    await setup.renderOnce()
+    expect(requestedUrls.some((path) => path.includes("dummy"))).toBe(false)
+    api?.keymap.dispatchCommand("app.exit")
+    await task
+  } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     mock.restore()
   }
