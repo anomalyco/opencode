@@ -199,7 +199,7 @@ jobs:
     needs: version
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
-    if: github.repository == 'anomalyco/opencode'
+    if: github.repository == 'anomalyco/opencode' && !(github.ref_name == 'v2' && (inputs.bump || inputs.version))
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
@@ -221,7 +221,7 @@ jobs:
     needs:
       - version
       - build-node-app-archive
-    if: github.repository == 'anomalyco/opencode'
+    if: github.repository == 'anomalyco/opencode' && !(github.ref_name == 'v2' && (inputs.bump || inputs.version))
     strategy:
       fail-fast: false
       matrix:
