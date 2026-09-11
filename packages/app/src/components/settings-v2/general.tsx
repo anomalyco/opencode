@@ -8,7 +8,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useUpdaterAction } from "../updater-action"
-import { useSettings } from "@/context/settings"
+import { useSettings, type NavigationMode } from "@/context/settings"
 import { ExternalLink } from "../external-link"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
@@ -114,6 +114,61 @@ const ShellSetting: Component<{ controller: ShellSettingsController }> = (props)
           return `${option.name} (${language.t("settings.general.row.shell.terminalOnly")})`
         }}
         onSelect={(option) => option && props.controller.select(option.value)}
+      />
+    </SettingsRowV2>
+  )
+}
+
+const navigationModeOptions: NavigationMode[] = ["tabs", "sidebar"]
+const sidebarSessionDayOptions = [0, 1, 3, 7, 30]
+
+const NavigationModeSetting: Component = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+  return (
+    <SettingsRowV2
+      title={language.t("settings.general.row.navigation.title")}
+      description={language.t("settings.general.row.navigation.description")}
+    >
+      <SelectV2
+        appearance="inline"
+        data-action="settings-navigation-mode"
+        options={navigationModeOptions}
+        current={navigationModeOptions.find((option) => option === settings.general.navigationMode())}
+        placement="bottom-end"
+        gutter={6}
+        label={(option) =>
+          option === "tabs"
+            ? language.t("settings.general.row.navigation.tabs")
+            : language.t("settings.general.row.navigation.sidebar")
+        }
+        onSelect={(option) => option && settings.general.setNavigationMode(option)}
+      />
+    </SettingsRowV2>
+  )
+}
+
+const SidebarSessionDaysSetting: Component = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+  return (
+    <SettingsRowV2
+      title={language.t("settings.general.row.sidebarSessions.title")}
+      description={language.t("settings.general.row.sidebarSessions.description")}
+    >
+      <SelectV2
+        appearance="inline"
+        data-action="settings-sidebar-session-days"
+        options={sidebarSessionDayOptions}
+        current={sidebarSessionDayOptions.find((option) => option === settings.general.sidebarSessionDays())}
+        placement="bottom-end"
+        gutter={6}
+        label={(option) =>
+          option
+            ? language.plural("settings.general.row.sidebarSessions.days", option)
+            : language.t("settings.general.row.sidebarSessions.always")
+        }
+        onSelect={(option) => option !== null && settings.general.setSidebarSessionDays(option)}
       />
     </SettingsRowV2>
   )
@@ -332,6 +387,13 @@ export const SettingsGeneralV2: Component<{
         <PermissionScopeSetting controller={permissionScope} />
 
         <ShellSetting controller={shell} />
+
+        <Show when={settings.general.newLayoutDesigns()}>
+          <NavigationModeSetting />
+          <Show when={settings.general.navigationMode() === "sidebar"}>
+            <SidebarSessionDaysSetting />
+          </Show>
+        </Show>
 
         <SettingsRowV2
           title={language.t("settings.general.row.reasoningSummaries.title")}
