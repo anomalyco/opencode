@@ -9,9 +9,9 @@ import {
   type ComponentProps,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Menu } from "@opencode-ai/ui/menu"
-import { Icon } from "@opencode-ai/ui/icon"
-import { ProjectAvatar } from "@opencode-ai/ui/project-avatar"
+import { Menu } from "@opencode/ui/menu"
+import { Icon } from "@opencode/ui/icon"
+import { ProjectAvatar } from "@opencode/ui/project-avatar"
 import { getProjectAvatarVariant } from "@/shell/state/layout"
 import { useLanguage } from "@/runtime/i18n/language"
 import { displayName, getProjectAvatarSource } from "@/shell/layout/helpers"
@@ -421,7 +421,7 @@ export function PromptProjectSelector(props: {
                   <span class="min-w-0 flex-1 truncate leading-5">{props.controller.labels.add()}</span>
                 </Menu.SubTrigger>
                 <Menu.Portal>
-                  <Menu.SubContent class="min-w-[180px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 shadow-[var(--v2-elevation-floating)] focus:outline-none">
+                  <Menu.SubContent class="max-h-[224px] min-w-[180px] overflow-y-auto rounded-md border-0 bg-v2-background-bg-layer-01 shadow-[var(--v2-elevation-floating)] focus:outline-none">
                     <For each={props.controller.servers()}>
                       {(server) => <ServerAction server={server!} onSelect={selectAction} />}
                     </For>

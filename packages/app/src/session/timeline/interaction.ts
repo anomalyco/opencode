@@ -1,7 +1,7 @@
-import type { SessionMessageUser } from "@opencode-ai/client/promise"
+import type { SessionMessageUser } from "@opencode/client/promise"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocation } from "@solidjs/router"
-import { createEffect, createSignal, on, onCleanup } from "solid-js"
+import { createEffect, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLayout } from "@/shell/state/layout"
 import type { SessionModel } from "../model"
@@ -19,22 +19,27 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       overflow: false,
       jump: false,
     },
+    follow: {
+      sessionKey: session.identity.sessionKey(),
+      pinned: true,
+    },
     refs: {
+      scroller: undefined as HTMLDivElement | undefined,
       content: undefined as HTMLDivElement | undefined,
       dock: undefined as HTMLDivElement | undefined,
     },
   })
   // The single source of truth for "follow the newest content". The virtualizer pins and unpins
   // it from scroll geometry; everything else only expresses explicit intent.
-  const [pinned, setPinned] = createSignal(true)
-  const pin = () => setPinned(true)
+  const pinned = () => state.follow.sessionKey !== session.identity.sessionKey() || state.follow.pinned
+  const pin = () => setState("follow", { sessionKey: session.identity.sessionKey(), pinned: true })
   const unpin = () => {
     if (!scroller || scroller.scrollHeight - scroller.clientHeight <= 1) return
-    setPinned(false)
+    setState("follow", { sessionKey: session.identity.sessionKey(), pinned: false })
   }
   let scroller: HTMLDivElement | undefined
   let dockHeight = 0
-  let revealMessage = (_id: string) => {}
+  let revealMessage = (_id: string, _partID?: string) => {}
   let scrollToEnd = () => {}
   let scrollMark = 0
   let messageMark = 0
@@ -153,6 +158,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   }
   const setScrollRef = (element: HTMLDivElement | undefined) => {
     scroller = element
+    setState("refs", "scroller", element)
     if (!element) return
     scheduleScrollState(element)
     fill()
@@ -209,8 +215,10 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     on(
       session.identity.sessionKey,
       () => {
+        pin()
         setState("messageID", undefined)
         setState("pendingMessage", undefined)
+        setState("scroll", { overflow: false, jump: false })
       },
       { defer: true },
     ),
@@ -284,6 +292,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   return {
     actions: {
       navigateMessage,
+      revealMessage: (id: string, partID?: string) => revealMessage(id, partID),
       resume,
       setActiveMessage,
     },
@@ -291,7 +300,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     resource: timeline.resource,
     ready: timeline.ready,
     scroll: state.scroll,
-    scroller: () => scroller,
+    scroller: () => state.refs.scroller,
     view: {
       anchor,
       markUserScroll,
@@ -307,7 +316,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       setDockRef: (element: HTMLDivElement | undefined) => {
         setState("refs", "dock", element)
       },
-      setRevealMessage: (reveal: (id: string) => void) => {
+      setRevealMessage: (reveal: (id: string, partID?: string) => void) => {
         revealMessage = reveal
       },
       setScrollRef,

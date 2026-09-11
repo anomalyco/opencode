@@ -1,6 +1,7 @@
-import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Deferred, Effect, Option, Schema, Semaphore, Stream } from "effect"
+import type { Server } from "node:http"
 import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
 import { Bus } from "../../bus.js"
@@ -12,11 +13,15 @@ import type { PluginInternal } from "../internal.js"
 const clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const issuer = "https://auth.openai.com"
 const callbackPort = 1455
+const callbackFallbackPort = 1457
+const callbackBindAttempts = 10
+const callbackBindRetryDelay = 200
 const pollingSafetyMargin = 3000
 const codexBaseURL = "https://chatgpt.com/backend-api/codex"
 const browserMethodID = Integration.MethodID.make("chatgpt-browser")
 const headlessMethodID = Integration.MethodID.make("chatgpt-headless")
-const codexAllowed = new Set(["gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini"])
+// ChatGPT accounts lost gpt-5.4 and gpt-5.4-mini in Codex on 2026-08-31 (replacements: gpt-5.6-terra, gpt-5.6-luna).
+const codexAllowed = new Set(["gpt-5.5", "gpt-5.3-codex-spark"])
 const codexDisallowed = new Set(["gpt-5.5-pro", "gpt-5.6"])
 
 type Pkce = {
@@ -55,11 +60,10 @@ const browser = (app: App.Info) =>
         const pkce = yield* Effect.promise(generatePKCE)
         const state = base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)).buffer)
         const code = yield* Deferred.make<string, Error>()
-        const redirect = `http://localhost:${callbackPort}/auth/callback`
         // Lazy so runtimes without a loopback listener (workerd) never evaluate node:http.
         const { createServer } = yield* Effect.promise(() => import("node:http"))
         const server = createServer((request, response) => {
-          const url = new URL(request.url ?? "/", `http://localhost:${callbackPort}`)
+          const url = new URL(request.url ?? "/", "http://localhost")
           if (url.pathname !== "/auth/callback") {
             response.writeHead(404).end("Not found")
             return
@@ -86,11 +90,9 @@ const browser = (app: App.Info) =>
             .writeHead(200, { "Content-Type": "text/html" })
             .end(OauthCallbackPage.success({ provider: "ChatGPT" }))
         })
-        yield* Effect.callback<void, Error>((resume) => {
-          server.once("error", (error) => resume(Effect.fail(error)))
-          server.listen(callbackPort, "localhost", () => resume(Effect.void))
-        })
+        const port = yield* listen(server)
         yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
+        const redirect = `http://localhost:${port}/auth/callback`
         return {
           mode: "auto" as const,
           url: authorizeURL(redirect, pkce, state),
@@ -103,6 +105,66 @@ const browser = (app: App.Info) =>
       }),
     refresh: (value) => refresh(browserMethodID, value, app),
   }) satisfies IntegrationOAuthMethodRegistration
+
+function listen(server: Server) {
+  return bind(server, callbackPort).pipe(
+    Effect.as(callbackPort),
+    Effect.catchIf(addressInUse, () =>
+      cancel(callbackPort).pipe(
+        Effect.ignore,
+        Effect.andThen(Effect.sleep(callbackBindRetryDelay)),
+        Effect.andThen(bindWithRetry(server, callbackPort, callbackBindAttempts - 1)),
+        Effect.as(callbackPort),
+        Effect.catchIf(addressInUse, () =>
+          bindWithRetry(server, callbackFallbackPort, callbackBindAttempts).pipe(
+            Effect.as(callbackFallbackPort),
+            Effect.catchIf(addressInUse, () =>
+              Effect.fail(
+                new Error(
+                  `OpenAI browser login needs local port ${callbackPort} or ${callbackFallbackPort}, but both are already in use. Stop the processes using those ports or choose ChatGPT Pro/Plus (headless), then try again.`,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
+}
+
+function bindWithRetry(server: Server, port: number, attempts: number): Effect.Effect<void, Error> {
+  return bind(server, port).pipe(
+    Effect.catchIf(
+      (error) => addressInUse(error) && attempts > 1,
+      () => Effect.sleep(callbackBindRetryDelay).pipe(Effect.andThen(bindWithRetry(server, port, attempts - 1))),
+    ),
+  )
+}
+
+function bind(server: Server, port: number) {
+  return Effect.callback<void, Error>((resume) => {
+    const onError = (error: Error) => resume(Effect.fail(error))
+    server.once("error", onError)
+    server.listen(port, "localhost", () => {
+      server.off("error", onError)
+      resume(Effect.void)
+    })
+  })
+}
+
+function cancel(port: number) {
+  return Effect.tryPromise({
+    try: (signal) =>
+      fetch(`http://localhost:${port}/cancel`, {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(2000)]),
+      }),
+    catch: (cause) => cause,
+  })
+}
+
+function addressInUse(error: Error) {
+  return "code" in error && error.code === "EADDRINUSE"
+}
 
 const headless = (app: App.Info) =>
   ({
@@ -184,9 +246,9 @@ export const OpenAIPlugin = define({
           : undefined
     })
 
-    yield* ctx.integration.transform((draft) => {
-      draft.method.update(browser(ctx.app))
-      draft.method.update(headless(ctx.app))
+    yield* ctx.integration.transform((editor) => {
+      editor.method.update(browser(ctx.app))
+      editor.method.update(headless(ctx.app))
     })
     yield* load()
     yield* ctx.catalog.transform((evt) => {
@@ -195,6 +257,7 @@ export const OpenAIPlugin = define({
       for (const model of item.models.values()) {
         evt.model.update(item.provider.id, model.id, (draft) => {
           draft.capabilities.responsesWebsockets = true
+          draft.websocket = true
         })
       }
       if (!chatgpt) return
@@ -202,6 +265,7 @@ export const OpenAIPlugin = define({
       const account = chatgpt.metadata?.accountID
       item.provider.headers = Provider.mergeHeaders(item.provider.headers, {
         originator: "opencode",
+        "x-codex-beta-features": "remote_compaction_v2",
         ...(typeof account === "string" ? { "chatgpt-account-id": account } : {}),
       })
       for (const model of item.models.values()) {
@@ -213,10 +277,12 @@ export const OpenAIPlugin = define({
             return
           }
           const apiID = draft.modelID ?? draft.id
-          const match = apiID.match(/^gpt-(\d+\.\d+)/)
+          const match = apiID.match(/^gpt-(\d+)(?:\.(\d+))?/)
+          const major = Number(match?.[1])
+          const minor = Number(match?.[2] ?? 0)
           if (
             !codexAllowed.has(apiID) &&
-            (codexDisallowed.has(apiID) || !match || Number.parseFloat(match[1]) <= 5.4)
+            (codexDisallowed.has(apiID) || !match || !(major > 5 || (major === 5 && minor > 4)))
           ) {
             draft.enabled = false
             return
@@ -240,7 +306,7 @@ export const OpenAIPlugin = define({
       { providerID: Provider.ID.openai },
     )
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
-    yield* bus.subscribe(Integration.Event.ConnectionUpdated).pipe(
+    yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("openai")),
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),

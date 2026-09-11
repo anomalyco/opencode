@@ -1,6 +1,6 @@
 import type { Config, Path, Project, ProviderAuthResponse } from "@/runtime/server/types"
 import { showToast } from "@/shell/notifications/toast"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode/util/path"
 import { getOwner, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -11,15 +11,17 @@ import type { ProjectMeta } from "./global-sync/types"
 import { formatServerError } from "@/runtime/server/errors"
 import { queryOptions, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createRefreshQueue } from "./global-sync/queue"
-import { directoryKey } from "./global-sync/utils"
+import { directoryKey, updateProjectInfo } from "./global-sync/utils"
 import { PathKey } from "@/workspaces/path-key"
 import type { ServerScope } from "@/runtime/server/scope"
 import { persisted } from "@/runtime/persistence/storage"
 import type { ServerApi } from "@/runtime/server/api"
 import { toggleMcp } from "./global-sync/mcp"
-import { createConnectionSync } from "./server-sync/connection"
+import { createConnectionSync, reconnectOrder } from "./server-sync/connection"
 import { usePlatform } from "@/runtime/platform/platform"
-import type { Data } from "@opencode-ai/client/solid"
+import type { Data } from "@opencode/client/solid"
+import { createWorktreeInventory, withWorktreeInventory } from "@/workspaces/inventory"
+import { sameDirectory } from "@/workspaces/paths"
 
 type GlobalStore = {
   path: Path
@@ -36,10 +38,10 @@ export const loadLspQuery = (scope: ServerScope, directory: string) =>
     queryFn: async () => [],
   })
 
-function makeQueryOptionsApi(scope: ServerScope, serverAPI: ServerApi) {
+function makeQueryOptionsApi(scope: ServerScope, serverAPI: () => ServerApi) {
   return {
     globalConfig: () => loadGlobalConfigQuery(scope),
-    path: () => loadPathQuery(scope, null, serverAPI.location),
+    path: () => loadPathQuery(scope, null, serverAPI().location),
     lsp: (directory: PathKey) => loadLspQuery(scope, directory),
   }
 }
@@ -52,7 +54,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   if (!owner) throw new Error("ServerSync must be created within owner")
 
   const booting = new Map<string, Promise<void>>()
-  const queryOptionsApi = makeQueryOptionsApi(serverSDK.scope, serverSDK.api)
+  const queryOptionsApi = makeQueryOptionsApi(serverSDK.scope, () => serverSDK.api)
   const connected = () => serverSDK.connection.status() === "connected"
 
   const [configQuery, pathQuery] = useQueries(() => ({
@@ -66,11 +68,11 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     provider_auth: {},
     get path() {
       const EMPTY = { state: "", config: "", worktree: "", directory: "", home: "" }
-      if (pathQuery.isLoading) return EMPTY
+      if (pathQuery.isPending) return EMPTY
       return pathQuery.data ?? EMPTY
     },
     get config() {
-      if (configQuery.isLoading) return {}
+      if (configQuery.isPending) return {}
       return configQuery.data ?? {}
     },
     get reload() {
@@ -79,39 +81,30 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   })
 
   const queryClient = useQueryClient()
-  const setProjects = (next: Project[] | ((draft: Project[]) => Project[])) => {
-    setGlobalStore("project", next)
-  }
-
-  const setBootStore = ((...input: unknown[]) => {
-    if (input[0] === "project" && Array.isArray(input[1])) {
-      setProjects(input[1] as Project[])
-      return input[1]
-    }
-    return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
-  }) as typeof setGlobalStore
-
+  const worktrees = createWorktreeInventory({
+    scope: serverSDK.scope,
+    queryClient,
+    api: () => serverSDK.api.worktree,
+    updated: (directory, items) =>
+      setGlobalStore("project", (projects) =>
+        projects.map((project) =>
+          sameDirectory(project.worktree, directory) ? withWorktreeInventory(project, items) : project,
+        ),
+      ),
+  })
   const bootstrap = useQuery(() => ({
     queryKey: [serverSDK.scope, "bootstrap"],
     queryFn: async () => {
       await bootstrapGlobal({
         serverAPI: serverSDK.api,
         scope: serverSDK.scope,
-        setGlobalStore: setBootStore,
+        setGlobalStore,
         queryClient,
       })
       return Date.now()
     },
     enabled: connected(),
   }))
-
-  const set = ((...input: unknown[]) => {
-    if (input[0] === "project" && (Array.isArray(input[1]) || typeof input[1] === "function")) {
-      setProjects(input[1] as Project[] | ((draft: Project[]) => Project[]))
-      return input[1]
-    }
-    return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
-  }) as typeof setGlobalStore
 
   const paused = () => untrack(() => globalStore.reload) !== undefined
 
@@ -169,12 +162,11 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     },
     connected: (info) => {
       if (bootstrap.data !== undefined && !bootstrap.isFetching) void bootstrap.refetch()
-      Object.keys(children.children)
-        .filter(children.active)
-        .forEach((directory) => {
-          queue.push(directory)
-          void data.location.sync({ directory }).catch(() => undefined)
-        })
+      // The refresh queue re-syncs two directories at a time, held ones first. Syncing every active
+      // directory here as well sent the whole catalog fan-out for all of them at once.
+      reconnectOrder(Object.keys(children.children).filter(children.active), children.pinned).forEach(
+        (directory) => queue.push(directory),
+      )
     },
   })
 
@@ -215,12 +207,29 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     return promise
   }
 
+  function applyProjectUpdate(update: Parameters<typeof updateProjectInfo>[1]) {
+    setGlobalStore("project", (projects) =>
+      projects.map((project) =>
+        project.id === update.id
+          ? // The wire payload carries no worktrees; keep the inventory this project already loaded.
+            withWorktreeInventory(updateProjectInfo(project, update), worktrees.cached(update.canonical))
+          : project,
+      ),
+    )
+  }
+
   const unsub = serverSDK.event.listen((event) => {
     connection.handleEvent({ type: event.type })
+    if (event.type === "project.updated") applyProjectUpdate(event.data)
+    if (event.type === "worktree.updated") {
+      const root = globalStore.project.find((project) => project.id === event.data.projectID)?.worktree
+      if (root) void worktrees.refresh(root)
+      void bootstrap.refetch()
+      return
+    }
 
     if (!event.location) {
-      if (event.type === "config.updated" || event.type === "agent.updated" || event.type === "worktree.updated")
-        bootstrap.refetch()
+      if (event.type === "config.updated" || event.type === "agent.updated") bootstrap.refetch()
       return
     }
 
@@ -229,9 +238,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     if (!children.children[key]) return
     children.mark(key)
     if (event.type === "config.updated" || event.type === "agent.updated") queue.push(key)
-    if (event.type === "worktree.updated") void bootstrap.refetch()
-    if (event.type === "reference.updated" && children.active(key))
-      void data.location.reference.sync({ directory: key }).catch(() => undefined)
   })
 
   onCleanup(unsub)
@@ -245,6 +251,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   })
 
   const projectApi = {
+    update: applyProjectUpdate,
     meta(directory: string, patch: ProjectMeta) {
       children.projectMeta(directory, patch)
     },
@@ -269,12 +276,13 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
 
   return {
     data: globalStore,
-    set,
+    set: setGlobalStore,
     child: children.child,
     disableMcp: children.disableMcp,
     // bootstrap,
     updateConfig: updateConfigMutation.mutateAsync,
     project: projectApi,
+    worktrees,
     mcp: {
       toggle: async (directory: string, name: string) => {
         const key = directoryKey(directory)

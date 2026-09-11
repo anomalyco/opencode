@@ -1,17 +1,16 @@
 export * as PatchTool from "./patch.js"
 
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
-import { ToolFailure } from "@opencode-ai/ai"
-import { FileDiff } from "@opencode-ai/schema/file-diff"
+import type { Context } from "@opencode/plugin/effect/plugin"
+import { ToolFailure } from "@opencode/ai"
+import { FileDiff } from "@opencode/schema/file-diff"
 import { Effect, Result, Schema } from "effect"
-import path from "path"
-import { Bom } from "@opencode-ai/util/bom"
+import { Bom } from "@opencode/util/bom"
 import { Environment } from "../../environment/index.js"
 import { Formatter } from "../../formatter.js"
 import { FileMutation } from "../../file-mutation.js"
 import { Location } from "../../location.js"
-import { LocationMutation } from "../../location-mutation.js"
-import { Patch } from "@opencode-ai/util/patch"
+import { FileAccess } from "../../file-access.js"
+import { Patch } from "@opencode/util/patch"
 import { Permission } from "../../permission.js"
 import DESCRIPTION from "../patch.txt"
 import { fileDiff } from "./file-diff.js"
@@ -36,7 +35,7 @@ export const Output = Schema.Struct({
 })
 export type Output = typeof Output.Type
 
-export const toModelOutput = (output: Output) =>
+export const toModelContent = (output: Output) =>
   [
     "Success. Updated the following files:",
     ...output.applied.map(
@@ -46,37 +45,37 @@ export const toModelOutput = (output: Output) =>
 
 type Prepared =
   | (Extract<Patch.Hunk, { readonly type: "add" }> & {
-      readonly target: LocationMutation.Target
+      readonly target: FileAccess.Target
       readonly content: string
       readonly before: string
       readonly after: string
     })
   | (Extract<Patch.Hunk, { readonly type: "delete" }> & {
-      readonly target: LocationMutation.Target
+      readonly target: FileAccess.Target
       readonly before: string
       readonly after: string
     })
   | (Extract<Patch.Hunk, { readonly type: "update" }> & {
-      readonly target: LocationMutation.Target
+      readonly target: FileAccess.Target
       readonly content: string
       readonly before: string
       readonly after: string
-      readonly moveTarget?: LocationMutation.Target
+      readonly moveTarget?: FileAccess.Target
     })
 
 export const Plugin = {
   id: "opencode.tool.patch",
-  effect: Effect.fn("PatchTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("PatchTool.Plugin")(function* (ctx: Context) {
     const environment = yield* Environment.Service
-    const mutation = yield* LocationMutation.Service
+    const access = yield* FileAccess.Service
     const fileMutation = yield* FileMutation.Service
     const formatter = yield* Formatter.Service
     const location = yield* Location.Service
     const permission = yield* Permission.Service
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false, permission: "edit" },
           description: DESCRIPTION,
@@ -87,8 +86,10 @@ export const Plugin = {
             const parsed = Patch.parse(input.patchText)
             const lockTargets = Result.isSuccess(parsed)
               ? parsed.success.flatMap((hunk) => [
-                  path.resolve(location.directory, hunk.path),
-                  ...(hunk.type === "update" && hunk.movePath ? [path.resolve(location.directory, hunk.movePath)] : []),
+                  FileAccess.resolvePath(location.directory, hunk.path),
+                  ...(hunk.type === "update" && hunk.movePath
+                    ? [FileAccess.resolvePath(location.directory, hunk.movePath)]
+                    : []),
                 ])
               : []
             const fail = (operation: string, error: unknown) => {
@@ -113,17 +114,11 @@ export const Plugin = {
               const prepared: Prepared[] = []
               const updates = new Map<string, string>()
               const resolveTarget = Effect.fnUntraced(function* (value: string) {
-                const target = yield* mutation.resolve({ path: value, kind: "file" })
+                const target = yield* access.resolve({ path: value, kind: "file" })
                 if (!target.externalDirectory) return target
-                yield* permission.assert({
-                  ...LocationMutation.externalDirectoryPermission(target.externalDirectory),
-                  metadata: {
-                    filepath: target.absolute,
-                    parentDir: target.externalDirectory.directory,
-                  },
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source,
+                yield* access.authorizeExternal([target], context, {
+                  filepath: target.absolute,
+                  parentDir: target.externalDirectory.directory,
                 })
                 return target
               })
@@ -215,17 +210,6 @@ export const Plugin = {
                 prepared,
                 (change) =>
                   Effect.gen(function* () {
-                    if (change.type === "add") {
-                      yield* environment.files
-                        .write(change.target.absolute, new TextEncoder().encode(change.content))
-                        .pipe(Effect.mapError((error) => fail(`Failed to write ${change.target.resource}`, error)))
-                      applied.push({
-                        type: change.type,
-                        resource: change.target.resource,
-                        target: change.target.absolute,
-                      })
-                      return
-                    }
                     if (change.type === "delete") {
                       yield* environment.files
                         .remove(change.target.absolute)
@@ -237,7 +221,7 @@ export const Plugin = {
                       })
                       return
                     }
-                    if (change.moveTarget) {
+                    if (change.type === "update" && change.moveTarget) {
                       const moveTarget = change.moveTarget
                       yield* environment.files
                         .write(moveTarget.absolute, new TextEncoder().encode(change.content))
@@ -296,7 +280,7 @@ export const Plugin = {
               fileMutation.withLock(lockTargets),
               Effect.map((output) => ({
                 output,
-                content: toModelOutput(output),
+                content: toModelContent(output),
                 metadata: { files: output.files },
               })),
               Effect.mapError((error) =>

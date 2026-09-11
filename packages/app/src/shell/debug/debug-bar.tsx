@@ -2,7 +2,7 @@ import { useIsRouting, useLocation } from "@solidjs/router"
 import { batch, createEffect, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 
@@ -185,7 +185,7 @@ export function DebugBar(props: { inline?: boolean } = {}) {
     return `${Math.round(value * 100)}%`
   }
   const longv = () => (state.long.count === undefined ? na() : `${time(state.long.block) ?? na()}/${state.long.count}`)
-  const navv = () => (state.nav.pending ? "..." : (time(state.nav.dur) ?? na()))
+  const navv = () => (state.nav.pending ? "…" : (time(state.nav.dur) ?? na()))
   const toggleFocus = async () => {
     if (!platform.setForceFocus) return
     const enabled = !state.focus

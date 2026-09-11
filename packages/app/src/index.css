@@ -1,6 +1,6 @@
-@import "@opencode-ai/ui/styles/tailwind";
-@import "@opencode-ai/session-ui/styles";
-@import "@opencode-ai/ui/styles/tokens";
+@import "@opencode/ui/styles/tailwind";
+@import "@opencode/session-ui/styles";
+@import "@opencode/ui/styles/tokens";
 @import "tw-animate-css";
 
 @font-face {
@@ -17,6 +17,14 @@
   font-style: normal;
 }
 
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("@ibm/plex/IBM-Plex-Mono/fonts/complete/woff2/IBMPlexMono-Text.woff2") format("woff2");
+  font-weight: 440;
+  font-style: normal;
+  font-display: swap;
+}
+
 @media (display-mode: standalone) {
   /* WebKit excludes safe-area insets from dvh in installed apps. */
   #root {
@@ -24,7 +32,202 @@
   }
 }
 
+/* iOS can report navigator.standalone without matching display-mode. */
+#root[data-standalone="true"] {
+  height: 100vh;
+}
+
 @layer components {
+  [data-slot="session-chat-panel"][data-scrollbar-hidden="true"]
+    [data-slot="session-timeline-scroll"]
+    > .scroll-view__thumb {
+    visibility: hidden;
+  }
+
+  [data-slot="session-side-panel-presence"][data-opened="true"] {
+    animation: side-region-presence-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-slot="session-side-panel-presence"][data-opened="false"] {
+    animation: side-region-presence-out 240ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  #review-panel {
+    container-type: inline-size;
+  }
+
+  /* Like the composer toolbar, fade only clipped content without reserving layout space.
+     The fade contracts as overflow clears; the second mask preserves the header divider. */
+  #review-panel .session-review-v2-tabs-bar {
+    --session-review-header-fade: clamp(0px, calc(100% - 100cqi), 24px);
+    mask-image:
+      linear-gradient(
+        to right,
+        #000 calc(100cqi - 40px - var(--session-review-header-fade)),
+        transparent calc(100cqi - 40px)
+      ),
+      linear-gradient(to top, #000 1px, transparent 1px);
+
+    &:dir(rtl) {
+      mask-image:
+        linear-gradient(
+          to left,
+          #000 calc(100cqi - 40px - var(--session-review-header-fade)),
+          transparent calc(100cqi - 40px)
+        ),
+        linear-gradient(to top, #000 1px, transparent 1px);
+    }
+  }
+
+  /* The panel's width animation supplies the slide; only fade its fixed-width contents. */
+  [data-slot="session-side-region-presence"][data-opened] [data-slot="session-review-content"] {
+    transition: opacity 200ms ease-out 40ms;
+  }
+
+  /* Cached contents must stay transparent even after the presence animation finishes. */
+  #review-panel[aria-hidden="true"] > [data-slot="session-review-content"] {
+    opacity: 0;
+  }
+
+  [data-slot="session-side-region-presence"][data-opened="false"] [data-slot="session-review-content"] {
+    transition: opacity 160ms ease-out;
+  }
+
+  @starting-style {
+    [data-slot="session-side-region-presence"][data-opened="true"] [data-slot="session-review-content"] {
+      opacity: 0;
+    }
+  }
+
+  [data-slot="session-side-region-presence"][data-opened="true"] {
+    animation: side-region-presence-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-slot="session-side-region-presence"][data-opened="false"] {
+    animation: side-region-presence-out 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-slot="terminal-panel-presence"][data-opened="true"] {
+    animation: terminal-panel-presence-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-slot="terminal-panel-presence"][data-opened="false"] {
+    animation: terminal-panel-presence-out 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  [data-slot="side-terminal-panel-presence"][data-opened="true"] {
+    animation: side-terminal-panel-presence-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-slot="side-terminal-panel-presence"][data-opened="false"] {
+    animation: side-terminal-panel-presence-out 240ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  [data-component="terminal-panel"][data-size-animated="true"][data-opened="true"] {
+    animation: terminal-panel-size-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-component="terminal-panel"][data-size-animated="true"][data-opened="false"] {
+    animation: terminal-panel-size-out 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="terminal-panel-presence"],
+    [data-slot="side-terminal-panel-presence"],
+    [data-slot="session-side-panel-presence"],
+    [data-slot="session-review-content"],
+    [data-slot="session-side-region-presence"],
+    [data-component="terminal-panel"] {
+      animation: none !important;
+    }
+
+    [data-slot="session-review-content"] {
+      transition: none !important;
+    }
+  }
+
+  @keyframes terminal-panel-presence-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes terminal-panel-presence-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes side-terminal-panel-presence-in {
+    from {
+      opacity: 0.999999;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes side-terminal-panel-presence-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0.999999;
+      visibility: hidden;
+    }
+  }
+
+  /* Presence needs an animation lifetime, but the panel frame must never fade. */
+  @keyframes side-region-presence-in {
+    from,
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes side-region-presence-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 1;
+      visibility: hidden;
+    }
+  }
+
+  @keyframes terminal-panel-size-in {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--terminal-panel-height);
+    }
+  }
+
+  @keyframes terminal-panel-size-out {
+    from {
+      height: var(--terminal-panel-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+
+  ::highlight(timeline-search-hit) {
+    background-color: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+  }
+
+  ::highlight(timeline-search-hit-active) {
+    background-color: var(--v2-icon-icon-accent);
+    color: var(--v2-background-bg-deep);
+  }
+
   [data-component="getting-started"] {
     container-type: inline-size;
     container-name: getting-started;
@@ -176,6 +379,69 @@
     }
     to {
       visibility: hidden;
+    }
+  }
+
+  @keyframes session-dropzone-enter {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes session-dropzone-content-enter {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.96);
+    }
+  }
+
+  @keyframes session-dropzone-upload-enter {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.92);
+    }
+  }
+
+  @keyframes session-dropzone-stripes-drift {
+    to {
+      background-position: 33.941px 0;
+    }
+  }
+
+  [data-component="session-dropzone"][data-visible="true"] {
+    animation: session-dropzone-enter 200ms cubic-bezier(0.215, 0.61, 0.355, 1);
+  }
+
+  [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-content"] {
+    animation: session-dropzone-content-enter 200ms cubic-bezier(0.215, 0.61, 0.355, 1);
+  }
+
+  [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-upload"] {
+    animation: session-dropzone-upload-enter 240ms cubic-bezier(0.215, 0.61, 0.355, 1);
+  }
+
+  [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-stripes"] {
+    animation: session-dropzone-stripes-drift 3s linear infinite;
+  }
+
+  [data-component="session-dropzone"] {
+    --session-dropzone-wash: 4%;
+    --session-dropzone-stripe: 7%;
+    --session-dropzone-card: var(--v2-background-bg-base);
+  }
+
+  [data-color-scheme="dark"] [data-component="session-dropzone"] {
+    --session-dropzone-wash: 6%;
+    --session-dropzone-stripe: 14%;
+    --session-dropzone-card: var(--v2-background-bg-layer-01);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-component="session-dropzone"][data-visible="true"],
+    [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-content"],
+    [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-upload"],
+    [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-stripes"] {
+      animation: none;
     }
   }
 

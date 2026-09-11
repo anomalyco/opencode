@@ -1,6 +1,6 @@
 // @ts-nocheck
-import { Button } from "@opencode-ai/ui/button"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Button } from "@opencode/ui/button"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { mockProviderAuth } from "@/runtime/server/sync"
 import { onCleanup, onMount } from "solid-js"

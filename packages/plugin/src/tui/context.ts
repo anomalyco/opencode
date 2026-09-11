@@ -1,7 +1,9 @@
 import type {
   AgentInfo,
   CommandInfo,
+  FormCancelInput,
   FormInfo,
+  FormReplyInput,
   IntegrationInfo,
   LocationRef,
   McpResource,
@@ -20,8 +22,8 @@ import type {
   ShellInfo,
   SkillInfo,
   VcsInfo,
-} from "@opencode-ai/client"
-import type { ResolvedTheme } from "@opencode-ai/theme/tui"
+} from "@opencode/client"
+import type { ResolvedTheme } from "@opencode/theme/tui"
 import type { CliRenderer, KeyEvent, MarkdownCodeBlockRenderer, Renderable } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 import type { Store } from "solid-js/store"
@@ -56,10 +58,12 @@ interface LocationCollection<Value> {
   invalidate(location?: LocationRef): void
 }
 
+type OpenCodeEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
+
 export interface Data {
   readonly on: <Type extends OpenCodeEvent["type"]>(
     type: Type,
-    handler: (event: Extract<OpenCodeEvent, { type: Type }>) => void,
+    handler: (event: OpenCodeEventMap[Type]) => void,
   ) => () => void
   readonly listen: (handler: (event: { details: OpenCodeEvent }) => void) => () => void
   readonly session: {
@@ -91,6 +95,8 @@ export interface Data {
       list(sessionID: string, location?: LocationRef): Array<FormInfo & { readonly location?: LocationRef }> | undefined
       sync(sessionID: string, location?: LocationRef): Promise<void>
       invalidate(sessionID: string, location?: LocationRef): void
+      reply(input: FormReplyInput, location?: LocationRef): Promise<void>
+      cancel(input: FormCancelInput, location?: LocationRef): Promise<void>
     }
   }
   readonly project: {
@@ -150,7 +156,26 @@ export interface Page {
   readonly render: (input: { readonly data?: Record<string, any> }) => JSX.Element
 }
 
-type PromptFooterInput = { readonly sessionID?: string; readonly mode: "normal" | "shell" }
+type PromptFooterInput = {
+  readonly sessionID?: string
+  readonly mode: "normal" | "shell"
+  readonly showDetails: boolean
+}
+
+export type PanelPresentation = "panel" | "fullscreen"
+
+/** Client-local state of the selected session panel. The host owns its layout and input scope. */
+export interface PanelInput {
+  /** Selected content name, set by ui.panel.open. Contributions decide whether to render it. */
+  readonly name: string
+  readonly sessionID: string
+  readonly width: number
+  readonly presentation: PanelPresentation
+  readonly focused: boolean
+  readonly focus: () => void
+  readonly close: () => void
+  readonly toggleFullscreen: () => void
+}
 
 /**
  * The host UI's slot tree. Every path is one slot: a named boundary a plugin
@@ -170,6 +195,7 @@ export interface SlotMap {
   readonly "prompt.footer.status": PromptFooterInput
   readonly "prompt.footer.file": PromptFooterInput
   readonly "session.composer.top": { readonly sessionID: string }
+  readonly "session.panel": PanelInput
   readonly "sidebar.content": { readonly sessionID: string }
   readonly "sidebar.footer": { readonly sessionID: string }
 }
@@ -327,6 +353,7 @@ export interface DialogSelectOption<Value> {
   readonly title: string
   readonly value: Value
   readonly description?: string
+  readonly footer?: string
   readonly category?: string
   readonly disabled?: boolean
 }
@@ -440,6 +467,14 @@ export interface UI {
     navigate(destination: Destination): void
     current(): Route
   }
+  readonly panel: {
+    /** Opens the session.panel slot in the current session. */
+    open(name: string, options?: { readonly presentation?: PanelPresentation }): boolean
+    /** Closes this plugin's active panel. Other plugins' panels are unaffected. */
+    close(): void
+    /** This plugin's active panel, if any. Reactive when read in a Solid computation. */
+    current(): { readonly name: string; readonly sessionID: string } | undefined
+  }
   readonly tabs: {
     /** Returns whether session tabs are enabled for this TUI. */
     enabled(): boolean
@@ -452,10 +487,12 @@ export interface UI {
       readonly attention: boolean
       readonly unread?: "activity" | "error"
     }[]
-    /** Opens (or focuses) a tab for a session, adding it when not already open. Returns false when tabs are disabled. */
+    /** Opens a tab for a session without focusing it. Returns false when tabs are disabled. */
     open(sessionID: string): boolean
-    /** Focuses an already-open tab and returns false when it is not open. */
+    /** Opens a tab when needed, then focuses it. Returns false when tabs are disabled. */
     focus(sessionID: string): boolean
+    /** Moves an open tab to an index and returns false when it is not open. */
+    move(sessionID: string, index: number): boolean
     /** Closes an open tab, or the active tab when omitted, and returns false when no tab matched. */
     close(sessionID?: string): boolean
   }
@@ -472,6 +509,7 @@ export interface Context {
   readonly data: Data
   readonly attention: Attention
   readonly theme: ResolvedTheme
+  readonly themeMode: "dark" | "light"
   readonly markdown: {
     registerCodeBlockRenderer(language: string, render: MarkdownCodeBlockRenderer): () => void
   }

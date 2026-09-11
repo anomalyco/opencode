@@ -8,8 +8,8 @@
 //   3. starts the stream transport (SDK event subscription), lazily for fresh
 //      local sessions,
 //   4. runs the prompt queue until the footer closes.
-import { SessionMessage } from "@opencode-ai/schema/session-message"
-import type { LocationRef } from "@opencode-ai/client/promise"
+import { SessionMessage } from "@opencode/schema/session-message"
+import type { LocationRef } from "@opencode/client/promise"
 import type { Config } from "../config"
 import { newSessionLocation } from "../config/new-session-location"
 import { loadRunAgents, loadRunCommands, loadRunReferences } from "./catalog.shared"
@@ -22,6 +22,7 @@ import {
 } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
 import { cycleVariant, formatModelLabel, resolveVariant } from "./variant.shared"
+import { verbosityPreset } from "./verbosity"
 import type {
   LocalReplayRow,
   MiniHost,
@@ -255,6 +256,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       ? async (change) => {
           const info = await config.update((draft) => {
             if (!draft.mini || typeof draft.mini !== "object") draft.mini = {}
+            if (change.key === "verbosity") {
+              Object.assign(draft.mini, verbosityPreset(change.value))
+              return
+            }
             draft.mini[change.key] = change.value
           })
           configState.current = resolveMiniSettings(info)
@@ -366,6 +371,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
     },
     onInterrupt: () => {
+      if (state.demo?.interrupt()) return true
       if (!state.sessionID) {
         return false
       }
@@ -390,11 +396,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     onQueuedPromptAction: async (action, inboxID) => {
       if (!state.sessionID) return
       log?.write(`send.pending.${action}`, { sessionID: state.sessionID, inboxID })
-      if (action === "steer") {
-        await state.sdk.session.inbox.steer({ sessionID: state.sessionID, inboxID })
-        return
-      }
-      await state.sdk.session.inbox.cancel({ sessionID: state.sessionID, inboxID })
+      await state.sdk.session.inbox[action]({ sessionID: state.sessionID, inboxID })
     },
     onSubagentInterrupt: (sessionID) => {
       log?.write("send.subagent.interrupt", { sessionID })
@@ -411,7 +413,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
   const thinking = () => input.thinking ?? configState.current.thinking === "show"
   const footer = shell.footer
   const firstPaint = footer.idle().catch(() => {})
-  const offRuntimeClose = footer.onClose(() => runtimeController.abort())
+  const offRuntimeClose = footer.onClose(() => {
+    state.demo?.interrupt()
+    runtimeController.abort()
+  })
   let clientGeneration = 0
   let clientController = new AbortController()
   let modelAttempt: AbortController | undefined
@@ -480,11 +485,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         footer.event({ type: "history", history: resumed.history })
         footer.event({ type: "first", first: resumed.first })
         if (footer.isClosed || runtimeController.signal.aborted) return
-        await shell.resetForReplay({
-          sessionTitle: state.sessionTitle,
-          sessionID: state.sessionID,
-          history: state.history,
-        })
+        await shell.resetForReplay()
       })
       .catch((error) => {
         if (footer.isClosed || runtimeController.signal.aborted) return
@@ -797,6 +798,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         location: state.location,
         sessionID: state.sessionID,
         thinking: thinking(),
+        tools: configState.current.tools === "show",
         replay: input.replay,
         replayLimit: input.replayLimit,
         footer,
@@ -848,12 +850,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         .then((item) =>
           item.handle.replayOnResize({
             localRows: () => state.localRows,
-            reset: () =>
-              shell.resetForReplay({
-                sessionTitle: state.sessionTitle,
-                sessionID: state.sessionID,
-                history: state.history,
-              }),
+            reset: () => shell.resetForReplay(),
           }),
         )
         .catch(() => {})
@@ -894,10 +891,11 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       footer,
       initialInput: input.initialInput,
       trace: log,
-      onSend: (prompt, delivery) => {
+      onSend: (prompt, emittedUser) => {
         state.shown = true
         state.history.push({ ...prompt, delivery: undefined })
-        if (prompt.mode !== "shell" && delivery === "steer") {
+        // Pending inputs can still be cancelled; only replay rows already printed.
+        if (emittedUser) {
           rememberLocal({
             kind: "user",
             text: prompt.text,
@@ -986,7 +984,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
                 type: "stream.patch",
                 patch: {
                   phase: "idle",
-                  usage: "",
+                  usage: undefined,
                   first: true,
                 },
               })

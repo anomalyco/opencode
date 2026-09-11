@@ -3,28 +3,37 @@ import { Effect } from "effect"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { FileSystem } from "../filesystem.js"
-import { DecodeError, ResizerUnavailableError, SizeError } from "../image.js"
+import { DecodeError, ResizerUnavailableError, SizeError, type Limits } from "../image.js"
 
 const JPEG_QUALITIES = [80, 85, 70, 55, 40]
 
 export const make = Effect.gen(function* () {
-  ;(globalThis as typeof globalThis & { __OPENCODE_PHOTON_WASM_PATH?: string }).__OPENCODE_PHOTON_WASM_PATH =
-    path.isAbsolute(photonWasm) ? photonWasm : fileURLToPath(new URL(photonWasm, import.meta.url))
   const loadPhoton = yield* Effect.cached(
-    Effect.tryPromise({
-      try: () => import("@silvia-odwyer/photon-node"),
-      catch: () => new ResizerUnavailableError(),
-    }),
+    // A runtime without a photon wasm artifact (#photon-wasm resolves to the
+    // empty string on workerd) has no resizer, by declaration: fail typed
+    // before touching URLs or module loading. The path resolution and import
+    // for runtimes that DO have an artifact stay inside the guard too — a
+    // throw outside it (workerd's undefined import.meta.url was one) is a
+    // defect that escapes the ResizerUnavailableError handling and turns any
+    // image-bearing prompt into a 500 instead of degrading to passthrough.
+    photonWasm === ""
+      ? Effect.fail(new ResizerUnavailableError())
+      : Effect.tryPromise({
+          try: async () => {
+            ;(
+              globalThis as typeof globalThis & { __OPENCODE_PHOTON_WASM_PATH?: string }
+            ).__OPENCODE_PHOTON_WASM_PATH = path.isAbsolute(photonWasm)
+              ? photonWasm
+              : fileURLToPath(new URL(photonWasm, import.meta.url))
+            return await import("@silvia-odwyer/photon-node")
+          },
+          catch: () => new ResizerUnavailableError(),
+        }),
   )
   return Effect.fn("Image.Photon.normalize")(function* (
     resource: string,
     content: FileSystem.Content & { readonly encoding: "base64" },
-    limits: {
-      readonly autoResize: boolean
-      readonly maxWidth: number
-      readonly maxHeight: number
-      readonly maxBase64Bytes: number
-    },
+    limits: Readonly<Limits>,
   ) {
     const photon = yield* loadPhoton
     const decoded = yield* Effect.try({
@@ -69,9 +78,15 @@ export const make = Effect.gen(function* () {
             ...JPEG_QUALITIES.map((quality) => ["image/jpeg", () => resized.get_bytes_jpeg(quality)] as const),
           ]
           for (const [mime, encode] of encoders) {
-            const candidate = Buffer.from(encode()).toString("base64")
-            if (Buffer.byteLength(candidate, "utf-8") <= limits.maxBase64Bytes)
-              return { ...content, content: candidate, encoding: "base64" as const, mime }
+            const candidate = encode()
+            // Base64 uses four bytes per three input bytes, including padding.
+            if (Math.ceil(candidate.length / 3) * 4 <= limits.maxBase64Bytes)
+              return {
+                ...content,
+                content: Buffer.from(candidate).toString("base64"),
+                encoding: "base64" as const,
+                mime,
+              }
           }
         } finally {
           resized.free()

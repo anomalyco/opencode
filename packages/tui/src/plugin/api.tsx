@@ -1,6 +1,6 @@
-import { PluginContextProvider } from "@opencode-ai/plugin/tui"
+import { PluginContextProvider } from "@opencode/plugin/tui"
 import type { JSX } from "solid-js"
-import type { Context, Dialog, Page, SlotClaim, SlotMap, SlotPath, Toast } from "@opencode-ai/plugin/tui/context"
+import type { Context, Dialog, Page, SlotClaim, SlotMap, SlotPath, Toast } from "@opencode/plugin/tui/context"
 import type { Placement, PlacementKind } from "./structure"
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
@@ -20,6 +20,7 @@ import { useToast } from "../ui/toast"
 import { useAttention } from "../context/attention"
 import { useStorage } from "../context/storage"
 import { useSessionTabs } from "../context/session-tabs"
+import { useOptionalPanel } from "../context/panel"
 import { abbreviateHome } from "../util/path-format"
 
 export type Dispose = () => Promise<void>
@@ -68,6 +69,7 @@ export function usePluginHost() {
     attention: useAttention(),
     storage: useStorage(),
     sessionTabs: useSessionTabs(),
+    panel: useOptionalPanel(),
   }
 }
 
@@ -82,6 +84,7 @@ export function createPluginContext(input: {
   registry: Registry
 }): Context {
   const host = input.host
+  input.owned.push(async () => host.panel?.release(input.id))
   let context: Context
   let claims = 0
   // Every dialog and registered render is wrapped so plugin components can
@@ -120,6 +123,9 @@ export function createPluginContext(input: {
     attention: host.attention,
     get theme() {
       return host.themes.currentTokens()
+    },
+    get themeMode() {
+      return host.themes.mode()
     },
     markdown: {
       registerCodeBlockRenderer(language, render) {
@@ -171,23 +177,48 @@ export function createPluginContext(input: {
           return host.route.data
         },
       },
+      panel: {
+        open(name, options) {
+          if (!host.panel || !input.registry.active()) return false
+          const route = host.route.data
+          if (route.type !== "session") return false
+          host.panel.open({ plugin: input.id, name, sessionID: route.sessionID }, options?.presentation)
+          return true
+        },
+        close: () => host.panel?.release(input.id),
+        current() {
+          const current = host.panel?.current()
+          if (current?.plugin !== input.id) return
+          return { name: current.name, sessionID: current.sessionID }
+        },
+      },
       tabs: {
         enabled: host.sessionTabs.enabled,
         list: () =>
-          host.sessionTabs.tabs().map((tab) => ({
-            ...tab,
-            active: host.sessionTabs.current() === tab.sessionID,
-            ...host.sessionTabs.status(tab.sessionID),
-          })),
+          host.sessionTabs.tabs().map((tab) => {
+            const status = host.sessionTabs.status(tab.sessionID)
+            return {
+              ...tab,
+              active: host.sessionTabs.current() === tab.sessionID,
+              ...status,
+              attention: Boolean(status.attention),
+            }
+          }),
         open(sessionID) {
           if (!host.sessionTabs.enabled()) return false
-          host.sessionTabs.select(sessionID)
+          host.sessionTabs.open(sessionID)
           return true
         },
         focus(sessionID) {
           if (!host.sessionTabs.enabled()) return false
-          if (!host.sessionTabs.tabs().some((tab) => tab.sessionID === sessionID)) return false
           host.sessionTabs.select(sessionID)
+          return true
+        },
+        move(sessionID, index) {
+          if (!host.sessionTabs.enabled()) return false
+          const target = host.data.session.root(sessionID)
+          if (!host.sessionTabs.tabs().some((tab) => tab.sessionID === target)) return false
+          host.sessionTabs.move(target, index)
           return true
         },
         close(sessionID) {
@@ -229,7 +260,10 @@ function settle<T>(resolve: (value: T) => void) {
   }
 }
 
-function createDialogApi(dialog: ReturnType<typeof useDialog>, provide: (render: () => JSX.Element) => JSX.Element) {
+export function createDialogApi(
+  dialog: ReturnType<typeof useDialog>,
+  provide: (render: () => JSX.Element) => JSX.Element,
+) {
   const api: Dialog = {
     show(render, onClose) {
       dialog.replace(() => provide(render), onClose)

@@ -12,13 +12,7 @@ describe("acp service prompt routing and usage", () => {
           return Response.json({ data: makeSession("ses_routes") })
         }
         if (request.method === "POST" && request.path === "/api/session/ses_routes/command") {
-          const id = requestID(request)
-          completeTurn(context, "ses_routes", {
-            id: `evt_${id}`,
-            type: "session.inbox.delivered",
-            data: { sessionID: "ses_routes", inboxID: id },
-          })
-          return Response.json({ data: {} })
+          return new Response(null, { status: 204 })
         }
         if (request.method === "POST" && request.path === "/api/session/ses_routes/skill") {
           const id = requestID(request)
@@ -65,9 +59,8 @@ describe("acp service prompt routing and usage", () => {
     const skill = fixture.requests.find((request) => request.path === "/api/session/ses_routes/skill")
     const compact = fixture.requests.find((request) => request.path === "/api/session/ses_routes/compact")
     expect(command?.body).toMatchObject({
-      id: expect.any(String),
       command: "review",
-      arguments: "now",
+      text: "now",
       files: [],
       delivery: "steer",
     })

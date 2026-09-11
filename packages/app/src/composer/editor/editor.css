@@ -1,3 +1,41 @@
 [data-component="composer-editor"]:empty::before {
   content: "\200B";
 }
+
+/* Masks only cover hidden content; they do not reserve space in the toolbar. */
+[data-slot="composer-controls"][data-overflow-start="true"] {
+  --mask-start: 16px;
+}
+
+[data-slot="composer-controls"][data-overflow-end="true"] {
+  --mask-end: 16px;
+}
+
+[data-slot="composer-controls"]:dir(rtl) {
+  --mask-direction: to left;
+}
+
+[data-slot="composer-controls"]:is([data-overflow-start="true"], [data-overflow-end="true"]) {
+  mask-image: linear-gradient(
+    var(--mask-direction, to right),
+    transparent,
+    black var(--mask-start, 0px),
+    black calc(100% - var(--mask-end, 0px)),
+    transparent
+  );
+}
+
+[data-component="composer"]:not(:hover) .composer-variant-default:not(:focus-visible, [data-expanded]) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-color-scheme="dark"] [data-component="composer"][data-dock-border-underlay="true"],
+[data-color-scheme="dark"] [data-component="session-composer-dock"] [data-component="composer"],
+[data-color-scheme="dark"] [data-component="new-session"] [data-component="composer"] {
+  background: var(--v2-background-bg-layer-01);
+}
+
+[data-color-scheme="dark"] [data-component="composer-suggestions"] [data-active] {
+  background: var(--v2-alpha-light-10);
+}

@@ -1,12 +1,12 @@
 # Schema Package Guide
 
-`@opencode-ai/schema` owns browser-safe wire and storage contracts shared by protocol, server, core, and generated SDKs. Keep runtime behavior, service layers, side effects, and host-local implementation details in the domain package that owns them.
+`@opencode/schema` owns browser-safe wire and storage contracts shared by protocol, server, core, and generated SDKs. Keep runtime behavior, service layers, side effects, and host-local implementation details in the domain package that owns them.
 
 ## Package Boundary
 
-- Preserve the dependency direction: `@opencode-ai/schema <- @opencode-ai/protocol <- @opencode-ai/server`.
+- Preserve the dependency direction: `@opencode/schema <- @opencode/protocol <- @opencode/server`.
 - Schema values should be serializable contract definitions, not service implementations or runtime registries.
-- A domain may keep a minimal public wire contract here when SDK generation needs it, but do not move the broader runtime model into Schema just because an event is public. `plugin.added` is the current example: Schema may own the minimum browser-safe event payload, while plugin runtime behavior stays outside Schema.
+- A domain may keep a minimal public wire contract here when SDK generation needs it, but do not move the broader runtime model into Schema just because an event is public. `plugin.updated` is the current example: Schema may own the minimum browser-safe event payload, while plugin runtime behavior stays outside Schema.
 - The root barrel exports canonical current domain contracts. Specialized event modules, manifests, infrastructure modules, and V1 contracts use direct entrypoints instead of becoming first-class root exports.
 
 ## Current Versus V1
@@ -16,7 +16,7 @@
 - Do not preserve `V2` as the permanent name for the replacement architecture. Remove `V2` from current namespaces, brands, and identifiers as the contracts are normalized.
 - Retained V1 contracts live under `src/v1/`. New/current code must not depend on that subtree.
 - V1 coexistence is temporary. Keep compatibility entrypoints only where migration requires them, and delete the V1 subtree when the legacy runtime is retired.
-- `@opencode-ai/protocol` and `@opencode-ai/sdk` are current `/api/...` surfaces.
+- `@opencode/protocol` and `@opencode/sdk` are current `/api/...` surfaces.
 
 ## Events
 
@@ -37,7 +37,7 @@
 ## Public Re-exports
 
 - Public leaf packages re-export the canonical domain namespaces used by their APIs so consumers install and version one package. Keep the list curated by public API reachability rather than mirroring the Schema root.
-- Re-export directly from `@opencode-ai/schema/<domain>` and preserve the exact canonical values and types. Do not wrap schemas, duplicate definitions, or route exports through another facade package.
+- Re-export directly from `@opencode/schema/<domain>` and preserve the exact canonical values and types. Do not wrap schemas, duplicate definitions, or route exports through another facade package.
 - Internal packages import contracts directly from their canonical Schema owner. Import a Core domain facade only when runtime behavior from that facade is required.
 - Resolve name collisions by retaining the domain namespace and qualifying its members, such as `Session.Info` and `Agent.Info`. Do not introduce aliases such as `SessionSchema`, `AgentSchema`, or `ModelSchema`.
 

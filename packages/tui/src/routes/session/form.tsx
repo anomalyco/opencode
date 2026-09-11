@@ -11,13 +11,13 @@ import {
 } from "@opentui/core"
 import open from "open"
 import { useTheme, useThemes } from "../../context/theme"
-import type { FormAnswer, FormField, FormValue } from "@opencode-ai/client"
-import type { FormWithLocation } from "../../context/data"
-import { useClient } from "../../context/client"
+import type { FormAnswer, FormField, FormValue } from "@opencode/client"
+import { useData, type FormWithLocation } from "../../context/data"
 import { useClipboard } from "../../context/clipboard"
 import { SplitBorder } from "../../ui/border"
 import { useToast } from "../../ui/toast"
 import { Keymap } from "../../context/keymap"
+import { useInteractivity } from "../../context/interactivity"
 import { useConfig } from "../../config"
 import { errorMessage } from "../../util/error"
 import {
@@ -41,28 +41,16 @@ function truncate(label: string, max: number) {
   return label.length > max ? label.slice(0, max - 1).trimEnd() + "…" : label
 }
 
-function requestOptions(form: FormWithLocation) {
-  if (form.sessionID !== "global" || !form.location) return undefined
-  return {
-    headers: {
-      "x-opencode-directory": encodeURIComponent(form.location.directory),
-      ...(form.location.workspaceID ? { "x-opencode-workspace": form.location.workspaceID } : {}),
-    },
-  }
-}
-
-export function FormPrompt(props: {
-  form: FormWithLocation
-  onReply?: (answer: FormAnswer) => void | Promise<void>
-  onCancel?: () => void | Promise<void>
-}) {
-  const client = useClient()
+export function FormPrompt(props: { form: FormWithLocation }) {
+  const data = useData()
   const themes = useThemes()
   const theme = useTheme("elevated")
   const themeMode = themes.mode
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const keymap = Keymap.use()
+  const enabled = useInteractivity()
+  const active = () => enabled() && keymap.mode.current() === FORM_MODE
   const config = useConfig().data
   const clipboard = useClipboard()
   const toast = useToast()
@@ -83,6 +71,7 @@ export function FormPrompt(props: {
   })
 
   let textarea: TextareaRenderable | undefined
+  const [inputTarget, setInputTarget] = createSignal<TextareaRenderable>()
   let review: ScrollBoxRenderable | undefined
   let measureReview: (() => void) | undefined
 
@@ -231,9 +220,22 @@ export function FormPrompt(props: {
     if (measureReview) renderer.off(CliRenderEvents.FRAME, measureReview)
   })
 
+  // Refs publish after initialization so burst typing stays with the interceptor until the editor is ready.
+  createEffect(() => {
+    const target = inputTarget()
+    if (!target || target.isDestroyed) return
+    if (!active()) {
+      target.blur()
+      target.focusable = false
+      return
+    }
+    target.focusable = true
+    target.focus()
+  })
+
   onCleanup(
     keymap.intercept("key", ({ event, consume }) => {
-      if (keymap.mode.current() !== FORM_MODE) return
+      if (!active()) return
       if (textual() || !other() || (store.editing && renderer.currentFocusedEditor === textarea)) return
       if (event.ctrl || event.meta || event.option || event.super || event.hyper) return
       if ((!store.editing && event.sequence === " ") || !/^[^\p{C}\p{Zl}\p{Zp}]$/u.test(event.sequence)) return
@@ -258,16 +260,9 @@ export function FormPrompt(props: {
   }
 
   function reply(answer: FormAnswer) {
-    void Promise.resolve()
-      .then(() =>
-        props.onReply
-          ? props.onReply(answer)
-          : client.api.form.reply(
-              { sessionID: props.form.sessionID, formID: props.form.id, answer },
-              requestOptions(props.form),
-            ),
-      )
-      .catch((error: unknown) => setStore("error", errorMessage(error)))
+    void data.session.form
+      .reply({ sessionID: props.form.sessionID, formID: props.form.id, answer }, props.form.location)
+      .catch(showError)
   }
 
   function replySingle(field: FormAnswerField, value: FormValue) {
@@ -350,8 +345,14 @@ export function FormPrompt(props: {
   }
 
   usePaste((event) => {
-    if (keymap.mode.current() !== FORM_MODE) return
-    if (!pasteCustom(stripAnsiSequences(decodePasteBytes(event.bytes)).replace(/\r\n?/g, "\n"))) return
+    if (!active()) return
+    const value = stripAnsiSequences(decodePasteBytes(event.bytes)).replace(/\r\n?/g, "\n")
+    if (store.editing && renderer.currentFocusedEditor === textarea) {
+      textarea.insertText(value)
+      event.preventDefault()
+      return
+    }
+    if (!pasteCustom(value)) return
     event.preventDefault()
   })
 
@@ -359,7 +360,7 @@ export function FormPrompt(props: {
     return clipboard
       .read()
       .then((content) => {
-        if (content?.mime !== "text/plain") return
+        if (!active() || content?.mime !== "text/plain") return
         const value = stripAnsiSequences(content.data).replace(/\r\n?/g, "\n")
         if (store.editing || textual()) {
           textarea?.insertText(value)
@@ -457,11 +458,13 @@ export function FormPrompt(props: {
   }
 
   function cancel() {
-    if (props.onCancel) {
-      void props.onCancel()
-      return
-    }
-    void client.api.form.cancel({ sessionID: props.form.sessionID, formID: props.form.id }, requestOptions(props.form))
+    void data.session.form
+      .cancel({ sessionID: props.form.sessionID, formID: props.form.id }, props.form.location)
+      .catch(showError)
+  }
+
+  function showError(error: unknown) {
+    setStore("error", errorMessage(error))
   }
 
   function openExternal() {
@@ -554,6 +557,10 @@ export function FormPrompt(props: {
         run() {
           const text = textarea?.plainText ?? ""
           if (!text) {
+            if (textual()) {
+              cancel()
+              return
+            }
             setStore("editing", false)
             return
           }
@@ -888,8 +895,9 @@ export function FormPrompt(props: {
                     textarea = val
                     val.traits = { status: "ANSWER" }
                     queueMicrotask(() => {
-                      val.focus()
+                      if (val.isDestroyed) return
                       val.gotoLineEnd()
+                      setInputTarget(val)
                     })
                   }}
                   initialValue={
@@ -917,7 +925,7 @@ export function FormPrompt(props: {
                     }
                     return (
                       <box
-                        onMouseOver={() => setStore("selected", i())}
+                        onMouseMove={() => setStore("selected", i())}
                         onMouseDown={() => setStore("selected", i())}
                         onMouseUp={() => {
                           if (renderer.getSelection()?.getSelectedText()) return
@@ -971,7 +979,7 @@ export function FormPrompt(props: {
                 </For>
                 <Show when={custom()}>
                   <box
-                    onMouseOver={() => setStore("selected", rows().length)}
+                    onMouseMove={() => setStore("selected", rows().length)}
                     onMouseDown={() => setStore("selected", rows().length)}
                     onMouseUp={() => {
                       if (renderer.getSelection()?.getSelectedText()) return
@@ -1027,9 +1035,10 @@ export function FormPrompt(props: {
                               textarea = val
                               val.traits = { status: "ANSWER" }
                               queueMicrotask(() => {
+                                if (val.isDestroyed) return
                                 val.setText(input())
-                                val.focus()
                                 val.gotoLineEnd()
+                                setInputTarget(val)
                               })
                             }}
                             initialValue={input()}

@@ -9,7 +9,7 @@ import type { TypedQueryBuilder } from "drizzle-orm/query-builders/query-builder
 import type { AnyRelations, EmptyRelations } from "drizzle-orm/relations"
 import { SelectionProxyHandler } from "drizzle-orm/selection-proxy"
 import { type ColumnsSelection, type SQL, sql, type SQLWrapper } from "drizzle-orm/sql/sql"
-import type { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core/dialect"
+import type { SQLiteDialect } from "drizzle-orm/sqlite-core/dialect"
 import { QueryBuilder } from "drizzle-orm/sqlite-core/query-builders/query-builder"
 import type { SelectedFields } from "drizzle-orm/sqlite-core/query-builders/select.types"
 import type { SQLiteTransactionConfig } from "drizzle-orm/sqlite-core/session"
@@ -45,7 +45,7 @@ export class SQLiteEffectDatabase<
 
   constructor(
     /** @internal */
-    readonly dialect: SQLiteAsyncDialect,
+    readonly dialect: SQLiteDialect,
     /** @internal */
     readonly session: SQLiteEffectSession<TEffectHKT, TRunResult, TRelations>,
     relations: TRelations,

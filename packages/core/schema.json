@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "3fb67508-0196-4bae-b2bd-c08ece7583fd",
-  "prevIds": ["dcde8e6b-4bf4-4f6b-b2be-4030c2c3e936"],
+  "id": "be60f352-8da1-40e1-8d70-dc41121cfbc5",
+  "prevIds": ["3fb67508-0196-4bae-b2bd-c08ece7583fd"],
   "ddl": [
     {
       "name": "account_state",
@@ -1442,7 +1442,7 @@
     },
     {
       "type": "text",
-      "notNull": true,
+      "notNull": false,
       "autoincrement": false,
       "default": null,
       "generated": null,

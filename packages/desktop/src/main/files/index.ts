@@ -62,15 +62,17 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
     }),
     readPickedFile: pickedFiles.read,
     releasePickedFiles: pickedFiles.release,
-    saveFilePicker: Effect.fn("DesktopFiles.saveFilePicker")(function* (options?: SaveFilePickerOptions) {
+    saveFile: Effect.fn("DesktopFiles.saveFile")(function* (options: SaveFilePickerOptions, content: string) {
       const result = yield* Effect.promise(() =>
         dialog.showSaveDialog({
           title: options?.title ?? nativeT("desktop.dialog.saveFile"),
           defaultPath: options?.defaultPath,
         }),
       )
-      if (result.canceled) return null
-      return result.filePath ?? null
+      if (result.canceled) return false
+      if (!result.filePath) return false
+      yield* fs.writeFile(result.filePath, new TextEncoder().encode(content))
+      return true
     }),
     openPath: Effect.fn("DesktopFiles.openPath")(function* (target: string, application?: string) {
       if (!application) return yield* Effect.promise(() => shell.openPath(target))
@@ -95,6 +97,9 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
       if (image.isEmpty()) return null
       const size = image.getSize()
       return { buffer: new Uint8Array(image.toPNG()).buffer, width: size.width, height: size.height }
+    },
+    writeClipboardText(text: string) {
+      clipboard.writeText(text)
     },
   }
 }

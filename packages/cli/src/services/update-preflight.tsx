@@ -4,9 +4,9 @@
 import { createCliRenderer, RGBA, TextAttributes, type CliRenderer, type ThemeMode } from "@opentui/core"
 import { render, useTerminalDimensions } from "@opentui/solid"
 import { OPENCODE_VERSION } from "../version"
-import { registerOpencodeSpinner } from "@opencode-ai/tui/component/register-spinner"
-import { SPINNER_FRAMES } from "@opencode-ai/tui/component/spinner"
-import { go } from "@opencode-ai/tui/logo"
+import { registerOpencodeSpinner } from "@opencode/tui/component/register-spinner"
+import { SPINNER_FRAMES } from "@opencode/tui/component/spinner"
+import { go } from "@opencode/tui/logo"
 import { setTimeout } from "node:timers/promises"
 import {
   batch,

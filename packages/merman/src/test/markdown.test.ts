@@ -13,7 +13,7 @@ let treeSitterClient: TreeSitterClient
 let renderer: Awaited<ReturnType<typeof createTestRenderer>>["renderer"] | undefined
 
 beforeAll(async () => {
-  const dataPath = join(tmpdir(), "merman-markdown-test-data")
+  const dataPath = join(tmpdir(), "mermaid-markdown-test-data")
   await mkdir(dataPath, { recursive: true })
   treeSitterClient = new TreeSitterClient({ dataPath })
   await treeSitterClient.initialize()
@@ -211,6 +211,32 @@ flowchart LR
   expect(testRenderer.captureCharFrame()).toContain("Current")
 })
 
+test("renders the valid prefix of an interrupted Mermaid fence", async () => {
+  const testRenderer = await createTestRenderer({ width: 100, height: 18 })
+  renderer = testRenderer.renderer
+  const markdown = new MarkdownRenderable(renderer, {
+    id: "markdown-interrupted-mermaid",
+    content: `\`\`\`mermaid
+flowchart TD
+  A[Resolve Project] --> B[Current directory]
+  B --> C[Search ancestors]
+  C --> D[Marker found]
+  C --> E[No marker found]
+  E --> G[Project root is`,
+    syntaxStyle,
+    internalBlockMode: "top-level",
+    renderNode: createMermaidMarkdownRenderer(renderer),
+  })
+
+  renderer.root.add(markdown)
+  await renderMarkdown(markdown, testRenderer.renderOnce)
+
+  const frame = testRenderer.captureCharFrame()
+  expect(frame).toContain("Resolve Project")
+  expect(frame).toContain("No marker found")
+  expect(frame).not.toContain("flowchart TD")
+})
+
 test("renders a Mermaid sequence fence inside MarkdownRenderable", async () => {
   const testRenderer = await createTestRenderer({ width: 80, height: 14 })
   renderer = testRenderer.renderer
@@ -334,6 +360,33 @@ flowchart LR
   expect(testRenderer.captureCharFrame()).toContain("GLOBAL registry")
 })
 
+test("folds a horizontal state diagram to the Markdown context width", async () => {
+  const testRenderer = await createTestRenderer({ width: 60, height: 48 })
+  renderer = testRenderer.renderer
+  const markdown = new MarkdownRenderable(renderer, {
+    id: "markdown-horizontal-state",
+    content: `\`\`\`mermaid
+stateDiagram-v2
+  direction LR
+  [*] --> A
+  A --> B: first
+  B --> C: second
+  C --> D: third
+  D --> [*]
+\`\`\``,
+    syntaxStyle,
+    renderNode: createMermaidMarkdownRenderer(renderer),
+  })
+
+  renderer.root.add(markdown)
+  await renderMarkdown(markdown, testRenderer.renderOnce)
+
+  const diagram = markdown.getChildren()[0] as CodeRenderable
+  expect(diagram.scrollWidth).toBeLessThanOrEqual(diagram.width)
+  expect(diagram.scrollWidth).toBeLessThanOrEqual(60)
+  expect(testRenderer.captureCharFrame()).toContain("third")
+})
+
 test("renders a Mermaid state fence inside MarkdownRenderable", async () => {
   const testRenderer = await createTestRenderer({ width: 80, height: 14 })
   renderer = testRenderer.renderer
@@ -355,6 +408,27 @@ stateDiagram-v2
   const frame = captureCharFrame()
   expect(frame).toContain("Idle")
   expect(frame).not.toContain("stateDiagram-v2")
+})
+
+test("sizes a standalone state choice after trimming leading rows", async () => {
+  const testRenderer = await createTestRenderer({ width: 80, height: 6 })
+  renderer = testRenderer.renderer
+  const markdown = new MarkdownRenderable(renderer, {
+    id: "markdown-state-choice",
+    content: `\`\`\`mermaid
+stateDiagram-v2
+  direction LR
+  state Decision <<choice>>
+\`\`\``,
+    syntaxStyle,
+    renderNode: createMermaidMarkdownRenderer(renderer),
+  })
+
+  renderer.root.add(markdown)
+  await renderMarkdown(markdown, testRenderer.renderOnce)
+
+  expect(markdown.getChildren()[0]?.height).toBe(1)
+  expect(testRenderer.captureCharFrame()).toContain("◆")
 })
 
 test("renders a Mermaid timeline fence inside MarkdownRenderable", async () => {

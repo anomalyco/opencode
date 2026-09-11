@@ -6,7 +6,6 @@ export default defineConfig({
   schema: ["./src/database/schema.ts"],
   // schema: ["./src/**/*.sql.ts"],
   out: "./migrations/",
-  strict: true,
   verbose: true,
   dbCredentials: {
     database: Resource.StatsDatabase.database,

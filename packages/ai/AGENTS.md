@@ -13,11 +13,20 @@
 Per-type constructors live on the type, not as top-level re-exports. Use `Message.system(...)`, `Message.user(...)`, `Message.assistant(...)`, `Message.tool(...)`, `LanguageModel.make(...)`, `ToolDefinition.make(...)`, `ToolCallPart.make(...)`, `ToolResultPart.make(...)`, `ToolChoice.make(...)`, `ToolChoice.named(...)`, `SystemPart.make(...)`, and `GenerationOptions.make(...)` directly. The top-level `LLM` namespace is reserved for request-shaped call APIs: `LLM.request`, `LLM.generate`, `LLM.stream`, and `LLM.generateObject`. Use `LLMRequest.update(...)` when deriving canonical request data; do not add a duplicate `LLM.updateRequest(...)` path. Two ways to construct the same thing is one too many.
 
 - Keep provider-defined string enums forward-compatible. Expose known values for autocomplete while accepting future values with `Known | (string & {})`; use `Schema.String` at runtime unless rejecting unknown values is required for correctness.
+- Order reasoning-effort values from lowest to highest: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. Provider-specific subsets follow the same relative order in types, schemas, option lists, and tests.
 
 ## Tests
 
 - Use `testEffect(...)` from `test/lib/effect.ts` for tests requiring Effect layers.
 - Keep provider tests fixture-first. Live provider calls must stay behind `RECORD=true` and required API-key checks.
+
+## Errors
+
+- `AIError` wraps a union of tagged reason errors. It stores only `reason`, derives `message` from the reason, and exposes the reason as its `cause`.
+- Each reason owns its readable `message`, category-specific fields, and optional `body`, `http`, and underlying exception in `cause`.
+- `reason.body` is the sole original-response or triggering-event payload field. Preserve original text before schema decoding removes fields; do not replace the complete event with only its nested error.
+- `reason.http` describes an observed HTTP response with required `url`, `status`, and response `headers`. Do not invent status codes or derive a separate request ID from headers.
+- Reclassification and transport recovery must preserve the reason's body, HTTP context, and underlying cause. Error `message` and `cause` are non-enumerable: copy them explicitly when constructing an enriched reason with its constructor or `AIErrorReason.make`.
 
 ## Architecture
 
@@ -73,7 +82,7 @@ export const route = Route.make({
 
 Route defaults are request-shaping defaults such as `headers`, `limits`, `generation`, `providerOptions`, and `http`. Endpoint host/query belongs on the route endpoint. Selected `LanguageModel` values carry only model id, provider id, and the configured route value. Model capability/catalog metadata lives outside this package; protocol support is enforced by request lowering and typed `AIError`s.
 
-The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider deployment is a 5-15 line `Route.make(...)` call instead of a 300-400 line route clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
+The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider owns a small `Route.make(...)` composition instead of a protocol clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
 
 When a provider supports multiple physical transports, selection remains execution policy below its semantic route. `OpenResponsesChannel.transport(...)` owns the provider-neutral Responses WebSocket concept: it prepares one final request, executes HTTP by default, strips WebSocket-disallowed fields, and passes a generic channel exchange to a per-call `WebSocketChannelExecutor` when supplied. Provider-specific Responses routes opt in with handshake and connection-age policy. `Route.streamPrepared` owns decoding and acknowledges channel completion only after successful full consumption.
 
@@ -107,15 +116,16 @@ Keep provider facades small and explicit:
 - Prefer `apiKey` as provider-specific sugar and `auth` as the explicit override; keep them mutually exclusive in provider option types with `ProviderAuthOption`.
 - Resolve `apiKey` → `Auth` with `AuthOptions.bearer(options, "<PROVIDER>_API_KEY")` (it honors an explicit `auth` override and falls back to `Auth.config(envVar)` so missing keys surface a typed `Authentication` error rather than a runtime crash).
 - Use separate top-level facades for products with different required setup, such as `CloudflareAIGateway` and `CloudflareWorkersAI`.
+- Give every named provider its own file and top-level export. Keep its endpoint, auth defaults, and route setup in that file. Compose shared protocols directly; do not nest named provider presets under generic compatible facades or keep their endpoints in a shared provider profile registry.
 
 `Provider.make(...)` remains available for simple static provider definitions, but new built-in providers should prefer plain configured facades unless a helper removes real duplication without adding runtime behavior.
 
 ### Provider Package Entrypoints
 
-Catalog-selected native providers use package-like export paths from `@opencode-ai/ai`. They are internal entrypoints in one npm package, not separately published provider packages. Every entrypoint implements `ProviderPackage.Definition` and exposes `model(modelID, settings)`, where settings are serializable provider configuration plus common `headers`, `body`, and `limits` overlays.
+Catalog-selected native providers use package-like export paths from `@opencode/ai`. They are internal entrypoints in one npm package, not separately published provider packages. Every entrypoint implements `ProviderPackage.Definition` and exposes `model(modelID, settings)`, where settings are serializable provider configuration plus common `headers`, `body`, and `limits` overlays.
 
 ```ts
-import { model } from "@opencode-ai/ai/providers/openai/responses"
+import { model } from "@opencode/ai/providers/openai/responses"
 
 const selected = model("gpt-5", {
   apiKey,
@@ -213,7 +223,7 @@ Errors must be expressed as `ToolFailure`. The runtime catches it and emits a `t
 - Input failed the `parameters` Schema.
 - The handler returned a `ToolFailure`.
 
-Provider-defined / hosted tools (Anthropic `web_search` / `code_execution` / `web_fetch`, OpenAI Responses `web_search_call` / `file_search_call` / `code_interpreter_call` / `mcp_call` / `local_shell_call` / `image_generation_call` / `computer_use_call`) pass through the runtime untouched:
+Provider-defined / hosted tools (Anthropic `web_search` / `code_execution` / `web_fetch`, OpenAI Responses `web_search_call` / `file_search_call` / `code_interpreter_call` / `mcp_call` / `image_generation_call` / `computer_use_call`) pass through the runtime untouched:
 
 - Routes surface the model's call as a `tool-call` event with `providerExecuted: true`, and the provider's result as a matching `tool-result` event with `providerExecuted: true`.
 - Callers detect `providerExecuted` on `tool-call` and **skip local dispatch** — no handler is invoked and no `tool-error` is raised for "unknown tool". The provider already executed it.

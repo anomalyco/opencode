@@ -8,6 +8,7 @@ import { useSettings } from "@/settings/model"
 import { useTabs } from "@/shell/tabs/tabs"
 import { type ServerHealth } from "@/runtime/server/health"
 import { showToast } from "@/shell/notifications/toast"
+import { useSsh } from "../ssh/context"
 
 function showRequestError(language: ReturnType<typeof useLanguage>, err: unknown) {
   showToast({
@@ -50,6 +51,7 @@ function useDefaultServer() {
 
 export function useServerActionsController() {
   const server = useServers()
+  const ssh = useSsh()
   const tabs = useTabs()
   const platform = usePlatform()
   const language = useLanguage()
@@ -58,6 +60,7 @@ export function useServerActionsController() {
   const remove = async (key: ServerConnection.Key) => {
     try {
       if (key.startsWith("wsl:")) await platform.wslServers?.removeServer(key)
+      if (key.startsWith("ssh:")) await ssh.forget(key.slice(4))
       tabs.removeServer(key)
       server.remove(key)
       if ((await platform.getDefaultServer?.()) === key) await defaults.set(null)
@@ -66,7 +69,19 @@ export function useServerActionsController() {
     }
   }
 
-  return { defaults, connection: { canRemove: server.canRemove, remove } }
+  return {
+    defaults,
+    connection: {
+      canRemove: server.canRemove,
+      remove,
+      canHide: (key: ServerConnection.Key) => {
+        const conn = server.list.find((item) => ServerConnection.key(item) === key)
+        return server.visible.length > 1 && !!conn && ServerConnection.builtin(conn)
+      },
+      isHidden: server.isHidden,
+      setHidden: server.setHidden,
+    },
+  }
 }
 
 export type ServerActionsController = ReturnType<typeof useServerActionsController>

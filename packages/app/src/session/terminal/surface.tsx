@@ -1,10 +1,13 @@
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
+import { ResizeHandle } from "@opencode/ui/resize-handle"
 import type { ParentProps } from "solid-js"
 
 export function TerminalSurface(
   props: ParentProps<{
     label: string
     opened: boolean
+    present?: boolean
+    framed?: boolean
+    embedded?: boolean
     desktop: boolean
     stacked: boolean
     height: string
@@ -12,6 +15,7 @@ export function TerminalSurface(
     pane: number
     max: number
     resizing: boolean
+    animate?: boolean
     onResizeStart: () => void
     onResize: (height: number) => void
     onCollapse: () => void
@@ -22,6 +26,11 @@ export function TerminalSurface(
     <aside
       ref={props.ref}
       id="terminal-panel"
+      data-component="terminal-panel"
+      data-opened={props.opened}
+      data-size-animated={
+        props.animate !== false && !props.embedded && !props.resizing && (!props.desktop || props.stacked)
+      }
       role="region"
       aria-label={props.label}
       aria-hidden={!props.opened}
@@ -29,15 +38,17 @@ export function TerminalSurface(
       class="relative shrink-0 overflow-hidden bg-v2-background-bg-base"
       classList={{
         "w-full": !props.desktop || props.stacked,
-        "min-w-0 h-full flex-1": props.desktop && props.opened && !props.stacked,
-        "w-0 h-full pointer-events-none": props.desktop && !props.opened,
-        "rounded-[10px] shadow-[var(--v2-elevation-raised)]": props.desktop,
-        "transition-[height] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[height] motion-reduce:transition-none":
-          !props.desktop && !props.resizing,
+        "min-w-0 h-full flex-1": props.desktop && (props.present ?? props.opened) && !props.stacked,
+        "w-0 h-full pointer-events-none": props.desktop && !(props.present ?? props.opened),
+        "rounded-[10px] shadow-[var(--v2-elevation-raised)]": props.desktop && (props.framed ?? true),
+        "will-change-[height]": !props.embedded && !props.resizing && (!props.desktop || props.stacked),
       }}
-      style={{ height: props.height }}
+      style={{ height: props.height, "--terminal-panel-height": props.contentHeight }}
     >
-      <div classList={{ "md:hidden": !props.stacked, hidden: props.stacked }} onPointerDown={props.onResizeStart}>
+      <div
+        classList={{ "md:hidden": !props.stacked, hidden: props.stacked || props.embedded }}
+        onPointerDown={props.onResizeStart}
+      >
         <ResizeHandle
           class="-top-1"
           direction="vertical"
@@ -50,9 +61,10 @@ export function TerminalSurface(
         />
       </div>
       <div
-        class="absolute inset-0 flex flex-col overflow-hidden"
+        data-slot="terminal-panel-content"
+        class="absolute inset-x-0 top-0 flex flex-col overflow-hidden"
         classList={{
-          "border-t border-border-weak-base": props.opened && !props.desktop,
+          "border-t border-border-weak-base": props.opened && !props.desktop && !props.embedded,
           "pointer-events-none": !props.opened,
         }}
         style={{ height: props.contentHeight }}

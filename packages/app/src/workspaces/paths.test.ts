@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionInfo } from "@opencode-ai/client/promise"
+import type { SessionInfo } from "@opencode/client/promise"
 import {
   filterWorkspaceInventory,
   inspectWorkspaceDeletion,
@@ -8,6 +8,7 @@ import {
   mergeWorkspaceSessionInventory,
   sessionsForWorkspace,
   workspaceInventory,
+  workspaceSelectionDestination,
 } from "./paths"
 
 describe("isWorkspaceDirectory", () => {
@@ -38,6 +39,19 @@ describe("isWorkspaceSelection", () => {
     expect(isWorkspaceSelection(project, "/workspaces/feature/")).toBe(true)
     expect(isWorkspaceSelection({ worktree: "C:\\repo" }, "c:\\repo\\")).toBe(true)
     expect(isWorkspaceSelection(project, "/other/workspace")).toBe(false)
+  })
+})
+
+describe("workspaceSelectionDestination", () => {
+  test("preserves local intent for the main selection and project root", () => {
+    expect(workspaceSelectionDestination("main", "/repo")).toBe("main")
+    expect(workspaceSelectionDestination("/repo/", "/repo")).toBe("main")
+    expect(workspaceSelectionDestination("c:\\repo\\", "C:\\repo")).toBe("main")
+  })
+
+  test("preserves workspace intent without carrying project-specific paths", () => {
+    expect(workspaceSelectionDestination("create", "/repo")).toBe("create")
+    expect(workspaceSelectionDestination("/workspaces/feature", "/repo")).toBe("create")
   })
 })
 

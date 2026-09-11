@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.18.15",
-  "name": "@opencode-ai/http-recorder",
+  "name": "@opencode/http-recorder",
   "description": "Record and replay Effect HTTP and WebSocket traffic with deterministic cassettes",
   "type": "module",
   "license": "MIT",
@@ -52,7 +52,7 @@
     "typescript": "catalog:"
   },
   "dependencies": {
-    "@effect/platform-node-shared": "4.0.0-rc.110"
+    "@effect/platform-node-shared": "4.0.0-rc.112"
   },
   "peerDependencies": {
     "effect": "catalog:"

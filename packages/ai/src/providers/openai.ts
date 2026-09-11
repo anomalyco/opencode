@@ -1,5 +1,5 @@
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import type { Route, RouteDefaultsInput } from "../route/client.js"
+import type { Route, RouteDefaultsInput, CompactionOperations } from "../route/client.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { HttpOptions, ProviderID, ToolDefinition, mergeHttpOptions, type ModelID } from "../schema/index.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
@@ -73,7 +73,10 @@ const defaults = (input: Config) => {
   return rest
 }
 
-const configuredRoute = <Body, Prepared>(route: Route<Body, Prepared>, input: Config) =>
+const configuredRoute = <Body, Prepared, Compact extends CompactionOperations | undefined>(
+  route: Route<Body, Prepared, Compact>,
+  input: Config,
+) =>
   route.with({
     auth: auth(input),
     endpoint: { baseURL: input.baseURL, query: input.queryParams },
@@ -129,7 +132,11 @@ const config = (settings: Settings): Config => {
   }
 }
 
-export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) => {
+export const model: ProviderPackage.Definition<
+  Settings,
+  OpenAIProviderOptionsInput,
+  typeof OpenAIResponses.route.compact
+>["model"] = (modelID, settings) => {
   return configure(config(settings)).responses(modelID)
 }
 

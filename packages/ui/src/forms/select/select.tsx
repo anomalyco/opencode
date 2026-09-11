@@ -68,6 +68,7 @@ export type SelectProps<T> = Omit<
   numeric?: boolean
   children?: (item: T) => JSX.Element
   valueClass?: string
+  contentClass?: string
 }
 
 export function Select<T>(props: SelectProps<T>) {
@@ -88,6 +89,7 @@ export function Select<T>(props: SelectProps<T>) {
     "numeric",
     "disabled",
     "valueClass",
+    "contentClass",
     "placement",
     "gutter",
     "sameWidth",
@@ -181,6 +183,8 @@ export function Select<T>(props: SelectProps<T>) {
     >
       <Trigger
         as="div"
+        aria-label={props["aria-label"]}
+        aria-labelledby={props["aria-labelledby"]}
         data-component="select-v2"
         data-appearance="inline"
         data-invalid={local.invalid ? "" : undefined}
@@ -206,7 +210,7 @@ export function Select<T>(props: SelectProps<T>) {
         </span>
       </Trigger>
       <Portal>
-        <Content data-component="menu-v2-content" data-slot="select-v2-content">
+        <Content class={local.contentClass} data-component="menu-v2-content" data-slot="select-v2-content">
           <Listbox data-slot="select-v2-listbox" />
         </Content>
       </Portal>

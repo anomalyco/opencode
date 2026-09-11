@@ -8,13 +8,21 @@ import { createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { HomeController } from "../model"
 import { homeSessionSearchKey, type HomeSessionRecord, type HomeSessionsController } from "./controller"
+import { looksLikeSessionID } from "@/session/search"
 
 type HomeSessionSearchSource = Pick<HomeSessionsController, "data" | "session">
 
 export function createHomeSessionSearchController(home: HomeController, sessions: HomeSessionSearchSource) {
   const command = useCommand()
   const language = useLanguage()
-  const [state, setState] = createStore({ value: "", focused: false, highlighted: "" })
+  const [state, setState] = createStore({
+    value: "",
+    focused: false,
+    highlighted: "",
+    exact: undefined as HomeSessionRecord | undefined,
+    lookingUp: false,
+  })
+  let lookup = 0
   let root: HTMLDivElement | undefined
   let input: HTMLInputElement | undefined
   let list: HTMLDivElement | undefined
@@ -22,9 +30,11 @@ export function createHomeSessionSearchController(home: HomeController, sessions
   const results = createMemo(() => {
     const value = query().toLowerCase()
     if (!value) return []
-    return sessions.data
+    const records = sessions.data
       .searchRecords()
       .filter((record) => `${sessionLabel(record.session)} ${record.projectName}`.toLowerCase().includes(value))
+    if (!state.exact || records.some((record) => record.session.id === state.exact?.session.id)) return records
+    return [state.exact, ...records]
   })
   const active = createMemo(() => {
     const records = results()
@@ -50,6 +60,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
       close()
     }),
   )
+  onCleanup(() => lookup++)
 
   command.register("home.search", () => [
     {
@@ -67,7 +78,26 @@ export function createHomeSessionSearchController(home: HomeController, sessions
   }
 
   function close() {
-    setState({ value: "", focused: false })
+    lookup++
+    setState({ value: "", focused: false, exact: undefined, lookingUp: false })
+  }
+
+  function update(value: string) {
+    const current = ++lookup
+    const sessionID = value.trim()
+    setState({ value, highlighted: "", exact: undefined, lookingUp: false })
+    if (!looksLikeSessionID(sessionID)) return
+    setState("lookingUp", true)
+    void sessions.session.lookup(sessionID).then(
+      (record) => {
+        if (current !== lookup) return
+        setState({ exact: record, lookingUp: false })
+      },
+      () => {
+        if (current !== lookup) return
+        setState("lookingUp", false)
+      },
+    )
   }
 
   function select(record: HomeSessionRecord, options?: { background?: boolean }) {
@@ -81,11 +111,11 @@ export function createHomeSessionSearchController(home: HomeController, sessions
       placeholder,
       open,
       focus,
-      input: (value: string) => setState({ value, highlighted: "" }),
+      input: update,
       close,
     },
     result: {
-      loading: sessions.data.loading,
+      loading: () => sessions.data.loading() || state.lookingUp,
       list: results,
       active,
       noResultsLabel: () => language.t("home.sessions.search.noResults", { query: query() }),

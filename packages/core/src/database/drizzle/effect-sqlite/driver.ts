@@ -6,7 +6,7 @@ import { EffectCache } from "drizzle-orm/cache/core/cache-effect"
 import { EffectLogger } from "drizzle-orm/effect-core"
 import { entityKind } from "drizzle-orm/entity"
 import type { AnyRelations, EmptyRelations } from "drizzle-orm/relations"
-import { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core/dialect"
+import { SQLiteDialect } from "drizzle-orm/sqlite-core/dialect"
 import { SQLiteEffectDatabase } from "../sqlite-core/effect/db.js"
 import type { DrizzleConfig } from "drizzle-orm/utils"
 import { jitCompatCheck } from "../internal/drizzle-utils.js"
@@ -36,14 +36,14 @@ export const DefaultServices = Layer.merge(EffectCache.Default, EffectLogger.Def
  *
  * @example
  * ```ts
- * import { SqliteClient } from '@effect/sql-sqlite-node';
- * import * as SQLiteDrizzle from 'drizzle-orm/effect-sqlite';
- * import * as Effect from 'effect/Effect';
+ * import { SqliteClient } from "@effect/sql-sqlite-node"
+ * import { EffectDrizzleSqlite } from "@opencode/core/database/drizzle"
+ * import { Effect } from "effect"
  *
- * const db = yield* SQLiteDrizzle.make({ relations }).pipe(
- *   Effect.provide(SQLiteDrizzle.DefaultServices),
- *   Effect.provide(SqliteClient.layer({ filename: 'sqlite.db' })),
- * );
+ * const db = yield* EffectDrizzleSqlite.make({ relations }).pipe(
+ *   Effect.provide(EffectDrizzleSqlite.DefaultServices),
+ *   Effect.provide(SqliteClient.layer({ filename: "sqlite.db" })),
+ * )
  * ```
  */
 export const make = Effect.fn("SQLiteDrizzle.make")(function* <TRelations extends AnyRelations = EmptyRelations>(
@@ -53,12 +53,13 @@ export const make = Effect.fn("SQLiteDrizzle.make")(function* <TRelations extend
   const cache = yield* EffectCache
   const logger = yield* EffectLogger
 
-  const dialect = new SQLiteAsyncDialect()
+  const useJitMappers = jitCompatCheck(config.jit)
+  const dialect = new SQLiteDialect({ useJitMappers })
   const relations = config.relations ?? ({} as TRelations)
   const session = new EffectSQLiteSession(client, dialect, relations, {
     logger,
     cache,
-    useJitMappers: jitCompatCheck(config.jit),
+    useJitMappers,
   })
   const db = new EffectSQLiteDatabase(dialect, session, relations) as EffectSQLiteDatabase<TRelations> & {
     $client: SqlClient

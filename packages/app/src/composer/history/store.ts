@@ -1,4 +1,4 @@
-import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
+import { type SetStoreFunction, type Store } from "solid-js/store"
 import type { Prompt } from "@/composer/state"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import {
@@ -8,28 +8,14 @@ import {
   type PromptHistoryStoredEntry,
 } from "./entry"
 import { clonePrompt } from "../prompt-parts"
+import { PromptHistoryState } from "../schema"
 
 export type ComposerHistoryStore = {
   entries: (mode: "normal" | "shell") => PromptHistoryStoredEntry[]
   add: (prompt: Prompt, mode: "normal" | "shell", comments: PromptHistoryComment[]) => void
 }
 
-type PromptHistoryState = { entries: PromptHistoryStoredEntry[] }
-
-export function upgradeHistoryState(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value) || !("entries" in value)) return value
-  const entries = value.entries
-  if (!Array.isArray(entries)) return value
-  return {
-    ...value,
-    entries: entries.flatMap((entry): PromptHistoryStoredEntry[] => {
-      if (Array.isArray(entry)) return [{ prompt: clonePrompt(entry as Prompt), comments: [] }]
-      if (!entry || typeof entry !== "object" || !("prompt" in entry) || !Array.isArray(entry.prompt)) return []
-      if (!("comments" in entry) || !Array.isArray(entry.comments)) return []
-      return [entry as PromptHistoryStoredEntry]
-    }),
-  }
-}
+type PromptHistoryState = typeof PromptHistoryState.Type
 
 function createComposerHistoryStore(
   normal: Store<PromptHistoryState>,
@@ -51,12 +37,14 @@ function createComposerHistoryStore(
 
 export function createComposerHistory() {
   const [normal, setNormal, normalInit] = persisted(
-    { ...Persist.prompt(Persist.global("prompt-history")), migrate: upgradeHistoryState },
-    createStore<PromptHistoryState>({ entries: [] }),
+    Persist.prompt(Persist.global("prompt-history")),
+    PromptHistoryState,
+    { entries: [] },
   )
   const [shell, setShell, shellInit] = persisted(
-    { ...Persist.prompt(Persist.global("prompt-history-shell")), migrate: upgradeHistoryState },
-    createStore<PromptHistoryState>({ entries: [] }),
+    Persist.prompt(Persist.global("prompt-history-shell")),
+    PromptHistoryState,
+    { entries: [] },
   )
   const history = createComposerHistoryStore(normal, setNormal, shell, setShell)
   return {

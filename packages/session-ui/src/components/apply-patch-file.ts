@@ -1,5 +1,4 @@
-import type { FileDiffInfo } from "@opencode-ai/client/promise"
-import { diffLines } from "diff"
+import type { FileDiffInfo } from "@opencode/client/promise"
 import { completePatchContents, normalize, type ViewDiff } from "./session-diff"
 
 type Kind = "add" | "update" | "delete"
@@ -15,24 +14,28 @@ export type ApplyPatchFile = {
 
 export type ApplyPatchFileGroup = Omit<ApplyPatchFile, "view" | "contents"> & { views: ViewDiff[] }
 
-function fileDiff(value: unknown): value is FileDiffInfo {
+export function changedFileDiff(value: unknown): value is FileDiffInfo {
   if (!value || typeof value !== "object") return false
   if (!("file" in value) || typeof value.file !== "string") return false
   if (!("patch" in value) || typeof value.patch !== "string") return false
   if (!("additions" in value) || typeof value.additions !== "number") return false
   if (!("deletions" in value) || typeof value.deletions !== "number") return false
   if (!("status" in value)) return false
-  return value.status === "added" || value.status === "deleted" || value.status === "modified"
+  if (value.status !== "added" && value.status !== "deleted" && value.status !== "modified") return false
+  return value.additions > 0 || value.deletions > 0
 }
 
 export function patchFile(value: unknown): ApplyPatchFile | undefined {
-  if (!fileDiff(value)) return
+  if (!changedFileDiff(value)) return
+  let view: ViewDiff | undefined
   return {
     path: value.file,
     type: value.status === "added" ? "add" : value.status === "deleted" ? "delete" : "update",
     additions: value.additions,
     deletions: value.deletions,
-    view: normalize(value),
+    get view() {
+      return (view ??= normalize(value))
+    },
     contents: completePatchContents(value.patch),
   }
 }
@@ -66,12 +69,22 @@ export function patchFileGroups(value: unknown): ApplyPatchFileGroup[] {
       }
     }
 
-    const before = first.contents!.before
-    const after = last.contents!.after
-    const counts = diffLines(before, after).reduce(
-      (result, item) => ({
-        additions: result.additions + (item.added ? (item.count ?? 0) : 0),
-        deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),
+    const view =
+      files.length === 1
+        ? first.view
+        : normalize({
+            file: path,
+            before: first.contents!.before,
+            after: last.contents!.after,
+            status: type === "add" ? "added" : type === "delete" ? "deleted" : "modified",
+            additions: 0,
+            deletions: 0,
+          })
+    // Parsed hunks already contain net change counts, excluding unchanged context.
+    const counts = view.fileDiff.hunks.reduce(
+      (result, hunk) => ({
+        additions: result.additions + hunk.additionLines,
+        deletions: result.deletions + hunk.deletionLines,
       }),
       { additions: 0, deletions: 0 },
     )
@@ -79,15 +92,7 @@ export function patchFileGroups(value: unknown): ApplyPatchFileGroup[] {
       path,
       type,
       ...counts,
-      views: [
-        normalize({
-          file: path,
-          before,
-          after,
-          status: type === "add" ? "added" : type === "delete" ? "deleted" : "modified",
-          ...counts,
-        }),
-      ],
+      views: [{ ...view, ...counts }],
     }
   })
 }

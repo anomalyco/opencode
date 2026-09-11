@@ -1,4 +1,4 @@
-import type { Platform } from "@opencode-ai/app/desktop"
+import type { Platform } from "@opencode/app/desktop"
 import type { ElectronAPI } from "../api-types"
 
 type DesktopOS = Extract<Platform, { platform: "desktop" }>["os"]
@@ -9,13 +9,14 @@ type DesktopFileAPI = Pick<
   | "readPickedFile"
   | "releasePickedFiles"
   | "getPathForFile"
-  | "saveFilePicker"
+  | "saveFile"
   | "openExternal"
   | "openLocalFile"
   | "resolveAppPath"
   | "openPath"
   | "revealPath"
   | "readClipboardImage"
+  | "writeClipboardText"
 >
 
 export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS, acceptedExtensions: string[]) {
@@ -51,9 +52,8 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS, acceptedE
     openDirectoryPickerDialog,
     openAttachmentPickerDialog,
     getPathForFile: (file: File) => attachmentPaths.get(file) ?? api.getPathForFile(file),
-    async saveFilePickerDialog(options?: { title?: string; defaultPath?: string }) {
-      return api.saveFilePicker({ title: options?.title, defaultPath: options?.defaultPath })
-    },
+    saveFile: (options: { title?: string; defaultPath?: string }, content: string) =>
+      api.saveFile({ title: options.title, defaultPath: options.defaultPath }, content),
     openExternal: (url: string) => api.openExternal(url),
     openLocalFile: (url: string) => api.openLocalFile(url),
     async openPath(path: string, app?: string) {
@@ -73,6 +73,9 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS, acceptedE
       return new File([new Blob([image.buffer], { type: "image/png" })], `pasted-image-${Date.now()}.png`, {
         type: "image/png",
       })
+    },
+    writeClipboardText(text: string) {
+      return api.writeClipboardText(text)
     },
   }
 }

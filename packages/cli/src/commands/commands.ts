@@ -1,5 +1,14 @@
-import { Argument, Flag } from "effect/unstable/cli"
+import { Argument, Flag, GlobalFlag } from "effect/unstable/cli"
+import { Schema } from "effect"
 import { Spec } from "../framework/spec"
+import { Updater } from "../services/updater"
+
+export const PrintLogs = GlobalFlag.setting("print-logs")({
+  flag: Flag.boolean("print-logs").pipe(
+    Flag.withDescription("Print logs to stderr (server logs require --standalone)"),
+    Flag.withDefault(false),
+  ),
+})
 
 declare const OPENCODE_CLI_NAME: string | undefined
 
@@ -48,6 +57,45 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
     prompt: Flag.string("prompt").pipe(Flag.withDescription("Prompt to use"), Flag.optional),
   },
   commands: [
+    Spec.make("upgrade", {
+      description: "Upgrade OpenCode to the latest or a specific version",
+      aliases: ["update"],
+      params: {
+        target: Argument.string("target").pipe(
+          Argument.withDescription("Version to upgrade to (with or without a leading v)"),
+          Argument.optional,
+        ),
+        method: Flag.choice("method", Updater.methods).pipe(
+          Flag.withAlias("m"),
+          Flag.withDescription("Installation method to use"),
+          Flag.optional,
+        ),
+      },
+    }),
+    Spec.make("uninstall", {
+      description: "Uninstall OpenCode and remove all related files",
+      params: {
+        keepConfig: Flag.boolean("keep-config").pipe(
+          Flag.withAlias("c"),
+          Flag.withDescription("Keep configuration files"),
+          Flag.withDefault(false),
+        ),
+        keepData: Flag.boolean("keep-data").pipe(
+          Flag.withAlias("d"),
+          Flag.withDescription("Keep session data and snapshots"),
+          Flag.withDefault(false),
+        ),
+        dryRun: Flag.boolean("dry-run").pipe(
+          Flag.withDescription("Show what would be removed without removing"),
+          Flag.withDefault(false),
+        ),
+        force: Flag.boolean("force").pipe(
+          Flag.withAlias("f"),
+          Flag.withDescription("Skip confirmation prompts"),
+          Flag.withDefault(false),
+        ),
+      },
+    }),
     Spec.make("acp", { description: "Start an Agent Client Protocol server" }),
     Spec.make("api", {
       description: "Make a request to the running server",
@@ -71,15 +119,24 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       commands: [
         Spec.make("agents", { description: "List all agents" }),
         Spec.make("config", { description: "List configuration sources" }),
-      ],
-    }),
-    Spec.make("console", {
-      description: "Manage OpenCode Console access",
-      commands: [
-        Spec.make("login", {
-          description: "Log in to OpenCode Console",
+        Spec.make("paths", {
+          description: "Show global paths (data, config, cache, state)",
           params: {
-            url: Argument.string("url").pipe(Argument.withDescription("Console server URL"), Argument.optional),
+            name: Argument.choice("name", [
+              "db",
+              "home",
+              "data",
+              "config",
+              "cache",
+              "state",
+              "tmp",
+              "bin",
+              "log",
+              "repos",
+            ]).pipe(
+              Argument.withDescription("Print only one path: db, home, data, config, cache, state, tmp, bin, log, repos"),
+              Argument.optional,
+            ),
           },
         }),
       ],
@@ -109,11 +166,29 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           },
         }),
         Spec.make("logout", {
-          description: "log out from a configured provider",
+          description: "log out of a saved account",
           params: {
             ...ServerParams,
             target: Argument.string("target").pipe(
               Argument.withDescription("Integration ID or name"),
+              Argument.optional,
+            ),
+            credential: Argument.string("credential").pipe(
+              Argument.withDescription("Credential ID or label (opens an account picker when omitted)"),
+              Argument.optional,
+            ),
+          },
+        }),
+        Spec.make("switch", {
+          description: "switch the active account for an integration",
+          params: {
+            ...ServerParams,
+            target: Argument.string("target").pipe(
+              Argument.withDescription("Integration ID or name"),
+              Argument.optional,
+            ),
+            credential: Argument.string("credential").pipe(
+              Argument.withDescription("Credential ID or label (opens an account picker when omitted)"),
               Argument.optional,
             ),
           },
@@ -172,7 +247,25 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         Spec.make("add", {
           description: "Install a plugin and add it to the global configuration",
           params: {
-            package: Argument.string("package").pipe(Argument.withDescription("npm registry package specifier")),
+            package: Argument.string("package").pipe(Argument.withDescription("npm registry or Git package specifier")),
+          },
+        }),
+        Spec.make("check", {
+          description: "Check package plugins for updates",
+          params: {
+            target: Argument.string("target").pipe(
+              Argument.withDescription("Configured package target"),
+              Argument.optional,
+            ),
+          },
+        }),
+        Spec.make("update", {
+          description: "Update package plugins",
+          params: {
+            target: Argument.string("target").pipe(
+              Argument.withDescription("Configured package target; omit to update all outdated plugins"),
+              Argument.optional,
+            ),
           },
         }),
         Spec.make("remove", {
@@ -187,26 +280,35 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       description: "List all available models",
       params: ServerParams,
     }),
-    Spec.make("export", {
-      description: "Export session data as JSON",
+    Spec.make("stats", {
+      description: "Show shareable usage statistics",
       params: {
         ...ServerParams,
-        session: Argument.string("session").pipe(Argument.withDescription("Session ID to export"), Argument.optional),
-        sanitize: Flag.boolean("sanitize").pipe(
-          Flag.withDescription("Redact sensitive transcript and file data"),
-          Flag.withDefault(false),
-        ),
-      },
-    }),
-    Spec.make("import", {
-      description: "Import session data from a JSON file or URL",
-      params: {
-        ...ServerParams,
-        file: Argument.string("file").pipe(Argument.withDescription("JSON file or URL to import")),
-        directory: Flag.string("directory").pipe(
-          Flag.withDescription("Directory in which to import the session"),
+        days: Flag.integer("days").pipe(
+          Flag.withSchema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+          Flag.withDescription("Show the last N days; 0 means today"),
           Flag.optional,
         ),
+        year: Flag.integer("year").pipe(
+          Flag.withSchema(Schema.Int.check(Schema.isBetween({ minimum: 1970, maximum: 9_999 }))),
+          Flag.withDescription("Show a calendar year"),
+          Flag.optional,
+        ),
+        all: Flag.boolean("all").pipe(Flag.withDescription("Show lifetime statistics"), Flag.withDefault(false)),
+        project: Flag.string("project").pipe(
+          Flag.withDescription('Filter by project ID, or use "." for the current project'),
+          Flag.optional,
+        ),
+        models: Flag.boolean("models").pipe(Flag.withDescription("Show model usage"), Flag.withDefault(false)),
+        tools: Flag.boolean("tools").pipe(Flag.withDescription("Show tool reliability"), Flag.withDefault(false)),
+        cost: Flag.boolean("cost").pipe(Flag.withDescription("Show cost and token details"), Flag.withDefault(false)),
+        full: Flag.boolean("full").pipe(Flag.withDescription("Show every detailed section"), Flag.withDefault(false)),
+        limit: Flag.integer("limit").pipe(
+          Flag.withSchema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+          Flag.withDescription("Number of rows in detailed sections"),
+          Flag.withDefault(5),
+        ),
+        json: Flag.boolean("json").pipe(Flag.withDescription("Output statistics as JSON"), Flag.withDefault(false)),
       },
     }),
     Spec.make("mini", {
@@ -287,6 +389,59 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         ...PermissionParams,
       },
     }),
+    Spec.make("session", {
+      description: "Manage sessions",
+      commands: [
+        Spec.make("list", {
+          description: "List top-level sessions in the current project, newest first",
+          params: {
+            ...ServerParams,
+            maxCount: Flag.integer("max-count").pipe(
+              Flag.withAlias("n"),
+              Flag.withSchema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+              Flag.withDescription("Limit to N most recent sessions (default: 100)"),
+              Flag.optional,
+            ),
+            format: Flag.choice("format", ["table", "json"]).pipe(
+              Flag.withDescription("Output format"),
+              Flag.withDefault("table"),
+            ),
+          },
+        }),
+        Spec.make("delete", {
+          description: "Delete a session and its child sessions",
+          params: {
+            ...ServerParams,
+            sessionID: Argument.string("sessionID").pipe(Argument.withDescription("Session ID to delete")),
+          },
+        }),
+        Spec.make("export", {
+          description: "Export session data as JSON",
+          params: {
+            ...ServerParams,
+            session: Argument.string("session").pipe(
+              Argument.withDescription("Session ID to export"),
+              Argument.optional,
+            ),
+            sanitize: Flag.boolean("sanitize").pipe(
+              Flag.withDescription("Redact sensitive transcript and file data"),
+              Flag.withDefault(false),
+            ),
+          },
+        }),
+        Spec.make("import", {
+          description: "Import session data from a JSON file or URL",
+          params: {
+            ...ServerParams,
+            file: Argument.string("file").pipe(Argument.withDescription("JSON file or URL to import")),
+            directory: Flag.string("directory").pipe(
+              Flag.withDescription("Directory in which to import the session"),
+              Flag.optional,
+            ),
+          },
+        }),
+      ],
+    }),
     Spec.make("service", {
       description: "Manage the background server",
       commands: [
@@ -329,12 +484,34 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         }),
       ],
     }),
-    Spec.make("pair", { description: "Show server pairing information" }),
+    Spec.make("pair", {
+      description: "Show server pairing information",
+      params: {
+        url: Flag.string("url").pipe(
+          Flag.withDescription("Advertise an external HTTP(S) server URL in the pairing QR code"),
+          Flag.mapTryCatch(
+            (value) => {
+              const url = new URL(value)
+              if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash)
+                throw new Error("Invalid pairing URL")
+              return url.href.replace(/\/+$/, "")
+            },
+            () => "Expected an HTTP(S) server URL without credentials, query parameters, or a fragment",
+          ),
+          Flag.optional,
+        ),
+      },
+    }),
     Spec.make("serve", {
       description: "Start the v2 API and web server",
       params: {
         hostname: Flag.string("hostname").pipe(Flag.optional),
         port: Flag.integer("port").pipe(Flag.optional),
+        cors: Flag.string("cors").pipe(
+          Flag.withSchema(Schema.NonEmptyString),
+          Flag.withDescription("Additional allowed CORS origin (repeat for multiple origins)"),
+          Flag.atLeast(0),
+        ),
         service: Flag.boolean("service").pipe(Flag.withDefault(false)),
         stdio: Flag.boolean("stdio").pipe(Flag.withDefault(false)),
       },

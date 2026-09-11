@@ -45,6 +45,28 @@ describe("prepareVisibleStateDiagram", () => {
     expect(visible.transitions.some((transition) => transition.to.includes(".__start"))).toBe(false)
   })
 
+  test("resolves an outgoing composite transition through its concrete exit state", () => {
+    const visible = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  state Session {
+    [*] --> Open
+    state Open {
+      [*] --> Clean
+      Clean --> Dirty: edit
+      Dirty --> Clean: save
+      Dirty --> [*]
+    }
+    Open --> Closing: request close
+    Closing --> Open: cancel
+  }
+  [*] --> Session: hydrate`),
+    )
+
+    expect(visible.transitions).toContainEqual({ from: "Dirty", to: "Closing", label: "request close" })
+    expect(visible.transitions).toContainEqual({ from: "Closing", to: "Clean", label: "cancel" })
+    expect(visible.transitions.some((transition) => transition.from === "Open")).toBe(false)
+  })
+
   test("preserves labels on both sides of collapsed composite markers", () => {
     const visible = prepareVisibleStateDiagram(
       parseMermaidStateDiagram(`stateDiagram-v2

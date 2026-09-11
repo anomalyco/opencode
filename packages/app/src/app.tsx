@@ -1,8 +1,8 @@
 import "@/index.css"
-import { DialogProvider } from "@opencode-ai/ui/context/dialog"
-import { FileComponentProvider } from "@opencode-ai/ui/context/file"
-import { Font } from "@opencode-ai/ui/font"
-import { ThemeProvider } from "@opencode-ai/ui/theme/context"
+import { DialogProvider } from "@opencode/ui/context/dialog"
+import { FileComponentProvider } from "@opencode/ui/context/file"
+import { Font } from "@opencode/ui/font"
+import { ThemeProvider } from "@opencode/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
@@ -17,6 +17,8 @@ import { ServerConnection, ServersProvider } from "@/runtime/server/registry"
 import { SettingsProvider } from "@/settings/model"
 import { TabsProvider } from "@/shell/tabs/tabs"
 import { WslServersProvider } from "@/servers/wsl/context"
+import { SshProvider } from "@/servers/ssh/context"
+import { SshRestore } from "@/servers/ssh/restore"
 import { ErrorPage } from "@/shell/errors/error"
 import { AppRoutes, File, preloadRoute } from "@/shell/routes/routes"
 
@@ -58,7 +60,7 @@ export function AppBaseProviders(
   props: ParentProps<{
     locale?: Locale
     onNativeTranslations?: Parameters<typeof LanguageProvider>[0]["onNativeTranslations"]
-    onThemeApplied?: () => void
+    onThemeApplied?: (mode: "light" | "dark", scheme: "system" | "light" | "dark") => void
   }>,
 ) {
   return (
@@ -67,7 +69,7 @@ export function AppBaseProviders(
       <ThemeProvider
         onThemeApplied={(_, mode, scheme) => {
           void window.api?.setTitlebar?.({ mode, scheme })
-          props.onThemeApplied?.()
+          props.onThemeApplied?.(mode, scheme)
         }}
       >
         <LanguageProvider locale={props.locale} onNativeTranslations={props.onNativeTranslations}>
@@ -81,7 +83,9 @@ export function AppBaseProviders(
               <QueryProvider>
                 <WslServersProvider>
                   <DialogProvider>
-                    <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
+                    <SshProvider>
+                      <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
+                    </SshProvider>
                   </DialogProvider>
                 </WslServersProvider>
               </QueryProvider>
@@ -95,7 +99,7 @@ export function AppBaseProviders(
 
 export function AppInterface(props: {
   children?: JSX.Element
-  defaultServer: ServerConnection.Key
+  defaultServer?: ServerConnection.Key
   canonicalLocalServer?: ServerConnection.Key
   servers?: Array<ServerConnection.Any>
   router?: Component<BaseRouterProps>
@@ -105,14 +109,17 @@ export function AppInterface(props: {
   // providers beneath it.
   const Root = (rootProps: ParentProps) => (
     <TabsProvider>
-      <BodyTypography />
-      <CommandProvider>
-        <DesktopCommands />
-        <HighlightsProvider>
-          {props.children}
-          {rootProps.children}
-        </HighlightsProvider>
-      </CommandProvider>
+      <GlobalProvider>
+        <BodyTypography />
+        <CommandProvider>
+          <DesktopCommands />
+          <SshRestore />
+          <HighlightsProvider>
+            {props.children}
+            {rootProps.children}
+          </HighlightsProvider>
+        </CommandProvider>
+      </GlobalProvider>
     </TabsProvider>
   )
 
@@ -123,11 +130,9 @@ export function AppInterface(props: {
       servers={props.servers}
     >
       <SettingsProvider>
-        <GlobalProvider>
-          <Dynamic component={props.router ?? Router} root={Root}>
-            <AppRoutes />
-          </Dynamic>
-        </GlobalProvider>
+        <Dynamic component={props.router ?? Router} root={Root}>
+          <AppRoutes />
+        </Dynamic>
       </SettingsProvider>
     </ServersProvider>
   )

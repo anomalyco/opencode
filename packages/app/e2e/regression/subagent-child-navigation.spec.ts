@@ -1,5 +1,5 @@
-import { base64Encode } from "@opencode-ai/util/encode"
-import type { OpenCodeEvent, SessionMessageInfo } from "@opencode-ai/client/promise"
+import { base64Encode } from "@opencode/util/encode"
+import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import { expect, test, type Page } from "@playwright/test"
 import { currentSession, mockOpenCodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
@@ -22,8 +22,43 @@ test("navigates to a subagent child session missing from the session list", asyn
   await expectSessionTitle(page, taskDescription)
   await expect(page.getByRole("heading", { name: parentTitle })).toHaveCount(0)
 
-  const titlebarRight = page.locator("#opencode-titlebar-right")
-  await expect(titlebarRight.getByRole("button", { name: "Toggle review" })).toHaveCount(1)
+  await expect(page.getByRole("button", { name: "Toggle review", exact: true })).toBeVisible()
+})
+
+test("returns to the parent session with Escape", async ({ page }) => {
+  await setup(page)
+  await openChildFromParent(page)
+  await expectSessionTitle(page, taskDescription)
+
+  await page.keyboard.press("Escape")
+
+  await Promise.all([expect(page).toHaveURL(sessionHref(parentID)), expectSessionTitle(page, parentTitle)])
+})
+
+test("shows parent lineage while the child timeline loads", async ({ page }) => {
+  await setup(page)
+  const requested = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  await page.route(
+    (url) =>
+      url.pathname === `/api/session/${childID}/message` && url.port === (process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"),
+    async (route) => {
+      requested.resolve()
+      await release.promise
+      await route.fallback()
+    },
+  )
+
+  await page.goto(sessionHref(parentID))
+  await expectSessionTitle(page, parentTitle)
+  await page.getByRole("button", { name: "Used 1 Agent", exact: true }).click()
+  await page.locator(`a[href="${sessionHref(childID)}"]`).click()
+  await Promise.all([requested.promise, expect(page).toHaveURL(sessionHref(childID))])
+  await Promise.all([
+    expect(page.locator('[data-slot="session-title-parent"]')).toHaveText(parentTitle),
+    expect(page.locator('[data-slot="session-title-child"]')).toHaveText(childTitle),
+  ]).finally(() => release.resolve())
+  await expectSessionTitle(page, taskDescription)
 })
 
 test("keeps the parent visible while the child session resolves", async ({ page }) => {
@@ -41,6 +76,7 @@ test("keeps the parent visible while the child session resolves", async ({ page 
   await page.goto(sessionHref(parentID))
   await expectSessionTitle(page, parentTitle)
 
+  await page.getByRole("button", { name: "Used 1 Agent", exact: true }).click()
   await page.locator(`a[href="${sessionHref(childID)}"]`).click()
   await requested.promise
   await Promise.all([expect(page).toHaveURL(sessionHref(parentID)), expectSessionTitle(page, parentTitle)]).finally(
@@ -48,6 +84,44 @@ test("keeps the parent visible while the child session resolves", async ({ page 
   )
 
   await expectSessionTitle(page, taskDescription)
+})
+
+test("keeps the parent tab selected while a loaded child session resolves", async ({ page }) => {
+  await setup(page)
+  await openChildFromParent(page)
+  await expectSessionTitle(page, taskDescription)
+  await page.goBack()
+  await Promise.all([expect(page).toHaveURL(sessionHref(parentID)), expectSessionTitle(page, parentTitle)])
+
+  const requested = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  await page.route(
+    (url) => url.pathname === `/api/session/${childID}` && url.port === (process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"),
+    async (route) => {
+      requested.resolve()
+      await release.promise
+      await route.fallback()
+    },
+  )
+
+  const parentTab = page.locator("[data-titlebar-tab-slot]", {
+    has: page.locator('[data-slot="tab-title"]', { hasText: parentTitle }),
+  })
+  await page.locator(`a[href="${sessionHref(childID)}"]`).click()
+  await Promise.all([requested.promise, expect(page).toHaveURL(sessionHref(childID))])
+  await Promise.all([
+    expect(parentTab).toHaveAttribute("data-active", "true"),
+    expect(page.locator('[data-slot="session-title-parent"]')).toHaveText(parentTitle),
+  ]).finally(() => release.resolve())
+  await expectSessionTitle(page, taskDescription)
+
+  const home = page.getByRole("button", { name: "Home" })
+  await home.click()
+  await expect(page).toHaveURL("/")
+  const childTab = page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(childID)}"]`)
+  await expect(childTab).toHaveCount(1)
+  await childTab.click()
+  await Promise.all([expect(page).toHaveURL(sessionHref(childID)), expectSessionTitle(page, taskDescription)])
 })
 
 test("shows the not found fallback when the viewed session is deleted", async ({ page }) => {
@@ -66,7 +140,7 @@ test("shows the not found fallback when the viewed session is deleted", async ({
   })
 
   await expect(page.getByText("This session cannot be found")).toBeVisible()
-  await expect(page.getByRole("button", { name: "Close Tab" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Close Tab", exact: true })).toBeVisible()
   await expect(page.getByRole("heading", { name: taskDescription })).toHaveCount(0)
 })
 
@@ -120,6 +194,7 @@ async function setup(page: Page, events?: () => OpenCodeEvent[]) {
 async function openChildFromParent(page: Page) {
   await page.goto(sessionHref(parentID))
   await expectSessionTitle(page, parentTitle)
+  await page.getByRole("button", { name: "Used 1 Agent", exact: true }).click()
 
   const card = page.locator(`a[href="${sessionHref(childID)}"]`)
   await expect(card).toBeVisible()

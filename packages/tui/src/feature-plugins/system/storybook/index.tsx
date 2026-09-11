@@ -1,9 +1,11 @@
-import { Plugin } from "@opencode-ai/plugin/tui"
+import { Plugin } from "@opencode/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createSignal, For, type JSX } from "solid-js"
 import { StoryFooter } from "./footer"
+import { mermanLayoutsStory } from "./merman-layouts"
 import { sessionTabsStory } from "./session-tabs"
 import { sessionLocationMissingStory } from "./session-location-missing"
+import { oneCellSpinnerStory } from "./one-cell-spinner"
 
 /**
  * A story is a full-screen, fixture-driven simulation of a real production component. Stories own
@@ -15,7 +17,7 @@ export type Story = {
   render: (context: Plugin.Context) => JSX.Element
 }
 
-const stories: Story[] = [sessionTabsStory, sessionLocationMissingStory]
+const stories: Story[] = [mermanLayoutsStory, sessionTabsStory, sessionLocationMissingStory, oneCellSpinnerStory]
 
 function Commands(props: { context: Plugin.Context }) {
   props.context.keymap.layer(() => ({

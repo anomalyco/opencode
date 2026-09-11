@@ -1,4 +1,4 @@
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import type {
   JsonValue,
   OpenCodeEvent,
@@ -8,9 +8,10 @@ import type {
   SessionMessageUser,
   SessionStatus,
   SessionStructuredError,
-} from "@opencode-ai/client/promise"
-import { EventManifest } from "@opencode-ai/schema/event-manifest"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
+} from "@opencode/client/promise"
+import { EventManifest } from "@opencode/schema/event-manifest"
+import { SessionMessage } from "@opencode/schema/session-message"
+import type { TimelineDetail } from "@opencode/session-ui/timeline/detail"
 import { expect, type Page } from "@playwright/test"
 import { Schema } from "effect"
 import { mockOpenCodeServer } from "../../utils/mock-server"
@@ -122,7 +123,7 @@ export async function setupTimeline(
     messages?: TimelineMessage[]
     sessionMessages?: SessionMessageInfo[]
     sessionStatus?: Record<string, SessionStatus>
-    settings?: Record<string, boolean>
+    settings?: Record<string, boolean | TimelineDetail>
     sessions?: Session[]
     cpuRate?: number
     viewport?: { width: number; height: number }
@@ -257,6 +258,22 @@ export function event(
   data: Extract<OpenCodeEvent, { type: "session.status" }>["data"],
 ): OpenCodeEvent {
   return makeEvent(type, data)
+}
+
+export function compactionStarted(data: Extract<OpenCodeEvent, { type: "session.compaction.started" }>["data"]) {
+  return makeEvent("session.compaction.started", data)
+}
+
+export function compactionDelta(data: Extract<OpenCodeEvent, { type: "session.compaction.delta" }>["data"]) {
+  return makeEvent("session.compaction.delta", data)
+}
+
+export function compactionEnded(data: Extract<OpenCodeEvent, { type: "session.compaction.ended" }>["data"]) {
+  return makeEvent("session.compaction.ended", data)
+}
+
+export function compactionFailed(data: Extract<OpenCodeEvent, { type: "session.compaction.failed" }>["data"]) {
+  return makeEvent("session.compaction.failed", data)
 }
 
 export function toolInputStarted(data: Extract<OpenCodeEvent, { type: "session.tool.input.started" }>["data"]) {
@@ -883,8 +900,26 @@ function provider() {
         name: "OpenCode",
         models: { "claude-opus-4-6": { id: "claude-opus-4-6", name: "Claude Opus 4.6", limit: { context: 200_000 } } },
       },
+      {
+        id: "company-gateway",
+        name: "Company Gateway",
+        models: {
+          "fast-nano": {
+            id: "fast-nano",
+            api: { id: "openai/gpt-5.4-nano" },
+            name: "GPT-5.4 nano",
+            limit: { context: 128_000 },
+          },
+          "long-context": {
+            id: "long-context",
+            api: { id: "company/long-context" },
+            name: "Company Gateway Extra Long Context Model for Narrow Timeline Layouts",
+            limit: { context: 128_000 },
+          },
+        },
+      },
     ],
-    connected: ["opencode"],
+    connected: ["opencode", "company-gateway"],
     default: { providerID: "opencode", modelID: "claude-opus-4-6" },
   }
 }

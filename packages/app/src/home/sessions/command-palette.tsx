@@ -1,4 +1,4 @@
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { createMemo, onCleanup } from "solid-js"
 import { commandPaletteOptions, useCommand } from "@/shell/commands/command"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -30,6 +30,7 @@ export function HomeCommandPalette(props: {
     opened: server.projects.list,
     stored: () => server.sync.data.project,
     load: (search, signal) => server.sdk.api.session.list({ parentID: null, search, limit: 50 }, { signal }),
+    get: (sessionID, signal) => server.sdk.api.session.get({ sessionID }, { signal }),
     untitled: () => language.t("command.session.new"),
     category: () => language.t("command.category.session"),
   })
@@ -51,10 +52,9 @@ export function HomeCommandPalette(props: {
     }
     if (item.type === "session") props.onSelectSession(item)
   }
-  const loadItems = async (text: string) => {
-    const query = text.trim()
+  const items = (query: string) => {
     if (!query) return commandEntries().slice(0, 5)
-    return [...commandEntries().filter((entry) => matchesCommandPaletteEntry(entry, query)), ...(await sessions(query))]
+    return commandEntries().filter((entry) => matchesCommandPaletteEntry(entry, query))
   }
 
   onCleanup(() => {
@@ -65,7 +65,8 @@ export function HomeCommandPalette(props: {
   return (
     <CommandPaletteView
       placeholder={language.t("palette.search.placeholder.home")}
-      loadItems={loadItems}
+      items={items}
+      sources={[sessions]}
       highlight={highlight}
       select={select}
       close={() => dialog.close()}

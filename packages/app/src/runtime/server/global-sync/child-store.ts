@@ -18,8 +18,9 @@ import { useQuery } from "@tanstack/solid-query"
 import { QueryOptionsApi } from "../sync"
 import { directoryKey, type DirectoryKey } from "./utils"
 import type { ServerScope } from "@/runtime/server/scope"
-import type { Data } from "@opencode-ai/client/solid"
+import type { Data } from "@opencode/client/solid"
 import { normalizeAgentList, normalizeProviderList } from "./utils"
+import { IconState, ProjectState, VcsState } from "../persistence"
 
 export function createChildStoreManager(input: {
   owner: Owner
@@ -155,29 +156,20 @@ export function createChildStoreManager(input: {
     if (!key) console.error("No directory provided")
     if (!children[key]) {
       const vcs = runWithOwner(input.owner, () =>
-        input.persist(
-          Persist.serverWorkspace(input.scope, directory, "vcs"),
-          createStore({ value: undefined as VcsInfo | undefined }),
-        ),
+        input.persist(Persist.serverWorkspace(input.scope, directory, "vcs"), VcsState, { value: undefined }),
       )
       if (!vcs) throw new Error(input.translate("error.childStore.persistedCacheCreateFailed"))
       const vcsStore = vcs[0]
       vcsCache.set(key, { store: vcsStore, setStore: vcs[1], ready: vcs[3] })
 
       const meta = runWithOwner(input.owner, () =>
-        input.persist(
-          Persist.serverWorkspace(input.scope, directory, "project"),
-          createStore({ value: undefined as ProjectMeta | undefined }),
-        ),
+        input.persist(Persist.serverWorkspace(input.scope, directory, "project"), ProjectState, { value: undefined }),
       )
       if (!meta) throw new Error(input.translate("error.childStore.persistedProjectMetadataCreateFailed"))
       metaCache.set(key, { store: meta[0], setStore: meta[1], ready: meta[3] })
 
       const icon = runWithOwner(input.owner, () =>
-        input.persist(
-          Persist.serverWorkspace(input.scope, directory, "icon"),
-          createStore({ value: undefined as string | undefined }),
-        ),
+        input.persist(Persist.serverWorkspace(input.scope, directory, "icon"), IconState, { value: undefined }),
       )
       if (!icon) throw new Error(input.translate("error.childStore.persistedProjectIconCreateFailed"))
       iconCache.set(key, { store: icon[0], setStore: icon[1], ready: icon[3] })
@@ -263,7 +255,7 @@ export function createChildStoreManager(input: {
           disposers.set(key, dispose)
           activationToggles.set(key, setInstanceQueriesEnabled)
 
-          const onPersistedInit = (init: Promise<string> | string | null, run: () => void) => {
+          const onPersistedInit = (init: Promise<string | null> | string | null, run: () => void) => {
             if (!(init instanceof Promise)) return
             void init.then(() => {
               if (children[key] !== child) return

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/server",
+  "name": "@opencode/server",
   "version": "1.18.4",
   "type": "module",
   "license": "MIT",
@@ -26,15 +26,18 @@
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/protocol": "workspace:*",
-    "@opencode-ai/schema": "workspace:*",
-    "@opencode-ai/simulation": "workspace:*",
-    "@opencode-ai/util": "workspace:*",
+    "@effect/platform-node-shared": "catalog:",
+    "@opencode/core": "workspace:*",
+    "@opencode/protocol": "workspace:*",
+    "@opencode/schema": "workspace:*",
+    "@opencode/simulation": "workspace:*",
+    "@opencode/util": "workspace:*",
     "drizzle-orm": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@opencode/client": "workspace:*",
+    "@opencode/plugin": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:"

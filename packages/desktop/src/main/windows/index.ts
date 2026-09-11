@@ -5,8 +5,10 @@ import { Effect, FileSystem, Path } from "effect"
 import { openExternalURL } from "../files"
 import { scoped } from "../native/logging"
 import { DesktopPaths } from "../paths"
-import { forgetStore, getStore } from "../storage/store"
+import { DesktopStorage } from "../storage"
+import { getStore } from "../storage/store"
 import { WINDOW_IDS_KEY } from "../storage/keys"
+import { windowIDArgument } from "../../shared/window-bootstrap"
 import {
   getBackgroundColor,
   getPinchZoomEnabled,
@@ -14,6 +16,7 @@ import {
   setDockIcon,
   setPinchZoomEnabled,
   setTitlebar,
+  setZoomFactor,
   updateTitlebar,
   windowAppearance,
   wireFullscreen,
@@ -24,7 +27,6 @@ import { createWindowRegistry } from "./registry"
 import { makeWindowRecovery } from "./recovery"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
 
-const windowIDs = new WeakMap<BrowserWindow, string>()
 const themeReady = new WeakMap<BrowserWindow, () => void>()
 const registry = createWindowRegistry<BrowserWindow>({
   read: () => getStore().get(WINDOW_IDS_KEY),
@@ -44,6 +46,7 @@ export {
   setDockIcon,
   setPinchZoomEnabled,
   setTitlebar,
+  setZoomFactor,
   updateTitlebar,
 }
 
@@ -57,10 +60,6 @@ export function setRelaunchHandler(handler: () => void) {
 
 export function setAppQuitting(quitting = true) {
   registry.setQuitting(quitting)
-}
-
-export function getWindowID(win: BrowserWindow) {
-  return windowIDs.get(win)
 }
 
 export function getLastFocusedWindow() {
@@ -79,6 +78,7 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   const paths = yield* DesktopPaths.resolve
+  const storage = yield* DesktopStorage.Service
   const runFork = Effect.runForkWith(yield* Effect.context())
   const wireWindowRecovery = yield* makeWindowRecovery
 
@@ -89,6 +89,7 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
 
   const create = (id: string = randomUUID()) => {
     const state = windowState({ file: windowStateFile(id), defaultWidth: 1280, defaultHeight: 800 })
+    const appearance = windowAppearance(path, paths)
     const win = new BrowserWindow({
       x: state.x,
       y: state.y,
@@ -96,7 +97,11 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
       height: state.height,
       show: false,
       autoHideMenuBar: true,
-      ...windowAppearance(path, paths),
+      ...appearance,
+      webPreferences: {
+        ...appearance.webPreferences,
+        additionalArguments: [windowIDArgument(id)],
+      },
     })
 
     allowRendererPermissions(win)
@@ -132,21 +137,18 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
   }
 
   const register = (win: BrowserWindow, id: string) => {
-    windowIDs.set(win, id)
     registry.register(id, win)
     win.on("focus", () => registry.focused(id))
     // Windows emits session-end, but not before-quit, during shutdown and logoff.
     win.on("session-end", () => registry.setQuitting())
     win.on("closed", () => {
       if (!registry.closed(id)) return
-      const data = windowDataFile(id)
       runFork(
         Effect.gen(function* () {
+          yield* Effect.try(() => storage.state.clear(windowDataFile(id)))
           yield* fs.remove(path.join(app.getPath("userData"), windowStateFile(id)), { force: true })
-          yield* fs.remove(path.join(app.getPath("userData"), data), { force: true })
         }).pipe(
-          Effect.tap(() => Effect.sync(() => forgetStore(data))),
-          Effect.catch((error) => scoped("window", Effect.logError("failed to clean window files", { id, error }))),
+          Effect.catch((error) => scoped("window", Effect.logError("failed to clean window state", { id, error }))),
         ),
       )
     })
@@ -159,7 +161,8 @@ function windowStateFile(id: string) {
   return `window-state-${safeWindowID(id)}.json`
 }
 
-// Mirrors windowStorage() in packages/app/src/utils/persist.ts.
+// Mirrors windowStorage() in packages/app/src/runtime/persistence/storage.ts; it is the state
+// namespace the renderer persists this window's tabs under.
 function windowDataFile(id: string) {
   return `opencode.window.${safeWindowID(id)}.dat`
 }

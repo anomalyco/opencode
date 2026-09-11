@@ -1,7 +1,7 @@
 import { Component, For, createEffect, createMemo, createResource } from "solid-js"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Switch } from "@opencode-ai/ui/switch"
-import { Tabs } from "@opencode-ai/ui/tabs"
+import { Icon } from "@opencode/ui/icon"
+import { Switch } from "@opencode/ui/switch"
+import { Tabs } from "@opencode/ui/tabs"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
@@ -27,6 +27,7 @@ export const SettingsExtensions: Component = () => {
   const [mcpList, { refetch: refetchMcp }] = createResource(
     () => serverSdk.connection.status() === "connected",
     () => serverSdk.api.mcp.list().then((result) => result.data),
+    { initialValue: [] },
   )
   const toggleMcp = useMcpToggle(() => undefined, refetchMcp)
   const mcps = createMemo<McpRowItem[]>(() => {
@@ -44,6 +45,7 @@ export const SettingsExtensions: Component = () => {
   const [pluginList] = createResource(
     () => serverSdk.connection.status() === "connected",
     () => serverSdk.api.plugin.list().then((result) => result.data),
+    { initialValue: [] },
   )
   const plugins = createMemo<PluginRowItem[]>(() => pluginLabels(pluginList.latest ?? []).map((name) => ({ name })))
 

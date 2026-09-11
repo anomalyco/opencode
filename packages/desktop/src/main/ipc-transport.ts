@@ -92,6 +92,7 @@ export const IpcServerProtocolLive = Layer.unwrap(
           yield* Effect.addFinalizer(() => Effect.forEach([...bindings.keys()], disconnect, { discard: true }))
 
           return {
+            codecFor: serialization.codecFor,
             disconnects,
             send: (clientId, response) =>
               Effect.sync(() => {
@@ -106,6 +107,7 @@ export const IpcServerProtocolLive = Layer.unwrap(
             supportsAck: true,
             supportsTransferables: false,
             supportsSpanPropagation: false,
+            supportsNotifications: true,
           }
         }),
       ),

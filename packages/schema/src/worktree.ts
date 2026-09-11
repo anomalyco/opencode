@@ -2,7 +2,6 @@ export * as Worktree from "./worktree.js"
 
 import { Schema } from "effect"
 import { durable, ephemeral, inventory } from "./event.js"
-import { ProjectID } from "./project-id.js"
 import { AbsolutePath, optional } from "./schema.js"
 import { Project } from "./project.js"
 
@@ -10,16 +9,18 @@ export const StrategyID = Schema.Trim.pipe(Schema.check(Schema.isNonEmpty()), Sc
 export type StrategyID = typeof StrategyID.Type
 
 export const CreateInput = Schema.Struct({
-  projectID: ProjectID,
-  strategy: StrategyID,
+  strategy: optional(StrategyID),
   from: optional(AbsolutePath),
-  directory: AbsolutePath,
+  branch: optional(Schema.Trim.pipe(Schema.check(Schema.isNonEmpty()))),
+  directory: optional(AbsolutePath).annotate({
+    description:
+      "Parent directory for the new worktree. Uses the location's configuration, then defaults to the server's data directory under worktree/<first six project ID characters>.",
+  }),
   name: optional(Schema.String),
 }).annotate({ identifier: "Worktree.CreateInput" })
 export interface CreateInput extends Schema.Schema.Type<typeof CreateInput> {}
 
 export const RemoveInput = Schema.Struct({
-  projectID: ProjectID,
   directory: AbsolutePath,
   force: Schema.Boolean,
 }).annotate({ identifier: "Worktree.RemoveInput" })
@@ -36,10 +37,16 @@ export const Directory = Schema.Struct({
 }).annotate({ identifier: "Worktree.Directory" })
 export interface Directory extends Schema.Schema.Type<typeof Directory> {}
 
-export const ListInput = Schema.Struct({
-  projectID: ProjectID,
-}).annotate({ identifier: "Worktree.ListInput" })
-export interface ListInput extends Schema.Schema.Type<typeof ListInput> {}
+export const ListEntry = Schema.Struct({
+  directory: AbsolutePath,
+  type: Schema.Literals(["root", "worktree"]),
+}).annotate({ identifier: "Worktree.ListEntry" })
+export interface ListEntry extends Schema.Schema.Type<typeof ListEntry> {}
+
+export class OperationError extends Schema.TaggedError<OperationError>()("Worktree.OperationError", {
+  message: Schema.String,
+  forceRequired: optional(Schema.Boolean),
+}) {}
 
 export const List = Schema.Array(Directory).annotate({ identifier: "Worktree.List" })
 export type List = typeof List.Type
@@ -56,27 +63,46 @@ const Resolved = durable({
     projectID: Project.ID,
     directory: AbsolutePath,
     previous: Project.ID,
+    adopted: optional(Schema.Array(Project.ID)),
   },
 })
 
 export const Event = { Updated, Resolved, Definitions: inventory(Updated, Resolved) }
 
 export function adopt(
-  session: { readonly projectID: string; readonly directory: string },
-  event: { readonly projectID: string; readonly directory: string; readonly previous: string },
+  session: { readonly projectID: string; readonly directory: string; readonly workspaceID?: string },
+  event: {
+    readonly projectID: string
+    readonly directory: string
+    readonly previous: string
+    readonly adopted?: ReadonlyArray<string>
+  },
 ) {
-  if (session.projectID !== event.previous && session.projectID !== Project.ID.global) return
+  if (session.workspaceID) return
+  if (
+    session.projectID !== event.previous &&
+    session.projectID !== Project.ID.global &&
+    !event.adopted?.includes(session.projectID)
+  )
+    return
   if (session.projectID === event.projectID) return
-  const inside =
-    session.directory === event.directory ||
-    session.directory.startsWith(event.directory + "/") ||
-    session.directory.startsWith(event.directory + "\\")
-  if (!inside) return
+  const normalize = (value: string) =>
+    value
+      .replaceAll("\\", "/")
+      .split("/")
+      .reduce((result, segment) => {
+        if (!segment || segment === ".") return result
+        if (segment === "..") return result.slice(0, result.lastIndexOf("/"))
+        return `${result}/${segment}`
+      }, "")
+  const directory = normalize(session.directory)
+  const root = normalize(event.directory)
+  const windows = /^\/[a-z]:/i.test(root)
+  const key = windows ? directory.toLowerCase() : directory
+  const parent = windows ? root.toLowerCase() : root
+  if (key !== parent && !key.startsWith(parent + "/")) return
   return {
     projectID: event.projectID,
-    subpath:
-      session.directory === event.directory
-        ? undefined
-        : session.directory.slice(event.directory.length + 1).replaceAll("\\", "/"),
+    subpath: key === parent ? undefined : directory.slice(root.length + 1),
   }
 }

@@ -6,7 +6,7 @@ import { Auth } from "../route/auth.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
-import { ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 
 export interface GeminiOptionsInput extends Gemini.OptionsInput {
@@ -38,13 +38,23 @@ export type Settings = ProviderPackage.Settings &
 
 const fromRequest = Effect.fn("GoogleVertex.fromRequest")(function* (request: LLMRequest) {
   const body = yield* Gemini.protocol.body.from(request)
+  // Vertex's native REST schema rejects `id` on FunctionCall/FunctionResponse parts with HTTP 400,
+  // unlike AI Studio, so history minted there cannot be lowered verbatim.
+  const contents = body.contents.map((content) => ({
+    ...content,
+    parts: (content.parts ?? []).map((part) => {
+      if ("functionCall" in part) return { ...part, functionCall: { ...part.functionCall, id: undefined } }
+      if ("functionResponse" in part) return { ...part, functionResponse: { ...part.functionResponse, id: undefined } }
+      return part
+    }),
+  }))
   const value = request.providerOptions?.labels
   const labels = ProviderShared.isRecord(value)
     ? Object.fromEntries(
         Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
       )
     : undefined
-  return { ...body, labels }
+  return { ...body, contents, labels }
 })
 
 const protocol = {
@@ -58,7 +68,7 @@ const protocol = {
 const route = Route.make({
   id: "google-vertex-gemini",
   provider: id,
-  providerMetadataKey: "google",
+  providerMetadataKey: "vertex",
   protocol,
   endpoint: Endpoint.path(({ request }) => {
     const model = String(request.model.id)
@@ -83,7 +93,10 @@ const configuredRoute = (input: Config, modelID: string | ModelID) => {
   const apiKey = GoogleVertexShared.apiKey(input)
   const endpointModel = String(modelID).startsWith("endpoints/")
   if (apiKey !== undefined && endpointModel)
-    throw new Error("Google Vertex tuned models do not support Express Mode API keys")
+    throw new ProviderConfigurationError({
+      provider: id,
+      message: "Google Vertex tuned models do not support Express Mode API keys",
+    })
   const location = GoogleVertexShared.location(inputLocation, "us-central1")
   const project = GoogleVertexShared.project(inputProject)
   const endpoint =
@@ -113,7 +126,10 @@ export const provider = {
 }
 export const model: ProviderPackage.Definition<Settings, GeminiProviderOptionsInput>["model"] = (modelID, settings) => {
   if (settings.apiKey !== undefined && settings.accessToken !== undefined)
-    throw new Error("Google Vertex apiKey cannot be combined with accessToken or auth")
+    throw new ProviderConfigurationError({
+      provider: id,
+      message: "Google Vertex apiKey cannot be combined with accessToken or auth",
+    })
   return configure({
     ...(settings.apiKey === undefined ? { accessToken: settings.accessToken } : { apiKey: settings.apiKey }),
     baseURL: settings.baseURL,

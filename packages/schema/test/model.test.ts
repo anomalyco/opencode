@@ -40,18 +40,41 @@ describe("Model.Compatibility", () => {
     expect(
       decode({
         reasoningField: "vendor_reasoning",
+        requireReasoning: true,
         maxTokensField: "max_completion_tokens",
         requireFinishReason: false,
+        requireAssistantAfterTool: true,
       }),
     ).toEqual({
       reasoningField: "vendor_reasoning",
+      requireReasoning: true,
       maxTokensField: "max_completion_tokens",
       requireFinishReason: false,
+      requireAssistantAfterTool: true,
     })
   })
 })
 
 describe("Model.Info", () => {
+  test("provider compaction policy is optional and uses the canonical closed schema", () => {
+    const model = Model.Info.default(Provider.ID.openai, Model.ID.make("gpt-5.4-mini"))
+    expect(Schema.encodeSync(Model.Info)({ ...model, compaction: undefined })).not.toHaveProperty("compaction")
+    expect(Schema.decodeUnknownSync(Model.Info)({ ...model, compaction: { mode: "provider" } }).compaction).toEqual({
+      mode: "provider",
+    })
+    expect(Schema.decodeUnknownSync(Provider.Compaction)({ mode: "local" })).toEqual({ mode: "local" })
+    expect(Schema.encodeSync(Provider.Compaction)({ mode: "provider", threshold: undefined })).toEqual({
+      mode: "provider",
+    })
+    expect(Schema.decodeUnknownSync(Provider.Compaction)({ mode: "provider", threshold: 120_000 })).toEqual({
+      mode: "provider",
+      threshold: 120_000,
+    })
+    for (const threshold of [0, -1, 1.5])
+      expect(() => Schema.decodeUnknownSync(Provider.Compaction)({ mode: "provider", threshold })).toThrow()
+    expect(() => Schema.decodeUnknownSync(Provider.Compaction)({ mode: "automatic" })).toThrow()
+  })
+
   test("uses practical token limits for unknown models", () => {
     const model = Model.Info.default(Provider.ID.make("custom"), Model.ID.make("gpt-5.6"))
 

@@ -2,9 +2,14 @@ import { batch, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { same } from "@/runtime/persistence/equality"
-import { SESSION_OPEN_FILE_TAB } from "@/shell/state/session-tabs"
+import { isSessionBrowserTab, SESSION_OPEN_FILE_TAB } from "@/shell/state/session-tabs"
 
-export { SESSION_OPEN_FILE_TAB } from "@/shell/state/session-tabs"
+export {
+  SESSION_BROWSER_TAB,
+  SESSION_OPEN_FILE_TAB,
+  sessionBrowserTab,
+  isSessionBrowserTab,
+} from "@/shell/state/session-tabs"
 
 const emptyTabs: string[] = []
 
@@ -20,6 +25,7 @@ type TabsInput = {
   review?: Accessor<boolean>
   hasReview?: Accessor<boolean>
   fileBrowser?: Accessor<boolean>
+  browser?: Accessor<boolean>
 }
 
 export function shouldShowFileTree(input: { visible: boolean; opened: boolean }) {
@@ -30,6 +36,7 @@ export const createSessionTabs = (input: TabsInput) => {
   const review = input.review ?? (() => false)
   const hasReview = input.hasReview ?? (() => false)
   const fileBrowser = input.fileBrowser ?? (() => false)
+  const browser = input.browser ?? (() => false)
   const contextOpen = createMemo(() => input.tabs().active() === "context" || input.tabs().all().includes("context"))
   const openFileOpen = createMemo(
     () =>
@@ -44,6 +51,7 @@ export const createSessionTabs = (input: TabsInput) => {
         .all()
         .flatMap((tab) => {
           if (tab === "context" || tab === "review") return []
+          if (isSessionBrowserTab(tab)) return browser() ? [tab] : []
           if (tab === SESSION_OPEN_FILE_TAB && !fileBrowser()) return []
           const value = input.pathFromTab(tab) ? input.normalizeTab(tab) : tab
           if (seen.has(value)) return []
@@ -54,13 +62,16 @@ export const createSessionTabs = (input: TabsInput) => {
     emptyTabs,
     { equals: same },
   )
-  const openedTabs = createMemo(() => panelTabs().filter((tab) => tab !== SESSION_OPEN_FILE_TAB), emptyTabs, {
-    equals: same,
-  })
+  const openedTabs = createMemo(
+    () => panelTabs().filter((tab) => tab !== SESSION_OPEN_FILE_TAB && !isSessionBrowserTab(tab)),
+    emptyTabs,
+    { equals: same },
+  )
   const activeTab = createMemo(() => {
     const active = input.tabs().active()
     if (active === "context") return active
     if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
+    if (active && isSessionBrowserTab(active) && browser()) return active
     if (active === "review" && review()) return active
     if (active && input.pathFromTab(active)) return input.normalizeTab(active)
 
@@ -70,15 +81,16 @@ export const createSessionTabs = (input: TabsInput) => {
     if (review() && hasReview()) return "review"
     return "empty"
   })
-  const activeFileTab = createMemo(() => {
+  const activeFileTab = createMemo<string | undefined>(() => {
     const active = activeTab()
     if (!openedTabs().includes(active)) return
     return active
   })
-  const closableTab = createMemo(() => {
+  const closableTab = createMemo<string | undefined>(() => {
     const active = activeTab()
     if (active === "context") return active
     if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
+    if (active && isSessionBrowserTab(active) && browser()) return active
     if (!openedTabs().includes(active)) return
     return active
   })
@@ -101,11 +113,11 @@ export const focusTerminalById = (id: string) => {
 
   const textarea = terminal.querySelector("textarea")
   if (textarea instanceof HTMLTextAreaElement) {
-    textarea.focus()
+    textarea.focus({ preventScroll: true })
     return true
   }
 
-  terminal.focus()
+  terminal.focus({ preventScroll: true })
   terminal.dispatchEvent(
     typeof PointerEvent === "function"
       ? new PointerEvent("pointerdown", { bubbles: true, cancelable: true })
@@ -124,14 +136,10 @@ export const createOpenReviewFile = (input: {
   return (path: string) => {
     batch(() => {
       input.showAllFiles()
-      const maybePromise = input.loadFile(path)
-      const open = () => {
-        const tab = input.tabForPath(path)
-        input.openTab(tab)
-        input.setActive(tab)
-      }
-      if (maybePromise instanceof Promise) void maybePromise.then(open)
-      else open()
+      input.loadFile(path)
+      const tab = input.tabForPath(path)
+      input.openTab(tab)
+      input.setActive(tab)
     })
   }
 }

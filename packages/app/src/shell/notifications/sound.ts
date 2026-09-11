@@ -3,7 +3,7 @@ let loads: Record<SoundID, () => Promise<string>> | undefined
 
 function getFiles() {
   if (files) return files
-  files = import.meta.glob("../../../ui/src/assets/audio/*.aac", { import: "default" }) as Record<
+  files = import.meta.glob("../../../../ui/src/assets/audio/*.aac", { import: "default" }) as Record<
     string,
     () => Promise<string>
   >

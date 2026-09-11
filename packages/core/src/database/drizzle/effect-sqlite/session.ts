@@ -14,7 +14,7 @@ import { entityKind } from "drizzle-orm/entity"
 import type { AnyRelations } from "drizzle-orm/relations"
 import type { RelationalQueryMapperConfig } from "drizzle-orm/relations"
 import type { Query } from "drizzle-orm/sql/sql"
-import type { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core/dialect"
+import type { SQLiteDialect } from "drizzle-orm/sqlite-core/dialect"
 import {
   SQLiteEffectPreparedQuery,
   SQLiteEffectSession,
@@ -59,7 +59,7 @@ export class EffectSQLiteSession<TRelations extends AnyRelations> extends SQLite
 
   constructor(
     private client: SqlClient,
-    dialect: SQLiteAsyncDialect,
+    dialect: SQLiteDialect,
     protected relations: TRelations,
     private options: EffectSQLiteSessionOptions,
   ) {

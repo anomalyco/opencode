@@ -1,15 +1,26 @@
-import type { CommandApi } from "@opencode-ai/client/promise/api"
-import type { CommandInfo } from "@opencode-ai/client"
+import type { CommandApi } from "@opencode/client/promise/api"
+import type { PromptInput } from "@opencode/schema/prompt-input"
+import type { Session } from "@opencode/schema/session"
+import type { SessionInbox } from "@opencode/schema/session-inbox"
 import type { Transform } from "./registration.js"
 
-export interface CommandDraft {
-  list(): readonly CommandInfo[]
-  get(name: string): CommandInfo | undefined
-  update(name: string, update: (command: CommandInfo) => void): void
-  remove(name: string): void
+export interface CommandInvocation {
+  readonly sessionID: Session.ID
+  readonly prompt: PromptInput.Prompt
+  readonly delivery: SessionInbox.Delivery
 }
 
-export interface CommandDomain extends CommandApi {
-  readonly transform: Transform<CommandDraft>
+export interface CommandDefinition {
+  readonly name: string
+  readonly description?: string
+  readonly execute: (input: CommandInvocation) => Promise<void>
+}
+
+export interface CommandEditor {
+  add(definition: CommandDefinition): void
+}
+
+export interface CommandDomain extends Pick<CommandApi, "list"> {
+  readonly transform: Transform<CommandEditor>
   readonly reload: () => Promise<void>
 }

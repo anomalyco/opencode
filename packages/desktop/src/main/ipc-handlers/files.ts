@@ -23,7 +23,7 @@ export const fileHandlers = FileRpcs.toLayer(
           .pipe(Effect.map((buffer) => new Uint8Array(buffer)), Effect.orDie),
       FilesReleasePickedFiles: ({ token }, context) =>
         Effect.sync(() => files.releasePickedFiles(sender(handoff, context).id, token)),
-      FilesSaveFilePicker: ({ options }) => files.saveFilePicker(options),
+      FilesSaveFile: ({ options, content }) => files.saveFile(options, content).pipe(Effect.orDie),
       FilesOpenExternal: ({ url }) => openExternalURL(url),
       FilesOpenLocalFile: ({ url }) => openLocalFileURL(url),
       FilesOpenPath: ({ path, application }) =>
@@ -37,6 +37,7 @@ export const fileHandlers = FileRpcs.toLayer(
           const image = files.readClipboardImage()
           return image ? { ...image, buffer: new Uint8Array(image.buffer) } : null
         }),
+      FilesWriteClipboardText: ({ text }) => Effect.sync(() => files.writeClipboardText(text)),
     })
   }),
 )

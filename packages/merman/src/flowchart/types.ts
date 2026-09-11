@@ -57,6 +57,7 @@ export interface FlowchartEdgeRoute {
   edge: FlowchartEdge
   points: FlowchartPoint[]
   labelAxis?: DiagramAxis
+  labelPoint?: FlowchartPoint
 }
 
 export type FlowchartEdgeDirection = DiagramDirection
