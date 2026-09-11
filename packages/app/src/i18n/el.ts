@@ -885,6 +885,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Διαγραφή ειδοποιήσεων",
   "sidebar.empty.title": "Δεν υπάρχουν ανοιχτά έργα",
   "sidebar.empty.description": "Ανοίξτε ένα έργο για να ξεκινήσετε",
+  "sidebar.projects.empty": "No projects",
   "debugBar.ariaLabel": "Διαγνωστικά απόδοσης ανάπτυξης",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

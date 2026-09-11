@@ -884,6 +884,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Bildirishnomalarni tozalash",
   "sidebar.empty.title": "Hech qanday loyiha ochiq emas",
   "sidebar.empty.description": "Boshlash uchun loyihani oching",
+  "sidebar.projects.empty": "No projects",
   "debugBar.ariaLabel": "Rivojlanish samaradorligi diagnostikasi",
   "debugBar.na": "yo'q",
   "debugBar.nav.label": "NAV",

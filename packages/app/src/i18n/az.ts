@@ -886,6 +886,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Bildirişləri təmizlə",
   "sidebar.empty.title": "Heç bir layihə açılmayıb",
   "sidebar.empty.description": "Başlamaq üçün bir layihə açın",
+  "sidebar.projects.empty": "No projects",
   "debugBar.ariaLabel": "Tərtibatçı performans diaqnostikası",
   "debugBar.na": "yox",
   "debugBar.nav.label": "NAV",

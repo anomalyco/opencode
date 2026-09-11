@@ -247,7 +247,7 @@ function directories(project: LocalProject) {
   return [project.worktree, ...(project.sandboxes ?? [])]
 }
 
-function buildHomeSessionRecords(input: {
+export function buildHomeSessionRecords(input: {
   sessions: () => Session[]
   projectDirectories: () => string[]
   projects: () => LocalProject[]
