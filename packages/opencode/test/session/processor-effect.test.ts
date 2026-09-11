@@ -4,7 +4,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
 import { tool } from "ai"
-import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import path from "path"
 import z from "zod"
 import type { Agent } from "../../src/agent/agent"
@@ -466,6 +466,195 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
     { config: (url) => providerCfg(url) },
   ),
 )
+
+for (const scenario of [
+  { name: "empty arrays", calls: [], end: "text" },
+  { name: "omitted arrays", calls: undefined, end: "text" },
+  { name: "null arrays", calls: null, end: "text" },
+  { name: "reasoning-only empty arrays", calls: [], end: "flush" },
+  { name: "nonempty tool boundary", calls: undefined, end: "tool" },
+  { name: "mixed content boundary", calls: [], end: "text" },
+  { name: "empty arrays before tool boundary", calls: [], end: "tool" },
+  { name: "empty array heartbeats", calls: undefined, end: "text" },
+] as const) {
+  it.live(`session.processor compatible reasoning persists one part: ${scenario.name}`, () =>
+    provideTmpdirServer(
+      ({ dir, llm }) =>
+        Effect.gen(function* () {
+          const { processors, session, provider } = yield* boot()
+          const deltas: unknown[] = [
+            { reasoning_content: "r1", tool_calls: scenario.calls },
+            {
+              reasoning_content: "r2",
+              tool_calls: scenario.calls,
+              ...(scenario.name === "mixed content boundary" ? { content: "done" } : {}),
+            },
+          ]
+          if (scenario.name === "empty array heartbeats") deltas.splice(1, 0, { tool_calls: [] }, { tool_calls: [] })
+          if (scenario.end === "text" && scenario.name !== "mixed content boundary") deltas.push({ content: "done" })
+          if (scenario.end === "tool")
+            deltas.push({
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call-1",
+                  type: "function",
+                  function: { name: "lookup", arguments: '{"query":"weather"}' },
+                },
+              ],
+            })
+          yield* llm.push(
+            raw({
+              chunks: [
+                ...deltas.map((delta) => ({
+                  id: "chatcmpl-reasoning",
+                  object: "chat.completion.chunk",
+                  choices: [{ index: 0, delta }],
+                })),
+                {
+                  id: "chatcmpl-reasoning",
+                  object: "chat.completion.chunk",
+                  choices: [{ index: 0, delta: {}, finish_reason: scenario.end === "tool" ? "tool_calls" : "stop" }],
+                },
+              ],
+            }),
+          )
+          const chat = yield* session.create({})
+          const parent = yield* user(chat.id, "reason")
+          const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+          const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+          const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+          const value = yield* handle.process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: ref,
+            },
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "reason" }],
+            tools: {
+              lookup: tool({
+                inputSchema: z.object({ query: z.string() }),
+                execute: async (input) => ({ title: "Lookup", output: `result:${input.query}`, metadata: {} }),
+              }),
+            },
+          })
+          const parts = yield* MessageV2.parts(msg.id)
+          const reasoning = parts.filter((part): part is SessionV1.ReasoningPart => part.type === "reasoning")
+          const calls = parts.filter((part): part is SessionV1.ToolPart => part.type === "tool")
+          expect(value).toBe("continue")
+          expect(yield* llm.calls).toBe(1)
+          expect(
+            parts
+              .filter((part) => part.type === "text")
+              .map((part) => part.text)
+              .join(""),
+          ).toBe(scenario.end === "text" ? "done" : "")
+          expect(calls).toHaveLength(scenario.end === "tool" ? 1 : 0)
+          if (scenario.end === "tool")
+            expect(calls[0]).toMatchObject({
+              callID: "call-1",
+              tool: "lookup",
+              state: { status: "completed", input: { query: "weather" }, output: "result:weather" },
+            })
+          expect(reasoning.map((part) => part.text).join("")).toBe("r1r2")
+          expect(reasoning).toHaveLength(1)
+          expect(reasoning[0]).toMatchObject({
+            text: "r1r2",
+            time: { start: expect.any(Number), end: expect.any(Number) },
+          })
+        }),
+      { config: (url) => providerCfg(url) },
+    ),
+  )
+}
+
+for (const failure of ["provider error", "interruption"] as const) {
+  it.live(
+    `session.processor compatible reasoning closes active parts after ${failure}`,
+    () =>
+      provideTmpdirServer(
+        ({ dir, llm }) =>
+          Effect.gen(function* () {
+            const { processors, session, provider } = yield* boot()
+            const bridge = yield* EventV2Bridge.Service
+            const seen = yield* Deferred.make<void>()
+            const chunks: unknown[] = ["r1", "r2"].map((text) => ({
+              id: "chatcmpl-reasoning",
+              object: "chat.completion.chunk",
+              choices: [{ index: 0, delta: { reasoning_content: text, tool_calls: [] } }],
+            }))
+            if (failure === "provider error")
+              chunks.push({
+                error: { type: "invalid_request_error", code: "invalid_request_error", message: "invalid request" },
+              })
+            yield* llm.push(raw({ chunks, hang: failure === "interruption" }))
+            const chat = yield* session.create({})
+            const parent = yield* user(chat.id, "reason")
+            const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+            const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+            const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+            const off = yield* bridge.listen((event) => {
+              if (event.type !== MessageV2.Event.PartDelta.type) return Effect.void
+              const data = event.data as typeof MessageV2.Event.PartDelta.data.Type
+              if (data.messageID !== msg.id || data.delta !== "r2") return Effect.void
+              return Deferred.succeed(seen, undefined).pipe(Effect.asVoid)
+            })
+            yield* Effect.addFinalizer(() => off)
+            const run = yield* handle
+              .process({
+                user: {
+                  id: parent.id,
+                  sessionID: chat.id,
+                  role: "user",
+                  time: parent.time,
+                  agent: parent.agent,
+                  model: ref,
+                },
+                sessionID: chat.id,
+                model: mdl,
+                agent: agent(),
+                system: [],
+                messages: [{ role: "user", content: "reason" }],
+                tools: {},
+              })
+              .pipe(Effect.forkChild)
+            if (failure === "interruption") {
+              // Wait for actual reasoning consumption, not just receipt of the HTTP request.
+              const reached = yield* Effect.raceFirst(
+                Deferred.await(seen).pipe(Effect.as("delta")),
+                Fiber.await(run).pipe(Effect.as("completed")),
+              )
+              expect(reached).toBe("delta")
+              yield* Fiber.interrupt(run)
+              const exit = yield* Fiber.await(run)
+              expect(Exit.isFailure(exit)).toBe(true)
+              if (Exit.isFailure(exit)) expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+              expect(handle.message.error?.name).toBe("MessageAbortedError")
+            } else {
+              expect(yield* Fiber.join(run)).toBe("stop")
+              expect(JSON.stringify(handle.message.error)).toContain("invalid request")
+            }
+            expect(yield* llm.calls).toBe(1)
+            const parts = yield* MessageV2.parts(msg.id)
+            const reasoning = parts.filter((part): part is SessionV1.ReasoningPart => part.type === "reasoning")
+            expect(reasoning).toHaveLength(1)
+            expect(reasoning[0]).toMatchObject({
+              text: "r1r2",
+              time: { start: expect.any(Number), end: expect.any(Number) },
+            })
+          }),
+        { config: (url) => providerCfg(url) },
+      ),
+    30000,
+  )
+}
 
 it.live("session.processor effect tests reset reasoning state across retries", () =>
   provideTmpdirServer(

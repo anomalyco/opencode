@@ -11,6 +11,15 @@ index dca128d3a790378c51a24a16d92585178343b278..da75f9d64acd2b607abd15079ce2d03b
                });
                return;
              }
+@@ -755,7 +755,7 @@ var OpenAICompatibleChatLanguageModel = class {
+                 delta: delta.content
+               });
+             }
+-            if (delta.tool_calls != null) {
++            if (delta.tool_calls != null && delta.tool_calls.length > 0) {
+               if (isActiveReasoning) {
+                 controller.enqueue({
+                   type: "reasoning-end",
 diff --git a/dist/index.mjs b/dist/index.mjs
 index 3b1e1b6bdec5032e3b4fa5ffbcc8cdf3dfe1cc40..eaffc446f80552ea0b26573b89daa4dfc7776e6e 100644
 --- a/dist/index.mjs
@@ -24,6 +33,15 @@ index 3b1e1b6bdec5032e3b4fa5ffbcc8cdf3dfe1cc40..eaffc446f80552ea0b26573b89daa4df
                });
                return;
              }
+@@ -742,7 +742,7 @@ var OpenAICompatibleChatLanguageModel = class {
+                 delta: delta.content
+               });
+             }
+-            if (delta.tool_calls != null) {
++            if (delta.tool_calls != null && delta.tool_calls.length > 0) {
+               if (isActiveReasoning) {
+                 controller.enqueue({
+                   type: "reasoning-end",
 diff --git a/src/chat/openai-compatible-chat-language-model.ts b/src/chat/openai-compatible-chat-language-model.ts
 index 8c622db23c2d9a7373701f5a1b0c2ba109e24602..643c3db68a6043e097edc1122e0eb53fd13495c5 100644
 --- a/src/chat/openai-compatible-chat-language-model.ts
@@ -37,3 +55,9 @@ index 8c622db23c2d9a7373701f5a1b0c2ba109e24602..643c3db68a6043e097edc1122e0eb53f
                });
                return;
              }
+@@ -522,4 +522,4 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
+-            if (delta.tool_calls != null) {
++            if (delta.tool_calls != null && delta.tool_calls.length > 0) {
+               // end active reasoning block before tool calls start
+               if (isActiveReasoning) {
+                 controller.enqueue({

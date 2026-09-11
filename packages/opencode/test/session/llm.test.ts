@@ -3,7 +3,9 @@ import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import path from "path"
-import { tool, type ModelMessage } from "ai"
+import { streamText, tool, type ModelMessage } from "ai"
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
+import type { LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
@@ -184,6 +186,115 @@ describe("session.llm.ai-sdk adapter", () => {
   }
   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- tests defensive adapter branches outside AI SDK's current typed surface
   const uncheckedAdapterEvent = (input: unknown) => input as AISDKAdapterEvent
+
+  for (const scenario of [
+    { name: "empty arrays", calls: [], end: "text" },
+    { name: "omitted arrays", calls: undefined, end: "text" },
+    { name: "null arrays", calls: null, end: "text" },
+    { name: "reasoning-only empty arrays", calls: [], end: "flush" },
+    { name: "nonempty tool boundary", calls: undefined, end: "tool" },
+    { name: "mixed content boundary", calls: [], end: "text" },
+    { name: "empty arrays before tool boundary", calls: [], end: "tool" },
+    { name: "empty array heartbeats", calls: undefined, end: "text" },
+  ] as const) {
+    const deltas: unknown[] = [
+      { reasoning_content: "r1", tool_calls: scenario.calls },
+      {
+        reasoning_content: "r2",
+        tool_calls: scenario.calls,
+        ...(scenario.name === "mixed content boundary" ? { content: "done" } : {}),
+      },
+    ]
+    if (scenario.name === "empty array heartbeats") deltas.splice(1, 0, { tool_calls: [] }, { tool_calls: [] })
+    if (scenario.end === "text" && scenario.name !== "mixed content boundary") deltas.push({ content: "done" })
+    if (scenario.end === "tool")
+      deltas.push({
+        tool_calls: [
+          { index: 0, id: "call-1", type: "function", function: { name: "lookup", arguments: '{"query":"weather"}' } },
+        ],
+      })
+    const chunks = [
+      ...deltas.map((delta) => ({
+        id: "chatcmpl-reasoning",
+        object: "chat.completion.chunk",
+        choices: [{ index: 0, delta }],
+      })),
+      {
+        id: "chatcmpl-reasoning",
+        object: "chat.completion.chunk",
+        choices: [{ index: 0, delta: {}, finish_reason: scenario.end === "tool" ? "tool_calls" : "stop" }],
+      },
+    ]
+    const model = () =>
+      createOpenAICompatible({
+        name: "test",
+        baseURL: "https://example.test/v1",
+        fetch: Object.assign(async () => createEventResponse(chunks, true), { preconnect() {} }),
+      }).chatModel("test-model")
+    const lifecycle = [
+      "reasoning-start",
+      "reasoning-delta",
+      "reasoning-delta",
+      "reasoning-end",
+    ] satisfies AISDKAdapterEvent["type"][]
+
+    test(`compatible reasoning doStream preserves one lifecycle: ${scenario.name}`, async () => {
+      const result = await model().doStream({ prompt: [{ role: "user", content: [{ type: "text", text: "reason" }] }] })
+      const events: LanguageModelV3StreamPart[] = []
+      await result.stream.pipeTo(
+        new WritableStream<LanguageModelV3StreamPart>({
+          write(event) {
+            events.push(event)
+          },
+        }),
+      )
+      expect(events.filter((event) => event.type === "error")).toEqual([])
+      if (scenario.end !== "tool") expect(events.filter((event) => event.type.startsWith("tool-"))).toEqual([])
+      expect(events.flatMap((event) => (event.type === "reasoning-delta" ? [event.delta] : [])).join("")).toBe("r1r2")
+      expect(events.filter((event) => event.type.startsWith("reasoning-")).map((event) => event.type)).toEqual(
+        lifecycle,
+      )
+      const end = events.findIndex((event) => event.type === "reasoning-end")
+      expect(events[end + 1]?.type).toBe(
+        scenario.end === "tool" ? "tool-input-start" : scenario.end === "text" ? "text-start" : "finish",
+      )
+      expect(events.filter((event) => event.type === "tool-call")).toEqual(
+        scenario.end === "tool"
+          ? [{ type: "tool-call", toolCallId: "call-1", toolName: "lookup", input: '{"query":"weather"}' }]
+          : [],
+      )
+      expect(events.flatMap((event) => (event.type === "text-delta" ? [event.delta] : [])).join("")).toBe(
+        scenario.end === "text" ? "done" : "",
+      )
+    })
+
+    test(`compatible reasoning streamText adapter preserves one lifecycle: ${scenario.name}`, async () => {
+      const result = streamText({
+        model: model(),
+        prompt: "reason",
+        maxRetries: 0,
+        tools: { lookup: tool({ inputSchema: z.object({ query: z.string() }) }) },
+      })
+      const events = await adapt(await Array.fromAsync(result.fullStream))
+      expect(events.filter((event) => event.type === "provider-error" || event.type === "tool-error")).toEqual([])
+      if (scenario.end !== "tool") expect(events.filter((event) => event.type.startsWith("tool-"))).toEqual([])
+      expect(events.flatMap((event) => (event.type === "reasoning-delta" ? [event.text] : [])).join("")).toBe("r1r2")
+      expect(events.filter((event) => event.type.startsWith("reasoning-")).map((event) => event.type)).toEqual(
+        lifecycle,
+      )
+      const end = events.findIndex((event) => event.type === "reasoning-end")
+      expect(events[end + 1]?.type).toBe(
+        scenario.end === "tool" ? "tool-input-start" : scenario.end === "text" ? "text-start" : "step-finish",
+      )
+      const calls = events.filter((event) => event.type === "tool-call")
+      expect(calls).toHaveLength(scenario.end === "tool" ? 1 : 0)
+      if (scenario.end === "tool")
+        expect(calls[0]).toMatchObject({ id: "call-1", name: "lookup", input: { query: "weather" } })
+      expect(events.flatMap((event) => (event.type === "text-delta" ? [event.text] : [])).join("")).toBe(
+        scenario.end === "text" ? "done" : "",
+      )
+    })
+  }
 
   test("maps AI SDK stream chunks without losing session-visible fields", async () => {
     const metadata = { openai: { itemID: "item-1" } }
