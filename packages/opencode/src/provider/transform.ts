@@ -1405,16 +1405,50 @@ const SLUG_OVERRIDES: Record<string, string> = {
   amazon: "bedrock",
 }
 
+// Reserved escape hatch: a caller that already knows exactly which upstream
+// provider namespace(s) it's targeting can nest them under this key instead
+// of relying on model-ID-prefix-derived slug inference. Consumed and
+// stripped before any legacy bucketing logic runs, so the legacy `options`
+// bag keeps byte-for-byte identical bucketing semantics for every other
+// key -- including one that happens to share a name with an upstream
+// provider (e.g. a flat `openai` option would still bucket under the
+// model-derived slug exactly as before). Values here are merged into the
+// final result verbatim, keyed by whatever name the caller supplies (not
+// limited to a fixed provider registry), after the legacy result is built.
+const EXPLICIT_PROVIDER_OPTIONS_KEY = "providerOptions"
+
+function mergeExplicitProviderOptions(result: Record<string, any>, explicit: JsonRecord | undefined) {
+  if (!explicit) return result
+  for (const [k, v] of Object.entries(explicit)) {
+    result[k] = isPlainObject(result[k]) && isPlainObject(v) ? { ...result[k], ...v } : v
+  }
+  return result
+}
+
 export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
+  // Only a plain-object value under the reserved key counts as the explicit
+  // escape hatch -- everywhere else in this file, a providerOptions
+  // namespace IS an options bag, so a non-object value here can only be an
+  // unrelated flat legacy option that happens to share the reserved name.
+  // Leave it in legacyOptions untouched so it still gets bucketed exactly
+  // like any other flat option, instead of being silently dropped.
+  const rawExplicit = options[EXPLICIT_PROVIDER_OPTIONS_KEY]
+  const explicitProviderOptions = isPlainObject(rawExplicit) ? rawExplicit : undefined
+  const legacyOptions =
+    explicitProviderOptions === undefined
+      ? options
+      : Object.fromEntries(Object.entries(options).filter(([k]) => k !== EXPLICIT_PROVIDER_OPTIONS_KEY))
   const usesOpenAIReasoningGate =
     model.api.npm === "@ai-sdk/openai" ||
     model.api.npm === "@ai-sdk/azure" ||
     model.api.npm === "@ai-sdk/amazon-bedrock/mantle"
   const normalized =
     usesOpenAIReasoningGate &&
-    (model.capabilities.reasoning || options.reasoningEffort !== undefined || options.reasoningSummary !== undefined)
-      ? { ...options, forceReasoning: true }
-      : anthropicBlockBinding(model, options)
+    (model.capabilities.reasoning ||
+      legacyOptions.reasoningEffort !== undefined ||
+      legacyOptions.reasoningSummary !== undefined)
+      ? { ...legacyOptions, forceReasoning: true }
+      : anthropicBlockBinding(model, legacyOptions)
 
   if (model.api.npm === "@ai-sdk/gateway") {
     // Gateway providerOptions are split across two namespaces:
@@ -1443,7 +1477,7 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
       }
     }
 
-    return result
+    return mergeExplicitProviderOptions(result, explicitProviderOptions)
   }
 
   // AI SDK packages that resolve providerOptionsName by splitting the
@@ -1460,9 +1494,9 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
   // providerOptions["openai"], but OpenAIResponsesLanguageModel checks
   // "azure" first. Pass both so model options work on either code path.
   if (model.api.npm === "@ai-sdk/azure") {
-    return { openai: normalized, azure: normalized }
+    return mergeExplicitProviderOptions({ openai: normalized, azure: normalized }, explicitProviderOptions)
   }
-  return { [key]: normalized }
+  return mergeExplicitProviderOptions({ [key]: normalized }, explicitProviderOptions)
 }
 
 export function maxOutputTokens(model: Provider.Model, outputTokenMax = OUTPUT_TOKEN_MAX): number {

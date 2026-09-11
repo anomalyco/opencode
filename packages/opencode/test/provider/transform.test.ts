@@ -1364,6 +1364,113 @@ describe("ProviderTransform.providerOptions", () => {
       groq: { reasoningFormat: "parsed" },
     })
   })
+
+  describe("explicit options.providerOptions escape hatch", () => {
+    // The model-ID prefix here ("acme") stands in for any internal routing
+    // alias that is not a recognized AI SDK provider slug (e.g. a
+    // centrally-configured virtual model catalog id).
+    const aliasModel = (apiId: string) =>
+      createModel({
+        providerID: "vercel",
+        api: { id: apiId, url: "https://ai-gateway.vercel.sh/v3/ai", npm: "@ai-sdk/gateway" },
+      })
+
+    test("a legacy flat option named openai still buckets under the model slug, unchanged", () => {
+      // Byte-for-byte legacy semantics: a plain (non-reserved-key) option
+      // that happens to share a name with an upstream provider is NOT
+      // treated specially. It bucket exactly like any other flat option
+      // did before this feature existed.
+      const model = aliasModel("acme/gpt-5.1")
+      expect(
+        ProviderTransform.providerOptions(model, {
+          gateway: { zeroDataRetention: true },
+          openai: { store: false },
+        }),
+      ).toEqual({
+        gateway: { zeroDataRetention: true },
+        acme: { openai: { store: false } },
+      })
+    })
+
+    test("options.providerOptions.openai passes through at the top level under an unrecognized alias slug", () => {
+      const model = aliasModel("acme/gpt-5.1")
+      expect(
+        ProviderTransform.providerOptions(model, {
+          gateway: { zeroDataRetention: true },
+          providerOptions: { openai: { store: false } },
+        }),
+      ).toEqual({
+        gateway: { zeroDataRetention: true },
+        openai: { store: false },
+      })
+    })
+
+    test("options.providerOptions.anthropic passes through at the top level under an unrecognized alias slug", () => {
+      const model = aliasModel("acme/claude-sonnet-5")
+      expect(
+        ProviderTransform.providerOptions(model, {
+          gateway: { zeroDataRetention: true },
+          providerOptions: { anthropic: { thinking: { type: "enabled", budgetTokens: 4000 } } },
+        }),
+      ).toEqual({
+        gateway: { zeroDataRetention: true },
+        anthropic: { thinking: { type: "enabled", budgetTokens: 4000 } },
+      })
+    })
+
+    test("merges with, rather than clobbers, a same-named legacy-bucketed slug", () => {
+      const model = aliasModel("acme/gpt-5.1")
+      expect(
+        ProviderTransform.providerOptions(model, {
+          gateway: { zeroDataRetention: true },
+          reasoningEffort: "high",
+          providerOptions: { acme: { extra: "flag" } },
+        }),
+      ).toEqual({
+        gateway: { zeroDataRetention: true },
+        acme: { reasoningEffort: "high", extra: "flag" },
+      })
+    })
+
+    test("preserves canonical (non-aliased) recognized-slug behavior unchanged", () => {
+      const model = aliasModel("openai/gpt-5.1")
+      expect(
+        ProviderTransform.providerOptions(model, {
+          gateway: { zeroDataRetention: true },
+          providerOptions: { openai: { store: false } },
+        }),
+      ).toEqual({
+        gateway: { zeroDataRetention: true },
+        openai: { store: false },
+      })
+    })
+
+    test("a scalar value under the reserved key is not silently dropped, and still buckets under the model slug like any other flat option", () => {
+      const model = aliasModel("acme/gpt-5.1")
+      expect(
+        ProviderTransform.providerOptions(model, {
+          gateway: { zeroDataRetention: true },
+          providerOptions: "not-an-options-object",
+        }),
+      ).toEqual({
+        gateway: { zeroDataRetention: true },
+        acme: { providerOptions: "not-an-options-object" },
+      })
+    })
+
+    test("an array value under the reserved key is not silently dropped, and still buckets under the model slug like any other flat option", () => {
+      const model = aliasModel("acme/gpt-5.1")
+      expect(
+        ProviderTransform.providerOptions(model, {
+          gateway: { zeroDataRetention: true },
+          providerOptions: ["not", "an", "options", "object"],
+        }),
+      ).toEqual({
+        gateway: { zeroDataRetention: true },
+        acme: { providerOptions: ["not", "an", "options", "object"] },
+      })
+    })
+  })
 })
 
 describe("ProviderTransform.schema - gemini array items", () => {
