@@ -16,7 +16,7 @@ const sessionID = SessionV2.ID.make("ses_tool_output_store")
 
 const withStore = <A, E, R>(
   body: (input: { root: string; store: ToolOutputStore.Interface; fs: FSUtil.Interface }) => Effect.Effect<A, E, R>,
-  config?: Config.Info,
+  config?: Config.Info | (() => Config.Info),
 ) =>
   Effect.acquireUseRelease(
     Effect.promise(() => tmpdir()),
@@ -26,7 +26,10 @@ const withStore = <A, E, R>(
         ? Layer.succeed(
             Config.Service,
             Config.Service.of({
-              entries: () => Effect.succeed([new Config.Document({ type: "document", info: config })]),
+              entries: () =>
+                Effect.sync(() => [
+                  new Config.Document({ type: "document", info: typeof config === "function" ? config() : config }),
+                ]),
             }),
           )
         : Layer.empty
@@ -82,6 +85,102 @@ describe("ToolOutputStore", () => {
       }),
     ),
   )
+
+  it.live("preserves exact UTF-8 suffixes across byte budget boundaries", () =>
+    Effect.forEach([512, 514, 516, 518], (maxBytes) =>
+      withStore(
+        ({ store }) =>
+          Effect.gen(function* () {
+            for (const [unit, width] of [
+              ["a", 1],
+              ["é", 2],
+              ["中", 3],
+              ["😀", 4],
+              ["\ud800", Buffer.byteLength("\ud800", "utf-8")],
+              ["\udc00", Buffer.byteLength("\udc00", "utf-8")],
+            ] as const) {
+              const result = yield* store.bound({
+                sessionID,
+                toolCallID: "call-utf8-suffix",
+                output: { structured: {}, content: [{ type: "text", text: unit.repeat(1_024) }] },
+              })
+              const marker = `... output truncated; full content saved to ${result.outputPaths[0]} ...`
+              const available = maxBytes - Buffer.byteLength(marker) - 4
+              const head = unit.repeat(Math.floor(Math.ceil(available / 2) / width))
+              const tail = unit.repeat(Math.floor(Math.floor(available / 2) / width))
+              expect(result.output.content).toEqual([{ type: "text", text: `${head}\n\n${marker}\n\n${tail}` }])
+              expect(Buffer.byteLength(`${head}\n\n${marker}\n\n${tail}`)).toBeLessThanOrEqual(maxBytes)
+            }
+          }),
+        new Config.Info({ tool_output: new ConfigToolOutput.Info({ max_bytes: maxBytes }) }),
+      ),
+    ),
+  )
+
+  it.live("keeps mixed-width suffixes in their original order", () =>
+    withStore(
+      ({ store, fs }) =>
+        Effect.gen(function* () {
+          const text = "a".repeat(1_024) + "é中😀Q"
+          const result = yield* store.bound({
+            sessionID,
+            toolCallID: "call-mixed-suffix",
+            output: { structured: {}, content: [{ type: "text", text }] },
+          })
+          const marker = `... output truncated; full content saved to ${result.outputPaths[0]} ...`
+          const available = 512 - Buffer.byteLength(marker) - 4
+          const head = "a".repeat(Math.ceil(available / 2))
+          const tail = "a".repeat(Math.floor(available / 2) - 10) + "é中😀Q"
+          expect(result.output.content).toEqual([{ type: "text", text: `${head}\n\n${marker}\n\n${tail}` }])
+          expect(yield* fs.readFileString(result.outputPaths[0])).toBe(text)
+        }),
+      new Config.Info({ tool_output: new ConfigToolOutput.Info({ max_bytes: 512 }) }),
+    ),
+  )
+
+  it.live("stops at the first suffix character that exceeds a tight byte budget", () => {
+    const limits = { maxBytes: 512 }
+    return withStore(
+      ({ store }) =>
+        Effect.gen(function* () {
+          const initial = yield* store.bound({
+            sessionID,
+            toolCallID: "call-marker-size",
+            output: { structured: {}, content: [{ type: "text", text: "a".repeat(1_024) }] },
+          })
+          const markerBytes = Buffer.byteLength(
+            `... output truncated; full content saved to ${initial.outputPaths[0]} ...`,
+          )
+          for (const [ending, budget, tail] of [
+            ["é", 1, ""],
+            ["é", 2, "é"],
+            ["😀", 3, ""],
+            ["😀", 4, "😀"],
+            ["😀a", 4, "a"],
+            ["😀a", 5, "😀a"],
+            ["\ud800", Buffer.byteLength("\ud800", "utf-8") - 1, ""],
+            ["\ud800", Buffer.byteLength("\ud800", "utf-8"), "\ud800"],
+            ["\udc00", Buffer.byteLength("\udc00", "utf-8") - 1, ""],
+            ["\udc00", Buffer.byteLength("\udc00", "utf-8"), "\udc00"],
+            ["\ud800\ud800\udc00", 4, "\ud800\udc00"],
+            ["\ud800\udc00\udc00", 3, "\udc00"],
+            ["\udc00\ud800", 3, "\ud800"],
+          ] as const) {
+            limits.maxBytes = markerBytes + 4 + budget * 2
+            const result = yield* store.bound({
+              sessionID,
+              toolCallID: "call-tight-suffix",
+              output: { structured: {}, content: [{ type: "text", text: "a".repeat(1_024) + ending }] },
+            })
+            const marker = `... output truncated; full content saved to ${result.outputPaths[0]} ...`
+            const text = "a".repeat(budget) + "\n\n" + marker + (tail ? "\n\n" + tail : "")
+            expect(result.output.content).toEqual([{ type: "text", text }])
+            expect(Buffer.byteLength(text)).toBeLessThanOrEqual(limits.maxBytes)
+          }
+        }),
+      () => new Config.Info({ tool_output: new ConfigToolOutput.Info({ max_bytes: limits.maxBytes }) }),
+    )
+  })
 
   it.live("preserves native media and structured metadata without applying a settlement media limit", () =>
     withStore(({ store }) =>
