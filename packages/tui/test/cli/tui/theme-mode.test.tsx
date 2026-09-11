@@ -1,13 +1,21 @@
 /** @jsxImportSource @opentui/solid */
-import { testRender } from "@opentui/solid"
+import { render, testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
-import { RGBA } from "@opentui/core"
+import { CliRenderEvents, RGBA, type TerminalColors } from "@opentui/core"
+import { createTestRenderer } from "@opentui/core/testing"
 import { createSignal } from "solid-js"
 import { DEFAULT_THEME, selectTheme } from "@opencode/theme/tui"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { DEFAULT_THEMES } from "../../../src/theme"
 import { ConfigProvider } from "../../../src/config"
-import { ThemeContextProvider, ThemeProvider, type ThemeError, useTheme, useThemes } from "../../../src/context/theme"
+import {
+  ThemeContextProvider,
+  ThemeProvider,
+  type ThemeError,
+  type ThemeSource,
+  useTheme,
+  useThemes,
+} from "../../../src/context/theme"
 
 async function wait(fn: () => boolean) {
   const started = Date.now()
@@ -222,3 +230,156 @@ test.each(["dark", "light"] as const)(
     }
   },
 )
+
+test("does not request terminal colors before a named theme is usable", async () => {
+  await using app = await renderPaletteTheme({ name: "opencode" })
+
+  expect(app.paletteCalls()).toBe(0)
+  expect(app.themes.selected).toBe("opencode")
+  app.themes.prepareSystem()
+  await wait(() => app.paletteCalls() === 1)
+})
+
+test("resolves the system theme from the terminal palette", async () => {
+  await using app = await renderPaletteTheme({ name: "system", colors: terminalColors("#101010") })
+
+  expect(app.paletteCalls()).toBe(1)
+  expect(app.themes.selected).toBe("system")
+  expect(app.themes.mode()).toBe("dark")
+})
+
+test("refreshes the system palette after a terminal theme notification", async () => {
+  await using app = await renderPaletteTheme({ name: "system", colors: terminalColors("#101010") })
+
+  app.notify("\x1b[?997;2n")
+  await wait(() => app.paletteCalls() === 2)
+  expect(app.themes.mode()).toBe("dark")
+})
+
+test.each([
+  ["dark", "#fefefe"],
+  ["light", "#010101"],
+] as const)("keeps an explicit %s mode when the terminal reports the opposite mode", async (mode, background) => {
+  await using app = await renderPaletteTheme({ name: "system", mode, colors: terminalColors(background) })
+
+  expect(app.themes.mode()).toBe(mode)
+})
+
+test("removes theme handlers and pending refreshes on cleanup", async () => {
+  let refresh = () => {}
+  let unsubscribed = false
+  const app = await renderPaletteTheme({
+    name: "opencode",
+    source: {
+      discover: async () => ({}),
+      subscribeRefresh(next) {
+        refresh = next
+        return () => {
+          unsubscribed = true
+        }
+      },
+    },
+  })
+
+  expect(app.renderer.listenerCount(CliRenderEvents.THEME_MODE)).toBe(1)
+  refresh()
+  app.renderer.destroy()
+  await Bun.sleep(1100)
+  expect(app.paletteCalls()).toBe(0)
+  expect(app.renderer.listenerCount(CliRenderEvents.THEME_MODE)).toBe(0)
+  expect(app.removedNotificationHandler()).toBeTrue()
+  expect(unsubscribed).toBeTrue()
+})
+
+function terminalColors(background: string): TerminalColors {
+  return {
+    palette: [
+      "#000000",
+      "#cc0000",
+      "#00cc00",
+      "#cccc00",
+      "#0000cc",
+      "#cc00cc",
+      "#00cccc",
+      "#cccccc",
+      "#555555",
+      "#ff0000",
+      "#00ff00",
+      "#ffff00",
+      "#0000ff",
+      "#ff00ff",
+      "#00ffff",
+      "#ffffff",
+    ],
+    defaultForeground: "#eeeeee",
+    defaultBackground: background,
+    cursorColor: null,
+    mouseForeground: null,
+    mouseBackground: null,
+    tekForeground: null,
+    tekBackground: null,
+    highlightBackground: null,
+    highlightForeground: null,
+  }
+}
+
+async function renderPaletteTheme(input: {
+  name: "opencode" | "system"
+  mode?: "dark" | "light"
+  colors?: TerminalColors
+  source?: ThemeSource
+}) {
+  const setup = await createTestRenderer({ width: 20, height: 2 })
+  const colors = input.colors ?? terminalColors("#101010")
+  let paletteCalls = 0
+  let notificationHandler: ((sequence: string) => boolean) | undefined
+  let removedNotificationHandler = false
+  const prependInputHandler = setup.renderer.prependInputHandler.bind(setup.renderer)
+  const removeInputHandler = setup.renderer.removeInputHandler.bind(setup.renderer)
+  setup.renderer.getPalette = async () => {
+    paletteCalls++
+    return colors
+  }
+  setup.renderer.prependInputHandler = (handler) => {
+    notificationHandler = handler
+    prependInputHandler(handler)
+  }
+  setup.renderer.removeInputHandler = (handler) => {
+    if (handler === notificationHandler) removedNotificationHandler = true
+    removeInputHandler(handler)
+  }
+  let themes: ReturnType<typeof useThemes> | undefined
+
+  function Probe() {
+    themes = useThemes()
+    return <text>{themes.selected}</text>
+  }
+
+  await render(
+    () => (
+      <ConfigProvider config={createTuiResolvedConfig({ theme: { name: input.name, mode: input.mode } })}>
+        <ThemeProvider mode="dark" source={input.source ?? { discover: async () => ({}) }}>
+          <Probe />
+        </ThemeProvider>
+      </ConfigProvider>
+    ),
+    setup.renderer,
+  )
+  setup.renderer.start()
+  await wait(() => themes?.ready === true)
+  if (!themes) throw new Error("Theme provider is not mounted")
+
+  return {
+    renderer: setup.renderer,
+    themes,
+    paletteCalls: () => paletteCalls,
+    notify(sequence: string) {
+      if (!notificationHandler) throw new Error("Theme notification handler is not registered")
+      notificationHandler(sequence)
+    },
+    removedNotificationHandler: () => removedNotificationHandler,
+    async [Symbol.asyncDispose]() {
+      setup.renderer.destroy()
+    },
+  }
+}

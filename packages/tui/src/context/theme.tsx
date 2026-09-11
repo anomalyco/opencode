@@ -116,6 +116,7 @@ type Themes = {
   unlock(): void
   setMode(mode?: "dark" | "light", persist?: boolean): boolean
   set(theme: string): boolean
+  prepareSystem(): void
   onError(handler: ThemeErrorHandler): () => void
   readonly ready: boolean
 }
@@ -184,7 +185,10 @@ const themeContext = createSimpleContext({
     }
 
     onMount(() => {
-      void Promise.allSettled([resolveSystemTheme(store.mode), syncCustomThemes()]).finally(() => {
+      void Promise.allSettled([
+        ...(store.active === "system" ? [resolveSystemTheme(store.mode)] : []),
+        syncCustomThemes(),
+      ]).finally(() => {
         valuesV2()
         setStore("ready", true)
       })
@@ -342,6 +346,10 @@ const themeContext = createSimpleContext({
         if (!modes().includes(requested)) return false
         pin(requested, persist)
         return true
+      },
+      prepareSystem() {
+        if (hasResolvedSystemTheme || systemRefreshRunning) return
+        refreshSystemTheme()
       },
       set(theme: string) {
         if (!hasTheme(theme)) return false

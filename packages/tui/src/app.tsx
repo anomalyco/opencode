@@ -285,8 +285,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       )
       renderer.once("destroy", () => shutdown.openUnsafe())
       yield* Effect.tryPromise(async () => {
-        // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
-        void renderer.getPalette({ size: 16 }).catch(() => undefined)
+        // The system theme needs terminal colors before its first paint. Named themes do not.
+        if (config.theme?.name === "system") void renderer.getPalette({ size: 16 }).catch(() => undefined)
         const mode = handoff?.mode ?? (await renderer.waitForThemeMode(1000)) ?? "dark"
         if (renderer.isDestroyed) return
 
@@ -484,7 +484,8 @@ function App(props: { pair?: DialogPairCredentials }) {
   const toast = useToast()
   const updater = useUpdateNotification()
   const theme = useTheme()
-  const { mode, supports, setMode, locked, lock, unlock } = useThemes()
+  const themes = useThemes()
+  const { mode, supports, setMode, locked, lock, unlock } = themes
   const data = useData()
   const location = useLocation()
   const exit = useExit()
@@ -492,6 +493,16 @@ function App(props: { pair?: DialogPairCredentials }) {
   const plugins = usePlugin()
   const clipboard = useClipboard()
   const terminalEnvironment = useTuiTerminalEnvironment()
+  let systemThemeTimeout: ReturnType<typeof setTimeout> | undefined
+  const prepareSystemTheme = () => {
+    // The native writer can still be flushing the frame when FRAME fires. Keep OSC probes behind visible app output.
+    systemThemeTimeout = setTimeout(themes.prepareSystem, 50)
+  }
+  onMount(() => renderer.once(CliRenderEvents.FRAME, prepareSystemTheme))
+  onCleanup(() => {
+    renderer.off(CliRenderEvents.FRAME, prepareSystemTheme)
+    if (systemThemeTimeout) clearTimeout(systemThemeTimeout)
+  })
   createEffect(() => {
     if (client.connection.status() !== "connected") return
     if (route.data.type !== "session") return
