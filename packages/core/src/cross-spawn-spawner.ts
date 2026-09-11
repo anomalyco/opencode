@@ -273,8 +273,16 @@ export const make = Effect.gen(function* () {
       proc.on("error", (err) => {
         resume(Effect.fail(toPlatformError("spawn", err, command)))
       })
+      // fix(win32-close-vs-exit): exit-first, not close-first.
+      // Node emits `exit` when the process ends and `close` when stdio
+      // pipes are closed. A grandchild holding an inherited pipe
+      // delays `close` indefinitely. Resolving on `exit` gives
+      // Claude-style exit semantics; streams drain separately.
       proc.on("exit", (...args) => {
         exit = args
+        if (end) return
+        end = true
+        Deferred.doneUnsafe(signal, Exit.succeed(args))
       })
       proc.on("close", (...args) => {
         if (end) return
@@ -505,3 +513,4 @@ const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSystem | Pat
 export const node = makeGlobalNode({ service: ChildProcessSpawner, layer, deps: [filesystem, path] })
 
 export * as CrossSpawnSpawner from "./cross-spawn-spawner"
+
