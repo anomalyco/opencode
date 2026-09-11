@@ -946,10 +946,6 @@ export function Session(props: {
       id: "session.toggle.thinking",
       group: "Session",
       palette: undefined,
-      slash: {
-        name: "thinking",
-        aliases: ["toggle-thinking"],
-      },
       run: () => {
         void configState
           .update((draft) => {
