@@ -64,7 +64,6 @@ describe("AISDKNative", () => {
           apiKey: "secret",
           baseURL: `https://${name}.example/v1`,
           headers: { "x-provider": name },
-          name: "custom-provider",
           reasoningEffort: "high",
           customOption: { enabled: true },
         }),

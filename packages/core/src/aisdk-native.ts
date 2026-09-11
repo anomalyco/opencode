@@ -18,9 +18,6 @@ export interface MapInput {
   readonly providerID: string
 }
 
-// AI SDK constructor options with no native counterpart.
-const LEGACY_KEYS = ["compatibility", "generateId", "name", "useCompletionUrls"] as const
-
 /**
  * Maps a legacy AI SDK package and its settings onto the native `@opencode/ai` package that replaces it.
  * Settings stay flat; only spellings that differ between the AI SDK and the native package are translated.
@@ -32,7 +29,7 @@ export function map(input: MapInput): Mapping | undefined {
   const converse = native === "@opencode/ai/providers/amazon-bedrock"
   // AI SDK constructors take request overlays as `headers` and `extraBody`; the mapping carries them separately.
   const settings = {
-    ...Struct.omit(input.settings, ["headers", "extraBody", ...LEGACY_KEYS, ...OPENROUTER_HEADER_KEYS]),
+    ...Struct.omit(input.settings, ["headers", "extraBody", ...OPENROUTER_KEYS]),
     ...(native === "@opencode/ai/providers/openai-compatible" ? { provider: input.providerID } : {}),
   }
   return {
@@ -193,8 +190,9 @@ function bedrockRegion(settings: Readonly<Record<string, unknown>>) {
 }
 
 // The AI SDK OpenRouter package takes app attribution and BYOK keys as constructor options; the native
-// package reads them as headers.
-const OPENROUTER_HEADER_KEYS = ["appName", "appUrl", "api_keys"] as const
+// package reads them as headers. The native package forwards unknown request options to the request body,
+// so the AI SDK constructor's `compatibility` must not reach it either.
+const OPENROUTER_KEYS = ["appName", "appUrl", "api_keys", "compatibility"] as const
 
 function openRouterRequest(settings: Readonly<Record<string, unknown>>): Pick<Mapping, "headers"> {
   const headers =
