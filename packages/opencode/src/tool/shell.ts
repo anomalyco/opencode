@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Duration, Effect, Fiber, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -290,8 +290,21 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan,
   })
 })
 
+// fix(win32-start-process): single-side RedirectStandardOutput/Error leaves the
+// other pipe inherited. Auto-complete the missing side to $null so the
+// parent can exit; explicit double redirect still wins.
+function normalizeWin32PsCommand(command: string): string {
+  if (!/Start-Process/i.test(command)) return command
+  const hasOut = /-RedirectStandardOutput\b/i.test(command)
+  const hasErr = /-RedirectStandardError\b/i.test(command)
+  if (hasOut === hasErr) return command
+  if (hasOut && !hasErr) return command + ' -RedirectStandardError "$null"'
+  return command + ' -RedirectStandardOutput "$null"'
+}
+
 function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
   if (process.platform === "win32" && Shell.ps(shell)) {
+    command = normalizeWin32PsCommand(command)
     return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
       cwd,
       env,
@@ -483,7 +496,9 @@ export const ShellTool = Tool.define(
           yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
-          yield* Effect.forkScoped(
+          // Bounded drain: forkScoped would otherwise keep Effect.scoped
+          // open forever when a grandchild holds the pipe (close vs exit).
+          const drain = yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
               const size = Buffer.byteLength(chunk, "utf-8")
               list.push({ text: chunk, size })
@@ -553,6 +568,13 @@ export const ShellTool = Tool.define(
             expired = true
             yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
           }
+
+          // Give drain a brief grace to flush, then interrupt so scoped can
+          // settle even if close/EOF never arrives (leaked pipe).
+          yield* Fiber.interrupt(drain).pipe(
+            Effect.timeoutOption(Duration.millis(500)),
+            Effect.ignore,
+          )
 
           return exit.kind === "exit" ? exit.code : null
         }),
@@ -643,3 +665,4 @@ export const ShellTool = Tool.define(
       })
   }),
 )
+
