@@ -896,8 +896,14 @@ export const dict = {
   "sidebar.project.clearNotifications": "Bildirimleri temizle",
   "sidebar.empty.title": "Açık proje yok",
   "sidebar.empty.description": "Başlamak için bir proje açın",
-  "sidebar.archived": "Arşivlendi",
-  "sidebar.archived.restore": "Oturumu geri yükle",
+  "sidebar.settled": "Kapatılan",
+  "sidebar.settle": "Konuyu kapat",
+  "sidebar.unsettle": "Konuyu yeniden aç",
+  "sidebar.thread.new": "Yeni konu",
+  "sidebar.thread.pin": "Konuyu sabitle",
+  "sidebar.thread.unpin": "Sabitlemeyi kaldır",
+  "sidebar.status.working": "Çalışıyor",
+  "sidebar.status.done": "Bitti",
 
   "app.name.desktop": "OpenCode Masaüstü",
 
@@ -922,8 +928,8 @@ export const dict = {
   "settings.general.row.navigation.description": "Başlık çubuğunda sekmeler veya kalıcı bir kenar çubuğu kullan",
   "settings.general.row.navigation.tabs": "Sekmeler",
   "settings.general.row.navigation.sidebar": "Kenar çubuğu",
-  "settings.general.row.sidebarSessions.title": "Boşta oturumları şu süreden sonra arşivle",
-  "settings.general.row.sidebarSessions.description": "Boşta oturumlar Arşivlendi bölümüne taşınır. Çalışan oturumlar görünür kalır.",
+  "settings.general.row.sidebarSessions.title": "Boştaki konuları kapatma süresi",
+  "settings.general.row.sidebarSessions.description": "Boştaki konular kapatılanlara taşınır. Çalışan konular görünür kalır.",
   "settings.general.row.sidebarSessions.always": "Her zaman göster",
   "settings.general.row.shell.title": "Terminal Kabuğu",
   "settings.general.row.shell.description":

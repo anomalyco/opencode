@@ -1,8 +1,10 @@
-import { createMemo, createSignal, For, onCleanup, Show, startTransition } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show, startTransition } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { useQuery } from "@tanstack/solid-query"
 import type { GlobalSession } from "@opencode-ai/sdk/v2/client"
 import { Binary } from "@opencode-ai/core/util/binary"
+import { SessionProgressIndicatorV2 } from "@opencode-ai/session-ui/v2/session-progress-indicator-v2"
+import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
@@ -21,12 +23,13 @@ import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { useSettings } from "@/context/settings"
 import { usePlatform } from "@/context/platform"
+import { useCommand } from "@/context/command"
 import { sessionHasOpenTab, useTabs } from "@/context/tabs"
 import { createHomeController } from "@/pages/home/home-controller"
 import { createHomeProjectsController } from "@/pages/home/home-projects-controller"
 import { archiveHomeSession } from "@/pages/home-session-archive"
 import { shouldOpenSessionInBackground } from "@/pages/home-session-open"
-import { errorMessage } from "@/pages/layout/helpers"
+import { displayName, errorMessage } from "@/pages/layout/helpers"
 import {
   buildSidebarRecords,
   groupSidebarRecords,
@@ -48,14 +51,25 @@ type SidebarProjectSection = SidebarProjectGroup & {
   hidden: SidebarSessionRecord[]
 }
 
+type SettledGroup = {
+  key: string
+  project: LocalProject
+  name: string
+  local: SidebarSessionRecord[]
+  archived: SidebarSessionRecord[]
+}
+
 const SESSION_LIMIT = 64
 const ARCHIVED_LIMIT = 100
 const AGE_TICK = 60_000
+const STATUS_TICK = 1_000
 const SECTION_LABEL = "px-3 pb-1 pt-3 text-v2-text-text-muted [font-weight:440]"
 const ROW =
   "group/row relative flex h-7 min-w-0 w-full shrink-0 cursor-default items-center gap-2 rounded-[6px] bg-transparent px-1.5 text-start text-v2-text-text-muted [font-weight:440] transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base data-[selected=true]:bg-v2-background-bg-layer-03 data-[selected=true]:text-v2-text-text-base data-[selected=true]:hover:bg-v2-background-bg-layer-03 focus-visible:bg-v2-background-bg-layer-01 focus-visible:text-v2-text-text-base focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]"
 const ROW_ACTIONS =
   "hover-reveal absolute end-1 top-1/2 flex -translate-y-1/2 items-center gap-1 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
+// Reserve room for the hover-revealed row actions so long titles never sit under them.
+const TITLE = "min-w-0 flex-1 truncate transition-[padding-inline-end] duration-[120ms] ease-in-out"
 
 function titleOf(session: { title?: string; parentID?: string; time: { created: number } }) {
   return sessionTitle(session.title) ?? withTimestampedFallback(session)
@@ -77,15 +91,25 @@ export function NavigationSidebar() {
   const layout = useLayout()
   const settings = useSettings()
   const tabs = useTabs()
+  const command = useCommand()
   const home = createHomeController()
   const projects = createHomeProjectsController(home)
 
   const [filter, setFilter] = createSignal("")
   const [now, setNow] = createSignal(Date.now())
+  const [tick, setTick] = createSignal(Date.now())
   const [state, setState] = persisted(
     Persist.global("sidebar.navigation", ["sidebar.navigation.v1"]),
-    createStore({ collapsed: {} as Record<string, boolean>, settledOpen: false }),
+    createStore({
+      collapsed: {} as Record<string, boolean>,
+      settledOpen: false,
+      pins: {} as Record<string, boolean>,
+    }),
   )
+  const [status, setStatus] = createStore({
+    started: {} as Record<string, number>,
+    done: {} as Record<string, number>,
+  })
 
   const ticker = setInterval(() => setNow(Date.now()), AGE_TICK)
   onCleanup(() => clearInterval(ticker))
@@ -133,6 +157,50 @@ export function NavigationSidebar() {
   })
   const working = (sessionID: string) => home.server.focusedSync().session.data.session_working(sessionID)
 
+  const anyWorking = createMemo(() => sessions().some((session) => working(session.id)))
+  createEffect(() => {
+    if (!anyWorking()) return
+    const timer = setInterval(() => setTick(Date.now()), STATUS_TICK)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  createEffect(() => {
+    for (const session of sessions()) {
+      const started = status.started[session.id]
+      if (working(session.id) && started === undefined) setStatus("started", session.id, Date.now())
+      if (!working(session.id) && started !== undefined)
+        setStatus(
+          produce((draft) => {
+            delete draft.started[session.id]
+            draft.done[session.id] = Date.now()
+          }),
+        )
+    }
+  })
+
+  createEffect(() => {
+    const current = currentSession()
+    if (!current || status.done[current] === undefined) return
+    setStatus(
+      produce((draft) => {
+        delete draft.done[current]
+      }),
+    )
+  })
+
+  // Open tabs whose session is missing from the index mean the cache lagged behind a promotion.
+  const [missingKey, setMissingKey] = createSignal("")
+  createEffect(() => {
+    const known = new Set(sessions().map((session) => session.id))
+    const missing = tabs.store
+      .flatMap((tab) => (tab.type === "session" && tab.server === serverKey() && !known.has(tab.sessionId) ? [tab.sessionId] : []))
+      .sort()
+      .join(",")
+    if (!missing || missing === missingKey()) return
+    setMissingKey(missing)
+    void sessionIndex.refetch()
+  })
+
   const groups = createMemo((): SidebarProjectSection[] => {
     const records = buildSidebarRecords({ sessions: sessions(), projects: home.project.list() }).filter((record) =>
       matchesSidebarFilter(record, filter()),
@@ -141,7 +209,7 @@ export function NavigationSidebar() {
       ...group,
       ...partitionSidebarRecords({
         records: group.records,
-        pinned: (record) => isPinned(record),
+        pinned: (record) => alwaysVisible(record),
         days: settings.general.sidebarSessionDays() ?? 3,
         now: now(),
       }),
@@ -169,7 +237,37 @@ export function NavigationSidebar() {
     staleTime: 30_000,
   }))
 
-  function isPinned(record: SidebarSessionRecord) {
+  const settledGroups = createMemo((): SettledGroup[] => {
+    const groups = new Map<string, SettledGroup>()
+    const push = (record: SidebarSessionRecord, kind: "local" | "archived") => {
+      const key = pathKey(record.project.worktree)
+      const group = groups.get(key) ?? { key, project: record.project, name: record.name, local: [], archived: [] }
+      group[kind].push(record)
+      groups.set(key, group)
+    }
+    settled().forEach((record) => push(record, "local"))
+    ;(archived.data ?? []).forEach((session) => push(archivedRecord(session), "archived"))
+    return [...groups.values()]
+  })
+  const settledCount = createMemo(() => settled().length + (archived.data ?? []).length)
+
+  function archivedRecord(session: GlobalSession): SidebarSessionRecord {
+    const project: LocalProject =
+      projectOf(session) ?? {
+        id: session.project?.id,
+        name: session.project?.name,
+        worktree: session.directory,
+        expanded: false,
+      }
+    return { session, project, name: displayName(project) }
+  }
+
+  function isPinned(sessionID: string) {
+    return state.pins[sessionID] === true
+  }
+
+  function alwaysVisible(record: SidebarSessionRecord) {
+    if (isPinned(record.session.id)) return true
     if (record.session.id === currentSession()) return true
     if (working(record.session.id)) return true
     return sessionHasOpenTab(tabs.store, serverKey(), record.session)
@@ -178,6 +276,10 @@ export function NavigationSidebar() {
   function projectOf(session: { directory: string }) {
     const directory = pathKey(session.directory)
     return home.project.list().find((item) => pathKey(item.worktree) === directory)
+  }
+
+  function branchOf(directory: string) {
+    return home.server.focusedSync().child(directory)[0].vcs?.branch
   }
 
   function open(session: { id: string; directory: string }, project: LocalProject | undefined, event?: MouseEvent) {
@@ -234,7 +336,7 @@ export function NavigationSidebar() {
     })()
   }
 
-  function unsettle(session: GlobalSession) {
+  function unsettle(session: { id: string; directory: string }) {
     void (async () => {
       const conn = home.server.focused()
       const ctx = home.server.focusedContext()
@@ -262,8 +364,35 @@ export function NavigationSidebar() {
     tabs.removeSessionTab({ server: serverKey(), sessionId: record.session.id })
   }
 
+  function togglePin(sessionID: string) {
+    setState("pins", sessionID, (value) => value !== true)
+  }
+
   const canCreate = createMemo(() => !!home.project.newSession())
   const connection = createMemo(() => home.server.focused())
+
+  function newThread() {
+    const conn = connection()
+    const current = currentSession()
+    const directory = current ? sessions().find((session) => session.id === current)?.directory : undefined
+    const target = directory ?? home.selection.value().directory
+    if (!conn || !target) {
+      home.project.openNewSession()
+      return
+    }
+    home.project.openProjectNewSession(conn, target)
+  }
+
+  command.register(() => [
+    {
+      id: "sidebar.thread.new",
+      title: language.t("sidebar.thread.new"),
+      category: language.t("command.category.session"),
+      keybind: "mod+shift+n",
+      disabled: !canCreate(),
+      onSelect: () => newThread(),
+    },
+  ])
 
   return (
     <aside
@@ -276,11 +405,11 @@ export function NavigationSidebar() {
             type="button"
             data-action="sidebar-new-session"
             disabled={!canCreate()}
-            onClick={() => home.project.openNewSession()}
+            onClick={newThread}
             class="flex h-7 min-w-0 flex-1 cursor-default items-center gap-2 rounded-[6px] bg-v2-background-bg-layer-01 px-2 text-start text-v2-text-text-base [font-weight:530] transition-[background-color,color] duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)] disabled:opacity-50"
           >
             <IconV2 name="edit" class="size-3.5 shrink-0 text-v2-icon-icon-muted" />
-            <span class="truncate">{language.t("command.session.new")}</span>
+            <span class="truncate">{language.t("sidebar.thread.new")}</span>
           </button>
           <TooltipV2 value={language.t("home.project.add")} placement="bottom-end">
             <IconButtonV2
@@ -342,7 +471,12 @@ export function NavigationSidebar() {
                 server={serverKey()}
                 collapsed={state.collapsed[group.key] === true}
                 current={currentSession()}
+                pinned={isPinned}
+                started={(sessionID) => status.started[sessionID]}
+                done={(sessionID) => status.done[sessionID]}
                 working={working}
+                tick={() => tick()}
+                branch={branchOf}
                 unseen={() => {
                   const conn = connection()
                   if (!conn) return 0
@@ -355,6 +489,7 @@ export function NavigationSidebar() {
                 onToggleCollapsed={() => setState("collapsed", group.key, (value) => !value)}
                 onOpen={open}
                 onSettle={settle}
+                onTogglePin={togglePin}
                 onCloseTab={closeTab}
                 onNewSession={() => {
                   const conn = connection()
@@ -380,70 +515,83 @@ export function NavigationSidebar() {
             )}
           </For>
 
-          <div class={SECTION_LABEL}>{language.t("sidebar.archived")}</div>
+          <Show when={settledCount() > 0}>
+            <div class={SECTION_LABEL}>{language.t("sidebar.settled")}</div>
 
-          <button
-            type="button"
-            data-action="sidebar-settled-toggle"
-            aria-expanded={archivedOpen()}
-            onClick={() => setState("settledOpen", (value) => !value)}
-            class={ROW}
-          >
-            <IconV2
-              name="chevron-down"
-              class={`size-3 shrink-0 text-v2-icon-icon-muted transition-transform duration-[120ms] ${archivedOpen() ? "" : "-rotate-90"}`}
-            />
-            <IconV2 name="archive" class="size-3.5 shrink-0 text-v2-icon-icon-muted" />
-            <span class="min-w-0 flex-1 truncate">{language.t("sidebar.archived")}</span>
-          </button>
+            <button
+              type="button"
+              data-action="sidebar-settled-toggle"
+              aria-expanded={archivedOpen()}
+              onClick={() => setState("settledOpen", (value) => !value)}
+              class={ROW}
+            >
+              <IconV2
+                name="chevron-down"
+                class={`size-3 shrink-0 text-v2-icon-icon-muted transition-transform duration-[120ms] ${archivedOpen() ? "" : "-rotate-90"}`}
+              />
+              <IconV2 name="archive" class="size-3.5 shrink-0 text-v2-icon-icon-muted" />
+              <span class={`${TITLE} group-hover/row:pe-8`}>{language.t("sidebar.settled")}</span>
+              <span class="shrink-0 text-xs text-v2-text-text-faint transition-opacity duration-[120ms] group-hover/row:opacity-0">
+                {settledCount()}
+              </span>
+            </button>
 
-          <Show when={archivedOpen()}>
-            <Show when={archived.isLoading}>
-              <div class="flex items-center justify-center py-3 text-v2-text-text-faint">
-                <Spinner class="size-3.5 shrink-0" />
-              </div>
-            </Show>
-            <Show when={!archived.isLoading && (archived.data ?? []).length === 0 && settled().length === 0}>
-              <div class="px-3 py-2 text-xs text-v2-text-text-faint">{language.t("sidebar.empty.description")}</div>
-            </Show>
-            <For each={settled()}>
-              {(record) => (
-                <SidebarSessionRow
-                  record={record}
-                  server={serverKey()}
-                  current={currentSession() === record.session.id}
-                  onOpen={open}
-                  onSettle={() => settle(record)}
-                  onCloseTab={() => closeTab(record)}
-                />
-              )}
-            </For>
-            <For each={archived.data ?? []}>
-              {(session) => (
-                <div class="flex min-w-0 items-center gap-1">
-                  <button
-                    type="button"
-                    data-action="sidebar-settled-session"
-                    onClick={(event) => open(session, projectOf(session), event)}
-                    class={`${ROW} min-w-0 flex-1`}
-                  >
-                    <span class="min-w-0 flex-1 truncate">{titleOf(session)}</span>
-                  </button>
-                  <div class="shrink-0">
-                    <TooltipV2 value={language.t("sidebar.archived.restore")} placement="top-end">
-                      <IconButtonV2
-                        data-action="sidebar-unsettle"
-                        variant="ghost-muted"
-                        size="small"
-                        icon={<IconV2 name="outline-reset" />}
-                        aria-label={language.t("sidebar.archived.restore")}
-                        onClick={() => unsettle(session)}
-                      />
-                    </TooltipV2>
-                  </div>
+            <Show when={archivedOpen()}>
+              <Show when={archived.isLoading}>
+                <div class="flex items-center justify-center py-3 text-v2-text-text-faint">
+                  <Spinner class="size-3.5 shrink-0" />
                 </div>
-              )}
-            </For>
+              </Show>
+              <Show when={!archived.isLoading && settledGroups().length === 0}>
+                <div class="px-3 py-2 text-xs text-v2-text-text-faint">{language.t("sidebar.empty.description")}</div>
+              </Show>
+              <For each={settledGroups()}>
+                {(group) => (
+                  <div class="flex min-w-0 flex-col">
+                    <div class="flex h-6 min-w-0 items-center gap-1.5 px-1.5">
+                      <SessionTabAvatarView
+                        project={group.project}
+                        directory={group.project.worktree}
+                        unread={false}
+                        loading={false}
+                      />
+                      <span class="min-w-0 flex-1 truncate text-xs text-v2-text-text-faint">{group.name}</span>
+                    </div>
+                    <div class="flex flex-col gap-0.5 pb-1 ps-6">
+                      <For each={group.local}>
+                        {(record) => (
+                          <SidebarSessionRow
+                            record={record}
+                            server={serverKey()}
+                            current={currentSession() === record.session.id}
+                            settled
+                            pinned={isPinned(record.session.id)}
+                            tick={() => tick()}
+                            branch={branchOf}
+                            onOpen={open}
+                            onUnsettle={() => togglePin(record.session.id)}
+                          />
+                        )}
+                      </For>
+                      <For each={group.archived}>
+                        {(record) => (
+                          <SidebarSessionRow
+                            record={record}
+                            server={serverKey()}
+                            current={currentSession() === record.session.id}
+                            settled
+                            tick={() => tick()}
+                            branch={branchOf}
+                            onOpen={open}
+                            onUnsettle={() => unsettle(record.session)}
+                          />
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                )}
+              </For>
+            </Show>
           </Show>
         </div>
       </ScrollView>
@@ -475,12 +623,18 @@ function SidebarProject(props: {
   server: ServerConnection.Key
   collapsed: boolean
   current: string | undefined
+  pinned: (sessionID: string) => boolean
+  started: (sessionID: string) => number | undefined
+  done: (sessionID: string) => number | undefined
   working: (sessionID: string) => boolean
+  tick: () => number
+  branch: (directory: string) => string | undefined
   unseen: () => number
   canReveal: () => boolean
   onToggleCollapsed: () => void
   onOpen: (session: { id: string; directory: string }, project: LocalProject | undefined, event?: MouseEvent) => void
   onSettle: (record: SidebarSessionRecord) => void
+  onTogglePin: (sessionID: string) => void
   onCloseTab: (record: SidebarSessionRecord) => void
   onNewSession: () => void
   onEdit: () => void
@@ -491,7 +645,6 @@ function SidebarProject(props: {
   const language = useLanguage()
   const platform = usePlatform()
   const [menuOpen, setMenuOpen] = createSignal(false)
-  const projectWorking = createMemo(() => props.group.visible.some((record) => props.working(record.session.id)))
 
   return (
     <div class="flex min-w-0 flex-col">
@@ -511,21 +664,25 @@ function SidebarProject(props: {
             project={props.group.project}
             directory={props.group.project.worktree}
             unread={props.unseen() > 0}
-            loading={projectWorking()}
+            loading={false}
           />
-          <span class="min-w-0 flex-1 truncate [font-weight:530] text-v2-text-text-base">{props.group.name}</span>
+          <span class={`${TITLE} [font-weight:530] text-v2-text-text-base group-hover/row:pe-14`}>
+            {props.group.name}
+          </span>
           <Show when={props.group.visible.length > 0}>
-            <span class="shrink-0 text-xs text-v2-text-text-faint">{props.group.visible.length}</span>
+            <span class="shrink-0 text-xs text-v2-text-text-faint transition-opacity duration-[120ms] group-hover/row:opacity-0">
+              {props.group.visible.length}
+            </span>
           </Show>
         </button>
         <div class={ROW_ACTIONS} data-menu={menuOpen()}>
-          <TooltipV2 value={language.t("command.session.new")} placement="top-end">
+          <TooltipV2 value={language.t("sidebar.thread.new")} placement="top-end">
             <IconButtonV2
               data-action="sidebar-project-new-session"
               variant="ghost-muted"
               size="small"
               icon={<IconV2 name="edit" />}
-              aria-label={language.t("command.session.new")}
+              aria-label={language.t("sidebar.thread.new")}
               onClick={props.onNewSession}
             />
           </TooltipV2>
@@ -546,7 +703,7 @@ function SidebarProject(props: {
             />
             <MenuV2.Portal>
               <MenuV2.Content>
-                <MenuV2.Item onSelect={props.onNewSession}>{language.t("command.session.new")}</MenuV2.Item>
+                <MenuV2.Item onSelect={props.onNewSession}>{language.t("sidebar.thread.new")}</MenuV2.Item>
                 <MenuV2.Item onSelect={props.onEdit}>{language.t("dialog.project.edit.title")}</MenuV2.Item>
                 <Show when={props.canReveal()}>
                   <MenuV2.Item onSelect={props.onReveal}>
@@ -568,15 +725,22 @@ function SidebarProject(props: {
       </div>
 
       <Show when={!props.collapsed}>
-        <div class="flex flex-col gap-0.5 pb-1 ps-3">
+        <div class="flex flex-col gap-0.5 pb-1 ps-6">
           <For each={props.group.visible}>
             {(record) => (
               <SidebarSessionRow
                 record={record}
                 server={props.server}
                 current={record.session.id === props.current}
+                pinned={props.pinned(record.session.id)}
+                started={() => props.started(record.session.id)}
+                done={() => props.done(record.session.id)}
+                working={() => props.working(record.session.id)}
+                tick={props.tick}
+                branch={props.branch}
                 onOpen={props.onOpen}
                 onSettle={props.onSettle}
+                onTogglePin={props.onTogglePin}
                 onCloseTab={props.onCloseTab}
               />
             )}
@@ -591,9 +755,18 @@ function SidebarSessionRow(props: {
   record: SidebarSessionRecord
   server: ServerConnection.Key
   current: boolean
+  settled?: boolean
+  pinned?: boolean
+  started?: () => number | undefined
+  done?: () => number | undefined
+  working?: () => boolean
+  tick: () => number
+  branch: (directory: string) => string | undefined
   onOpen: (session: { id: string; directory: string }, project: LocalProject | undefined, event?: MouseEvent) => void
-  onSettle: (record: SidebarSessionRecord) => void
-  onCloseTab: (record: SidebarSessionRecord) => void
+  onSettle?: (record: SidebarSessionRecord) => void
+  onTogglePin?: (sessionID: string) => void
+  onUnsettle?: () => void
+  onCloseTab?: (record: SidebarSessionRecord) => void
 }) {
   const language = useLanguage()
   const tabs = useTabs()
@@ -603,53 +776,162 @@ function SidebarSessionRow(props: {
   const status = useSessionTabAvatarState(server, directory, sessionID)
   const open = createMemo(() => sessionHasOpenTab(tabs.store, props.server, props.record.session))
   const title = createMemo(() => titleOf(props.record.session))
+  const live = createMemo(() => {
+    if (props.settled) return undefined
+    const started = props.started?.()
+    if (started !== undefined && props.working?.()) return { done: false, since: started }
+    const done = props.done?.()
+    if (done !== undefined) return { done: true, since: done }
+    return undefined
+  })
+
+  function elapsed(since: number) {
+    const seconds = Math.max(0, Math.round((props.tick() - since) / 1000))
+    if (seconds < 60) return `${seconds}s`
+    const minutes = Math.floor(seconds / 60)
+    if (minutes < 60) return `${minutes}m`
+    return `${Math.floor(minutes / 60)}h`
+  }
 
   return (
     <div class="group/row relative flex min-w-0 items-center">
-      <button
-        type="button"
-        data-action="sidebar-session"
-        data-selected={props.current ? true : undefined}
-        aria-current={props.current ? "true" : undefined}
-        onClick={(event) => props.onOpen(props.record.session, props.record.project, event)}
-        class={`${ROW} min-w-0 flex-1`}
-      >
-        <Show when={open()}>
-          <span class="absolute start-0 top-1/2 h-3.5 w-[2px] -translate-y-1/2 rounded-full bg-v2-text-text-muted" />
-        </Show>
-        <SessionTabAvatarView
-          project={props.record.project}
-          directory={props.record.session.directory}
-          revealProjectOnHover
-          unread={status.unread()}
-          loading={status.loading()}
-        />
-        <span class="min-w-0 flex-1 truncate">{title()}</span>
-      </button>
-      <div class={ROW_ACTIONS}>
-        <TooltipV2 value={language.t("command.session.archive")} placement="top-end">
-          <IconButtonV2
-            data-action="sidebar-session-settle"
-            variant="ghost-muted"
-            size="small"
-            icon={<IconV2 name="archive" />}
-            aria-label={language.t("command.session.archive")}
-            onClick={() => props.onSettle(props.record)}
+      <TooltipV2 value={<SessionInfo record={props.record} branch={() => props.branch(props.record.session.directory)} />} placement="right-start" gutter={10}>
+        <button
+          type="button"
+          data-action="sidebar-session"
+          data-selected={props.current ? true : undefined}
+          aria-current={props.current ? "true" : undefined}
+          onClick={(event) => props.onOpen(props.record.session, props.record.project, event)}
+          class={`${ROW} min-w-0 flex-1`}
+        >
+          <Show when={open()}>
+            <span class="absolute start-0 top-1/2 h-3.5 w-[2px] -translate-y-1/2 rounded-full bg-v2-text-text-muted" />
+          </Show>
+          <SessionTabAvatarView
+            project={props.record.project}
+            directory={props.record.session.directory}
+            revealProjectOnHover
+            unread={status.unread()}
+            loading={status.loading()}
           />
-        </TooltipV2>
-        <Show when={open()}>
-          <TooltipV2 value={language.t("command.tab.close")} placement="top-end">
-            <IconButtonV2
-              data-action="sidebar-session-close-tab"
-              variant="ghost-muted"
-              size="small"
-              icon={<IconV2 name="xmark-small" />}
-              aria-label={language.t("command.tab.close")}
-              onClick={() => props.onCloseTab(props.record)}
-            />
-          </TooltipV2>
+          <span class={`${TITLE} ${props.settled ? "group-hover/row:pe-8" : "group-hover/row:pe-20"}`}>{title()}</span>
+          <Show when={props.pinned}>
+            <IconV2 name="pin" class="size-3 shrink-0 text-v2-icon-icon-muted" />
+          </Show>
+          <Show when={live()}>
+            {(value) => (
+              <span class="flex shrink-0 items-center gap-1 transition-opacity duration-[120ms] group-hover/row:opacity-0">
+                <Show
+                  when={value().done}
+                  fallback={
+                    <>
+                      <SessionProgressIndicatorV2 class="size-3.5 shrink-0 text-v2-state-fg-info" />
+                      <span class="text-xs text-v2-state-fg-info">{language.t("sidebar.status.working")}</span>
+                      <span class="text-xs text-v2-state-fg-info">{elapsed(value().since)}</span>
+                    </>
+                  }
+                >
+                  <IconV2 name="check" class="size-3 shrink-0 text-v2-state-fg-success" />
+                  <span class="text-xs text-v2-state-fg-success">{language.t("sidebar.status.done")}</span>
+                </Show>
+              </span>
+            )}
+          </Show>
+        </button>
+      </TooltipV2>
+      <div class={ROW_ACTIONS}>
+        <Show when={!props.settled && props.onTogglePin}>
+          {(toggle) => (
+            <TooltipV2
+              value={language.t(props.pinned ? "sidebar.thread.unpin" : "sidebar.thread.pin")}
+              placement="top-end"
+            >
+              <IconButtonV2
+                data-action="sidebar-session-pin"
+                variant="ghost-muted"
+                size="small"
+                icon={<IconV2 name="pin" />}
+                aria-label={language.t(props.pinned ? "sidebar.thread.unpin" : "sidebar.thread.pin")}
+                onClick={() => toggle()(props.record.session.id)}
+              />
+            </TooltipV2>
+          )}
+        </Show>
+        <Show when={!props.settled && props.onSettle}>
+          {(settle) => (
+            <TooltipV2 value={language.t("sidebar.settle")} placement="top-end">
+              <IconButtonV2
+                data-action="sidebar-session-settle"
+                variant="ghost-muted"
+                size="small"
+                icon={<IconV2 name="archive" />}
+                aria-label={language.t("sidebar.settle")}
+                onClick={() => settle()(props.record)}
+              />
+            </TooltipV2>
+          )}
+        </Show>
+        <Show when={props.settled && props.onUnsettle}>
+          {(unsettle) => (
+            <TooltipV2 value={language.t("sidebar.unsettle")} placement="top-end">
+              <IconButtonV2
+                data-action="sidebar-session-unsettle"
+                variant="ghost-muted"
+                size="small"
+                icon={<IconV2 name="outline-reset" />}
+                aria-label={language.t("sidebar.unsettle")}
+                onClick={() => unsettle()}
+              />
+            </TooltipV2>
+          )}
+        </Show>
+        <Show when={!props.settled && open() && props.onCloseTab}>
+          {(close) => (
+            <TooltipV2 value={language.t("command.tab.close")} placement="top-end">
+              <IconButtonV2
+                data-action="sidebar-session-close-tab"
+                variant="ghost-muted"
+                size="small"
+                icon={<IconV2 name="xmark-small" />}
+                aria-label={language.t("command.tab.close")}
+                onClick={() => close()(props.record)}
+              />
+            </TooltipV2>
+          )}
         </Show>
       </div>
+    </div>
+  )
+}
+
+function SessionInfo(props: { record: SidebarSessionRecord; branch: () => string | undefined }) {
+  return (
+    <div class="flex w-56 flex-col gap-1.5 p-1">
+      <span class="truncate text-v2-text-text-base [font-weight:530]">{titleOf(props.record.session)}</span>
+      <div class="flex min-w-0 items-center gap-1.5 text-xs text-v2-text-text-muted">
+        <IconV2 name="folder" class="size-3 shrink-0 text-v2-icon-icon-muted" />
+        <span class="truncate">{props.record.name}</span>
+      </div>
+      <div class="flex min-w-0 items-center gap-1.5 text-xs text-v2-text-text-muted">
+        <IconV2 name="filetree" class="size-3 shrink-0 text-v2-icon-icon-muted" />
+        <span class="truncate">{props.record.session.directory}</span>
+      </div>
+      <Show when={props.branch()}>
+        {(branch) => (
+          <div class="flex min-w-0 items-center gap-1.5 text-xs text-v2-text-text-muted">
+            <IconV2 name="branch" class="size-3 shrink-0 text-v2-icon-icon-muted" />
+            <span class="truncate">{branch()}</span>
+          </div>
+        )}
+      </Show>
+      <Show when={props.record.session.model}>
+        {(model) => (
+          <div class="flex min-w-0 items-center gap-1.5 text-xs text-v2-text-text-muted">
+            <ProviderIcon id={model().providerID} class="size-3 shrink-0" />
+            <span class="truncate">{model().id}</span>
+          </div>
+        )}
+      </Show>
     </div>
   )
 }

@@ -878,8 +878,14 @@ export const dict = {
   "sidebar.project.clearNotifications": "ล้างการแจ้งเตือน",
   "sidebar.empty.title": "ไม่มีโปรเจกต์ที่เปิดอยู่",
   "sidebar.empty.description": "เปิดโปรเจกต์เพื่อเริ่มต้น",
-  "sidebar.archived": "จัดเก็บแล้ว",
-  "sidebar.archived.restore": "กู้คืนเซสชัน",
+  "sidebar.settled": "ที่พักไว้",
+  "sidebar.settle": "พักเธรด",
+  "sidebar.unsettle": "ยกเลิกการพักเธรด",
+  "sidebar.thread.new": "เธรดใหม่",
+  "sidebar.thread.pin": "ปักหมุดเธรด",
+  "sidebar.thread.unpin": "ยกเลิกการปักหมุด",
+  "sidebar.status.working": "กำลังทำงาน",
+  "sidebar.status.done": "เสร็จ",
 
   "app.name.desktop": "OpenCode Desktop",
 
@@ -904,8 +910,8 @@ export const dict = {
   "settings.general.row.navigation.description": "ใช้แท็บในแถบชื่อเรื่องหรือแถบด้านข้างถาวร",
   "settings.general.row.navigation.tabs": "แท็บ",
   "settings.general.row.navigation.sidebar": "แถบด้านข้าง",
-  "settings.general.row.sidebarSessions.title": "จัดเก็บเซสชันที่ไม่ได้ใช้งานหลังจาก",
-  "settings.general.row.sidebarSessions.description": "เซสชันที่ไม่ได้ใช้งานจะถูกย้ายไปยังจัดเก็บแล้ว เซสชันที่กำลังทำงานยังแสดงอยู่",
+  "settings.general.row.sidebarSessions.title": "พักเธรดที่เงียบหลังจาก",
+  "settings.general.row.sidebarSessions.description": "เธรดที่เงียบจะย้ายไปที่ที่พักไว้ เธรดที่กำลังทำงานยังแสดงอยู่",
   "settings.general.row.sidebarSessions.always": "แสดงเสมอ",
   "settings.general.row.shell.title": "เชลล์เทอร์มินัล",
   "settings.general.row.shell.description":
