@@ -16,12 +16,44 @@ let target: FindHost | undefined
 let current: FindHost | undefined
 let installed = false
 
+// Lets non-file find surfaces (e.g. the session timeline) join the shared
+// mod+f / mod+g routing so only one find bar is active at a time.
+export function registerFindHost(host: FindHost) {
+  installShortcuts()
+  hosts.add(host)
+  if (!target) target = host
+  return () => {
+    hosts.delete(host)
+    if (current === host) {
+      current = undefined
+      clearHighlightFind()
+    }
+    if (target === host) target = undefined
+  }
+}
+
+export function activateFindHost(host: FindHost) {
+  if (current && current !== host) current.close()
+  current = host
+  target = host
+}
+
+export function targetFindHost(host: FindHost) {
+  target = host
+}
+
+export function anyFindHostOpen() {
+  return !!current?.isOpen()
+}
+
 function isEditable(node: unknown): boolean {
   if (!(node instanceof HTMLElement)) return false
   if (node.closest("[data-prevent-autofocus]")) return true
   if (node.isContentEditable) return true
   return /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(node.tagName)
 }
+
+const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
 function hostForNode(node: unknown) {
   if (!(node instanceof Node)) return
@@ -42,7 +74,9 @@ function installShortcuts() {
       if (event.defaultPrevented) return
       if (isEditable(event.target)) return
 
-      const mod = event.metaKey || event.ctrlKey
+      // Platform convention: Cmd on macOS, Ctrl elsewhere. Plain Ctrl+F
+      // keeps its native cursor-forward behavior on macOS.
+      const mod = IS_MAC ? event.metaKey : event.ctrlKey
       if (!mod) return
 
       const key = event.key.toLowerCase()
