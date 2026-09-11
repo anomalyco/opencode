@@ -1345,11 +1345,20 @@ flowchart TD
     ])
   })
 
-  test("rejects an empty & group member", () => {
-    expect(() =>
-      parseMermaidFlowchartDiagram(`flowchart LR
-  A & --> B`),
-    ).toThrow('Unsupported syntax in flowchart diagram at line 2: "A & --> B"')
+  test("keeps & inside edge labels as label text", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  X[a & b] -->|x & y| Y`)
+
+    expect(diagram.nodes.find((node) => node.id === "X")?.label).toBe("a & b")
+    expect(diagram.edges).toEqual([{ from: "X", to: "Y", label: "x & y" }])
+  })
+
+  test("rejects empty & group members", () => {
+    for (const statement of ["A & --> B", "& A --> B", "A --> B &", "A &"]) {
+      expect(() => parseMermaidFlowchartDiagram(`flowchart LR\n  ${statement}`)).toThrow(
+        `Unsupported syntax in flowchart diagram at line 2: "${statement}"`,
+      )
+    }
   })
 
   test("renders a fan-in expressed with & the same as separate edge statements", () => {
