@@ -140,6 +140,20 @@ describe("toSessionError", () => {
     })
   })
 
+  test("preserves provider initialization errors", () => {
+    const error = new ModelResolver.ModelInitializationError({
+      providerID: Provider.ID.make("azure"),
+      modelID: ID.make("gpt-5.4-nano"),
+      package: "aisdk:@ai-sdk/azure",
+      phase: "construct",
+      detail: "Azure requires resourceName or baseURL",
+    })
+    expect(toSessionError(error)).toEqual({
+      type: "provider.no-route",
+      message: "Cannot initialize azure/gpt-5.4-nano: Azure requires resourceName or baseURL",
+    })
+  })
+
   test("retries rate limits, provider-internal, transport, and unrecognized failures", () => {
     const eligible = [
       llm(new RateLimitError({ message: "rate" })),

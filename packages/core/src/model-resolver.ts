@@ -39,6 +39,25 @@ export class UnsupportedPackageError extends Schema.TaggedError<UnsupportedPacka
   }
 }
 
+export const InitializationPhase = Schema.Literals(["load", "init", "construct"])
+export type InitializationPhase = typeof InitializationPhase.Type
+
+/** A supported package failed while loading or constructing the model; the provider's own message is the diagnosis. */
+export class ModelInitializationError extends Schema.TaggedError<ModelInitializationError>()(
+  "SessionRunnerModel.ModelInitializationError",
+  {
+    providerID: Provider.ID,
+    modelID: ID,
+    package: Schema.String,
+    phase: InitializationPhase,
+    detail: Schema.String,
+  },
+) {
+  override get message() {
+    return `Cannot initialize ${this.providerID}/${this.modelID}: ${this.detail}`
+  }
+}
+
 export class UnresolvedProviderVariablesError extends Schema.TaggedError<UnresolvedProviderVariablesError>()(
   "SessionRunnerModel.UnresolvedProviderVariablesError",
   {
@@ -68,6 +87,7 @@ export class UnsupportedCompactionError extends Schema.TaggedError<UnsupportedCo
 export type Error =
   | VariantUnavailableError
   | UnsupportedPackageError
+  | ModelInitializationError
   | UnresolvedProviderVariablesError
   | UnsupportedCompactionError
   | Integration.AuthorizationError
@@ -135,7 +155,7 @@ export const fromCatalogModel = (
   dependencies?: Dependencies,
 ): Effect.Effect<
   LanguageModel,
-  UnsupportedPackageError | UnresolvedProviderVariablesError | UnsupportedCompactionError
+  UnsupportedPackageError | ModelInitializationError | UnresolvedProviderVariablesError | UnsupportedCompactionError
 > =>
   resolveCatalogModel(model, credential, dependencies).pipe(
     Effect.flatMap((resolved) => validateProviderVariables(model, resolved)),
@@ -178,14 +198,16 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
         ...configuration,
       }) ?? {},
     )
-    return yield* loadAISDK({ ...resolved, settings }).pipe(Effect.mapError(() => unsupported(resolved)))
+    return yield* loadAISDK({ ...resolved, settings }).pipe(
+      Effect.mapError((error) => initialization(resolved, "init", error.cause)),
+    )
   }
   if (!native) return yield* unsupported(resolved)
 
   const specifier = native
   const mapped = yield* prepareProviderSettings(resolved, mapping?.settings ?? configured)
   const module = yield* (dependencies?.loadPackage ?? Provider.loadPackage)(specifier).pipe(
-    Effect.mapError(() => unsupported(resolved)),
+    Effect.mapError((error) => initialization(resolved, "load", error.cause)),
   )
   const settings = {
     ...(credential ? Struct.omit(mapped, ["accessToken", "apiKey", "authToken"]) : mapped),
@@ -204,7 +226,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
           : runtime.compatibility,
       })
     },
-    catch: () => unsupported(resolved),
+    catch: (cause) => initialization(resolved, "construct", cause),
   })
 })
 
@@ -276,6 +298,25 @@ const unsupported = (model: Info) =>
     modelID: model.id,
     package: model.package ?? "unknown",
   })
+
+const initialization = (model: Info, phase: InitializationPhase, cause: unknown) =>
+  new ModelInitializationError({
+    providerID: model.providerID,
+    modelID: model.id,
+    package: model.package ?? "unknown",
+    phase,
+    detail: causeMessage(cause) ?? `${phase} failed for ${model.package ?? "unknown"}`,
+  })
+
+// Provider factories throw plain errors for misconfiguration, such as a missing Azure resource name.
+// Keep their message; a stack or an unknown thrown value is not a diagnosis.
+const causeMessage = (cause: unknown): string | undefined => {
+  if (typeof cause === "string") return cause.trim() || undefined
+  if (!(cause instanceof globalThis.Error)) return undefined
+  const message = cause.message.trim()
+  if (message) return message
+  return causeMessage(cause.cause)
+}
 
 export const resolveModel = (
   model: Info,

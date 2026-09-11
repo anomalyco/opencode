@@ -1395,6 +1395,63 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("reports provider configuration errors from supported packages", () =>
+    Effect.gen(function* () {
+      const failure = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/azure"), {
+          providerID: Provider.ID.azure,
+          modelID: "gpt-5.4-nano",
+        }),
+        Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("oauth"),
+          access: "oauth-token",
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+        }),
+      ).pipe(Effect.flip)
+
+      expect(failure).toMatchObject({
+        _tag: "SessionRunnerModel.ModelInitializationError",
+        providerID: "azure",
+        modelID: "test-model",
+        package: "aisdk:@ai-sdk/azure",
+        phase: "construct",
+        detail: "Azure requires resourceName or baseURL",
+      })
+      expect(failure.message).toBe("Cannot initialize azure/test-model: Azure requires resourceName or baseURL")
+    }),
+  )
+
+  it.effect("reports package load and AISDK initialization failures with their causes", () =>
+    Effect.gen(function* () {
+      const load = yield* ModelResolver.fromCatalogModel(model("@opencode/ai/providers/custom"), undefined, {
+        loadPackage: (specifier) =>
+          Effect.fail(
+            new Provider.LoadError({ package: specifier, cause: new Error(`Provider package ${specifier} is broken`) }),
+          ),
+      }).pipe(Effect.flip)
+      expect(load).toMatchObject({
+        _tag: "SessionRunnerModel.ModelInitializationError",
+        phase: "load",
+        detail: "Provider package @opencode/ai/providers/custom is broken",
+      })
+
+      const init = yield* ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/cohere")), undefined, {
+        loadAISDK: (runtime) =>
+          Effect.fail(
+            new AISDK.InitError({ providerID: runtime.providerID, cause: new Error("Cohere plugin failed") }),
+          ),
+      }).pipe(Effect.flip)
+      expect(init).toMatchObject({
+        _tag: "SessionRunnerModel.ModelInitializationError",
+        phase: "init",
+        detail: "Cohere plugin failed",
+      })
+      expect(init.message).toBe("Cannot initialize test-provider/test-model: Cohere plugin failed")
+    }),
+  )
+
   it.effect("drops an empty API key before loading an AISDK package", () =>
     Effect.gen(function* () {
       const native = yield* ModelResolver.fromCatalogModel(
