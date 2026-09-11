@@ -39,10 +39,24 @@ const layer = Layer.effect(
       // Each service self-manages its own slow work via Effect.forkScoped against
       // its per-instance state scope. We just await materialization here.
       yield* Effect.forEach(
-        [lsp, shareNext, format, vcs, snapshot, project],
-        (s) => s.init().pipe(Effect.catchCause((cause) => Effect.logWarning("init failed", { cause }))),
+        [
+          ["lsp", lsp],
+          ["share", shareNext],
+          ["format", format],
+          ["vcs", vcs],
+          ["snapshot", snapshot],
+          ["project", project],
+        ] as const,
+        ([name, service]) =>
+          Effect.logInfo("instance service init started", { service: name }).pipe(
+            Effect.andThen(service.init()),
+            Effect.timeout("10 seconds"),
+            Effect.tap(() => Effect.logInfo("instance service init completed", { service: name })),
+            Effect.catchCause((cause) => Effect.logWarning("instance service init failed", { service: name, cause })),
+          ),
         { concurrency: "unbounded", discard: true },
       ).pipe(Effect.withSpan("InstanceBootstrap.init"))
+      yield* Effect.logInfo("bootstrap completed", { directory: ctx.directory })
     }).pipe(Effect.withSpan("InstanceBootstrap"))
 
     return Service.of({ run })
