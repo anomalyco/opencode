@@ -8,13 +8,14 @@ import { AgentAttachment, FileAttachment } from "@opencode-ai/core/session/promp
 import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { DateTime } from "effect"
+import { docxBytes, OFFICE_DOCX_MIME } from "./lib/office"
 
 const created = DateTime.makeUnsafe(0)
 const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
 const model = Model.make({ id: "model", provider: "provider", route: OpenAIChat.route })
 
 describe("toLLMMessages", () => {
-  test("omits empty assistant turns", () => {
+  test("omits empty assistant turns", async () => {
     const assistant = (value: string, content: SessionMessage.Assistant["content"]) =>
       SessionMessage.Assistant.make({
         id: id(value),
@@ -24,7 +25,7 @@ describe("toLLMMessages", () => {
         content,
         time: { created, completed: created },
       })
-    const messages = toLLMMessages(
+    const messages = await toLLMMessages(
       [
         assistant("empty", []),
         assistant("empty-text", [SessionMessage.AssistantText.make({ type: "text", id: "empty", text: "" })]),
@@ -47,9 +48,9 @@ describe("toLLMMessages", () => {
     expect(messages.map((message) => message.id)).toEqual([id("text"), id("reasoning")])
   })
 
-  test("maps every top-level V2 Session message type", () => {
+  test("maps every top-level V2 Session message type", async () => {
     const file = FileAttachment.make({ uri: "data:image/png;base64,aGVsbG8=", mime: "image/png", name: "hello.png" })
-    const messages = toLLMMessages(
+    const messages = await toLLMMessages(
       [
         SessionMessage.AgentSwitched.make({
           id: id("agent"),
@@ -139,8 +140,8 @@ Recent work
     ])
   })
 
-  test("replays durable tool media into canonical tool messages without structured base64", () => {
-    const messages = toLLMMessages(
+  test("replays durable tool media into canonical tool messages without structured base64", async () => {
+    const messages = await toLLMMessages(
       [
         SessionMessage.Assistant.make({
           id: id("assistant"),
@@ -296,8 +297,8 @@ Recent work
     ])
   })
 
-  test("restores OpenAI encrypted reasoning metadata", () => {
-    const messages = toLLMMessages(
+  test("restores OpenAI encrypted reasoning metadata", async () => {
+    const messages = await toLLMMessages(
       [
         SessionMessage.Assistant.make({
           id: id("assistant-openai-reasoning"),
@@ -327,8 +328,8 @@ Recent work
     ])
   })
 
-  test("drops provider-native continuation metadata from failed assistant turns", () => {
-    const messages = toLLMMessages(
+  test("drops provider-native continuation metadata from failed assistant turns", async () => {
+    const messages = await toLLMMessages(
       [
         SessionMessage.Assistant.make({
           id: id("assistant-failed"),
@@ -399,8 +400,8 @@ Recent work
     ])
   })
 
-  test("drops provider-native continuation metadata after a model switch", () => {
-    const messages = toLLMMessages(
+  test("drops provider-native continuation metadata after a model switch", async () => {
+    const messages = await toLLMMessages(
       [
         SessionMessage.Assistant.make({
           id: id("assistant-old-model"),
@@ -496,6 +497,32 @@ Recent work
         metadata: undefined,
         providerMetadata: undefined,
       },
+    ])
+  })
+
+  test("lowers office attachments to extracted text for non-document-block providers", async () => {
+    const uri = `data:${OFFICE_DOCX_MIME};base64,${Buffer.from(await docxBytes("Native office text")).toString("base64")}`
+    const messages = await toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("office"),
+          type: "user",
+          text: "Summarize the deck notes",
+          files: [
+            FileAttachment.make({
+              uri,
+              mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              name: "notes.docx",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+    expect(messages[0].content).toEqual([
+      { type: "text", text: "Summarize the deck notes" },
+      { type: "text", text: "Native office text" },
     ])
   })
 })

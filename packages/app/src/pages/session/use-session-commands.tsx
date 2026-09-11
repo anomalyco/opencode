@@ -15,6 +15,7 @@ import { showToast } from "@/utils/toast"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
+import { clearPreviewPayload, isPreviewTab } from "./document-preview-tab"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { Message, Part, UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -270,6 +271,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const closeTab = () => {
     const tab = closableTab()
     if (!tab) return
+    if (isPreviewTab(tab)) clearPreviewPayload(tab)
     tabs().close(tab)
   }
 

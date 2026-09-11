@@ -32,6 +32,7 @@ import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { errorMessage } from "@/util/error"
 import { isMedia } from "@/util/media"
+import { Office } from "@opencode-ai/core/office"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { Effect, Schema } from "effect"
@@ -210,11 +211,23 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           })
         // text/plain and directory files are converted into text parts, ignore them
         if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
-          if (options?.stripMedia && isMedia(part.mime)) {
+          if (options?.stripMedia && (isMedia(part.mime) || Office.officeMime(part.mime))) {
             userMessage.parts.push({
               type: "text",
               text: `[Attached ${part.mime}: ${part.filename ?? "file"}]`,
             })
+          } else if (
+            // Providers without native office document blocks get extracted text in
+            // place of the bytes; the AI SDK converters reject office media types outright.
+            Office.officeMime(part.mime) &&
+            !(model.api.npm === "@ai-sdk/amazon-bedrock" && Office.NATIVE_OFFICE_DOCUMENT_MIMES.has(part.mime))
+          ) {
+            const text = yield* Effect.promise(() => Office.officeTextFromUri(part.url, part.mime, part.filename))
+            userMessage.parts.push(
+              text === undefined
+                ? { type: "file", url: part.url, mediaType: part.mime, filename: part.filename }
+                : { type: "text", text },
+            )
           } else {
             userMessage.parts.push({
               type: "file",

@@ -2,12 +2,23 @@ import { onMount } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { PromptInputV2Attachment, PromptInputV2Prompt } from "./types"
 
-const accepted = [
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
+
+export const accepted = [
   "image/png",
   "image/jpeg",
   "image/gif",
   "image/webp",
   "application/pdf",
+  "application/msword",
+  "application/vnd.ms-excel",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.oasis.opendocument.spreadsheet",
+  "application/vnd.oasis.opendocument.presentation",
   "text/*",
   "application/json",
   "application/ld+json",
@@ -19,6 +30,15 @@ const accepted = [
   ".c",
   ".cc",
   ".cjs",
+  ".doc",
+  ".docx",
+  ".odt",
+  ".ods",
+  ".odp",
+  ".ppt",
+  ".pptx",
+  ".xls",
+  ".xlsx",
   ".conf",
   ".cpp",
   ".css",
@@ -75,6 +95,7 @@ export type PromptInputV2AttachmentConfig = {
   isDialogActive: () => boolean
   warn: () => void
   duplicate: () => void
+  oversize: () => void
   onError: (error: unknown) => void
   readClipboardImage?: () => Promise<File | null>
   getPathForFile?: (file: File) => string
@@ -101,6 +122,10 @@ export function createPromptInputV2Attachments(
     const mime = await attachmentMime(file)
     if (!mime) {
       if (toast) input.warn()
+      return false
+    }
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      if (toast) input.oversize()
       return false
     }
     const blob = input.store ? await input.store(file) : await blobReference(file)
@@ -243,13 +268,34 @@ const textMimes = new Set([
   "application/xml",
   "application/yaml",
 ])
+const officeMimes = new Set(
+  accepted.filter(
+    (mime) =>
+      mime.includes("office") ||
+      mime.includes("opendocument") ||
+      mime === "application/msword" ||
+      mime.startsWith("application/vnd.ms-"),
+  ),
+)
+const officeExtensions = new Map([
+  ["doc", "application/msword"],
+  ["xls", "application/vnd.ms-excel"],
+  ["ppt", "application/vnd.ms-powerpoint"],
+  ["docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+  ["xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+  ["pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+  ["odt", "application/vnd.oasis.opendocument.text"],
+  ["ods", "application/vnd.oasis.opendocument.spreadsheet"],
+  ["odp", "application/vnd.oasis.opendocument.presentation"],
+])
 
 async function attachmentMime(file: File) {
   const type = file.type.split(";", 1)[0]?.trim().toLowerCase() ?? ""
-  if (imageMimes.has(type) || type === "application/pdf") return type
+  if (imageMimes.has(type) || type === "application/pdf" || officeMimes.has(type)) return type
   const index = file.name.lastIndexOf(".")
   const suffix = index === -1 ? "" : file.name.slice(index + 1).toLowerCase()
-  const fallback = imageExtensions.get(suffix) ?? (suffix === "pdf" ? "application/pdf" : undefined)
+  const fallback =
+    imageExtensions.get(suffix) ?? officeExtensions.get(suffix) ?? (suffix === "pdf" ? "application/pdf" : undefined)
   if ((!type || type === "application/octet-stream") && fallback) return fallback
   if (type.startsWith("text/") || textMimes.has(type) || type.endsWith("+json") || type.endsWith("+xml")) {
     return "text/plain"
