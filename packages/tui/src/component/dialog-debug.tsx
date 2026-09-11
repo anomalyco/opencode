@@ -19,8 +19,6 @@ export function DialogDebug() {
   const toast = useToast()
   const [copied, setCopied] = createSignal(false)
 
-  dialog.setSize("large")
-
   const entries = createMemo(() => {
     const model = local.model.current()
     return [
@@ -51,7 +49,7 @@ export function DialogDebug() {
   }))
 
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
+    <box paddingLeft={4} paddingRight={4} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           Debug
