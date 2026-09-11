@@ -1,13 +1,7 @@
 import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect"
 import type { Diagnostic } from "../codemode.js"
-import {
-  type AstNode,
-  CodeModeFunction,
-  InterpreterRuntimeError,
-  ProgramThrow,
-  PromiseInstanceMethodReference,
-} from "./model.js"
-import { get, ProgramArray, ProgramObject, record } from "./objects.js"
+import { type AstNode, InterpreterRuntimeError, ProgramThrow, PromiseInstanceMethodReference } from "./model.js"
+import { get, ProgramArray, ProgramFunction, ProgramObject, record } from "./objects.js"
 import { HostFunction, requiresNew, sync } from "./host.js"
 import { caughtErrorValue, normalizeError } from "./errors.js"
 import { typeofValue } from "./references.js"
@@ -250,7 +244,7 @@ const constructPromise = <R>(
   executor: unknown,
   node: AstNode,
 ): Effect.Effect<Values.Promise, unknown, R> => {
-  if (!(executor instanceof CodeModeFunction)) {
+  if (!(executor instanceof ProgramFunction)) {
     throw new InterpreterRuntimeError(
       "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... })).",
       node,

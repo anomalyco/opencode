@@ -3,19 +3,18 @@ import { Values } from "../values.js"
 import { HostFunction, HostNamespace } from "./host.js"
 import {
   type AstNode,
-  CodeModeFunction,
   CodeModeGenerator,
   GeneratorMethodReference,
   InterpreterRuntimeError,
   IntrinsicReference,
   PromiseInstanceMethodReference,
 } from "./model.js"
-import { getOwn, ownKeys, ProgramArray, ProgramObject } from "./objects.js"
+import { getOwn, ownKeys, ProgramArray, ProgramFunction, ProgramObject } from "./objects.js"
 
 export const isRuntimeReference = (value: unknown): boolean =>
   value instanceof HostFunction ||
   value instanceof HostNamespace ||
-  value instanceof CodeModeFunction ||
+  value instanceof ProgramFunction ||
   value instanceof CodeModeGenerator ||
   value instanceof GeneratorMethodReference ||
   value instanceof ToolReference ||
@@ -93,7 +92,7 @@ export const describeValue = (value: unknown): string => {
 export const typeofValue = (value: unknown): string => {
   if (
     value instanceof HostFunction ||
-    value instanceof CodeModeFunction ||
+    value instanceof ProgramFunction ||
     value instanceof GeneratorMethodReference ||
     value instanceof IntrinsicReference ||
     value instanceof PromiseInstanceMethodReference

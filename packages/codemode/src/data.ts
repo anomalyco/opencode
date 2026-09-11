@@ -1,7 +1,14 @@
 export * as Data from "./data.js"
 
 import type { DiagnosticKind } from "./codemode.js"
-import { ownEntries, parseArrayIndex, ProgramArray, ProgramObject, set } from "./interpreter/objects.js"
+import {
+  ownEntries,
+  parseArrayIndex,
+  ProgramArray,
+  ProgramFunction,
+  ProgramObject,
+  set,
+} from "./interpreter/objects.js"
 import { Values } from "./values.js"
 
 const MAX_VALUE_DEPTH = 32
@@ -60,6 +67,9 @@ const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Se
       "InvalidDataValue",
       `${label} contains an un-awaited Promise; await tool calls (e.g. \`const result = await tools.ns.tool(...)\`) before using their results.`,
     )
+  }
+  if (value instanceof ProgramFunction && mode !== "program") {
+    throw new ToolRuntimeError("InvalidDataValue", `${label} must contain data only.`)
   }
 
   const plain = mode === "program" || mode === "data"

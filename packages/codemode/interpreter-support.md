@@ -121,7 +121,10 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [ ] User-defined constructor calls.
 - [ ] `Function.prototype.call`, `apply`, and `bind` for CodeMode functions.
 - [ ] Classes and private fields.
-- [ ] `name` and `length` properties of functions, including names inferred from bindings and destructuring defaults.
+- [x] Functions are objects: they hold own properties (`fn.count = 1`), enumerate them, and expose read-only `name`
+      and `length`. Names follow JavaScript's NamedEvaluation: declarations, named expressions, bindings,
+      assignments, object literal keys, and destructuring or parameter defaults.
+- [ ] `name` and `length` of built-in functions such as `Math.max` or `"a".includes`.
 - [ ] A named function expression's name is not bound inside its own body.
 - [ ] Redeclaring a function in the same scope is rejected; in JavaScript the last declaration wins.
 - [ ] A line terminator between `async function` and the function name.

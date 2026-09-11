@@ -1,6 +1,7 @@
 import type {
   ArrayExpression,
   ArrayPattern,
+  AssignmentPattern,
   ArrowFunctionExpression,
   AssignmentExpression,
   AssignmentProperty,
@@ -47,7 +48,6 @@ import {
   type AstNode,
   AsyncIteratorSymbol,
   type Binding,
-  CodeModeFunction,
   CodeModeGenerator,
   ComputedValue,
   GeneratorMethodReference,
@@ -74,6 +74,7 @@ import {
   ownKeys,
   parseArrayIndex,
   ProgramArray,
+  ProgramFunction,
   ProgramObject,
   record,
   remove,
@@ -139,7 +140,7 @@ const constructorName = (value: unknown): string | undefined => {
   if (value instanceof Values.URL) return "URL"
   if (value instanceof Values.URLSearchParams) return "URLSearchParams"
   if (value instanceof Values.Promise) return "Promise"
-  if (!(value instanceof ProgramObject)) return undefined
+  if (!(value instanceof ProgramObject) || value instanceof ProgramFunction) return undefined
   return errorBrandName(value) ?? "Object"
 }
 
@@ -434,8 +435,19 @@ class Frame<R> {
     }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
   }
 
-  private createFunction(node: FunctionDeclaration | FunctionExpression | ArrowFunctionExpression): CodeModeFunction {
-    return new CodeModeFunction(node.params, node.body, this.scopes.capture(), node.async, node.generator)
+  private createFunction(
+    node: FunctionDeclaration | FunctionExpression | ArrowFunctionExpression,
+    name = node.type === "ArrowFunctionExpression" ? "" : (node.id?.name ?? ""),
+  ): ProgramFunction {
+    return new ProgramFunction(name, node.params, node.body, this.scopes.capture(), node.async, node.generator)
+  }
+
+  // NamedEvaluation: an anonymous function definition takes the name of what it is assigned to.
+  private evaluateNamed(node: Expression, name: string): Effect.Effect<unknown, unknown, R> {
+    if (node.type === "ArrowFunctionExpression" || (node.type === "FunctionExpression" && !node.id)) {
+      return Effect.sync(() => this.createFunction(node, name))
+    }
+    return this.evaluateExpression(node)
   }
 
   private hoistFunctions(statements: ReadonlyArray<Statement | ModuleDeclaration>): void {
@@ -1023,11 +1035,14 @@ class Frame<R> {
 
         const init = declaration.init
         // `var x` alone is a no-op: the binding was hoisted on function entry.
+        const id = declaration.id
+        const evaluate = (init: Expression) =>
+          id.type === "Identifier" ? self.evaluateNamed(init, id.name) : self.evaluateExpression(init)
         if (kind === "var") {
-          if (init) yield* self.assignPattern(declaration.id, yield* self.evaluateExpression(init), declaration)
+          if (init) yield* self.assignPattern(id, yield* evaluate(init), declaration)
           continue
         }
-        const value = init ? yield* self.evaluateExpression(init) : undefined
+        const value = init ? yield* evaluate(init) : undefined
         yield* self.declarePattern(declaration.id, value, kind !== "const", declaration, true)
       }
     })
@@ -1050,7 +1065,7 @@ class Frame<R> {
       }
 
       if (pattern.type === "AssignmentPattern") {
-        const resolved = value === undefined ? yield* self.evaluateExpression(pattern.right) : value
+        const resolved = value === undefined ? yield* self.evaluateDefault(pattern) : value
         yield* self.declarePattern(pattern.left, resolved, mutable, node, initialize)
         return
       }
@@ -1110,7 +1125,7 @@ class Frame<R> {
       }
 
       if (pattern.type === "AssignmentPattern") {
-        const resolved = value === undefined ? yield* self.evaluateExpression(pattern.right) : value
+        const resolved = value === undefined ? yield* self.evaluateDefault(pattern) : value
         yield* self.assignPattern(pattern.left, resolved, node)
         return
       }
@@ -1147,6 +1162,12 @@ class Frame<R> {
 
       throw new InterpreterRuntimeError(`Unsupported assignment pattern '${pattern.type}'.`, node)
     })
+  }
+
+  private evaluateDefault(pattern: AssignmentPattern): Effect.Effect<unknown, unknown, R> {
+    return pattern.left.type === "Identifier"
+      ? this.evaluateNamed(pattern.right, pattern.left.name)
+      : this.evaluateExpression(pattern.right)
   }
 
   private destructureArrayPattern(
@@ -1288,7 +1309,7 @@ class Frame<R> {
         // otherwise; say `new` is unsupported for them and point at the plain call.
         const name = calleeDescription(node.callee)
         const message =
-          callee instanceof CodeModeFunction
+          callee instanceof ProgramFunction
             ? `${name} cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead.`
             : callee instanceof HostFunction
               ? `new ${name}(...) is not supported; call ${name}(...) without new instead.`
@@ -1316,6 +1337,9 @@ class Frame<R> {
   private applyBinaryOperator(operator: string, lhs: unknown, rhs: unknown, node: AstNode): unknown {
     if (operator === "===") return lhs === rhs
     if (operator === "!==") return lhs !== rhs
+    if (operator === "in" && rhs instanceof ProgramObject && !containsOpaqueReference(lhs)) {
+      return has(rhs, lhs !== null && typeof lhs === "object" ? coerceToString(lhs) : (lhs as PropertyKey))
+    }
     if (containsOpaqueReference(lhs) || containsOpaqueReference(rhs)) {
       throw new InterpreterRuntimeError("Binary operators require data values.", node, "InvalidDataValue")
     }
@@ -1448,7 +1472,7 @@ class Frame<R> {
           const next = toProgram(self.applyCompoundAssignment(operator, current, rightValue, node), "Assignment result")
           return self.scopes.set(name, next, left)
         }
-        const rightValue = yield* self.evaluateExpression(node.right)
+        const rightValue = yield* self.evaluateNamed(node.right, name)
         return self.scopes.set(name, rightValue, left)
       }
       if (left.type === "MemberExpression") {
@@ -1480,7 +1504,7 @@ class Frame<R> {
       return Effect.gen(function* () {
         const current = self.scopes.get(name, left)
         if (!shouldAssign(current)) return current
-        const rightValue = yield* self.evaluateExpression(node.right)
+        const rightValue = yield* self.evaluateNamed(node.right, name)
         return self.scopes.set(name, rightValue, left)
       })
     }
@@ -1569,7 +1593,7 @@ class Frame<R> {
         }
         return yield* self.createToolCallPromise(callable.path, args)
       }
-      if (callable instanceof CodeModeFunction) {
+      if (callable instanceof ProgramFunction) {
         return yield* self.invokeFunction(callable, args)
       }
       if (callable instanceof GeneratorMethodReference) {
@@ -1620,7 +1644,7 @@ class Frame<R> {
     })
   }
 
-  invokeFunction(fn: CodeModeFunction, args: Array<unknown>): Effect.Effect<unknown, unknown, R> {
+  invokeFunction(fn: ProgramFunction, args: Array<unknown>): Effect.Effect<unknown, unknown, R> {
     const invocation = new Frame(this.runtime, new ScopeStack([...fn.capturedScopes, new Map()]))
     const run = Effect.gen(function* () {
       // Seed all parameters first so defaults cannot fall through to same-named outer bindings.
@@ -1934,7 +1958,13 @@ class Frame<R> {
           throw new InterpreterRuntimeError("Unsupported object property key shape.", keyNode)
         }
 
-        set(objectValue, key, yield* self.evaluateExpression(property.value))
+        const name =
+          key === IteratorSymbol
+            ? "[Symbol.iterator]"
+            : key === AsyncIteratorSymbol
+              ? "[Symbol.asyncIterator]"
+              : String(key)
+        set(objectValue, key, yield* self.evaluateNamed(property.value, name))
       }
 
       return objectValue
@@ -2138,6 +2168,8 @@ class Frame<R> {
         return new ComputedValue(undefined)
       }
 
+      if (objectValue instanceof ProgramObject) return { target: objectValue, key }
+
       if (isRuntimeReference(objectValue)) {
         throw new InterpreterRuntimeError(
           `Cannot read properties of ${describeValue(objectValue)}; only data values expose properties.`,
@@ -2145,12 +2177,7 @@ class Frame<R> {
           "InvalidDataValue",
         )
       }
-
-      if (!(objectValue instanceof ProgramObject)) {
-        throw new InterpreterRuntimeError("Cannot access a property on a non-object value.", objectNode)
-      }
-
-      return { target: objectValue, key }
+      throw new InterpreterRuntimeError("Cannot access a property on a non-object value.", objectNode)
     })
   }
 
@@ -2257,7 +2284,9 @@ class Frame<R> {
       target instanceof ProgramArray ? "Array assignment result" : "Object assignment result",
       node,
     )
-    if (!set(target, key, next)) throw new InterpreterRuntimeError("Invalid array length", node).as("RangeError")
+    if (set(target, key, next)) return
+    if (target instanceof ProgramArray) throw new InterpreterRuntimeError("Invalid array length", node).as("RangeError")
+    throw new InterpreterRuntimeError(`Cannot assign to read only property '${String(key)}'.`, node).as("TypeError")
   }
 
   private toPropertyKey(value: unknown, node: AstNode): PropertyKey {

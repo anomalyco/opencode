@@ -2,8 +2,8 @@ import { Effect, Exit } from "effect"
 import { Values } from "../values.js"
 import { coerceToString } from "../stdlib/value.js"
 import { HostFunction } from "./host.js"
-import { type AstNode, CodeModeFunction, InterpreterRuntimeError, IntrinsicReference } from "./model.js"
-import { get, has, ProgramObject } from "./objects.js"
+import { type AstNode, InterpreterRuntimeError, IntrinsicReference } from "./model.js"
+import { get, has, ProgramFunction, ProgramObject } from "./objects.js"
 import { typeofValue } from "./references.js"
 
 export type IteratorCursor<R> = {
@@ -13,7 +13,7 @@ export type IteratorCursor<R> = {
 
 /** Everything a host function needs to call back into the program. */
 export type Runner<R> = {
-  readonly invokeFunction: (fn: CodeModeFunction, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
+  readonly invokeFunction: (fn: ProgramFunction, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
   readonly invokeCallable: (
     callable: unknown,
     args: Array<unknown>,
@@ -61,10 +61,10 @@ export const toPrimitive = <R>(
 // Array.from mappers, and promise reactions all admit exactly these callables.
 // Admission means dispatchable, not necessarily invocable: new-requiring
 // constructors pass the gate and throw a TypeError on call, like JS.
-export type SupportedCallback = CodeModeFunction | HostFunction<unknown> | IntrinsicReference
+export type SupportedCallback = ProgramFunction | HostFunction<unknown> | IntrinsicReference
 
 export const isSupportedCallback = (value: unknown): value is SupportedCallback =>
-  value instanceof CodeModeFunction ||
+  value instanceof ProgramFunction ||
   (value instanceof HostFunction && value.callback) ||
   value instanceof IntrinsicReference
 

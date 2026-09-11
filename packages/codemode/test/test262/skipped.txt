@@ -87,20 +87,12 @@ built-ins/Array/prototype/toString/S15.4.4.2_A1_T3.js  # .toString is not a func
 built-ins/Array/prototype/toString/S15.4.4.2_A1_T4.js  # .toString is not a function.
 built-ins/Array/prototype/values/iteration-mutable.js  # .next is not a function.
 built-ins/Array/prototype/values/iteration.js  # .next is not a function.
-language/statements/async-function/dflt-params-trailing-comma.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/async-function/params-trailing-comma-multiple.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/async-function/params-trailing-comma-single.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/async-function/rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
 language/statements/async-generator/dflt-params-abrupt.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/async-generator/dflt-params-ref-later.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
 language/statements/async-generator/dflt-params-ref-self.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
-language/statements/async-generator/dflt-params-trailing-comma.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/async-generator/dstr/ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
-language/statements/async-generator/dstr/ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/async-generator/dstr/ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/async-generator/dstr/ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/async-generator/dstr/ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/async-generator/dstr/ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
@@ -111,10 +103,6 @@ language/statements/async-generator/dstr/ary-ptrn-rest-id-elision-next-err.js  #
 language/statements/async-generator/dstr/ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/dflt-ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/dflt-ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
-language/statements/async-generator/dstr/dflt-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/async-generator/dstr/dflt-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/async-generator/dstr/dflt-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/async-generator/dstr/dflt-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/async-generator/dstr/dflt-ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/dflt-ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/dflt-ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
@@ -125,10 +113,6 @@ language/statements/async-generator/dstr/dflt-ary-ptrn-rest-id-elision-next-err.
 language/statements/async-generator/dstr/dflt-ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/dflt-obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/dflt-obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
-language/statements/async-generator/dstr/dflt-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/async-generator/dstr/dflt-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/async-generator/dstr/dflt-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/async-generator/dstr/dflt-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/async-generator/dstr/dflt-obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/dflt-obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/dflt-obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
@@ -140,10 +124,6 @@ language/statements/async-generator/dstr/dflt-obj-ptrn-prop-obj-value-null.js  #
 language/statements/async-generator/dstr/dflt-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
-language/statements/async-generator/dstr/obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/async-generator/dstr/obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/async-generator/dstr/obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/async-generator/dstr/obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/async-generator/dstr/obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
@@ -153,22 +133,12 @@ language/statements/async-generator/dstr/obj-ptrn-prop-id-init-throws.js  # Expe
 language/statements/async-generator/dstr/obj-ptrn-prop-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
-language/statements/async-generator/params-trailing-comma-multiple.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/async-generator/params-trailing-comma-single.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/async-generator/rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
 language/statements/async-generator/return-undefined-implicit-and-explicit.js  # Actual ["tick 1", "tick 2", "g1 ret", "g2 ret", "g3 ret", "g4 ret"] and expected ["tick 1", "g1 ret"
-language/statements/const/dstr/ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/const/dstr/ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/const/dstr/ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/const/dstr/ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/const/dstr/ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
 language/statements/const/dstr/ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
 language/statements/const/dstr/obj-init-null.js  # Expected a TypeError but got a Error
 language/statements/const/dstr/obj-init-undefined.js  # Expected a TypeError but got a Error
-language/statements/const/dstr/obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/const/dstr/obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/const/dstr/obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/const/dstr/obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/const/dstr/obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
 language/statements/const/dstr/obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error
 language/statements/for-await-of/async-func-decl-dstr-array-elem-init-in.js  # Failed to parse TypeScript: '…' expected.
@@ -190,10 +160,6 @@ language/statements/for-await-of/async-func-decl-dstr-obj-rest-number.js  # Obje
 language/statements/for-await-of/async-func-decl-dstr-obj-rest-str-val.js  # Object destructuring requires a data object or array value, received a string.
 language/statements/for-await-of/async-func-dstr-const-ary-init-iter-get-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-func-dstr-const-ary-ptrn-elem-ary-val-null.js  # Expected SameValue(«undefined», «TypeError») to be true
-language/statements/for-await-of/async-func-dstr-const-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-const-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-const-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-const-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-func-dstr-const-ary-ptrn-elem-id-init-throws.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-func-dstr-const-ary-ptrn-elem-id-init-unresolvable.js  # Expected SameValue(«undefined», «ReferenceError») to be true
 language/statements/for-await-of/async-func-dstr-const-ary-ptrn-elem-id-iter-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
@@ -202,20 +168,8 @@ language/statements/for-await-of/async-func-dstr-const-ary-ptrn-elem-obj-val-und
 language/statements/for-await-of/async-func-dstr-const-ary-ptrn-elision-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-func-dstr-const-ary-ptrn-rest-id-elision-next-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-func-dstr-const-ary-ptrn-rest-id-iter-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
-language/statements/for-await-of/async-func-dstr-const-async-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-const-async-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-const-async-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-const-async-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-const-async-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-const-async-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-const-async-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-const-async-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-func-dstr-const-obj-init-null.js  # Expected SameValue(«undefined», «TypeError») to be true
 language/statements/for-await-of/async-func-dstr-const-obj-init-undefined.js  # Expected SameValue(«undefined», «TypeError») to be true
-language/statements/for-await-of/async-func-dstr-const-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-const-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-const-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-const-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-func-dstr-const-obj-ptrn-id-init-throws.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-func-dstr-const-obj-ptrn-id-init-unresolvable.js  # Expected SameValue(«undefined», «ReferenceError») to be true
 language/statements/for-await-of/async-func-dstr-const-obj-ptrn-list-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
@@ -227,10 +181,6 @@ language/statements/for-await-of/async-func-dstr-const-obj-ptrn-prop-obj-value-n
 language/statements/for-await-of/async-func-dstr-const-obj-ptrn-prop-obj-value-undef.js  # Expected SameValue(«undefined», «TypeError») to be true
 language/statements/for-await-of/async-func-dstr-let-ary-init-iter-get-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-func-dstr-let-ary-ptrn-elem-ary-val-null.js  # Expected SameValue(«undefined», «TypeError») to be true
-language/statements/for-await-of/async-func-dstr-let-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-let-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-let-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-let-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-func-dstr-let-ary-ptrn-elem-id-init-throws.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-func-dstr-let-ary-ptrn-elem-id-init-unresolvable.js  # Expected SameValue(«undefined», «ReferenceError») to be true
 language/statements/for-await-of/async-func-dstr-let-ary-ptrn-elem-id-iter-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
@@ -239,20 +189,8 @@ language/statements/for-await-of/async-func-dstr-let-ary-ptrn-elem-obj-val-undef
 language/statements/for-await-of/async-func-dstr-let-ary-ptrn-elision-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-func-dstr-let-ary-ptrn-rest-id-elision-next-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-func-dstr-let-ary-ptrn-rest-id-iter-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
-language/statements/for-await-of/async-func-dstr-let-async-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-let-async-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-let-async-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-let-async-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-let-async-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-let-async-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-let-async-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-let-async-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-func-dstr-let-obj-init-null.js  # Expected SameValue(«undefined», «TypeError») to be true
 language/statements/for-await-of/async-func-dstr-let-obj-init-undefined.js  # Expected SameValue(«undefined», «TypeError») to be true
-language/statements/for-await-of/async-func-dstr-let-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-let-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-let-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-let-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-func-dstr-let-obj-ptrn-id-init-throws.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-func-dstr-let-obj-ptrn-id-init-unresolvable.js  # Expected SameValue(«undefined», «ReferenceError») to be true
 language/statements/for-await-of/async-func-dstr-let-obj-ptrn-list-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
@@ -264,10 +202,6 @@ language/statements/for-await-of/async-func-dstr-let-obj-ptrn-prop-obj-value-nul
 language/statements/for-await-of/async-func-dstr-let-obj-ptrn-prop-obj-value-undef.js  # Expected SameValue(«undefined», «TypeError») to be true
 language/statements/for-await-of/async-func-dstr-var-ary-init-iter-get-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-func-dstr-var-ary-ptrn-elem-ary-val-null.js  # Expected SameValue(«undefined», «TypeError») to be true
-language/statements/for-await-of/async-func-dstr-var-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-var-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-var-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-var-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-func-dstr-var-ary-ptrn-elem-id-init-throws.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-func-dstr-var-ary-ptrn-elem-id-init-unresolvable.js  # Expected SameValue(«undefined», «ReferenceError») to be true
 language/statements/for-await-of/async-func-dstr-var-ary-ptrn-elem-id-iter-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
@@ -276,20 +210,8 @@ language/statements/for-await-of/async-func-dstr-var-ary-ptrn-elem-obj-val-undef
 language/statements/for-await-of/async-func-dstr-var-ary-ptrn-elision-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-func-dstr-var-ary-ptrn-rest-id-elision-next-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-func-dstr-var-ary-ptrn-rest-id-iter-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
-language/statements/for-await-of/async-func-dstr-var-async-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-var-async-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-var-async-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-var-async-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-var-async-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-var-async-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-var-async-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-var-async-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-func-dstr-var-obj-init-null.js  # Expected SameValue(«undefined», «TypeError») to be true
 language/statements/for-await-of/async-func-dstr-var-obj-init-undefined.js  # Expected SameValue(«undefined», «TypeError») to be true
-language/statements/for-await-of/async-func-dstr-var-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-var-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-var-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-func-dstr-var-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-func-dstr-var-obj-ptrn-id-init-throws.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-func-dstr-var-obj-ptrn-id-init-unresolvable.js  # Expected SameValue(«undefined», «ReferenceError») to be true
 language/statements/for-await-of/async-func-dstr-var-obj-ptrn-list-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
@@ -325,10 +247,6 @@ language/statements/for-await-of/async-gen-decl-dstr-obj-rest-number.js  # Objec
 language/statements/for-await-of/async-gen-decl-dstr-obj-rest-str-val.js  # Object destructuring requires a data object or array value, received a string.
 language/statements/for-await-of/async-gen-dstr-const-ary-init-iter-get-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-gen-dstr-const-ary-ptrn-elem-ary-val-null.js  # Expected SameValue(«undefined», «TypeError») to be true
-language/statements/for-await-of/async-gen-dstr-const-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-const-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-const-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-const-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-gen-dstr-const-ary-ptrn-elem-id-init-throws.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-gen-dstr-const-ary-ptrn-elem-id-init-unresolvable.js  # Expected SameValue(«undefined», «ReferenceError») to be true
 language/statements/for-await-of/async-gen-dstr-const-ary-ptrn-elem-id-iter-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
@@ -337,20 +255,8 @@ language/statements/for-await-of/async-gen-dstr-const-ary-ptrn-elem-obj-val-unde
 language/statements/for-await-of/async-gen-dstr-const-ary-ptrn-elision-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-gen-dstr-const-ary-ptrn-rest-id-elision-next-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-gen-dstr-const-ary-ptrn-rest-id-iter-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
-language/statements/for-await-of/async-gen-dstr-const-async-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-const-async-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-const-async-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-const-async-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-const-async-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-const-async-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-const-async-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-const-async-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-gen-dstr-const-obj-init-null.js  # Expected SameValue(«undefined», «TypeError») to be true
 language/statements/for-await-of/async-gen-dstr-const-obj-init-undefined.js  # Expected SameValue(«undefined», «TypeError») to be true
-language/statements/for-await-of/async-gen-dstr-const-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-const-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-const-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-const-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-gen-dstr-const-obj-ptrn-id-init-throws.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-gen-dstr-const-obj-ptrn-id-init-unresolvable.js  # Expected SameValue(«undefined», «ReferenceError») to be true
 language/statements/for-await-of/async-gen-dstr-const-obj-ptrn-list-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
@@ -362,10 +268,6 @@ language/statements/for-await-of/async-gen-dstr-const-obj-ptrn-prop-obj-value-nu
 language/statements/for-await-of/async-gen-dstr-const-obj-ptrn-prop-obj-value-undef.js  # Expected SameValue(«undefined», «TypeError») to be true
 language/statements/for-await-of/async-gen-dstr-let-ary-init-iter-get-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-gen-dstr-let-ary-ptrn-elem-ary-val-null.js  # Expected SameValue(«undefined», «TypeError») to be true
-language/statements/for-await-of/async-gen-dstr-let-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-let-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-let-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-let-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-gen-dstr-let-ary-ptrn-elem-id-init-throws.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-gen-dstr-let-ary-ptrn-elem-id-init-unresolvable.js  # Expected SameValue(«undefined», «ReferenceError») to be true
 language/statements/for-await-of/async-gen-dstr-let-ary-ptrn-elem-id-iter-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
@@ -374,20 +276,8 @@ language/statements/for-await-of/async-gen-dstr-let-ary-ptrn-elem-obj-val-undef.
 language/statements/for-await-of/async-gen-dstr-let-ary-ptrn-elision-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-gen-dstr-let-ary-ptrn-rest-id-elision-next-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-gen-dstr-let-ary-ptrn-rest-id-iter-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
-language/statements/for-await-of/async-gen-dstr-let-async-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-let-async-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-let-async-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-let-async-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-let-async-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-let-async-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-let-async-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-let-async-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-gen-dstr-let-obj-init-null.js  # Expected SameValue(«undefined», «TypeError») to be true
 language/statements/for-await-of/async-gen-dstr-let-obj-init-undefined.js  # Expected SameValue(«undefined», «TypeError») to be true
-language/statements/for-await-of/async-gen-dstr-let-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-let-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-let-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-let-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-gen-dstr-let-obj-ptrn-id-init-throws.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-gen-dstr-let-obj-ptrn-id-init-unresolvable.js  # Expected SameValue(«undefined», «ReferenceError») to be true
 language/statements/for-await-of/async-gen-dstr-let-obj-ptrn-list-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
@@ -399,10 +289,6 @@ language/statements/for-await-of/async-gen-dstr-let-obj-ptrn-prop-obj-value-null
 language/statements/for-await-of/async-gen-dstr-let-obj-ptrn-prop-obj-value-undef.js  # Expected SameValue(«undefined», «TypeError») to be true
 language/statements/for-await-of/async-gen-dstr-var-ary-init-iter-get-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-gen-dstr-var-ary-ptrn-elem-ary-val-null.js  # Expected SameValue(«undefined», «TypeError») to be true
-language/statements/for-await-of/async-gen-dstr-var-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-var-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-var-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-var-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-gen-dstr-var-ary-ptrn-elem-id-init-throws.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-gen-dstr-var-ary-ptrn-elem-id-init-unresolvable.js  # Expected SameValue(«undefined», «ReferenceError») to be true
 language/statements/for-await-of/async-gen-dstr-var-ary-ptrn-elem-id-iter-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
@@ -411,20 +297,8 @@ language/statements/for-await-of/async-gen-dstr-var-ary-ptrn-elem-obj-val-undef.
 language/statements/for-await-of/async-gen-dstr-var-ary-ptrn-elision-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-gen-dstr-var-ary-ptrn-rest-id-elision-next-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-gen-dstr-var-ary-ptrn-rest-id-iter-step-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
-language/statements/for-await-of/async-gen-dstr-var-async-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-var-async-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-var-async-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-var-async-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-var-async-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-var-async-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-var-async-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-var-async-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-gen-dstr-var-obj-init-null.js  # Expected SameValue(«undefined», «TypeError») to be true
 language/statements/for-await-of/async-gen-dstr-var-obj-init-undefined.js  # Expected SameValue(«undefined», «TypeError») to be true
-language/statements/for-await-of/async-gen-dstr-var-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-var-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-var-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-await-of/async-gen-dstr-var-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-await-of/async-gen-dstr-var-obj-ptrn-id-init-throws.js  # Expected SameValue(«undefined», «Test262Error») to be true
 language/statements/for-await-of/async-gen-dstr-var-obj-ptrn-id-init-unresolvable.js  # Expected SameValue(«undefined», «ReferenceError») to be true
 language/statements/for-await-of/async-gen-dstr-var-obj-ptrn-list-err.js  # Expected SameValue(«undefined», «Test262Error») to be true
@@ -455,32 +329,16 @@ language/statements/for-of/dstr/array-rest-iter-rtrn-close-err.js  # Iterator ne
 language/statements/for-of/dstr/array-rest-iter-rtrn-close-null.js  # Iterator next must be a function.
 language/statements/for-of/dstr/array-rest-iter-thrw-close-err.js  # Expected SameValue(«11», «0») to be true
 language/statements/for-of/dstr/array-rest-lref-err.js  # Expected SameValue(«1», «0») to be true
-language/statements/for-of/dstr/const-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/const-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/const-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/const-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-of/dstr/const-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
 language/statements/for-of/dstr/const-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
 language/statements/for-of/dstr/const-obj-init-null.js  # Expected a TypeError but got a Error
 language/statements/for-of/dstr/const-obj-init-undefined.js  # Expected a TypeError but got a Error
-language/statements/for-of/dstr/const-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/const-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/const-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/const-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-of/dstr/const-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
 language/statements/for-of/dstr/const-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error
-language/statements/for-of/dstr/let-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/let-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/let-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/let-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-of/dstr/let-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
 language/statements/for-of/dstr/let-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
 language/statements/for-of/dstr/let-obj-init-null.js  # Expected a TypeError but got a Error
 language/statements/for-of/dstr/let-obj-init-undefined.js  # Expected a TypeError but got a Error
-language/statements/for-of/dstr/let-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/let-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/let-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/let-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-of/dstr/let-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
 language/statements/for-of/dstr/let-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error
 language/statements/for-of/dstr/obj-empty-bool.js  # Object destructuring requires a data object or array value, received a boolean.
@@ -496,118 +354,60 @@ language/statements/for-of/dstr/obj-rest-number.js  # Object destructuring requi
 language/statements/for-of/dstr/obj-rest-str-val.js  # Object destructuring requires a data object or array value, received a string.
 language/statements/for-of/dstr/obj-rest-val-null.js  # Expected a TypeError but got a Error
 language/statements/for-of/dstr/obj-rest-val-undefined.js  # Expected a TypeError but got a Error
-language/statements/for-of/dstr/var-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/var-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/var-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/var-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-of/dstr/var-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
 language/statements/for-of/dstr/var-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
 language/statements/for-of/dstr/var-obj-init-null.js  # Expected a TypeError but got a Error
 language/statements/for-of/dstr/var-obj-init-undefined.js  # Expected a TypeError but got a Error
-language/statements/for-of/dstr/var-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/var-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/var-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for-of/dstr/var-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for-of/dstr/var-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
 language/statements/for-of/dstr/var-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error
 language/statements/for-of/throw-from-catch.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 language/statements/for-of/throw-from-finally.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 language/statements/for-of/throw.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
-language/statements/for/dstr/const-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/const-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/const-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/const-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for/dstr/const-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
 language/statements/for/dstr/const-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
 language/statements/for/dstr/const-obj-init-null.js  # Expected a TypeError but got a Error
 language/statements/for/dstr/const-obj-init-undefined.js  # Expected a TypeError but got a Error
-language/statements/for/dstr/const-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/const-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/const-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/const-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for/dstr/const-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
 language/statements/for/dstr/const-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error
-language/statements/for/dstr/let-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/let-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/let-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/let-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for/dstr/let-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
 language/statements/for/dstr/let-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
 language/statements/for/dstr/let-obj-init-null.js  # Expected a TypeError but got a Error
 language/statements/for/dstr/let-obj-init-undefined.js  # Expected a TypeError but got a Error
-language/statements/for/dstr/let-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/let-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/let-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/let-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for/dstr/let-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
 language/statements/for/dstr/let-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error
-language/statements/for/dstr/var-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/var-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/var-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/var-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for/dstr/var-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
 language/statements/for/dstr/var-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
 language/statements/for/dstr/var-obj-init-null.js  # Expected a TypeError but got a Error
 language/statements/for/dstr/var-obj-init-undefined.js  # Expected a TypeError but got a Error
-language/statements/for/dstr/var-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/var-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/var-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/for/dstr/var-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/for/dstr/var-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
 language/statements/for/dstr/var-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error
-language/statements/function/13.2-19-b-3gs.js  # Expected a TypeError but got a Error
-language/statements/function/13.2-2-s.js  # Expected a TypeError but got a Error
+language/statements/function/13.2-19-b-3gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/function/13.2-2-s.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/function/S13.2.1_A5_T1.js  # .toString is not a function.
-language/statements/function/S13.2_A3.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/function/S13.2_A7_T1.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/function/S13.2_A8_T1.js  # Binary operators require data values.
+language/statements/function/S13.2_A7_T1.js  # The called value is not a function.
 language/statements/function/S13_A3_T1.js  # Unknown identifier '…'.
 language/statements/function/S13_A6_T1.js  # Identifier '…' has already been declared.
 language/statements/function/S14_A2.js  # Unknown identifier '…'.
 language/statements/function/S14_A5_T1.js  # Identifier '…' has already been declared.
 language/statements/function/S14_A5_T2.js  # Identifier '…' has already been declared.
-language/statements/function/dflt-params-trailing-comma.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/function/dstr/ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/function/dstr/ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/function/dstr/ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/function/dstr/ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/function/dstr/ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
 language/statements/function/dstr/ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
-language/statements/function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/function/dstr/dflt-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
 language/statements/function/dstr/dflt-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
 language/statements/function/dstr/dflt-obj-init-null.js  # Expected a TypeError but got a Error
 language/statements/function/dstr/dflt-obj-init-undefined.js  # Expected a TypeError but got a Error
-language/statements/function/dstr/dflt-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/function/dstr/dflt-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/function/dstr/dflt-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/function/dstr/dflt-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/function/dstr/dflt-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
 language/statements/function/dstr/dflt-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error
 language/statements/function/dstr/obj-init-null.js  # Expected a TypeError but got a Error
 language/statements/function/dstr/obj-init-undefined.js  # Expected a TypeError but got a Error
-language/statements/function/dstr/obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/function/dstr/obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/function/dstr/obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/function/dstr/obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/function/dstr/obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
 language/statements/function/dstr/obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error
-language/statements/function/params-trailing-comma-multiple.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/function/params-trailing-comma-single.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/function/rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
 language/statements/generators/dflt-params-abrupt.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/generators/dflt-params-ref-later.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
 language/statements/generators/dflt-params-ref-self.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
-language/statements/generators/dflt-params-trailing-comma.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/generators/dstr/ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/generators/dstr/ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
-language/statements/generators/dstr/ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/generators/dstr/ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/generators/dstr/ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/generators/dstr/ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/generators/dstr/ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/generators/dstr/ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
@@ -618,10 +418,6 @@ language/statements/generators/dstr/ary-ptrn-rest-id-elision-next-err.js  # Expe
 language/statements/generators/dstr/ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/generators/dstr/dflt-ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/generators/dstr/dflt-ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
-language/statements/generators/dstr/dflt-ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/generators/dstr/dflt-ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/generators/dstr/dflt-ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/generators/dstr/dflt-ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/generators/dstr/dflt-ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/generators/dstr/dflt-ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/dflt-ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
@@ -632,10 +428,6 @@ language/statements/generators/dstr/dflt-ary-ptrn-rest-id-elision-next-err.js  #
 language/statements/generators/dstr/dflt-ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/generators/dstr/dflt-obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/dflt-obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
-language/statements/generators/dstr/dflt-obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/generators/dstr/dflt-obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/generators/dstr/dflt-obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/generators/dstr/dflt-obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/generators/dstr/dflt-obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/generators/dstr/dflt-obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/dflt-obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
@@ -647,10 +439,6 @@ language/statements/generators/dstr/dflt-obj-ptrn-prop-obj-value-null.js  # Expe
 language/statements/generators/dstr/dflt-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
-language/statements/generators/dstr/obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/generators/dstr/obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/generators/dstr/obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/generators/dstr/obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/generators/dstr/obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/generators/dstr/obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
@@ -661,23 +449,13 @@ language/statements/generators/dstr/obj-ptrn-prop-id-init-unresolvable.js  # Exp
 language/statements/generators/dstr/obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/generators/has-instance.js  # The right-hand side of '…' must be a supported constructor: Error (or a specific error type like Typ
-language/statements/generators/params-trailing-comma-multiple.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/generators/params-trailing-comma-single.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/generators/rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
 language/statements/labeled/value-await-non-module-escaped.js  # Failed to parse TypeScript: Keywords cannot contain escape characters.
 language/statements/labeled/value-await-non-module.js  # Failed to parse TypeScript: Expression expected.
-language/statements/let/dstr/ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/let/dstr/ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/let/dstr/ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/let/dstr/ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/let/dstr/ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
 language/statements/let/dstr/ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
 language/statements/let/dstr/obj-init-null.js  # Expected a TypeError but got a Error
 language/statements/let/dstr/obj-init-undefined.js  # Expected a TypeError but got a Error
-language/statements/let/dstr/obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/let/dstr/obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/let/dstr/obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/let/dstr/obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/let/dstr/obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
 language/statements/let/dstr/obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error
 language/statements/return/S12.9_A1_T1.js  # expected SyntaxError but the program ran
@@ -694,31 +472,15 @@ language/statements/switch/S12.11_A1_T4.js  # Switch discriminants must be data 
 language/statements/switch/scope-lex-open-dflt.js  # Switch discriminants must be data values.
 language/statements/try/S12.14_A19_T1.js  # .toString is not a function.
 language/statements/try/S12.14_A19_T2.js  # .toString is not a function.
-language/statements/try/dstr/ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/try/dstr/ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/try/dstr/ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/try/dstr/ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/try/dstr/ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
 language/statements/try/dstr/ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
 language/statements/try/dstr/obj-init-null.js  # Expected a TypeError but got a Error
 language/statements/try/dstr/obj-init-undefined.js  # Expected a TypeError but got a Error
-language/statements/try/dstr/obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/try/dstr/obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/try/dstr/obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/try/dstr/obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/try/dstr/obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
 language/statements/try/dstr/obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error
-language/statements/variable/dstr/ary-ptrn-elem-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/variable/dstr/ary-ptrn-elem-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/variable/dstr/ary-ptrn-elem-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/variable/dstr/ary-ptrn-elem-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/variable/dstr/ary-ptrn-elem-obj-val-null.js  # Expected a TypeError but got a Error
 language/statements/variable/dstr/ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError but got a Error
 language/statements/variable/dstr/obj-init-null.js  # Expected a TypeError but got a Error
 language/statements/variable/dstr/obj-init-undefined.js  # Expected a TypeError but got a Error
-language/statements/variable/dstr/obj-ptrn-id-init-fn-name-arrow.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/variable/dstr/obj-ptrn-id-init-fn-name-cover.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/variable/dstr/obj-ptrn-id-init-fn-name-fn.js  # Cannot read properties of a function; only data values expose properties.
-language/statements/variable/dstr/obj-ptrn-id-init-fn-name-gen.js  # Cannot read properties of a function; only data values expose properties.
 language/statements/variable/dstr/obj-ptrn-prop-obj-value-null.js  # Expected a TypeError but got a Error
 language/statements/variable/dstr/obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError but got a Error

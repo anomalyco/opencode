@@ -1,4 +1,4 @@
-import type { BlockStatement, Expression, Node, Pattern } from "acorn"
+import type { Node } from "acorn"
 import type { Effect } from "effect"
 import type { DiagnosticKind } from "../codemode.js"
 import type { ProgramObject } from "./objects.js"
@@ -22,16 +22,6 @@ export type StatementResult =
 export type MemberReference = {
   target: ProgramObject | Values.RegExp | Values.URL
   key: PropertyKey
-}
-
-export class CodeModeFunction {
-  constructor(
-    readonly parameters: ReadonlyArray<Pattern>,
-    readonly body: BlockStatement | Expression,
-    readonly capturedScopes: ReadonlyArray<Map<string, Binding>>,
-    readonly async: boolean,
-    readonly generator: boolean,
-  ) {}
 }
 
 export type GeneratorRequestKind = "next" | "return" | "throw"

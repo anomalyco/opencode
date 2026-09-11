@@ -1,4 +1,5 @@
-import { AsyncIteratorSymbol, IteratorSymbol } from "./model.js"
+import type { BlockStatement, Expression, Pattern } from "acorn"
+import { AsyncIteratorSymbol, type Binding, IteratorSymbol } from "./model.js"
 
 /** An object owned by the program: own properties plus a prototype link. */
 export class ProgramObject {
@@ -18,6 +19,22 @@ export class ProgramError extends ProgramObject {
   }
 }
 
+export class ProgramFunction extends ProgramObject {
+  readonly length: number
+  constructor(
+    readonly name: string,
+    readonly parameters: ReadonlyArray<Pattern>,
+    readonly body: BlockStatement | Expression,
+    readonly capturedScopes: ReadonlyArray<Map<string, Binding>>,
+    readonly async: boolean,
+    readonly generator: boolean,
+  ) {
+    super()
+    const optional = parameters.findIndex((p) => p.type === "AssignmentPattern" || p.type === "RestElement")
+    this.length = optional === -1 ? parameters.length : optional
+  }
+}
+
 const MAX_ARRAY_LENGTH = 4_294_967_295
 
 export const parseArrayIndex = (key: string | number): number | undefined => {
@@ -32,19 +49,25 @@ const canonical = (key: PropertyKey): string | symbol => (typeof key === "symbol
 const index = (target: ProgramObject, key: string | symbol): number | undefined =>
   target instanceof ProgramArray && typeof key === "string" ? parseArrayIndex(key) : undefined
 
+// Non-enumerable built-in properties: array length, function name and length.
+const builtin = (target: ProgramObject, name: string | symbol): boolean =>
+  (name === "length" && target instanceof ProgramArray) ||
+  ((name === "name" || name === "length") && target instanceof ProgramFunction)
+
 export const hasOwn = (target: ProgramObject, key: PropertyKey): boolean => {
   const name = canonical(key)
   const at = index(target, name)
   if (at !== undefined) return at in (target as ProgramArray).items
-  if (name === "length" && target instanceof ProgramArray) return true
-  return target.props.has(name)
+  return builtin(target, name) || target.props.has(name)
 }
 
 export const getOwn = (target: ProgramObject, key: PropertyKey): unknown => {
   const name = canonical(key)
   const at = index(target, name)
   if (at !== undefined) return (target as ProgramArray).items[at]
-  if (name === "length" && target instanceof ProgramArray) return target.items.length
+  if (target instanceof ProgramArray && name === "length") return target.items.length
+  if (target instanceof ProgramFunction && name === "name") return target.name
+  if (target instanceof ProgramFunction && name === "length") return target.length
   return target.props.get(name)
 }
 
@@ -75,6 +98,7 @@ export const set = (target: ProgramObject, key: PropertyKey, value: unknown): bo
     target.items.length = length
     return true
   }
+  if (builtin(target, name)) return false
   target.props.set(name, value)
   return true
 }
@@ -84,6 +108,7 @@ export const remove = (target: ProgramObject, key: PropertyKey): boolean => {
   const at = index(target, name)
   if (at !== undefined) return delete (target as ProgramArray).items[at]
   if (name === "length" && target instanceof ProgramArray) return false
+  if (builtin(target, name)) return true
   target.props.delete(name)
   return true
 }

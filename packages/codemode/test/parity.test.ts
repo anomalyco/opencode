@@ -913,3 +913,48 @@ describe("coercion parity: unknown static members read as undefined", () => {
     ])
   })
 })
+
+describe("functions are objects", () => {
+  test("name follows NamedEvaluation and length counts required parameters", async () => {
+    expect(
+      await value(`
+        function decl(a, b = 1, ...rest) {}
+        const arrow = () => {}
+        const named = function inner() {}
+        let assigned
+        assigned = (a, b) => {}
+        const { fromDefault = () => {} } = {}
+        const [fromArray = function () {}] = []
+        const obj = { method() {}, key: () => {}, [Symbol.iterator]: () => {} }
+        const passthrough = (0, () => {})
+        return [
+          [decl.name, decl.length],
+          [arrow.name, named.name, assigned.name, assigned.length],
+          [fromDefault.name, fromArray.name],
+          [obj.method.name, obj.key.name, obj[Symbol.iterator].name],
+          passthrough.name,
+        ]
+      `),
+    ).toEqual([
+      ["decl", 1],
+      ["arrow", "inner", "assigned", 2],
+      ["fromDefault", "fromArray"],
+      ["method", "key", "[Symbol.iterator]"],
+      "",
+    ])
+  })
+
+  test("functions hold own properties; name and length are read-only", async () => {
+    expect(
+      await value(`
+        const fn = () => 1
+        fn.count = 2
+        fn.count += 1
+        let renamed = false
+        try { fn.name = "other" } catch (error) { renamed = error instanceof TypeError }
+        const { name, count } = fn
+        return [fn.count, Object.keys(fn), "count" in fn, "name" in fn, name, count, renamed, delete fn.count, fn.count]
+      `),
+    ).toEqual([3, ["count"], true, true, "fn", 3, true, true, null])
+  })
+})

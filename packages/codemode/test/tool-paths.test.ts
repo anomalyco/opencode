@@ -192,9 +192,10 @@ describe("blocked member names on tool paths", () => {
       `,
       ),
     ).toEqual([true, true, true, null, true, null, null, null, true, null, null, "undefined"])
-    expect((await failure(runtime, `return (() => 1).constructor`)).message).toContain(
-      "Cannot read properties of a function",
-    )
+    expect(await value(runtime, `return [(() => 1).constructor, typeof (() => 1).__proto__]`)).toEqual([
+      null,
+      "undefined",
+    ])
     const escape = await failure(runtime, `return ({}).constructor.constructor.constructor("return 1")()`)
     expect(escape.message).toContain("Cannot access a property on a non-object value")
     const poisoned = await failure(runtime, `const o = {}; o.__proto__.constructor("return 1")`)

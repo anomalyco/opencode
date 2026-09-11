@@ -1101,7 +1101,7 @@ describe("CodeMode values at intra-CodeMode checkpoints", () => {
     const diagnostic = await error(`return Array.from(Promise.resolve([1]))`)
     expect(diagnostic.kind).toBe("InvalidDataValue")
     expect(diagnostic.message).toContain("await")
-    expect((await error(`return Array.from(() => 1)`)).kind).toBe("InvalidDataValue")
+    expect(await value(`return Array.from((a, b) => 1)`)).toEqual([null, null])
   })
 
   test("regexes stay callable through Object.values", async () => {
