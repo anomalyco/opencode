@@ -12,12 +12,11 @@ import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
 import type { SystemContext } from "../system-context/index"
-import { AgentV2 } from "../agent"
 import type { Revert } from "@opencode-ai/schema/revert"
 import type { FileDiff } from "@opencode-ai/schema/file-diff"
 
 type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
-type V1MessageData = Omit<SessionV1.Info | SessionV1.InfoV2, "id" | "sessionID">
+type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
 type V1PartData = Omit<SessionV1.Part, "id" | "sessionID" | "messageID">
 
 export const SessionTable = sqliteTable(
@@ -85,7 +84,8 @@ export const MessageDiffTable = sqliteTable(
   {
     message_id: text()
       .$type<MessageID>()
-      .primaryKey(),
+      .primaryKey()
+      .references(() => MessageTable.id, { onDelete: "cascade" }),
     session_id: text()
       .$type<SessionSchema.ID>()
       .notNull()

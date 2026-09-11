@@ -74,11 +74,7 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
   }
 }
 
-function messageData(
-  info:
-    | (typeof SessionV1.Event.MessageUpdated.Type)["data"]["info"]
-    | (typeof SessionV1.Event.MessageUpdatedV2.Type)["data"]["info"],
-): typeof MessageTable.$inferInsert.data {
+function messageData(info: (typeof SessionV1.Event.MessageUpdated.Type)["data"]["info"]): typeof MessageTable.$inferInsert.data {
   const { id: _, sessionID: __, ...rest } = info
   return rest as DeepMutable<typeof rest>
 }
@@ -259,13 +255,7 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionV1.Event.Deleted, (event) =>
       db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie),
     )
-    const projectMessage = (event: {
-      data: {
-        info:
-          | (typeof SessionV1.Event.MessageUpdated.Type)["data"]["info"]
-          | (typeof SessionV1.Event.MessageUpdatedV2.Type)["data"]["info"]
-      }
-    }) =>
+    const projectMessage = (event: { data: { info: (typeof SessionV1.Event.MessageUpdated.Type)["data"]["info"] } }) =>
       Effect.gen(function* () {
         const time_created = event.data.info.time.created
         const id = event.data.info.id
@@ -279,7 +269,6 @@ const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
       })
     yield* events.project(SessionV1.Event.MessageUpdated, projectMessage)
-    yield* events.project(SessionV1.Event.MessageUpdatedV2, projectMessage)
     yield* events.project(SessionV1.Event.MessageDiffUpdated, (event) =>
       db
         .insert(MessageDiffTable)

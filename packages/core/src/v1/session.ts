@@ -16,7 +16,6 @@ export {
   FileSource,
   Format,
   Info,
-  InfoV2,
   MessageID,
   OutputFormatJsonSchema,
   OutputFormatText,
@@ -43,7 +42,6 @@ export {
   ToolStatePending,
   ToolStateRunning,
   User,
-  UserV2,
   WithParts,
 } from "@opencode-ai/schema/session-v1"
 
