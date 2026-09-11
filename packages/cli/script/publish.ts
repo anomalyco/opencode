@@ -147,6 +147,10 @@ if (existsSync(path.join(root, "node"))) {
   })
 }
 
+if (Script.channel === "latest" && Script.release && !dryRun) {
+  await $`docker buildx build --platform linux/amd64,linux/arm64 --tag ghcr.io/anomalyco/opencode:${Script.version} --push .`
+}
+
 if (Script.channel === "beta" && Script.release) {
   await $`bun ./script/publish-aur.ts ${dryRun ? ["--dry-run"] : []}`.env({ ...process.env, OPENCODE_CLI_DIST: root })
 }

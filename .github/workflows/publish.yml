@@ -25,7 +25,7 @@ on:
         required: false
         type: string
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.version || inputs.bump }}
+concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ (github.ref_name == 'v2' && (inputs.version || inputs.bump) && 'release') || inputs.version || inputs.bump }}
 
 permissions:
   id-token: write
@@ -33,7 +33,7 @@ permissions:
   packages: write
 
 env:
-  OPENCODE_CHANNEL: ${{ (github.ref_name == 'v2' && 'dev') || '' }}
+  OPENCODE_CHANNEL: ${{ (github.ref_name == 'v2' && !inputs.bump && !inputs.version && 'dev') || '' }}
 
 jobs:
   version:
@@ -378,7 +378,7 @@ jobs:
     needs:
       - version
       - sign-cli-macos
-    if: github.repository == 'anomalyco/opencode' && github.ref_name != 'v2'
+    if: github.repository == 'anomalyco/opencode' && (github.ref_name != 'v2' || needs.version.outputs.release != '')
     continue-on-error: false
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
