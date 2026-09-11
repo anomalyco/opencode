@@ -77,7 +77,7 @@ describe("AISDKNative", () => {
         settings: {
           apiKey: "secret",
           baseURL: `https://${name}.example/v1`,
-          providerOptions: { reasoningEffort: "high", customOption: { enabled: true } },
+          providerOptions: { name: "custom-provider", reasoningEffort: "high", customOption: { enabled: true } },
         },
         headers: { "x-provider": name },
       })
@@ -123,10 +123,6 @@ describe("AISDKNative", () => {
         promptCacheKey: "session-123",
         reasoningEffort: "high",
         promptMode: "reasoning",
-        fetch: "ignored",
-        generateId: "ignored",
-        structuredOutputs: true,
-        unsupported: true,
       }),
     ).toEqual({
       package: "@opencode/ai/providers/mistral",
@@ -148,24 +144,12 @@ describe("AISDKNative", () => {
     })
   })
 
-  test("omits invalid and runtime-only Mistral settings", () => {
+  test("merges a nested providerOptions object instead of nesting it again", () => {
     expect(
-      map("@ai-sdk/mistral", {
-        headers: { valid: "header", invalid: 1 },
-        extraBody: "invalid",
-        safePrompt: "false",
-        documentImageLimit: "4",
-        documentPageLimit: null,
-        parallelToolCalls: 0,
-        promptCacheKey: false,
-        reasoningEffort: false,
-        promptMode: "unsupported",
-        fetch: "ignored",
-        generateId: "ignored",
-      }),
+      map("@ai-sdk/openai", { apiKey: "secret", reasoningEffort: "high", providerOptions: { textVerbosity: "low" } }),
     ).toEqual({
-      package: "@opencode/ai/providers/mistral",
-      settings: {},
+      package: "@opencode/ai/providers/openai",
+      settings: { apiKey: "secret", providerOptions: { textVerbosity: "low", reasoningEffort: "high" } },
     })
   })
 
@@ -259,9 +243,9 @@ describe("AISDKNative", () => {
 
     // GPT-5.6+ reject `reasoning_effort` and take the Responses-style nested field.
     for (const modelID of ["global.openai.gpt-5.6-sol", "us.openai.gpt-5.6-sol", "us.openai.gpt-6-astra"]) {
-      expect(
-        map("@ai-sdk/amazon-bedrock", { reasoningConfig: { maxReasoningEffort: "none" } }, modelID)?.body,
-      ).toEqual({ additionalModelRequestFields: { reasoning: { effort: "none" } } })
+      expect(map("@ai-sdk/amazon-bedrock", { reasoningConfig: { maxReasoningEffort: "none" } }, modelID)?.body).toEqual(
+        { additionalModelRequestFields: { reasoning: { effort: "none" } } },
+      )
     }
     expect(
       map(
@@ -330,7 +314,6 @@ describe("AISDKNative", () => {
           },
           baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/v1",
           credentialProvider: "ignored",
-          fetch: "ignored",
           store: false,
         },
         "openai.gpt-oss-120b",
@@ -415,7 +398,6 @@ describe("AISDKNative", () => {
           thinkingBudget: 0,
           includeThoughts: false,
           thinkingLevel: "high",
-          unknown: true,
         },
       }),
     ).toEqual({
@@ -533,23 +515,6 @@ describe("AISDKNative", () => {
           store: true,
         },
       },
-    })
-  })
-
-  test("omits invalid and unsupported xAI settings", () => {
-    expect(
-      map("@ai-sdk/xai", {
-        reasoningEffort: 10,
-        store: "yes",
-        include: ["unknown"],
-        logprobs: true,
-        topLogprobs: 8,
-        previousResponseId: "response-id",
-        searchParameters: { mode: "auto" },
-      }),
-    ).toEqual({
-      package: "@opencode/ai/providers/xai",
-      settings: {},
     })
   })
 })

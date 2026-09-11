@@ -103,6 +103,53 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
   return yield* importPackage(specifier, entrypoint)
 })
 
+// Keys native provider packages read from the top level of `settings`; see the `Settings` types under
+// `@opencode/ai/providers`. Catalog settings are flat, so every other key is a request option.
+const CONNECTION_KEYS = new Set([
+  "accessToken",
+  "accountId",
+  "apiKey",
+  "apiVersion",
+  "auth",
+  "authToken",
+  "baseURL",
+  "body",
+  "credentials",
+  "gatewayApiKey",
+  "gatewayId",
+  "headers",
+  "location",
+  "organization",
+  "profile",
+  "project",
+  "provider",
+  "queryParams",
+  "region",
+  "resourceName",
+  "topP",
+  "useDeploymentBasedUrls",
+])
+
+/**
+ * Shapes flat catalog settings for a native provider package: connection keys stay on top and every other
+ * key moves into `providerOptions`. A nested `providerOptions` written in the package's own shape merges in
+ * rather than nesting twice, so AI SDK-style and native-style configs resolve identically.
+ */
+export function nativeSettings(settings: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  // A provider ID is a string; OpenRouter's routing preferences reuse the `provider` key as an object.
+  const connection = ([key, value]: readonly [string, unknown]) =>
+    CONNECTION_KEYS.has(key) && (key !== "provider" || typeof value === "string")
+  const entries = Object.entries(settings)
+  const providerOptions = {
+    ...(isRecord(settings.providerOptions) ? settings.providerOptions : {}),
+    ...Object.fromEntries(entries.filter((entry) => entry[0] !== "providerOptions" && !connection(entry))),
+  }
+  return {
+    ...Object.fromEntries(entries.filter(connection)),
+    ...(Object.keys(providerOptions).length === 0 ? {} : { providerOptions }),
+  }
+}
+
 export function mergeOverlay(
   base: Readonly<Record<string, unknown>> | undefined,
   overlay: Readonly<Record<string, unknown>> | undefined,
