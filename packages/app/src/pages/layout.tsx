@@ -68,10 +68,9 @@ import {
   sortedRootSessions,
 } from "./layout/helpers"
 import {
-  collectNewSessionDeepLinks,
-  collectOpenProjectDeepLinks,
   deepLinkEvent,
   drainPendingDeepLinks,
+  handleDeepLinks,
 } from "./layout/deep-links"
 import { createInlineEditorController } from "./layout/inline-editor"
 import {
@@ -1249,24 +1248,22 @@ export default function LegacyLayout(props: ParentProps) {
     if (navigate) return navigateToProject(directory)
   }
 
-  const handleDeepLinks = (urls: string[]) => {
-    if (!server.isLocal()) return
-
-    for (const directory of collectOpenProjectDeepLinks(urls)) {
-      void openProject(directory)
-    }
-
-    for (const link of collectNewSessionDeepLinks(urls)) {
-      void openProject(link.directory, false)
-      const slug = base64Encode(link.directory)
-      if (link.prompt) {
-        setSessionHandoff(SessionStateKey.from(server.scope(), SessionRouteKey.fromLegacy(slug)), {
-          prompt: link.prompt,
-        })
-      }
-      const href = link.prompt ? `/${slug}/session?prompt=${encodeURIComponent(link.prompt)}` : `/${slug}/session`
-      navigateWithSidebarReset(href)
-    }
+  const handleLegacyDeepLinks = (urls: string[]) => {
+    handleDeepLinks(urls, {
+      canHandle: () => server.isLocal() && !settings.general.newLayoutDesigns(),
+      openProject: (directory) => void openProject(directory),
+      openNewSession: (link) => {
+        void openProject(link.directory, false)
+        const slug = base64Encode(link.directory)
+        if (link.prompt) {
+          setSessionHandoff(SessionStateKey.from(server.scope(), SessionRouteKey.fromLegacy(slug)), {
+            prompt: link.prompt,
+          })
+        }
+        const href = link.prompt ? `/${slug}/session?prompt=${encodeURIComponent(link.prompt)}` : `/${slug}/session`
+        navigateWithSidebarReset(href)
+      },
+    })
   }
 
   onMount(() => {
@@ -1274,10 +1271,10 @@ export default function LegacyLayout(props: ParentProps) {
       const detail = (event as CustomEvent<{ urls: string[] }>).detail
       const urls = detail?.urls ?? []
       if (urls.length === 0) return
-      handleDeepLinks(urls)
+      handleLegacyDeepLinks(urls)
     }
 
-    handleDeepLinks(drainPendingDeepLinks(window))
+    handleLegacyDeepLinks(drainPendingDeepLinks(window))
     makeEventListener(window, deepLinkEvent, handler as EventListener)
   })
 
