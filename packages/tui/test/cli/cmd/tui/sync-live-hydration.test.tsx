@@ -56,6 +56,102 @@ test("live messages use creation time with an ID tie-break", async () => {
   }
 })
 
+test("hydrates turn patches from message.diff.updated", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+  const { app, emit, sync } = await mount(undefined, tmp.path)
+  const user = {
+    id: "msg_user",
+    sessionID,
+    role: "user" as const,
+    agent: "build",
+    model: { providerID: "test", modelID: "model" },
+    time: { created: 0 },
+  }
+
+  try {
+    emit(global({ id: "evt_message", type: "message.updated", properties: { sessionID, info: user } }))
+    emit(
+      global({
+        id: "evt_diff",
+        type: "message.diff.updated",
+        properties: {
+          sessionID,
+          messageID: user.id,
+          diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PATCH-CONTENT" }],
+        },
+      }),
+    )
+    await wait(
+      () =>
+        sync.data.message[sessionID]?.[0]?.role === "user" &&
+        sync.data.message[sessionID]?.[0]?.summary?.diffs[0]?.patch === "PATCH-CONTENT",
+    )
+
+    const message = sync.data.message[sessionID]?.[0]
+    expect(message?.role === "user" ? message.summary?.diffs[0]?.patch : undefined).toBe("PATCH-CONTENT")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("pending hydration retains a live turn patch", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+  let resolveMessages!: (response: Response) => void
+  const messages = new Promise<Response>((resolve) => {
+    resolveMessages = resolve
+  })
+  let requested = false
+  const { app, emit, sync } = await mount((url) => {
+    if (url.pathname === `/session/${sessionID}`) return json(session)
+    if (url.pathname === `/session/${sessionID}/message`) {
+      requested = true
+      return messages
+    }
+    if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
+    return undefined
+  }, tmp.path)
+  const user = {
+    id: "msg_user",
+    sessionID,
+    role: "user" as const,
+    agent: "build",
+    model: { providerID: "test", modelID: "model" },
+    time: { created: 0 },
+  }
+
+  try {
+    emit(global({ id: "evt_message", type: "message.updated", properties: { sessionID, info: user } }))
+    await wait(() => sync.data.message[sessionID]?.[0]?.id === user.id)
+    const hydrate = sync.session.sync(sessionID)
+    await wait(() => requested)
+    emit(
+      global({
+        id: "evt_diff",
+        type: "message.diff.updated",
+        properties: {
+          sessionID,
+          messageID: user.id,
+          diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PATCH-CONTENT" }],
+        },
+      }),
+    )
+    await wait(
+      () =>
+        sync.data.message[sessionID]?.[0]?.role === "user" &&
+        sync.data.message[sessionID]?.[0]?.summary?.diffs !== undefined,
+    )
+    resolveMessages(json([{ info: user, parts: [] }]))
+    await hydrate
+
+    const message = sync.data.message[sessionID]?.[0]
+    expect(message?.role === "user" ? message.summary?.diffs[0]?.patch : undefined).toBe("PATCH-CONTENT")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("stale session hydration does not overwrite live message parts", async () => {
   await using tmp = await tmpdir()
   await Bun.write(`${tmp.path}/kv.json`, "{}")
