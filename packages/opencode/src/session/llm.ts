@@ -334,6 +334,7 @@ const live: Layer.Layer<
                       args.params.prompt,
                       input.model,
                       prepared.messageTransformOptions,
+                      !(item.id === "openai" && info?.type === "oauth"),
                     )
                   }
                   return args.params

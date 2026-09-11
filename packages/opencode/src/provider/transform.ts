@@ -406,6 +406,74 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
   return msgs
 }
 
+// GPT-5.6 and later is where @ai-sdk/openai's explicit cache breakpoints take
+// effect; a request in explicit mode with no breakpoint the model honours
+// gets no prompt caching at all, which is worse than leaving implicit mode
+// alone. Parses "gpt-<major>[.<minor>]" out of the api id, treating a missing
+// minor as 0, e.g. "gpt-5-pro" -> (5, 0), "gpt-5.6-sol" -> (5, 6).
+// NOTE: a sibling PR introduces a similar gpt-N[.M] parse elsewhere in this
+// file; the two can be unified once both have landed.
+const GPT_EXPLICIT_CACHE_VERSION_RE = /gpt-(\d+)(?:\.(\d+))?/
+
+function supportsExplicitCacheBreakpoint(apiId: string): boolean {
+  const match = GPT_EXPLICIT_CACHE_VERSION_RE.exec(apiId)
+  if (!match) return false
+  const major = Number(match[1])
+  const minor = Number(match[2] ?? 0)
+  return major > 5 || (major === 5 && minor >= 6)
+}
+
+// Places an explicit OpenAI prompt cache breakpoint on the same trailing
+// messages applyCaching() targets (first 2 system, last 2 non-system).
+// Kept separate from applyCaching()'s provider map/gate so Anthropic
+// behaviour stays byte-identical and non-openai @ai-sdk/openai-compatible
+// models never receive an openai-namespaced marker.
+//
+// Callers must only invoke this for API-key OpenAI auth. Explicit cache
+// breakpoints are only meaningful alongside the request-level explicit mode
+// options() sets, and that mode can never be sent on the OAuth/Codex path
+// (see the allowExplicitCache gate in message() below) - so on OAuth,
+// breakpoints would be inert content-block keys with no upside, only risk.
+function applyOpenAICacheBreakpoint(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+  const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
+  const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
+
+  const providerOptions = {
+    openai: {
+      promptCacheBreakpoint: { mode: "explicit" },
+    },
+  }
+
+  for (const msg of unique([...system, ...final])) {
+    // Only text parts carry the breakpoint on the wire for array content:
+    // Chat Completions reads promptCacheBreakpoint exclusively off text
+    // parts, and the Responses API's user/file/output_text serializations
+    // only ever read it off the part, never the message. Marking the last
+    // part of any type (a trailing tool-call, say) produces a marker the SDK
+    // silently drops, so find the last text part instead, and leave the
+    // message unmarked entirely if it has none (this also naturally excludes
+    // tool-approval parts, which are never type "text").
+    if (Array.isArray(msg.content) && msg.content.length > 0) {
+      const lastText = [...msg.content].reverse().find((part) => part && typeof part === "object" && part.type === "text")
+      if (lastText) {
+        lastText.providerOptions = mergeDeep(lastText.providerOptions ?? {}, providerOptions)
+      }
+      continue
+    }
+
+    // String content only occurs here for system messages (SystemModelMessage.content
+    // is a string in the `ai` package). @ai-sdk/openai reads the breakpoint off
+    // message-level providerOptions specifically for the system role, on both
+    // Chat Completions and Responses, so this is the only place a
+    // message-level marker is honoured. Anchoring the system prompt this way
+    // guarantees at least one marker per request even when neither of the
+    // last two non-system messages has a text part to carry one.
+    msg.providerOptions = mergeDeep(msg.providerOptions ?? {}, providerOptions)
+  }
+
+  return msgs
+}
+
 function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
   return msgs.map((msg) => {
     if (msg.role !== "user" || !Array.isArray(msg.content)) return msg
@@ -462,7 +530,12 @@ function mapProviderOptions(
   })
 }
 
-export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
+export function message(
+  msgs: ModelMessage[],
+  model: Provider.Model,
+  options: Record<string, unknown>,
+  allowExplicitCache = false,
+) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
   const usesAnthropicAutomaticCaching =
@@ -483,7 +556,12 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
     msgs = applyCaching(msgs, model)
   }
 
-  // Remap providerOptions keys from stored providerID to expected SDK key
+  // Remap providerOptions keys from stored providerID to expected SDK key.
+  // Must run before applyOpenAICacheBreakpoint() below: for models whose SDK
+  // key differs from their providerID (e.g. @ai-sdk/amazon-bedrock/mantle,
+  // key "openai" vs providerID "amazon-bedrock"), this remap overwrites
+  // result[key] with whatever already lived under result[model.providerID].
+  // Placing the breakpoint first would let that overwrite clobber it.
   const key = sdkKey(model.api.npm)
   if (key && key !== model.providerID) {
     const remap = (opts: Record<string, any> | undefined) => {
@@ -496,6 +574,36 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
     }
 
     msgs = mapProviderOptions(msgs, remap)
+  }
+
+  // OpenAI-native explicit cache breakpoint. Scoped to the OpenAI-native path
+  // (Chat Completions + Responses); @ai-sdk/amazon-bedrock/mantle shares it
+  // via sdkKey() mapping onto "openai" without a special case (its "mantle-gpt"
+  // style ids never match GPT_EXPLICIT_CACHE_VERSION_RE, so it's excluded
+  // anyway pending confirmation it accepts OpenAI-shaped body fields). Never
+  // reaches Copilot, whose sdkKey is "copilot". Gated on the same setCacheKey
+  // opt-out options() uses for promptCacheOptions, so the markers are never
+  // placed without the mode that makes them meaningful, and on
+  // supportsExplicitCacheBreakpoint() so pre-5.6 models keep implicit caching
+  // instead of losing it to an unmarked explicit request.
+  //
+  // allowExplicitCache defaults to false (permission the caller must grant,
+  // not an identity the caller declares) because the two failure directions
+  // are asymmetric: a caller that forgets to pass it just loses prompt
+  // caching, an invisible cost, whereas defaulting to true would place a
+  // breakpoint on every call site nobody has vetted, including ChatGPT/Codex
+  // OAuth requests. Those never reach api.openai.com - they route through
+  // the chatgpt.com Codex relay, which 400s on unknown top-level request
+  // params and can never be sent the explicit mode (promptCacheOptions) that
+  // makes these breakpoints meaningful there. Production call sites pass
+  // `!isOpenaiOauth`, so the OAuth path stays byte-identical to stock.
+  if (
+    allowExplicitCache &&
+    sdkKey(model.api.npm) === "openai" &&
+    options.setCacheKey !== false &&
+    supportsExplicitCacheBreakpoint(model.api.id)
+  ) {
+    msgs = applyOpenAICacheBreakpoint(msgs, model)
   }
 
   // Strip Responses item IDs before serialization, following Codex and keeping signed request bodies immutable.
@@ -1208,6 +1316,7 @@ export function options(input: {
   model: Provider.Model
   sessionID: string
   providerOptions?: Record<string, any>
+  allowExplicitCache?: boolean
 }): Record<string, any> {
   const result: Record<string, any> = {}
 
@@ -1319,6 +1428,31 @@ export function options(input: {
       input.providerOptions?.setCacheKey === true
     ) {
       result["promptCacheKey"] = input.sessionID
+    }
+
+    // Disable implicit breakpoint selection so the explicit breakpoints
+    // applyOpenAICacheBreakpoint() places on message content take effect.
+    // Scoped to the OpenAI-native path via sdkKey(); @ai-sdk/amazon-bedrock/mantle
+    // shares it without a special case, and Copilot's sdkKey ("copilot") never matches.
+    // Gated on supportsExplicitCacheBreakpoint() to match message(): pre-5.6
+    // models don't honour explicit breakpoints, so forcing explicit mode here
+    // without message() ever placing a marker would just turn caching off.
+    //
+    // allowExplicitCache defaults to false (permission the caller must grant,
+    // not an identity the caller declares): the failure directions are
+    // asymmetric, a caller that forgets to pass it just loses prompt caching,
+    // an invisible cost, whereas defaulting to true would set explicit mode
+    // on every call site nobody has vetted, including ChatGPT/Codex OAuth
+    // requests, which route through the chatgpt.com Codex relay (not
+    // api.openai.com) and 400 on unknown top-level request params such as
+    // prompt_cache_options. Production call sites pass `!isOpenaiOauth`, so
+    // the OAuth path stays byte-identical to stock.
+    if (
+      input.allowExplicitCache === true &&
+      sdkKey(input.model.api.npm) === "openai" &&
+      supportsExplicitCacheBreakpoint(input.model.api.id)
+    ) {
+      result["promptCacheOptions"] = { mode: "explicit" }
     }
   }
 
