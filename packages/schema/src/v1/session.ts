@@ -354,6 +354,18 @@ export const User = Schema.Struct({
 }).annotate({ identifier: "UserMessage" })
 export type User = Types.DeepMutable<Schema.Schema.Type<typeof User>>
 
+const UserSummaryV2 = Schema.Struct({
+  title: optional(Schema.String),
+  body: optional(Schema.String),
+  diffs: optional(Schema.Array(FileDiff.Info)),
+})
+
+export const UserV2 = Schema.Struct({
+  ...User.fields,
+  summary: optional(UserSummaryV2),
+}).annotate({ identifier: "UserMessageV2" })
+export type UserV2 = Types.DeepMutable<Schema.Schema.Type<typeof UserV2>>
+
 export const Part = Schema.Union([
   TextPart,
   SubtaskPart,
@@ -490,6 +502,9 @@ export type Assistant = Omit<Types.DeepMutable<Schema.Schema.Type<typeof Assista
 export const Info = Schema.Union([User, Assistant]).annotate({ discriminator: "role", identifier: "Message" })
 export type Info = User | Assistant
 
+export const InfoV2 = Schema.Union([UserV2, Assistant]).annotate({ discriminator: "role", identifier: "MessageV2" })
+export type InfoV2 = UserV2 | Assistant
+
 export const WithParts = Schema.Struct({
   info: Info,
   parts: Schema.Array(Part),
@@ -500,6 +515,13 @@ export type WithParts = {
 }
 
 const options = {
+  durable: {
+    aggregate: "sessionID",
+    version: 1,
+  },
+} as const
+
+const optionsV2 = {
   durable: {
     aggregate: "sessionID",
     version: 1,
@@ -601,6 +623,24 @@ const events = {
       info: Info,
     },
   }),
+  MessageUpdatedV2: define({
+    // A distinct type makes unsupported peers reject this transition instead of applying it as V1.
+    type: "message.updated.v2",
+    ...optionsV2,
+    schema: {
+      sessionID: SessionID,
+      info: InfoV2,
+    },
+  }),
+  MessageDiffUpdated: define({
+    type: "message.diff.updated",
+    ...options,
+    schema: {
+      sessionID: SessionID,
+      messageID: MessageID,
+      diffs: Schema.Array(FileDiff.Info),
+    },
+  }),
   MessageRemoved: define({
     type: "message.removed",
     ...options,
@@ -666,6 +706,8 @@ export const Event = {
     events.Updated,
     events.Deleted,
     events.MessageUpdated,
+    events.MessageUpdatedV2,
+    events.MessageDiffUpdated,
     events.MessageRemoved,
     events.PartUpdated,
     events.PartRemoved,
