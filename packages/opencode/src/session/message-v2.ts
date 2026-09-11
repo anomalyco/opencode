@@ -526,10 +526,7 @@ export const get = Effect.fn("MessageV2.get")(function* (input: { sessionID: Ses
     .get()
     .pipe(Effect.orDie)
   if (!row) return yield* new NotFoundError({ message: `Message not found: ${input.messageID}` })
-  return {
-    info: info(row),
-    parts: yield* parts(input.messageID),
-  }
+  return (yield* hydrate(db, [row]))[0]!
 })
 
 export function filterCompacted(msgs: Iterable<WithParts>) {

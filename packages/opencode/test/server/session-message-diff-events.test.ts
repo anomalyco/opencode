@@ -95,19 +95,51 @@ describe("session message diff events", () => {
         })
         const summary = yield* SessionSummary.Service
         yield* summary.summarize({ sessionID: session.id, messageID })
+        yield* summary.summarize({ sessionID: session.id, messageID })
         const summarized = (yield* Session.use.messages({ sessionID: session.id })).find(
           (item) => item.info.id === messageID,
         )?.info
-        const diff = summarized?.role === "user" ? summarized.summary?.diffs[0] : undefined
+        const initialDiffs = summarized?.role === "user" ? summarized.summary?.diffs : undefined
+        const diff = initialDiffs?.[0]
         expect(diff?.patch).toContain("turn patch")
 
-        yield* Session.use.updateMessage({
-          ...message,
-          summary: { diffs: [diff!] },
-          tools: { read: true },
-        })
-
         const { db } = yield* Database.Service
+        const unchangedEvents = yield* db
+          .select()
+          .from(EventTable)
+          .where(eq(EventTable.aggregate_id, session.id))
+          .orderBy(EventTable.seq)
+          .all()
+          .pipe(Effect.orDie)
+        const unchangedDiffEvents = unchangedEvents.filter((event) => event.type === "message.diff.updated.1")
+        expect(unchangedDiffEvents).toHaveLength(1)
+        expect(JSON.stringify(unchangedDiffEvents[0]?.data)).toContain("turn patch")
+
+        yield* Effect.promise(() => Bun.write(path.join(test.directory, "turn.ts"), "changed turn patch".repeat(30_000)))
+        const changed = yield* snapshot.track()
+        if (!changed) return yield* Effect.die("expected changed snapshot")
+        yield* Session.use.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "step-finish",
+          reason: "stop",
+          snapshot: changed,
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        })
+        const expectedChangedDiffs = yield* summary.computeDiff({
+          messages: (yield* Session.use.messages({ sessionID: session.id })).filter(
+            (item) => item.info.id === messageID || (item.info.role === "assistant" && item.info.parentID === messageID),
+          ),
+        })
+        yield* summary.summarize({ sessionID: session.id, messageID })
+        const changedDiffs = (yield* Session.use.messages({ sessionID: session.id })).find(
+          (item) => item.info.id === messageID,
+        )?.info
+        if (!changedDiffs || changedDiffs.role !== "user") return yield* Effect.die("expected changed user message")
+        expect(changedDiffs.summary?.diffs).toEqual(expectedChangedDiffs)
+
         const events = yield* db
           .select()
           .from(EventTable)
@@ -115,12 +147,12 @@ describe("session message diff events", () => {
           .orderBy(EventTable.seq)
           .all()
           .pipe(Effect.orDie)
-        const diffEvent = events.find((event) => event.type === "message.diff.updated.1")
-        const messageEvent = events.find((event) => event.type === "message.updated.v2.1")
-        expect(JSON.stringify(diffEvent?.data)).toContain("turn patch")
-        expect(JSON.stringify(messageEvent?.data)).not.toContain("turn patch")
-        expect(JSON.stringify(diffEvent?.data).length).toBeGreaterThan(250_000)
-        expect(JSON.stringify(messageEvent?.data).length).toBeLessThan(1_000)
+        const diffEvents = events.filter((event) => event.type === "message.diff.updated.1")
+        expect(diffEvents).toHaveLength(2)
+        expect(JSON.stringify(diffEvents[0]?.data)).toContain("turn patch")
+        expect(JSON.stringify(diffEvents[1]?.data)).toContain("changed turn patch")
+        expect(JSON.stringify(diffEvents[0]?.data).length).toBeGreaterThan(250_000)
+        expect(JSON.stringify(diffEvents[1]?.data).length).toBeGreaterThan(250_000)
 
         const response = yield* requestInDirectory(
           `${pathFor(SessionPaths.diff, { sessionID: session.id })}?messageID=${messageID}`,
@@ -128,7 +160,17 @@ describe("session message diff events", () => {
         )
         expect(response.status).toBe(200)
         const responseDiffs = yield* response.json
-        expect(Array.isArray(responseDiffs) ? responseDiffs[0]?.patch : undefined).toContain("turn patch")
+        expect(responseDiffs).toEqual(expectedChangedDiffs)
+
+        const messageResponse = yield* requestInDirectory(
+          pathFor(SessionPaths.message, { sessionID: session.id, messageID }),
+          test.directory,
+        )
+        expect(messageResponse.status).toBe(200)
+        const messagePayload = (yield* messageResponse.json) as SessionV1.WithParts
+        expect(
+          messagePayload.info.role === "user" ? messagePayload.info.summary?.diffs : undefined,
+        ).toEqual(expectedChangedDiffs)
 
         yield* db.delete(MessageDiffTable).where(eq(MessageDiffTable.session_id, session.id)).run().pipe(Effect.orDie)
         yield* db.delete(MessageTable).where(eq(MessageTable.session_id, session.id)).run().pipe(Effect.orDie)
@@ -149,8 +191,7 @@ describe("session message diff events", () => {
         const replayed = (yield* Session.use.messages({ sessionID: session.id })).find(
           (item) => item.info.id === messageID,
         )?.info
-        const replayedDiff = replayed?.role === "user" ? replayed.summary?.diffs[0] : undefined
-        expect(replayedDiff?.patch).toContain("turn patch")
+        expect(replayed?.role === "user" ? replayed.summary?.diffs : undefined).toEqual(expectedChangedDiffs)
       }),
     { git: true, config: { formatter: false, lsp: false }, timeout: 30_000 },
   )
