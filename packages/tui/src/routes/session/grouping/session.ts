@@ -108,12 +108,14 @@ export function completePrevious(rows: SessionRow[], index = rows.length) {
 
 /** Part references for an existing production subgroup, not a flat timeline. */
 export function groupRefs(row: SessionGroup, includePending = false): PartRef[] {
-  const pending = new Set(!includePending && row.kind === "exploration" ? row.pending.map((ref) => ref.partID) : [])
+  const pending = !includePending && row.kind === "exploration" ? row.pending : []
   const visit = (nodes: readonly GroupNode<SessionEntry, GroupKind>[]): PartRef[] =>
     nodes.flatMap((node) => {
       if (node.type === "group") return visit(node.children)
-      if (node.entry.type !== "part" || pending.has(node.entry.ref.partID)) return []
-      return [node.entry.ref]
+      if (node.entry.type !== "part") return []
+      const ref = node.entry.ref
+      if (pending.some((item) => item.messageID === ref.messageID && item.partID === ref.partID)) return []
+      return [ref]
     })
   return visit(row.children)
 }
