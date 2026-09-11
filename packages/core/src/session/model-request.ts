@@ -369,14 +369,26 @@ export const layer = Layer.effect(
             kind: input.kind,
           })
         : undefined
-      // HTTP hooks must observe every request, so they keep the provider on HTTP.
+      // HTTP hooks must observe every request, so they keep the provider on HTTP. The route decides
+      // whether it has a WebSocket channel; an explicit "websocket" preference on a route without one
+      // warns before the route falls back to HTTP.
       const options: StreamOptions = {
         ...(http ? { http } : {}),
-        ...(input.webSocket === "session" &&
-        !hasHttpHooks &&
-        resolved.capabilities.responsesWebsockets === true &&
-        resolved.websocket
-          ? { webSocket: transport.bind(session.id) }
+        ...(input.webSocket === "session" && !hasHttpHooks && resolved.transport !== "http"
+          ? {
+              webSocket: {
+                ...transport.bind(session.id),
+                ...(resolved.transport === "websocket"
+                  ? {
+                      unavailable: Effect.logWarning("session websocket not offered by route; using http", {
+                        sessionTransport: "websocket",
+                        model: `${resolved.ref.providerID}/${resolved.ref.id}`,
+                        route: request.model.route.id,
+                      }),
+                    }
+                  : {}),
+              },
+            }
           : {}),
       }
       const executeTool: Prepared["executeTool"] = (input) =>

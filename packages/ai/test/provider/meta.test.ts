@@ -36,13 +36,21 @@ it.effect("Meta composes baseline protocols with provider-owned endpoints and de
 
 it.effect("Meta Responses stays on HTTP when a WebSocket executor is supplied", () =>
   Effect.gen(function* () {
+    let unavailable = 0
     for (const baseURL of ["https://api.meta.ai/v1", "https://gateway.example/v1"]) {
       const response = yield* LLMClient.generate(
         LLM.request({
           model: Meta.configure({ apiKey: "fixture", baseURL }).responses("muse-spark-1.3"),
           prompt: "Hello",
         }),
-        { webSocket: { execute: () => Effect.die("Meta must not execute WebSocket requests") } },
+        {
+          webSocket: {
+            execute: () => Effect.die("Meta must not execute WebSocket requests"),
+            unavailable: Effect.sync(() => {
+              unavailable += 1
+            }),
+          },
+        },
       ).pipe(
         Effect.provide(
           dynamicResponse((input) =>
@@ -76,6 +84,7 @@ it.effect("Meta Responses stays on HTTP when a WebSocket executor is supplied", 
       expect(response.text).toBe("Hello")
       expect(response.finishReason.normalized).toBe("stop")
     }
+    expect(unavailable).toBe(2)
   }),
 )
 

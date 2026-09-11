@@ -6,6 +6,8 @@ export interface WebSocketChannelExecutor {
   readonly execute: (
     exchange: WebSocketChannelExchange,
   ) => Effect.Effect<WebSocketChannelExecution, AIError, Scope.Scope>
+  /** Runs when the route has no WebSocket channel for this request and carries it over HTTP instead. */
+  readonly unavailable?: Effect.Effect<void>
 }
 
 export interface WebSocketChannelExecution {

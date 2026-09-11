@@ -204,7 +204,6 @@ describe("OpenAIPlugin", () => {
       expect(model.package).toBe(Provider.aisdk("@ai-sdk/openai"))
       expect(model.enabled).toBe(true)
       expect(model.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
-      expect(model.capabilities.responsesWebsockets).toBe(true)
       expect(direct.headers).not.toHaveProperty("originator")
       expect(direct.baseURL).toBe("https://api.openai.com/v1")
       expect(provider.headers).not.toHaveProperty("x-codex-beta-features")
@@ -214,7 +213,7 @@ describe("OpenAIPlugin", () => {
     }),
   )
 
-  it.effect("selects Azure WebSocket from capability unless the policy disables it", () =>
+  it.effect("offers the session WebSocket unless the transport preference is http", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
       yield* credentials.create({
@@ -235,13 +234,13 @@ describe("OpenAIPlugin", () => {
         id: "deployment-responses",
         provider: Provider.ID.azure,
       })
-      const prepare = (websocket?: boolean) =>
+      const prepare = (preference?: Model.Info["transport"]) =>
         Effect.gen(function* () {
           const model = SessionRunnerModel.resolved(route.model({ id: "gpt-5.5" }), {
-            capabilities: { tools: true, input: ["text"], output: ["text"], responsesWebsockets: true },
+            capabilities: { tools: true, input: ["text"], output: ["text"] },
             cost: [],
             limit: { context: 200_000, output: 32_000 },
-            websocket,
+            transport: preference,
           })
           const requests = yield* SessionModelRequest.Service
           return yield* requests.prepare({
@@ -268,11 +267,15 @@ describe("OpenAIPlugin", () => {
         )
 
       const prepared = yield* prepare()
-      const disabled = yield* prepare(false)
+      const explicit = yield* prepare("websocket")
+      const http = yield* prepare("http")
 
-      expect(prepared.options.webSocket).toBe(executor)
+      expect(prepared.options.webSocket?.execute).toBe(executor.execute)
+      expect(prepared.options.webSocket?.unavailable).toBeUndefined()
       expect(prepared.options.http).toBeUndefined()
-      expect(disabled.options.webSocket).toBeUndefined()
+      expect(explicit.options.webSocket?.execute).toBe(executor.execute)
+      expect(explicit.options.webSocket?.unavailable).toBeDefined()
+      expect(http.options.webSocket).toBeUndefined()
     }),
   )
 })

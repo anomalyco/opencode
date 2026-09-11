@@ -95,15 +95,6 @@ export const XAIPlugin = define({
       editor.method.update(device(ctx.app))
       editor.method.update({ integrationID: "xai", method: { type: "key", label: "Manually enter API Key" } })
     })
-    yield* ctx.catalog.transform((catalog) => {
-      const provider = catalog.provider.get(providerID)
-      if (!provider) return
-      for (const model of provider.models.values()) {
-        catalog.model.update(providerID, model.id, (draft) => {
-          draft.capabilities.responsesWebsockets = true
-        })
-      }
-    })
   }),
 })
 

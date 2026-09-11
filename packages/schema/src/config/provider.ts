@@ -42,8 +42,9 @@ class Limit extends Schema.Class<Limit>("Config.Model.Limit")({
 
 class Model extends Schema.Class<Model>("Config.Model")({
   compaction: Provider.Compaction.pipe(optional),
-  websocket: Schema.Boolean.pipe(optional).annotate({
-    description: "Use the provider's WebSocket transport for this model. Defaults to the provider policy.",
+  transport: Provider.Transport.pipe(optional).annotate({
+    description:
+      "Session transport for this model. Defaults to the provider transport, which uses the WebSocket channel when the route offers one.",
   }),
   modelID: ID.pipe(optional),
   family: Family.pipe(optional),
@@ -63,8 +64,9 @@ class Model extends Schema.Class<Model>("Config.Model")({
 
 export class Info extends Schema.Class<Info>("Config.Provider")({
   compaction: Provider.Compaction.pipe(optional),
-  websocket: Schema.Boolean.pipe(optional).annotate({
-    description: "Use the provider's WebSocket transport when the route supports it. Defaults to true.",
+  transport: Provider.Transport.pipe(optional).annotate({
+    description:
+      "Session transport for this provider's models. Omitted uses the WebSocket channel when the route offers one and HTTP otherwise; \"websocket\" on a route without a channel warns and falls back to HTTP.",
   }),
   canonical: Provider.ID.pipe(optional),
   name: Schema.String.pipe(optional),

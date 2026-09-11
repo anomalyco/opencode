@@ -1138,9 +1138,13 @@ describe("OpenAI Responses route", () => {
         },
       ]
 
+      const unavailable = yield* Ref.make(0)
       yield* Effect.forEach(cases, (item) =>
         LLMClient.generate(LLM.request({ model: item.model, prompt: "Say hello." }), {
-          webSocket: { execute: () => Effect.die("unexpected WebSocket request") },
+          webSocket: {
+            execute: () => Effect.die("unexpected WebSocket request"),
+            unavailable: Ref.update(unavailable, (value) => value + 1),
+          },
         }).pipe(
           Effect.provide(
             dynamicResponse((input) =>
@@ -1154,6 +1158,7 @@ describe("OpenAI Responses route", () => {
           ),
         ),
       )
+      expect(yield* Ref.get(unavailable)).toBe(cases.length)
     }),
   )
 

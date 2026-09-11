@@ -14243,6 +14243,9 @@
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
+          "transport": {
+            "$ref": "#/components/schemas/Provider.Transport"
+          },
           "modelID": {
             "type": "string"
           },
@@ -14350,6 +14353,9 @@
         "properties": {
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
+          },
+          "transport": {
+            "$ref": "#/components/schemas/Provider.Transport"
           },
           "canonical": {
             "type": "string"
@@ -16198,9 +16204,6 @@
             "items": {
               "type": "string"
             }
-          },
-          "responsesWebsockets": {
-            "type": "boolean"
           }
         },
         "required": ["tools", "input", "output"],
@@ -16296,6 +16299,9 @@
           },
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
+          },
+          "transport": {
+            "$ref": "#/components/schemas/Provider.Transport"
           },
           "settings": {
             "type": "object"
@@ -17285,6 +17291,9 @@
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
+          "transport": {
+            "$ref": "#/components/schemas/Provider.Transport"
+          },
           "settings": {
             "type": "object"
           },
@@ -17322,6 +17331,10 @@
       },
       "Provider.Settings": {
         "type": "object"
+      },
+      "Provider.Transport": {
+        "type": "string",
+        "enum": ["http", "websocket"]
       },
       "ProviderNotFoundErrorEncoded": {
         "type": "object",
@@ -18256,6 +18269,12 @@
           },
           "providerContext": {
             "$ref": "#/components/schemas/Session.ProviderContext"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/Money.USD"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/TokenUsage.Info"
           }
         },
         "required": ["type", "id", "time", "status", "reason", "summary", "recent"],
@@ -18295,6 +18314,12 @@
           },
           "error": {
             "$ref": "#/components/schemas/Session.StructuredError"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/Money.USD"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/TokenUsage.Info"
           }
         },
         "required": ["type", "id", "time", "status", "reason", "error"],

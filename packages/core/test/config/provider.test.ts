@@ -80,7 +80,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
-  it.effect("inherits the provider websocket policy with model overrides", () =>
+  it.effect("inherits the provider transport preference with model overrides", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       yield* addPlugin([
@@ -90,8 +90,8 @@ describe("ConfigProviderPlugin.Plugin", () => {
             providers: {
               custom: {
                 package: "@opencode/ai/providers/openai/responses",
-                websocket: false,
-                models: { inherited: {}, override: { websocket: true } },
+                transport: "http",
+                models: { inherited: {}, override: { transport: "websocket" } },
               },
               default: { package: "@opencode/ai/providers/openai/responses", models: { untouched: {} } },
             },
@@ -101,9 +101,9 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const inherited = required(yield* catalog.model.get(Provider.ID.make("custom"), Model.ID.make("inherited")))
       const override = required(yield* catalog.model.get(Provider.ID.make("custom"), Model.ID.make("override")))
       const untouched = required(yield* catalog.model.get(Provider.ID.make("default"), Model.ID.make("untouched")))
-      expect(inherited.websocket).toBe(false)
-      expect(override.websocket).toBe(true)
-      expect(untouched.websocket).toBeUndefined()
+      expect(inherited.transport).toBe("http")
+      expect(override.transport).toBe("websocket")
+      expect(untouched.transport).toBeUndefined()
     }),
   )
 

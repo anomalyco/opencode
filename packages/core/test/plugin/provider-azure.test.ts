@@ -452,53 +452,6 @@ describe("AzurePlugin", () => {
     ),
   )
 
-  it.effect("marks only Azure v1 Responses deployments as WebSocket capable", () =>
-    withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
-      Effect.gen(function* () {
-        const catalog = yield* Catalog.Service
-        const models = {
-          responses: Model.ID.make("responses"),
-          chat: Model.ID.make("chat"),
-          preview: Model.ID.make("preview"),
-          deploymentURL: Model.ID.make("deployment-url"),
-          gateway: Model.ID.make("gateway"),
-          nonAzure: Model.ID.make("non-azure"),
-        }
-        yield* catalog.transform((editor) => {
-          editor.provider.update(Provider.ID.azure, (provider) => {
-            provider.package = Provider.aisdk("@ai-sdk/azure")
-          })
-          editor.model.update(Provider.ID.azure, models.responses, () => {})
-          editor.model.update(Provider.ID.azure, models.chat, (model) => {
-            model.settings = { useCompletionUrls: true }
-          })
-          editor.model.update(Provider.ID.azure, models.preview, (model) => {
-            model.settings = { apiVersion: "2025-04-01-preview" }
-          })
-          editor.model.update(Provider.ID.azure, models.deploymentURL, (model) => {
-            model.settings = { useDeploymentBasedUrls: true }
-          })
-          editor.model.update(Provider.ID.azure, models.gateway, (model) => {
-            model.settings = { baseURL: "https://gateway.example/azure" }
-          })
-          editor.model.update(Provider.ID.azure, models.nonAzure, (model) => {
-            model.package = Provider.aisdk("@ai-sdk/anthropic")
-          })
-        })
-
-        yield* addPlugin()
-
-        expect(
-          required(yield* catalog.model.get(Provider.ID.azure, models.responses)).capabilities.responsesWebsockets,
-        ).toBe(true)
-        for (const modelID of [models.chat, models.preview, models.deploymentURL, models.gateway, models.nonAzure])
-          expect(
-            required(yield* catalog.model.get(Provider.ID.azure, modelID)).capabilities.responsesWebsockets,
-          ).toBeUndefined()
-      }),
-    ),
-  )
-
   it.effect("rejects missing resourceName when baseURL is not configured", () =>
     withEnv({ AZURE_RESOURCE_NAME: undefined }, () =>
       Effect.gen(function* () {

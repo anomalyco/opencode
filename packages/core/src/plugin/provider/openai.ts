@@ -253,13 +253,7 @@ export const OpenAIPlugin = define({
     yield* load()
     yield* ctx.catalog.transform((evt) => {
       const item = evt.provider.get(Provider.ID.openai)
-      if (!item) return
-      for (const model of item.models.values()) {
-        evt.model.update(item.provider.id, model.id, (draft) => {
-          draft.capabilities.responsesWebsockets = true
-        })
-      }
-      if (!chatgpt) return
+      if (!item || !chatgpt) return
       item.provider.settings = Provider.mergeOverlay(item.provider.settings, { baseURL: codexBaseURL })
       const account = chatgpt.metadata?.accountID
       item.provider.headers = Provider.mergeHeaders(item.provider.headers, {

@@ -68,23 +68,4 @@ describe("XAIPlugin", () => {
       })
     }),
   )
-
-  it.effect("marks xAI deployments as Responses WebSocket capable", () =>
-    Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
-      const providerID = Provider.ID.make("xai")
-      yield* catalog.transform((editor) => {
-        editor.provider.update(providerID, (provider) => {
-          provider.package = Provider.aisdk("@ai-sdk/xai")
-        })
-        editor.model.update(providerID, Model.ID.make("grok-4.6"), () => {})
-      })
-
-      yield* addPlugin()
-
-      expect((yield* catalog.model.get(providerID, Model.ID.make("grok-4.6")))?.capabilities.responsesWebsockets).toBe(
-        true,
-      )
-    }),
-  )
 })

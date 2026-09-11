@@ -67,7 +67,6 @@ export const Capabilities = Schema.Struct({
   tools: Schema.Boolean,
   input: Schema.Array(Schema.String),
   output: Schema.Array(Schema.String),
-  responsesWebsockets: Schema.Boolean.pipe(optional),
 })
   .annotate({ identifier: "Model.Capabilities" })
   .pipe(
@@ -107,8 +106,8 @@ export const Info = Schema.Struct({
   compatibility: Compatibility.pipe(optional),
   package: Provider.Package.pipe(optional),
   compaction: Provider.Compaction.pipe(optional),
-  /** Session WebSocket policy; omitted inherits the provider policy, which defaults to enabled. */
-  websocket: Schema.Boolean.pipe(optional),
+  /** Omitted inherits the provider transport preference. */
+  transport: Provider.Transport.pipe(optional),
   ...Provider.Overlays,
   capabilities: Capabilities,
   variants: Schema.Array(Variant),

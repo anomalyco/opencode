@@ -7,7 +7,6 @@ import { App } from "../../app.js"
 import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
-import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
 import { iife } from "../../util/iife.js"
 import { which } from "../../util/which.js"
@@ -162,7 +161,6 @@ export const AzurePlugin = define({
                 draft.settings.baseURL,
                 resolveResourceName(draft.settings, resourceName) ?? resourceName,
               )
-            if (responsesWebSocketCapable(item.provider, draft)) draft.capabilities.responsesWebsockets = true
           })
         }
       }
@@ -240,13 +238,4 @@ function expandResourceName(baseURL: string, resourceName: string) {
   return baseURL
     .replaceAll("${AZURE_RESOURCE_NAME}", resourceName)
     .replaceAll("${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}", resourceName)
-}
-
-function responsesWebSocketCapable(provider: Provider.Info, model: Model.Info) {
-  if (Provider.packageName(model.package ?? provider.package) !== "@ai-sdk/azure") return false
-  const settings = Provider.mergeOverlay(provider.settings, model.settings)
-  if (settings?.useCompletionUrls === true || settings?.useDeploymentBasedUrls === true) return false
-  if (settings?.apiVersion !== undefined && settings.apiVersion !== "v1") return false
-  if (typeof settings?.baseURL !== "string") return true
-  return /^https:\/\/[^/]+\.openai\.azure\.com(?:\/|$)/i.test(settings.baseURL)
 }

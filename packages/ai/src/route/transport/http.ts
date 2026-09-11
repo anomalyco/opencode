@@ -87,8 +87,9 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
         middleware: prepareInput.middleware,
       }
     }),
-  execute: (prepared, _request, runtime) =>
+  execute: (prepared, _request, runtime, options) =>
     Effect.gen(function* () {
+      if (options?.webSocket?.unavailable) yield* options.webSocket.unavailable
       const response = yield* runtime.http.execute(prepared.request, prepared.middleware)
       return {
         frames: prepared.framing.frame(RequestExecutor.responseStream(response)),

@@ -34,6 +34,13 @@ export const Compaction = Schema.Union([
   Schema.Struct({ mode: Schema.Literal("provider"), threshold: PositiveInt.pipe(optional) }),
 ]).annotate({ identifier: "Provider.Compaction" })
 
+/**
+ * Session transport preference. Omitted selects the WebSocket channel when the route offers one and
+ * HTTP otherwise; an explicit "websocket" on a route without a channel warns and falls back to HTTP.
+ */
+export const Transport = Schema.Literals(["http", "websocket"]).annotate({ identifier: "Provider.Transport" })
+export type Transport = typeof Transport.Type
+
 export const Overlays = {
   settings: Schema.Record(Schema.String, Schema.Any).pipe(optional),
   headers: Schema.Record(Schema.String, Schema.String).pipe(optional),
@@ -59,8 +66,7 @@ export const Info = Schema.Struct({
   activation: Activation,
   package: Package,
   compaction: Compaction.pipe(optional),
-  /** Session WebSocket policy for routes that support it; omitted means enabled. */
-  websocket: Schema.Boolean.pipe(optional),
+  transport: Transport.pipe(optional),
   ...Overlays,
 })
   .annotate({ identifier: "Provider.Info" })
