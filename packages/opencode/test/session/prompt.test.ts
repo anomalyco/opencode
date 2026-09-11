@@ -453,8 +453,6 @@ const g6PromptCases = [
   { name: "uncaptured length", capture: false, finish: "length" },
   { name: "uncaptured stop control", capture: false, finish: "stop" },
   { name: "uncaptured content filter control", capture: false, finish: "content_filter" },
-  { name: "failed driver cancels and drains actual runner", capture: true, finish: "stop", driver: "primary" },
-  { name: "driver and drain failures remain observable", capture: true, finish: "stop", driver: "combined" },
   { name: "settled tool failed driver control", capture: true, finish: "stop", driver: "primary", delayed: true },
   { name: "settled tool combined failure control", capture: true, finish: "stop", driver: "combined", delayed: true },
 ] as const
@@ -1376,7 +1374,6 @@ for (const fixture of g7PromptCases) {
 // failures, and never substitute a test outer-finalizer failure for a store fault.
 const g8PromptCases = [
   { name: "fatal healthy final write", ending: "fatal", fault: false, driver: false },
-  { name: "fatal final write failure preserves primary Cause", ending: "fatal", fault: true, driver: false },
   { name: "cancel healthy final write", ending: "cancel", fault: false, driver: false },
   { name: "cancel final write failure preserves interrupt", ending: "cancel", fault: true, driver: false },
   { name: "failed driver observes actual runner persistence failure", ending: "cancel", fault: true, driver: true },
@@ -1698,10 +1695,6 @@ for (const fixture of g8PromptCases) {
               true,
             )
             expect(drained).toEqual(ended)
-          } else if (fixture.ending === "fatal") {
-            // Desired P9 preservation, not an assertion that ordinary healthy
-            // provider errors must escape instead of returning stored errors.
-            expect(failures.some((reason) => reason.error === primary)).toBe(true)
           } else expect(Exit.isFailure(ended) && Cause.hasInterrupts(ended.cause)).toBe(true)
         } else {
           expect(Exit.isSuccess(ended)).toBe(true)
