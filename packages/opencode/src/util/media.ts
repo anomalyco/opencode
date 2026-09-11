@@ -4,8 +4,12 @@ export function isPdfAttachment(mime: string) {
   return mime === "application/pdf"
 }
 
+export function isVideoAttachment(mime: string) {
+  return mime.startsWith("video/")
+}
+
 export function isMedia(mime: string) {
-  return mime.startsWith("image/") || isPdfAttachment(mime)
+  return mime.startsWith("image/") || isPdfAttachment(mime) || isVideoAttachment(mime)
 }
 
 export function isImageAttachment(mime: string) {

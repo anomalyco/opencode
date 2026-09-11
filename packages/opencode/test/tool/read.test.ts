@@ -514,6 +514,38 @@ describe("tool.read truncation", () => {
     }),
   )
 
+  it.live("attaches mp4 files as video attachments", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      // Minimal bytes that are not sniffed as an image/PDF; the mime comes
+      // from the .mp4 extension via the mime-type fallback.
+      const clip = Buffer.from(Array.from({ length: 64 }, (_, i) => (i % 12) + 1))
+      yield* put(path.join(dir, "clip.mp4"), clip)
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "clip.mp4") })
+      expect(result.output).toBe("Video read successfully")
+      expect(result.metadata.truncated).toBe(false)
+      expect(result.attachments?.length).toBe(1)
+      expect(result.attachments?.[0].mime).toBe("video/mp4")
+      expect(result.attachments?.[0].url.startsWith("data:video/mp4;base64,")).toBe(true)
+    }),
+  )
+
+  it.live("rejects oversized video files with a clear error", () => {
+    const originalLimit = 20 * 1024 * 1024
+    return Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      // Sparse-ish content just over the limit: repeat a chunk instead of
+      // allocating one huge buffer.
+      const chunk = Buffer.alloc(1024 * 1024, 7)
+      const chunks = Array.from({ length: Math.ceil((originalLimit + 1024) / chunk.length) }, () => chunk)
+      yield* put(path.join(dir, "big.mp4"), Buffer.concat(chunks))
+
+      const err = yield* fail(dir, { filePath: path.join(dir, "big.mp4") })
+      expect(err.message).toContain("Video file too large")
+    })
+  })
+
   it.live("large image files are properly attached without error", () =>
     Effect.gen(function* () {
       const result = yield* exec(FIXTURES_DIR, { filePath: path.join(FIXTURES_DIR, "large-image.png") })

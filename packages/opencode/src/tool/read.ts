@@ -17,6 +17,11 @@ const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 const SAMPLE_BYTES = 4096
 const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
+// Inline video only: providers cap request size well below what a long clip
+// base64-encodes to, so anything bigger fails before reaching the provider.
+const SUPPORTED_VIDEO_MIMES = new Set(["video/mp4", "video/webm", "video/quicktime"])
+const MAX_VIDEO_BYTES = 20 * 1024 * 1024
+const MAX_VIDEO_LABEL = `${MAX_VIDEO_BYTES / (1024 * 1024)} MB`
 
 class ReadStop extends Schema.TaggedErrorClass<ReadStop>()("ReadStop", {}) {}
 
@@ -306,6 +311,34 @@ export const ReadTool = Tool.define<
       if (isImage || isPdfAttachment(mime)) {
         const bytes = yield* fs.readFile(filepath)
         const msg = isPdfAttachment(mime) ? "PDF read successfully" : "Image read successfully"
+        return {
+          title,
+          output: msg,
+          metadata: {
+            preview: msg,
+            truncated: false,
+            loaded: loaded.map((item) => item.filepath),
+          },
+          attachments: [
+            {
+              type: "file" as const,
+              mime,
+              url: `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`,
+            },
+          ],
+        }
+      }
+
+      if (SUPPORTED_VIDEO_MIMES.has(mime)) {
+        if (Number(stat.size) > MAX_VIDEO_BYTES) {
+          return yield* Effect.fail(
+            new Error(
+              `Video file too large to attach: ${filepath} (${(Number(stat.size) / (1024 * 1024)).toFixed(1)} MB, limit ${MAX_VIDEO_LABEL}). Trim or compress the clip and try again.`,
+            ),
+          )
+        }
+        const bytes = yield* fs.readFile(filepath)
+        const msg = "Video read successfully"
         return {
           title,
           output: msg,
