@@ -22,7 +22,7 @@ it.live(
         Effect.provideService(
           HttpClient.HttpClient,
           HttpClient.make((request) => {
-            expect(request.url).toBe("https://registry.npmjs.org/@opencode-ai%2fcli/beta")
+            expect(request.url).toBe("https://registry.npmjs.org/@opencode%2fcli/beta")
             return Effect.succeed(HttpClientResponse.fromWeb(request, response))
           }),
         ),
@@ -65,7 +65,7 @@ posix(
 
 test("pins platform-specific artifacts and rejects unsafe inputs", () => {
   expect(RemoteCli.archiveUrl("linux-x64-baseline-musl", "2.0.0-beta.1")).toBe(
-    "https://registry.npmjs.org/@opencode-ai/cli-linux-x64-baseline-musl/-/cli-linux-x64-baseline-musl-2.0.0-beta.1.tgz",
+    "https://registry.npmjs.org/@opencode/cli-linux-x64-baseline-musl/-/cli-linux-x64-baseline-musl-2.0.0-beta.1.tgz",
   )
   expect(() => RemoteCli.installScript({ version: '2.0.0"; whoami', source: { type: "installer" } })).toThrow()
   expect(() => RemoteCli.archiveUrl("linux-x64;whoami", "2.0.0")).toThrow()
