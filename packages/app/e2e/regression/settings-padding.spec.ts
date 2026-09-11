@@ -39,6 +39,7 @@ for (const viewport of [
       await page.setViewportSize(viewport)
       const settings = page.getByTestId("settings-screen")
       const panel = settings.locator(":scope > .settings > .settings-panel:visible")
+      const scroller = panel.locator('[data-slot="settings-panel-scroll"] > [data-scrollable]')
       if (viewport.bottom) {
         const toggle = settings.locator('[data-action="settings-mobile-titlebar-bottom"]')
         await toggle.locator('[data-slot="switch-control"]').click()
@@ -74,7 +75,7 @@ for (const viewport of [
         await panel.hover()
         await page.mouse.wheel(0, 10000)
         await expect
-          .poll(() => panel.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop))
+          .poll(() => scroller.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop))
           .toBeLessThanOrEqual(1)
         await expect
           .poll(

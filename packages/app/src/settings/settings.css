@@ -97,6 +97,16 @@
   padding-inline: 24px;
 }
 
+/*
+ * .settings-about centers its content via align-items on the panel. The
+ * ScrollView viewport is a block box, so re-establish the centering there.
+ */
+.settings-about [data-slot="settings-panel-scroll"] > .scroll-view__viewport {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 .settings-about-content {
   display: flex;
   flex-shrink: 0;
@@ -233,8 +243,6 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow-y: auto;
-  scrollbar-width: none;
   user-select: none;
   container: settings-panel / inline-size;
 }
@@ -243,7 +251,23 @@
   user-select: text;
 }
 
-.settings-panel::-webkit-scrollbar {
+/*
+ * Panels that scroll themselves rather than delegating to a ScrollView child.
+ * The settings tabs wrap their content in ScrollView so a thumb reveals on
+ * hover, and must not also scroll here — otherwise the thumb tracks an inner
+ * viewport while the panel scrolls behind it.
+ *
+ * The two model dialogs have no ScrollView and rely on this element being the
+ * scroll container: Manage Models to drive its scroll-timeline top fade in
+ * index.css, and the model selector to scroll the active row into view. They
+ * keep the base class, so those selectors still match.
+ */
+.settings-panel--scroll {
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.settings-panel--scroll::-webkit-scrollbar {
   display: none;
 }
 

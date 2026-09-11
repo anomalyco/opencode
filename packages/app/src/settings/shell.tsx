@@ -4,6 +4,7 @@ import { Tabs } from "@opencode/ui/tabs"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
 import { Button } from "@opencode/ui/button"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { useLanguage } from "@/runtime/i18n/language"
 import { SettingsGeneral } from "./general/general"
 import { SettingsAppearance } from "./appearance/appearance"
@@ -200,45 +201,66 @@ export const SettingsScreen: Component = () => {
         </Tabs.List>
 
         <Tabs.Content value="general" class="settings-panel">
-          <SettingsGeneral server={server()} />
+          <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+            <SettingsGeneral server={server()} />
+          </ScrollView>
         </Tabs.Content>
         <Tabs.Content value="appearance" class="settings-panel">
-          <SettingsAppearance />
+          <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+            <SettingsAppearance />
+          </ScrollView>
         </Tabs.Content>
         <Tabs.Content value="notifications" class="settings-panel">
-          <SettingsNotifications />
+          <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+            <SettingsNotifications />
+          </ScrollView>
         </Tabs.Content>
         <Tabs.Content value="shortcuts" class="settings-panel">
-          <SettingsKeybinds />
+          <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+            <SettingsKeybinds />
+          </ScrollView>
         </Tabs.Content>
         <Tabs.Content value="experimental" class="settings-panel">
-          <SettingsExperimental />
+          <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+            <SettingsExperimental />
+          </ScrollView>
         </Tabs.Content>
         <Tabs.Content value="servers" class="settings-panel">
-          <SettingsServers />
+          <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+            <SettingsServers />
+          </ScrollView>
         </Tabs.Content>
         <Tabs.Content value="projects" class="settings-panel">
-          <SettingsProjects />
+          <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+            <SettingsProjects />
+          </ScrollView>
         </Tabs.Content>
         <SettingsServerScope directory={directory()}>
           <Tabs.Content value="workspaces" class="settings-panel">
-            <SettingsWorkspaces
-              activeDirectory={directory()}
-              resetProjectFilter={() => state.worktreeFilterReset}
-            />
+            <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+              <SettingsWorkspaces activeDirectory={directory()} resetProjectFilter={() => state.worktreeFilterReset} />
+            </ScrollView>
           </Tabs.Content>
           <Tabs.Content value="providers" class="settings-panel">
-            <SettingsProviders directory={directory()} onBack={showProviders} />
+            <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+              <SettingsProviders directory={directory()} onBack={showProviders} />
+            </ScrollView>
           </Tabs.Content>
           <Tabs.Content value="models" class="settings-panel">
-            <SettingsModels />
+            <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+              <SettingsModels />
+            </ScrollView>
           </Tabs.Content>
           <Tabs.Content value="extensions" class="settings-panel">
-            <SettingsExtensions />
+            <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+              <SettingsExtensions />
+            </ScrollView>
           </Tabs.Content>
         </SettingsServerScope>
         <Tabs.Content value="about" class="settings-panel settings-about">
-          <SettingsAbout active={surface.tab() === "about"} />
+          <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+            <SettingsAbout active={surface.tab() === "about"} />
+          </ScrollView>
         </Tabs.Content>
       </Tabs>
     </div>

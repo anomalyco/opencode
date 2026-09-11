@@ -137,7 +137,10 @@ const ModelList: Component<{
         </div>
       </div>
       <div class="relative min-h-0 flex-1">
-        <div ref={(element) => (scrollRef = element)} class="settings-panel settings-models h-full px-4 pt-4 pb-4">
+        <div
+          ref={(element) => (scrollRef = element)}
+          class="settings-panel settings-panel--scroll settings-models h-full px-4 pt-4 pb-4"
+        >
           <Show
             when={models().length > 0}
             fallback={<div class="settings-models-status">{language.t("dialog.model.empty")}</div>}
