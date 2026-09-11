@@ -231,7 +231,23 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
     "github-copilot": () =>
       Effect.succeed({
         autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>, model?: Model) {
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>, model?: Model) {
+          // "Auto" is Copilot's server-side router rather than a real model, so it
+          // resolves to a wrapper that picks a routable model per request.
+          if (modelID === "auto") {
+            const { CopilotAuto } = await import("@/plugin/github-copilot/auto")
+            return CopilotAuto.create({
+              sdk,
+              baseURL:
+                model?.api.url ??
+                (typeof options?.baseURL === "string" ? options.baseURL : "https://api.githubcopilot.com"),
+              fetch: typeof options?.fetch === "function" ? options.fetch : undefined,
+              endpoints:
+                options?.endpoints && typeof options.endpoints === "object"
+                  ? (options.endpoints as Record<string, "chat" | "responses" | "messages">)
+                  : undefined,
+            })
+          }
           if (sdk.responses === undefined && sdk.chat === undefined) return sdk.languageModel(modelID)
           if (model && "endpoint" in model.api) {
             if (model.api.endpoint === "responses" && sdk.responses) return sdk.responses(modelID)

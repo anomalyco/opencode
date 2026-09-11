@@ -490,3 +490,175 @@ test("remaps fallback oauth model urls to the enterprise host", async () => {
   expect(models.claude.api.url).toBe("https://copilot-api.ghe.example.com")
   expect(models.claude.api.npm).toBe("@ai-sdk/github-copilot")
 })
+
+// Regression for #34644: Free/Student plans report `model_picker_enabled: false`
+// on every model, which left the picker empty and dropped the provider entirely.
+test("keeps Copilot selectable when the plan disables every model picker flag", async () => {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: false,
+              id: "gpt-5-mini",
+              name: "GPT-5 mini",
+              version: "gpt-5-mini",
+              policy: { state: "enabled" },
+              capabilities: {
+                family: "gpt-5-mini",
+                limits: {
+                  max_context_window_tokens: 128000,
+                  max_output_tokens: 16384,
+                  max_prompt_tokens: 128000,
+                },
+                supports: { streaming: true, tool_calls: true },
+              },
+            },
+            {
+              model_picker_enabled: false,
+              id: "claude-opus-5",
+              name: "Claude Opus 5",
+              version: "claude-opus-5",
+              policy: { state: "disabled" },
+              capabilities: {
+                family: "claude-opus-5",
+                limits: {
+                  max_context_window_tokens: 400000,
+                  max_output_tokens: 128000,
+                  max_prompt_tokens: 272000,
+                },
+                supports: { streaming: true, tool_calls: true },
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ),
+  ) as unknown as typeof fetch
+
+  const result = await CopilotModels.get("https://api.githubcopilot.com")
+
+  expect(result.pickerEnabled.has("auto")).toBe(true)
+  expect(result.models.auto.api.id).toBe("auto")
+  expect(result.models.auto.capabilities.toolcall).toBe(true)
+  // Plan-locked models stay unselectable, and Auto is the only way to reach them.
+  expect(result.pickerEnabled.has("gpt-5-mini")).toBe(false)
+  expect(result.models["claude-opus-5"]).toBeUndefined()
+})
+
+test("advertises the most conservative limits of the routable models for auto", async () => {
+  globalThis.fetch = mock((url: string) => {
+    // Auto routes only within the session's available_models. "utility" is listed
+    // on the account but never routed to, so it must not shrink auto's context.
+    if (String(url).endsWith("/models/session")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            available_models: ["big", "small"],
+            selected_model: "big",
+            session_token: "token",
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+          }),
+          { status: 200 },
+        ),
+      )
+    }
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: true,
+              id: "utility",
+              name: "Legacy utility",
+              version: "utility",
+              capabilities: {
+                family: "utility",
+                limits: {
+                  max_context_window_tokens: 16384,
+                  max_output_tokens: 4096,
+                  max_prompt_tokens: 16384,
+                },
+                supports: { streaming: true, tool_calls: true },
+              },
+            },
+            {
+              model_picker_enabled: true,
+              id: "big",
+              name: "Big",
+              version: "big",
+              capabilities: {
+                family: "big",
+                limits: {
+                  max_context_window_tokens: 400000,
+                  max_output_tokens: 128000,
+                  max_prompt_tokens: 272000,
+                },
+                supports: { streaming: true, tool_calls: true },
+              },
+            },
+            {
+              model_picker_enabled: true,
+              id: "small",
+              name: "Small",
+              version: "small",
+              capabilities: {
+                family: "small",
+                limits: {
+                  max_context_window_tokens: 64000,
+                  max_output_tokens: 8192,
+                  max_prompt_tokens: 64000,
+                },
+                supports: { streaming: true, tool_calls: true },
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    )
+  }) as unknown as typeof fetch
+
+  const result = await CopilotModels.get("https://api.githubcopilot.com")
+
+  // Overstating context here would break compaction once Auto routes to "small";
+  // understating it to "utility" would compact almost immediately.
+  expect(result.models.auto.limit.context).toBe(64000)
+  expect(result.models.auto.limit.output).toBe(8192)
+})
+
+test("auto uses the resolved base url so enterprise deployments keep working", async () => {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: false,
+              id: "gpt-5-mini",
+              name: "GPT-5 mini",
+              version: "gpt-5-mini",
+              policy: { state: "enabled" },
+              capabilities: {
+                family: "gpt-5-mini",
+                limits: {
+                  max_context_window_tokens: 128000,
+                  max_output_tokens: 16384,
+                  max_prompt_tokens: 128000,
+                },
+                supports: { streaming: true, tool_calls: true },
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ),
+  ) as unknown as typeof fetch
+
+  const result = await CopilotModels.get("https://copilot-api.ghe.example.com")
+
+  expect(result.models.auto.api.url).toBe("https://copilot-api.ghe.example.com")
+})
