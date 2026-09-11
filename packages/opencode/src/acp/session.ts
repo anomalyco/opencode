@@ -229,4 +229,34 @@ function partMetadataKey(input: { messageId: string; partId: string }) {
   return `${input.messageId}:${input.partId}`
 }
 
+const MAX_ANCESTOR_DEPTH = 8
+
+// Resolves a session id that was never registered as its own ACP session —
+// e.g. a subagent session spawned server-side by the `task` tool — back to
+// the nearest ancestor that IS registered (a root session/new/load/resume/
+// fork). Without this, permission asks and tool-call updates from child
+// sessions hit `tryGet` -> undefined and get silently dropped by callers,
+// which (for permission asks) leaves the underlying Permission.ask Deferred
+// unresolved forever (see ACP G1: child session permission hang).
+//
+// `fetchParentID` is supplied by the caller since walking the ancestor chain
+// requires an SDK round-trip (this module has no SDK dependency of its own).
+export function resolveAncestor(input: {
+  readonly tryGet: (sessionId: string) => Effect.Effect<Info | undefined>
+  readonly fetchParentID: (sessionId: string) => Promise<string | undefined>
+  readonly sessionId: string
+}): Effect.Effect<Info | undefined> {
+  return Effect.gen(function* () {
+    let current = input.sessionId
+    for (let depth = 0; depth < MAX_ANCESTOR_DEPTH; depth++) {
+      const known = yield* input.tryGet(current)
+      if (known) return known
+      const parentID = yield* Effect.promise(() => input.fetchParentID(current))
+      if (!parentID || parentID === current) return undefined
+      current = parentID
+    }
+    return undefined
+  })
+}
+
 export * as ACPSession from "./session"
