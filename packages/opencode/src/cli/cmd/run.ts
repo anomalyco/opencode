@@ -261,6 +261,9 @@ export const RunCommand = effectCmd({
         describe: "enable direct interactive demo slash commands; pass one as the message to run it immediately",
       }),
   handler: Effect.fn("Cli.run")(function* (args) {
+    const { installConsoleGuard } = yield* Effect.promise(() => import("@/util/console-guard"))
+    // The TUI renders on the alternate screen; console output must go to the log file.
+    installConsoleGuard()
     const { Agent } = yield* Effect.promise(() => import("@/agent/agent"))
     const { RuntimeFlags } = yield* Effect.promise(() => import("@/effect/runtime-flags"))
     const { InstanceRef } = yield* Effect.promise(() => import("@/effect/instance-ref"))
