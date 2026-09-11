@@ -573,12 +573,14 @@ const invariants = [
     title: "Dock YouTube LLM Drive",
     clauses: [
       "dock session drives dock_open, dock_read and dock_click against YouTube results via live model call",
-      "live model turn produces final text answering with a video title"
+      "live model turn produces final text answering with a video title",
+      "dock_* tools are visible in the session tool list for the live model"
     ],
     unwanted: [
-      "dock session completes without invoking any dock_* tool"
+      "dock session completes without invoking any dock_* tool",
+      "session tool list omits dock_* tools for the live model"
     ],
-    tests: ["app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL; skipped otherwise)"]
+    tests: ["app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL=provider/model; skipped otherwise; Y03/Y04 need a tool-capable funded model)"]
   }
 ];
 

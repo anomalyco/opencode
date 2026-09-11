@@ -42,7 +42,7 @@
 | `dock-drag` | Dock Drag | 1 | 1 | app-dock-live.test.ts |
 | `dock-scroll-to` | Dock Scroll To | 1 | 1 | app-dock-live.test.ts |
 | `snapshot-shadow-dom` | Snapshot Shadow DOM Piercing | 1 | 1 | app-dock-live.test.ts |
-| `dock-youtube-llm` | Dock YouTube LLM Drive | 2 | 1 | app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL; skipped otherwise) |
+| `dock-youtube-llm` | Dock YouTube LLM Drive | 3 | 2 | app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL=provider/model; skipped otherwise; Y03/Y04 need a tool-capable funded model) |
 
 ## Clause Detail
 
@@ -493,9 +493,11 @@
 ### dock-youtube-llm: Dock YouTube LLM Drive
 
 **Clauses**
-- dock session drives dock_open, dock_read and dock_click against YouTube results via live model call *(measured: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL; skipped otherwise))*
-- live model turn produces final text answering with a video title *(measured: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL; skipped otherwise))*
+- dock session drives dock_open, dock_read and dock_click against YouTube results via live model call *(measured: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL=provider/model; skipped otherwise; Y03/Y04 need a tool-capable funded model))*
+- live model turn produces final text answering with a video title *(measured: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL=provider/model; skipped otherwise; Y03/Y04 need a tool-capable funded model))*
+- dock_* tools are visible in the session tool list for the live model *(measured: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL=provider/model; skipped otherwise; Y03/Y04 need a tool-capable funded model))*
 
 **Unwanted**
-- dock session completes without invoking any dock_* tool *(measured: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL; skipped otherwise))*
+- dock session completes without invoking any dock_* tool *(measured: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL=provider/model; skipped otherwise; Y03/Y04 need a tool-capable funded model))*
+- session tool list omits dock_* tools for the live model *(measured: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL=provider/model; skipped otherwise; Y03/Y04 need a tool-capable funded model))*
 

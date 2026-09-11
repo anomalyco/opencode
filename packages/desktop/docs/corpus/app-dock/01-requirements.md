@@ -735,5 +735,11 @@ The system **shall** dock session drives dock_open, dock_read and dock_click aga
 The system **shall** live model turn produces final text answering with a video title. *(from invariant `dock-youtube-llm`)*
 
 ### REQ-219
+The system **shall** dock_* tools are visible in the session tool list for the live model. *(from invariant `dock-youtube-llm`)*
+
+### REQ-220
 If the system dock session completes without invoking any dock_* tool, then it **shall refuse** and return an error. *(from invariant `dock-youtube-llm` unwanted)*
+
+### REQ-221
+If the system session tool list omits dock_* tools for the live model, then it **shall refuse** and return an error. *(from invariant `dock-youtube-llm` unwanted)*
 

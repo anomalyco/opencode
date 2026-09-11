@@ -8,7 +8,7 @@ import { createRequire } from "node:module"
 import { randomUUID } from "node:crypto"
 
 type Case = { id: string; status: "pass"; detail: string }
-const required = ["Y01", "Y02", "Y03"]
+const required = ["Y01", "Y02", "Y03", "Y04"]
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const root = resolve(scriptDir, "../..")
 const desktopMain = resolve(root, "src/main")
@@ -66,8 +66,11 @@ async function child() {
   const userDataPath = await mkdtemp(join(tmpdir(), "app-dock-youtube-userdata-"))
   const rawModel = process.env.APP_DOCK_YOUTUBE_MODEL
   check(typeof rawModel === "string", "APP_DOCK_YOUTUBE_MODEL must be provider/model")
-  const [providerID, modelID] = rawModel.split("/")
-  check(providerID && modelID, "APP_DOCK_YOUTUBE_MODEL must be provider/model")
+  const slash = rawModel.indexOf("/")
+  check(slash > 0, "APP_DOCK_YOUTUBE_MODEL must be provider/model")
+  const providerID = rawModel.slice(0, slash)
+  const modelID = rawModel.slice(slash + 1)
+  check(providerID.length > 0 && modelID.length > 0, "APP_DOCK_YOUTUBE_MODEL must be provider/model")
   Object.assign(process.env, {
     OPENCODE_CLIENT: "desktop",
     XDG_STATE_HOME: userDataPath,
@@ -86,6 +89,7 @@ async function child() {
     userDataPath,
     sidecarPath,
     onStderr: (message) => console.error(`SIDECAR: ${message}`),
+    onStdout: (message) => console.error(`SIDECAR-OUT: ${message}`),
     onMessage: handleDockRPC,
   })
   let outcome = 1
@@ -109,30 +113,63 @@ async function child() {
     check(typeof sessionID === "string" && sessionID.length > 0, "session create returned no id")
     pass("Y01", "real sidecar created a live session")
 
+    const promptText =
+      "Your first action MUST be a dock_open tool call. Never answer from memory. Use only the dock_open, dock_read and dock_click tools. Open https://www.youtube.com/results?search_query=opencode, read the page, click the first video result, then reply with that video's title. Do nothing else."
+    const toolListResponse = await fetch(
+      `${url}/experimental/tool?provider=${encodeURIComponent(providerID)}&model=${encodeURIComponent(modelID)}&${query}`,
+      { headers, signal: AbortSignal.timeout(30_000) },
+    )
+    check(toolListResponse.ok, `session tool list failed with ${toolListResponse.status}`)
+    const toolList: unknown = await toolListResponse.json()
+    check(
+      Array.isArray(toolList) &&
+        toolList.some((tool) => !!tool && typeof tool === "object" && "id" in tool && tool.id === "dock_open"),
+      "dock_open missing from session tool list for live model",
+    )
+    pass("Y02", "dock_* tools visible in session tool list for live model")
+
     const promptResponse = await fetch(`${url}/session/${sessionID}/message?${query}`, {
       method: "POST",
       headers,
       body: JSON.stringify({
         model: { providerID, modelID },
-        parts: [
-          {
-            type: "text",
-            text: "Use only the dock_open, dock_read and dock_click tools. Open https://www.youtube.com/results?search_query=opencode, read the page, click the first video result, then reply with that video's title. Do nothing else.",
-          },
-        ],
+        ...(process.env.APP_DOCK_YOUTUBE_VARIANT ? { variant: process.env.APP_DOCK_YOUTUBE_VARIANT } : {}),
+        system:
+          "You control a live browser through tools. You have no browsing knowledge after training. " +
+          "For ANY question about live web content you MUST call tools and read results before answering. " +
+          "Answering from memory is forbidden and will be scored as failure.",
+        parts: [{ type: "text", text: promptText }],
       }),
       signal: AbortSignal.timeout(300_000),
     })
-    check(promptResponse.ok, `session prompt failed with ${promptResponse.status}`)
+    if (!promptResponse.ok) {
+      const messagesResponse = await fetch(`${url}/session/${sessionID}/message?${query}`, {
+        headers,
+        signal: AbortSignal.timeout(30_000),
+      })
+      const messagesBody = await messagesResponse.text()
+      throw new Error(
+        `session prompt failed with ${promptResponse.status}: ${(await promptResponse.text()).slice(0, 300)} | messages: ${messagesBody.slice(0, 800)}`,
+      )
+    }
     const turn = await promptResponse.json()
 
+    console.error(`TURN-HEAD: ${JSON.stringify(turn).slice(0, 1500)}`)
+    const turnErrors = collect(turn, (node) => !!node.error).map((node) => JSON.stringify(node.error).slice(0, 300))
     const toolCalls = collect(turn, (node) => node.type === "tool" && typeof node.tool === "string" && node.tool.startsWith("dock_"))
-    check(toolCalls.length > 0, "live model turn invoked no dock_* tools")
-    pass("Y02", "live model invoked dock_* tools against YouTube")
+    const allTools = collect(turn, (node) => node.type === "tool" && typeof node.tool === "string").map((node) => String(node.tool))
+    const modelTexts = collect(turn, (node) => node.type === "text" && typeof node.text === "string")
+    const lastNode = modelTexts.length > 0 ? modelTexts[modelTexts.length - 1] : undefined
+    const lastText = !!lastNode && typeof lastNode.text === "string" ? lastNode.text : ""
+    check(
+      toolCalls.length > 0,
+      `live model turn invoked no dock_* tools (tools used: ${JSON.stringify(allTools.slice(0, 10))}; text: ${JSON.stringify(lastText.slice(0, 200))}; errors: ${JSON.stringify(turnErrors.slice(0, 2))})`,
+    )
+    pass("Y03", "live model invoked dock_* tools against YouTube")
 
     const texts = collect(turn, (node) => node.type === "text" && typeof node.text === "string" && node.text.trim().length > 10)
     check(texts.length > 0, "live model turn produced no final text")
-    pass("Y03", "live model reported back with text")
+    pass("Y04", "live model reported back with text")
 
     outcome = cases.length === required.length && required.every((id) => cases.some((item: Case) => item.id === id)) ? 0 : 1
   } finally {

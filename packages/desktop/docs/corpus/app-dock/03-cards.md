@@ -1379,18 +1379,30 @@
 ### WP-217 (covers REQ-217 + GOLDEN-217)
 **Invariant**: `dock-youtube-llm`
 **Clause**: dock session drives dock_open, dock_read and dock_click against YouTube results via live model call
-**Witness**: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL; skipped otherwise)
+**Witness**: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL=provider/model; skipped otherwise; Y03/Y04 need a tool-capable funded model)
 **Status**: ready (test exists on main)
 
 ### WP-218 (covers REQ-218 + GOLDEN-218)
 **Invariant**: `dock-youtube-llm`
 **Clause**: live model turn produces final text answering with a video title
-**Witness**: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL; skipped otherwise)
+**Witness**: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL=provider/model; skipped otherwise; Y03/Y04 need a tool-capable funded model)
 **Status**: ready (test exists on main)
 
 ### WP-219 (covers REQ-219 + GOLDEN-219)
 **Invariant**: `dock-youtube-llm`
+**Clause**: dock_* tools are visible in the session tool list for the live model
+**Witness**: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL=provider/model; skipped otherwise; Y03/Y04 need a tool-capable funded model)
+**Status**: ready (test exists on main)
+
+### WP-220 (covers REQ-220 + GOLDEN-220)
+**Invariant**: `dock-youtube-llm`
 **Unwanted**: dock session completes without invoking any dock_* tool
-**Witness**: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL; skipped otherwise)
+**Witness**: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL=provider/model; skipped otherwise; Y03/Y04 need a tool-capable funded model)
+**Status**: ready (test exists on main)
+
+### WP-221 (covers REQ-221 + GOLDEN-221)
+**Invariant**: `dock-youtube-llm`
+**Unwanted**: session tool list omits dock_* tools for the live model
+**Witness**: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL=provider/model; skipped otherwise; Y03/Y04 need a tool-capable funded model)
 **Status**: ready (test exists on main)
 

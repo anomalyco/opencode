@@ -1163,15 +1163,25 @@
 ### GOLDEN-217 (for REQ-217)
 **Requirement**: The system shall dock session drives dock_open, dock_read and dock_click against YouTube results via live model call.
 
-**Witness**: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL; skipped otherwise)
+**Witness**: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL=provider/model; skipped otherwise; Y03/Y04 need a tool-capable funded model)
 
 ### GOLDEN-218 (for REQ-218)
 **Requirement**: The system shall live model turn produces final text answering with a video title.
 
-**Witness**: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL; skipped otherwise)
+**Witness**: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL=provider/model; skipped otherwise; Y03/Y04 need a tool-capable funded model)
 
 ### GOLDEN-219 (for REQ-219)
+**Requirement**: The system shall dock_* tools are visible in the session tool list for the live model.
+
+**Witness**: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL=provider/model; skipped otherwise; Y03/Y04 need a tool-capable funded model)
+
+### GOLDEN-220 (for REQ-220)
 **Requirement**: If the system dock session completes without invoking any dock_* tool, then it shall refuse and return an error.
 
-**Witness**: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL; skipped otherwise)
+**Witness**: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL=provider/model; skipped otherwise; Y03/Y04 need a tool-capable funded model)
+
+### GOLDEN-221 (for REQ-221)
+**Requirement**: If the system session tool list omits dock_* tools for the live model, then it shall refuse and return an error.
+
+**Witness**: app-dock-youtube.test.ts (opt-in: APP_DOCK_YOUTUBE=1, OPENCODE_AUTH_CONTENT, APP_DOCK_YOUTUBE_MODEL=provider/model; skipped otherwise; Y03/Y04 need a tool-capable funded model)
 
