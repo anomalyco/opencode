@@ -1218,6 +1218,25 @@ const layer = Layer.effect(
             })
             .pipe(Effect.onInterrupt(() => finalizeInterruptedAssistant))
 
+          // Turns can end below without the loop's natural exit check firing:
+          // stop (denied tool or errored turn), structured output, or a
+          // content-filtered / structured-output-less finish. Prompts queued
+          // while the run is active persist their user message immediately and
+          // every waiter of the run resolves with its final message, so an
+          // unconditional break hands those queued prompts the ended turn's
+          // message — often a tool call or filtered turn with no usable text.
+          // Keep looping while a newer user message is already waiting; the
+          // exit check at the top of the loop terminates the run once the
+          // newest user message has been answered. The ended turn itself is
+          // never retried — the model gets no extra turn for a denial.
+          const newerUserWaiting = Effect.gen(function* () {
+            const msgsNow = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
+              Effect.provideService(Database.Service, database),
+            )
+            const newestUser = MessageV2.latest(msgsNow).user
+            return newestUser !== undefined && newestUser.id !== lastUser.id
+          })
+
           const outcome: "break" | "continue" = yield* Effect.gen(function* () {
             const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
             const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
@@ -1289,6 +1308,12 @@ const layer = Layer.effect(
               handle.message.structured = structured
               handle.message.finish = handle.message.finish ?? "stop"
               yield* sessions.updateMessage(handle.message)
+              if (yield* newerUserWaiting) {
+                // Clear the captured output so it cannot leak into the next
+                // turn's check above.
+                structured = undefined
+                return "continue" as const
+              }
               return "break" as const
             }
 
@@ -1304,6 +1329,7 @@ const layer = Layer.effect(
                 }).toObject()
                 yield* sessions.updateMessage(handle.message)
                 yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
+                if (yield* newerUserWaiting) return "continue" as const
                 return "break" as const
               }
               if (format.type === "json_schema") {
@@ -1312,25 +1338,13 @@ const layer = Layer.effect(
                   retries: 0,
                 }).toObject()
                 yield* sessions.updateMessage(handle.message)
+                if (yield* newerUserWaiting) return "continue" as const
                 return "break" as const
               }
             }
 
             if (result === "stop") {
-              // A stop (denied tool or errored turn) ends only the turn of the
-              // user message this iteration answered. Prompts submitted while
-              // the run is active persist their user message immediately and
-              // every waiter of the run resolves with its final message, so
-              // breaking out here hands those queued prompts the stopped
-              // turn's message — often a tool call with no text at all. Keep
-              // looping while a newer user message is already waiting; the
-              // exit check at the top of the loop terminates the run once the
-              // newest user message has been answered.
-              const msgsNow = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
-                Effect.provideService(Database.Service, database),
-              )
-              const newestUser = MessageV2.latest(msgsNow).user
-              if (newestUser && newestUser.id !== lastUser.id) return "continue" as const
+              if (yield* newerUserWaiting) return "continue" as const
               return "break" as const
             }
             if (result === "compact") {

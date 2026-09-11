@@ -1568,6 +1568,69 @@ it.instance("queued prompt gets a text reply when the active turn stops on a rej
   }),
 )
 
+it.instance("queued prompt gets a text reply when the active turn ends on a content filter", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    // Hold the first stream open before its content-filter finish so the
+    // second prompt can be persisted while the turn is still active.
+    let release: () => void = () => {}
+    const held = new Promise<void>((resolve) => (release = resolve))
+    yield* llm.push(reply().wait(held).text("partial response").contentFilter())
+    yield* llm.text("second reply")
+
+    const a = yield* prompt
+      .prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        parts: [{ type: "text", text: "first" }],
+      })
+      .pipe(Effect.forkChild)
+
+    yield* llm.wait(1)
+
+    const id = MessageID.ascending()
+    const b = yield* prompt
+      .prompt({
+        sessionID: chat.id,
+        messageID: id,
+        agent: "build",
+        model: ref,
+        parts: [{ type: "text", text: "second" }],
+      })
+      .pipe(Effect.forkChild)
+
+    yield* pollWithTimeout(
+      sessions
+        .messages({ sessionID: chat.id })
+        .pipe(Effect.map((msgs) => (msgs.some((msg) => msg.info.role === "user" && msg.info.id === id) ? true : undefined))),
+      "timed out waiting for second prompt to save",
+    )
+
+    release()
+
+    const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
+    expect(Exit.isSuccess(ea)).toBe(true)
+    expect(Exit.isSuccess(eb)).toBe(true)
+    if (!Exit.isSuccess(eb)) throw new Error("queued prompt failed")
+    if (eb.value.info.role !== "assistant") throw new Error("expected assistant message")
+    // The queued prompt must resolve with its own answered message, never the
+    // content-filtered turn's message.
+    expect(eb.value.info.parentID).toBe(id)
+    expect(eb.value.parts.some((part) => part.type === "text" && part.text === "second reply")).toBe(true)
+    expect(yield* llm.calls).toBe(2)
+    // The filtered turn still recorded its error on disk.
+    const stored = yield* sessions.messages({ sessionID: chat.id })
+    expect(
+      stored.some((msg) => msg.info.role === "assistant" && msg.info.error?.name === "ContentFilterError"),
+    ).toBe(true)
+  }),
+)
+
 it.instance("assertNotBusy fails with BusyError when loop running", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
