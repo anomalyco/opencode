@@ -891,6 +891,8 @@ export const dict = {
   "sidebar.project.clearNotifications": "Očisti obavijesti",
   "sidebar.empty.title": "Nema otvorenih projekata",
   "sidebar.empty.description": "Otvori projekat za početak",
+  "sidebar.archived": "Arhivirano",
+  "sidebar.archived.restore": "Vrati sesiju",
 
   "app.name.desktop": "OpenCode Desktop",
 
@@ -912,6 +914,12 @@ export const dict = {
 
   "settings.general.row.language.title": "Jezik",
   "settings.general.row.language.description": "Promijeni jezik prikaza u OpenCode-u",
+  "settings.general.row.navigation.description": "Koristite kartice u traci naslova ili stalnu bočnu traku",
+  "settings.general.row.navigation.tabs": "Kartice",
+  "settings.general.row.navigation.sidebar": "Bočna traka",
+  "settings.general.row.sidebarSessions.title": "Arhiviraj neaktivne sesije nakon",
+  "settings.general.row.sidebarSessions.description": "Neaktivne sesije idu u Arhivirano. Aktivne sesije ostaju vidljive.",
+  "settings.general.row.sidebarSessions.always": "Uvijek prikaži",
   "settings.general.row.shell.title": "Shell terminala",
   "settings.general.row.shell.description":
     "Odaberi shell koji se koristi za terminal. Kompatibilni shellovi koriste se i za pozive alata agenta.",

@@ -871,6 +871,8 @@ export const dict = {
   "sidebar.project.clearNotifications": "清除通知",
   "sidebar.empty.title": "未開啟任何專案",
   "sidebar.empty.description": "開啟專案以開始使用",
+  "sidebar.archived": "已封存",
+  "sidebar.archived.restore": "還原工作階段",
 
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "桌面",
@@ -891,6 +893,12 @@ export const dict = {
 
   "settings.general.row.language.title": "語言",
   "settings.general.row.language.description": "變更 OpenCode 的顯示語言",
+  "settings.general.row.navigation.description": "在標題列使用分頁，或使用常駐側邊欄",
+  "settings.general.row.navigation.tabs": "分頁",
+  "settings.general.row.navigation.sidebar": "側邊欄",
+  "settings.general.row.sidebarSessions.title": "閒置工作階段封存時間",
+  "settings.general.row.sidebarSessions.description": "閒置工作階段會移至已封存。正在運作的工作階段會保持顯示。",
+  "settings.general.row.sidebarSessions.always": "一律顯示",
   "settings.general.row.shell.title": "終端機 Shell",
   "settings.general.row.shell.description": "選擇終端機使用的 Shell。相容的 Shell 也會用於代理程式工具呼叫。",
   "settings.general.row.shell.autoDefault": "自動（預設）",

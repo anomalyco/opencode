@@ -592,6 +592,12 @@ export const dict = {
   "settings.general.section.display": "디스플레이",
   "settings.general.row.language.title": "언어",
   "settings.general.row.language.description": "OpenCode 표시 언어 변경",
+  "settings.general.row.navigation.description": "제목 표시줄 탭 또는 고정 사이드바 사용",
+  "settings.general.row.navigation.tabs": "탭",
+  "settings.general.row.navigation.sidebar": "사이드바",
+  "settings.general.row.sidebarSessions.title": "유휴 세션 보관 기준",
+  "settings.general.row.sidebarSessions.description": "유휴 세션은 보관됨으로 이동합니다. 작업 중인 세션은 계속 표시됩니다.",
+  "settings.general.row.sidebarSessions.always": "항상 표시",
   "settings.general.row.appearance.title": "모양",
   "settings.general.row.appearance.description": "기기에서 OpenCode가 보이는 방식 사용자 지정",
   "settings.general.row.colorScheme.title": "색상 테마",
@@ -1016,6 +1022,8 @@ export const dict = {
 
   "sidebar.empty.title": "열린 프로젝트 없음",
   "sidebar.empty.description": "프로젝트를 열어 시작하세요",
+  "sidebar.archived": "보관됨",
+  "sidebar.archived.restore": "세션 복원",
 
   "settings.general.section.advanced": "고급",
   "settings.general.row.shell.title": "터미널 셸",

@@ -896,6 +896,8 @@ export const dict = {
   "sidebar.project.clearNotifications": "Bildirimleri temizle",
   "sidebar.empty.title": "Açık proje yok",
   "sidebar.empty.description": "Başlamak için bir proje açın",
+  "sidebar.archived": "Arşivlendi",
+  "sidebar.archived.restore": "Oturumu geri yükle",
 
   "app.name.desktop": "OpenCode Masaüstü",
 
@@ -917,6 +919,12 @@ export const dict = {
 
   "settings.general.row.language.title": "Dil",
   "settings.general.row.language.description": "OpenCode'un görünüm dilini değiştirin",
+  "settings.general.row.navigation.description": "Başlık çubuğunda sekmeler veya kalıcı bir kenar çubuğu kullan",
+  "settings.general.row.navigation.tabs": "Sekmeler",
+  "settings.general.row.navigation.sidebar": "Kenar çubuğu",
+  "settings.general.row.sidebarSessions.title": "Boşta oturumları şu süreden sonra arşivle",
+  "settings.general.row.sidebarSessions.description": "Boşta oturumlar Arşivlendi bölümüne taşınır. Çalışan oturumlar görünür kalır.",
+  "settings.general.row.sidebarSessions.always": "Her zaman göster",
   "settings.general.row.shell.title": "Terminal Kabuğu",
   "settings.general.row.shell.description":
     "Terminalinizde kullanılacak kabuğu seçin. Uyumlu kabuklar, ajan araç çağrılarında da kullanılır.",

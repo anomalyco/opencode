@@ -874,6 +874,8 @@ export const dict = {
   "sidebar.project.clearNotifications": "清除通知",
   "sidebar.empty.title": "没有打开的项目",
   "sidebar.empty.description": "打开一个项目以开始使用",
+  "sidebar.archived": "已归档",
+  "sidebar.archived.restore": "恢复会话",
 
   "app.name.desktop": "OpenCode Desktop",
 
@@ -896,6 +898,12 @@ export const dict = {
   "settings.general.section.display": "显示",
   "settings.general.row.language.title": "语言",
   "settings.general.row.language.description": "更改 OpenCode 的显示语言",
+  "settings.general.row.navigation.description": "在标题栏使用标签页，或使用常驻侧边栏",
+  "settings.general.row.navigation.tabs": "标签页",
+  "settings.general.row.navigation.sidebar": "侧边栏",
+  "settings.general.row.sidebarSessions.title": "闲置会话归档时间",
+  "settings.general.row.sidebarSessions.description": "闲置会话会移入已归档。正在工作的会话始终可见。",
+  "settings.general.row.sidebarSessions.always": "始终显示",
   "settings.general.row.shell.title": "终端 Shell",
   "settings.general.row.shell.description": "选择终端使用的 shell。兼容的 shell 也会用于智能体工具调用。",
   "settings.general.row.shell.autoDefault": "自动（默认）",

@@ -267,7 +267,7 @@ export function NavigationSidebar() {
 
   return (
     <aside
-      aria-label={language.t("sidebar.navigation.label")}
+      aria-label={language.t("settings.shortcuts.group.navigation")}
       class="my-2 ms-2 flex w-[268px] shrink-0 flex-col overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
     >
       <div class="flex shrink-0 flex-col gap-2 px-2 pt-2">
@@ -303,7 +303,7 @@ export function NavigationSidebar() {
           showClearButton={!!filter()}
           clearLabel={language.t("common.close")}
           onClearClick={() => setFilter("")}
-          placeholder={language.t("sidebar.navigation.filter")}
+          placeholder={language.t("home.sessions.search.placeholder")}
           leadingIcon={<IconV2 name="magnifying-glass" />}
           onInput={(event) => setFilter(event.currentTarget.value)}
         />
@@ -321,9 +321,9 @@ export function NavigationSidebar() {
           <Show when={!sessionIndex.isLoading && empty()}>
             <div class="flex flex-col gap-1 px-3 py-6 text-center">
               <span class="text-v2-text-text-base [font-weight:530]">
-                {language.t(
-                  filter() ? "sidebar.navigation.noMatches" : "sidebar.empty.title",
-                )}
+                {filter()
+                  ? language.t("home.sessions.search.noResults", { query: filter() })
+                  : language.t("sidebar.empty.title")}
               </span>
               <Show when={!filter()}>
                 <span class="text-xs text-v2-text-text-faint">{language.t("sidebar.empty.description")}</span>
@@ -332,7 +332,7 @@ export function NavigationSidebar() {
           </Show>
 
           <Show when={visibleGroups().length > 0}>
-            <div class={SECTION_LABEL}>{language.t("sidebar.navigation.projects")}</div>
+            <div class={SECTION_LABEL}>{language.t("home.projects")}</div>
           </Show>
 
           <For each={visibleGroups()}>
@@ -380,12 +380,7 @@ export function NavigationSidebar() {
             )}
           </For>
 
-          <div class={`${SECTION_LABEL} flex items-center justify-between gap-2`}>
-            <span>{language.t("sidebar.navigation.settled")}</span>
-            <Show when={settled().length > 0}>
-              <span class="text-v2-text-text-faint">{settled().length}</span>
-            </Show>
-          </div>
+          <div class={SECTION_LABEL}>{language.t("sidebar.archived")}</div>
 
           <button
             type="button"
@@ -399,7 +394,7 @@ export function NavigationSidebar() {
               class={`size-3 shrink-0 text-v2-icon-icon-muted transition-transform duration-[120ms] ${archivedOpen() ? "" : "-rotate-90"}`}
             />
             <IconV2 name="archive" class="size-3.5 shrink-0 text-v2-icon-icon-muted" />
-            <span class="min-w-0 flex-1 truncate">{language.t("sidebar.navigation.settled.show")}</span>
+            <span class="min-w-0 flex-1 truncate">{language.t("sidebar.archived")}</span>
           </button>
 
           <Show when={archivedOpen()}>
@@ -408,9 +403,21 @@ export function NavigationSidebar() {
                 <Spinner class="size-3.5 shrink-0" />
               </div>
             </Show>
-            <Show when={!archived.isLoading && (archived.data ?? []).length === 0}>
-              <div class="px-3 py-2 text-xs text-v2-text-text-faint">{language.t("sidebar.navigation.settled.empty")}</div>
+            <Show when={!archived.isLoading && (archived.data ?? []).length === 0 && settled().length === 0}>
+              <div class="px-3 py-2 text-xs text-v2-text-text-faint">{language.t("sidebar.empty.description")}</div>
             </Show>
+            <For each={settled()}>
+              {(record) => (
+                <SidebarSessionRow
+                  record={record}
+                  server={serverKey()}
+                  current={currentSession() === record.session.id}
+                  onOpen={open}
+                  onSettle={() => settle(record)}
+                  onCloseTab={() => closeTab(record)}
+                />
+              )}
+            </For>
             <For each={archived.data ?? []}>
               {(session) => (
                 <div class="flex min-w-0 items-center gap-1">
@@ -423,13 +430,13 @@ export function NavigationSidebar() {
                     <span class="min-w-0 flex-1 truncate">{titleOf(session)}</span>
                   </button>
                   <div class="shrink-0">
-                    <TooltipV2 value={language.t("sidebar.navigation.settled.restore")} placement="top-end">
+                    <TooltipV2 value={language.t("sidebar.archived.restore")} placement="top-end">
                       <IconButtonV2
                         data-action="sidebar-unsettle"
                         variant="ghost-muted"
                         size="small"
                         icon={<IconV2 name="outline-reset" />}
-                        aria-label={language.t("sidebar.navigation.settled.restore")}
+                        aria-label={language.t("sidebar.archived.restore")}
                         onClick={() => unsettle(session)}
                       />
                     </TooltipV2>
@@ -620,13 +627,13 @@ function SidebarSessionRow(props: {
         <span class="min-w-0 flex-1 truncate">{title()}</span>
       </button>
       <div class={ROW_ACTIONS}>
-        <TooltipV2 value={language.t("sidebar.navigation.settle")} placement="top-end">
+        <TooltipV2 value={language.t("command.session.archive")} placement="top-end">
           <IconButtonV2
             data-action="sidebar-session-settle"
             variant="ghost-muted"
             size="small"
             icon={<IconV2 name="archive" />}
-            aria-label={language.t("sidebar.navigation.settle")}
+            aria-label={language.t("command.session.archive")}
             onClick={() => props.onSettle(props.record)}
           />
         </TooltipV2>

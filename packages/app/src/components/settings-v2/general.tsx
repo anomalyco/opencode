@@ -127,7 +127,7 @@ const NavigationModeSetting: Component = () => {
   const settings = useSettings()
   return (
     <SettingsRowV2
-      title={language.t("settings.general.row.navigation.title")}
+      title={language.t("settings.shortcuts.group.navigation")}
       description={language.t("settings.general.row.navigation.description")}
     >
       <SelectV2
@@ -164,9 +164,7 @@ const SidebarSessionDaysSetting: Component = () => {
         placement="bottom-end"
         gutter={6}
         label={(option) =>
-          option
-            ? language.plural("settings.general.row.sidebarSessions.days", option)
-            : language.t("settings.general.row.sidebarSessions.always")
+          option ? String(option) : language.t("settings.general.row.sidebarSessions.always")
         }
         onSelect={(option) => option !== null && settings.general.setSidebarSessionDays(option)}
       />

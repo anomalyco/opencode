@@ -774,6 +774,12 @@ export const dict = {
 
   "settings.general.row.language.title": "Språk",
   "settings.general.row.language.description": "Endre visningsspråket for OpenCode",
+  "settings.general.row.navigation.description": "Bruk faner i tittellinjen eller et fast sidefelt",
+  "settings.general.row.navigation.tabs": "Faner",
+  "settings.general.row.navigation.sidebar": "Sidefelt",
+  "settings.general.row.sidebarSessions.title": "Arkiver inaktive sesjoner etter",
+  "settings.general.row.sidebarSessions.description": "Inaktive sesjoner flyttes til Arkivert. Aktive sesjoner forblir synlige.",
+  "settings.general.row.sidebarSessions.always": "Vis alltid",
   "settings.general.row.appearance.title": "Utseende",
   "settings.general.row.appearance.description": "Tilpass hvordan OpenCode ser ut på enheten din",
   "settings.general.row.colorScheme.title": "Fargevalg",
@@ -1229,6 +1235,8 @@ export const dict = {
 
   "sidebar.empty.title": "Ingen åpne prosjekter",
   "sidebar.empty.description": "Åpne et prosjekt for å komme i gang",
+  "sidebar.archived": "Arkivert",
+  "sidebar.archived.restore": "Gjenopprett sesjon",
 
   "settings.general.section.advanced": "Avansert",
   "settings.general.row.shell.title": "Terminalskall",

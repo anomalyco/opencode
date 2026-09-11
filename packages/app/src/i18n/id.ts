@@ -953,6 +953,8 @@ export const dict = {
   "sidebar.project.clearNotifications": "Hapus notifikasi",
   "sidebar.empty.title": "Tidak ada proyek terbuka",
   "sidebar.empty.description": "Buka proyek untuk memulai",
+  "sidebar.archived": "Diarsipkan",
+  "sidebar.archived.restore": "Pulihkan sesi",
 
   "debugBar.ariaLabel": "Diagnostik kinerja pengembangan",
   "debugBar.na": "n/a",
@@ -1005,6 +1007,12 @@ export const dict = {
 
   "settings.general.row.language.title": "Bahasa",
   "settings.general.row.language.description": "Ubah bahasa tampilan untuk OpenCode",
+  "settings.general.row.navigation.description": "Gunakan tab di bilah judul atau bilah sisi tetap",
+  "settings.general.row.navigation.tabs": "Tab",
+  "settings.general.row.navigation.sidebar": "Bilah sisi",
+  "settings.general.row.sidebarSessions.title": "Arsipkan sesi tak aktif setelah",
+  "settings.general.row.sidebarSessions.description": "Sesi tak aktif dipindahkan ke Diarsipkan. Sesi yang bekerja tetap terlihat.",
+  "settings.general.row.sidebarSessions.always": "Selalu tampilkan",
   "settings.general.row.shell.title": "Shell terminal",
   "settings.general.row.shell.description": "Shell yang digunakan oleh terminal dan alat agen",
   "settings.general.row.shell.autoDefault": "Otomatis (Bawaan)",

@@ -768,6 +768,8 @@ export const dict = {
   "sidebar.project.clearNotifications": "Ryd notifikationer",
   "sidebar.empty.title": "Ingen åbne projekter",
   "sidebar.empty.description": "Åbn et projekt for at komme i gang",
+  "sidebar.archived": "Arkiveret",
+  "sidebar.archived.restore": "Gendan session",
 
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "Desktop",
@@ -788,6 +790,12 @@ export const dict = {
 
   "settings.general.row.language.title": "Sprog",
   "settings.general.row.language.description": "Ændr visningssproget for OpenCode",
+  "settings.general.row.navigation.description": "Brug faner i titellinjen eller et fast sidepanel",
+  "settings.general.row.navigation.tabs": "Faner",
+  "settings.general.row.navigation.sidebar": "Sidepanel",
+  "settings.general.row.sidebarSessions.title": "Arkivér inaktive sessioner efter",
+  "settings.general.row.sidebarSessions.description": "Inaktive sessioner flyttes til Arkiveret. Aktive sessioner forbliver synlige.",
+  "settings.general.row.sidebarSessions.always": "Vis altid",
   "settings.general.row.shell.title": "Terminalshell",
   "settings.general.row.shell.description":
     "Vælg den shell, der bruges i din terminal. Kompatible shells bruges også til agentens værktøjskald.",

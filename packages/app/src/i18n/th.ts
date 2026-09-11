@@ -878,6 +878,8 @@ export const dict = {
   "sidebar.project.clearNotifications": "ล้างการแจ้งเตือน",
   "sidebar.empty.title": "ไม่มีโปรเจกต์ที่เปิดอยู่",
   "sidebar.empty.description": "เปิดโปรเจกต์เพื่อเริ่มต้น",
+  "sidebar.archived": "จัดเก็บแล้ว",
+  "sidebar.archived.restore": "กู้คืนเซสชัน",
 
   "app.name.desktop": "OpenCode Desktop",
 
@@ -899,6 +901,12 @@ export const dict = {
 
   "settings.general.row.language.title": "ภาษา",
   "settings.general.row.language.description": "เปลี่ยนภาษาที่แสดงสำหรับ OpenCode",
+  "settings.general.row.navigation.description": "ใช้แท็บในแถบชื่อเรื่องหรือแถบด้านข้างถาวร",
+  "settings.general.row.navigation.tabs": "แท็บ",
+  "settings.general.row.navigation.sidebar": "แถบด้านข้าง",
+  "settings.general.row.sidebarSessions.title": "จัดเก็บเซสชันที่ไม่ได้ใช้งานหลังจาก",
+  "settings.general.row.sidebarSessions.description": "เซสชันที่ไม่ได้ใช้งานจะถูกย้ายไปยังจัดเก็บแล้ว เซสชันที่กำลังทำงานยังแสดงอยู่",
+  "settings.general.row.sidebarSessions.always": "แสดงเสมอ",
   "settings.general.row.shell.title": "เชลล์เทอร์มินัล",
   "settings.general.row.shell.description":
     "เลือกเชลล์ที่จะใช้กับเทอร์มินัล เชลล์ที่เข้ากันได้จะใช้สำหรับการเรียกเครื่องมือของเอเจนต์ด้วย",
