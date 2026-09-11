@@ -1361,6 +1361,62 @@ describe("session.message-v2.toModelMessage", () => {
     const texts = (result[0].content as any[]).filter((p) => p.type === "text")
     expect(texts.map((t) => t.text)).toStrictEqual(["", "hello"])
   })
+
+  test("drops phantom invalid tool calls, keeps the real one", async () => {
+    const userID = "m-user-invalid"
+    const assistantID = "m-assistant-invalid"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [{ ...basePart(userID, "u1-invalid"), type: "text", text: "hi" }] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "r1-invalid"),
+            type: "reasoning",
+            text: "thinking",
+            metadata: { anthropic: { signature: "sig" } },
+          },
+          {
+            ...basePart(assistantID, "i1-invalid"),
+            type: "tool",
+            callID: "call-invalid",
+            tool: "invalid",
+            state: {
+              status: "completed",
+              input: { tool: "nope", error: "unavailable" },
+              output: "",
+              title: "",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+          {
+            ...basePart(assistantID, "b1-invalid"),
+            type: "tool",
+            callID: "call-bash",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { command: "echo hi" },
+              output: "hi",
+              title: "bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+    const assistant = result.find((m) => m.role === "assistant")!
+    const toolNames = (assistant.content as any[]).filter((c) => c.type === "tool-call").map((c) => c.toolName)
+    expect(toolNames).not.toContain("invalid")
+    expect(toolNames).toContain("bash")
+  })
 })
 
 describe("session.message-v2.fromError", () => {

@@ -288,6 +288,9 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
             type: "step-start",
           })
         if (part.type === "tool") {
+          // Phantom tool calls were never executed; replaying them between signed
+          // thinking blocks wedges Anthropic turns. Drop them.
+          if (part.tool === "invalid") continue
           toolNames.add(part.tool)
           if (part.state.status === "completed") {
             const outputText = part.state.time.compacted
