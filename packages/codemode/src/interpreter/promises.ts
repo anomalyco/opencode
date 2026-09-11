@@ -1,6 +1,5 @@
 import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect"
 import type { Diagnostic } from "../codemode.js"
-import type { SafeObject } from "../data.js"
 import {
   type AstNode,
   CodeModeFunction,
@@ -8,6 +7,7 @@ import {
   ProgramThrow,
   PromiseInstanceMethodReference,
 } from "./model.js"
+import { get, ProgramArray, ProgramObject, record } from "./objects.js"
 import { HostFunction, requiresNew, sync } from "./host.js"
 import { caughtErrorValue, normalizeError } from "./errors.js"
 import { typeofValue } from "./references.js"
@@ -111,8 +111,8 @@ export const resolvePromiseValue = <R>(
 ): Effect.Effect<unknown, unknown, R> => {
   if (own?.promise !== undefined && value === own.promise) return Effect.fail(selfResolutionError(node))
   if (value instanceof Values.Promise) return runner.settlePromise(value)
-  if (value === null || typeof value !== "object" || !Object.hasOwn(value, "then")) return Effect.succeed(value)
-  const then = (value as SafeObject).then
+  if (!(value instanceof ProgramObject)) return Effect.succeed(value)
+  const then = get(value, "then")
   if (typeofValue(then) !== "function") return Effect.succeed(value)
 
   return Effect.gen(function* () {
@@ -174,10 +174,12 @@ const invokePromiseMethod = <R>(
       }
 
       if (name === "all") {
-        return yield* settleAfterTurn(
-          Effect.all(
-            items.map((item) => Effect.flatten(promises.await(item))),
-            { concurrency: "unbounded" },
+        return new ProgramArray(
+          yield* settleAfterTurn(
+            Effect.all(
+              items.map((item) => Effect.flatten(promises.await(item))),
+              { concurrency: "unbounded" },
+            ),
           ),
         )
       }
@@ -186,19 +188,14 @@ const invokePromiseMethod = <R>(
         for (const item of items) {
           const exit = yield* promises.await(item)
           if (Exit.isSuccess(exit)) {
-            outcomes.push(Object.assign(Object.create(null) as SafeObject, { status: "fulfilled", value: exit.value }))
+            outcomes.push(record({ status: "fulfilled", value: exit.value }))
             continue
           }
           if (Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause)
-          outcomes.push(
-            Object.assign(Object.create(null) as SafeObject, {
-              status: "rejected",
-              reason: caughtErrorValue(Cause.squash(exit.cause)),
-            }),
-          )
+          outcomes.push(record({ status: "rejected", reason: caughtErrorValue(Cause.squash(exit.cause)) }))
         }
         yield* Effect.yieldNow
-        return outcomes
+        return new ProgramArray(outcomes)
       }
       if (name === "race") {
         if (items.length === 0) {

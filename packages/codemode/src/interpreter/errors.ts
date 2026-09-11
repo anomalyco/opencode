@@ -1,10 +1,11 @@
 import { Effect } from "effect"
 import type { Diagnostic } from "../codemode.js"
 import { ToolError } from "../tool-error.js"
-import { type SafeObject, toData, ToolRuntimeError } from "../data.js"
+import { toData, ToolRuntimeError } from "../data.js"
 import { type AstNode, formatLocation, InterpreterRuntimeError, ProgramThrow, sourceLocation } from "./model.js"
 import { containsRuntimeReference } from "./references.js"
 import { type HostCall, HostFunction } from "./host.js"
+import { get, ProgramError, ProgramObject } from "./objects.js"
 import { type Runner } from "./runner.js"
 import {
   coerceToString,
@@ -44,12 +45,8 @@ export const normalizeError = (error: unknown): Diagnostic => {
       message = "a non-data value"
     } else if (typeof value === "string") {
       message = value
-    } else if (
-      value !== null &&
-      typeof value === "object" &&
-      typeof (value as { message?: unknown }).message === "string"
-    ) {
-      message = (value as { message: string }).message
+    } else if (value instanceof ProgramObject && typeof get(value, "message") === "string") {
+      message = get(value, "message") as string
     } else {
       try {
         message = JSON.stringify(toData(value, "Thrown value")) ?? String(value)
@@ -87,14 +84,14 @@ export const caughtErrorValue = (thrown: unknown): unknown => {
   return createErrorValue(name, normalizeError(thrown).message)
 }
 
-const constructErrorValue = (name: string, args: Array<unknown>): SafeObject =>
+const constructErrorValue = (name: string, args: Array<unknown>): ProgramError =>
   createErrorValue(name, args[0] === undefined ? "" : coerceToString(args[0]))
 
 const constructAggregateErrorValue = <R>(
   runner: Runner<R>,
   args: Array<unknown>,
   node: AstNode,
-): Effect.Effect<SafeObject, unknown, R> =>
+): Effect.Effect<ProgramError, unknown, R> =>
   Effect.gen(function* () {
     const cursor = yield* runner.syncIterator(args[0], node)
     if (cursor === undefined) {

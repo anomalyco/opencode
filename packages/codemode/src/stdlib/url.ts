@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { toProgram } from "../data.js"
 import { HostFunction, requiresNew, sync, syncCall } from "../interpreter/host.js"
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+import { ownEntries, ProgramObject } from "../interpreter/objects.js"
 import { isRuntimeReference } from "../interpreter/references.js"
 import { preserveConsumerError, type Runner } from "../interpreter/runner.js"
 import { Values } from "../values.js"
@@ -183,15 +184,14 @@ const constructURLSearchParams = <R>(
       ).as("TypeError")
     }
     if (Values.isValue(init)) return new Values.URLSearchParams(new URLSearchParams())
-    const data = toProgram(init, "new URLSearchParams input")
-    if (data === null || typeof data !== "object") {
+    if (!(init instanceof ProgramObject)) {
       throw new InterpreterRuntimeError(
         "new URLSearchParams(...) expects a query string, data object, iterable pairs, or URLSearchParams.",
         node,
       ).as("TypeError")
     }
     return new Values.URLSearchParams(
-      new URLSearchParams(Object.fromEntries(Object.entries(data).map(([key, value]) => [key, coerceToString(value)]))),
+      new URLSearchParams(Object.fromEntries(ownEntries(init).map(([key, value]) => [key, coerceToString(value)]))),
     )
   })
 }

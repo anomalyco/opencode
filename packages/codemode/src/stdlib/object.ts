@@ -2,11 +2,10 @@ import { Effect } from "effect"
 import { toProgram } from "../data.js"
 import { HostFunction, sync, syncCall } from "../interpreter/host.js"
 import { type AstNode, AsyncIteratorSymbol, InterpreterRuntimeError, IteratorSymbol } from "../interpreter/model.js"
+import { getOwn, hasOwn, ownEntries, ownKeys, ProgramArray, ProgramObject, set } from "../interpreter/objects.js"
 import {
   containsOpaqueReference,
   describeValue,
-  isRuntimeReference,
-  parseArrayIndex,
   rejectCircularInsertion,
   typeofValue,
 } from "../interpreter/references.js"
@@ -16,9 +15,8 @@ import { Values } from "../values.js"
 import { groupBy } from "./collections.js"
 import { coerceToString } from "./value.js"
 
-// ToObject for enumeration. Strings return themselves: the host's Object.keys/entries/hasOwn index a
-// primitive string directly. Numbers, booleans, wrappers, and functions have no own enumerable keys.
-export const enumerableSource = (label: string, value: unknown, node: AstNode): Record<string, unknown> => {
+// ToObject for enumeration.
+export const enumerableSource = (label: string, value: unknown, node: AstNode): ProgramObject => {
   if (value === null || value === undefined) {
     throw new InterpreterRuntimeError(`${label} cannot convert ${describeValue(value)} to an object.`, node).as(
       "TypeError",
@@ -38,58 +36,41 @@ export const enumerableSource = (label: string, value: unknown, node: AstNode): 
       "InvalidDataValue",
     )
   }
-  if (typeof value === "string") return value as unknown as Record<string, unknown>
-  if (typeof value !== "object" || Values.isValue(value) || isRuntimeReference(value)) return {}
-  return value as Record<string, unknown>
+  if (typeof value === "string") return new ProgramArray([...value])
+  if (value instanceof ProgramObject) return value
+  return new ProgramObject()
 }
 
 export const objectAssign = (args: Array<unknown>, node: AstNode): unknown => {
   const target = args[0]
   // JS would box a primitive target; wrappers and primitives cannot hold fields here.
-  if (target === null || typeof target !== "object" || Values.isValue(target) || isRuntimeReference(target)) {
+  if (!(target instanceof ProgramObject)) {
     throw new InterpreterRuntimeError(
       `Object.assign expects a data object or array target, received ${describeValue(target)}.`,
       node,
     ).as("TypeError")
   }
-  const out = target as Record<string, unknown>
   const seen = new Set<object>()
-  const guardedSet = (key: PropertyKey, item: unknown): void => {
-    // Arrays hold only indexed elements, as with direct assignment; Reflect.set would otherwise
-    // reach Array's length and Object.prototype's __proto__ setter.
-    if (Array.isArray(out) && (typeof key === "symbol" || parseArrayIndex(key) === undefined)) {
-      throw new InterpreterRuntimeError(
-        `Object.assign cannot assign '${String(key)}' to an array: only array indexes may be assigned.`,
-        node,
-      ).as("TypeError")
-    }
-    rejectCircularInsertion(out, item, "Object.assign result", node, seen)
-    if (!Reflect.set(out, key, item))
-      throw new InterpreterRuntimeError(`Object.assign could not assign property '${String(key)}'.`, node).as(
-        "TypeError",
-      )
-  }
   for (const source of args.slice(1)) {
     if (source === null || source === undefined) continue
     const from = enumerableSource("Object.assign(...)", source, node)
-    if (typeof from !== "object") {
-      for (const [key, item] of Object.entries(from)) guardedSet(key, item)
-      continue
-    }
-    for (const key of Reflect.ownKeys(from)) {
+    for (const key of ownKeys(from)) {
       if (typeof key === "symbol" && key !== AsyncIteratorSymbol && key !== IteratorSymbol) continue
-      if (Object.prototype.propertyIsEnumerable.call(from, key)) guardedSet(key, Reflect.get(from, key))
+      rejectCircularInsertion(target, getOwn(from, key), "Object.assign result", node, seen)
+      if (!set(target, key, getOwn(from, key))) {
+        throw new InterpreterRuntimeError("Invalid array length", node).as("RangeError")
+      }
     }
   }
-  return out
+  return target
 }
 
 const objectFromEntries = <R>(
   runner: Runner<R>,
   source: unknown,
   node: AstNode,
-): Effect.Effect<Record<string, unknown>, unknown, R> => {
-  const out: Record<string, unknown> = Object.create(null)
+): Effect.Effect<ProgramObject, unknown, R> => {
+  const out = new ProgramObject()
   return Effect.gen(function* () {
     const cursor = yield* runner.syncIterator(source, node)
     if (cursor === undefined) {
@@ -103,21 +84,12 @@ const objectFromEntries = <R>(
       yield* preserveConsumerError(
         cursor,
         Effect.sync(() => {
-          if (
-            step.value === null ||
-            typeof step.value !== "object" ||
-            Values.isValue(step.value) ||
-            containsOpaqueReference(step.value)
-          ) {
+          if (!(step.value instanceof ProgramObject) || containsOpaqueReference(step.value)) {
             throw new InterpreterRuntimeError("Object.fromEntries expects [key, value] entry objects.", node).as(
               "TypeError",
             )
           }
-          const entry = step.value as Record<string, unknown>
-          toProgram(entry[0], "Object.fromEntries key")
-          toProgram(entry[1], "Object.fromEntries value")
-          const key = coerceToString(entry[0])
-          out[key] = entry[1]
+          set(out, coerceToString(getOwn(step.value, 0)), getOwn(step.value, 1))
         }),
       )
     }
@@ -126,7 +98,7 @@ const objectFromEntries = <R>(
 
 const constructObject = (args: Array<unknown>, node: AstNode): unknown => {
   const first = args[0]
-  if (first === null || first === undefined) return Object.create(null)
+  if (first === null || first === undefined) return new ProgramObject()
   if (typeof first === "object") return first
   throw new InterpreterRuntimeError(
     `Object(${typeof first}) wrapper objects are not supported; use the primitive value directly.`,
@@ -147,18 +119,24 @@ export const objectGlobal = <R>(runner: Runner<R>, toolKeys: (path: ReadonlyArra
         toProgram(
           args[0] instanceof ToolReference
             ? [...toolKeys(args[0].path)]
-            : Object.keys(enumerableSource("Object.keys(...)", args[0], node)),
+            : ownKeys(enumerableSource("Object.keys(...)", args[0], node)).filter((key) => typeof key === "string"),
           "Object.keys result",
         ),
       ),
-      values: sync("Object.values", (args, node) =>
-        Object.values(enumerableSource("Object.values(...)", args[0], node)),
+      values: sync(
+        "Object.values",
+        (args, node) =>
+          new ProgramArray(ownEntries(enumerableSource("Object.values(...)", args[0], node)).map((entry) => entry[1])),
       ),
-      entries: sync("Object.entries", (args, node) =>
-        Object.entries(enumerableSource("Object.entries(...)", args[0], node)).map(([key, item]) => [key, item]),
+      entries: sync(
+        "Object.entries",
+        (args, node) =>
+          new ProgramArray(
+            ownEntries(enumerableSource("Object.entries(...)", args[0], node)).map((entry) => new ProgramArray(entry)),
+          ),
       ),
       hasOwn: sync("Object.hasOwn", (args, node) =>
-        Object.hasOwn(
+        hasOwn(
           enumerableSource("Object.hasOwn(...)", args[0], node),
           args[1] === AsyncIteratorSymbol || args[1] === IteratorSymbol ? args[1] : String(args[1]),
         ),

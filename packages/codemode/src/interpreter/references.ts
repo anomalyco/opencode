@@ -3,15 +3,14 @@ import { Values } from "../values.js"
 import { HostFunction, HostNamespace } from "./host.js"
 import {
   type AstNode,
-  AsyncIteratorSymbol,
   CodeModeFunction,
   CodeModeGenerator,
   GeneratorMethodReference,
   InterpreterRuntimeError,
   IntrinsicReference,
-  IteratorSymbol,
   PromiseInstanceMethodReference,
 } from "./model.js"
+import { getOwn, ownKeys, ProgramArray, ProgramObject } from "./objects.js"
 
 export const isRuntimeReference = (value: unknown): boolean =>
   value instanceof HostFunction ||
@@ -26,11 +25,8 @@ export const isRuntimeReference = (value: unknown): boolean =>
   Values.isValue(value)
 
 function* childValues(value: object): Generator {
-  for (const key of Reflect.ownKeys(value)) {
-    if (!Object.prototype.propertyIsEnumerable.call(value, key)) continue
-    if (typeof key === "symbol" && key !== AsyncIteratorSymbol && key !== IteratorSymbol) continue
-    yield Reflect.get(value, key)
-  }
+  if (!(value instanceof ProgramObject)) return
+  for (const key of ownKeys(value)) yield getOwn(value, key)
 }
 
 // Depth-first search over a value tree. `match` stops the walk; `skip` prunes a subtree without matching it.
@@ -79,7 +75,7 @@ export const rejectCircularInsertion = (
 
 export const describeValue = (value: unknown): string => {
   if (value === null) return "null"
-  if (Array.isArray(value)) return "an array"
+  if (value instanceof ProgramArray) return "an array"
   if (value instanceof Values.Promise) return "an un-awaited Promise"
   if (value instanceof ToolReference) return "a tool reference"
   if (value instanceof Values.Date) return "a Date"
@@ -107,13 +103,4 @@ export const typeofValue = (value: unknown): string => {
   if (value instanceof HostNamespace) return "object"
   if (value instanceof ToolReference) return value.path.length > 0 ? "function" : "object"
   return typeof value
-}
-
-const MAX_ARRAY_LENGTH = 4_294_967_295
-
-export const parseArrayIndex = (key: string | number): number | undefined => {
-  const property = String(key)
-  if (!/^(0|[1-9]\d*)$/.test(property)) return undefined
-  const index = Number(property)
-  return index < MAX_ARRAY_LENGTH ? index : undefined
 }

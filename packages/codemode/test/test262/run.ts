@@ -8,6 +8,7 @@ import { executeProgram } from "../../src/interpreter/execute.js"
 import type { Host } from "../../src/interpreter/globals.js"
 import { HostFunction } from "../../src/interpreter/host.js"
 import { ProgramThrow } from "../../src/interpreter/model.js"
+import { get, ProgramArray, ProgramObject } from "../../src/interpreter/objects.js"
 import { createErrorValue, errorBrandName } from "../../src/stdlib/value.js"
 import { ToolRuntime } from "../../src/tool-runtime.js"
 
@@ -67,7 +68,10 @@ const harness = <R>(host: Host<R>, onDone: (error: unknown) => void): ReadonlyAr
   const fail = (message: string) => Effect.fail(new ProgramThrow(createErrorValue("Test262Error", message)))
   const prefix = (message: unknown) => (message === undefined ? "" : `${String(message)} `)
   const compare = (a: unknown, b: unknown) =>
-    Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((value, i) => Object.is(value, b[i]))
+    a instanceof ProgramArray &&
+    b instanceof ProgramArray &&
+    a.items.length === b.items.length &&
+    a.items.every((value, i) => Object.is(value, b.items[i]))
   const test262Error = new HostFunction<R>({
     name: "Test262Error",
     call: (args) => Effect.succeed(createErrorValue("Test262Error", args[0] === undefined ? "" : String(args[0]))),
@@ -154,9 +158,9 @@ const harness = <R>(host: Host<R>, onDone: (error: unknown) => void): ReadonlyAr
 const show = (value: unknown): string => {
   if (typeof value === "string") return JSON.stringify(value)
   if (Object.is(value, -0)) return "-0"
-  if (Array.isArray(value)) return `[${value.map(show).join(", ")}]`
+  if (value instanceof ProgramArray) return `[${value.items.map(show).join(", ")}]`
   if (value instanceof HostFunction) return value.name
-  if (value === null || typeof value !== "object") return String(value)
-  const message = (value as { message?: unknown }).message
+  if (!(value instanceof ProgramObject)) return String(value)
+  const message = get(value, "message")
   return typeof message === "string" ? `${errorBrandName(value) ?? "object"}: ${message}` : "object"
 }

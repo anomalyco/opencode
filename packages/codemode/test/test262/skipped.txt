@@ -1,6 +1,6 @@
-built-ins/Array/prototype/concat/create-ctor-non-object.js  # Only data fields may be assigned.
+built-ins/Array/prototype/concat/create-ctor-non-object.js  # a.concat() throws a TypeError exception Expected a TypeError to be thrown but no exception was throw
 built-ins/Array/prototype/copyWithin/coerced-values-end.js  # Array.copyWithin expects end to be a number.
-built-ins/Array/prototype/copyWithin/coerced-values-start-change-target.js  # Array length cannot be assigned.
+built-ins/Array/prototype/copyWithin/coerced-values-start-change-target.js  # Array.copyWithin expects start to be a number.
 built-ins/Array/prototype/copyWithin/coerced-values-start.js  # Array.copyWithin expects start to be a number.
 built-ins/Array/prototype/copyWithin/coerced-values-target.js  # Array.copyWithin expects target index to be a number.
 built-ins/Array/prototype/copyWithin/fill-holes.js  # .hasOwnProperty is not a function.
@@ -9,18 +9,15 @@ built-ins/Array/prototype/copyWithin/return-abrupt-from-start.js  # Expected a T
 built-ins/Array/prototype/copyWithin/return-abrupt-from-target.js  # Expected a Test262Error but got a Error
 built-ins/Array/prototype/entries/iteration-mutable.js  # .next is not a function.
 built-ins/Array/prototype/entries/iteration.js  # .next is not a function.
-built-ins/Array/prototype/every/15.4.4.16-7-4.js  # Array length cannot be assigned.
 built-ins/Array/prototype/every/15.4.4.16-7-7.js  # .hasOwnProperty is not a function.
-built-ins/Array/prototype/every/15.4.4.16-8-13.js  # Only data fields may be assigned.
+built-ins/Array/prototype/every/15.4.4.16-8-13.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
 built-ins/Array/prototype/fill/coerced-indexes.js  # Array.fill expects start to be a number.
 built-ins/Array/prototype/fill/return-abrupt-from-end.js  # Expected a Test262Error but got a Error
 built-ins/Array/prototype/fill/return-abrupt-from-start.js  # Expected a Test262Error but got a Error
-built-ins/Array/prototype/filter/15.4.4.20-10-4.js  # Only data fields may be assigned.
-built-ins/Array/prototype/filter/15.4.4.20-9-4.js  # Array length cannot be assigned.
-built-ins/Array/prototype/filter/create-ctor-non-object.js  # Only data fields may be assigned.
+built-ins/Array/prototype/filter/15.4.4.20-10-4.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+built-ins/Array/prototype/filter/create-ctor-non-object.js  # null value Expected a TypeError to be thrown but no exception was thrown at all
 built-ins/Array/prototype/flat/non-numeric-depth-should-not-throw.js  # Array.flat expects depth to be a number.
-built-ins/Array/prototype/forEach/15.4.4.18-7-3.js  # Array length cannot be assigned.
-built-ins/Array/prototype/forEach/15.4.4.18-8-12.js  # Only data fields may be assigned.
+built-ins/Array/prototype/forEach/15.4.4.18-8-12.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
 built-ins/Array/prototype/includes/length-zero-returns-false.js  # Array.includes expects a value and optional start index.
 built-ins/Array/prototype/includes/no-arg.js  # Array.includes expects a value and optional start index.
 built-ins/Array/prototype/includes/return-abrupt-tointeger-fromindex.js  # Expected a Test262Error but got a Error
@@ -40,15 +37,13 @@ built-ins/Array/prototype/indexOf/15.4.4.14-5-3.js  # Array.indexOf expects star
 built-ins/Array/prototype/indexOf/15.4.4.14-5-5.js  # Array.indexOf expects start index to be a number.
 built-ins/Array/prototype/indexOf/15.4.4.14-9-7.js  # Array assignment result contains a circular value.
 built-ins/Array/prototype/indexOf/15.4.4.14-9-8.js  # .toString is not a function.
-built-ins/Array/prototype/indexOf/15.4.4.14-9-9.js  # Only data fields may be assigned.
-built-ins/Array/prototype/indexOf/15.4.4.14-9-a-3.js  # Array length cannot be assigned.
-built-ins/Array/prototype/indexOf/15.4.4.14-9-a-6.js  # Array length cannot be assigned.
+built-ins/Array/prototype/indexOf/15.4.4.14-9-a-3.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-9-a-6.js  # Array.indexOf expects start index to be a number.
 built-ins/Array/prototype/indexOf/length-zero-returns-minus-one.js  # Array.indexOf expects start index to be a number.
-built-ins/Array/prototype/join/S15.4.4.5_A1.1_T1.js  # Array length cannot be assigned.
 built-ins/Array/prototype/join/S15.4.4.5_A1.2_T2.js  # Array.join expects zero arguments or one string separator.
 built-ins/Array/prototype/join/S15.4.4.5_A3.1_T1.js  # Array.join expects zero arguments or one string separator.
 built-ins/Array/prototype/join/S15.4.4.5_A3.1_T2.js  # Array.join expects zero arguments or one string separator.
-built-ins/Array/prototype/join/S15.4.4.5_A3.2_T2.js  # Array.join input must contain plain objects only.
+built-ins/Array/prototype/join/S15.4.4.5_A3.2_T2.js  # x.join() must return "*" Expected SameValue(«"[object Object]"», «"*"») to be true
 built-ins/Array/prototype/keys/iteration-mutable.js  # .next is not a function.
 built-ins/Array/prototype/keys/iteration.js  # .next is not a function.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-1.js  # Array.lastIndexOf expects start index to be a number.
@@ -67,36 +62,24 @@ built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-4.js  # a.lastIndexOf(2,undefi
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-5.js  # Array.lastIndexOf expects start index to be a number.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-7.js  # Array assignment result contains a circular value.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-8.js  # .toString is not a function.
-built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-9.js  # Only data fields may be assigned.
-built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-a-3.js  # Array length cannot be assigned.
-built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-a-6.js  # Array length cannot be assigned.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-a-3.js  # Array.lastIndexOf expects start index to be a number.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-a-6.js  # Array.lastIndexOf expects start index to be a number.
 built-ins/Array/prototype/lastIndexOf/length-zero-returns-minus-one.js  # Array.lastIndexOf expects start index to be a number.
-built-ins/Array/prototype/map/15.4.4.19-8-4.js  # Array length cannot be assigned.
 built-ins/Array/prototype/map/15.4.4.19-8-7.js  # .toString is not a function.
-built-ins/Array/prototype/map/15.4.4.19-9-4.js  # Only data fields may be assigned.
-built-ins/Array/prototype/map/create-ctor-non-object.js  # Only data fields may be assigned.
-built-ins/Array/prototype/pop/S15.4.4.6_A1.1_T1.js  # Array length cannot be assigned.
-built-ins/Array/prototype/pop/S15.4.4.6_A1.2_T1.js  # Array length cannot be assigned.
-built-ins/Array/prototype/push/S15.4.4.7_A3.js  # Array length cannot be assigned.
-built-ins/Array/prototype/reduce/15.4.4.21-10-8.js  # Only data fields may be assigned.
-built-ins/Array/prototype/reduce/15.4.4.21-8-c-2.js  # Array length cannot be assigned.
-built-ins/Array/prototype/reduce/15.4.4.21-9-4.js  # Array length cannot be assigned.
+built-ins/Array/prototype/map/15.4.4.19-9-4.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+built-ins/Array/prototype/map/create-ctor-non-object.js  # null value Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Array/prototype/push/S15.4.4.7_A3.js  # The value of x[4294967295] is expected to be "x" Expected SameValue(«undefined», «"x"») to be true
+built-ins/Array/prototype/reduce/15.4.4.21-10-8.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
 built-ins/Array/prototype/reduce/15.4.4.21-9-7.js  # .hasOwnProperty is not a function.
-built-ins/Array/prototype/reduceRight/15.4.4.22-10-8.js  # Only data fields may be assigned.
-built-ins/Array/prototype/reduceRight/15.4.4.22-8-c-2.js  # Array length cannot be assigned.
-built-ins/Array/prototype/reduceRight/15.4.4.22-9-4.js  # Array length cannot be assigned.
+built-ins/Array/prototype/reduceRight/15.4.4.22-10-8.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
 built-ins/Array/prototype/reduceRight/15.4.4.22-9-7.js  # .hasOwnProperty is not a function.
-built-ins/Array/prototype/reverse/S15.4.4.8_A1_T2.js  # Array length cannot be assigned.
-built-ins/Array/prototype/shift/S15.4.4.9_A1.1_T1.js  # Array length cannot be assigned.
-built-ins/Array/prototype/shift/S15.4.4.9_A1.2_T1.js  # Array length cannot be assigned.
-built-ins/Array/prototype/slice/create-ctor-non-object.js  # Only data fields may be assigned.
-built-ins/Array/prototype/some/15.4.4.17-7-4.js  # Array length cannot be assigned.
-built-ins/Array/prototype/some/15.4.4.17-8-13.js  # Only data fields may be assigned.
-built-ins/Array/prototype/sort/S15.4.4.11_A2.1_T3.js  # isNaN input must contain plain objects only.
-built-ins/Array/prototype/sort/S15.4.4.11_A2.2_T3.js  # String input must contain plain objects only.
+built-ins/Array/prototype/slice/create-ctor-non-object.js  # null value Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Array/prototype/some/15.4.4.17-8-13.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+built-ins/Array/prototype/sort/S15.4.4.11_A2.1_T3.js  # #1: Check ToString operator
+built-ins/Array/prototype/sort/S15.4.4.11_A2.2_T3.js  # #1: Check ToString operator
 built-ins/Array/prototype/sort/bug_596_1.js  # #1: [object, object].sort(); counter < 2. Actual: 0
 built-ins/Array/prototype/sort/bug_596_2.js  # .hasOwnProperty is not a function.
-built-ins/Array/prototype/splice/create-ctor-non-object.js  # Only data fields may be assigned.
+built-ins/Array/prototype/splice/create-ctor-non-object.js  # null value Expected a TypeError to be thrown but no exception was thrown at all
 built-ins/Array/prototype/toLocaleString/S15.4.4.3_A1_T1.js  # .toLocaleString is not a function.
 built-ins/Array/prototype/toString/S15.4.4.2_A1_T1.js  # .toString is not a function.
 built-ins/Array/prototype/toString/S15.4.4.2_A1_T2.js  # .toString is not a function.

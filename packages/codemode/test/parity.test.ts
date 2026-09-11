@@ -81,27 +81,26 @@ describe("H3: array property access reads as undefined (not a throw)", () => {
     ).toEqual(["b", "b", null, null, "a", null])
   })
 
-  test("noncanonical keys cannot mutate or delete an aliased element", async () => {
+  test("noncanonical keys are ordinary properties that never alias an element", async () => {
     expect(
       await value(`
         const values = ["a", "b"]
-        let writes = 0
-        try { values["01"] = ++writes } catch {}
+        values["01"] = "c"
+        const before = [values["01"], values[1], values.length]
         const removed = delete values["01"]
-        return [writes, removed, values]
+        return [before, removed, values["01"], values]
       `),
-    ).toEqual([0, true, ["a", "b"]])
+    ).toEqual([["c", "b", 2], true, null, ["a", "b"]])
   })
 
-  test("the maximum array length is not accepted as an array index", async () => {
+  test("the maximum array length is a property, not an index", async () => {
     expect(
       await value(`
         const values = []
-        let writes = 0
-        try { values["4294967295"] = ++writes } catch {}
-        return [writes, values.length]
+        values["4294967295"] = 1
+        return [values["4294967295"], values.length]
       `),
-    ).toEqual([0, 0])
+    ).toEqual([1, 0])
   })
 })
 
@@ -246,16 +245,14 @@ describe("property deletion", () => {
     expect(await value(`const values = [1, 2]; return [delete values.length, values.length]`)).toEqual([false, 2])
   })
 
-  test("does not broaden unsupported array property assignment", async () => {
+  test("arrays accept named properties like JS, and they stay out of the JSON form", async () => {
     expect(
       await value(`
-        const values = []
-        let rightHandSideRuns = 0
-        function next() { rightHandSideRuns++; return 1 }
-        try { values.field = next() } catch {}
-        return rightHandSideRuns
+        const values = [1]
+        values.field = 2
+        return [values.field, Object.keys(values), values]
       `),
-    ).toBe(0)
+    ).toEqual([2, ["0", "field"], [1]])
   })
 
   test("optional deletion short-circuits without evaluating the key", async () => {

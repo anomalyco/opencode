@@ -243,7 +243,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Circular references are rejected when created (`o.self = o`, `array.push(array)`), not at serialization as in JS.
 - [x] `Object.is` for supported data values.
 - [x] `Object.groupBy` over finite collections and custom synchronous iterators/generators, with string-key coercion
-      and null-prototype results.
+      and plain-object results.
 - [ ] `Object.prototype` methods on values: `toString`, `toLocaleString`, `valueOf`, and `hasOwnProperty`.
 
 ## Arrays
@@ -264,12 +264,13 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `length`, numeric indexing, index assignment, spread, and `for...of`.
 - [x] The `thisArg` argument of `Array.from` is accepted and ignored, like JS arrows.
 - [x] `Array.prototype.toSpliced`.
-- [x] Canonical array/string index parsing: keys such as `"01"` remain non-index properties rather than aliasing index
-      `1`; arbitrary array-property assignment remains unsupported.
+- [x] Canonical array/string index parsing: keys such as `"01"` are ordinary properties rather than aliases of index
+      `1`.
 - [x] `Array.prototype.sort` preserves trailing holes, while `toSorted` densifies holes into `undefined` elements,
       like JavaScript.
-- [ ] Assigning `length` to truncate or extend an array.
-- [ ] Non-index own properties on arrays (`arr.foo = 1`, `arr.constructor = null`).
+- [x] Assigning `length` to truncate or extend an array; invalid lengths throw `RangeError`.
+- [x] Non-index own properties on arrays (`arr.foo = 1`, `arr.constructor = null`). They are excluded from the JSON
+      form, like `JSON.stringify`.
 - [ ] Argument coercion for `indexOf`, `lastIndexOf`, `includes`, `fill`, `flat`, `copyWithin`, and the `join`
       separator: JavaScript applies ToIntegerOrInfinity/ToString (including `valueOf`, strings, and `undefined`), the
       interpreter requires numbers and strings; `includes()`/`indexOf()` with no argument should search for
@@ -358,7 +359,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `test`, `exec`, and `toString`.
 - [x] Readable `source`, `flags`, `lastIndex`, `hasIndices`, `global`, `ignoreCase`, `multiline`, `sticky`, `unicode`,
       `unicodeSets`, and `dotAll`.
-- [x] Captures, named groups, match `.index`, and stateful global matching.
+- [x] Captures, named groups, match `.index` and `.input`, and stateful global matching.
 - [x] Integration with supported String methods, including function replacers.
 - [x] Writable `lastIndex`.
 - [x] Match `indices` metadata for the `d` flag, including named groups on `exec`, `match`, and `matchAll` results.

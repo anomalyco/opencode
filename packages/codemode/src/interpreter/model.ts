@@ -1,7 +1,7 @@
 import type { BlockStatement, Expression, Node, Pattern } from "acorn"
 import type { Effect } from "effect"
 import type { DiagnosticKind } from "../codemode.js"
-import type { SafeObject } from "../data.js"
+import type { ProgramObject } from "./objects.js"
 import type { Values } from "../values.js"
 
 /** Any parsed node; the interpreter narrows on `type` and reads `loc` for diagnostics. */
@@ -20,7 +20,7 @@ export type StatementResult =
   | { kind: "continue"; label?: string }
 
 export type MemberReference = {
-  target: SafeObject | Array<unknown> | Values.RegExp | Values.URL
+  target: ProgramObject | Values.RegExp | Values.URL
   key: PropertyKey
 }
 

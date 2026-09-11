@@ -1,18 +1,8 @@
 import { sync, syncCall } from "../interpreter/host.js"
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
-import type { SafeObject } from "../data.js"
+import { ProgramArray, record, set } from "../interpreter/objects.js"
 import { Values } from "../values.js"
 import { coerceToNumber, coerceToString } from "./value.js"
-
-type MatchValue = Array<unknown> & {
-  index?: number
-  groups?: SafeObject
-  indices?: IndicesValue
-}
-
-type IndicesValue = Array<unknown> & {
-  groups?: SafeObject
-}
 
 export const regexpMethods = new Set(["test", "exec", "toString"])
 
@@ -56,17 +46,12 @@ export const toHostRegex = (arg: unknown, method: string, node: AstNode, extraFl
   )
 }
 
-export const matchToValue = (match: RegExpMatchArray): Array<unknown> => {
-  const result: MatchValue = Array.from(match, (group) => group)
-  if (match.index !== undefined) result.index = match.index
-  if (match.groups) {
-    const groups: SafeObject = Object.create(null) as SafeObject
-    for (const [key, group] of Object.entries(match.groups)) {
-      groups[key] = group
-    }
-    result.groups = groups
-  }
-  if (match.indices) result.indices = indicesToValue(match.indices)
+export const matchToValue = (match: RegExpMatchArray): ProgramArray => {
+  const result = new ProgramArray(Array.from(match, (group) => group))
+  if (match.index !== undefined) set(result, "index", match.index)
+  if (match.input !== undefined) set(result, "input", match.input)
+  if (match.groups) set(result, "groups", record(match.groups))
+  if (match.indices) set(result, "indices", indicesToValue(match.indices))
   return result
 }
 
@@ -143,16 +128,16 @@ const toLength = (value: unknown): number => {
   return Math.min(Math.floor(number), Number.MAX_SAFE_INTEGER)
 }
 
-const indicesToValue = (indices: RegExpIndicesArray): IndicesValue => {
-  const result: IndicesValue = Array.from(indices, (range) => (range === undefined ? undefined : [...range]))
-  if (indices.groups) {
-    const groups: SafeObject = Object.create(null) as SafeObject
-    for (const [key, range] of Object.entries(indices.groups)) {
-      groups[key] = range === undefined ? undefined : [...range]
-    }
-    result.groups = groups
-    return result
-  }
-  result.groups = undefined
+const indicesToValue = (indices: RegExpIndicesArray): ProgramArray => {
+  const range = (pair: [number, number] | undefined) => (pair === undefined ? undefined : new ProgramArray([...pair]))
+  const result = new ProgramArray(Array.from(indices, range))
+  const groups = indices.groups
+  set(
+    result,
+    "groups",
+    groups === undefined
+      ? undefined
+      : record(Object.fromEntries(Object.entries(groups).map(([key, pair]) => [key, range(pair)]))),
+  )
   return result
 }

@@ -1,7 +1,7 @@
 import { Effect } from "effect"
-import type { SafeObject } from "../data.js"
 import { HostFunction, requiresNew } from "../interpreter/host.js"
-import { type AstNode, InterpreterRuntimeError, isRecord } from "../interpreter/model.js"
+import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+import { getOwn, ProgramArray, ProgramObject, set } from "../interpreter/objects.js"
 import { describeValue, isRuntimeReference } from "../interpreter/references.js"
 import { applyCollectionCallback, preserveConsumerError, type Runner, toPrimitive } from "../interpreter/runner.js"
 import { Values } from "../values.js"
@@ -108,13 +108,13 @@ export const groupBy = <R>(runner: Runner<R>, namespace: "Map" | "Object") =>
             const item = step.value
             const key = yield* preserveConsumerError(cursor, apply([item, index]))
             const group = result.map.get(key)
-            if (group === undefined) result.map.set(key, [item])
-            else (group as Array<unknown>).push(item)
+            if (group === undefined) result.map.set(key, new ProgramArray([item]))
+            else (group as ProgramArray).items.push(item)
             index += 1
           }
         }
 
-        const result: SafeObject = Object.create(null) as SafeObject
+        const result = new ProgramObject()
         let index = 0
         while (true) {
           const step = yield* cursor.next
@@ -124,9 +124,9 @@ export const groupBy = <R>(runner: Runner<R>, namespace: "Map" | "Object") =>
             cursor,
             Effect.flatMap(apply([item, index]), (value) => coerceGroupByPropertyKey(runner, value, node)),
           )
-          const group = result[key]
-          if (group === undefined) result[key] = [item]
-          else (group as Array<unknown>).push(item)
+          const group = getOwn(result, key)
+          if (group === undefined) set(result, key, new ProgramArray([item]))
+          else (group as ProgramArray).items.push(item)
           index += 1
         }
       })
@@ -150,12 +150,12 @@ const constructMap = <R>(runner: Runner<R>, init: unknown, node: AstNode) => {
       yield* preserveConsumerError(
         cursor,
         Effect.sync(() => {
-          if (!isRecord(step.value) || isRuntimeReference(step.value)) {
+          if (!(step.value instanceof ProgramObject)) {
             throw new InterpreterRuntimeError("new Map(...) expects [key, value] pairs as entry objects.", node).as(
               "TypeError",
             )
           }
-          target.map.set(step.value[0], step.value[1])
+          target.map.set(getOwn(step.value, 0), getOwn(step.value, 1))
         }),
       )
     }
