@@ -171,6 +171,18 @@ test("session methods use the public HTTP contract", async () => {
   })
 })
 
+test("preserves base path in request URLs", async () => {
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000/opencode",
+    fetch: async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+      expect(url).toBe("http://localhost:3000/opencode/api/session/ses_test")
+      return Response.json(session)
+    },
+  })
+  await client.sessions.get({ sessionID: "ses_test" })
+})
+
 test("middleware errors remain declared client errors", async () => {
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",

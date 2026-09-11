@@ -1,3 +1,4 @@
+import { appBasePath } from "./utils/base-path"
 import "@/index.css"
 import * as Sentry from "@sentry/solid"
 import { I18nProvider } from "@opencode-ai/ui/context"
@@ -601,6 +602,7 @@ export function AppInterface(props: {
                     </PermissionProvider>
                   </TabsProvider>
                 )}
+                base={appBasePath() || undefined}
               >
                 <Routes serverScoped={props.serverScoped} />
               </Dynamic>
