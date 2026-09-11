@@ -96,12 +96,41 @@ export function getLegacyTerminalStorageKeys(dir: string, legacySessionID?: stri
 
 type TerminalSession = ReturnType<typeof createWorkspaceTerminalSession>
 
-type TerminalCacheEntry = {
-  value: TerminalSession
-  dispose: VoidFunction
+export function createWorkspaceTerminalRegistry<T>(limit = MAX_TERMINAL_SESSIONS) {
+  const cache = new Map<string, { value: T; dispose: VoidFunction }>()
+
+  return {
+    get(key: string, create: () => { value: T; dispose: VoidFunction }) {
+      const existing = cache.get(key)
+      if (existing) {
+        cache.delete(key)
+        cache.set(key, existing)
+        return existing.value
+      }
+
+      const entry = create()
+      cache.set(key, entry)
+      while (cache.size > limit) {
+        const first = cache.keys().next().value
+        if (!first) break
+        cache.get(first)?.dispose()
+        cache.delete(first)
+      }
+      return entry.value
+    },
+    peek(key: string) {
+      return cache.get(key)?.value
+    },
+    dispose() {
+      for (const entry of cache.values()) entry.dispose()
+      cache.clear()
+    },
+  }
 }
 
-const caches = new Set<Map<string, TerminalCacheEntry>>()
+type TerminalRegistry = ReturnType<typeof createWorkspaceTerminalRegistry<TerminalSession>>
+
+const registries = new Set<TerminalRegistry>()
 
 const trimTerminal = (pty: LocalPTY) => {
   if (!pty.buffer && pty.cursor === undefined && pty.scrollY === undefined) return pty
@@ -124,10 +153,7 @@ export function clearWorkspaceTerminals(
   scope: ServerScopeValue = ServerScope.local,
 ) {
   const key = getWorkspaceTerminalCacheKey(dir, scope)
-  for (const cache of caches) {
-    const entry = cache.get(key)
-    entry?.value.clear()
-  }
+  for (const registry of registries) registry.peek(key)?.clear()
 
   void removePersisted(terminalPersistTarget(scope, dir), platform)
 
@@ -142,6 +168,20 @@ export function clearWorkspaceTerminals(
     void removePersisted({ key }, platform)
   }
 }
+
+export const { use: useTerminalRegistry, provider: TerminalRegistryProvider } = createSimpleContext({
+  name: "TerminalRegistry",
+  gate: false,
+  init: () => {
+    const registry = createWorkspaceTerminalRegistry<TerminalSession>()
+    registries.add(registry)
+    onCleanup(() => {
+      registries.delete(registry)
+      registry.dispose()
+    })
+    return registry
+  },
+})
 
 function createWorkspaceTerminalSession(
   sdk: DirectorySDK,
@@ -460,51 +500,21 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
   init: () => {
     const sdk = useSDK()
     const serverSDK = useServerSDK()
+    const registry = useTerminalRegistry()
     const params = useParams()
-    const cache = new Map<string, TerminalCacheEntry>()
     const scope = () => serverSDK().scope
     const directory = createMemo(() => base64Encode(sdk().directory))
 
-    caches.add(cache)
-    onCleanup(() => caches.delete(cache))
-
-    const disposeAll = () => {
-      for (const entry of cache.values()) {
-        entry.dispose()
-      }
-      cache.clear()
-    }
-
-    onCleanup(disposeAll)
-
-    const prune = () => {
-      while (cache.size > MAX_TERMINAL_SESSIONS) {
-        const first = cache.keys().next().value
-        if (!first) return
-        const entry = cache.get(first)
-        entry?.dispose()
-        cache.delete(first)
-      }
-    }
-
     const loadWorkspace = (dir: string, legacySessionID: string | undefined, serverScope: ServerScopeValue) => {
-      // Terminals are workspace-scoped so tabs persist while switching sessions in the same directory.
+      // The app-level registry outlives chat routes, while each entry keeps the DirectorySDK from
+      // the workspace that created it. The server scope in the key prevents cross-server reuse.
       const key = getWorkspaceTerminalCacheKey(dir, serverScope)
-      const existing = cache.get(key)
-      if (existing) {
-        cache.delete(key)
-        cache.set(key, existing)
-        return existing.value
-      }
-
-      const entry = createRoot((dispose) => ({
-        value: createWorkspaceTerminalSession(sdk(), dir, serverScope, legacySessionID),
-        dispose,
-      }))
-
-      cache.set(key, entry)
-      prune()
-      return entry.value
+      return registry.get(key, () =>
+        createRoot((dispose) => ({
+          value: createWorkspaceTerminalSession(sdk(), dir, serverScope, legacySessionID),
+          dispose,
+        })),
+      )
     }
 
     const workspace = createMemo(() => loadWorkspace(directory(), params.id, scope()))
