@@ -18,13 +18,14 @@ export type LiteUsageBreakdownItem = {
 }
 
 export function buildLiteUsageBreakdown(input: { usage: number; limit: number; sources: LiteUsageBreakdownSource[] }) {
-  // Legacy usage can resolve to the same rate as a separately grouped recorded multiplier.
+  // Legacy usage can resolve to the same model and rate as a separately grouped recorded multiplier.
   const groups = new Map<string, LiteUsageBreakdownSource>()
   input.sources.forEach((item) => {
-    const key = JSON.stringify([item.model, item.multiplier])
+    const model = item.model === "deepseek-flash" ? "deepseek-v4.1-flash" : item.model
+    const key = JSON.stringify([model, item.multiplier])
     const row = groups.get(key)
     if (!row) {
-      groups.set(key, { ...item })
+      groups.set(key, { ...item, model })
       return
     }
     row.cost += item.cost
