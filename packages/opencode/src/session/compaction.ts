@@ -20,7 +20,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { buildPrompt } from "@opencode-ai/core/session/compaction"
+import { buildPrompt, buildReplayPrompt } from "@opencode-ai/core/session/compaction"
 import { SessionCompactionEvent } from "@opencode-ai/schema/session-compaction-event"
 
 export const Event = SessionCompactionEvent
@@ -162,6 +162,26 @@ function splitTurn(input: {
   })
 }
 
+function containsMedia(messages: SessionV1.WithParts[]) {
+  return messages.some((message) =>
+    message.parts.some((part) => {
+      if (part.type === "file") return MessageV2.isMedia(part.mime)
+      if (part.type !== "tool" || part.state.status !== "completed") return false
+      return part.state.attachments?.some((attachment) => MessageV2.isMedia(attachment.mime)) ?? false
+    }),
+  )
+}
+
+export type Run = (input: {
+  user: SessionV1.User
+  agent: Agent.Info
+  model: Provider.Model
+  processor: SessionProcessor.Handle
+  messages: SessionV1.WithParts[]
+  prompt: string
+  bypassAgentCheck: boolean
+}) => Effect.Effect<SessionProcessor.Result>
+
 export interface Interface {
   readonly isOverflow: (input: {
     tokens: SessionV1.Assistant["tokens"]
@@ -174,6 +194,7 @@ export interface Interface {
     sessionID: SessionID
     auto: boolean
     overflow?: boolean
+    run?: Run
   }) => Effect.Effect<"continue" | "stop">
   readonly create: (input: {
     sessionID: SessionID
@@ -322,6 +343,7 @@ const layer = Layer.effect(
       sessionID: SessionID
       auto: boolean
       overflow?: boolean
+      run?: Run
     }) {
       const parent = input.messages.findLast((m) => m.info.id === input.parentID)
       if (!parent || parent.info.role !== "user") {
@@ -355,40 +377,77 @@ const layer = Layer.effect(
         }
       }
 
-      const agent = yield* agents.get("compaction")
-      const model = agent.model
-        ? yield* provider.getModel(agent.model.providerID, agent.model.modelID).pipe(Effect.orDie)
+      const compactionAgent = yield* agents.get("compaction")
+      const compactionModel = compactionAgent.model
+        ? yield* provider.getModel(compactionAgent.model.providerID, compactionAgent.model.modelID).pipe(Effect.orDie)
         : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID).pipe(Effect.orDie)
       const cfg = yield* config.get()
       const history = compactionPart && messages.at(-1)?.info.id === input.parentID ? messages.slice(0, -1) : messages
       const prior = completedCompactions(history)
       const hidden = new Set(prior.flatMap((item) => [item.userIndex, item.assistantIndex]))
       const previousSummary = prior.at(-1)?.summary
+      const filtered = history.filter((_, index) => !hidden.has(index))
+      // Replay cannot merge an earlier summary without changing the cached prefix.
+      const replayRequest =
+        cfg.compaction?.preserve_prefix_cache === true &&
+        input.run !== undefined &&
+        input.overflow !== true &&
+        cfg.agent?.compaction === undefined &&
+        prior.length === 0
+          ? { run: input.run }
+          : undefined
+      const active = replayRequest
+        ? history.findLast(
+            (message): message is SessionV1.WithParts & { info: SessionV1.User } =>
+              message.info.role === "user" && !message.parts.some((part) => part.type === "compaction"),
+          )
+        : undefined
+      const activeAgent = active ? yield* agents.get(active.info.agent) : undefined
+      const activeModel = active
+        ? yield* provider.getModel(active.info.model.providerID, active.info.model.modelID).pipe(Effect.orDie)
+        : undefined
+      const replayModel =
+        active !== undefined &&
+        active.info.format?.type !== "json_schema" &&
+        activeAgent !== undefined &&
+        activeModel !== undefined &&
+        activeModel.api.npm === "@ai-sdk/openai-compatible" &&
+        !activeModel.providerID.startsWith("opencode") &&
+        activeModel.id === compactionModel.id &&
+        activeModel.providerID === compactionModel.providerID
+          ? { user: active, agent: activeAgent, model: activeModel }
+          : undefined
       const selected = yield* select({
-        messages: history.filter((_, index) => !hidden.has(index)),
+        messages: filtered,
         cfg,
-        model,
+        model: replayModel?.model ?? compactionModel,
       })
+      const tail = selected.tail_start_id
+        ? filtered.find((message) => message.info.id === selected.tail_start_id)
+        : undefined
+      // Structured replay is deliberately narrow; every other request keeps the
+      // provider-safe serialized path.
+      const replayCandidate =
+        replayRequest && replayModel !== undefined && tail?.info.role === "user" && !containsMedia(selected.head)
+          ? { ...replayModel, run: replayRequest.run }
+          : undefined
       // Allow plugins to inject context or replace compaction prompt.
       const compacting = yield* plugin.trigger(
         "experimental.session.compacting",
         { sessionID: input.sessionID },
         { context: [], prompt: undefined },
       )
+      const replayContext =
+        compacting.prompt === undefined && compacting.context.length === 0 ? replayCandidate : undefined
+      const agent = replayContext?.agent ?? compactionAgent
+      const model = replayContext?.model ?? compactionModel
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
       const conversation = msgs.map(serialize).filter(Boolean).join("\n\n")
-      const nextPrompt =
+      const fallbackPrompt =
         compacting.prompt ??
-        [
-          buildPrompt({
-            previousSummary,
-            context: [conversation],
-          }),
-          ...compacting.context,
-        ]
-          .filter(Boolean)
-          .join("\n\n")
+        [buildPrompt({ previousSummary, context: [conversation] }), ...compacting.context].filter(Boolean).join("\n\n")
+      const nextPrompt = replayContext ? buildReplayPrompt() : fallbackPrompt
       const ctx = yield* InstanceState.context
       const msg: SessionV1.Assistant = {
         id: MessageID.ascending(),
@@ -397,7 +456,7 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         mode: "compaction",
         agent: "compaction",
-        variant: userMessage.model.variant,
+        variant: replayContext?.user.info.model.variant ?? userMessage.model.variant,
         summary: true,
         path: {
           cwd: ctx.directory,
@@ -422,30 +481,44 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         model,
       })
-      const result = yield* processor.process({
-        user: userMessage,
-        agent,
-        sessionID: input.sessionID,
-        tools: {},
-        system: [],
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: [
-                  nextPrompt,
-                  ...(compacting.prompt ? ["The following is the conversation history:", conversation] : []),
-                ]
-                  .filter(Boolean)
-                  .join("\n\n"),
-              },
-            ],
-          },
-        ],
-        model,
-      })
+      const runSerialized = () =>
+        processor.process({
+          user: userMessage,
+          agent: compactionAgent,
+          sessionID: input.sessionID,
+          tools: {},
+          system: [],
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: [
+                    fallbackPrompt,
+                    ...(compacting.prompt ? ["The following is the conversation history:", conversation] : []),
+                  ]
+                    .filter(Boolean)
+                    .join("\n\n"),
+                },
+              ],
+            },
+          ],
+          model: compactionModel,
+        })
+      const result = replayContext
+        ? yield* replayContext
+            .run({
+              user: replayContext.user.info,
+              agent,
+              model,
+              processor,
+              messages: msgs,
+              prompt: nextPrompt,
+              bypassAgentCheck: replayContext.user.parts.some((part) => part.type === "agent"),
+            })
+            .pipe(Effect.flatMap((result) => (result === "compact" ? runSerialized() : Effect.succeed(result))))
+        : yield* runSerialized()
 
       if (result === "compact") {
         processor.message.error = new SessionV1.ContextOverflowError({

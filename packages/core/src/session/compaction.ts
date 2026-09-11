@@ -173,6 +173,13 @@ export const buildPrompt = (input: { readonly previousSummary?: string; readonly
   ].join("\n\n")
 }
 
+export const buildReplayPrompt = () =>
+  [
+    "Create a new anchored summary from the conversation messages above so another coding agent can continue the work.",
+    "Do not continue the task or call tools. Output only the summary.",
+    SUMMARY_TEMPLATE,
+  ].join("\n\n")
+
 export const make = (dependencies: Dependencies) => {
   const config = settings(dependencies.config)
   const compactAfterOverflow = Effect.fn("SessionCompaction.compactAfterOverflow")(function* (input: Input) {
