@@ -626,7 +626,7 @@ describe("OpencodePlugin", () => {
           expect(yield* catalog.provider.get(firstID)).toBeUndefined()
 
           state.advertised = true
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("10 minutes")
           yield* drain
           expect(yield* catalog.provider.get(firstID)).toMatchObject({
             id: firstID,
@@ -666,7 +666,7 @@ describe("OpencodePlugin", () => {
 
           state.alias = "coding-renamed"
           state.name = "Renamed route"
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("10 minutes")
           yield* drain
           expect(yield* catalog.model.get(firstID, routeID)).toMatchObject({
             id: "route_1",
@@ -676,19 +676,19 @@ describe("OpencodePlugin", () => {
           expect(yield* catalog.model.get(firstID, Model.ID.make("coding"))).toBeUndefined()
 
           state.disabled = true
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("10 minutes")
           yield* drain
           expect((yield* catalog.model.available()).some((model) => model.providerID === firstID)).toBe(false)
 
           state.advertised = false
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("10 minutes")
           yield* drain
           expect(yield* catalog.model.get(firstID, routeID)).toBeUndefined()
           expect(yield* catalog.provider.get(firstID)).toBeUndefined()
 
           state.advertised = true
           state.disabled = false
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("10 minutes")
           yield* drain
           expect(yield* catalog.model.get(firstID, routeID)).toBeDefined()
           const requests = state.requests
@@ -784,26 +784,26 @@ describe("OpencodePlugin", () => {
           expect(yield* websearch.default()).toBeUndefined()
 
           state.advertised = true
-          yield* TestClock.adjust("50 seconds")
+          yield* TestClock.adjust("9 minutes")
           yield* drain
           expect(state.requests).toBe(1)
           expect(rebuilds).toEqual(initial)
           expect(yield* websearch.default()).toBeUndefined()
 
-          yield* TestClock.adjust("10 seconds")
+          yield* TestClock.adjust("1 minute")
           yield* drain
           expect(state.requests).toBe(2)
           expect(rebuilds).toEqual({ catalog: initial.catalog + 1, websearch: initial.websearch + 1 })
           expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" })
 
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("10 minutes")
           yield* drain
           expect(state.requests).toBe(3)
           expect(rebuilds).toEqual({ catalog: initial.catalog + 1, websearch: initial.websearch + 1 })
           expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" })
 
           state.advertised = false
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("10 minutes")
           yield* drain
           expect(state.requests).toBe(4)
           expect(rebuilds).toEqual({ catalog: initial.catalog + 2, websearch: initial.websearch + 2 })
