@@ -884,6 +884,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Мэдэгдлийг арилгах",
   "sidebar.empty.title": "Нээлттэй төсөл байхгүй",
   "sidebar.empty.description": "Эхлэхийн тулд төсөл нээнэ үү",
+  "sidebar.history.runningChat": "Ажиллаж байна: {{title}}",
   "debugBar.ariaLabel": "Хөгжлийн гүйцэтгэлийн оношлогоо",
   "debugBar.na": "үгүй",
   "debugBar.nav.label": "NAV",
