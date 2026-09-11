@@ -1153,6 +1153,25 @@ it.effect("installs dependencies in writable OPENCODE_CONFIG_DIR", () =>
   }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 
+it.effect("OPENCODE_DISABLE_PLUGIN_DEPS skips dependency install and gitignore", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const configDir = path.join(dir, "configdir")
+    yield* FSUtil.use.ensureDir(configDir)
+
+    yield* withProcessEnvs(
+      { OPENCODE_DISABLE_PLUGIN_DEPS: "1", OPENCODE_CONFIG_DIR: configDir },
+      Config.Service.use((svc) => svc.get().pipe(Effect.andThen(svc.waitForDependencies()))).pipe(
+        provideInstanceEffect(dir),
+      ),
+    )
+
+    expect(yield* FSUtil.use.existsSafe(path.join(configDir, ".gitignore"))).toBe(false)
+    expect(yield* FSUtil.use.existsSafe(path.join(configDir, "package.json"))).toBe(false)
+    expect(yield* FSUtil.use.existsSafe(path.join(configDir, "node_modules"))).toBe(false)
+  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+)
+
 // Note: deduplication and serialization of npm installs is now handled by the
 // core Npm.Service (via EffectFlock). Those behaviors are tested in the core
 // package's npm tests, not here.

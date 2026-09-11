@@ -98,6 +98,7 @@ const layer = Layer.effect(
     const state = yield* InstanceState.make<State>(
       Effect.fn("Agent.state")(function* (ctx) {
         const cfg = yield* config.get()
+        const plansDir = cfg.plans_directory ? path.resolve(Global.expandTilde(cfg.plans_directory)) : undefined
         const skillDirs = yield* skill.dirs()
         const referenceDirs = Object.keys(cfg.references ?? cfg.reference ?? {}).length
           ? yield* Effect.gen(function* () {
@@ -167,11 +168,13 @@ const layer = Layer.effect(
                 },
                 external_directory: {
                   [path.join(Global.Path.data, "plans", "*")]: "allow",
+                  ...(plansDir ? { [path.join(plansDir, "*")]: "allow" } : {}),
                 },
                 edit: {
                   "*": "deny",
                   [path.join(".opencode", "plans", "*.md")]: "allow",
                   [path.relative(ctx.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
+                  ...(plansDir ? { [path.join(plansDir, "*.md")]: "allow" } : {}),
                 },
               }),
               user,
@@ -314,7 +317,7 @@ const layer = Layer.effect(
         })
 
         const list = Effect.fnUntraced(function* () {
-          const cfg = yield* config.get()
+        const cfg = yield* config.get()
           return pipe(
             agents,
             values(),
