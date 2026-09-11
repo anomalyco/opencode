@@ -267,22 +267,45 @@ const layer = Layer.effectDiscard(
           .onConflictDoUpdate({ target: MessageTable.id, set: { data } })
           .run()
           .pipe(Effect.orDie)
+        if (event.data.info.role !== "user") return
+        const diffs = event.data.info.summary?.diffs
+        if (!diffs) return
+        yield* db
+          .insert(MessageDiffTable)
+          .values({ message_id: id, session_id: sessionID, diffs: diffs.map((item) => ({ ...item })) })
+          .onConflictDoUpdate({
+            target: MessageDiffTable.message_id,
+            set: { diffs: diffs.map((item) => ({ ...item })) },
+          })
+          .run()
+          .pipe(Effect.orDie)
       })
     yield* events.project(SessionV1.Event.MessageUpdated, projectMessage)
     yield* events.project(SessionV1.Event.MessageDiffUpdated, (event) =>
-      db
-        .insert(MessageDiffTable)
-        .values({
-          message_id: event.data.messageID,
-          session_id: event.data.sessionID,
-          diffs: event.data.diffs.map((item) => ({ ...item })),
-        })
-        .onConflictDoUpdate({
-          target: MessageDiffTable.message_id,
-          set: { diffs: event.data.diffs.map((item) => ({ ...item })) },
-        })
-        .run()
-        .pipe(Effect.orDie),
+      Effect.gen(function* () {
+        // A diff can outlive its parent when removal races the summarize producer. The foreign key
+        // would otherwise abort the whole projector transaction, so an absent parent is a no-op.
+        const parent = yield* db
+          .select({ id: MessageTable.id })
+          .from(MessageTable)
+          .where(eq(MessageTable.id, event.data.messageID))
+          .get()
+          .pipe(Effect.orDie)
+        if (!parent) return
+        yield* db
+          .insert(MessageDiffTable)
+          .values({
+            message_id: event.data.messageID,
+            session_id: event.data.sessionID,
+            diffs: event.data.diffs.map((item) => ({ ...item })),
+          })
+          .onConflictDoUpdate({
+            target: MessageDiffTable.message_id,
+            set: { diffs: event.data.diffs.map((item) => ({ ...item })) },
+          })
+          .run()
+          .pipe(Effect.orDie)
+      }),
     )
     yield* events.project(SessionV1.Event.MessageRemoved, (event) =>
       Effect.gen(function* () {
