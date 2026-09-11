@@ -262,11 +262,9 @@ const layer = Layer.effect(
       return (yield* all()).map((tool) => tool.id)
     })
 
-    const describeTask = Effect.fn("ToolRegistry.describeTask")(function* (agent: Agent.Info) {
+    const describeTask = Effect.fn("ToolRegistry.describeTask")(function* (ruleset: PermissionV1.Ruleset) {
       const items = (yield* agents.list()).filter((item) => item.mode !== "primary")
-      const filtered = items.filter(
-        (item) => Permission.evaluate("task", item.name, agent.permission).action !== "deny",
-      )
+      const filtered = items.filter((item) => Permission.evaluate("task", item.name, ruleset).action !== "deny")
       const list = filtered.toSorted((a, b) => a.name.localeCompare(b.name))
       const description = list
         .map(
@@ -324,7 +322,9 @@ const layer = Layer.effect(
             id: tool.id,
             description: [
               output.description,
-              tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
+              tool.id === TaskTool.id
+                ? yield* describeTask(Permission.merge(input.agent.permission, input.permission ?? []))
+                : undefined,
               tool.id === "execute" ? codeModeDescription : undefined,
             ]
               .filter(Boolean)
