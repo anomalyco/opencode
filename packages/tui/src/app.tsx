@@ -278,7 +278,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                           skipInitialLoading: Boolean(process.env.OPENCODE_FAST_BOOT),
                         }}
                       >
-                        <ClipboardProvider>
+                        <ClipboardProvider linuxClipboardSelection={input.config.linux_clipboard_selection}>
                           <OpencodeKeymapProvider keymap={keymap}>
                             <ArgsProvider {...input.args}>
                               <KVProvider>

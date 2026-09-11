@@ -1,5 +1,5 @@
 import { createContext, type JSX, useContext } from "solid-js"
-import { read, write } from "../clipboard"
+import { read, write, type ClipboardSelection } from "../clipboard"
 
 export type ClipboardContent = Readonly<{ data: string; mime: string }>
 export type ClipboardService = Readonly<{
@@ -9,8 +9,20 @@ export type ClipboardService = Readonly<{
 const clipboard = { read, write }
 const ClipboardContext = createContext<ClipboardService>(clipboard)
 
-export function ClipboardProvider(props: { value?: ClipboardService; children: JSX.Element }) {
-  return <ClipboardContext.Provider value={props.value ?? clipboard}>{props.children}</ClipboardContext.Provider>
+export function ClipboardProvider(props: {
+  value?: ClipboardService
+  children: JSX.Element
+  linuxClipboardSelection?: ClipboardSelection
+}) {
+  const clipboardWithSelection =
+    props.value ??
+    (props.linuxClipboardSelection
+      ? {
+          read: () => read(props.linuxClipboardSelection === "primary" ? "primary" : "clipboard"),
+          write: (text: string) => write(text, props.linuxClipboardSelection),
+        }
+      : clipboard)
+  return <ClipboardContext.Provider value={clipboardWithSelection}>{props.children}</ClipboardContext.Provider>
 }
 
 export function useClipboard() {
