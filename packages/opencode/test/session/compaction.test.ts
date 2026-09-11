@@ -405,6 +405,34 @@ describe("session.compaction.isOverflow", () => {
   )
 
   it.live(
+    "returns false for small sessions on output==context models without input limit",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const tokens = { input: 5_000, output: 500, reasoning: 0, cache: { read: 0, write: 0 } }
+        for (const model of [
+          createModel({ context: 32_768, output: 32_768 }),
+          createModel({ context: 24_000, output: 24_000 }),
+        ]) {
+          expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+        }
+      }),
+    ),
+  )
+
+  it.live(
+    "preserves the output reserve for ordinary models without an input limit",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const model = createModel({ context: 200_000, output: 32_000 })
+        const tokens = { input: 169_000, output: 1_000, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
+      }),
+    ),
+  )
+
+  it.live(
     "includes cache.read in token count",
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
