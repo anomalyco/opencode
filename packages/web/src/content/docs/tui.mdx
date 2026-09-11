@@ -401,9 +401,24 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.
 - `cursor` - Controls the terminal cursor in TUI input fields. `style` defaults to `"block"`, can be `"underline"`, `"line"`, or `"default"`; `blinking` defaults to `true`. When `style` is `"default"`, the terminal default cursor is restored, so `blinking` has no effect.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
+- `kitty_keyboard.events` - Request Kitty keyboard press, repeat, and release events. Disabled by default. Enable it only in terminals with reliable Kitty keyboard support; some xterm.js-based terminals report release events incorrectly.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
+
+### Kitty keyboard events
+
+To receive Kitty keyboard press, repeat, and release events, add this opt-in setting:
+
+```json title="tui.json"
+{
+  "kitty_keyboard": {
+    "events": true
+  }
+}
+```
+
+Enable it only in terminals with reliable Kitty keyboard support. Some xterm.js-based terminals report release events incorrectly.
 
 ### Attention
 

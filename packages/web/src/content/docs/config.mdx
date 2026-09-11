@@ -291,6 +291,8 @@ Use `OPENCODE_TUI_CONFIG` to point to a custom TUI config file.
 
 When `cursor.style` is `"default"`, the terminal default cursor is restored, so `cursor.blinking` has no effect.
 
+Set `kitty_keyboard.events` to `true` only when your terminal reliably supports the Kitty keyboard protocol. It enables press, repeat, and release events; some xterm.js-based terminals report releases incorrectly.
+
 Set `attention.enabled` to turn on TUI desktop notifications and sounds. See [TUI attention](/docs/tui#attention).
 
 Legacy `theme`, `keybinds`, and `tui` keys in `opencode.json` are deprecated and automatically migrated when possible.

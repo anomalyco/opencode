@@ -82,6 +82,7 @@ function runTuiConfig(config: Config | undefined): RunTuiConfig {
     keybinds: config.keybinds,
     leader_timeout: config.leader_timeout,
     diff_style: config.diff_style ?? "auto",
+    kitty_keyboard: config.kitty_keyboard,
   }
 }
 
