@@ -10,6 +10,9 @@ import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { DialogFooter, DialogHeader, DialogTitleGroup, DialogV2 } from "@opencode-ai/ui/v2/dialog-v2"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import {
   loadHomeSessionIndex,
@@ -42,6 +45,11 @@ import { SessionTabAvatarView } from "@/pages/layout/session-tab-avatar"
 import { fileManagerApp } from "@/utils/file-manager"
 import { pathKey } from "@/utils/path-key"
 import { Persist, persisted } from "@/utils/persist"
+import {
+  downloadSessionExport,
+  fetchSessionExport,
+  sessionExportFilename,
+} from "@/utils/session-export"
 import { sessionTitle, withTimestampedFallback } from "@/utils/session-title"
 import { showToast } from "@/utils/toast"
 
@@ -58,6 +66,8 @@ type SettledGroup = {
   archived: SidebarSessionRecord[]
 }
 
+type SessionAction = (record: SidebarSessionRecord) => void
+
 const SESSION_LIMIT = 64
 const ARCHIVED_LIMIT = 100
 const AGE_TICK = 60_000
@@ -71,6 +81,7 @@ const ROW_SESSION = `${ROW} pe-20`
 const ROW_PROJECT = `${ROW} pe-14`
 const ROW_ACTIONS =
   "hover-reveal absolute end-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-[6px] bg-v2-background-bg-layer-02 p-0.5 opacity-0 shadow-[var(--v2-elevation-raised)] group-hover/row:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
+const COUNT = "absolute end-2 top-1/2 -translate-y-1/2 text-xs text-v2-text-text-faint"
 const NAME = "flex min-w-0 flex-1 items-center gap-1.5"
 
 function titleOf(session: { title?: string; parentID?: string; time: { created: number } }) {
@@ -94,6 +105,7 @@ export function NavigationSidebar() {
   const settings = useSettings()
   const tabs = useTabs()
   const command = useCommand()
+  const dialog = useDialog()
   const home = createHomeController()
   const projects = createHomeProjectsController(home)
 
@@ -104,6 +116,7 @@ export function NavigationSidebar() {
     Persist.global("sidebar.navigation", ["sidebar.navigation.v1"]),
     createStore({
       collapsed: {} as Record<string, boolean>,
+      settled: false,
       settledOpen: {} as Record<string, boolean>,
       pins: {} as Record<string, boolean>,
     }),
@@ -147,9 +160,23 @@ export function NavigationSidebar() {
     refetchOnReconnect: true,
   }))
 
-  const sessions = createMemo(() =>
-    retainHomeSessions(homeSessions().sessions(sessionIndex.data, sessionEvents.data), SESSION_LIMIT, now()),
-  )
+  // The shared index cache only refreshes on mount; the per-directory sync stores are the live
+  // source of truth, so overlay them to pick up renames, settles and deletes immediately.
+  const sessions = createMemo(() => {
+    const sync = home.server.focusedSync()
+    const indexed = retainHomeSessions(
+      homeSessions().sessions(sessionIndex.data, sessionEvents.data),
+      SESSION_LIMIT,
+      now(),
+    )
+    return indexed.flatMap((session) => {
+      const [store] = sync.child(session.directory, { bootstrap: false })
+      if (store.status === "loading") return [session]
+      const match = Binary.search(store.session, session.id, (item) => item.id)
+      if (!match.found) return []
+      return [store.session[match.index]]
+    })
+  })
 
   const serverKey = createMemo(() => home.selection.value().server ?? ServerConnection.Key.make(""))
   const route = createMemo(() => layout.route())
@@ -226,7 +253,7 @@ export function NavigationSidebar() {
 
   const archived = useQuery(() => ({
     queryKey: ["sidebar", "settled", serverKey()],
-    enabled: !!home.server.focusedContext(),
+    enabled: state.settled && !!home.server.focusedContext(),
     queryFn: async ({ signal }): Promise<GlobalSession[]> => {
       const ctx = home.server.focusedContext()
       if (!ctx) return []
@@ -363,6 +390,120 @@ export function NavigationSidebar() {
     })()
   }
 
+  async function removeSession(record: SidebarSessionRecord) {
+    const conn = home.server.focused()
+    const ctx = home.server.focusedContext()
+    if (!conn || !ctx) return
+    const key = ServerConnection.key(conn)
+    const id = record.session.id
+    const directory = record.session.directory
+    const wasCurrent = currentSession() === id
+    const others = tabs.store.filter((tab) => tab.type === "session" && tab.sessionId !== id)
+    const result = await ctx.sdk.api.session
+      .remove({ sessionID: id })
+      .catch((cause) => {
+        showToast({
+          title: language.t("session.delete.failed.title"),
+          description: errorMessage(cause, language.t("session.delete.failed.title")),
+        })
+        return undefined
+      })
+    if (!result) return
+    const [, setStore] = ctx.sync.child(directory)
+    setStore(
+      produce((draft) => {
+        const match = Binary.search(draft.session, id, (item) => item.id)
+        if (match.found) draft.session.splice(match.index, 1)
+      }),
+    )
+    homeSessions().remove(id)
+    tabs.removeSessionTab({ server: key, sessionId: id })
+    if (wasCurrent && others.length === 0) void tabs.newDraft({ server: key, directory })
+  }
+
+  function confirmDelete(record: SidebarSessionRecord) {
+    dialog.show(() => (
+      <DialogDeleteSession name={titleOf(record.session)} onDelete={() => removeSession(record)} />
+    ))
+  }
+
+  function rename(record: SidebarSessionRecord, title: string) {
+    void (async () => {
+      const ctx = home.server.focusedContext()
+      if (!ctx) return
+      const result = await ctx.sdk.api.session
+        .rename({ sessionID: record.session.id, title })
+        .catch((cause) => {
+          requestFailed(cause)
+          return undefined
+        })
+      if (!result) return
+    })()
+  }
+
+  function confirmRename(record: SidebarSessionRecord) {
+    dialog.show(() => (
+      <DialogRenameSession initial={titleOf(record.session)} onConfirm={(title) => rename(record, title)} />
+    ))
+  }
+
+  const canShare = createMemo(() => home.server.focusedSync().data.config.share !== "disabled")
+
+  function share(record: SidebarSessionRecord) {
+    void (async () => {
+      const ctx = home.server.focusedContext()
+      if (!ctx) return
+      const [store] = ctx.sync.child(record.session.directory, { bootstrap: false })
+      const match = Binary.search(store.session, record.session.id, (item) => item.id)
+      const existing = match.found ? store.session[match.index].share?.url : undefined
+      const url =
+        existing ??
+        (await ctx.sdk.client.session
+          .share({ sessionID: record.session.id })
+          .then((response) => response.data?.share?.url)
+          .catch(() => undefined))
+      if (!url) {
+        showToast({
+          title: language.t("toast.session.share.failed.title"),
+          description: language.t("toast.session.share.failed.description"),
+        })
+        return
+      }
+      const copied = await navigator.clipboard.writeText(url).then(
+        () => true,
+        () => false,
+      )
+      showToast(
+        copied
+          ? {
+              title: language.t("toast.session.share.success.title"),
+              description: language.t("toast.session.share.success.description"),
+            }
+          : { title: language.t("toast.session.share.copyFailed.title") },
+      )
+    })()
+  }
+
+  function exportSession(record: SidebarSessionRecord) {
+    void (async () => {
+      const ctx = home.server.focusedContext()
+      if (!ctx) return
+      const data = await fetchSessionExport({ sessionID: record.session.id, client: ctx.sdk.client }).catch(
+        (cause) => {
+          requestFailed(cause)
+          return undefined
+        },
+      )
+      if (!data) return
+      const filename = sessionExportFilename(data.info)
+      downloadSessionExport(filename, data)
+      showToast({
+        title: language.t("toast.session.export.success.title"),
+        description: language.t("toast.session.export.success.description", { filename }),
+      })
+    })()
+  }
+
   function closeTab(record: SidebarSessionRecord) {
     tabs.removeSessionTab({ server: serverKey(), sessionId: record.session.id })
   }
@@ -397,6 +538,19 @@ export function NavigationSidebar() {
     },
   ])
 
+  const rowActions = {
+    onRename: confirmRename,
+    onShare: share,
+    onExport: exportSession,
+    onSettle: settle,
+    onUnsettleArchive: unsettle,
+    onUnsettlePin: togglePin,
+    onDelete: confirmDelete,
+    onCloseTab: closeTab,
+    onTogglePin: togglePin,
+    canShare,
+  }
+
   return (
     <aside
       aria-label={language.t("settings.shortcuts.group.navigation")}
@@ -429,7 +583,7 @@ export function NavigationSidebar() {
           </TooltipV2>
         </div>
         <TextInputV2
-          class="w-full min-w-0"
+          fluid
           value={filter()}
           autocomplete="off"
           spellcheck={false}
@@ -481,6 +635,7 @@ export function NavigationSidebar() {
                 working={working}
                 tick={() => tick()}
                 branch={branchOf}
+                actions={rowActions}
                 unseen={() => {
                   const conn = connection()
                   if (!conn) return 0
@@ -492,9 +647,6 @@ export function NavigationSidebar() {
                 }}
                 onToggleCollapsed={() => setState("collapsed", group.key, (value) => !value)}
                 onOpen={open}
-                onSettle={settle}
-                onTogglePin={togglePin}
-                onCloseTab={closeTab}
                 onNewSession={() => {
                   const conn = connection()
                   if (conn) home.project.openProjectNewSession(conn, group.project.worktree)
@@ -519,28 +671,46 @@ export function NavigationSidebar() {
             )}
           </For>
 
-          <Show when={settledCount() > 0}>
-            <div class={`${SECTION_LABEL} flex items-center gap-1.5`}>
-              <span>{language.t("sidebar.settled")}</span>
-              <span class="text-xs text-v2-text-text-faint">{settledCount()}</span>
-            </div>
-            <For each={settledGroups()}>
-              {(group) => (
-                <SidebarSettledGroup
-                  group={group}
-                  server={serverKey()}
-                  open={state.settledOpen[group.key] === true}
-                  loading={archived.isLoading}
-                  current={currentSession()}
-                  tick={() => tick()}
-                  branch={branchOf}
-                  onToggle={() => setState("settledOpen", group.key, (value) => value !== true)}
-                  onOpen={open}
-                  onUnsettlePin={togglePin}
-                  onUnsettleArchive={unsettle}
+          <Show when={settledCount() > 0 || state.settled}>
+            <button
+              type="button"
+              data-action="sidebar-settled-toggle"
+              aria-expanded={state.settled}
+              onClick={() => setState("settled", (value) => !value)}
+              class={`${ROW_PROJECT} min-w-0`}
+            >
+              <span class={NAME}>
+                <IconV2 name="archive" class="size-3.5 shrink-0 text-v2-icon-icon-muted" />
+                <span class="min-w-0 truncate">{language.t("sidebar.settled")}</span>
+                <IconV2
+                  name="chevron-down"
+                  class={`size-3 shrink-0 text-v2-icon-icon-muted transition-transform duration-[120ms] ${state.settled ? "" : "-rotate-90"}`}
                 />
-              )}
-            </For>
+              </span>
+              <span class={COUNT}>{settledCount()}</span>
+            </button>
+            <Show when={state.settled}>
+              <Show when={archived.isLoading}>
+                <div class="flex items-center justify-center py-3 text-v2-text-text-faint">
+                  <Spinner class="size-3.5 shrink-0" />
+                </div>
+              </Show>
+              <For each={settledGroups()}>
+                {(group) => (
+                  <SidebarSettledGroup
+                    group={group}
+                    server={serverKey()}
+                    open={state.settledOpen[group.key] === true}
+                    current={currentSession()}
+                    tick={() => tick()}
+                    branch={branchOf}
+                    actions={rowActions}
+                    onToggle={() => setState("settledOpen", group.key, (value) => value !== true)}
+                    onOpen={open}
+                  />
+                )}
+              </For>
+            </Show>
           </Show>
         </div>
       </ScrollView>
@@ -567,6 +737,19 @@ export function NavigationSidebar() {
   )
 }
 
+type SessionActions = {
+  onRename: SessionAction
+  onShare: SessionAction
+  onExport: SessionAction
+  onSettle: SessionAction
+  onUnsettleArchive: (session: { id: string; directory: string }) => void
+  onUnsettlePin: (sessionID: string) => void
+  onDelete: SessionAction
+  onCloseTab: SessionAction
+  onTogglePin: (sessionID: string) => void
+  canShare: () => boolean
+}
+
 function SidebarProject(props: {
   group: SidebarProjectSection
   server: ServerConnection.Key
@@ -578,13 +761,11 @@ function SidebarProject(props: {
   working: (sessionID: string) => boolean
   tick: () => number
   branch: (directory: string) => string | undefined
+  actions: SessionActions
   unseen: () => number
   canReveal: () => boolean
   onToggleCollapsed: () => void
   onOpen: (session: { id: string; directory: string }, project: LocalProject | undefined, event?: MouseEvent) => void
-  onSettle: (record: SidebarSessionRecord) => void
-  onTogglePin: (sessionID: string) => void
-  onCloseTab: (record: SidebarSessionRecord) => void
   onNewSession: () => void
   onEdit: () => void
   onReveal: () => void
@@ -619,7 +800,7 @@ function SidebarProject(props: {
             />
           </span>
           <Show when={props.group.visible.length > 0}>
-            <span class="shrink-0 text-xs text-v2-text-text-faint transition-opacity duration-[120ms] group-hover/row:opacity-0">
+            <span class={`${COUNT} transition-opacity duration-[120ms] group-hover/row:opacity-0`}>
               {props.group.visible.length}
             </span>
           </Show>
@@ -687,10 +868,8 @@ function SidebarProject(props: {
                 working={() => props.working(record.session.id)}
                 tick={props.tick}
                 branch={props.branch}
+                actions={props.actions}
                 onOpen={props.onOpen}
-                onSettle={props.onSettle}
-                onTogglePin={props.onTogglePin}
-                onCloseTab={props.onCloseTab}
               />
             )}
           </For>
@@ -704,14 +883,12 @@ function SidebarSettledGroup(props: {
   group: SettledGroup
   server: ServerConnection.Key
   open: boolean
-  loading: boolean
   current: string | undefined
   tick: () => number
   branch: (directory: string) => string | undefined
+  actions: SessionActions
   onToggle: () => void
   onOpen: (session: { id: string; directory: string }, project: LocalProject | undefined, event?: MouseEvent) => void
-  onUnsettlePin: (sessionID: string) => void
-  onUnsettleArchive: (session: { id: string; directory: string }) => void
 }) {
   const count = () => props.group.local.length + props.group.archived.length
   return (
@@ -721,7 +898,7 @@ function SidebarSettledGroup(props: {
         data-action="sidebar-settled-group"
         aria-expanded={props.open}
         onClick={props.onToggle}
-        class={`${ROW} min-w-0 flex-1`}
+        class={`${ROW_PROJECT} min-w-0`}
       >
         <SessionTabAvatarView
           project={props.group.project}
@@ -736,7 +913,7 @@ function SidebarSettledGroup(props: {
             class={`size-3 shrink-0 text-v2-icon-icon-muted transition-transform duration-[120ms] ${props.open ? "" : "-rotate-90"}`}
           />
         </span>
-        <span class="shrink-0 text-xs text-v2-text-text-faint">{count()}</span>
+        <span class={COUNT}>{count()}</span>
       </button>
       <Show when={props.open}>
         <div class="flex flex-col gap-0.5 pb-1 ps-6">
@@ -747,11 +924,10 @@ function SidebarSettledGroup(props: {
                 server={props.server}
                 current={record.session.id === props.current}
                 settled
-                pinned
                 tick={props.tick}
                 branch={props.branch}
+                actions={props.actions}
                 onOpen={props.onOpen}
-                onUnsettle={() => props.onUnsettlePin(record.session.id)}
               />
             )}
           </For>
@@ -762,10 +938,11 @@ function SidebarSettledGroup(props: {
                 server={props.server}
                 current={record.session.id === props.current}
                 settled
+                serverArchived
                 tick={props.tick}
                 branch={props.branch}
+                actions={props.actions}
                 onOpen={props.onOpen}
-                onUnsettle={() => props.onUnsettleArchive(record.session)}
               />
             )}
           </For>
@@ -780,20 +957,19 @@ function SidebarSessionRow(props: {
   server: ServerConnection.Key
   current: boolean
   settled?: boolean
+  serverArchived?: boolean
   pinned?: boolean
   started?: () => number | undefined
   done?: () => number | undefined
   working?: () => boolean
   tick: () => number
   branch: (directory: string) => string | undefined
+  actions: SessionActions
   onOpen: (session: { id: string; directory: string }, project: LocalProject | undefined, event?: MouseEvent) => void
-  onSettle?: (record: SidebarSessionRecord) => void
-  onTogglePin?: (sessionID: string) => void
-  onUnsettle?: () => void
-  onCloseTab?: (record: SidebarSessionRecord) => void
 }) {
   const language = useLanguage()
   const tabs = useTabs()
+  const [menuOpen, setMenuOpen] = createSignal(false)
   const server = createMemo(() => props.server)
   const directory = createMemo(() => props.record.session.directory)
   const sessionID = createMemo(() => props.record.session.id)
@@ -819,6 +995,38 @@ function SidebarSessionRow(props: {
     return `${Math.floor(minutes / 60)}h`
   }
 
+  const badge = () => (
+    <Show when={live()}>
+      {(value) => (
+        <Show
+          when={value().kind === "working"}
+          fallback={
+            <Show
+              when={value().kind === "attention"}
+              fallback={
+                <span class="flex shrink-0 items-center gap-1 text-v2-state-fg-success">
+                  <IconV2 name="check" class="size-3 shrink-0" />
+                  <span class="text-xs">{value().label}</span>
+                </span>
+              }
+            >
+              <span class="flex shrink-0 items-center gap-1 text-v2-state-fg-warning">
+                <IconV2 name="status-active" class="size-3 shrink-0" />
+                <span class="text-xs">{value().label}</span>
+              </span>
+            </Show>
+          }
+        >
+          <span class="flex shrink-0 items-center gap-1 text-v2-state-fg-info">
+            <Spinner class="size-3 shrink-0" />
+            <span class="text-xs">{value().label}</span>
+            <span class="text-xs">{value().time}</span>
+          </span>
+        </Show>
+      )}
+    </Show>
+  )
+
   return (
     <div class="group/row relative flex min-w-0 items-center">
       <TooltipV2
@@ -833,7 +1041,11 @@ function SidebarSessionRow(props: {
           data-selected={props.current ? true : undefined}
           aria-current={props.current ? "true" : undefined}
           onClick={(event) => props.onOpen(props.record.session, props.record.project, event)}
-          class={`${props.settled ? ROW : ROW_SESSION} min-w-0 flex-1`}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            setMenuOpen(true)
+          }}
+          class={`${props.settled ? ROW_PROJECT : ROW_SESSION} min-w-0 flex-1`}
         >
           <Show when={open()}>
             <span class="absolute start-0 top-1/2 h-3.5 w-[2px] -translate-y-1/2 rounded-full bg-v2-text-text-muted" />
@@ -847,100 +1059,97 @@ function SidebarSessionRow(props: {
           />
           <span class={NAME}>
             <span class="min-w-0 truncate">{title()}</span>
-            <Show when={props.pinned}>
-              <IconV2 name="pin" class="size-3 shrink-0 text-v2-icon-icon-muted" />
-            </Show>
-            <Show when={live()}>
-              {(value) => (
-                <Show
-                  when={value().kind === "working"}
-                  fallback={
-                    <Show
-                      when={value().kind === "attention"}
-                      fallback={
-                        <span class="flex shrink-0 items-center gap-1 text-v2-state-fg-success">
-                          <IconV2 name="check" class="size-3 shrink-0" />
-                          <span class="text-xs">{value().label}</span>
-                        </span>
-                      }
-                    >
-                      <span class="flex shrink-0 items-center gap-1 text-v2-state-fg-warning">
-                        <IconV2 name="status-active" class="size-3 shrink-0" />
-                        <span class="text-xs">{value().label}</span>
-                      </span>
-                    </Show>
-                  }
-                >
-                  <span class="flex shrink-0 items-center gap-1 text-v2-state-fg-info">
-                    <Spinner class="size-3 shrink-0" />
-                    <span class="text-xs">{value().label}</span>
-                    <span class="text-xs">{value().time}</span>
-                  </span>
-                </Show>
-              )}
-            </Show>
           </span>
         </button>
       </TooltipV2>
-      <div class={ROW_ACTIONS}>
-        <Show when={!props.settled && props.onTogglePin}>
-          {(toggle) => (
-            <TooltipV2
-              value={language.t(props.pinned ? "sidebar.thread.unpin" : "sidebar.thread.pin")}
-              placement="top-end"
-            >
-              <IconButtonV2
-                data-action="sidebar-session-pin"
-                variant="ghost-muted"
-                size="small"
-                icon={<IconV2 name="pin" />}
-                aria-label={language.t(props.pinned ? "sidebar.thread.unpin" : "sidebar.thread.pin")}
-                onClick={() => toggle()(props.record.session.id)}
-              />
-            </TooltipV2>
-          )}
+      <Show when={!props.settled}>
+        <span class="pointer-events-none absolute end-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1.5 transition-opacity duration-[120ms] group-hover/row:opacity-0">
+          <Show when={props.pinned}>
+            <IconV2 name="pin" class="size-3 shrink-0 text-v2-icon-icon-muted" />
+          </Show>
+          {badge()}
+        </span>
+      </Show>
+      <div class={ROW_ACTIONS} data-menu={menuOpen()}>
+        <Show when={!props.settled}>
+          <TooltipV2 value={language.t("sidebar.settle")} placement="top-end">
+            <IconButtonV2
+              data-action="sidebar-session-settle"
+              variant="ghost-muted"
+              size="small"
+              icon={<IconV2 name="archive" />}
+              aria-label={language.t("sidebar.settle")}
+              onClick={() => props.actions.onSettle(props.record)}
+            />
+          </TooltipV2>
         </Show>
-        <Show when={!props.settled && props.onSettle}>
-          {(settle) => (
-            <TooltipV2 value={language.t("sidebar.settle")} placement="top-end">
-              <IconButtonV2
-                data-action="sidebar-session-settle"
-                variant="ghost-muted"
-                size="small"
-                icon={<IconV2 name="archive" />}
-                aria-label={language.t("sidebar.settle")}
-                onClick={() => settle()(props.record)}
-              />
-            </TooltipV2>
-          )}
+        <Show when={props.settled}>
+          <TooltipV2 value={language.t("sidebar.unsettle")} placement="top-end">
+            <IconButtonV2
+              data-action="sidebar-session-unsettle"
+              variant="ghost-muted"
+              size="small"
+              icon={<IconV2 name="outline-reset" />}
+              aria-label={language.t("sidebar.unsettle")}
+              onClick={() =>
+                props.serverArchived
+                  ? props.actions.onUnsettleArchive(props.record.session)
+                  : props.actions.onUnsettlePin(props.record.session.id)
+              }
+            />
+          </TooltipV2>
         </Show>
-        <Show when={props.settled && props.onUnsettle}>
-          {(unsettle) => (
-            <TooltipV2 value={language.t("sidebar.unsettle")} placement="top-end">
-              <IconButtonV2
-                data-action="sidebar-session-unsettle"
-                variant="ghost-muted"
-                size="small"
-                icon={<IconV2 name="outline-reset" />}
-                aria-label={language.t("sidebar.unsettle")}
-                onClick={() => unsettle()}
-              />
-            </TooltipV2>
-          )}
-        </Show>
-        <Show when={!props.settled && open() && props.onCloseTab}>
-          {(close) => (
-            <TooltipV2 value={language.t("command.tab.close")} placement="top-end">
-              <IconButtonV2
-                data-action="sidebar-session-close-tab"
-                variant="ghost-muted"
-                size="small"
-                icon={<IconV2 name="xmark-small" />}
-                aria-label={language.t("command.tab.close")}
-                onClick={() => close()(props.record)}
-              />
-            </TooltipV2>
-          )}
+        <MenuV2
+          gutter={6}
+          modal={false}
+          placement="bottom-end"
+          open={menuOpen()}
+          onOpenChange={(open) => setMenuOpen(open)}
+        >
+          <MenuV2.Trigger
+            as={IconButtonV2}
+            data-action="sidebar-session-menu"
+            variant="ghost-muted"
+            size="small"
+            icon={<IconV2 name="outline-dots" />}
+            aria-label={language.t("common.moreOptions")}
+          />
+          <MenuV2.Portal>
+            <MenuV2.Content>
+              <MenuV2.Item onSelect={() => props.actions.onRename(props.record)}>
+                {language.t("common.rename")}
+              </MenuV2.Item>
+              <Show when={!props.settled && props.actions.canShare()}>
+                <MenuV2.Item onSelect={() => props.actions.onShare(props.record)}>
+                  {language.t("session.share.action.share")}
+                </MenuV2.Item>
+              </Show>
+              <MenuV2.Item onSelect={() => props.actions.onExport(props.record)}>
+                {language.t("common.export")}
+              </MenuV2.Item>
+              <Show when={!props.settled}>
+                <MenuV2.Item onSelect={() => props.actions.onTogglePin(props.record.session.id)}>
+                  {language.t(props.pinned ? "sidebar.thread.unpin" : "sidebar.thread.pin")}
+                </MenuV2.Item>
+              </Show>
+              <MenuV2.Separator />
+              <MenuV2.Item onSelect={() => props.actions.onDelete(props.record)}>
+                {language.t("common.delete")}
+              </MenuV2.Item>
+            </MenuV2.Content>
+          </MenuV2.Portal>
+        </MenuV2>
+        <Show when={!props.settled && open()}>
+          <TooltipV2 value={language.t("command.tab.close")} placement="top-end">
+            <IconButtonV2
+              data-action="sidebar-session-close-tab"
+              variant="ghost-muted"
+              size="small"
+              icon={<IconV2 name="xmark-small" />}
+              aria-label={language.t("command.tab.close")}
+              onClick={() => props.actions.onCloseTab(props.record)}
+            />
+          </TooltipV2>
         </Show>
       </div>
     </div>
@@ -976,5 +1185,69 @@ function SessionInfo(props: { record: SidebarSessionRecord; branch: () => string
         )}
       </Show>
     </div>
+  )
+}
+
+function DialogRenameSession(props: { initial: string; onConfirm: (title: string) => void }) {
+  const language = useLanguage()
+  const dialog = useDialog()
+  const [value, setValue] = createSignal(props.initial)
+  const submit = () => {
+    const title = value().trim()
+    if (!title) return
+    props.onConfirm(title)
+    dialog.close()
+  }
+  return (
+    <DialogV2 fit>
+      <DialogHeader hideClose>
+        <DialogTitleGroup title={language.t("common.rename")} description={props.initial} />
+      </DialogHeader>
+      <div class="px-5 pb-4">
+        <TextInputV2
+          fluid
+          autofocus
+          value={value()}
+          onInput={(event) => setValue(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") submit()
+          }}
+        />
+      </div>
+      <DialogFooter>
+        <ButtonV2 variant="ghost" onClick={() => dialog.close()}>
+          {language.t("common.cancel")}
+        </ButtonV2>
+        <ButtonV2 onClick={submit}>{language.t("common.rename")}</ButtonV2>
+      </DialogFooter>
+    </DialogV2>
+  )
+}
+
+function DialogDeleteSession(props: { name: string; onDelete: () => Promise<unknown> }) {
+  const language = useLanguage()
+  const dialog = useDialog()
+  return (
+    <DialogV2 fit>
+      <DialogHeader hideClose>
+        <DialogTitleGroup
+          title={language.t("session.delete.title")}
+          description={language.t("session.delete.confirm", { name: props.name })}
+        />
+      </DialogHeader>
+      <DialogFooter>
+        <ButtonV2 variant="ghost" onClick={() => dialog.close()}>
+          {language.t("common.cancel")}
+        </ButtonV2>
+        <ButtonV2
+          variant="danger"
+          onClick={() => {
+            void props.onDelete().then(() => dialog.close())
+          }}
+        >
+          {language.t("session.delete.button")}
+        </ButtonV2>
+      </DialogFooter>
+    </DialogV2>
   )
 }
