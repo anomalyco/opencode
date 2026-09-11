@@ -12,6 +12,7 @@ export interface Info {
   name: string
   environment?: Record<string, string>
   extensions: string[]
+  timeout?: number
   enabled(context: Context): Promise<string[] | false>
 }
 
