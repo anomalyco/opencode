@@ -82,7 +82,7 @@ export function map(input: MapInput): Mapping | undefined {
   if (!native) return
   const converse = native === "@opencode/ai/providers/amazon-bedrock"
   const mapped = {
-    ...Struct.omit(settings, ["headers", "extraBody", ...OPENROUTER_KEYS]),
+    ...Struct.omit(settings, ["headers", "extraBody", "useCompletionUrls", ...OPENROUTER_KEYS]),
     ...(native === "@opencode/ai/providers/openai-compatible" ? { provider: input.providerID } : {}),
   }
   return {
