@@ -135,6 +135,13 @@ beforeAll(async () => {
   mock.module("@opencode-ai/ui/toast", () => ({
     Toast: { Region: () => null },
     showToast: () => 0,
+    toaster: { dismiss: () => undefined },
+  }))
+
+  mock.module("@opencode-ai/ui/v2/toast-v2", () => ({
+    ToastV2: { Region: () => null },
+    showToastV2: () => 0,
+    toasterV2: { dismiss: () => undefined },
   }))
 
   mock.module("@opencode-ai/core/util/encode", () => ({
@@ -594,5 +601,37 @@ describe("prompt submit worktree selection", () => {
     expect(storedSessions["/repo/worktree-a"]).toHaveLength(1)
     expect(storedSessions["/repo/worktree-a"]?.[0]).toMatchObject({ id: "session-1", title: "New session 1" })
     expect(optimisticSeeded).toEqual([true])
+  })
+
+  test("synchronizes text from DOM editor element if target.current is empty", async () => {
+    params = { id: "session-1" }
+    promptValue = [{ type: "text", content: "", start: 0, end: 0 }]
+    const domEditor = document.createElement("div")
+    domEditor.textContent = "Hello from DOM editor"
+
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => domEditor,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    expect(sentPrompts).toContain("/repo/main")
+    expect(promptInputs[promptInputs.length - 1]).toMatchObject({
+      sessionID: "session-1",
+      text: "Hello from DOM editor",
+    })
   })
 })

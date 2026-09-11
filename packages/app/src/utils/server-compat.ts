@@ -44,6 +44,8 @@ type LegacyPrompt = {
   model?: { providerID: string; modelID: string }
   variant?: string
   legacyParts?: (TextPartInput | FilePartInput | AgentPartInput)[]
+  sessionDirectory?: string
+  location?: { directory?: string }
 }
 type LegacyLocation = { directory?: string }
 type CompatibleInput = {
@@ -198,7 +200,8 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
         await legacy().session.abort(value)
       },
       async prompt(value: SessionPromptInput & LegacyPrompt) {
-        await legacy().session.promptAsync({
+        const loc = value.location ?? (value.sessionDirectory ? { directory: value.sessionDirectory } : undefined)
+        await legacy(loc).session.promptAsync({
           sessionID: value.sessionID,
           messageID: value.id ?? undefined,
           agent: value.agent,
