@@ -19,9 +19,15 @@ export function primitiveInputSummary(input: Record<string, unknown>, omit: read
   return `[${entries.map(([key, value]) => `${key}=${String(value)}`).join(", ")}]`
 }
 
+// Capitalizing the id is enough for single-word providers; anything hyphenated
+// needs a spelling here or it renders as "Firecrawl-developer".
+const WEB_SEARCH_PROVIDER_NAMES: Record<string, string> = {
+  "firecrawl-developer": "Firecrawl Developer",
+}
+
 export function webSearchProviderName(provider: unknown) {
   if (typeof provider !== "string" || !provider) return ""
-  return `${provider[0].toUpperCase()}${provider.slice(1)}`
+  return WEB_SEARCH_PROVIDER_NAMES[provider] ?? `${provider[0].toUpperCase()}${provider.slice(1)}`
 }
 
 export function webSearchProviderLabel(provider: unknown) {

@@ -5,6 +5,7 @@ import {
   primitiveInputSummary,
   toolDisplayMetadata,
   webSearchProviderLabel,
+  webSearchProviderName,
 } from "../../src/util/tool-display"
 
 test("normalizes shared tool primitives", () => {
@@ -19,11 +20,18 @@ test("normalizes shared tool primitives", () => {
   expect(primitiveInputSummary({ path: "src/a.ts", line: 2 }, ["path"])).toBe("[line=2]")
 })
 
+test("webSearchProviderName spells hyphenated providers", () => {
+  expect(webSearchProviderName("firecrawl")).toBe("Firecrawl")
+  expect(webSearchProviderName("firecrawl-developer")).toBe("Firecrawl Developer")
+  expect(webSearchProviderName("")).toBe("")
+})
+
 describe("webSearchProviderLabel", () => {
   test("labels known providers", () => {
     expect(webSearchProviderLabel("parallel")).toBe("Web Search via Parallel")
     expect(webSearchProviderLabel("exa")).toBe("Web Search via Exa")
     expect(webSearchProviderLabel("firecrawl")).toBe("Web Search via Firecrawl")
+    expect(webSearchProviderLabel("firecrawl-developer")).toBe("Web Search via Firecrawl Developer")
     expect(webSearchProviderLabel("tavily")).toBe("Web Search via Tavily")
   })
 
