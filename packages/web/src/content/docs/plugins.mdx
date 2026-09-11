@@ -196,6 +196,10 @@ Plugins can subscribe to events as seen below in the Examples section. Here is a
 
 - `shell.env`
 
+#### Permission Hooks
+
+- `permission.ask`
+
 #### Tool Events
 
 - `tool.execute.after`
@@ -237,6 +241,47 @@ We are using `osascript` to run AppleScript on macOS. Here we are using it to se
 :::note
 If you’re using the OpenCode desktop app, it can send system notifications automatically when a response is ready or when a session errors.
 :::
+
+---
+
+### External permissions system
+
+Use `permission.ask` to integrate an external permissions system. The hook fires after OpenCode's own config rules have been evaluated but before the user is prompted, letting you allow, deny, or fall back to the normal prompt.
+
+```ts title=".opencode/plugins/permissions.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const PermissionsPlugin: Plugin = async ({ $ }) => {
+  return {
+    "permission.ask": async (input, output) => {
+      // input.permission — the permission key, e.g. "bash", "edit"
+      // input.patterns  — the specific patterns being requested
+      // input.sessionID — the current session
+      // input.metadata  — tool-specific metadata
+      //   bash: { command: string }  — the full raw command string the LLM requested
+
+      const allowed = await myExternalSystem.check(input)
+
+      if (allowed) {
+        output.status = "allow"
+        return
+      }
+
+      // Deny with a message — the message is fed back to the LLM
+      output.status = "deny"
+      output.message = `Permission denied by external policy: ${input.permission}`
+
+      // Or leave output.status as "ask" to fall through to the normal user prompt
+    },
+  }
+}
+```
+
+The three possible values for `output.status`:
+
+- `"allow"` — approve the request, skip the user prompt
+- `"deny"` — reject the request; set `output.message` to give the LLM a reason
+- `"ask"` — default, fall through to the normal user prompt
 
 ---
 
