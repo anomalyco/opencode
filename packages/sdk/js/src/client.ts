@@ -43,14 +43,15 @@ export function createOpencodeClient(config?: Config & { directory?: string }) {
     }
   }
 
+  const client = createClient(config)
   if (config?.directory) {
-    config.headers = {
-      ...config.headers,
-      "x-opencode-directory": encodeURIComponent(config.directory),
-    }
+    client.setConfig({
+      headers: {
+        "x-opencode-directory": encodeURIComponent(config.directory),
+      },
+    })
   }
 
-  const client = createClient(config)
   client.interceptors.request.use((request) => rewrite(request, config?.directory))
   client.interceptors.error.use(wrapClientError)
   return new OpencodeClient({ client })
