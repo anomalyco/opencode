@@ -7,7 +7,7 @@
     </picture>
   </a>
 </p>
-<p align="center">The open source AI coding agent.</p>
+<p align="center">Open-source AI coding agent.</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
@@ -47,34 +47,34 @@
 ### Installation
 
 ```bash
-# YOLO
+# Direct install (YOLO)
 curl -fsSL https://opencode.ai/install | bash
 
 # Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
+npm i -g opencode-ai@latest        # ya bun/pnpm/yarn bhi use kar sakte ho
 scoop install opencode             # Windows
 choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
+brew install anomalyco/tap/opencode # macOS aur Linux (recommended, hamesha up to date)
+brew install opencode              # macOS aur Linux (official brew formula, thoda kam frequently updated)
 sudo pacman -S opencode            # Arch Linux (Stable)
 paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # Any OS
-nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
+mise use -g opencode               # Kisi bhi OS par
+nix run nixpkgs#opencode           # ya latest dev branch ke liye github:anomalyco/opencode use karo
 ```
 
 > [!TIP]
-> Remove versions older than 0.1.x before installing.
+> Install karne se pehle 0.1.x se purane versions ko remove kar lena.
 
 ### Desktop App (BETA)
 
-OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
+OpenCode ka desktop app bhi available hai. Isse directly [releases page](https://github.com/anomalyco/opencode/releases) ya [opencode.ai/download](https://opencode.ai/download) se download kar sakte ho.
 
 | Platform              | Download                           |
 | --------------------- | ---------------------------------- |
 | macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
 | macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
 | Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm`, or `.AppImage`     |
+| Linux                 | `.deb`, `.rpm`, ya `.AppImage`     |
 
 ```bash
 # macOS (Homebrew)
@@ -85,11 +85,11 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 #### Installation Directory
 
-The install script respects the following priority order for the installation path:
+Install script installation path choose karte waqt ye priority order follow karta hai:
 
 1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
+2. `$XDG_BIN_DIR` - XDG Base Directory Specification ke according path
+3. `$HOME/bin` - Standard user binary directory, agar exist karti hai ya create ki ja sakti hai
 4. `$HOME/.opencode/bin` - Default fallback
 
 ```bash
@@ -100,31 +100,31 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 ### Agents
 
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
+OpenCode mein do built-in agents hain, jinhe `Tab` key se switch kar sakte ho.
 
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
+- **build** - Default agent, development work ke liye full access ke saath
+- **plan** - Read-only agent, analysis aur code exploration ke liye
+  - By default files edit nahi karta
+  - Bash commands run karne se pehle permission maangta hai
+  - Unfamiliar codebases explore karne ya changes plan karne ke liye useful hai
 
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
+Ek **general** subagent bhi included hai jo complex searches aur multi-step tasks ke liye use hota hai.
+Ye internally use hota hai, aur messages mein `@general` likhkar invoke bhi kar sakte ho.
 
-Learn more about [agents](https://opencode.ai/docs/agents).
+[Agents](https://opencode.ai/docs/agents) ke baare mein aur jaanne ke liye docs dekho.
 
 ### Documentation
 
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
+OpenCode ko configure karne aur baaki features ke baare mein jaankari ke liye [**official docs**](https://opencode.ai/docs) dekho.
 
 ### Contributing
 
-If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
+Agar tum OpenCode mein contribute karna chahte ho, PR submit karne se pehle [contributing docs](./CONTRIBUTING.md) zaroor padh lena.
 
 ### Building on OpenCode
 
-If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
+Agar tum OpenCode se related koi project bana rahe ho aur uske naam mein `opencode` use kar rahe ho, jaise `opencode-dashboard` ya `opencode-mobile`, to apne README mein clearly mention karo ki project OpenCode team ne nahi banaya hai aur OpenCode team se affiliated nahi hai.
 
 ---
 
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Community join karo:** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
