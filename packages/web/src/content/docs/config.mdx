@@ -560,6 +560,28 @@ The default is `1`, which allows primary agents to launch subagents but prevents
 
 ---
 
+### Tool output
+
+Tool output larger than either threshold is written to the truncation directory and the model receives a
+preview plus the path to the full text. Raise these if tools you rely on are being truncated too eagerly.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tool_output": {
+    "max_lines": 4000,
+    "max_bytes": 102400
+  }
+}
+```
+
+- `max_lines` - Maximum lines of tool output before truncation. Defaults to `2000`.
+- `max_bytes` - Maximum bytes of tool output before truncation. Defaults to `51200` (50 KB).
+
+Whichever limit is reached first triggers truncation.
+
+---
+
 ### Sharing
 
 You can configure the [share](/docs/share) feature through the `share` option.
