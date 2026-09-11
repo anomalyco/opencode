@@ -1144,30 +1144,59 @@ describe("ACP service sessions", () => {
     expect(order).toEqual(["update", "response"])
   })
 
-  it("maps assistant prompt errors to request errors instead of end turn", async () => {
-    const { service } = makeService([], {
-      prompt: () =>
-        Promise.resolve({
-          data: {
-            info: assistantInfo(
-              { input: 8, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-              { name: "APIError", data: { message: "Provider request failed", isRetryable: false } },
-            ),
-          },
-        }),
+  it.each([undefined, 429, 500])(
+    "maps assistant API errors with status %s to internal request errors",
+    async (statusCode) => {
+      const { service } = makeService([], {
+        prompt: () =>
+          Promise.resolve({
+            data: {
+              info: assistantInfo(
+                { input: 8, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                { name: "APIError", data: { message: "Provider request failed", statusCode, isRetryable: false } },
+              ),
+            },
+          }),
+      })
+      const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+      const error = await Effect.runPromise(
+        service
+          .prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hello" }] })
+          .pipe(Effect.mapError(ACPError.toRequestError), Effect.flip),
+      )
+
+      expect(error.code).toBe(-32603)
+      expect(error.message).toBe("Internal error: Provider request failed")
+      expect(error.data).toEqual({ service: "session", errorName: "APIError" })
+    },
+  )
+
+  for (const statusCode of [401, 403]) {
+    it(`maps assistant HTTP ${statusCode} errors to auth-required request errors`, async () => {
+      const { service } = makeService([], {
+        prompt: () =>
+          Promise.resolve({
+            data: {
+              info: assistantInfo(
+                { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                { name: "APIError", data: { message: "Provider request failed", statusCode, isRetryable: false } },
+              ),
+            },
+          }),
+      })
+      const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+      const error = await Effect.runPromise(
+        service
+          .prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hello" }] })
+          .pipe(Effect.mapError(ACPError.toRequestError), Effect.flip),
+      )
+
+      expect(error.code).toBe(-32000)
+      expect(error.data).toEqual({ providerId: "test" })
     })
-    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
-
-    const error = await Effect.runPromise(
-      service
-        .prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hello" }] })
-        .pipe(Effect.mapError(ACPError.toRequestError), Effect.flip),
-    )
-
-    expect(error.code).toBe(-32603)
-    expect(error.message).toBe("Internal error: Provider request failed")
-    expect(error.data).toEqual({ service: "session", errorName: "APIError" })
-  })
+  }
 
   it("maps aborted assistant prompt errors to cancelled", async () => {
     const { service } = makeService([], {
