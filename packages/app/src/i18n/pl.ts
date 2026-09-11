@@ -713,6 +713,7 @@ export const dict = {
   "session.review.noChanges": "Brak zmian",
   "session.review.noUncommittedChanges": "Brak jeszcze niezatwierdzonych zmian",
   "session.review.noBranchChanges": "Brak jeszcze zmian w gałęzi",
+  "session.files.refresh": "Odśwież",
   "session.files.selectToOpen": "Wybierz plik do otwarcia",
   "session.files.all": "Wszystkie pliki",
   "session.files.empty": "Brak plików",

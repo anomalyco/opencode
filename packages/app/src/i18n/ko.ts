@@ -485,6 +485,7 @@ export const dict = {
   "session.review.noVcs": "Git 버전 관리 시스템이 감지되지 않아 변경 사항이 표시되지 않습니다",
   "session.review.noSnapshot": "구성에서 스냅샷 추적이 비활성화되어 있어 세션 변경 사항을 사용할 수 없습니다",
   "session.review.noChanges": "변경 없음",
+  "session.files.refresh": "새로 고침",
   "session.files.selectToOpen": "열 파일을 선택하세요",
   "session.files.all": "모든 파일",
   "session.files.empty": "파일 없음",

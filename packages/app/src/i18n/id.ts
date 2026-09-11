@@ -790,6 +790,7 @@ export const dict = {
   "session.review.noUncommittedChanges": "Belum ada perubahan yang belum dikomit",
   "session.review.noBranchChanges": "Belum ada perubahan cabang",
 
+  "session.files.refresh": "Muat ulang",
   "session.files.selectToOpen": "Pilih berkas untuk dibuka",
   "session.files.all": "Semua berkas",
   "session.files.empty": "Tidak ada berkas",

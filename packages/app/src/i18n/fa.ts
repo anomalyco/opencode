@@ -723,6 +723,7 @@ export const dict = {
   "session.review.noChanges": "بدون تغییر",
   "session.review.noUncommittedChanges": "هنوز هیچ تغییری انجام نشده است",
   "session.review.noBranchChanges": "هنوز شعبه ای تغییر نکرده است",
+  "session.files.refresh": "تازه کردن",
   "session.files.selectToOpen": "فایلی را برای باز کردن انتخاب کنید",
   "session.files.all": "همه فایل ها",
   "session.files.empty": "بدون فایل",
