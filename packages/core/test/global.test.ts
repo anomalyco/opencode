@@ -14,3 +14,19 @@ describe("global paths", () => {
     expect((await fs.stat(Global.Path.tmp)).isDirectory()).toBe(true)
   })
 })
+
+describe("Global.configDirs", () => {
+  // Regression coverage for #28658: OPENCODE_CONFIG_DIR replaced the global
+  // config dir instead of adding to it.
+  test("checks an override in addition to the real global default", () => {
+    expect(Global.configDirs("/override")).toEqual(["/override", Global.Path.config])
+  })
+
+  test("prioritizes the override over the real global default", () => {
+    expect(Global.configDirs("/override")[0]).toBe("/override")
+  })
+
+  test("does not duplicate the path when there is no override", () => {
+    expect(Global.configDirs(Global.Path.config)).toEqual([Global.Path.config])
+  })
+})

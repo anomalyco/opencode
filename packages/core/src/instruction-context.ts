@@ -55,7 +55,10 @@ const layer = Layer.effectDiscard(
           fs.resolve,
         ),
       )
-      const paths = Array.dedupe([yield* fs.resolve(join(global.config, "AGENTS.md")), ...discovered])
+      const globalPaths = yield* Effect.forEach(Global.configDirs(global.config), (dir) =>
+        fs.resolve(join(dir, "AGENTS.md")),
+      )
+      const paths = Array.dedupe([...globalPaths, ...discovered])
       const files = yield* Effect.forEach(
         paths,
         (path) =>

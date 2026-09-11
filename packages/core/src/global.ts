@@ -30,6 +30,19 @@ const paths = {
 
 export const Path = paths
 
+/**
+ * `Interface.config` resolves to `Flag.OPENCODE_CONFIG_DIR` when that flag is
+ * set, replacing the static XDG global config dir entirely rather than
+ * adding to it (see issue #28658). Callers that scan a single `config`
+ * directory for global instructions/config files should search this list
+ * instead of `config` alone, so `OPENCODE_CONFIG_DIR` stays additive: it's
+ * checked first so it still takes priority, but the real global default is
+ * never dropped just because an override is set.
+ */
+export function configDirs(config: string): string[] {
+  return config === Path.config ? [config] : [config, Path.config]
+}
+
 Flock.setGlobal({ state })
 
 await Promise.all([
