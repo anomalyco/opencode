@@ -292,39 +292,6 @@ export function applyDirectoryEvent(input: {
       )
       break
     }
-    case "message.updated.v2": {
-      const raw = (event.properties as { info: Message }).info
-      const info = clean(raw)
-      const messages = input.store.message[info.sessionID]
-      if (!messages) {
-        input.setStore("message", info.sessionID, [info])
-        break
-      }
-      const result = Binary.search(messages, messageKey(info), messageKey)
-      if (result.found) {
-        const current = messages[result.index]
-        const summary = typeof info.summary === "object" && info.summary ? info.summary : {}
-        const user = info as Extract<Message, { role: "user" }>
-        const next =
-          raw.role === "user" &&
-          typeof raw.summary === "object" &&
-          raw.summary &&
-          raw.summary.diffs === undefined &&
-          current?.role === "user"
-            ? { ...user, summary: { ...summary, diffs: current.summary?.diffs ?? [] } }
-            : info
-        input.setStore("message", info.sessionID, result.index, reconcile(next))
-        break
-      }
-      input.setStore(
-        "message",
-        info.sessionID,
-        produce((draft) => {
-          draft.splice(result.index, 0, info)
-        }),
-      )
-      break
-    }
     case "message.diff.updated": {
       const props = event.properties as { sessionID: string; messageID: string; diffs: FileDiffInfo[] }
       const messages = input.store.message[props.sessionID]

@@ -448,24 +448,6 @@ describe("applyDirectoryEvent", () => {
       "PATCH-CONTENT",
     )
 
-    applyDirectoryEvent({
-      event: {
-        type: "message.updated.v2",
-        properties: {
-          info: { ...userMessage(messageID, sessionID), summary: { title: "updated" } } as Message,
-        },
-      },
-      store,
-      setStore,
-      push() {},
-      directory: "/tmp",
-      loadLsp() {},
-    })
-
-    const second = store.message[sessionID]?.[0]
-    expect(second?.role === "user" && typeof second.summary === "object" ? second.summary?.diffs[0]?.patch : undefined).toBe(
-      "PATCH-CONTENT",
-    )
   })
 
   test("upserts and prunes message parts", () => {
