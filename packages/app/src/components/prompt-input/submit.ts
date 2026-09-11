@@ -353,7 +353,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const projectDirectory = sdk().directory
     const permissionState = permission.currentServerState()
     const isNewSession = !params.id
-    const shouldAutoAccept = isNewSession && input.autoAccept()
+    const shouldAutoAccept =
+      isNewSession &&
+      (input.autoAccept() || permissionState.isAutoAcceptingDirectory(projectDirectory))
     const worktreeSelection = input.newSessionWorktree?.() || "main"
 
     let sessionDirectory = projectDirectory
