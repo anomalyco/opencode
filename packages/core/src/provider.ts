@@ -103,23 +103,18 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
   return yield* importPackage(specifier, entrypoint)
 })
 
-// Settings the AI SDK runtime in `aisdk.ts` consumes itself; native packages never see them.
+// opencode-only; handled in aisdk.ts.
 const TRANSPORT_KEYS = ["chunkTimeout", "fetch", "timeout"] as const
-// Credentials the resolver injects plus the `ProviderPackage.Settings` base contract. Nothing else about a
-// package's shape is known here.
+// Credentials and request overlays that must not be duplicated into providerOptions.
 const PACKAGE_KEYS = ["accessToken", "apiKey", "authToken", "baseURL", "body", "headers"] as const
 
 /**
- * Prepares flat opencode settings for a native provider package. The package reads the connection keys it
- * declares from the top level and its protocol reads request options from `providerOptions`, so the same
- * settings are offered to both and each side picks the names it knows. A legacy nested `providerOptions`
- * is flattened first.
+ * opencode settings are flat, but `@opencode/ai` packages still read request options from a nested
+ * `providerOptions`. Until that is flattened, hand the same settings to both places and let each side
+ * pick the keys it knows.
  */
-export function nativeSettings(settings: Readonly<Record<string, unknown>>): Record<string, unknown> {
-  const flat = Struct.omit({ ...(isRecord(settings.providerOptions) ? settings.providerOptions : {}), ...settings }, [
-    "providerOptions",
-    ...TRANSPORT_KEYS,
-  ])
+export function nativeSettings(settings: Settings): Settings {
+  const flat = Struct.omit({ ...settings.providerOptions, ...settings }, ["providerOptions", ...TRANSPORT_KEYS])
   const providerOptions = Struct.omit(flat, PACKAGE_KEYS)
   return { ...flat, ...(Object.keys(providerOptions).length === 0 ? {} : { providerOptions }) }
 }

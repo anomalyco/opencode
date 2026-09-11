@@ -1,52 +1,102 @@
 export * as AISDKNative from "./aisdk-native.js"
 
-import { isRecord } from "@opencode/ai/utils/record"
-import { Struct } from "effect"
+import { Effect, Option, Schema, Struct } from "effect"
 import { Provider } from "./provider.js"
 
 export interface Mapping {
   readonly package: string
-  readonly settings: Readonly<Record<string, unknown>>
+  readonly settings: Provider.Settings
   readonly headers?: Readonly<Record<string, string>>
   readonly body?: Readonly<Record<string, unknown>>
 }
 
 export interface MapInput {
   readonly packageName: string | undefined
-  readonly settings: Readonly<Record<string, unknown>>
+  readonly settings: Provider.Settings
   readonly modelID: string
   readonly providerID: string
 }
 
-/**
- * Maps a legacy AI SDK package and its settings onto the native `@opencode/ai` package that replaces it.
- * Settings stay flat; only spellings that differ between the AI SDK and the native package are translated.
- */
+// A wrongly typed legacy value is dropped rather than failing the whole decode.
+const lenient = <S extends Schema.Top>(schema: S) =>
+  Schema.optional(Schema.UndefinedOr(schema).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some(undefined)))))
+
+const Credentials = Schema.Struct({
+  accessKeyId: Schema.String,
+  secretAccessKey: Schema.String,
+  sessionToken: lenient(Schema.String),
+  region: lenient(Schema.String),
+})
+
+/** AI SDK settings whose spelling differs from the native package. Everything else passes through. */
+const Legacy = Schema.StructWithRest(
+  Schema.Struct({
+    apiKey: lenient(Schema.String),
+    baseURL: lenient(Schema.String),
+    headers: lenient(Schema.Record(Schema.String, Schema.String)),
+    extraBody: lenient(Schema.Record(Schema.String, Schema.Unknown)),
+    useCompletionUrls: lenient(Schema.Boolean),
+    // Bedrock
+    auth: lenient(Schema.Literals(["bearer", "sigv4"])),
+    bearerToken: lenient(Schema.String),
+    endpoint: lenient(Schema.String),
+    region: lenient(Schema.String),
+    credentials: lenient(Credentials),
+    accessKeyId: lenient(Schema.String),
+    secretAccessKey: lenient(Schema.String),
+    sessionToken: lenient(Schema.String),
+    anthropicBeta: lenient(Schema.Array(Schema.String)),
+    serviceTier: lenient(Schema.String),
+    reasoningConfig: lenient(
+      Schema.Struct({
+        type: lenient(Schema.String),
+        display: lenient(Schema.String),
+        maxReasoningEffort: lenient(Schema.String),
+        budgetTokens: lenient(Schema.Number),
+      }),
+    ),
+    additionalModelRequestFields: lenient(
+      Schema.StructWithRest(
+        Schema.Struct({
+          anthropic_beta: lenient(Schema.Array(Schema.String)),
+          output_config: lenient(Schema.Record(Schema.String, Schema.Unknown)),
+          reasoning: lenient(Schema.Record(Schema.String, Schema.Unknown)),
+        }),
+        [Schema.Record(Schema.String, Schema.Unknown)],
+      ),
+    ),
+    // OpenRouter
+    appName: lenient(Schema.String),
+    appUrl: lenient(Schema.String),
+    api_keys: lenient(Schema.Record(Schema.String, Schema.String)),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
+type Legacy = typeof Legacy.Type
+const decode = Schema.decodeUnknownSync(Legacy)
+
+/** Maps a legacy AI SDK package onto the native package that replaces it. */
 export function map(input: MapInput): Mapping | undefined {
-  const native = mapPackage(input)
+  const settings = decode(input.settings)
+  const native = mapPackage(input.packageName, input.modelID, settings)
   if (!native) return
-  const headers = isStringRecord(input.settings.headers) ? input.settings.headers : undefined
   const converse = native === "@opencode/ai/providers/amazon-bedrock"
-  // AI SDK constructors take request overlays as `headers` and `extraBody`; the mapping carries them separately.
-  const settings = {
-    ...Struct.omit(input.settings, ["headers", "extraBody", ...OPENROUTER_KEYS]),
+  const mapped = {
+    ...Struct.omit(settings, ["headers", "extraBody", ...OPENROUTER_KEYS]),
     ...(native === "@opencode/ai/providers/openai-compatible" ? { provider: input.providerID } : {}),
   }
   return {
     package: native,
-    settings: native.startsWith("@opencode/ai/providers/amazon-bedrock")
-      ? bedrockSettings(settings, converse)
-      : settings,
-    ...(headers === undefined ? {} : { headers }),
-    ...(isRecord(input.settings.extraBody) ? { body: input.settings.extraBody } : {}),
-    ...(converse ? bedrockRequest(input) : {}),
-    ...(native === "@opencode/ai/providers/openrouter" ? openRouterRequest(input.settings) : {}),
+    settings: native.startsWith("@opencode/ai/providers/amazon-bedrock") ? bedrockSettings(mapped, converse) : mapped,
+    ...(settings.headers === undefined ? {} : { headers: settings.headers }),
+    ...(settings.extraBody === undefined ? {} : { body: settings.extraBody }),
+    ...(converse ? bedrockRequest(input.modelID, settings) : {}),
+    ...(native === "@opencode/ai/providers/openrouter" ? openRouterRequest(settings) : {}),
   }
 }
 
-function mapPackage(input: MapInput) {
-  const settings = input.settings
-  switch (input.packageName) {
+function mapPackage(packageName: string | undefined, modelID: string, settings: Legacy) {
+  switch (packageName) {
     case "@ai-sdk/anthropic":
     case "@ai-sdk/cerebras":
     case "@ai-sdk/deepinfra":
@@ -58,22 +108,22 @@ function mapPackage(input: MapInput) {
     case "@ai-sdk/togetherai":
     case "@ai-sdk/xai":
     case "@ai-sdk/amazon-bedrock":
-      return `@opencode/ai/providers/${input.packageName.slice("@ai-sdk/".length)}`
+      return `@opencode/ai/providers/${packageName.slice("@ai-sdk/".length)}`
     case "@ai-sdk/amazon-bedrock/mantle":
-      return `@opencode/ai/providers/amazon-bedrock/mantle/${input.modelID.includes("gpt-oss") ? "chat" : "responses"}`
+      return `@opencode/ai/providers/amazon-bedrock/mantle/${modelID.includes("gpt-oss") ? "chat" : "responses"}`
     case "@ai-sdk/azure":
       return `@opencode/ai/providers/azure/${settings.useCompletionUrls === true ? "chat" : "responses"}`
     case "@ai-sdk/google-vertex/anthropic":
       return "@opencode/ai/providers/google-vertex/messages"
     case "@ai-sdk/openai-compatible":
-      return typeof settings.baseURL === "string" ? "@opencode/ai/providers/openai-compatible" : undefined
+      return settings.baseURL === undefined ? undefined : "@opencode/ai/providers/openai-compatible"
     case "@openrouter/ai-sdk-provider":
       return "@opencode/ai/providers/openrouter"
   }
 }
 
-// AI SDK connection spellings the native Bedrock packages do not read.
-const BEDROCK_CONNECTION_KEYS = [
+// AI SDK spellings the native Bedrock packages do not read.
+const BEDROCK_KEYS = [
   "bearerToken",
   "endpoint",
   "credentials",
@@ -82,70 +132,56 @@ const BEDROCK_CONNECTION_KEYS = [
   "secretAccessKey",
   "sessionToken",
 ]
-// AI SDK request settings that Converse expects in the body; `bedrockRequest` translates them.
-const BEDROCK_BODY_KEYS = ["additionalModelRequestFields", "reasoningConfig", "anthropicBeta", "serviceTier"]
+// Request settings Converse takes in the body; translated by `bedrockRequest`.
+const CONVERSE_KEYS = ["additionalModelRequestFields", "reasoningConfig", "anthropicBeta", "serviceTier"]
 
-// The AI SDK Bedrock packages spell connection settings differently from the native package.
-function bedrockSettings(settings: Readonly<Record<string, unknown>>, converse: boolean) {
-  const excluded = converse ? [...BEDROCK_CONNECTION_KEYS, ...BEDROCK_BODY_KEYS] : BEDROCK_CONNECTION_KEYS
-  const region = bedrockRegion(settings)
-  const credentials = bedrockCredentials(settings, region)
-  const baseURL = typeof settings.baseURL === "string" ? settings.baseURL : settings.endpoint
+function bedrockSettings(settings: Legacy, converse: boolean) {
+  const region = settings.region ?? settings.credentials?.region
+  const credentials = settings.credentials ?? settings
+  const baseURL = settings.baseURL ?? settings.endpoint
   return {
-    ...Object.fromEntries(
-      Object.entries(settings).filter(
-        ([key, value]) => !excluded.includes(key) && (key !== "auth" || value === "bearer" || value === "sigv4"),
-      ),
-    ),
-    ...(typeof baseURL === "string"
-      ? { baseURL: region === undefined ? baseURL : baseURL.replaceAll("${AWS_REGION}", region) }
-      : {}),
-    ...(typeof settings.apiKey !== "string" && typeof settings.bearerToken === "string"
-      ? { apiKey: settings.bearerToken }
-      : {}),
-    ...(credentials === undefined ? {} : { credentials }),
+    ...Struct.omit(settings, converse ? [...BEDROCK_KEYS, ...CONVERSE_KEYS] : BEDROCK_KEYS),
+    ...(baseURL === undefined
+      ? {}
+      : { baseURL: region === undefined ? baseURL : baseURL.replaceAll("${AWS_REGION}", region) }),
+    ...(settings.apiKey === undefined && settings.bearerToken !== undefined ? { apiKey: settings.bearerToken } : {}),
+    ...(region === undefined || credentials.accessKeyId === undefined || credentials.secretAccessKey === undefined
+      ? {}
+      : {
+          credentials: {
+            region,
+            accessKeyId: credentials.accessKeyId,
+            secretAccessKey: credentials.secretAccessKey,
+            ...(credentials.sessionToken === undefined ? {} : { sessionToken: credentials.sessionToken }),
+          },
+        }),
   }
 }
 
-function bedrockRequest(input: MapInput): Pick<Mapping, "body"> {
-  const settings = input.settings
-  const additional = isRecord(settings.additionalModelRequestFields) ? settings.additionalModelRequestFields : {}
-  const reasoning = isRecord(settings.reasoningConfig) ? settings.reasoningConfig : undefined
-  const anthropic = input.modelID.includes("anthropic")
-  const openai = input.modelID.includes("openai.")
-  // Converse passes OpenAI fields through verbatim. gpt-oss (Harmony) takes the
-  // flat chat-completions `reasoning_effort`; GPT-5.6+ reject it and take the
-  // Responses-style `reasoning.effort` instead.
-  const harmony = input.modelID.includes("openai.gpt-oss")
-  const effort = typeof reasoning?.maxReasoningEffort === "string" ? reasoning.maxReasoningEffort : undefined
-  const type = typeof reasoning?.type === "string" ? reasoning.type : undefined
-  const budget = typeof reasoning?.budgetTokens === "number" ? reasoning.budgetTokens : undefined
-  const display = typeof reasoning?.display === "string" ? reasoning.display : undefined
-  const betas = Array.isArray(settings.anthropicBeta)
-    ? settings.anthropicBeta.filter((item): item is string => typeof item === "string")
-    : []
-  const existingBetas = Array.isArray(additional.anthropic_beta)
-    ? additional.anthropic_beta.filter((item): item is string => typeof item === "string")
-    : []
+function bedrockRequest(modelID: string, settings: Legacy): Pick<Mapping, "body"> {
+  const additional = settings.additionalModelRequestFields ?? {}
+  const reasoning = settings.reasoningConfig
+  const anthropic = modelID.includes("anthropic")
+  const openai = modelID.includes("openai.")
+  // gpt-oss (Harmony) takes the flat chat-completions `reasoning_effort`; GPT-5.6+ take Responses-style `reasoning.effort`.
+  const harmony = modelID.includes("openai.gpt-oss")
+  const effort = reasoning?.maxReasoningEffort
+  const type = reasoning?.type
+  const budget = reasoning?.budgetTokens
+  const display = reasoning?.display
+  const betas = settings.anthropicBeta ?? []
   const fields = Provider.mergeOverlay(additional, {
-    ...(betas.length > 0 ? { anthropic_beta: [...existingBetas, ...betas] } : {}),
+    ...(betas.length > 0 ? { anthropic_beta: [...(additional.anthropic_beta ?? []), ...betas] } : {}),
     ...(anthropic && type === "enabled" && budget !== undefined
       ? { thinking: { type: "enabled", budget_tokens: budget } }
       : {}),
     ...(anthropic && type === "adaptive"
       ? { thinking: { type: "adaptive", ...(display === undefined ? {} : { display }) } }
       : {}),
-    ...(anthropic && effort !== undefined
-      ? {
-          output_config: {
-            ...(isRecord(additional.output_config) ? additional.output_config : {}),
-            effort,
-          },
-        }
-      : {}),
+    ...(anthropic && effort !== undefined ? { output_config: { ...additional.output_config, effort } } : {}),
     ...(!anthropic && openai && harmony && effort !== undefined ? { reasoning_effort: effort } : {}),
     ...(!anthropic && openai && !harmony && effort !== undefined
-      ? { reasoning: { ...(isRecord(additional.reasoning) ? additional.reasoning : {}), effort } }
+      ? { reasoning: { ...additional.reasoning, effort } }
       : {}),
     ...(!anthropic && !openai && effort !== undefined
       ? {
@@ -159,56 +195,26 @@ function bedrockRequest(input: MapInput): Pick<Mapping, "body"> {
   })
   const body = {
     ...(fields && Object.keys(fields).length > 0 ? { additionalModelRequestFields: fields } : {}),
-    ...(typeof settings.serviceTier === "string" ? { serviceTier: { type: settings.serviceTier } } : {}),
+    ...(settings.serviceTier === undefined ? {} : { serviceTier: { type: settings.serviceTier } }),
   }
   return Object.keys(body).length === 0 ? {} : { body }
 }
 
-function bedrockCredentials(settings: Readonly<Record<string, unknown>>, region: string | undefined) {
-  const credentials = isRecord(settings.credentials) ? settings.credentials : settings
-  if (
-    region === undefined ||
-    typeof credentials.accessKeyId !== "string" ||
-    typeof credentials.secretAccessKey !== "string"
-  )
-    return undefined
-  return {
-    region,
-    accessKeyId: credentials.accessKeyId,
-    secretAccessKey: credentials.secretAccessKey,
-    ...(typeof credentials.sessionToken === "string" ? { sessionToken: credentials.sessionToken } : {}),
-  }
-}
-
-function bedrockRegion(settings: Readonly<Record<string, unknown>>) {
-  const credentials = isRecord(settings.credentials) ? settings.credentials : settings
-  return typeof settings.region === "string"
-    ? settings.region
-    : typeof credentials.region === "string"
-      ? credentials.region
-      : undefined
-}
-
-// The AI SDK OpenRouter package takes app attribution and BYOK keys as constructor options; the native
-// package reads them as headers. The native package forwards unknown request options to the request body,
-// so the AI SDK constructor's `compatibility` must not reach it either.
+// Constructor options the native OpenRouter package takes as headers, plus `compatibility`, which the
+// native package would otherwise forward to the request body.
 const OPENROUTER_KEYS = ["appName", "appUrl", "api_keys", "compatibility"] as const
 
-function openRouterRequest(settings: Readonly<Record<string, unknown>>): Pick<Mapping, "headers"> {
+function openRouterRequest(settings: Legacy): Pick<Mapping, "headers"> {
   const headers =
     Provider.mergeHeaders(
       {
-        ...(typeof settings.appName === "string" ? { "X-OpenRouter-Title": settings.appName } : {}),
-        ...(typeof settings.appUrl === "string" ? { "HTTP-Referer": settings.appUrl } : {}),
-        ...(isStringRecord(settings.api_keys) && Object.keys(settings.api_keys).length > 0
-          ? { "X-Provider-API-Keys": JSON.stringify(settings.api_keys) }
-          : {}),
+        ...(settings.appName === undefined ? {} : { "X-OpenRouter-Title": settings.appName }),
+        ...(settings.appUrl === undefined ? {} : { "HTTP-Referer": settings.appUrl }),
+        ...(settings.api_keys === undefined || Object.keys(settings.api_keys).length === 0
+          ? {}
+          : { "X-Provider-API-Keys": JSON.stringify(settings.api_keys) }),
       },
-      isStringRecord(settings.headers) ? settings.headers : undefined,
+      settings.headers,
     ) ?? {}
   return Object.keys(headers).length === 0 ? {} : { headers }
-}
-
-function isStringRecord(value: unknown): value is Readonly<Record<string, string>> {
-  return isRecord(value) && Object.values(value).every((item) => typeof item === "string")
 }
