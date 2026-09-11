@@ -7,9 +7,52 @@ const serverA = "http://127.0.0.1:4096"
 const serverB = "http://127.0.0.1:4097"
 const directoryA = "C:/server-a"
 const directoryB = "/home/server-b"
+const draftID = "draft_remote_settings_directory"
 const sessionA = session("ses_server_a", directoryA, "Server A session")
 const childSessionA = { ...session("ses_server_a_child", directoryA, "Server A child session"), parentID: sessionA.id }
 const sessionB = session("ses_server_b", directoryB, "Server B session")
+
+test("draft settings use directory auto-accept", async ({ page }) => {
+  const permissionRequests: string[] = []
+  await mockServers(page, permissionRequests)
+  await configureServers(page, [{ type: "draft", server: serverB, draftID, directory: directoryB }])
+
+  await page.goto(`/new-session?draftId=${draftID}`)
+  await page.keyboard.press("Control+,")
+
+  const autoAccept = page.locator(".settings-v2-dialog").locator('[data-action="settings-auto-accept-permissions"]')
+  const input = autoAccept.getByRole("switch")
+  await expect(autoAccept).toBeVisible()
+  await expect(input).toBeEnabled()
+  permissionRequests.length = 0
+  await autoAccept.locator('[data-slot="switch-control"]').click()
+  await expect(input).toBeChecked()
+  await expect
+    .poll(() =>
+      permissionRequests.some((request) => {
+        const url = new URL(request)
+        return url.origin === serverB && url.searchParams.get("directory") === directoryB
+      }),
+    )
+    .toBe(true)
+  expect(permissionRequests.every((request) => new URL(request).origin === serverB)).toBe(true)
+})
+
+test("settings without active scope keep auto-accept disabled", async ({ page }) => {
+  const permissionRequests: string[] = []
+  await mockServers(page, permissionRequests)
+  await configureServers(page)
+
+  await page.goto("/")
+  await page.keyboard.press("Control+,")
+
+  const autoAccept = page.locator(".settings-v2-dialog").locator('[data-action="settings-auto-accept-permissions"]')
+  const input = autoAccept.getByRole("switch")
+  await expect(autoAccept).toBeVisible()
+  await expect(input).toBeDisabled()
+  await expect(input).not.toBeChecked()
+  expect(permissionRequests).toEqual([])
+})
 
 test("session settings use the remote server context", async ({ page }) => {
   const permissionRequests: string[] = []
@@ -150,7 +193,11 @@ type PermissionResponse = {
   body: unknown
 }
 
-async function configureServers(page: Page, tabs: { type: "session"; server: string; sessionId: string }[] = []) {
+type StoredTab =
+  | { type: "session"; server: string; sessionId: string }
+  | { type: "draft"; server: string; draftID: string; directory: string }
+
+async function configureServers(page: Page, tabs: StoredTab[] = []) {
   await page.addInitScript(
     ({ serverB, tabs }) => {
       localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))

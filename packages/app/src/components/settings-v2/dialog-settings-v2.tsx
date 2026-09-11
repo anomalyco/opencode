@@ -94,7 +94,7 @@ export const DialogSettings: Component<{
           </div>
         </TabsV2.List>
         <TabsV2.Content value="general" class="settings-v2-panel">
-          <SettingsGeneralV2 sessionID={props.sessionID} />
+          <SettingsGeneralV2 sessionID={props.sessionID} directory={directory} />
         </TabsV2.Content>
         <TabsV2.Content value="shortcuts" class="settings-v2-panel">
           <SettingsKeybinds v2 />
