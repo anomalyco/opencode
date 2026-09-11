@@ -65,6 +65,21 @@ describe("ProxyUtil", () => {
       expect(result.get("content-type")).toBe("application/json")
     })
 
+    test("strips headers named by the connection header", () => {
+      const req = new Request("http://localhost", {
+        headers: {
+          connection: "x-hop, invalid name, x-second",
+          "x-hop": "remove",
+          "x-second": "remove",
+          "x-end-to-end": "keep",
+        },
+      })
+      const result = ProxyUtil.headers(req)
+      expect(result.get("x-hop")).toBeNull()
+      expect(result.get("x-second")).toBeNull()
+      expect(result.get("x-end-to-end")).toBe("keep")
+    })
+
     test("strips opencode-specific headers", () => {
       const req = new Request("http://localhost", {
         headers: {
