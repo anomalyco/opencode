@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import path from "path"
 import { and, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
@@ -15,6 +16,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
@@ -31,6 +33,10 @@ export const Event = {
 }
 
 type Row = typeof ProjectTable.$inferSelect
+
+// The project icon is the shallowest favicon in the worktree, so only enough
+// candidates to pick a winner are needed.
+const ICON_CANDIDATE_LIMIT = 100
 
 export function fromRow(row: Row): Info {
   const icon =
@@ -107,6 +113,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
+    const ripgrep = yield* Ripgrep.Service
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const projectV2 = yield* ProjectV2.Service
     const projectDirectories = yield* ProjectDirectories.Service
@@ -314,19 +321,24 @@ const layer = Layer.effect(
       if (input.icon?.override) return
       if (input.icon?.url) return
 
-      const matches = yield* fs
-        .glob("**/favicon.{ico,png,svg,jpg,jpeg,webp}", {
+      // Ripgrep honours .gitignore, so build artifacts and vendored trees are
+      // pruned at the directory level. A plain recursive glob walks every entry
+      // in the worktree instead, which costs tens of seconds on large projects
+      // and can pick a dependency's favicon over the project's own.
+      const matches = yield* ripgrep
+        .glob({
           cwd: input.worktree,
-          absolute: true,
-          include: "file",
+          pattern: "**/favicon.{ico,png,svg,jpg,jpeg,webp}",
+          limit: ICON_CANDIDATE_LIMIT,
         })
         .pipe(Effect.orDie)
-      const shortest = matches.sort((a, b) => a.length - b.length)[0]
+      const shortest = matches.map((entry) => entry.path.toString()).sort((a, b) => a.length - b.length)[0]
       if (!shortest) return
 
-      const buffer = yield* fs.readFile(shortest).pipe(Effect.orDie)
+      const file = path.resolve(input.worktree, shortest)
+      const buffer = yield* fs.readFile(file).pipe(Effect.orDie)
       const base64 = Buffer.from(buffer).toString("base64")
-      const mime = FSUtil.mimeType(shortest)
+      const mime = FSUtil.mimeType(file)
       const url = `data:${mime};base64,${base64}`
       yield* update({ projectID: input.id, icon: { url } }).pipe(
         Effect.catchTag("Project.NotFoundError", () => Effect.void),
@@ -470,6 +482,7 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [
     FSUtil.node,
+    Ripgrep.node,
     AppProcess.node,
     CrossSpawnSpawner.node,
     ProjectV2.node,
