@@ -135,6 +135,14 @@ export default {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`message_diff\` (
+          \`message_id\` text PRIMARY KEY,
+          \`session_id\` text NOT NULL,
+          \`diffs\` text NOT NULL,
+          CONSTRAINT \`fk_message_diff_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`part\` (
           \`id\` text PRIMARY KEY,
           \`message_id\` text NOT NULL,
@@ -244,6 +252,7 @@ export default {
       yield* tx.run(
         `CREATE INDEX \`message_session_time_created_id_idx\` ON \`message\` (\`session_id\`,\`time_created\`,\`id\`);`,
       )
+      yield* tx.run(`CREATE INDEX \`message_diff_session_idx\` ON \`message_diff\` (\`session_id\`);`)
       yield* tx.run(`CREATE INDEX \`part_message_id_id_idx\` ON \`part\` (\`message_id\`,\`id\`);`)
       yield* tx.run(`CREATE INDEX \`part_session_idx\` ON \`part\` (\`session_id\`);`)
       yield* tx.run(
