@@ -4,6 +4,7 @@ import path from "path"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "../effect/app-node"
+import { ConfigMarkdown } from "../config/markdown"
 import { FSUtil } from "../fs-util"
 import { SkillV2 } from "../skill"
 import { PermissionV2 } from "../permission"
@@ -32,13 +33,13 @@ export const description = [
   "The skill name must match one of the available skills in the system context.",
 ].join("\n")
 
-export const toModelOutput = (skill: SkillV2.Info, files: ReadonlyArray<string>) => {
+export const toModelOutput = (skill: SkillV2.Info, files: ReadonlyArray<string>, content?: string) => {
   const directory = path.dirname(skill.location)
   return [
     `<skill_content name="${skill.name}">`,
     `# Skill: ${skill.name}`,
     "",
-    skill.content.trim(),
+    (content ?? skill.content).trim(),
     "",
     `Base directory for this skill: ${directory}`,
     "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
@@ -89,10 +90,14 @@ const layer = Layer.effectDiscard(
                         .toSorted()
                         .slice(0, FILE_LIMIT)
                     : []
+                const content = yield* fs.readFileStringSafe(skill.location).pipe(
+                  Effect.map((raw) => (raw ? ConfigMarkdown.parseOption(raw)?.content ?? skill.content : skill.content)),
+                  Effect.catch(() => Effect.succeed(skill.content)),
+                )
                 return {
                   name: skill.name,
                   directory,
-                  output: toModelOutput(skill, files),
+                  output: toModelOutput(skill, files, content),
                 }
               }).pipe(Effect.mapError((error) => unableToLoad(input.name, error)))
             }),
