@@ -13,7 +13,7 @@ import {
 } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
-import { useNavigate } from "@solidjs/router"
+import { useNavigate, useLocation } from "@solidjs/router"
 import { useMutation } from "@tanstack/solid-query"
 import { createVirtualizer, defaultRangeExtractor, elementScroll, type VirtualItem } from "@tanstack/solid-virtual"
 import { Accordion } from "@opencode-ai/ui/accordion"
@@ -88,7 +88,36 @@ type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, { _tag: "TurnGap" }>
 type TimelineRowByTag<T extends TimelineRow.TimelineRow["_tag"]> = Extract<TimelineRow.TimelineRow, { _tag: T }>
 
 const timelineFallbackItemSize = 60
-const timelineCache = new Map<string, { measurements: VirtualItem[]; toolOpen: Record<string, boolean | undefined> }>()
+
+type TimelineScrollSnapshot = {
+  // Timeline-row key of the first visible row, and its distance to the
+  // viewport top, so the position survives content appended while away.
+  key: string
+  offset: number
+  top: number
+  atBottom: boolean
+}
+
+const timelineCache = new Map<
+  string,
+  { measurements: VirtualItem[]; toolOpen: Record<string, boolean | undefined>; scroll?: TimelineScrollSnapshot }
+>()
+
+const scrollBottomThreshold = 80
+
+export function captureTimelineScroll(root: HTMLElement): TimelineScrollSnapshot {
+  const view = root.getBoundingClientRect()
+  const anchor = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")]
+    .map((element) => ({ element, rect: element.getBoundingClientRect() }))
+    .filter((item) => item.rect.bottom > view.top && item.rect.top < view.bottom)
+    .sort((a, b) => a.rect.top - b.rect.top)[0]
+  return {
+    key: anchor?.element.dataset.timelineKey ?? "",
+    offset: anchor ? anchor.rect.top - view.top : 0,
+    top: root.scrollTop,
+    atBottom: root.scrollHeight - root.clientHeight - root.scrollTop < scrollBottomThreshold,
+  }
+}
 
 const taskDescription = (part: PartType, sessionID: string) => {
   if (part.type !== "tool" || part.tool !== "task") return
@@ -259,6 +288,7 @@ export function MessageTimeline(props: {
   let touchGesture: number | undefined
 
   const navigate = useNavigate()
+  const location = useLocation()
   const serverSDK = useServerSDK()
   const sdk = useSDK()
   const sync = useSync()
@@ -272,6 +302,20 @@ export function MessageTimeline(props: {
   const initialMeasurements = cached?.measurements
   const coldBottomMount = !initialMeasurements?.length && props.shouldAnchorBottom()
   const platform = usePlatform()
+  // Restore the viewport position captured when this session's timeline was
+  // last unmounted (e.g. switching session tabs), instead of re-anchoring to
+  // the bottom. Hash navigation takes precedence over the saved position.
+  const savedScroll = cached?.scroll
+  const restoring = !!savedScroll && !savedScroll.atBottom && !location.hash
+  let restoreDone = false
+  let restoreFrame: number | undefined
+  // Tracked continuously so the unmount-time capture reads the last live
+  // value; reading it during disposal is racy because the incoming session
+  // may already have reset the shared auto-scroll state.
+  let followBottom = true
+  createEffect(() => {
+    followBottom = props.shouldAnchorBottom()
+  })
 
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
   const sessionID = createMemo(() => params.id)
@@ -419,7 +463,10 @@ export function MessageTimeline(props: {
     },
     getScrollElement: () => listRoot() ?? null,
     observeElementOffset: observeElementOffsetReconnectAware,
-    initialOffset: () => (props.shouldAnchorBottom() ? Number.MAX_SAFE_INTEGER : 0),
+    initialOffset: () => {
+      if (restoring) return savedScroll.top
+      return props.shouldAnchorBottom() ? Number.MAX_SAFE_INTEGER : 0
+    },
     initialMeasurementsCache: initialMeasurements,
     estimateSize: () => timelineFallbackItemSize,
     scrollToFn: (offset, options, instance) => {
@@ -461,6 +508,7 @@ export function MessageTimeline(props: {
     resizeAnchorScheduled = true
     queueMicrotask(() => {
       resizeAnchorScheduled = false
+      if (restoring && !restoreDone) return
       if (!props.shouldAnchorBottom() || props.hasScrollGesture()) return
       virtualizer.scrollToEnd()
     })
@@ -507,20 +555,73 @@ export function MessageTimeline(props: {
     props.setHistoryAnchor?.({ capture: capturePrependAnchor, restore: restorePrependAnchor })
   })
 
+  // Re-apply the saved anchor while rows keep measuring after remount, then
+  // let the resulting scroll events re-engage (near bottom) or detach (away
+  // from bottom) the bottom-follow behavior through the normal handlers.
+  const attemptScrollRestore = () => {
+    if (restoreDone) return
+    const root = listRoot()
+    const saved = savedScroll
+    if (!root || !saved) {
+      restoreDone = true
+      return
+    }
+    let frames = 0
+    let stable = 0
+    const apply = () => {
+      restoreFrame = undefined
+      const element = saved.key
+        ? root.querySelector<HTMLElement>(`[data-timeline-key="${CSS.escape(saved.key)}"]`)
+        : undefined
+      if (element) {
+        const delta = element.getBoundingClientRect().top - root.getBoundingClientRect().top - saved.offset
+        if (Math.abs(delta) > 0.5) {
+          root.scrollTop += delta
+          // Programmatic restores do not count as gestures, so detach the
+          // bottom-follow explicitly through the normal scroll handler.
+          props.onAutoScrollHandleScroll()
+          stable = 0
+        } else {
+          stable += 1
+        }
+      } else {
+        const max = Math.max(0, root.scrollHeight - root.clientHeight)
+        const top = Math.min(saved.top, max)
+        if (Math.abs(root.scrollTop - top) > 0.5) {
+          root.scrollTop = top
+          props.onAutoScrollHandleScroll()
+          stable = 0
+        } else {
+          stable += 1
+        }
+      }
+      frames += 1
+      if (stable >= 3 || frames >= 90) {
+        restoreDone = true
+        return
+      }
+      restoreFrame = requestAnimationFrame(apply)
+    }
+    restoreFrame = requestAnimationFrame(apply)
+  }
+
   let overscanFrame: number | undefined
   onMount(() => {
     overscanFrame = requestAnimationFrame(() => {
-      if (props.shouldAnchorBottom()) virtualizer.scrollToEnd()
+      if (restoring) attemptScrollRestore()
+      else if (props.shouldAnchorBottom()) virtualizer.scrollToEnd()
       overscanFrame = requestAnimationFrame(() => {
         overscanFrame = undefined
         if (renderOverscan() < 20) setRenderOverscan(20)
-        if (props.shouldAnchorBottom()) virtualizer.scrollToEnd()
+        if (restoring) attemptScrollRestore()
+        else if (props.shouldAnchorBottom()) virtualizer.scrollToEnd()
       })
     })
   })
 
   const maybeAnchorBottom = () => {
     if (timelineRows().length === 0) return
+    if (restoring && !restoreDone) return
     if (!props.shouldAnchorBottom() || props.hasScrollGesture()) return
     if (resizePinFrame !== undefined) cancelAnimationFrame(resizePinFrame)
     clearPrependAnchor()
@@ -541,8 +642,18 @@ export function MessageTimeline(props: {
 
   onCleanup(() => {
     clearPrependAnchor()
+    if (restoreFrame !== undefined) cancelAnimationFrame(restoreFrame)
     timelineCache.delete(ownerSessionKey)
-    timelineCache.set(ownerSessionKey, { measurements: virtualizer.takeSnapshot(), toolOpen: { ...toolOpen } })
+    const root = listRoot()
+    // Capture before takeSnapshot, while layout metrics are still intact.
+    // "At bottom" means the bottom-follow mode was engaged, not a pixel
+    // measurement — unmount-time layout churn makes the latter unreliable.
+    const scroll = root ? { ...captureTimelineScroll(root), atBottom: followBottom } : undefined
+    timelineCache.set(ownerSessionKey, {
+      measurements: virtualizer.takeSnapshot(),
+      toolOpen: { ...toolOpen },
+      scroll,
+    })
     while (timelineCache.size > 16) timelineCache.delete(timelineCache.keys().next().value!)
     if (resizePinFrame !== undefined) cancelAnimationFrame(resizePinFrame)
     if (overscanFrame !== undefined) cancelAnimationFrame(overscanFrame)
