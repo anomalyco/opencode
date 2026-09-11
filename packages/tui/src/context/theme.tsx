@@ -184,7 +184,11 @@ const themeContext = createSimpleContext({
     }
 
     onMount(() => {
-      void Promise.allSettled([resolveSystemTheme(store.mode), syncCustomThemes()]).finally(() => {
+      const systemTheme = resolveSystemTheme(store.mode)
+      void Promise.allSettled([
+        store.active === "system" ? systemTheme : Promise.resolve(),
+        syncCustomThemes(),
+      ]).finally(() => {
         valuesV2()
         setStore("ready", true)
       })
