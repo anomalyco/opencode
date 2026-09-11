@@ -7,6 +7,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { reply } from "../../lib/llm-server"
 import { cliIt } from "../../lib/cli-process"
+import { testProviderConfig } from "../../lib/test-provider"
 
 describe("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
@@ -77,6 +78,27 @@ describe("opencode run (non-interactive subprocess)", () => {
         })
         expect(result.exitCode).not.toBe(0)
         expect(result.durationMs).toBeLessThan(15_000)
+      }),
+    30_000,
+  )
+
+  cliIt.concurrent(
+    "reports an actionable error when the configured model is unavailable",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        const result = yield* opencode.spawn(["run", "say hi"], {
+          env: {
+            OPENCODE_CONFIG_CONTENT: JSON.stringify({
+              ...testProviderConfig(llm.url),
+              model: "test/deprecated-model",
+            }),
+          },
+        })
+
+        expect(result.exitCode).not.toBe(0)
+        expect(result.stderr).toContain("Model not found: test/deprecated-model")
+        expect(result.stderr).toContain("opencode models")
+        expect(result.stderr).not.toContain("Unexpected server error")
       }),
     30_000,
   )
