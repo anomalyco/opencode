@@ -31,6 +31,16 @@ export const countPatch = (patch: string) => {
   return { additions, deletions }
 }
 
+const pathEscapes = new Map([
+  ["a", "\x07"],
+  ["b", "\b"],
+  ["f", "\f"],
+  ["v", "\v"],
+  ["t", "\t"],
+  ["n", "\n"],
+  ["r", "\r"],
+])
+
 const parseQuotedPath = (value: string) => {
   let out = ""
   for (let idx = 1; idx < value.length; idx++) {
@@ -42,12 +52,16 @@ const parseQuotedPath = (value: string) => {
     }
 
     const next = value[++idx]
-    if (next === "t") out += "\t"
-    else if (next === "n") out += "\n"
-    else if (next === "r") out += "\r"
-    else if (next === '"' || next === "\\") out += next
-    else out += next ?? ""
+    // Git encodes non-ASCII filenames as octal UTF-8 bytes, not JavaScript string escapes.
+    const octal = /^[0-7]{1,3}(?:\\[0-7]{1,3})*/.exec(value.slice(idx))?.[0]
+    if (octal) {
+      out += Buffer.from(octal.split("\\").map((byte) => Number.parseInt(byte, 8))).toString("utf8")
+      idx += octal.length - 1
+      continue
+    }
+    out += pathEscapes.get(next) ?? next ?? ""
   }
+  return undefined
 }
 
 const parsePathToken = (value: string) => {
@@ -56,7 +70,7 @@ const parsePathToken = (value: string) => {
 }
 
 const fileFromDiffPath = (value: string | undefined) => {
-  if (!value || value === "/dev/null") return
+  if (!value || value === "/dev/null") return undefined
   const file = parsePathToken(value)
   if (file.startsWith("a/") || file.startsWith("b/")) return file.slice(2)
   return file
@@ -66,13 +80,15 @@ const fileFromGitHeader = (header: string) => {
   if (header.startsWith('"')) {
     const first = parseQuotedPath(header)
     const second = first ? header.slice(first.end).trimStart() : undefined
-    if (!second) return
-    if (!second.startsWith('"')) return fileFromDiffPath(second)
-    return fileFromDiffPath(parseQuotedPath(second)?.value)
+    if (!second) return undefined
+    return fileFromDiffPath(second)
   }
 
+  // Mode-only changes have no ---/+++ lines. A filename may itself contain " b/".
+  const file = header.slice(2, Math.floor(header.length / 2))
+  if (header === `a/${file} b/${file}`) return file
   const separator = header.indexOf(" b/")
-  if (separator === -1) return
+  if (separator === -1) return undefined
   return fileFromDiffPath(header.slice(separator + 1))
 }
 
@@ -104,3 +120,39 @@ export const chunksByFile = (patch: Patch, fallback: (index: number) => string |
     acc.set(file, (acc.get(file) ?? "") + chunk)
     return acc
   }, new Map<string, string>())
+
+/** Assemble streamed Git output one file at a time, preserving every character. */
+export function collectGitPatch() {
+  const files = new Map<string, string>()
+  const fragments: string[] = []
+  const marker = "\ndiff --git "
+  let tail = ""
+  const flush = () => {
+    if (fragments.length === 0) return
+    const text = fragments.join("")
+    fragments.length = 0
+    const file = fileFromPatchChunk(text)
+    if (file) files.set(file, (files.get(file) ?? "") + text)
+  }
+  return {
+    write(chunk: string) {
+      const text = tail + chunk
+      let start = 0
+      for (let index = text.indexOf(marker); index !== -1; index = text.indexOf(marker, start)) {
+        fragments.push(text.slice(start, index + 1))
+        flush()
+        start = index + 1
+      }
+      // Keep only enough lookbehind to recognize a header split between reads.
+      const end = Math.max(start, text.length - marker.length + 1)
+      if (end > start) fragments.push(text.slice(start, end))
+      tail = text.slice(end)
+    },
+    end() {
+      if (tail) fragments.push(tail)
+      tail = ""
+      flush()
+      return files
+    },
+  }
+}
