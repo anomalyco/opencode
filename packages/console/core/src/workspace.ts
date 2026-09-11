@@ -97,6 +97,28 @@ export namespace Workspace {
     },
   )
 
+  export const block = fn(
+    z.object({
+      workspaceID: Identifier.schema("workspace"),
+    }),
+    async (input) => {
+      await Database.use(async (tx) => {
+        const result = await tx
+          .update(WorkspaceTable)
+          .set({ is_blocked: true })
+          .where(eq(WorkspaceTable.id, input.workspaceID))
+        // MySQL reports 0 affected rows for a no-op update, so an already-blocked
+        // workspace lands here too. Distinguish it from a missing one.
+        if (result.rowsAffected === 1) return
+        const matches = await tx
+          .select({ id: WorkspaceTable.id })
+          .from(WorkspaceTable)
+          .where(eq(WorkspaceTable.id, input.workspaceID))
+        if (matches.length === 0) throw new Error("Workspace not found")
+      })
+    },
+  )
+
   export const unblock = fn(
     z.object({
       workspaceID: Identifier.schema("workspace"),
