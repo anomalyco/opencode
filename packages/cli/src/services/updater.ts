@@ -109,7 +109,12 @@ const make = Effect.gen(function* () {
     )
     if (path.resolve(process.execPath) === path.resolve(binary)) return "curl"
     const executable = yield* fs.realPath(process.execPath).pipe(Effect.orElseSucceed(() => process.execPath))
-    if (executable.includes(`${path.sep}Cellar${path.sep}opencode-v2${path.sep}`)) return "brew"
+    if (
+      ["opencode-beta", "opencode-v2"].some((name) =>
+        executable.includes(`${path.sep}Cellar${path.sep}${name}${path.sep}`),
+      )
+    )
+      return "brew"
     if (!installedPackage) return
 
     const checks: ReadonlyArray<{ method: Method; command: string[] }> = [

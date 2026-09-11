@@ -17,6 +17,8 @@ const dir = fileURLToPath(new URL("..", import.meta.url))
 const root = path.resolve(process.env.OPENCODE_CLI_DIST ?? path.join(dir, "dist"))
 const outdir = path.join(root, "homebrew-tap")
 const dryRun = process.argv.includes("--dry-run")
+const name = Script.channel === "beta" ? "opencode-beta" : "opencode-v2"
+const formulaClass = Script.channel === "beta" ? "OpencodeBeta" : "OpencodeV2"
 
 const targets = await Promise.all(
   [
@@ -58,13 +60,13 @@ const linuxArm = target("linux-arm64")
 const linuxIntel = target("linux-x64-baseline")
 
 await Bun.write(
-  path.join(outdir, "opencode-v2.rb"),
+  path.join(outdir, `${name}.rb`),
   [
     "# typed: false",
     "# frozen_string_literal: true",
     "",
-    "class OpencodeV2 < Formula",
-    '  desc "OpenCode V2 - the AI coding agent for the terminal"',
+    `class ${formulaClass} < Formula`,
+    `  desc "OpenCode V2${Script.channel === "beta" ? " beta" : ""} - the AI coding agent for the terminal"`,
     '  homepage "https://github.com/anomalyco/opencode"',
     `  version "${Script.version}"`,
     '  license "MIT"',
@@ -98,12 +100,12 @@ await Bun.write(
     "",
   ].join("\n"),
 )
-console.log(`Prepared opencode-v2 ${Script.version} in ${outdir}`)
+console.log(`Prepared ${name} ${Script.version} in ${outdir}`)
 if (dryRun) process.exit(0)
 
-await $`git add opencode-v2.rb`.cwd(outdir)
+await $`git add ${name + ".rb"}`.cwd(outdir)
 if ((await $`git diff --cached --quiet`.cwd(outdir).nothrow()).exitCode !== 0) {
-  await $`git commit -m ${`chore: update opencode-v2 to ${Script.version}`}`.cwd(outdir)
+  await $`git commit -m ${`chore: update ${name} to ${Script.version}`}`.cwd(outdir)
   await $`git push origin master`.cwd(outdir)
 }
 await UpdateArtifact.publish({
@@ -111,5 +113,5 @@ await UpdateArtifact.publish({
   name: "cli",
   distribution: "homebrew",
   version: Script.version,
-  metadata: { package: "anomalyco/tap/opencode-v2" },
+  metadata: { package: `anomalyco/tap/${name}` },
 })
