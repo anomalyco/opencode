@@ -3,7 +3,7 @@ import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { Auth } from "../route/auth.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
 import type { RouteDefaultsInput } from "../route/client.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 
 export type AnthropicOptionsInput = AnthropicMessages.OptionsInput
 export type AnthropicProviderOptionsInput = AnthropicMessages.ProviderOptionsInput
@@ -36,8 +36,12 @@ const auth = (input: ProviderAuthOption<"optional">) => {
 }
 
 export const configure = (input: Config) => {
-  if (!input.baseURL) throw new Error("Anthropic-compatible providers require a baseURL")
   const provider = input.provider ?? "anthropic-compatible"
+  if (!input.baseURL)
+    throw new ProviderConfigurationError({
+      provider: ProviderID.make(provider),
+      message: "Anthropic-compatible providers require a baseURL",
+    })
   const { provider: _, baseURL, apiKey: _apiKey, auth: _auth, ...rest } = input
   const route = AnthropicMessages.route.with({
     ...rest,
@@ -62,7 +66,10 @@ export const model: ProviderPackage.Definition<Settings, AnthropicMessages.Provi
   { apiKey, authToken, baseURL, body, headers, provider, ...providerOptions },
 ) => {
   if (apiKey !== undefined && authToken !== undefined)
-    throw new Error("Anthropic-compatible apiKey cannot be combined with authToken")
+    throw new ProviderConfigurationError({
+      provider: ProviderID.make(provider ?? id),
+      message: "Anthropic-compatible apiKey cannot be combined with authToken",
+    })
   return configure({
     ...(authToken === undefined ? { apiKey: apiKey } : { auth: Auth.bearer(authToken) }),
     baseURL,

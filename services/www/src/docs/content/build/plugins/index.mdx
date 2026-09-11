@@ -1222,7 +1222,7 @@ differently:
 
 ```ts
 await ctx.session.hook("context", (event) => {
-  event.system.push({ text: "Keep the review focused on correctness." })
+  event.system.push({ type: "text", text: "Keep the review focused on correctness." })
   delete event.tools.write
   event.options.temperature = 0.2
   event.options.maxTokens = 8_000

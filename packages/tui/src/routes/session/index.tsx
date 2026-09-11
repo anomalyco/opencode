@@ -110,6 +110,7 @@ import { isRecord } from "../../util/record"
 import { createHistoryPrepend } from "./history"
 import { context, use, type PendingAction } from "./render-context"
 import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, reasoningContent, TextPart } from "./message-parts"
+import { groupRefs } from "./grouping/session"
 export { InlineToolRow } from "./message-parts"
 
 addDefaultParsers(parsers.parsers)
@@ -1442,12 +1443,14 @@ function SessionRowView(props: SessionRowViewProps) {
           {(row) => <SessionPartView partRef={row().ref} message={props.message} />}
         </Match>
         <Match when={props.row.type === "group" && props.row.kind === "reasoning" ? props.row : undefined}>
-          {(row) => <SessionReasoningGroupView refs={row().refs} completed={row().completed} message={props.message} />}
+          {(row) => (
+            <SessionReasoningGroupView refs={groupRefs(row())} completed={row().completed} message={props.message} />
+          )}
         </Match>
         <Match when={props.row.type === "group" && props.row.kind === "exploration" ? props.row : undefined}>
           {(row) => (
             <SessionGroupView
-              refs={row().refs}
+              refs={groupRefs(row())}
               pending={row().pending}
               completed={row().completed}
               message={props.message}

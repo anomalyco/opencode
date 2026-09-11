@@ -7,6 +7,7 @@ import type { DataValue, Diagnostic, ResolvedExecutionLimits, Result } from "../
 import { toData } from "../data.js"
 import { ToolRuntime } from "../tool-runtime.js"
 import { normalizeError } from "./errors.js"
+import type { Host } from "./globals.js"
 import { InterpreterRuntimeError } from "./model.js"
 import { PromiseRuntime } from "./promises.js"
 import { Runtime } from "./runtime.js"
@@ -16,6 +17,7 @@ export const executeProgram = <R>(
   prepared: ToolRuntime.Prepared<R>,
   limits: ResolvedExecutionLimits,
   hooks: ToolRuntime.ToolCallHooks<R>,
+  extraGlobals?: (host: Host<R>) => ReadonlyArray<readonly [string, unknown]>,
 ): Effect.Effect<Result, never, R> => {
   if (code.trim().length === 0) {
     return Effect.succeed({
@@ -39,7 +41,14 @@ export const executeProgram = <R>(
         Effect.gen(function* () {
           const program = parseProgram(code)
           const promises = new PromiseRuntime<R>(scope)
-          const value = yield* new Runtime<R>(tools.execute, tools.search, tools.keys, promises, logs).run(program)
+          const value = yield* new Runtime<R>(
+            tools.execute,
+            tools.search,
+            tools.keys,
+            promises,
+            logs,
+            extraGlobals,
+          ).run(program)
           const result = toData(value, "Execution result", "result") as DataValue
           returned = { value: result, promises }
           const warnings = yield* promises.interrupt()

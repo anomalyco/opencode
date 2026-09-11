@@ -6,7 +6,7 @@ import { Auth } from "../route/auth.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
-import { ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 
 export interface GeminiOptionsInput extends Gemini.OptionsInput {
@@ -93,7 +93,10 @@ const configuredRoute = (input: Config, modelID: string | ModelID) => {
   const apiKey = GoogleVertexShared.apiKey(input)
   const endpointModel = String(modelID).startsWith("endpoints/")
   if (apiKey !== undefined && endpointModel)
-    throw new Error("Google Vertex tuned models do not support Express Mode API keys")
+    throw new ProviderConfigurationError({
+      provider: id,
+      message: "Google Vertex tuned models do not support Express Mode API keys",
+    })
   const location = GoogleVertexShared.location(inputLocation, "us-central1")
   const project = GoogleVertexShared.project(inputProject)
   const endpoint =
@@ -126,7 +129,10 @@ export const model: ProviderPackage.Definition<Settings, GeminiProviderOptionsIn
   { accessToken, apiKey, baseURL, body, headers, location, project, ...providerOptions },
 ) => {
   if (apiKey !== undefined && accessToken !== undefined)
-    throw new Error("Google Vertex apiKey cannot be combined with accessToken or auth")
+    throw new ProviderConfigurationError({
+      provider: id,
+      message: "Google Vertex apiKey cannot be combined with accessToken or auth",
+    })
   return configure({
     ...(apiKey === undefined ? { accessToken: accessToken } : { apiKey: apiKey }),
     baseURL,

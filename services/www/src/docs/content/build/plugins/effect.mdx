@@ -1099,7 +1099,7 @@ effect: (ctx) =>
     const session = ctx.session
     yield* session.hook("context", (event) =>
       Effect.sync(() => {
-        event.system.push({ text: "Keep the review focused on correctness." })
+        event.system.push({ type: "text", text: "Keep the review focused on correctness." })
         delete event.tools.write
       }),
     )

@@ -2,7 +2,7 @@ import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
@@ -37,7 +37,8 @@ const route = Route.make({
 export const routes = [route]
 
 const configuredRoute = (input: Config) => {
-  if ("apiKey" in input && input.apiKey !== undefined) throw new Error("Google Vertex Chat does not support API keys")
+  if ("apiKey" in input && input.apiKey !== undefined)
+    throw new ProviderConfigurationError({ provider: id, message: "Google Vertex Chat does not support API keys" })
   const {
     accessToken: _accessToken,
     auth: _auth,
@@ -77,7 +78,8 @@ export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsIn
   modelID,
   { accessToken, apiKey, baseURL, body, headers, location, project, ...providerOptions },
 ) => {
-  if (apiKey !== undefined) throw new Error("Google Vertex Chat does not support API keys")
+  if (apiKey !== undefined)
+    throw new ProviderConfigurationError({ provider: id, message: "Google Vertex Chat does not support API keys" })
   return configure({
     accessToken,
     baseURL,

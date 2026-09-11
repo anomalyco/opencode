@@ -9,7 +9,8 @@ standard-library surface that programs can use today, plus concrete gaps that ma
 - Intentional boundaries are not listed as compatibility work.
 
 When behavior changes, update this file and the tests in the same change. The implementation and tests remain the
-ultimate source of truth.
+ultimate source of truth. Upstream test262 files run verbatim from `test/test262`; a failing file is listed in
+`test/test262/skipped.txt` and its gap is an unchecked item here (see `test/test262/README.md`).
 
 ## Source and execution model
 
@@ -25,6 +26,10 @@ ultimate source of truth.
 - [x] The global `search(...)` built-in: synchronous tool discovery that counts as an admitted tool call and is
       shadowable by program declarations like other globals.
 - [x] Cooperative timeout, an optional total tool-call limit, output bounding, and unrestricted tool-call concurrency.
+- [ ] Strict-mode early errors: duplicate parameter names, `yield` as an identifier, and a trailing comma after a
+      rest parameter are accepted unless the program itself begins with `"use strict"`.
+- [ ] Valid JavaScript rejected by TypeScript transpilation before interpretation, such as `in` inside a destructuring
+      default in a `for...of` head and Unicode-escaped keywords.
 
 ## Values and literals
 
@@ -64,6 +69,11 @@ ultimate source of truth.
 - [x] Array binding and assignment destructuring from strings, Maps, Sets, URLSearchParams, custom synchronous
       iterators, and synchronous generators, including stepwise elisions/rest and `IteratorClose` on early completion
       or binding/default failure.
+- [ ] Object destructuring from primitives follows ToObject (`const { length } = "abc"`, `const {} = 1`); non-object
+      sources are rejected.
+- [ ] Destructuring a key that member access resolves through the owning built-in, such as
+      `const { constructor } = error`, reads `undefined`.
+- [ ] Member expressions as `for...in` targets (`for (x.y in obj)`).
 
 ## Statements and control flow
 
@@ -111,6 +121,12 @@ ultimate source of truth.
 - [ ] User-defined constructor calls.
 - [ ] `Function.prototype.call`, `apply`, and `bind` for CodeMode functions.
 - [ ] Classes and private fields.
+- [ ] `name` and `length` properties of functions, including names inferred from bindings and destructuring defaults.
+- [ ] A named function expression's name is not bound inside its own body.
+- [ ] Redeclaring a function in the same scope is rejected; in JavaScript the last declaration wins.
+- [ ] A line terminator between `async function` and the function name.
+- [ ] Async generator functions evaluate parameter defaults and destructuring at the first `next()` rather than at the
+      call, so their errors are not thrown synchronously.
 - [x] Synchronous and async generator declarations/expressions, `yield`, and `yield*`, including lazy bodies,
       `next(value)`, `return(value)`, `throw(value)`, exhaustion, promise adoption, async request ordering,
       `try`/`catch`/`finally`, and sync/async iterator symbols. Async `yield*` awaits values while adapting a sync
@@ -154,6 +170,8 @@ ultimate source of truth.
 - [x] Plain, arithmetic, bitwise, and logical assignment operators.
 - [x] Property deletion on plain data objects and arrays, including computed and optional forms; deleting an array index
       creates a hole without changing its length.
+- [ ] Operators, `switch` discriminants, and coercion helpers such as `String` and `isNaN` applied to functions and
+      namespaces; JavaScript coerces them, the interpreter rejects non-data operands.
 
 ## Promises and tools
 
@@ -226,6 +244,7 @@ ultimate source of truth.
 - [x] `Object.is` for supported data values.
 - [x] `Object.groupBy` over finite collections and custom synchronous iterators/generators, with string-key coercion
       and null-prototype results.
+- [ ] `Object.prototype` methods on values: `toString`, `toLocaleString`, `valueOf`, and `hasOwnProperty`.
 
 ## Arrays
 
@@ -249,6 +268,13 @@ ultimate source of truth.
       `1`; arbitrary array-property assignment remains unsupported.
 - [x] `Array.prototype.sort` preserves trailing holes, while `toSorted` densifies holes into `undefined` elements,
       like JavaScript.
+- [ ] Assigning `length` to truncate or extend an array.
+- [ ] Non-index own properties on arrays (`arr.foo = 1`, `arr.constructor = null`).
+- [ ] Argument coercion for `indexOf`, `lastIndexOf`, `includes`, `fill`, `flat`, `copyWithin`, and the `join`
+      separator: JavaScript applies ToIntegerOrInfinity/ToString (including `valueOf`, strings, and `undefined`), the
+      interpreter requires numbers and strings; `includes()`/`indexOf()` with no argument should search for
+      `undefined`.
+- [ ] Iterator objects from `keys`, `values`, and `entries` with a live `next()`.
 
 ## Strings
 
@@ -391,3 +417,5 @@ ultimate source of truth.
 - [x] Caught errors do not distinguish user throws, interpreter failures, and tool failures; a program sees one
       Error-shaped value with `name` and `message` in `catch`, rejection handlers, and `Promise.allSettled` reasons.
       This is deliberate: the program should handle a failure the same way regardless of where it originated.
+- [ ] Failures raised by the interpreter itself carry the generic `Error` name where JavaScript throws a `TypeError`,
+      `RangeError`, or `ReferenceError`, so `e instanceof TypeError` and `e.constructor === TypeError` are false.

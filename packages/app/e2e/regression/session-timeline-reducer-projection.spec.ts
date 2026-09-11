@@ -115,7 +115,7 @@ test("combines follow-up patches into one three-file stack inside Used", async (
   })
   const group = page.locator('[data-component="collapsed-tool-group"]')
   await group.getByRole("button", { name: "Used 2 Shell, Patch", exact: true }).click()
-  await expect(group.getByText("2 files", { exact: true })).toBeVisible()
+  await expect(group.locator('[data-slot="apply-patch-filename"]')).toHaveText(["a.ts", "b.ts"])
   await timeline.send(
     partUpdated(
       toolPart(
@@ -134,7 +134,6 @@ test("combines follow-up patches into one three-file stack inside Used", async (
     "true",
   )
   await expect(group.locator('[data-component="apply-patch-tool"]')).toHaveCount(1)
-  await expect(group.getByText("3 files", { exact: true })).toBeVisible()
   await expect(group.locator('[data-slot="apply-patch-filename"]')).toHaveText(["a.ts", "b.ts", "c.ts"])
 })
 

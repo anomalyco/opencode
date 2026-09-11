@@ -1458,7 +1458,13 @@ describe("Bedrock Converse route", () => {
         expect(headers.get("authorization")).toContain("Credential=AKIACHAINEXAMPLE/")
         expect(headers.get("authorization")).toContain("/ap-southeast-2/bedrock/aws4_request")
       }
-      expect(() => AmazonBedrock.configure({ auth: "sigv4", apiKey: "k" })).toThrow("does not accept apiKey")
+      expect(() => AmazonBedrock.configure({ auth: "sigv4", apiKey: "k" })).toThrow(
+        expect.objectContaining({
+          _tag: "ProviderConfiguration",
+          provider: "amazon-bedrock",
+          message: "Amazon Bedrock SigV4 auth does not accept apiKey",
+        }),
+      )
     }).pipe(
       withProcessEnv({
         ...noAmbientAWS,

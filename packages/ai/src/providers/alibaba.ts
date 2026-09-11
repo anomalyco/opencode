@@ -7,7 +7,7 @@ import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
-import { ProviderID, ToolDefinition, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, ToolDefinition, type ModelID } from "../schema/index.js"
 
 export const id = ProviderID.make("alibaba")
 
@@ -83,8 +83,13 @@ export const configure = (input: Config) => {
         ? hosts.get(region)
         : `${workspaceID}.${region}.maas.aliyuncs.com`
   if (baseURL === undefined) {
-    if (region === undefined) throw new Error("Alibaba requires region or baseURL")
-    if (host === undefined) throw new Error(`Alibaba region ${region} requires workspaceID or baseURL`)
+    if (region === undefined)
+      throw new ProviderConfigurationError({ provider: id, message: "Alibaba requires region or baseURL" })
+    if (host === undefined)
+      throw new ProviderConfigurationError({
+        provider: id,
+        message: `Alibaba region ${region} requires workspaceID or baseURL`,
+      })
   }
   const opts = { ...rest, auth: AuthOptions.bearer(input, ["DASHSCOPE_API_KEY", "ALIBABA_API_KEY"]) }
   const common = { ...opts, endpoint: { baseURL: baseURL ?? `https://${host}/compatible-mode/v1` } }

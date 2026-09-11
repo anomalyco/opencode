@@ -597,7 +597,7 @@ function groupContent(
   detail?: TimelineDetail,
 ): PartGroup[] {
   const groups: PartGroup[] = []
-  let adjacent: { type: "context" | "patch" | "edit"; refs: PartRef[]; tools: boolean } | undefined
+  let adjacent: { type: "context" | "file"; refs: PartRef[]; tools: boolean } | undefined
   const flush = () => {
     const current = adjacent
     const first = current?.refs[0]
@@ -665,8 +665,7 @@ function toolGroupType(
     const category = timelineCategory(content)!
     if (detail[category].placement === "grouped") return "context"
     if (currentToolFailed(content)) return undefined
-    if (content.name === "patch") return "patch"
-    if (content.name === "edit") return "edit"
+    if (content.name === "patch" || content.name === "edit" || content.name === "write") return "file"
     return undefined
   }
   if (content.name === "question" || currentToolHasLoadedFiles(content)) return undefined
@@ -684,8 +683,7 @@ function toolGroupType(
   )
     return undefined
   if (currentContentDefaultOpen(content, shellExpanded, editExpanded) !== true) return "context"
-  if (content.name === "patch") return "patch"
-  if (content.name === "edit") return "edit"
+  if (content.name === "patch" || content.name === "edit" || content.name === "write") return "file"
   return undefined
 }
 

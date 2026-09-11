@@ -5,7 +5,7 @@ import { Auth } from "../route/auth.js"
 import type { AtLeastOne, ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("cloudflare-ai-gateway")
@@ -35,7 +35,11 @@ export type Settings = ProviderPackage.Settings &
 
 export const baseURL = (input: GatewayURL) => {
   if (input.baseURL) return input.baseURL
-  if (!input.accountId) throw new Error("CloudflareAIGateway.configure requires accountId unless baseURL is supplied")
+  if (!input.accountId)
+    throw new ProviderConfigurationError({
+      provider: id,
+      message: "CloudflareAIGateway.configure requires accountId unless baseURL is supplied",
+    })
   return `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(input.accountId)}/${encodeURIComponent(input.gatewayId?.trim() || "default")}/compat`
 }
 
