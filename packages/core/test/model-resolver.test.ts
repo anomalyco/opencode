@@ -73,6 +73,66 @@ function withConfigEnv<A, E, R>(env: Record<string, string>, effect: () => Effec
 }
 
 describe("ModelResolver", () => {
+  it.effect("resolves Workers AI account configuration without an environment variable", () =>
+    withEnv({ CLOUDFLARE_ACCOUNT_ID: undefined }, () =>
+      Effect.gen(function* () {
+        for (const credential of [
+          Credential.Key.make({ type: "key", key: "test-key", configuration: { accountId: "account" } }),
+          Credential.Key.make({ type: "key", key: "test-key", metadata: { accountId: "account" } }),
+        ]) {
+          const resolved = yield* ModelResolver.fromCatalogModel(
+            model(Provider.aisdk("@ai-sdk/openai-compatible"), {
+              providerID: Provider.ID.make("cloudflare-workers-ai"),
+              modelID: "@cf/deepseek-ai/deepseek-v4-flash-0731",
+              settings: { baseURL: "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1" },
+            }),
+            credential,
+          )
+          expect(resolved.route.endpoint.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/account/ai/v1")
+          expect(resolved.route.defaults.providerOptions).not.toHaveProperty("accountId")
+        }
+      }),
+    ),
+  )
+
+  it.effect("resolves Workers AI settings for an alias and preserves explicit endpoints", () =>
+    withEnv({ CLOUDFLARE_ACCOUNT_ID: undefined }, () =>
+      Effect.gen(function* () {
+        for (const baseURL of [
+          "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1",
+          "https://proxy.example/v1",
+        ]) {
+          const resolved = yield* ModelResolver.fromCatalogModel(
+            model(Provider.aisdk("@ai-sdk/openai-compatible"), {
+              providerID: Provider.ID.make("workers-alias"),
+              canonical: Provider.ID.make("cloudflare-workers-ai"),
+              settings: { baseURL, accountId: "account" },
+            }),
+          )
+          expect(resolved.route.endpoint.baseURL).toBe(baseURL.replace("${CLOUDFLARE_ACCOUNT_ID}", "account"))
+          expect(resolved.route.defaults.providerOptions).not.toHaveProperty("accountId")
+        }
+      }),
+    ),
+  )
+
+  it.effect("preserves Workers AI environment account precedence", () =>
+    withEnv({ CLOUDFLARE_ACCOUNT_ID: "env-account" }, () =>
+      Effect.gen(function* () {
+        const resolved = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/openai-compatible"), {
+            providerID: Provider.ID.make("cloudflare-workers-ai"),
+            settings: {
+              baseURL: "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1",
+              accountId: "configured-account",
+            },
+          }),
+        )
+        expect(resolved.route.endpoint.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/env-account/ai/v1")
+      }),
+    ),
+  )
+
   it.effect("constructs native Azure requests with deployment IDs and projected resource URLs", () =>
     Effect.gen(function* () {
       const responses = yield* ModelResolver.fromCatalogModel(
