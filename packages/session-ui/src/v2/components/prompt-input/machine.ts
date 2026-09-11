@@ -235,7 +235,7 @@ function populated(persisted: PromptInputV2PersistedState) {
   return (
     !!promptText(persisted).trim() ||
     persisted.context.items.length > 0 ||
-    persisted.prompt.some((part) => part.type === "file" || part.type === "image")
+    persisted.prompt.some((part) => part.type === "file" || part.type === "image" || part.type === "text-attachment")
   )
 }
 

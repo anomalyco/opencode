@@ -23,6 +23,7 @@ import {
 import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
 import { createDesktopDraftStore } from "./draft-store"
+import { createDraftAttachmentMaterializer } from "./draft-attachments"
 import { nativeT } from "./native-translations"
 
 const pickerFilters = (ext?: string[]) => {
@@ -56,6 +57,10 @@ type Deps = {
 
 export function registerIpcHandlers(deps: Deps) {
   const drafts = createDesktopDraftStore(join(app.getPath("userData"), "drafts.sqlite"))
+  const draftAttachments = createDraftAttachmentMaterializer({
+    directory: join(app.getPath("userData"), "prompt-attachments"),
+    getBlob: drafts.getBlob,
+  })
   const updaterSubscriptions = createUpdaterSubscriptions()
   app.once("will-quit", updaterSubscriptions.clear)
   app.on("before-quit", () => drafts.flush())
@@ -148,6 +153,8 @@ export function registerIpcHandlers(deps: Deps) {
     const data = drafts.getBlob(id)
     return data ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : null
   })
+  ipcMain.handle("draft-blob-materialize", (_event, id: string) => draftAttachments.materialize(id))
+  ipcMain.handle("draft-blob-cleanup", (_event, id: string) => draftAttachments.cleanup(id))
 
   ipcMain.handle(
     "open-directory-picker",

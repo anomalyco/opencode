@@ -86,7 +86,9 @@ export function createPromptInputV2Store(input: PromptInputV2StoreInput) {
       setStore()("prompt", (prompt) => [...prompt, attachment])
     },
     removeAttachment(id: string) {
-      setStore()("prompt", (parts) => parts.filter((part) => part.type !== "image" || part.id !== id))
+      setStore()("prompt", (parts) =>
+        parts.filter((part) => (part.type !== "image" && part.type !== "text-attachment") || part.id !== id),
+      )
     },
   }
 }
@@ -97,7 +99,7 @@ function insertText(prompt: PromptInputV2Prompt, cursor: number, content: string
   let position = 0
   let inserted = false
   const parts = prompt.flatMap<PromptInputV2Prompt[number]>((part) => {
-    if (part.type === "image") return [part]
+    if (part.type === "image" || part.type === "text-attachment") return [part]
     const start = position
     position += part.content.length
     if (inserted) return [part]
@@ -122,7 +124,7 @@ function insertMention(
 ): PromptInputV2Prompt {
   let position = 0
   const parts = prompt.flatMap<PromptInputV2Prompt[number]>((part) => {
-    if (part.type === "image") return [part]
+    if (part.type === "image" || part.type === "text-attachment") return [part]
     const partStart = position
     position += part.content.length
     if (part.type !== "text" || start < partStart || end > position) return [part]
@@ -140,7 +142,7 @@ function insertMention(
 function withOffsets(prompt: PromptInputV2Prompt): PromptInputV2Prompt {
   let offset = 0
   return prompt.map((part) => {
-    if (part.type === "image") return part
+    if (part.type === "image" || part.type === "text-attachment") return part
     const next = { ...part, start: offset, end: offset + part.content.length }
     offset = next.end
     return next

@@ -25,7 +25,7 @@ export type PromptInputV2AgentPart = PromptInputV2PartBase & {
   name: string
 }
 
-export type PromptInputV2Attachment = {
+export type PromptInputV2ImageAttachment = {
   type: "image"
   id: string
   filename: string
@@ -33,6 +33,18 @@ export type PromptInputV2Attachment = {
   mime: string
   blob: { id: string; url: string }
 }
+
+export type PromptInputV2TextAttachment = {
+  type: "text-attachment"
+  id: string
+  filename: string
+  mime: "text/plain"
+  size: number
+  lineCount: number
+  blob: { id: string; url: string }
+}
+
+export type PromptInputV2Attachment = PromptInputV2ImageAttachment | PromptInputV2TextAttachment
 
 export type PromptInputV2Prompt = (
   | PromptInputV2TextPart

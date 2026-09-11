@@ -69,6 +69,8 @@ export type ElectronAPI = {
   draftDelete: (key: string) => Promise<void>
   draftBlobPut: (data: ArrayBuffer) => Promise<string>
   draftBlobGet: (id: string) => Promise<ArrayBuffer | null>
+  draftBlobMaterialize: (id: string) => Promise<{ id: string; path: string }>
+  draftBlobCleanup: (id: string) => Promise<void>
 
   getWindowID: () => Promise<string>
   onMenuCommand: (cb: (id: string) => void) => () => void

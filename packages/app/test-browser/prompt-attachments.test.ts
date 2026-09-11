@@ -4,7 +4,8 @@ import { createStore } from "solid-js/store"
 import { createPromptAttachmentsCore } from "@/components/prompt-input/attachments"
 import { createPromptState } from "@/context/prompt"
 import { createPromptInputV2Attachments } from "../../session-ui/src/v2/components/prompt-input/attachments"
-import type { PromptInputV2Prompt } from "../../session-ui/src/v2/components/prompt-input/types"
+import { createPromptInputV2Controller } from "../../session-ui/src/v2/components/prompt-input/interaction"
+import type { PromptInputV2PersistedState, PromptInputV2Prompt } from "../../session-ui/src/v2/components/prompt-input/types"
 
 describe("prompt attachment session ownership", () => {
   test("adds an asynchronously read image to the session where the read started", async () => {
@@ -167,6 +168,107 @@ test("rejects desktop duplicates and keeps changed files in the V2 prompt store"
     expect(state.prompt).toHaveLength(4)
     expect(duplicates).toHaveLength(3)
     dispose()
+  })
+})
+
+test("stores a large text paste as a compact V2 text attachment", async () => {
+  await createRoot(async (dispose) => {
+    const [state, setState] = createStore({ prompt: [] as PromptInputV2Prompt })
+    const stored: File[] = []
+    const attachments = createPromptInputV2Attachments({
+      capture: () => ({
+        current: () => state.prompt,
+        cursor: () => 0,
+        set: (prompt) => setState("prompt", prompt),
+      }),
+      editor: () => document.createElement("div"),
+      focusEditor: () => undefined,
+      addPart: () => false,
+      setDraggingType: () => undefined,
+      directory: () => "/",
+      isDialogActive: () => false,
+      warn: () => undefined,
+      duplicate: () => undefined,
+      onError: () => undefined,
+      store: async (file) => {
+        stored.push(file)
+        return { id: "blob-1", url: "blob:blob-1" }
+      },
+    })
+    const text = Array.from({ length: 1400 }, () => "1".repeat(120)).join("\n")
+
+    expect(await attachments.addTextAttachment(text)).toBe(true)
+    expect(stored).toHaveLength(1)
+    expect(await stored[0]!.text()).toBe(text)
+    expect(state.prompt).toEqual([
+      expect.objectContaining({
+        type: "text-attachment",
+        mime: "text/plain",
+        size: text.length,
+        lineCount: 1400,
+        blob: { id: "blob-1", url: "blob:blob-1" },
+      }),
+    ])
+    dispose()
+  })
+})
+
+test("rejects the large-paste regression fixture before editor insertion", () => {
+  createRoot((dispose) => {
+    const [state, setState] = createStore<PromptInputV2PersistedState>({
+      prompt: [{ type: "text" as const, content: "", start: 0, end: 0 }],
+      cursor: 0,
+      context: { items: [] },
+    })
+    let notified = 0
+    let prevented = false
+    let execCommandCalls = 0
+    const editor = document.createElement("div")
+    editor.textContent = "existing"
+    document.body.append(editor)
+    const descriptor = Object.getOwnPropertyDescriptor(document, "execCommand")
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: () => {
+        execCommandCalls += 1
+        return true
+      },
+    })
+    const controller = createPromptInputV2Controller({
+      store: [state, setState],
+      commands: () => [],
+      context: () => [],
+      searchContextFiles: () => [],
+      view: {
+        submit: { stopping: () => false, onSubmit: () => undefined, onStop: () => undefined },
+        onLargePaste: () => {
+          notified += 1
+        },
+      },
+    })
+    const text = Array.from({ length: 1400 }, () => "1".repeat(120)).join("\n")
+    const event = {
+      clipboardData: { items: [], getData: () => text },
+      preventDefault: () => {
+        prevented = true
+      },
+    } as unknown as ClipboardEvent
+
+    try {
+      controller.setEditor(editor)
+      controller.onPaste(event)
+
+      expect(prevented).toBe(true)
+      expect(notified).toBe(1)
+      expect(execCommandCalls).toBe(0)
+      expect(editor.textContent).toBe("existing")
+      expect(controller.value()).toBe("")
+    } finally {
+      if (descriptor) Object.defineProperty(document, "execCommand", descriptor)
+      else Reflect.deleteProperty(document, "execCommand")
+      editor.remove()
+      dispose()
+    }
   })
 })
 
