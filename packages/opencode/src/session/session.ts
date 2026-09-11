@@ -32,6 +32,7 @@ import { MessageV2 } from "./message-v2"
 import type { InstanceContext } from "../project/instance-context"
 import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
+import { Project } from "@/project/project"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { SessionID, MessageID, PartID } from "./schema"
@@ -486,7 +487,7 @@ export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" 
 const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service
+  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service | Project.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -495,6 +496,7 @@ const layer: Layer.Layer<
     const background = yield* BackgroundJob.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const projects = yield* Project.Service
 
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID
@@ -509,11 +511,25 @@ const layer: Layer.Layer<
       permission?: PermissionV1.Ruleset
     }) {
       const ctx = yield* InstanceState.context
+      // The instance context caches the project id resolved when the instance
+      // was loaded. Another opencode process can rekey the project (a git
+      // remote change migrates the row and deletes the previous one), leaving
+      // this process with a deleted project id. Verify the row still exists and
+      // re-resolve the directory when it does not, so a new session can never
+      // reference a missing project.
+      const projectID = (yield* db
+        .select({ id: ProjectTable.id })
+        .from(ProjectTable)
+        .where(eq(ProjectTable.id, ctx.project.id))
+        .get()
+        .pipe(Effect.orDie))
+        ? ctx.project.id
+        : (yield* projects.fromDirectory(input.directory)).project.id
       const result: Info = {
         id: SessionID.descending(input.id),
         slug: Slug.create(),
         version: InstallationVersion,
-        projectID: ctx.project.id,
+        projectID,
         directory: input.directory,
         path: input.path,
         workspaceID: input.workspaceID,
@@ -1010,7 +1026,7 @@ function listByProject(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node],
+  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node, Project.node],
 })
 
 export * as Session from "./session"
