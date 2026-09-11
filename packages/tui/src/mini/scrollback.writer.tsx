@@ -6,7 +6,7 @@ import {
   type ScrollbackRenderContext,
   type ScrollbackWriter,
 } from "@opentui/core"
-import { Match, Switch, createMemo } from "solid-js"
+import { For, Match, Switch, createMemo } from "solid-js"
 import { entryBody, entryFlags } from "./entry.body"
 import { monoMarkdownRenderable, monoMarkdownTableOptions } from "./mono"
 import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
@@ -39,6 +39,7 @@ export function sameEntryGroup(left: StreamCommit | undefined, right: StreamComm
 }
 
 function entryLayout(commit: StreamCommit, body: RunEntryBody = entryBody(commit)): EntryLayout {
+  if (commit.image) return "block"
   if (commit.kind === "tool") {
     if (body.type === "structured" || body.type === "markdown") {
       return "block"
@@ -253,17 +254,22 @@ export function RunEntryContent(props: {
         </box>
       </Match>
       <Match when={markdown()}>
-        <markdown
-          ref={(renderable: MarkdownRenderable) => {
-            if (props.opts?.mono) monoMarkdownRenderable(renderable)
-          }}
-          width="100%"
-          syntaxStyle={syntax()}
-          streaming={streaming()}
-          content={markdown()!.content}
-          fg={color()}
-          tableOptions={props.opts?.mono ? monoMarkdownTableOptions : { widthMode: "content" }}
-        />
+        {/* Mono hooks mutate renderables, so toggling needs a fresh Markdown leaf. */}
+        <For each={[props.opts?.mono === true]}>
+          {(mono) => (
+            <markdown
+              ref={(renderable: MarkdownRenderable) => {
+                if (mono) monoMarkdownRenderable(renderable)
+              }}
+              width="100%"
+              syntaxStyle={syntax()}
+              streaming={streaming()}
+              content={markdown()!.content}
+              fg={color()}
+              tableOptions={mono ? monoMarkdownTableOptions : { widthMode: "content" }}
+            />
+          )}
+        </For>
       </Match>
     </Switch>
   )

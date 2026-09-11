@@ -1,10 +1,10 @@
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import { showToast } from "@/shell/notifications/toast"
 import { useParams } from "@solidjs/router"
-import { base64Encode } from "@opencode-ai/util/encode"
-import { getFilename } from "@opencode-ai/util/path"
+import { base64Encode } from "@opencode/util/encode"
+import { getFilename } from "@opencode/util/path"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useLayout } from "@/shell/state/layout"
@@ -212,7 +212,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           {
             location: { directory: sdk().directory },
             query,
-            type: dirs === "true" ? "directory" : "file",
+            type: dirs === "true" ? undefined : "file",
             limit: options?.limit,
           },
           { signal: options?.signal },

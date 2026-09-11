@@ -1,8 +1,8 @@
 import os from "os"
 import { App } from "../../app.js"
 import { Effect, Option, Schema } from "effect"
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Form } from "@opencode-ai/schema/form"
+import { define } from "@opencode/plugin/effect/plugin"
+import { Form } from "@opencode/schema/form"
 import { Provider } from "../../provider.js"
 import { iife } from "../../util/iife.js"
 import { configuredSettings } from "./configured.js"
@@ -39,8 +39,8 @@ export const CloudflareAIGatewayPlugin = define({
       if (gatewayId) return Form.Fields.make([accountIdForm])
       return Form.Fields.make([accountIdForm, gatewayIdForm])
     })
-    yield* ctx.integration.transform((draft) => {
-      draft.method.update({
+    yield* ctx.integration.transform((editor) => {
+      editor.method.update({
         integrationID: providerID,
         method: {
           type: "key",
@@ -58,10 +58,8 @@ export const CloudflareAIGatewayPlugin = define({
         const config = gatewayConfig(evt.options)
         if (!config) return
         const metadata = gatewayMetadata(evt.options)
-        const { createAiGateway } = yield* Effect.promise(() => import("ai-gateway-provider")).pipe(Effect.orDie)
-        const { createUnified } = yield* Effect.promise(() => import("ai-gateway-provider/providers/unified")).pipe(
-          Effect.orDie,
-        )
+        const { createAiGateway } = yield* Effect.promise(() => import("ai-gateway-provider"))
+        const { createUnified } = yield* Effect.promise(() => import("ai-gateway-provider/providers/unified"))
         const gateway = createAiGateway({
           accountId: config.accountId,
           gateway: config.gatewayId,

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/theme",
+  "name": "@opencode/theme",
   "version": "0.0.0",
   "type": "module",
   "license": "MIT",
@@ -21,6 +21,7 @@
   },
   "scripts": {
     "build": "bun run script/build.ts",
+    "test": "bun test --timeout 30000",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {

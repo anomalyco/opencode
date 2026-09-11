@@ -1,6 +1,7 @@
+import { sync, syncCall } from "../interpreter/host.js"
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
-import { isBlockedMember, type SafeObject } from "../tool-runtime.js"
-import { CodeModeRegExp } from "../values.js"
+import type { SafeObject } from "../data.js"
+import { Values } from "../values.js"
 import { coerceToNumber, coerceToString } from "./value.js"
 
 type MatchValue = Array<unknown> & {
@@ -14,8 +15,6 @@ type IndicesValue = Array<unknown> & {
 }
 
 export const regexpMethods = new Set(["test", "exec", "toString"])
-
-export const regexpStatics = new Set(["escape"])
 
 export const regexpProperties = new Set([
   "source",
@@ -31,16 +30,16 @@ export const regexpProperties = new Set([
   "dotAll",
 ])
 
-export const regexFailureReason = (error: unknown): string =>
+const regexFailureReason = (error: unknown): string =>
   (error instanceof Error ? error.message : String(error)).replace(/^Invalid regular expression:\s*/i, "")
 
-export const escapeRegexHint =
+const escapeRegexHint =
   'To match special characters like ( ) [ ] { } + * ? . literally, escape them with a backslash (e.g. "\\\\(") or test for them with String.includes instead.'
 
 export const toHostRegex = (arg: unknown, method: string, node: AstNode, extraFlags = ""): RegExp => {
   // Native parity: an undefined pattern behaves as an empty pattern.
   if (arg === undefined) return new RegExp("", extraFlags)
-  if (arg instanceof CodeModeRegExp) return arg.regex
+  if (arg instanceof Values.RegExp) return arg.regex
   if (typeof arg === "string") {
     try {
       return new RegExp(arg, extraFlags)
@@ -63,7 +62,7 @@ export const matchToValue = (match: RegExpMatchArray): Array<unknown> => {
   if (match.groups) {
     const groups: SafeObject = Object.create(null) as SafeObject
     for (const [key, group] of Object.entries(match.groups)) {
-      if (!isBlockedMember(key)) groups[key] = group
+      groups[key] = group
     }
     result.groups = groups
   }
@@ -71,16 +70,46 @@ export const matchToValue = (match: RegExpMatchArray): Array<unknown> => {
   return result
 }
 
-export const invokeRegExpStatic = (name: string, args: Array<unknown>, node: AstNode): string => {
-  if (name !== "escape") throw new InterpreterRuntimeError(`RegExp.${name} is not available.`, node)
-  if (typeof args[0] !== "string") {
-    throw new InterpreterRuntimeError("RegExp.escape expects a string.", node).as("TypeError")
+export const constructRegExp = (args: Array<unknown>, node: AstNode): Values.RegExp => {
+  const first = args[0]
+  const pattern = first instanceof Values.RegExp ? first.regex.source : first === undefined ? "" : coerceToString(first)
+  const flagsArg = args[1]
+  if (flagsArg !== undefined && typeof flagsArg !== "string") {
+    throw new InterpreterRuntimeError(
+      `RegExp flags must be a string of flag characters (e.g. "g", "gi"), not ${flagsArg === null ? "null" : typeof flagsArg}.`,
+      node,
+    ).as("SyntaxError")
   }
-  return RegExp.escape(args[0])
+  const flags = flagsArg ?? (first instanceof Values.RegExp ? first.regex.flags : "")
+  try {
+    return new Values.RegExp(pattern, flags)
+  } catch (error) {
+    const reason = regexFailureReason(error)
+    throw new InterpreterRuntimeError(
+      /flag/i.test(reason)
+        ? `new RegExp(...) received invalid flags ${JSON.stringify(flags)} (${reason}). Valid flags are d, g, i, m, s, u, v, and y.`
+        : `new RegExp(...) received ${JSON.stringify(pattern)}, which is not a valid regular expression pattern (${reason}). ${escapeRegexHint}`,
+      node,
+    ).as("SyntaxError")
+  }
 }
 
+// RegExp constructs identically with or without new, like JS.
+export const regexpGlobal = sync("RegExp", constructRegExp, {
+  construct: syncCall(constructRegExp),
+  instanceOf: (value) => value instanceof Values.RegExp,
+  members: {
+    escape: sync("RegExp.escape", (args, node) => {
+      if (typeof args[0] !== "string") {
+        throw new InterpreterRuntimeError("RegExp.escape expects a string.", node).as("TypeError")
+      }
+      return RegExp.escape(args[0])
+    }),
+  },
+})
+
 export const invokeRegExpMethod = (
-  value: CodeModeRegExp,
+  value: Values.RegExp,
   name: string,
   args: Array<unknown>,
   node: AstNode,
@@ -119,7 +148,7 @@ const indicesToValue = (indices: RegExpIndicesArray): IndicesValue => {
   if (indices.groups) {
     const groups: SafeObject = Object.create(null) as SafeObject
     for (const [key, range] of Object.entries(indices.groups)) {
-      if (!isBlockedMember(key)) groups[key] = range === undefined ? undefined : [...range]
+      groups[key] = range === undefined ? undefined : [...range]
     }
     result.groups = groups
     return result

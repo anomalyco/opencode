@@ -1,6 +1,6 @@
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
-import { OpenCode } from "@opencode-ai/client/promise"
-import { Service } from "@opencode-ai/client/effect/service"
+import { OpenCode } from "@opencode/client/promise"
+import { Service } from "@opencode/client/effect/service"
 import { Effect } from "effect"
 import { ACP } from "../../acp/agent"
 import { Commands } from "../commands"

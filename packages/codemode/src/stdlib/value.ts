@@ -1,3 +1,8 @@
+import { type HostFunction, sync, type SyncOptions } from "../interpreter/host.js"
+import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+import { type SafeObject, toProgram } from "../data.js"
+import { Values } from "../values.js"
+
 export const errorConstructors = new Set([
   "Error",
   "TypeError",
@@ -8,8 +13,6 @@ export const errorConstructors = new Set([
   "URIError",
   "AggregateError",
 ])
-
-export const valueConstructors = new Set(["Date", "RegExp", "Map", "Set", "URL", "URLSearchParams"])
 
 export const compoundOperators = new Set(["+=", "-=", "*=", "/=", "%=", "**=", "&=", "|=", "^=", "<<=", ">>=", ">>>="])
 
@@ -29,18 +32,16 @@ export const errorBrandName = (value: unknown): string | undefined =>
     ? ((value as Record<PropertyKey, unknown>)[ErrorBrand] as string | undefined)
     : undefined
 
-export const boundedData = (value: unknown, label: string): unknown => copyIn(value, label, true)
-
 export const coerceToString = (value: unknown): string => {
   if (value === null) return "null"
   if (value === undefined) return "undefined"
-  if (value instanceof CodeModeDate)
+  if (value instanceof Values.Date)
     return Number.isFinite(value.time) ? new Date(value.time).toISOString() : "Invalid Date"
-  if (value instanceof CodeModeRegExp) return `/${value.regex.source}/${value.regex.flags}`
-  if (value instanceof CodeModeMap) return "[object Map]"
-  if (value instanceof CodeModeSet) return "[object Set]"
-  if (value instanceof CodeModeURL) return value.url.href
-  if (value instanceof CodeModeURLSearchParams) return value.params.toString()
+  if (value instanceof Values.RegExp) return `/${value.regex.source}/${value.regex.flags}`
+  if (value instanceof Values.Map) return "[object Map]"
+  if (value instanceof Values.Set) return "[object Set]"
+  if (value instanceof Values.URL) return value.url.href
+  if (value instanceof Values.URLSearchParams) return value.params.toString()
   if (errorBrandName(value) !== undefined) {
     // Match Error.prototype.toString: "name: message", or just one when the other is empty.
     const error = value as { name?: unknown; message?: unknown }
@@ -59,56 +60,51 @@ export const coerceToString = (value: unknown): string => {
 }
 
 export const coerceToNumber = (value: unknown): number => {
-  if (value instanceof CodeModeDate) return value.time
-  if (isCodeModeValue(value)) return Number.NaN
+  if (value instanceof Values.Date) return value.time
+  if (Values.isValue(value)) return Number.NaN
   // Arrays coerce through our own string coercion: host Number(array) joins with host
   // ToPrimitive, which throws on the null-prototype objects the interpreter produces.
   if (Array.isArray(value)) return Number(coerceToString(value))
   return value !== null && typeof value === "object" ? Number.NaN : Number(value)
 }
 
-export const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node: AstNode): unknown => {
+type Coercion = "Number" | "String" | "Boolean" | "parseInt" | "parseFloat" | "isFinite" | "isNaN"
+
+const coerce = (name: Coercion, args: Array<unknown>, node: AstNode): unknown => {
   // Native: Number() is 0 and String() is "", unlike their undefined-argument forms; the
   // other coercers match native through the undefined-argument path below.
   if (args.length === 0) {
-    if (ref.name === "Number") return 0
-    if (ref.name === "String") return ""
+    if (name === "Number") return 0
+    if (name === "String") return ""
   }
   const raw = args[0]
-  // Error values are plain SafeObjects; the boundedData path below would strip their brand.
-  if (ref.name === "String" && errorBrandName(raw) !== undefined) return coerceToString(raw)
-  if (isCodeModeValue(raw)) {
-    if (ref.name === "Boolean") return true
-    if (ref.name === "Number") return coerceToNumber(raw)
-    if (ref.name === "String") return coerceToString(raw)
-    if (ref.name === "isFinite") return Number.isFinite(coerceToNumber(raw))
-    if (ref.name === "isNaN") return Number.isNaN(coerceToNumber(raw))
-    if (ref.name === "parseInt") return parseInt(coerceToString(raw))
+  // Error values are plain SafeObjects; the toProgram path below would strip their brand.
+  if (name === "String" && errorBrandName(raw) !== undefined) return coerceToString(raw)
+  if (Values.isValue(raw)) {
+    if (name === "Boolean") return true
+    if (name === "Number") return coerceToNumber(raw)
+    if (name === "String") return coerceToString(raw)
+    if (name === "isFinite") return Number.isFinite(coerceToNumber(raw))
+    if (name === "isNaN") return Number.isNaN(coerceToNumber(raw))
+    if (name === "parseInt") return parseInt(coerceToString(raw))
     return parseFloat(coerceToString(raw))
   }
-  const value = boundedData(raw, `${ref.name} input`)
-  if (ref.name === "Number") return coerceToNumber(value)
-  if (ref.name === "Boolean") return Boolean(value)
-  if (ref.name === "isFinite") return Number.isFinite(coerceToNumber(value))
-  if (ref.name === "isNaN") return Number.isNaN(coerceToNumber(value))
-  if (ref.name === "parseInt") {
+  const value = toProgram(raw, `${name} input`)
+  if (name === "Number") return coerceToNumber(value)
+  if (name === "Boolean") return Boolean(value)
+  if (name === "isFinite") return Number.isFinite(coerceToNumber(value))
+  if (name === "isNaN") return Number.isNaN(coerceToNumber(value))
+  if (name === "parseInt") {
     const radix = args[1]
     if (radix !== undefined && typeof radix !== "number") {
       throw new InterpreterRuntimeError("parseInt expects a numeric radix.", node)
     }
     return parseInt(coerceToString(value), radix)
   }
-  if (ref.name === "parseFloat") return parseFloat(coerceToString(value))
+  if (name === "parseFloat") return parseFloat(coerceToString(value))
   return coerceToString(value)
 }
-import { type AstNode, CoercionFunction, InterpreterRuntimeError } from "../interpreter/model.js"
-import { copyIn, type SafeObject } from "../tool-runtime.js"
-import {
-  isCodeModeValue,
-  CodeModeDate,
-  CodeModeMap,
-  CodeModeRegExp,
-  CodeModeSet,
-  CodeModeURL,
-  CodeModeURLSearchParams,
-} from "../values.js"
+
+/** A global coercion function such as `Number` or `parseInt`. */
+export const coercion = (name: Coercion, options: SyncOptions = {}): HostFunction =>
+  sync(name, (args, node) => toProgram(coerce(name, args, node), `${name} result`), options)

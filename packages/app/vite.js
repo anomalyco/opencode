@@ -17,7 +17,7 @@ if (tailwindGenerate && typeof tailwindHotUpdate === "function") {
   }
 }
 
-const channel = (() => {
+export const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
   if (raw === "local" || raw === "dev" || raw === "beta" || raw === "prod") return raw
   if (process.env.OPENCODE_CHANNEL === "latest") return "prod"
@@ -45,7 +45,7 @@ export default [
         },
         optimizeDeps: {
           exclude: ["@shikijs/stream", "marked", "marked-shiki", "remend"],
-          include: ["@opencode-ai/session-ui > mermaid", "@opencode-ai/session-ui > mermaid > katex"],
+          include: ["@opencode/session-ui > mermaid", "@opencode/session-ui > mermaid > katex"],
         },
       }
     },

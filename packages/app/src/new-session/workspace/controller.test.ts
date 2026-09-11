@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import {
-  normalizeNewSessionWorktree,
-  resolveNewSessionBranch,
-  resolveNewSessionGit,
-  resolveNewSessionWorktree,
-} from "./controller"
+import { resolveNewSessionBranch, resolveNewSessionGit, resolveNewSessionWorktree } from "./controller"
 
 describe("new session workspace selection", () => {
   test("uses main when the workspace bar is unavailable", () => {
@@ -12,31 +7,29 @@ describe("new session workspace selection", () => {
       resolveNewSessionWorktree({
         enabled: false,
         selected: "/project/feature",
-        directory: "/project/feature",
-        projectWorktree: "/project",
       }),
     ).toBe("main")
   })
 
-  test("derives an existing worktree from the current directory", () => {
+  test("uses the saved destination instead of the current worktree", () => {
     expect(
-      resolveNewSessionWorktree({ enabled: true, directory: "/project/feature", projectWorktree: "/project" }),
-    ).toBe("/project/feature")
-    expect(resolveNewSessionWorktree({ enabled: true, directory: "/project", projectWorktree: "/project" })).toBe(
-      "main",
-    )
+      resolveNewSessionWorktree({
+        enabled: true,
+        fallback: "create",
+      }),
+    ).toBe("create")
+    expect(
+      resolveNewSessionWorktree({
+        enabled: true,
+        fallback: "main",
+      }),
+    ).toBe("main")
   })
 
-  test("normalizes main to the project root outside the main worktree", () => {
-    expect(normalizeNewSessionWorktree("main", "/project/feature", "/project")).toBe("/project")
-    expect(normalizeNewSessionWorktree("main", "/project", "/project")).toBe("main")
-  })
-
-  test("treats equivalent Windows roots as the main worktree", () => {
-    expect(resolveNewSessionWorktree({ enabled: true, directory: "C:\\Repo\\", projectWorktree: "c:/repo" })).toBe(
-      "main",
-    )
-    expect(normalizeNewSessionWorktree("main", "C:\\Repo\\", "c:/repo")).toBe("main")
+  test("keeps local selection when the cached project path is stale", () => {
+    const input = { enabled: true, directory: "C:/Projects/repo", projectWorktree: "D:/Projects/repo" }
+    expect(resolveNewSessionWorktree(input)).toBe("main")
+    expect(resolveNewSessionWorktree({ ...input, selected: "/worktree" })).toBe("/worktree")
   })
 
   test("resolves the branch from the active location", () => {
@@ -53,6 +46,17 @@ describe("new session workspace selection", () => {
     expect(
       resolveNewSessionBranch({ worktree: "/missing", directory: "/project/feature", worktreeBranch: branch }),
     ).toBe(undefined)
+  })
+
+  test("uses a selected branch for a new workspace", () => {
+    expect(
+      resolveNewSessionBranch({
+        worktree: "create",
+        directory: "/project/feature",
+        createBranch: "release",
+        worktreeBranch: () => "feature",
+      }),
+    ).toBe("release")
   })
 
   test("uses location VCS state when the project inventory is stale", () => {

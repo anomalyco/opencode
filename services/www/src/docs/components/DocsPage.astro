@@ -1,0 +1,25 @@
+---
+import { render, type CollectionEntry } from "astro:content"
+import Callout from "./Callout.astro"
+import Card from "./Card.astro"
+import CardGroup from "./CardGroup.astro"
+import CodeBlock from "./CodeBlock.astro"
+import DocsLayout from "../layouts/DocsLayout.astro"
+
+interface Props {
+  entry: CollectionEntry<"docs">
+}
+
+const entry = Astro.props.entry
+const rendered = await render(entry)
+---
+
+<DocsLayout
+  title={entry.data.title}
+  description={entry.data.description}
+  currentSlug={entry.id}
+  headings={rendered.headings}
+  showTableOfContents={entry.data.tableOfContents !== false}
+>
+  <rendered.Content components={{ Callout, Card, CardGroup, CodeBlock }} />
+</DocsLayout>

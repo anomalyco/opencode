@@ -1,7 +1,7 @@
 export * as Tool from "./tool.js"
 
 import { Effect, JsonSchema, Schema } from "effect"
-import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
+import type { StandardSchemaV1 } from "@standard-schema/spec"
 import type { Agent } from "./agent.js"
 import type { Session } from "./session.js"
 import type { SessionMessage } from "./session-message.js"
@@ -17,6 +17,11 @@ export interface Context {
   readonly messageID: SessionMessage.ID
   readonly id: CallID
   readonly progress: (update: Metadata) => Effect.Effect<void>
+}
+
+export interface Namespace {
+  readonly name: string
+  readonly description: string
 }
 
 interface BaseOptions {
@@ -36,10 +41,7 @@ export type Options = BaseOptions &
       }
   )
 
-export type ValueSchema<A = unknown> =
-  | Schema.Codec<A, any>
-  | (StandardSchemaV1<any, A> & StandardJSONSchemaV1<any, A>)
-  | JsonSchema.JsonSchema
+export type ValueSchema<A = unknown> = Schema.Codec<A, any> | StandardSchemaV1<any, A> | JsonSchema.JsonSchema
 
 type InputValue<S> = 0 extends 1 & S
   ? any

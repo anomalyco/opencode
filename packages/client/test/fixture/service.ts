@@ -11,8 +11,10 @@ if (mode === "record-start") {
   await writeFile(registration + ".started", "")
   process.exit(1)
 }
-if (mode === "environment")
+if (mode === "environment") {
   await writeFile(registration + ".environment", process.env.OPENCODE_SERVICE_ENV_TEST ?? "")
+  await writeFile(registration + ".handoff", process.env.OPENCODE_PTY_HANDOFF ?? "null")
+}
 if (mode === "signal") process.kill(process.pid, process.platform === "win32" ? "SIGTERM" : "SIGKILL")
 
 if (mode === "delayed" || mode === "delayed-failed" || mode === "coordinated" || mode === "coordinated-failed-loser") {
@@ -30,14 +32,26 @@ if (mode === "delayed" || mode === "delayed-failed" || mode === "coordinated" ||
 
 let requests = 0
 let version = "test"
-if (mode === "old") version = "old"
+if (mode === "old" || mode === "handoff") version = "old"
 if (mode === "incompatible") version = "1.9.0"
 if (mode === "compatible" || mode === "delayed-compatible") version = "2.1.0-next.1"
 const id = crypto.randomUUID()
+const handoff = {
+  directory: registration + ".daemon",
+  instanceID: crypto.randomUUID(),
+  ticket: crypto.randomUUID(),
+  expiresAt: Date.now() + 30_000,
+}
 const server = Bun.serve({
   port: 0,
   async fetch(request) {
     const pathname = new URL(request.url).pathname
+    if (pathname === "/api/experimental/persistent-pty/handoff" && mode === "handoff") {
+      if (request.method !== "POST" || request.headers.get("authorization") !== "Basic " + btoa("opencode:private"))
+        return new Response(null, { status: 401 })
+      await writeFile(registration + ".prepared", JSON.stringify(handoff))
+      return Response.json({ handoff })
+    }
     if (pathname !== "/api/health") return new Response(null, { status: 404 })
     requests += 1
     if (mode === "starting") await writeFile(registration + ".health-request", "")
@@ -54,8 +68,7 @@ const server = Bun.serve({
     if (mode === "starting" && !(await Bun.file(registration + ".release").exists()))
       return Response.json({ healthy: true, version, pid: process.pid }, { status: 503 })
     if (mode === "failed-owner") return Response.json({ healthy: true, version, pid: process.pid }, { status: 500 })
-    if (mode === "starting" || mode === "graceful")
-      return Response.json({ healthy: true, version, pid: process.pid })
+    if (mode === "starting" || mode === "graceful") return Response.json({ healthy: true, version, pid: process.pid })
     return Response.json({ healthy: true, version, pid: process.pid })
   },
 })
@@ -67,6 +80,7 @@ await writeFile(
     version: mode === "legacy" ? undefined : version,
     url: server.url.toString(),
     pid: process.pid,
+    password: "private",
   }),
   { mode: 0o600 },
 )

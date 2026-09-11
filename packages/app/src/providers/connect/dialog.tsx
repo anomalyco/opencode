@@ -1,12 +1,12 @@
-import { Button } from "@opencode-ai/ui/button"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Icon } from "@opencode-ai/ui/icon"
-import { List } from "@opencode-ai/ui/list"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { DialogBody, DialogHeader, DialogTitle, Dialog } from "@opencode-ai/ui/dialog"
-import { TextInput } from "@opencode-ai/ui/text-input"
+import { Button } from "@opencode/ui/button"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { Icon } from "@opencode/ui/icon"
+import { List } from "@opencode/ui/list"
+import { ProviderIcon } from "@opencode/ui/provider-icon"
+import { Spinner } from "@opencode/ui/spinner"
+import { TextField } from "@opencode/ui/text-field"
+import { DialogBody, DialogHeader, DialogTitle, Dialog } from "@opencode/ui/dialog"
+import { TextInput } from "@opencode/ui/text-input"
 import { showToast } from "@/shell/notifications/toast"
 import { type Component, createMemo, createUniqueId, For, Match, onMount, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -110,7 +110,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
     active: undefined as string | undefined,
     connecting: undefined as string | undefined,
   })
-  const featured = ["opencode", "opencode-go", "anthropic", "openai", "google", "openrouter", "vercel"]
+  const featured = ["opencode-go", "opencode", "anthropic", "openai", "google", "openrouter", "vercel"]
   const custom = () => ({ id: CUSTOM_ID, name: language.t("dialog.provider.custom.label") })
   const all = createMemo(() => {
     language.locale()

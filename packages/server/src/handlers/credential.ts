@@ -1,4 +1,4 @@
-import { Integration } from "@opencode-ai/core/integration"
+import { Integration } from "@opencode/core/integration"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
@@ -10,6 +10,14 @@ export const CredentialHandler = HttpApiBuilder.group(Api, "server.credential", 
       Effect.fn(function* (ctx) {
         const integration = yield* Integration.Service
         yield* integration.connection.update(ctx.params.credentialID, { label: ctx.payload.label })
+        return HttpApiSchema.NoContent.make()
+      }),
+    )
+    .handle(
+      "credential.activate",
+      Effect.fn(function* (ctx) {
+        const integration = yield* Integration.Service
+        yield* integration.connection.activate(ctx.params.credentialID)
         return HttpApiSchema.NoContent.make()
       }),
     )

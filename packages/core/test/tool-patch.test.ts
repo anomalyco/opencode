@@ -2,22 +2,22 @@ import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Layer, Schema } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Environment } from "@opencode-ai/core/environment/index"
-import { Formatter } from "@opencode-ai/core/formatter"
-import { FileMutation } from "@opencode-ai/core/file-mutation"
-import { Location } from "@opencode-ai/core/location"
-import { LocationMutation } from "@opencode-ai/core/location-mutation"
-import { Permission } from "@opencode-ai/core/permission"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Session } from "@opencode-ai/core/session"
-import { Tool } from "@opencode-ai/core/tool"
-import { PatchTool } from "@opencode-ai/core/tool/plugin/patch"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Environment } from "@opencode/core/environment/index"
+import { Formatter } from "@opencode/core/formatter"
+import { FileMutation } from "@opencode/core/file-mutation"
+import { Location } from "@opencode/core/location"
+import { FileAccess } from "@opencode/core/file-access"
+import { Permission } from "@opencode/core/permission"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Session } from "@opencode/core/session"
+import { Tool } from "@opencode/core/tool"
+import { PatchTool } from "@opencode/core/tool/plugin/patch"
 import { transformEnvironmentFiles } from "./fixture/environment"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
@@ -27,7 +27,7 @@ const patchToolNode = makeLocationNode({
   layer: Layer.effectDiscard(registerToolPlugin(PatchTool.Plugin)),
   deps: [
     Tool.node,
-    LocationMutation.node,
+    FileAccess.node,
     FileMutation.node,
     Environment.node,
     Formatter.node,
@@ -99,10 +99,9 @@ const withTool = <A, E, R>(
     return yield* body(yield* Tool.Service)
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(LayerNode.group([Tool.node, LocationMutation.node, FileMutation.node, patchToolNode]), [
-        [
-          Environment.node,
-          transformEnvironmentFiles(activeLocation, (files) => ({
+      AppNodeBuilder.build(LayerNode.group([Tool.node, FileAccess.node, FileMutation.node, patchToolNode]), [
+        Environment.node.replace(
+          transformEnvironmentFiles((files) => ({
             read: (target, range) =>
               Effect.sync(() => {
                 if (!editApproved) readsBeforeEditApproval++
@@ -120,10 +119,10 @@ const withTool = <A, E, R>(
               return files.write(target, content)
             },
           })),
-        ],
-        [Location.node, activeLocation],
-        [Formatter.node, formatter],
-        [Permission.node, permission],
+        ),
+        Location.node.replace(activeLocation),
+        Formatter.node.replace(formatter),
+        Permission.node.replace(permission),
       ]),
     ),
   )
@@ -239,6 +238,22 @@ describe("PatchTool", () => {
         )
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("replaces a file with a directory containing an added file", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "parent"), "before\n"))
+        const settled = yield* executeTool(
+          registry,
+          call("*** Begin Patch\n*** Delete File: parent\n*** Add File: parent/child.txt\n+after\n*** End Patch"),
+        )
+        expect(settled.status).toBe("completed")
+        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "parent/child.txt"), "utf8"))).toBe(
+          "after\n",
+        )
+      }),
     ),
   )
 
@@ -920,7 +935,7 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("treats a sibling path inside the project worktree as external to the Location", () =>
+  it.live("treats a sibling path inside the project worktree as internal", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
@@ -939,9 +954,8 @@ describe("PatchTool", () => {
                       call("*** Begin Patch\n*** Update File: ../sibling.txt\n@@\n-before\n+after\n*** End Patch"),
                     ),
                   ).toMatchObject({ status: "completed" })
-                  expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
-                  expect(assertions[0]?.resources).toEqual([path.join(tmp.path, "*").replaceAll("\\", "/")])
-                  expect(assertions[1]?.resources).toEqual([target.replaceAll("\\", "/")])
+                  expect(assertions.map((input) => input.action)).toEqual(["edit"])
+                  expect(assertions[0]?.resources).toEqual(["../sibling.txt"])
                   expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
                 }),
               tmp.path,

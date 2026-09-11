@@ -29,10 +29,9 @@ export type ResponseIncludable = (typeof ResponseIncludables)[number] | (string 
 
 export const ServiceTiers = ["auto", "default", "flex", "priority"] as const
 export type ServiceTier = (typeof ServiceTiers)[number] | (string & {})
-export const ServiceTier = Schema.declare<ServiceTier>(
-  (value): value is ServiceTier => typeof value === "string",
-  { title: "ServiceTier" },
-)
+export const ServiceTier = Schema.declare<ServiceTier>((value): value is ServiceTier => typeof value === "string", {
+  title: "ServiceTier",
+})
 
 export const Truncations = ["auto", "disabled"] as const
 export type Truncation = (typeof Truncations)[number]
@@ -56,7 +55,6 @@ export const StreamOptions = Schema.Struct({
 })
 
 export const Options = Schema.Struct({
-  instructions: Schema.optional(Schema.String),
   store: Schema.optional(Schema.Boolean),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   safetyIdentifier: Schema.optional(Schema.String),

@@ -279,7 +279,7 @@ export class SQLiteEffectUpdateBase<
           : undefined
         on = on(
           new Proxy(
-            this.config.table._.columns,
+            getTableColumnsRuntime(this.config.table),
             new SelectionProxyHandler({ sqlAliasedBehavior: "sql", sqlBehavior: "sql" }),
           ) as any,
           from &&

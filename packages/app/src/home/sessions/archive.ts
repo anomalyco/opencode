@@ -1,6 +1,6 @@
 import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
 import type { ServerConnection } from "@/runtime/server/registry"
-import type { SessionInfo } from "@opencode-ai/client/promise"
+import type { SessionInfo } from "@opencode/client/promise"
 
 type HomeSession = Pick<SessionInfo, "id" | "location">
 

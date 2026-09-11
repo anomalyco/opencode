@@ -100,7 +100,11 @@ function packageNames() {
 function copyBinary(source) {
   if (!fs.existsSync(source)) throw new Error(`Binary not found at ${source}`)
   fs.mkdirSync(path.dirname(targetBinary), { recursive: true })
-  if (fs.existsSync(targetBinary)) fs.unlinkSync(targetBinary)
+  if (fs.existsSync(targetBinary)) {
+    try {
+      fs.unlinkSync(targetBinary)
+    } catch {}
+  }
   try {
     fs.linkSync(source, targetBinary)
   } catch {

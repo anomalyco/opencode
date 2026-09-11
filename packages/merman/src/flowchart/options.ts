@@ -7,6 +7,6 @@ export interface FlowchartDiagramRenderOptions {
   borderStyle?: BorderStyle
   minNodeGap?: number
   minRankGap?: number
-  /** Fold oversized horizontal layouts vertically when their rendered width exceeds this limit. */
+  /** Target rendered width. Oversized horizontal layouts fold vertically and broad vertical ranks wrap. */
   layoutMaxWidth?: number
 }

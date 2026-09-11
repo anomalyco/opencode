@@ -1,10 +1,13 @@
-import { Location } from "@opencode-ai/core/location"
-import { LocationServiceMap } from "@opencode-ai/core/location-services"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Workspace } from "@opencode-ai/core/workspace"
-import { Effect, Layer } from "effect"
+import { Location } from "@opencode/core/location"
+import { LocationServiceMap } from "@opencode/core/location-services"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Session } from "@opencode/core/session"
+import { Workspace } from "@opencode/core/workspace"
+import { InvalidRequestError } from "@opencode/protocol/errors"
+import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
+import { missingSession } from "./handlers/session-error"
 
 export type LocationServices = Layer.Success<ReturnType<(typeof LocationServiceMap.Service)["get"]>>
 
@@ -25,6 +28,15 @@ export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
     }
   })
 }
+
+const decodeSessionID = Schema.decodeUnknownEffect(Session.ID)
+
+export const sessionInfo = Effect.fnUntraced(function* (sessions: Session.Interface, sessionID: unknown) {
+  const id = yield* decodeSessionID(sessionID).pipe(
+    Effect.mapError(() => new InvalidRequestError({ message: "Invalid session ID", field: "sessionID" })),
+  )
+  return yield* sessions.get(id).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+})
 
 export function requestRef(request: HttpServerRequest.HttpServerRequest): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams

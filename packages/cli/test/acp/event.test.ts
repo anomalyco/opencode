@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
-import { OpenCode } from "@opencode-ai/client/promise"
+import { OpenCode } from "@opencode/client/promise"
 import { streamTurn } from "../../src/acp/event"
 
 test("acp prompt resolves after ordered turn updates", async () => {
@@ -119,5 +119,44 @@ test("acp prompt resolves after ordered turn updates", async () => {
 
   function send(controller: ReadableStreamDefaultController<Uint8Array>, event: unknown) {
     controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+  }
+})
+
+test("acp action resolves without prompt lifecycle events", async () => {
+  const encoder = new TextEncoder()
+  const server = Bun.serve({
+    port: 0,
+    fetch(request) {
+      if (new URL(request.url).pathname !== "/api/event") return new Response(null, { status: 404 })
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "server.connected", data: {} })}\n\n`))
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    },
+  })
+
+  try {
+    const response = await streamTurn({
+      client: OpenCode.make({ baseUrl: server.url.toString() }),
+      connection: {
+        sessionUpdate: async () => {},
+        requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+      },
+      sessionID: "ses_test",
+      cwd: "/workspace",
+      start: { type: "input", id: "msg_action" },
+      writeTextFile: false,
+      action: true,
+      control: { cancelled: false, admission: new AbortController() },
+      submit: async () => {},
+    })
+
+    expect(response).toMatchObject({ stopReason: "end_turn" })
+  } finally {
+    await server.stop(true)
   }
 })

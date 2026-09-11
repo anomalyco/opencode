@@ -1,0 +1,35 @@
+[data-slot="session-mobile-files"]
+  [data-slot="session-mobile-files-header"]
+  [data-component="tabs-v2"][data-variant="normal"][data-orientation="horizontal"]
+  [data-slot="tabs-v2-list"] {
+  position: static;
+
+  &::before {
+    inset-inline-start: 0;
+    width: 100%;
+  }
+}
+
+[data-slot="session-mobile-files"] [data-component="line-comment-v2"] {
+  max-width: none;
+}
+
+[data-slot="session-mobile-files"][data-browsing="true"] {
+  [data-component="session-review-v2-sidebar-root"] {
+    width: 100%;
+  }
+
+  [data-slot="session-review-v2-sidebar"] {
+    width: 100% !important;
+    border-inline-end: 0;
+  }
+
+  [data-slot="session-review-v2-preview"] {
+    display: none;
+  }
+}
+
+[data-slot="session-mobile-files"] [data-slot="tabs-v2-trigger-close-button"] [data-slot="tabs-close-button"] {
+  width: 32px;
+  height: 36px;
+}

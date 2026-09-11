@@ -1,0 +1,74 @@
+---
+title: "Web"
+description: "Run OpenCode in the browser."
+---
+
+OpenCode ships with a web ui that is served from the same server that powers the
+TUI. It's available by default and password protected.
+
+## Access
+
+```bash
+$ opencode2 pair
+
+  URLs      http://127.0.0.1:49374
+  Username  opencode
+  Password  ********
+```
+
+By default the server runs on port 49374 and listens only on localhost. You can
+change this config with the `opencode2 service` command.
+
+## Configure
+
+Set any option with `opencode2 service set`:
+
+```bash
+# Listen on every network interface
+$ opencode2 service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode2 service set port 49374
+
+# Replace the generated password
+$ opencode2 service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode2 service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode2 service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+Changing a setting stops the background server. To apply the new config
+
+```bash
+$ opencode2 service start
+```
+
+## Standalone
+
+`opencode2 serve` runs the same server in the foreground instead of through the
+shared background service.
+
+```bash
+$ opencode2 serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+Use it when you want to:
+
+- Run OpenCode on a shared, always-on, or remote host, then connect clients with
+  `opencode2 --server <url>`.
+- Control the hostname, port, and CORS origins for a single process.
+- Run under a supervisor like systemd, Docker, or another environment that expects
+  a foreground process.
+- Keep a dedicated server instead of the shared background service.
+
+
+Connect a client to it with `--server`:
+
+```bash
+$ opencode2 --server http://127.0.0.1:4096
+```

@@ -2,7 +2,8 @@ export * as Credential from "./credential.js"
 
 import { Schema } from "effect"
 import { optional } from "./schema.js"
-import { IntegrationMethodID } from "./integration-id.js"
+import { ephemeral, inventory } from "./event.js"
+import { IntegrationID, IntegrationMethodID } from "./integration-id.js"
 import { ascending } from "./identifier.js"
 import { NonNegativeInt, statics } from "./schema.js"
 import { Form } from "./form.js"
@@ -12,6 +13,20 @@ export const ID = Schema.String.pipe(
   statics((schema) => ({ create: () => schema.make("cred_" + ascending()) })),
 )
 export type ID = typeof ID.Type
+
+const Updated = ephemeral({
+  type: "credential.updated",
+  schema: {},
+})
+const Switched = ephemeral({
+  type: "credential.switched",
+  schema: { integrationID: IntegrationID, credentialID: Schema.NullOr(ID) },
+})
+export const Event = {
+  Updated,
+  Switched,
+  Definitions: inventory(Updated, Switched),
+}
 
 export interface OAuth extends Schema.Schema.Type<typeof OAuth> {}
 export const OAuth = Schema.Struct({

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.18.4",
-  "name": "@opencode-ai/sdk",
+  "name": "@opencode/sdk",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -17,25 +17,29 @@
   ],
   "exports": {
     ".": "./src/index.ts",
-    "./workerd": "./src/workerd.ts"
+    "./effect": "./src/effect/index.ts",
+    "./workerd": "./src/workerd.ts",
+    "./workerd/effect": "./src/effect/workerd.ts"
   },
   "scripts": {
     "build": "bun run script/build.ts",
     "test": "bun test --timeout 5000",
-    "typecheck": "tsgo -b"
+    "typecheck": "tsgo -b",
+    "verify:package": "bun run script/verify-package.ts"
   },
   "dependencies": {
-    "@opencode-ai/client": "workspace:*",
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/schema": "workspace:*",
-    "@opencode-ai/server": "workspace:*",
-    "@opencode-ai/util": "workspace:*",
+    "@opencode/client": "workspace:*",
+    "@opencode/core": "workspace:*",
+    "@opencode/plugin": "workspace:*",
+    "@opencode/schema": "workspace:*",
+    "@opencode/server": "workspace:*",
+    "@opencode/util": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@opencode-ai/ai": "workspace:*",
-    "@opencode-ai/httpapi-codegen": "workspace:*",
-    "@opencode-ai/protocol": "workspace:*",
+    "@opencode/ai": "workspace:*",
+    "@opencode/httpapi-codegen": "workspace:*",
+    "@opencode/protocol": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:"

@@ -1,14 +1,16 @@
 import { createStore, reconcile } from "solid-js/store"
+import { Schema } from "effect"
+import { SessionError } from "@opencode/schema/session-error"
 import { type Accessor, batch, createEffect, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import type { ServerSDK } from "@/runtime/server/client"
-import type { Data } from "@opencode-ai/client/solid"
-import type { OpenCodeEvent } from "@opencode-ai/client/promise"
+import type { Data } from "@opencode/client/solid"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { decode64 } from "@/runtime/persistence/base64"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { Persistence } from "@/runtime/persistence/schema"
 import { playSoundById } from "@/shell/notifications/sound"
 import type { createNotificationCoordinator } from "@/shell/notifications/coordinator"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -18,24 +20,19 @@ import { requireServerKey, sessionHref } from "@/shell/routes/session"
 import type { ServerScope } from "@/runtime/server/scope"
 import { useServer } from "@/runtime/server/current"
 
-type NotificationBase = {
-  directory?: string
-  session?: string
-  metadata?: unknown
-  time: number
-  viewed: boolean
+const NotificationBase = {
+  directory: Schema.optional(Schema.String),
+  session: Schema.optional(Schema.String),
+  metadata: Schema.optional(Schema.Unknown),
+  time: Schema.Finite,
+  viewed: Schema.Boolean,
 }
-
-type TurnCompleteNotification = NotificationBase & {
-  type: "turn-complete"
-}
-
-type ErrorNotification = NotificationBase & {
-  type: "error"
-  error: Extract<OpenCodeEvent, { type: "session.execution.failed" }>["data"]["error"]
-}
-
-export type Notification = TurnCompleteNotification | ErrorNotification
+export const Notification = Schema.Union([
+  Persistence.struct({ ...NotificationBase, type: Schema.Literal("turn-complete") }),
+  Persistence.struct({ ...NotificationBase, type: Schema.Literal("error"), error: SessionError.Error }),
+])
+export type Notification = typeof Notification.Type
+export const NotificationStore = Persistence.struct({ list: Persistence.array(Notification) })
 
 type NotificationIndex = {
   session: {
@@ -50,6 +47,15 @@ type NotificationIndex = {
     unseenCount: Record<string, number>
     unseenHasError: Record<string, boolean>
   }
+}
+
+type NotificationTabs = Pick<ReturnType<typeof useTabs>, "addSessionTab" | "rememberSessionRoute" | "select">
+
+export function openNotificationSession(tabs: NotificationTabs, server: ServerConnection.Key, sessionID: string) {
+  const tab = tabs.addSessionTab({ server, sessionId: sessionID })
+  if (tab.type !== "session") return
+  tabs.rememberSessionRoute(tab, sessionID)
+  tabs.select(tab)
 }
 
 const MAX_NOTIFICATIONS = 500
@@ -123,9 +129,8 @@ export function createServerNotificationState(input: {
 
   const [store, setStore, _, ready] = persisted(
     Persist.serverGlobal(input.sdk.scope, "notification"),
-    createStore({
-      list: [] as Notification[],
-    }),
+    NotificationStore,
+    { list: [] },
   )
   const [index, setIndex] = createStore<NotificationIndex>(buildNotificationIndex(store.list))
 
@@ -217,21 +222,13 @@ export function createServerNotificationState(input: {
     return typeof location !== "undefined" && location.pathname === sessionHref(input.key, sessionID)
   }
 
-  const navigate = (href: string) => {
-    history.pushState(null, "", href)
-    dispatchEvent(new PopStateEvent("popstate"))
-  }
-
   const handleSessionIdle = (sessionID: string, eventID: string, time: number) => {
     void lookup(sessionID).then((session) => {
       if (meta.disposed) return
       if (!session) return
       if (session.parentID) return
 
-      if (
-        sessionIDHasOpenTab(tabs.store, input.key, sessionID) &&
-        settings.sounds.agentEnabled()
-      ) {
+      if (sessionIDHasOpenTab(tabs.store, input.key, sessionID) && settings.sounds.agentEnabled()) {
         void input.coordinator.sound(`${input.key}\0${eventID}`, () => playSoundById(settings.sounds.agent()))
       }
 
@@ -243,31 +240,22 @@ export function createServerNotificationState(input: {
         session: sessionID,
       })
 
-      const href = sessionHref(input.key, sessionID)
       if (settings.notifications.agent()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
           platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, () =>
-            navigate(href),
+            openNotificationSession(tabs, input.key, sessionID),
           ),
         )
       }
     })
   }
 
-  const handleSessionError = (
-    sessionID: string,
-    error: ErrorNotification["error"],
-    eventID: string,
-    time: number,
-  ) => {
+  const handleSessionError = (sessionID: string, error: SessionError.Error, eventID: string, time: number) => {
     void lookup(sessionID).then((session) => {
       if (meta.disposed) return
       if (session?.parentID) return
 
-      if (
-        sessionIDHasOpenTab(tabs.store, input.key, sessionID) &&
-        settings.sounds.errorsEnabled()
-      ) {
+      if (sessionIDHasOpenTab(tabs.store, input.key, sessionID) && settings.sounds.errorsEnabled()) {
         void input.coordinator.sound(`${input.key}\0${eventID}`, () => playSoundById(settings.sounds.errors()))
       }
 
@@ -282,10 +270,11 @@ export function createServerNotificationState(input: {
       const description =
         session?.title ??
         (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
-      const href = sessionHref(input.key, sessionID)
       if (settings.notifications.errors()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
-          platform.notify(language.t("notification.session.error.title"), description, () => navigate(href)),
+          platform.notify(language.t("notification.session.error.title"), description, () =>
+            openNotificationSession(tabs, input.key, sessionID),
+          ),
         )
       }
     })

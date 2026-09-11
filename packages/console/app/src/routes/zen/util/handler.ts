@@ -1,19 +1,19 @@
 import type { APIEvent } from "@solidjs/start/server"
-import { and, Database, eq, isNull, lt, or, sql } from "@opencode-ai/console-core/drizzle/index.js"
-import { KeyTable } from "@opencode-ai/console-core/schema/key.sql.js"
-import { BillingTable, LiteTable, SubscriptionTable, UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
-import { centsToMicroCents } from "@opencode-ai/console-core/util/price.js"
-import { getMonthlyBounds, getWeekBounds } from "@opencode-ai/console-core/util/date.js"
-import { Identifier } from "@opencode-ai/console-core/identifier.js"
-import { Billing } from "@opencode-ai/console-core/billing.js"
-import { Actor } from "@opencode-ai/console-core/actor.js"
-import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
-import { ZenData } from "@opencode-ai/console-core/model.js"
-import { Subscription } from "@opencode-ai/console-core/subscription.js"
-import { BlackData } from "@opencode-ai/console-core/black.js"
-import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
-import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
-import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
+import { and, Database, eq, isNull, lt, or, sql } from "@opencode/console-core/drizzle/index.js"
+import { KeyTable } from "@opencode/console-core/schema/key.sql.js"
+import { BillingTable, LiteTable, SubscriptionTable, UsageTable } from "@opencode/console-core/schema/billing.sql.js"
+import { centsToMicroCents } from "@opencode/console-core/util/price.js"
+import { getMonthlyBounds, getWeekBounds } from "@opencode/console-core/util/date.js"
+import { Identifier } from "@opencode/console-core/identifier.js"
+import { Billing } from "@opencode/console-core/billing.js"
+import { Actor } from "@opencode/console-core/actor.js"
+import { WorkspaceTable } from "@opencode/console-core/schema/workspace.sql.js"
+import { ZenData } from "@opencode/console-core/model.js"
+import { Subscription } from "@opencode/console-core/subscription.js"
+import { BlackData } from "@opencode/console-core/black.js"
+import { UserTable } from "@opencode/console-core/schema/user.sql.js"
+import { ModelTable } from "@opencode/console-core/schema/model.sql.js"
+import { ProviderTable } from "@opencode/console-core/schema/provider.sql.js"
 import { logger } from "./logger"
 import {
   AuthError,
@@ -42,15 +42,15 @@ import { createRateLimiter as createIpRateLimiter } from "./ipRateLimiter"
 import { createRateLimiter as createKeyRateLimiter } from "./keyRateLimiter"
 import { createTrialLimiter } from "./trialLimiter"
 import { createStickyTracker } from "./stickyProviderTracker"
-import { LiteData } from "@opencode-ai/console-core/lite.js"
-import { Resource } from "@opencode-ai/console-resource"
+import { LiteData } from "@opencode/console-core/lite.js"
+import { Resource } from "@opencode/console-resource"
 import { i18n, type Key } from "~/i18n"
 import { localeFromRequest } from "~/lib/language"
 import { createModelTpmLimiter } from "./modelTpmLimiter"
 import { createModelTpsLimiter } from "./modelTpsLimiter"
 import { createProviderBudgetTracker } from "./providerBudgetTracker"
 import { accumulateUsage, HOT_WORKSPACES } from "./usageBatcher"
-import { Workspace } from "@opencode-ai/console-core/workspace.js"
+import { Workspace } from "@opencode/console-core/workspace.js"
 import { countryFromRequest } from "~/lib/request-country"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
@@ -1109,6 +1109,8 @@ export async function handler(
     authInfo = authInfo!
 
     const cost = centsToMicroCents(totalCostInCent)
+    // Keep period bounds and persisted timestamps on one snapshot when a queued write crosses a reset boundary.
+    const trackedAt = new Date()
 
     // For hot workspaces, batch balance/usage updates through Redis to avoid
     // row-level lock contention on BillingTable/UserTable. Returns the amount
@@ -1149,7 +1151,7 @@ export async function handler(
           if (billingSource === "subscription") {
             const plan = authInfo.billing.subscription!.plan
             const black = BlackData.getLimits({ plan })
-            const week = getWeekBounds(new Date())
+            const week = getWeekBounds(trackedAt)
             const rollingWindowSeconds = black.rollingWindow * 3600
             return [
               db
@@ -1157,11 +1159,17 @@ export async function handler(
                 .set({
                   fixedUsage: sql`
               CASE
+                WHEN ${SubscriptionTable.timeFixedUpdated} >= ${week.end} THEN ${SubscriptionTable.fixedUsage}
                 WHEN ${SubscriptionTable.timeFixedUpdated} >= ${week.start} THEN ${SubscriptionTable.fixedUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-                  timeFixedUpdated: sql`now()`,
+                  timeFixedUpdated: sql`
+              CASE
+                WHEN ${SubscriptionTable.timeFixedUpdated} > ${trackedAt} THEN ${SubscriptionTable.timeFixedUpdated}
+                ELSE ${trackedAt}
+              END
+            `,
                   rollingUsage: sql`
               CASE
                 WHEN UNIX_TIMESTAMP(${SubscriptionTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${SubscriptionTable.rollingUsage} + ${cost}
@@ -1185,8 +1193,8 @@ export async function handler(
           }
           if (billingSource === "lite") {
             const lite = LiteData.getLimits()
-            const week = getWeekBounds(new Date())
-            const month = getMonthlyBounds(new Date(), authInfo.lite!.timeCreated)
+            const week = getWeekBounds(trackedAt)
+            const month = getMonthlyBounds(trackedAt, authInfo.lite!.timeCreated)
             const rollingWindowSeconds = lite.rollingWindow * 3600
             const quotaCost = Math.round(cost * modelInfo.costMultiplier)
             return [
@@ -1195,18 +1203,30 @@ export async function handler(
                 .set({
                   monthlyUsage: sql`
               CASE
+                WHEN ${LiteTable.timeMonthlyUpdated} >= ${month.end} THEN ${LiteTable.monthlyUsage}
                 WHEN ${LiteTable.timeMonthlyUpdated} >= ${month.start} THEN ${LiteTable.monthlyUsage} + ${quotaCost}
                 ELSE ${quotaCost}
               END
             `,
-                  timeMonthlyUpdated: sql`now()`,
+                  timeMonthlyUpdated: sql`
+              CASE
+                WHEN ${LiteTable.timeMonthlyUpdated} > ${trackedAt} THEN ${LiteTable.timeMonthlyUpdated}
+                ELSE ${trackedAt}
+              END
+            `,
                   weeklyUsage: sql`
               CASE
+                WHEN ${LiteTable.timeWeeklyUpdated} >= ${week.end} THEN ${LiteTable.weeklyUsage}
                 WHEN ${LiteTable.timeWeeklyUpdated} >= ${week.start} THEN ${LiteTable.weeklyUsage} + ${quotaCost}
                 ELSE ${quotaCost}
               END
             `,
-                  timeWeeklyUpdated: sql`now()`,
+                  timeWeeklyUpdated: sql`
+              CASE
+                WHEN ${LiteTable.timeWeeklyUpdated} > ${trackedAt} THEN ${LiteTable.timeWeeklyUpdated}
+                ELSE ${trackedAt}
+              END
+            `,
                   rollingUsage: sql`
               CASE
                 WHEN UNIX_TIMESTAMP(${LiteTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${LiteTable.rollingUsage} + ${quotaCost}

@@ -65,6 +65,13 @@
   }
 }
 
+[data-component="tooltip-v2"][data-appearance="large"] {
+  padding: 12px;
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+}
+
 @keyframes tooltipV2In {
   from {
     opacity: 0;

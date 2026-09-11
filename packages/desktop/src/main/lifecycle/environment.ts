@@ -8,7 +8,6 @@ import { Effect, FileSystem, Path } from "effect"
 import { CHANNEL } from "../constants"
 import { DesktopPaths } from "../paths"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
-import { cleanupStoreFiles } from "../storage/cleanup"
 import { registerRendererProtocol, setDockIcon } from "../windows"
 
 const appNames: Record<string, string> = {
@@ -74,14 +73,6 @@ export const preferApplicationEnvironment = Effect.gen(function* () {
 export const prepareDesktop = Effect.gen(function* () {
   const path = yield* Path.Path
   const paths = yield* DesktopPaths.resolve
-  yield* cleanupStoreFiles(app.getPath("userData")).pipe(
-    Effect.tap((result) =>
-      result.deleted.length === 0
-        ? Effect.void
-        : Effect.logInfo("cleaned scoped store files", { count: result.deleted.length, scanned: result.scanned }),
-    ),
-    Effect.catch((error) => Effect.logWarning("failed to clean scoped store files", { error })),
-  )
   if (app.isPackaged || process.env.OPENCODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION !== "1")
     app.setAsDefaultProtocolClient("opencode")
   yield* registerRendererProtocol()

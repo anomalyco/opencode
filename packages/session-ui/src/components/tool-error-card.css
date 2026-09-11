@@ -2,9 +2,10 @@
   --card-pad-y: 0px;
   --card-line-pad: 0px;
   --card-pad-r: 0px;
+  --card-pad-l: 0px;
 
   &::before {
-    border-radius: 0;
+    display: none;
   }
 
   /* Figma's leading-none would clip Inter descenders at 13px; keep the compact metric. */
@@ -26,18 +27,7 @@
     color: var(--v2-text-text-muted);
   }
 
-  [data-slot="tool-error-card-dot"] {
-    flex-shrink: 0;
-    font-family: var(--v2-font-family-sans);
-    font-size: 11px;
-    font-weight: 530;
-    line-height: var(--line-height-tight);
-    letter-spacing: 0.05px;
-    color: var(--v2-text-text-muted);
-  }
-
-  [data-slot="tool-error-card-summary"],
-  [data-slot="tool-error-card-message"] {
+  [data-slot="tool-error-card-summary"] {
     font-family: var(--v2-font-family-sans);
     font-size: 13px;
     font-weight: 440;
@@ -52,11 +42,6 @@
   [data-slot="tool-error-card-summary"] {
     flex-shrink: 1;
     min-width: 0;
-  }
-
-  [data-slot="tool-error-card-message"] {
-    /* Text column indent: 16px icon + 8px gap. */
-    padding-inline-start: 24px;
   }
 
   [data-slot="basic-tool-tool-info-main"] {
@@ -83,8 +68,7 @@
   }
 
   > [data-component="collapsible"].tool-collapsible {
-    /* Figma's 4px gap minus the 1.5px the compact line box adds above the summary em. */
-    gap: 2.5px;
+    gap: 0px;
 
     > [data-slot="collapsible-trigger"] {
       height: 24px;
@@ -100,11 +84,6 @@
         display: none;
       }
     }
-  }
-
-  > [data-component="collapsible"].tool-collapsible[data-open="true"] {
-    /* The compact line box alone yields Figma's spacing under the header. */
-    gap: 0px;
   }
 
   [data-component="tool-error-card-icon"] [data-slot="icon-svg"] {
@@ -135,10 +114,13 @@
     position: absolute;
     top: 0;
     right: 0;
-    opacity: 0;
-    pointer-events: none;
     transition: opacity 0.15s ease;
     will-change: opacity;
+
+    @media (hover: hover) {
+      opacity: 0;
+      pointer-events: none;
+    }
   }
 
   &:hover [data-slot="tool-error-card-copy"],

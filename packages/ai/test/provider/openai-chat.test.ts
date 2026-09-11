@@ -7,6 +7,7 @@ import {
   AIError,
   LLMEvent,
   LLMRequest,
+  LLMResponse,
   Message,
   LanguageModel,
   ToolCallPart,
@@ -47,7 +48,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(request)
 
-      expect(prepared.body).toEqual({
+      expect(prepared.body).toMatchObject({
         model: "gpt-4o-mini",
         messages: [
           { role: "system", content: "You are concise." },
@@ -55,7 +56,8 @@ describe("OpenAI Chat route", () => {
         ],
         stream: true,
         stream_options: { include_usage: true },
-        max_tokens: 20,
+        store: false,
+        max_completion_tokens: 20,
         temperature: 0,
       })
     }),
@@ -79,6 +81,28 @@ describe("OpenAI Chat route", () => {
           role: "user",
           content: "Before.\n<system-update>\nTreat &lt;admin&gt; &amp; data literally.\n</system-update>",
         },
+        { role: "assistant", content: "After." },
+      ])
+    }),
+  )
+
+  it.effect("omits empty and whitespace-only assistant messages", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Before."),
+            Message.assistant([]),
+            Message.assistant(""),
+            Message.assistant(" \n\t "),
+            Message.assistant("After."),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: "Before." },
         { role: "assistant", content: "After." },
       ])
     }),
@@ -146,6 +170,56 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("preserves observed reasoning fields when reasoning is required", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: LanguageModel.update(model, { compatibility: { requireReasoning: true } }),
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "thinking",
+                providerMetadata: { openai: { reasoningField: "reasoning_text" } },
+              },
+              { type: "text", text: "Hello" },
+            ]),
+            Message.assistant("Done"),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: "Hello", reasoning_text: "thinking" },
+        { role: "assistant", content: "Done", reasoning_content: "" },
+      ])
+    }),
+  )
+
+  it.effect("omits empty configured reasoning fields when reasoning is explicitly optional", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: LanguageModel.update(model, {
+            compatibility: { reasoningField: "reasoning_text", requireReasoning: false },
+          }),
+          messages: [
+            Message.assistant([
+              { type: "reasoning", text: "thinking" },
+              { type: "text", text: "Hello" },
+            ]),
+            Message.assistant("Done"),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: "Hello", reasoning_text: "thinking" },
+        { role: "assistant", content: "Done" },
+      ])
+    }),
+  )
+
   it.effect("rejects reasoning fields that conflict with assistant message fields", () =>
     Effect.gen(function* () {
       const error = yield* compileRequest(
@@ -188,6 +262,21 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(prepared.body.prompt_cache_key).toBe("session_123")
+    }),
+  )
+
+  it.effect("omits the prompt cache key when caching is disabled", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Hello",
+          promptCacheKey: "session_123",
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body).not.toHaveProperty("prompt_cache_key")
     }),
   )
 
@@ -325,7 +414,7 @@ describe("OpenAI Chat route", () => {
         }),
       )
 
-      expect(prepared.body).toEqual({
+      expect(prepared.body).toMatchObject({
         model: "gpt-4o-mini",
         messages: [
           { role: "user", content: "What is the weather?" },
@@ -345,7 +434,37 @@ describe("OpenAI Chat route", () => {
         tools: [],
         stream: true,
         stream_options: { include_usage: true },
+        store: false,
       })
+    }),
+  )
+
+  it.effect("limits OpenAI and Azure Chat tool call IDs to 40 characters", () =>
+    Effect.gen(function* () {
+      const id = `call_${"a".repeat(48)}`
+      const models = [
+        model,
+        Azure.configure({ baseURL: "https://opencode-test.openai.azure.com/openai/", apiKey: "test" }).chat("gpt-4o"),
+      ]
+
+      yield* Effect.forEach(models, (selected) =>
+        Effect.gen(function* () {
+          const prepared = yield* compileRequest(
+            LLM.request({
+              model: selected,
+              messages: [
+                Message.assistant([ToolCallPart.make({ id, name: "lookup", input: {} })]),
+                Message.tool({ id, name: "lookup", result: "Sunny" }),
+              ],
+            }),
+          )
+
+          expect(prepared.body.messages).toMatchObject([
+            { role: "assistant", tool_calls: [{ id: id.slice(0, 40) }] },
+            { role: "tool", tool_call_id: id.slice(0, 40) },
+          ])
+        }),
+      )
     }),
   )
 
@@ -411,6 +530,30 @@ describe("OpenAI Chat route", () => {
         },
       ])
       expect(JSON.stringify(prepared.body.messages)).not.toContain('"content":"AAECAw=="')
+    }),
+  )
+
+  it.effect("bridges image tool results before their synthetic user message when required", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: LanguageModel.update(model, { compatibility: { requireAssistantAfterTool: true } }),
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_image", name: "read", input: {} })]),
+            Message.tool({
+              id: "call_image",
+              name: "read",
+              result: {
+                type: "content",
+                value: [{ type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png", name: "pixel.png" }],
+              },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages.map((message) => message.role)).toEqual(["assistant", "tool", "assistant", "user"])
+      expect(prepared.body.messages[2]).toEqual({ role: "assistant", content: "Done." })
     }),
   )
 
@@ -665,6 +808,28 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("finishes at the done sentinel without waiting for response EOF", () =>
+    Effect.gen(function* () {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(sseEvents(deltaChunk({ content: "Hello" }), deltaChunk({}, "stop"))),
+          )
+        },
+      })
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(stream, {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        ),
+      )
+
+      expect(response.text).toBe("Hello")
+      expect(response.events.at(-1)?.type).toBe("finish")
+    }),
+  )
+
   it.effect("preserves streamed refusals as ordinary assistant text", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
@@ -758,6 +923,70 @@ describe("OpenAI Chat route", () => {
         const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
         expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", [field]: "thinking" }])
       }
+    }),
+  )
+
+  it.effect("uses the configured provider metadata namespace for reasoning and usage", () =>
+    Effect.gen(function* () {
+      const selected = LanguageModel.update(model, {
+        route: { ...model.route, providerMetadataKey: "vendor" },
+      })
+      const details = [{ type: "reasoning.text", text: "thinking", signature: "signed" }]
+      const response = yield* LLMClient.generate(LLMRequest.update(request, { model: selected })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning: "thinking", reasoning_details: details } }] },
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "stop"),
+              usageChunk({ prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        vendor: { reasoningField: "reasoning", reasoningDetails: details },
+      })
+      expect(response.usage?.providerMetadata).toEqual({
+        vendor: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+      })
+
+      const replay = yield* compileRequest(LLM.request({ model: selected, messages: [response.message] }))
+      expect(replay.body.messages).toEqual([
+        { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: details },
+      ])
+    }),
+  )
+
+  it.effect("falls back to the selected provider for the metadata namespace", () =>
+    Effect.gen(function* () {
+      const compatible = model.route.with({ provider: "deepseek" }).model({ id: "deepseek-chat" })
+      const selected = LanguageModel.update(compatible, {
+        route: { ...compatible.route, providerMetadataKey: undefined },
+      })
+      const response = yield* LLMClient.generate(LLMRequest.update(request, { model: selected })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ reasoning_content: "thinking" }),
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "stop"),
+              usageChunk({ prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        deepseek: { reasoningField: "reasoning_content" },
+      })
+      expect(response.usage?.providerMetadata).toEqual({
+        deepseek: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+      })
+
+      const replay = yield* compileRequest(LLM.request({ model: selected, messages: [response.message] }))
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_content: "thinking" }])
     }),
   )
 
@@ -921,7 +1150,7 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("preserves scalar reasoning after content starts", () =>
+  it.effect("preserves scalar reasoning after content starts in one lifecycle", () =>
     Effect.gen(function* () {
       const details = [{ type: "reasoning.text", text: "detail", format: "unknown", index: 0 }]
       const response = yield* LLMClient.generate(request).pipe(
@@ -938,8 +1167,35 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(response.reasoning).toBe("detailscalar")
-      expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(2)
-      expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(2)
+      expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
+      expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
+      expect(response.message.content.filter((part) => part.type === "reasoning")).toHaveLength(1)
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningField: "reasoning", reasoningDetails: details },
+      })
+    }),
+  )
+
+  it.effect("keeps one reasoning lifecycle across many content chunks", () =>
+    Effect.gen(function* () {
+      const details = [{ type: "reasoning.text", text: "thinking", format: "anthropic-claude-v1", index: 0 }]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning: "thinking", reasoning_details: details } }] },
+              ...Array.from({ length: 25 }, (_, index) => deltaChunk({ content: `chunk-${index} ` })),
+              deltaChunk({}, "stop"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("thinking")
+      expect(response.text).toBe(Array.from({ length: 25 }, (_, index) => `chunk-${index} `).join(""))
+      expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
+      expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
+      expect(response.message.content.filter((part) => part.type === "reasoning")).toHaveLength(1)
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
         openai: { reasoningField: "reasoning", reasoningDetails: details },
       })
@@ -985,7 +1241,18 @@ describe("OpenAI Chat route", () => {
           index: 0,
         },
       ]
-      const response = yield* LLMClient.generate(request).pipe(
+      // Snapshot reasoning-end metadata as each event is published so the
+      // assertion cannot pass through later mutation of a shared array.
+      const publishedEndMetadata: unknown[] = []
+      const response = yield* LLMClient.stream(request).pipe(
+        Stream.tap((event) =>
+          Effect.sync(() => {
+            if (LLMEvent.is.reasoningEnd(event))
+              publishedEndMetadata.push(decodeJson(encodeJson(event.providerMetadata)))
+          }),
+        ),
+        Stream.runFold(LLMResponse.empty, LLMResponse.reduce),
+        Effect.map((state) => LLMResponse.complete(state)!),
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -1006,10 +1273,12 @@ describe("OpenAI Chat route", () => {
       expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.reasoningDelta)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
-      expect(response.events.filter(LLMEvent.is.reasoningEnd).at(-1)?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: merged },
-      })
-      expect(response.events.findIndex(LLMEvent.is.reasoningEnd)).toBeLessThan(
+      expect(publishedEndMetadata).toEqual([{ openai: { reasoningField: "reasoning", reasoningDetails: merged } }])
+      expect(response.events.findIndex(LLMEvent.is.reasoningStart)).toBeLessThan(
+        response.events.findIndex(LLMEvent.is.textStart),
+      )
+      // Reasoning stays open alongside text and closes once during finalization.
+      expect(response.events.findIndex(LLMEvent.is.reasoningEnd)).toBeGreaterThan(
         response.events.findIndex(LLMEvent.is.textStart),
       )
 
@@ -1162,8 +1431,14 @@ describe("OpenAI Chat route", () => {
       expect(response.events).toEqual([
         { type: "step-start", index: 0 },
         { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata: undefined },
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"', input: {} },
+        {
+          type: "tool-input-delta",
+          id: "call_1",
+          name: "lookup",
+          text: ':"weather"}',
+          input: { query: "weather" },
+        },
         { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata: undefined },
         {
           type: "tool-call",
@@ -1181,6 +1456,162 @@ describe("OpenAI Chat route", () => {
           providerMetadata: undefined,
         },
         { type: "finish", reason: { normalized: "tool-calls", raw: "tool_calls" }, usage: undefined },
+      ])
+    }),
+  )
+
+  it.effect("does not finalize streamed tool calls when content is filtered", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({
+          tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: '{"query":"weather"' } }],
+        }),
+        deltaChunk({}, "content_filter"),
+      )
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events).toEqual([
+        { type: "step-start", index: 0 },
+        {
+          type: "tool-input-start",
+          id: "call_1",
+          name: "lookup",
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+        {
+          type: "tool-input-delta",
+          id: "call_1",
+          name: "lookup",
+          text: '{"query":"weather"',
+          input: { query: "weather" },
+        },
+        {
+          type: "step-finish",
+          index: 0,
+          reason: { normalized: "content-filter", raw: "content_filter" },
+          usage: undefined,
+          providerMetadata: undefined,
+        },
+        { type: "finish", reason: { normalized: "content-filter", raw: "content_filter" }, usage: undefined },
+      ])
+      expect(response.toolCalls).toEqual([])
+
+      const missingIdentity = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ tool_calls: [{ index: 0, id: "call_2", function: { arguments: "{}" } }] }),
+              deltaChunk({}, "content_filter"),
+            ),
+          ),
+        ),
+      )
+      expect(missingIdentity.finishReason).toEqual({ normalized: "content-filter", raw: "content_filter" })
+      expect(missingIdentity.toolCalls).toEqual([])
+    }),
+  )
+
+  it.effect("does not finalize streamed tool calls when output is truncated", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({
+          tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: '{"query":"weather"}' } }],
+        }),
+        deltaChunk({}, "length"),
+      )
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events).toEqual([
+        { type: "step-start", index: 0 },
+        {
+          type: "tool-input-start",
+          id: "call_1",
+          name: "lookup",
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+        {
+          type: "tool-input-delta",
+          id: "call_1",
+          name: "lookup",
+          text: '{"query":"weather"}',
+          input: { query: "weather" },
+        },
+        {
+          type: "step-finish",
+          index: 0,
+          reason: { normalized: "length", raw: "length" },
+          usage: undefined,
+          providerMetadata: undefined,
+        },
+        { type: "finish", reason: { normalized: "length", raw: "length" }, usage: undefined },
+      ])
+      expect(response.toolCalls).toEqual([])
+
+      const missingIdentity = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ tool_calls: [{ index: 0, id: "call_2", function: { arguments: "{}" } }] }),
+              deltaChunk({}, "length"),
+            ),
+          ),
+        ),
+      )
+      expect(missingIdentity.finishReason).toEqual({ normalized: "length", raw: "length" })
+      expect(missingIdentity.toolCalls).toEqual([])
+    }),
+  )
+
+  it.effect("rejects unknown finish reasons without finalizing streamed tool calls", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({
+          tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: '{"query":"weather"' } }],
+        }),
+        deltaChunk({}, "future_reason"),
+      )
+      const events = yield* Ref.make<ReadonlyArray<LLMEvent>>([])
+      const error = yield* LLMClient.stream(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Stream.tap((event) => Ref.update(events, (current) => [...current, event])),
+        Stream.runDrain,
+        Effect.provide(fixedResponse(body)),
+        Effect.flip,
+      )
+
+      expect(error).toMatchObject({
+        reason: { _tag: "UnknownProvider" },
+        message: "Provider finish_reason: future_reason",
+      })
+      expect(yield* Ref.get(events)).toEqual([
+        { type: "step-start", index: 0 },
+        {
+          type: "tool-input-start",
+          id: "call_1",
+          name: "lookup",
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+        {
+          type: "tool-input-delta",
+          id: "call_1",
+          name: "lookup",
+          text: '{"query":"weather"',
+          input: { query: "weather" },
+        },
       ])
     }),
   )
@@ -1243,6 +1674,11 @@ describe("OpenAI Chat route", () => {
       ).pipe(Effect.provide(fixedResponse(body)), Effect.flip)
 
       expect(error.message).toContain("OpenAI Chat tool call delta is missing id or name")
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+      if (error.reason._tag !== "InvalidProviderOutput") return
+      expect(decodeJson(error.reason.body ?? "")).toMatchObject({
+        choices: [{ finish_reason: "tool_calls" }],
+      })
     }),
   )
 
@@ -1256,6 +1692,7 @@ describe("OpenAI Chat route", () => {
         deltaChunk({ tool_calls: [{ index: 0, function: { arguments: ':"weather"}' } }] }),
       )
       const input = LLMRequest.update(request, {
+        model: LanguageModel.update(model, { compatibility: { requireFinishReason: false } }),
         tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
       })
       const response = yield* LLMClient.generate(input).pipe(Effect.provide(fixedResponse(body)))
@@ -1263,8 +1700,14 @@ describe("OpenAI Chat route", () => {
       expect(response.events).toEqual([
         { type: "step-start", index: 0 },
         { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata: undefined },
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"', input: {} },
+        {
+          type: "tool-input-delta",
+          id: "call_1",
+          name: "lookup",
+          text: ':"weather"}',
+          input: { query: "weather" },
+        },
         { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata: undefined },
         {
           type: "tool-call",
@@ -1310,9 +1753,9 @@ describe("OpenAI Chat route", () => {
       )
 
       expect((yield* Ref.get(events)).some((event) => event.type === "text-delta")).toBeTrue()
+      expect(error.message).toBe("ECONNRESET: socket closed unexpectedly")
       expect(error.reason).toMatchObject({
         _tag: "Transport",
-        message: "ECONNRESET: socket closed unexpectedly",
         transport: "http",
         operation: "read",
         code: "ECONNRESET",
@@ -1328,9 +1771,9 @@ describe("OpenAI Chat route", () => {
         Effect.flip,
       )
 
+      expect(error.message).toBe("ECONNRESET: socket closed before output")
       expect(error.reason).toMatchObject({
         _tag: "Transport",
-        message: "ECONNRESET: socket closed before output",
         transport: "http",
         operation: "read",
         code: "ECONNRESET",
@@ -1351,7 +1794,7 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(error).toBeInstanceOf(AIError)
-      expect(error.reason).toMatchObject({ _tag: "InvalidRequest", message: "Bad request" })
+      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" }, message: "Bad request" })
     }),
   )
 

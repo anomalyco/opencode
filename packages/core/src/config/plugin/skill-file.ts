@@ -39,7 +39,9 @@ export function parse(directory: string, filepath: string, content: string): Par
   if (Result.isFailure(decoded)) return { _tag: "Skipped", reason: "frontmatter", issue: decoded.failure }
   const frontmatter = decoded.success
   const id =
-    path.dirname(filepath) === directory ? path.basename(filepath, ".md") : path.basename(path.dirname(filepath))
+    path.dirname(filepath) === directory && path.basename(filepath) !== "SKILL.md"
+      ? path.basename(filepath, ".md")
+      : path.basename(path.dirname(filepath))
   const slash = metadataBoolean(frontmatter.metadata, "opencode/slash") ?? frontmatter.slash
   const autoinvoke = metadataBoolean(frontmatter.metadata, "opencode/autoinvoke")
   return {

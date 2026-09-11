@@ -2,6 +2,90 @@
   user-select: none;
 }
 
+[data-slot="vertical-tabs-sidebar"] [data-slot="vertical-tabs"] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+[data-slot="vertical-tabs-sidebar"] [data-slot="vertical-tabs-scroll"] {
+  min-height: 0;
+  /* Leave enough space to scroll the final tab clear of the fade above Settings. */
+  padding-block-end: 16px;
+  scroll-padding-block-end: 16px;
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 16px), transparent);
+  mask-image: linear-gradient(to bottom, black calc(100% - 16px), transparent);
+}
+
+[data-slot="mobile-tabs-trigger"][aria-expanded="true"] {
+  background:
+    linear-gradient(var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
+    var(--v2-background-bg-layer-02);
+}
+
+[data-action="mobile-tabs-home"][data-state="pressed"] {
+  background:
+    linear-gradient(var(--v2-overlay-simple-overlay-pressed), var(--v2-overlay-simple-overlay-pressed)),
+    var(--v2-background-bg-layer-02);
+}
+
+/* Keep the strip mounted for tab shortcuts and session metadata while collapsed. */
+[data-slot="mobile-tabs-drawer"] {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 8px;
+  margin-block-start: 8px;
+}
+
+[data-slot="mobile-tabs-drawer-list"] {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+[data-slot="mobile-tabs-drawer"] [data-slot="vertical-tabs"] {
+  display: flex;
+  flex-direction: column;
+}
+
+[data-slot="mobile-tabs-drawer"] [data-slot="vertical-tabs-scroll"] {
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+
+[data-slot="mobile-tabs-drawer"] [data-titlebar-tab] {
+  min-height: 44px;
+}
+
+[data-slot="mobile-tabs-drawer"] [data-titlebar-tab] [data-slot="tab-close"] {
+  inset-inline-end: 0;
+  width: 44px;
+  height: 44px;
+}
+
+[data-slot="mobile-tabs-drawer"] [data-slot="tab-close"] button {
+  width: 44px;
+  height: 44px;
+  opacity: 1;
+}
+
+[data-slot="mobile-tabs-drawer"] [data-titlebar-tab] [data-slot="tab-link"] {
+  padding-inline-end: 38px;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+[data-slot="mobile-tabs-drawer"] [data-titlebar-tab] [data-slot="tab-title"] {
+  color: var(--v2-text-text-base);
+  font-weight: 530;
+}
+
+[data-slot="mobile-tabs-drawer"] [data-titlebar-tab] [data-slot="tab-project"] {
+  color: var(--v2-text-text-faint);
+  font-weight: 440;
+}
+
 [data-slot="titlebar-tab-item"] a {
   outline: none;
 }

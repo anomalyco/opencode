@@ -1,9 +1,9 @@
 import { For, Show, createMemo, lazy, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { Button } from "@opencode-ai/ui/button"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TextInput } from "@opencode-ai/ui/text-input"
+import { Button } from "@opencode/ui/button"
+import { IconButton } from "@opencode/ui/icon-button"
+import { TextInput } from "@opencode/ui/text-input"
 import { showToast } from "@/shell/notifications/toast"
 import fuzzysort from "fuzzysort"
 import { DEFAULT_PALETTE_KEYBIND, formatKeybind, parseKeybind, useCommand } from "@/shell/commands/command"
@@ -11,7 +11,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { SettingsList } from "@/settings/list"
 
-const Icon = lazy(() => import("@opencode-ai/ui/icon").then((module) => ({ default: module.Icon })))
+const Icon = lazy(() => import("@opencode/ui/icon").then((module) => ({ default: module.Icon })))
 
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 const PALETTE_ID = "command.palette"

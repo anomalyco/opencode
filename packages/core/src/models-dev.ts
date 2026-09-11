@@ -1,13 +1,13 @@
 import { Cause, Context, Duration, Effect, Layer, Option, Schedule, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { ModelsDev } from "@opencode-ai/schema/models-dev"
-import { Money } from "@opencode-ai/schema/money"
+import { ModelsDev } from "@opencode/schema/models-dev"
+import { Money } from "@opencode/schema/money"
 import { App } from "./app.js"
-import { Hash } from "@opencode-ai/util/hash"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Hash } from "@opencode/util/hash"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "./bus.js"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { httpClient } from "@opencode/util/effect/app-node-platform"
 import { Model } from "./model.js"
 import { Provider } from "./provider.js"
 import { KV } from "./kv.js"
@@ -519,7 +519,7 @@ function modelInfo(
   }
 }
 
-export { Event } from "@opencode-ai/schema/models-dev"
+export { Event } from "@opencode/schema/models-dev"
 
 export interface Interface {
   readonly get: () => Effect.Effect<readonly Snapshot[]>
@@ -572,7 +572,7 @@ function cacheKey(source: string) {
 }
 
 export function bodyDigest(text: string) {
-  return new Bun.CryptoHasher("sha256").update(text).digest("hex")
+  return Hash.sha256(text)
 }
 
 export const layer = (options?: Options) =>
@@ -636,8 +636,8 @@ export const layer = (options?: Options) =>
       // population. The payload has outgrown some KV backends' per-value
       // limits (Durable Object SQLite caps values at 2 MB and api.json
       // passed it in Aug 2026); a boot without a cache hit just refetches.
-      const writeCache = Effect.fn("ModelsDev.writeCache")(function* (text: string) {
-        yield* kv.set(key, { updatedAt: Date.now(), digest: bodyDigest(text), body: text }).pipe(
+      const writeCache = Effect.fn("ModelsDev.writeCache")(function* (text: string, digest = bodyDigest(text)) {
+        yield* kv.set(key, { updatedAt: Date.now(), digest, body: text }).pipe(
           Effect.catchCauseIf(
             (cause) => !Cause.hasInterruptsOnly(cause),
             (cause) => Effect.logWarning("Failed to cache models.dev catalog", { cause }),
@@ -681,12 +681,13 @@ export const layer = (options?: Options) =>
               const stored = yield* loadFromCache()
               if (!force && stored && Date.now() - stored.updatedAt < Duration.toMillis(ttl)) return
               const text = yield* fetchApi()
+              const digest = bodyDigest(text)
               // models.dev rarely changes between polls; skip the cache write,
               // invalidation, and Refreshed event for a byte-identical body so
               // downstream catalog.updated listeners stay quiet.
-              if (!force && stored?.digest === bodyDigest(text)) return
+              if (!force && stored?.digest === digest) return
               yield* decodeCatalog(text)
-              yield* writeCache(text)
+              yield* writeCache(text, digest)
               yield* invalidate
               yield* bus.publish(ModelsDev.Event.Refreshed, {})
             }),

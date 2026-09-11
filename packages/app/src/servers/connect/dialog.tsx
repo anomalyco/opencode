@@ -1,8 +1,8 @@
-import { Button } from "@opencode-ai/ui/button"
-import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/dialog"
-import { Divider } from "@opencode-ai/ui/divider"
-import { TextInput } from "@opencode-ai/ui/text-input"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Button } from "@opencode/ui/button"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
+import { Divider } from "@opencode/ui/divider"
+import { TextInput } from "@opencode/ui/text-input"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
 import { type Component, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -16,9 +16,9 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { normalizeServerUrl, ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useCheckServerHealth } from "@/runtime/server/health"
+import { usePlatform } from "@/runtime/platform/platform"
+import { isMixedContent } from "./browser"
 import "@/settings/settings.css"
-
-const DEFAULT_USERNAME = "opencode"
 
 type FormMode = "list" | "add" | "edit"
 
@@ -83,11 +83,14 @@ export const DialogServer: Component<{
               invalid={!!form.state.error()}
               disabled={form.state.busy()}
               autofocus
+              aria-describedby={form.state.error() ? "dialog-server-error" : undefined}
               onInput={(event) => form.change.value(event.currentTarget.value)}
               onKeyDown={keyDown}
             />
             <Show when={form.state.error()}>
-              <span class="settings-server-dialog-error">{form.state.error()}</span>
+              <span id="dialog-server-error" class="settings-server-dialog-error" role="alert">
+                {form.state.error()}
+              </span>
             </Show>
           </div>
           <div class="flex w-full min-w-0 flex-col gap-2">
@@ -103,33 +106,18 @@ export const DialogServer: Component<{
               onKeyDown={keyDown}
             />
           </div>
-          <div class="grid w-full min-w-0 grid-cols-2 gap-4">
-            <div class="flex min-w-0 flex-col gap-2">
-              <label class="settings-server-dialog-label">{language.t("dialog.server.add.username")}</label>
-              <TextInput
-                type="text"
-                appearance="large"
-                class="!w-full self-stretch"
-                value={form.state.username()}
-                placeholder={language.t("dialog.server.add.usernamePlaceholder")}
-                disabled={form.state.busy()}
-                onInput={(event) => form.change.username(event.currentTarget.value)}
-                onKeyDown={keyDown}
-              />
-            </div>
-            <div class="flex min-w-0 flex-col gap-2">
-              <label class="settings-server-dialog-label">{language.t("dialog.server.add.password")}</label>
-              <TextInput
-                type="password"
-                appearance="large"
-                class="!w-full self-stretch"
-                value={form.state.password()}
-                placeholder={language.t("dialog.server.add.passwordPlaceholder")}
-                disabled={form.state.busy()}
-                onInput={(event) => form.change.password(event.currentTarget.value)}
-                onKeyDown={keyDown}
-              />
-            </div>
+          <div class="flex w-full min-w-0 flex-col gap-2">
+            <label class="settings-server-dialog-label">{language.t("dialog.server.add.password")}</label>
+            <TextInput
+              type="password"
+              appearance="large"
+              class="!w-full self-stretch"
+              value={form.state.password()}
+              placeholder={language.t("dialog.server.add.passwordPlaceholder")}
+              disabled={form.state.busy()}
+              onInput={(event) => form.change.password(event.currentTarget.value)}
+              onKeyDown={keyDown}
+            />
           </div>
         </div>
       </DialogBody>
@@ -146,6 +134,7 @@ export const DialogServer: Component<{
 }
 
 function createFormController(options: { onSelect?: () => void } = {}) {
+  const platform = usePlatform()
   const server = useServers()
   const tabs = useTabs()
   const global = useGlobal()
@@ -155,7 +144,7 @@ function createFormController(options: { onSelect?: () => void } = {}) {
   const [store, setStore] = createStore({
     mode: "list" as FormMode,
     originalUrl: undefined as string | undefined,
-    values: { url: "", name: "", username: DEFAULT_USERNAME, password: "" },
+    values: { url: "", name: "", password: "" },
     error: "",
     status: undefined as boolean | undefined,
   })
@@ -167,7 +156,7 @@ function createFormController(options: { onSelect?: () => void } = {}) {
     setStore({
       mode: "list",
       originalUrl: undefined,
-      values: { url: "", name: "", username: DEFAULT_USERNAME, password: "" },
+      values: { url: "", name: "", password: "" },
       error: "",
       status: undefined,
     })
@@ -197,13 +186,11 @@ function createFormController(options: { onSelect?: () => void } = {}) {
       const original = store.mode === "edit" ? editing() : undefined
       if (store.mode === "edit" && !original) return
       const name = store.values.name.trim() || undefined
-      const username = store.values.username || undefined
       const password = store.values.password || undefined
       if (
         original?.type === "http" &&
         normalized === original.http.url &&
         name === original.displayName &&
-        username === original.http.username &&
         password === original.http.password
       ) {
         reset()
@@ -215,13 +202,19 @@ function createFormController(options: { onSelect?: () => void } = {}) {
         displayName: name,
         http: {
           url: normalized,
-          username: store.mode === "add" && !password ? undefined : username,
           password,
         },
       }
       const result = await checkServerHealth(connection.http)
       if (!result.healthy) {
-        setStore("error", language.t("dialog.server.add.error"))
+        setStore(
+          "error",
+          language.t(
+            platform.platform === "web" && isMixedContent(location.href, normalized)
+              ? "server.connect.mixedContent"
+              : "dialog.server.add.error",
+          ),
+        )
         return
       }
       if (original?.type === "http") {
@@ -256,7 +249,6 @@ function createFormController(options: { onSelect?: () => void } = {}) {
       values: {
         url: connection.http.url,
         name: connection.displayName ?? "",
-        username: connection.http.username ?? "",
         password: connection.http.password ?? "",
       },
       error: "",
@@ -283,7 +275,6 @@ function createFormController(options: { onSelect?: () => void } = {}) {
       busy: () => request.isPending,
       value: () => store.values.url,
       name: () => store.values.name,
-      username: () => store.values.username,
       password: () => store.values.password,
       error: () => store.error,
       status: () => store.status,
@@ -291,7 +282,6 @@ function createFormController(options: { onSelect?: () => void } = {}) {
     change: {
       value: (value: string) => change("url", value),
       name: (value: string) => change("name", value),
-      username: (value: string) => change("username", value),
       password: (value: string) => change("password", value),
     },
     start: { add: startAdd, edit: startEdit },

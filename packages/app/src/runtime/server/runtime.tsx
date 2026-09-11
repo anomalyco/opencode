@@ -1,4 +1,4 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import { Accessor, createEffect, createMemo, createResource, createRoot, getOwner } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServers } from "./registry"
@@ -6,12 +6,19 @@ import { pathKey } from "@/workspaces/path-key"
 import { useServerHealth } from "@/runtime/server/health"
 import { createServerSdkContext } from "./client"
 import { createServerSyncContext } from "./sync"
-import { createData } from "@opencode-ai/client/solid"
+import { createData } from "@opencode/client/solid"
 import type { ServerScope } from "@/runtime/server/scope"
-import { createServerPermissionState } from "@/session/requests/server-permission"
+import { createPermissionAutoApprover } from "@/session/requests/auto-approve"
 import { createServerNotificationState } from "@/shell/notifications/notification"
 import { createNotificationCoordinator } from "@/shell/notifications/coordinator"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { createDesktopData } from "./data"
+import { ModelState } from "./persistence"
+import { useLanguage } from "@/runtime/i18n/language"
+import { showToast } from "@/shell/notifications/toast"
+import { formatServerError } from "./errors"
+import { useSettings } from "@/settings/model"
+import { timelinePreset } from "@opencode/session-ui/timeline/detail"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -99,18 +106,11 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
 })
 
 function createGlobalModels() {
-  const [store, setStore, _, ready] = persisted(
-    Persist.global("model"),
-    createStore<{
-      user: Array<{ providerID: string; modelID: string; visibility: "show" | "hide"; favorite?: boolean }>
-      recent: Array<{ providerID: string; modelID: string }>
-      variant?: Record<string, string | undefined>
-    }>({
-      user: [],
-      recent: [],
-      variant: {},
-    }),
-  )
+  const [store, setStore, _, ready] = persisted(Persist.global("model"), ModelState, {
+    user: [],
+    recent: [],
+    variant: {},
+  })
   const [recent] = createResource(
     async () => {
       const value = store.recent
@@ -135,19 +135,33 @@ function createServerController(
   projects: ReturnType<typeof createServerProjects>,
   notificationCoordinator: ReturnType<typeof createNotificationCoordinator>,
 ) {
+  const language = useLanguage()
+  const settings = useSettings()
   const connKey = ServerConnection.key(conn)
   const sdk = createServerSdkContext(conn, scope)
-  const data = createData({
+  const source = createData({
     api: () => sdk.api,
+    initialMessageLimit: () => (timelinePreset(settings.general.timelineDetail())?.id === "compact" ? 40 : 20),
     event: {
       on: sdk.event.on,
       listen: (handler) => sdk.event.listen((event) => handler({ name: event.type, details: event })),
     },
     connection: sdk.connection,
     directory: "",
+    onError(error) {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: formatServerError(error, language.t),
+      })
+    },
+  })
+  const data = createDesktopData({
+    data: source,
+    remove: (sessionID) => sdk.api.session.remove({ sessionID }),
   })
   const sync = createServerSyncContext(sdk, data)
-  const permission = createServerPermissionState({ sdk, sync, data })
+  createPermissionAutoApprover({ sdk, data })
   const notification = createServerNotificationState({ sdk, data, key: connKey, coordinator: notificationCoordinator })
 
   function enrich(project: { worktree: string; expanded: boolean }) {
@@ -190,7 +204,6 @@ function createServerController(
       list: projectsList,
       recentlyClosed: recentlyClosedList,
     },
-    permission,
     notification,
   }
 }

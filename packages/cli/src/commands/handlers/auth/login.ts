@@ -1,6 +1,6 @@
 import { autocomplete, intro, log, outro, select, spinner, text } from "@clack/prompts"
 import { Effect, Option } from "effect"
-import type { FormAnswer, IntegrationInfo, OpenCodeClient } from "@opencode-ai/client"
+import type { FormAnswer, IntegrationInfo, OpenCodeClient } from "@opencode/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { handlePromptErrors, openUrl, prompt, requireInteractive } from "../../../ui/prompt"
@@ -17,8 +17,8 @@ import {
 } from "./shared"
 
 const integrationPriority = new Map([
-  ["opencode", 0],
-  ["opencode-go", 1],
+  ["opencode-go", 0],
+  ["opencode", 1],
   ["openai", 2],
   ["github-copilot", 3],
   ["google", 4],

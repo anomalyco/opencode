@@ -1,2 +1,2 @@
-export * as SessionMessage from "./message.js"
-export * from "@opencode-ai/schema/session-message"
+export * as SessionMessage from "@opencode/schema/session-message"
+export * from "@opencode/schema/session-message"

@@ -1,18 +1,21 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/merman",
+  "name": "@opencode/merman",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
+    "./markdown": "./src/markdown.ts",
+    "./palette": "./src/palette.ts",
     "./plugin": "./src/plugin.ts"
   },
   "scripts": {
+    "audit:layouts": "bun run script/layout-audit.ts",
     "test": "bun test --timeout 30000 --only-failures",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "workspace:*",
+    "@opencode/plugin": "workspace:*",
     "@opentui/core": "catalog:",
     "entities": "7.0.1",
     "string-width": "catalog:"

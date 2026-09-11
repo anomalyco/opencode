@@ -42,7 +42,6 @@ export default defineMain({
           { find: /^@\/workspaces\/location$/, replacement: path.resolve(mocks, "app/context/location.ts") },
           { find: /^@\/composer\/comments$/, replacement: path.resolve(mocks, "app/context/comments.ts") },
           { find: /^@\/shell\/commands\/command$/, replacement: path.resolve(mocks, "app/context/command.ts") },
-          { find: /^@\/session\/requests\/permission$/, replacement: path.resolve(mocks, "app/context/permission.ts") },
           { find: /^@\/runtime\/platform\/platform$/, replacement: path.resolve(mocks, "app/context/platform.ts") },
           { find: /^@\/runtime\/server\/global-sync$/, replacement: path.resolve(mocks, "app/context/global-sync.ts") },
           { find: /^@\/runtime\/server\/sync$/, replacement: path.resolve(mocks, "app/context/server-sync.ts") },

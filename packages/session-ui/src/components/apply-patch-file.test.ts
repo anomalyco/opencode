@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createTwoFilesPatch } from "diff"
 import { patchFile, patchFileGroups, patchFiles } from "./apply-patch-file"
+import { text } from "./session-diff"
 
 describe("apply patch files", () => {
   test("parses current file diffs", () => {
@@ -79,5 +80,85 @@ describe("apply patch files", () => {
 
     expect(groups).toHaveLength(1)
     expect(groups[0]?.views).toHaveLength(2)
+  })
+
+  test.each(["\n", "\r\n"])("preserves complete chained contents with %j line endings", (newline) => {
+    const before = `const count = 1${newline}export { count }`
+    const middle = `const count = 2${newline}export { count }`
+    const after = `const count = 3${newline}export { count }`
+    const groups = patchFileGroups(
+      [before, middle].map((value, index) => ({
+        file: "count.ts",
+        patch: createTwoFilesPatch("count.ts", "count.ts", value, index === 0 ? middle : after, "", "", {
+          context: Infinity,
+        }),
+        status: "modified",
+        additions: 1,
+        deletions: 1,
+      })),
+    )
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0]).toMatchObject({ type: "update", additions: 1, deletions: 1 })
+    expect(groups[0]!.views).toHaveLength(1)
+    expect(text(groups[0]!.views[0]!, "deletions")).toBe(before)
+    expect(text(groups[0]!.views[0]!, "additions")).toBe(after)
+    expect(groups[0]!.views).toBe(groups[0]!.views)
+  })
+
+  test("uses net counts for complete patches instead of producer counts", () => {
+    const groups = patchFileGroups([
+      {
+        file: "count.ts",
+        patch: createTwoFilesPatch("count.ts", "count.ts", "one\n", "two\n", "", "", { context: Infinity }),
+        status: "modified",
+        additions: 4,
+        deletions: 5,
+      },
+    ])
+    expect(groups[0]).toMatchObject({ additions: 1, deletions: 1 })
+    expect(groups[0]!.views[0]).toMatchObject({ additions: 1, deletions: 1 })
+  })
+
+  test("keeps disconnected complete patches separate and preserves file order", () => {
+    const groups = patchFileGroups(
+      [
+        ["b.ts", "one\n", "two\n"],
+        ["a.ts", "first\n", "second\n"],
+        ["b.ts", "three\n", "four\n"],
+      ].map(([file, before, after]) => ({
+        file,
+        patch: createTwoFilesPatch(file!, file!, before!, after!, "", "", { context: Infinity }),
+        status: "modified",
+        additions: 1,
+        deletions: 1,
+      })),
+    )
+    expect(groups.map((group) => group.path)).toEqual(["b.ts", "a.ts"])
+    expect(groups[0]).toMatchObject({ additions: 2, deletions: 2 })
+    expect(groups[0]!.views.map((view) => text(view, "additions"))).toEqual(["two\n", "four\n"])
+  })
+
+  test.each([
+    ["", "created\n", "", "added", "deleted", "delete", 0, 0],
+    ["original\n", "changed\n", "original\n", "modified", "modified", "update", 0, 0],
+    ["", "created\n", "changed\n", "added", "modified", "add", 1, 0],
+  ])("preserves chain status and cancellation %#", (before, middle, after, first, last, type, additions, deletions) => {
+    const groups = patchFileGroups(
+      [
+        { before, after: middle, status: first },
+        { before: middle, after, status: last },
+      ].map((value) => ({
+        file: "chain.ts",
+        patch: createTwoFilesPatch("chain.ts", "chain.ts", value.before, value.after, "", "", { context: Infinity }),
+        status: value.status,
+        additions: 1,
+        deletions: 1,
+      })),
+    )
+    expect(groups[0]).toMatchObject({ type, additions, deletions })
+    expect(groups[0]!.views).toHaveLength(1)
+    expect(text(groups[0]!.views[0]!, "deletions")).toBe(before)
+    expect(text(groups[0]!.views[0]!, "additions")).toBe(after)
   })
 })
