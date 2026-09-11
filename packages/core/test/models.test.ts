@@ -18,13 +18,19 @@ import path from "path"
 // bun process.
 const ORIGINAL_MODELS_PATH = Flag.OPENCODE_MODELS_PATH
 const ORIGINAL_DISABLE_FETCH = Flag.OPENCODE_DISABLE_MODELS_FETCH
+const ORIGINAL_CLIENT = process.env["OPENCODE_CLIENT"]
 beforeAll(() => {
   Flag.OPENCODE_MODELS_PATH = undefined
   Flag.OPENCODE_DISABLE_MODELS_FETCH = true
+  // The suite asserts the "/cli" user-agent suffix; desktop/web hosts set
+  // OPENCODE_CLIENT, which would otherwise leak into the assertion.
+  process.env["OPENCODE_CLIENT"] = "cli"
 })
 afterAll(() => {
   Flag.OPENCODE_MODELS_PATH = ORIGINAL_MODELS_PATH
   Flag.OPENCODE_DISABLE_MODELS_FETCH = ORIGINAL_DISABLE_FETCH
+  if (ORIGINAL_CLIENT === undefined) delete process.env["OPENCODE_CLIENT"]
+  else process.env["OPENCODE_CLIENT"] = ORIGINAL_CLIENT
 })
 
 const cacheFile = path.join(Global.Path.cache, "models.json")
@@ -233,6 +239,27 @@ describe("ModelsDev Service", () => {
       expect(final.calls.length).toBe(1)
       expect(final.calls[0].url).toContain("/api.json")
       expect(final.calls[0].userAgent).toContain("/cli")
+    }),
+  )
+
+  it.live("refresh(true) builds the user agent per request, not at import time", () =>
+    Effect.gen(function* () {
+      yield* writeCache(fixture)
+      const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
+      yield* provided(
+        state,
+        Effect.gen(function* () {
+          const svc = yield* ModelsDev.Service
+          yield* svc.refresh(true)
+          // Flip the client flag between fetches; a module-load-time constant would not see this.
+          process.env["OPENCODE_CLIENT"] = "desktop"
+          yield* svc.refresh(true)
+        }),
+      )
+      const final = yield* Ref.get(state)
+      expect(final.calls.length).toBe(2)
+      expect(final.calls[0].userAgent).toContain("/cli")
+      expect(final.calls[1].userAgent).toContain("/desktop")
     }),
   )
 
