@@ -617,6 +617,7 @@ export const dict = {
   "toast.model.none.description": "Connect a provider to summarize this session",
 
   "toast.file.loadFailed.title": "Failed to load file",
+  "file.error.notFound": "File not found: {{name}}",
   "toast.file.listFailed.title": "Failed to list files",
 
   "toast.context.noLineSelection.title": "No line selection",
