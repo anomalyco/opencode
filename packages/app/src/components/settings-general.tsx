@@ -30,6 +30,7 @@ import {
 import { decode64 } from "@/utils/base64"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { ExternalLink } from "./external-link"
+import { SettingsCustomInstructions } from "./settings-custom-instructions"
 import { SettingsList } from "./settings-list"
 
 let demoSoundState = {
@@ -757,6 +758,9 @@ export const SettingsGeneral: Component = () => {
         </Show>
 
         <GeneralSection />
+
+        {/* Custom instructions sits in its own section so general-row changes merge cleanly. */}
+        <SettingsCustomInstructions />
 
         <AppearanceSection />
 

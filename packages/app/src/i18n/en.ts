@@ -1147,4 +1147,12 @@ export const dict = {
   "workspace.reset.archived.one": "1 session will be archived.",
   "workspace.reset.archived.many": "{{count}} sessions will be archived.",
   "workspace.reset.note": "This will reset the workspace to match the default branch.",
+
+  "settings.customInstructions.title": "Custom instructions",
+  "settings.customInstructions.description":
+    "Tell OpenCode how to behave in every new chat: your role, the tools on this machine, and how you like to work.",
+  "settings.customInstructions.placeholder":
+    "e.g. You are a senior TypeScript engineer. Prefer Bun APIs, explain tradeoffs briefly, and run typecheck before finishing.",
+  "settings.customInstructions.hint":
+    "Saved to your global config and applied to each new chat. Project config can extend it.",
 }
