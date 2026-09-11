@@ -58,6 +58,10 @@ export interface LearnInput {
 
 export interface Interface {
   readonly dbPath: string
+  readonly fts: {
+    readonly available: boolean
+    readonly bm25: boolean
+  }
   readonly teach: (input: TeachInput) => Effect.Effect<Item>
   readonly recall: (input: RecallInput) => Effect.Effect<Item[]>
   readonly list: (input?: ListInput) => Effect.Effect<Item[]>
@@ -157,7 +161,7 @@ export function initDatabase(dbPath: string): Database {
       END;
     `)
   } catch (error) {
-    console.warn("Memory: FTS5 full-text search initialization failed; falling back to LIKE search.", error)
+    console.warn(`Memory: FTS5 full-text search initialization failed for "${dbPath}"; falling back to LIKE search.`, error)
   }
 
   return db
@@ -177,9 +181,23 @@ export const layer = Layer.effect(
       try {
         db.prepare("SELECT bm25(memory_fts) FROM memory_fts WHERE memory_fts MATCH ?").all("test")
         hasBm25 = true
-      } catch {
+        yield* Effect.logInfo("Memory: FTS5 and bm25 ranking detected and available").pipe(
+          Effect.annotateLogs({ dbPath, fts: true, bm25: true }),
+        )
+      } catch (error) {
         hasBm25 = false
+        console.warn(
+          `Memory: FTS5 bm25 ranking unavailable for "${dbPath}"; falling back to time_created ordering.`,
+          error,
+        )
+        yield* Effect.logWarning(
+          "Memory: FTS5 bm25 ranking unavailable; falling back to time_created ordering",
+        ).pipe(Effect.annotateLogs({ dbPath, fts: true, bm25: false, error: String(error) }))
       }
+    } else {
+      yield* Effect.logWarning("Memory: FTS5 table is unavailable; falling back to LIKE search").pipe(
+        Effect.annotateLogs({ dbPath, fts: false, bm25: false }),
+      )
     }
 
     const teach = Effect.fn("Memory.teach")(function* (input: TeachInput) {
@@ -341,6 +359,10 @@ export const layer = Layer.effect(
 
     return Service.of({
       dbPath,
+      fts: {
+        available: hasFtsTable,
+        bm25: hasBm25,
+      },
       teach,
       recall,
       list,

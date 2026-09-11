@@ -103,4 +103,14 @@ describe("Memory Persistence (SQLite .db)", () => {
       // Ignored on Windows if file handle release is asynchronous
     }
   })
+
+  it("provides fts and bm25 status on the Memory service", async () => {
+    const memory = await Effect.runPromise(
+      Effect.gen(function* () {
+        return yield* Memory.Service
+      }).pipe(Effect.provide(Memory.layer)),
+    )
+    expect(memory.fts.available).toBe(true)
+    expect(memory.fts.bm25).toBe(true)
+  })
 })
