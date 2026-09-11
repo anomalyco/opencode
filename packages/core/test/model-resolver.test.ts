@@ -855,7 +855,6 @@ describe("ModelResolver", () => {
                 expect(modelID).toBe("api-test-model")
                 expect(settings).toEqual({
                   region: "test",
-                  providerOptions: { region: "test" },
                   headers: { "x-package": "header" },
                   body: { custom: true },
                 })
@@ -1022,7 +1021,7 @@ describe("ModelResolver", () => {
                     baseURL: "https://provider.example/v1",
                     headers: { "x-provider": "header" },
                     body: { custom: true },
-                    providerOptions,
+                    ...providerOptions,
                   })
                   return LanguageModel.make({ id: modelID, provider: "native-provider", route: native.route })
                 },
@@ -1109,10 +1108,8 @@ describe("ModelResolver", () => {
                   accessToken: "vertex-token",
                   location: "eu",
                   project: "vertex-project",
-                  providerOptions: {
-                    thinking: { type: "adaptive", display: "summarized" },
-                    effort: "high",
-                  },
+                  thinking: { type: "adaptive", display: "summarized" },
+                  effort: "high",
                 })
                 return LanguageModel.make({ id: modelID, provider: "native-provider", route: native.route })
               },

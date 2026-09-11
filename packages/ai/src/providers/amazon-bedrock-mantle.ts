@@ -23,16 +23,16 @@ export type Config = RouteDefaultsInput & {
   readonly providerOptions?: OpenAIProviderOptionsInput
 }
 
-export interface Settings extends ProviderPackage.Settings {
-  readonly apiKey?: string
-  readonly auth?: "bearer" | "sigv4"
-  readonly baseURL?: string
-  readonly credentials?: Credentials
-  readonly profile?: string
-  readonly region?: string
-  readonly topP?: number
-  readonly providerOptions?: OpenAIProviderOptionsInput
-}
+export type Settings = ProviderPackage.Settings &
+  OpenAIProviderOptionsInput & {
+    readonly apiKey?: string
+    readonly auth?: "bearer" | "sigv4"
+    readonly baseURL?: string
+    readonly credentials?: Credentials
+    readonly profile?: string
+    readonly region?: string
+    readonly topP?: number
+  }
 
 const responsesRoute = Route.make({
   id: "bedrock-mantle-responses",
@@ -105,18 +105,29 @@ export const configure = (input: Config = {}) => {
 
 export const provider = configure()
 
-const fromSettings = (settings: Settings) =>
+const fromSettings = ({
+  apiKey,
+  auth,
+  baseURL,
+  body,
+  credentials,
+  headers,
+  profile,
+  region,
+  topP,
+  ...providerOptions
+}: Settings) =>
   configure({
-    apiKey: settings.apiKey,
-    auth: settings.auth,
-    baseURL: settings.baseURL,
-    credentials: settings.credentials,
-    generation: settings.topP === undefined ? undefined : { topP: settings.topP },
-    headers: settings.headers === undefined ? undefined : { ...settings.headers },
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    profile: settings.profile,
-    providerOptions: settings.providerOptions,
-    region: settings.region,
+    apiKey,
+    auth,
+    baseURL,
+    credentials,
+    generation: topP === undefined ? undefined : { topP },
+    headers: headers === undefined ? undefined : { ...headers },
+    http: body === undefined ? undefined : { body: { ...body } },
+    profile,
+    providerOptions,
+    region,
   })
 
 export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (

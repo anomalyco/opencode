@@ -185,13 +185,13 @@ describe("provider package entrypoints", () => {
       baseURL: "https://provider.example.test/v1/",
       headers: { "x-application": "opencode" },
       body: { service_tier: "priority" },
-      providerOptions: { reasoningEffort: "high" as const },
+      reasoningEffort: "high" as const,
     }
     const deepinfra = DeepInfra.model("google/gemma-3-27b-it", settings)
 
     expect(deepinfra.route.id).toBe("deepinfra-chat")
     expect(deepinfra.route.endpoint.baseURL).toBe("https://provider.example.test/v1/openai")
-    expect(deepinfra.route.defaults.providerOptions).toEqual(settings.providerOptions)
+    expect(deepinfra.route.defaults.providerOptions).toEqual({ reasoningEffort: "high" })
     expect(deepinfra.route.defaults.headers).toEqual(settings.headers)
     expect(deepinfra.route.defaults.http?.body).toEqual(settings.body)
   })
@@ -207,7 +207,7 @@ describe("provider package entrypoints", () => {
         apiKey: "fixture",
         headers: { "x-application": "opencode" },
         body: { custom: true },
-        providerOptions: { reasoningEffort: "high" },
+        reasoningEffort: "high",
       })
       expect(selected.provider).toBe(provider.id)
       expect(selected.route.endpoint.baseURL).toBe(provider.baseURL({ accountId: "account" }))
@@ -228,11 +228,11 @@ describe("provider package entrypoints", () => {
     }
     const openrouter = OpenRouter.model("anthropic/claude-sonnet-4", {
       ...settings,
-      providerOptions: { usage: true },
+      usage: true,
     })
     const xai = XAI.model("grok-4", {
       ...settings,
-      providerOptions: { reasoningEffort: "high" },
+      reasoningEffort: "high",
     })
 
     for (const selected of [openrouter, xai]) {
@@ -266,7 +266,8 @@ describe("provider package entrypoints", () => {
       provider: "example",
       headers: { "x-application": "opencode" },
       body: { service_tier: "priority" },
-      providerOptions: { reasoningEffort: "low", store: true },
+      reasoningEffort: "low",
+      store: true,
     })
 
     expect(String(selected.provider)).toBe("example")
@@ -292,7 +293,7 @@ describe("provider package entrypoints", () => {
       provider: "example",
       headers: { "x-application": "opencode" },
       body: { metadata: { user_id: "user_1" } },
-      providerOptions: { effort: "low" },
+      effort: "low",
     })
 
     expect(String(selected.provider)).toBe("example")
@@ -312,7 +313,7 @@ describe("provider package entrypoints", () => {
     const Anthropic = await import("@opencode/ai/providers/anthropic")
     const selected = Anthropic.model("claude-sonnet-4-6", {
       apiKey: "fixture",
-      providerOptions: { thinking: { type: "adaptive" } },
+      thinking: { type: "adaptive" },
     })
 
     expect(selected.route.defaults.providerOptions).toEqual({ thinking: { type: "adaptive" } })
@@ -406,7 +407,7 @@ describe("provider package entrypoints", () => {
       baseURL: "https://generativelanguage.test/v1beta",
       headers: { "x-application": "opencode" },
       body: { safetySettings: [] },
-      providerOptions: { thinkingConfig: { thinkingBudget: 1_024 } },
+      thinkingConfig: { thinkingBudget: 1_024 },
     })
 
     expect(selected.route.id).toBe("gemini")

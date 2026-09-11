@@ -1,3 +1,4 @@
+import { Struct } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
 import { AlibabaChat } from "../protocols/alibaba-chat.js"
 import { AlibabaMessages } from "../protocols/alibaba-messages.js"
@@ -34,9 +35,9 @@ export type Config = Location &
     readonly providerOptions?: ChatOptionsInput | MessagesOptionsInput | ResponsesOptionsInput
   }
 export type Settings<Options = ChatOptionsInput> = Location &
-  ProviderPackage.Settings & {
+  ProviderPackage.Settings &
+  Options & {
     readonly apiKey?: string
-    readonly providerOptions?: Options
   }
 
 const hosts = new Map<string, string>([
@@ -115,7 +116,11 @@ export const responsesModel: ProviderPackage.Definition<
 
 function fromSettings(input: Settings<Config["providerOptions"]>) {
   const { body, ...rest } = input
-  return configure({ ...rest, http: body === undefined ? undefined : { body } })
+  return configure({
+    ...rest,
+    http: body === undefined ? undefined : { body },
+    providerOptions: Struct.omit(rest, ["apiKey", "baseURL", "headers", "region", "workspaceID"]),
+  })
 }
 
 export const webSearch = () => hostedTool("web_search", "Search the web with Alibaba's hosted search tool.")

@@ -27,10 +27,10 @@ export type LanguageModelOptions = GatewayURL &
   }
 
 export type Settings = ProviderPackage.Settings &
+  OpenAIProviderOptionsInput &
   GatewayURL & {
     readonly apiKey?: string
     readonly gatewayApiKey?: string
-    readonly providerOptions?: OpenAIProviderOptionsInput
   }
 
 export const baseURL = (input: GatewayURL) => {
@@ -85,14 +85,25 @@ export const configure = (input: LanguageModelOptions) => {
 
 export const provider = { id, configure }
 
-export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) =>
-  configure({
-    apiKey: settings.apiKey,
-    gatewayApiKey: settings.gatewayApiKey,
+export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) => {
+  const {
+    accountId: _,
+    apiKey,
+    baseURL: _url,
+    body,
+    gatewayApiKey,
+    gatewayId: _id,
+    headers,
+    ...providerOptions
+  } = settings
+  return configure({
+    apiKey,
+    gatewayApiKey,
     baseURL: baseURL(settings),
-    headers: settings.headers === undefined ? undefined : { ...settings.headers },
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    providerOptions: settings.providerOptions,
+    headers: headers === undefined ? undefined : { ...headers },
+    http: body === undefined ? undefined : { body: { ...body } },
+    providerOptions,
   }).model(modelID)
+}
 
 export * as CloudflareAIGateway from "./cloudflare-ai-gateway.js"

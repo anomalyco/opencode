@@ -105,18 +105,10 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
 
 // opencode-only; handled in aisdk.ts.
 const TRANSPORT_KEYS = ["chunkTimeout", "fetch", "timeout"] as const
-// Credentials and request overlays that must not be duplicated into providerOptions.
-const PACKAGE_KEYS = ["accessToken", "apiKey", "authToken", "baseURL", "body", "headers"] as const
 
-/**
- * opencode settings are flat, but `@opencode/ai` packages still read request options from a nested
- * `providerOptions`. Until that is flattened, hand the same settings to both places and let each side
- * pick the keys it knows.
- */
+/** Settings for a native package: flat, minus opencode transport keys. A legacy nested `providerOptions` is flattened. */
 export function nativeSettings(settings: Settings): Settings {
-  const flat = Struct.omit({ ...settings.providerOptions, ...settings }, ["providerOptions", ...TRANSPORT_KEYS])
-  const providerOptions = Struct.omit(flat, PACKAGE_KEYS)
-  return { ...flat, ...(Object.keys(providerOptions).length === 0 ? {} : { providerOptions }) }
+  return Struct.omit({ ...settings.providerOptions, ...settings }, ["providerOptions", ...TRANSPORT_KEYS])
 }
 
 export function mergeOverlay(

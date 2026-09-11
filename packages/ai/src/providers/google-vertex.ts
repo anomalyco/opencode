@@ -26,6 +26,7 @@ export type Config = RouteDefaultsInput &
   }
 
 export type Settings = ProviderPackage.Settings &
+  GeminiProviderOptionsInput &
   (
     | { readonly accessToken?: string; readonly apiKey?: never }
     | { readonly accessToken?: never; readonly apiKey?: string }
@@ -33,7 +34,6 @@ export type Settings = ProviderPackage.Settings &
     readonly baseURL?: string
     readonly location?: string
     readonly project?: string
-    readonly providerOptions?: GeminiProviderOptionsInput
   }
 
 const fromRequest = Effect.fn("GoogleVertex.fromRequest")(function* (request: LLMRequest) {
@@ -121,16 +121,19 @@ export const provider = {
   id,
   configure,
 }
-export const model: ProviderPackage.Definition<Settings, GeminiProviderOptionsInput>["model"] = (modelID, settings) => {
-  if (settings.apiKey !== undefined && settings.accessToken !== undefined)
+export const model: ProviderPackage.Definition<Settings, GeminiProviderOptionsInput>["model"] = (
+  modelID,
+  { accessToken, apiKey, baseURL, body, headers, location, project, ...providerOptions },
+) => {
+  if (apiKey !== undefined && accessToken !== undefined)
     throw new Error("Google Vertex apiKey cannot be combined with accessToken or auth")
   return configure({
-    ...(settings.apiKey === undefined ? { accessToken: settings.accessToken } : { apiKey: settings.apiKey }),
-    baseURL: settings.baseURL,
-    headers: settings.headers === undefined ? undefined : { ...settings.headers },
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    location: settings.location,
-    project: settings.project,
-    providerOptions: settings.providerOptions,
+    ...(apiKey === undefined ? { accessToken: accessToken } : { apiKey: apiKey }),
+    baseURL,
+    headers: headers === undefined ? undefined : { ...headers },
+    http: body === undefined ? undefined : { body: { ...body } },
+    location,
+    project,
+    providerOptions,
   }).model(modelID)
 }
