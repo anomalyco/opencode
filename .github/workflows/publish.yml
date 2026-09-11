@@ -191,7 +191,7 @@ jobs:
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: opencode-preview-cli
+          name: opencode-preview-cli-macos
           path: packages/cli/dist/cli-*
           if-no-files-found: error
 
@@ -276,10 +276,10 @@ jobs:
 
   sign-cli-windows:
     needs:
-      - build-cli
-      - version
+      - sign-cli-macos
+      - build-node-cli
     runs-on: blacksmith-4vcpu-windows-2025
-    if: github.repository == 'anomalyco/opencode' && github.ref_name != 'v2' && github.ref_name != 'beta'
+    if: github.repository == 'anomalyco/opencode' && (github.ref_name == 'v2' || github.ref_name == 'beta')
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -292,15 +292,14 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: opencode-cli-windows
-          path: packages/opencode/dist
+          name: opencode-preview-cli-macos
+          path: packages/cli/dist
 
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+          pattern: opencode-node-cli-*
+          path: packages/cli/dist/node
+          merge-multiple: true
 
       - name: Azure login
         uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
@@ -315,9 +314,11 @@ jobs:
           signing-account-name: ${{ env.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
           certificate-profile-name: ${{ env.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
           files: |
-            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\opencode.exe
-            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\opencode.exe
-            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\opencode.exe
+            ${{ github.workspace }}\packages\cli\dist\cli-windows-arm64\bin\opencode.exe
+            ${{ github.workspace }}\packages\cli\dist\cli-windows-x64\bin\opencode.exe
+            ${{ github.workspace }}\packages\cli\dist\cli-windows-x64-baseline\bin\opencode.exe
+            ${{ github.workspace }}\packages\cli\dist\node\cli-node-windows-arm64\bin\opencode2-node.exe
+            ${{ github.workspace }}\packages\cli\dist\node\cli-node-windows-x64\bin\opencode2-node.exe
           exclude-environment-credential: true
           exclude-workload-identity-credential: true
           exclude-managed-identity-credential: true
@@ -333,9 +334,11 @@ jobs:
         shell: pwsh
         run: |
           $files = @(
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\opencode.exe",
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\opencode.exe",
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\opencode.exe"
+            "${{ github.workspace }}\packages\cli\dist\cli-windows-arm64\bin\opencode.exe",
+            "${{ github.workspace }}\packages\cli\dist\cli-windows-x64\bin\opencode.exe",
+            "${{ github.workspace }}\packages\cli\dist\cli-windows-x64-baseline\bin\opencode.exe",
+            "${{ github.workspace }}\packages\cli\dist\node\cli-node-windows-arm64\bin\opencode2-node.exe",
+            "${{ github.workspace }}\packages\cli\dist\node\cli-node-windows-x64\bin\opencode2-node.exe"
           )
 
           foreach ($file in $files) {
@@ -345,39 +348,22 @@ jobs:
             }
           }
 
-      - name: Repack Windows CLI archives
-        working-directory: packages/opencode/dist
-        shell: pwsh
-        run: |
-          Compress-Archive -Path "opencode-windows-arm64\bin\*" -DestinationPath "opencode-windows-arm64.zip" -Force
-          Compress-Archive -Path "opencode-windows-x64\bin\*" -DestinationPath "opencode-windows-x64.zip" -Force
-          Compress-Archive -Path "opencode-windows-x64-baseline\bin\*" -DestinationPath "opencode-windows-x64-baseline.zip" -Force
-
-      - name: Upload signed Windows CLI release assets
-        if: needs.version.outputs.release != ''
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
-        run: |
-          gh release upload "v${{ needs.version.outputs.version }}" `
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64.zip" `
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64.zip" `
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline.zip" `
-            --clobber `
-            --repo "${{ needs.version.outputs.repo }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-preview-cli
+          path: packages/cli/dist/cli-*
+          if-no-files-found: error
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: opencode-cli-signed-windows
-          path: |
-            packages/opencode/dist/opencode-windows-arm64
-            packages/opencode/dist/opencode-windows-x64
-            packages/opencode/dist/opencode-windows-x64-baseline
+          name: opencode-node-cli-signed
+          path: packages/cli/dist/node/cli-node-*
+          if-no-files-found: error
 
   build-electron:
     needs:
       - version
-      - sign-cli-macos
+      - sign-cli-windows
     if: github.repository == 'anomalyco/opencode' && (github.ref_name != 'v2' || needs.version.outputs.release != '')
     continue-on-error: false
     env:
@@ -625,11 +611,17 @@ jobs:
           path: packages/cli/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: needs.build-node-cli.result == 'success'
+        if: needs.build-node-cli.result == 'success' && github.ref_name != 'v2' && github.ref_name != 'beta'
         with:
           pattern: opencode-node-cli-*
           path: packages/cli/dist/node
           merge-multiple: true
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: needs.build-node-cli.result == 'success' && (github.ref_name == 'v2' || github.ref_name == 'beta')
+        with:
+          name: opencode-node-cli-signed
+          path: packages/cli/dist/node
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         if: needs.version.outputs.release
