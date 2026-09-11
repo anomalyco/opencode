@@ -1,5 +1,6 @@
 export * as ConfigMigrateV1 from "./migrate"
 
+import { Option, Schema } from "effect"
 import { ConfigV1 } from "./config"
 import { ConfigAgentV1 } from "./agent"
 import { ConfigMCPV1 } from "./mcp"
@@ -27,31 +28,25 @@ const keys = new Set([
   "layout",
 ])
 
-// v2 nests servers under `mcp.servers` and keeps only `timeout` beside it, while
-// v1 used a flat map of server definitions whose entries are tagged `local` or
-// `remote`. Without this, the flat map decodes as v2, where excess properties are
-// ignored, and every server is silently dropped.
-//
-// Only an unambiguous flat map is treated as v1: a `servers` key or an entry
-// that is not a tagged server means v2. The loader falls back to a v2 decode if
-// a file detected as v1 fails to decode, so a wrong guess no longer discards the
-// file, but detection still should not claim v2 files as v1.
-function isV1Mcp(input: Record<string, unknown>) {
-  if (!isRecord(input.mcp) || "servers" in input.mcp) return false
-  const entries = Object.values(input.mcp)
-  return (
-    entries.length > 0 &&
-    entries.every((server) => isRecord(server) && (server.type === "local" || server.type === "remote"))
-  )
-}
-
 export function isV1(input: unknown) {
   if (!isRecord(input)) return false
-  return Object.keys(input).some((key) => keys.has(key)) || isV1Mcp(input)
+  return Object.keys(input).some((key) => keys.has(key))
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+// Normalize only MCP: a legacy block can coexist with native v2 settings.
+export function normalizeMcp(input: unknown) {
+  if (!isRecord(input) || !isRecord(input.mcp)) return input
+  // Native timeout fields take precedence over a legacy server named `timeout`.
+  const timeout = input.mcp.timeout
+  if (isRecord(timeout) && ("startup" in timeout || "request" in timeout)) return input
+  const decoded = Schema.decodeUnknownOption(ConfigV1.Info.fields.mcp, { onExcessProperty: "ignore" })(input.mcp)
+  if (Option.isNone(decoded)) return input
+  const migrated = mcp({ mcp: decoded.value })
+  return migrated ? { ...input, mcp: migrated } : input
 }
 
 export function migrate(info: typeof ConfigV1.Info.Type) {

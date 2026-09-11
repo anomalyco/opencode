@@ -152,18 +152,11 @@ const layer = Layer.effect(
       const input: unknown = parse(text, errors, { allowTrailingComma: true })
       if (errors.length) return
 
-      // A file that looks v1 but fails to decode is retried as v2. Without this,
-      // a wrong guess in `isV1` silently discards the whole file, since excess
-      // properties are ignored on the v2 path but a failed v1 decode returns
-      // nothing at all.
-      const decoded = ConfigMigrateV1.isV1(input)
-        ? decodeV1Info(input).pipe(
-            Option.map(ConfigMigrateV1.migrate),
-            Option.flatMap(decodeInfo),
-            Option.orElse(() => decodeInfo(input)),
-          )
-        : decodeInfo(input)
-      const info = Option.getOrUndefined(decoded)
+      const info = Option.getOrUndefined(
+        ConfigMigrateV1.isV1(input)
+          ? decodeV1Info(input).pipe(Option.map(ConfigMigrateV1.migrate), Option.flatMap(decodeInfo))
+          : decodeInfo(ConfigMigrateV1.normalizeMcp(input)),
+      )
       if (!info) return
       return new Document({ type: "document", path: filepath, info })
     })
