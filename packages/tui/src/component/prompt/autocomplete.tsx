@@ -21,7 +21,7 @@ import { Locale } from "../../util/locale"
 import type { PromptInfo } from "../../prompt/history"
 import { useFrecency } from "../../prompt/frecency"
 import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keymap"
-import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
+import { displayCharAt, mentionTriggerIndex, slashTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode-ai/sdk/v2"
 
 function removeLineRange(input: string) {
@@ -445,7 +445,9 @@ export function Autocomplete(props: {
   )
 
   const commands = createMemo((): AutocompleteOption[] => {
-    const results: AutocompleteOption[] = [...slashes()]
+    // Built-in slash commands execute actions, so they are only offered when the
+    // slash starts the prompt. Mid-prompt completion lists custom commands only.
+    const results: AutocompleteOption[] = store.index === 0 ? [...slashes()] : []
 
     for (const serverCommand of sync.data.command) {
       if (serverCommand.source === "skill") continue
@@ -454,11 +456,17 @@ export function Autocomplete(props: {
         display: "/" + serverCommand.name + label,
         description: serverCommand.description,
         onSelect: () => {
-          const newText = "/" + serverCommand.name + " "
-          const cursor = props.input().logicalCursor
-          props.input().deleteRange(0, 0, cursor.row, cursor.col)
-          props.input().insertText(newText)
-          props.input().cursorOffset = Bun.stringWidth(newText)
+          const input = props.input()
+          const endOffset = input.cursorOffset
+          const needsSpace = displayCharAt(props.value, endOffset) !== " "
+          const newText = "/" + serverCommand.name + (needsSpace ? " " : "")
+          input.cursorOffset = store.index
+          const startCursor = input.logicalCursor
+          input.cursorOffset = endOffset
+          const endCursor = input.logicalCursor
+          input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+          input.insertText(newText)
+          input.cursorOffset = store.index + Bun.stringWidth(newText)
         },
       })
     }
@@ -679,9 +687,7 @@ export function Autocomplete(props: {
             // Typed text before the trigger
             props.input().cursorOffset <= store.index ||
             // There is a space between the trigger and the cursor
-            props.input().getTextRange(store.index, props.input().cursorOffset).match(/\s/) ||
-            // "/<command>" is not the sole content
-            (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
+            props.input().getTextRange(store.index, props.input().cursorOffset).match(/\s/)
           ) {
             hide()
           }
@@ -692,10 +698,11 @@ export function Autocomplete(props: {
         const offset = props.input().cursorOffset
         if (offset === 0) return
 
-        // Check for "/" at position 0 - reopen slash commands
-        if (value.startsWith("/") && !value.slice(0, offset).match(/\s/)) {
+        // Check for a "/" slash-command token ending at the cursor (anywhere in the prompt)
+        const slashIndex = slashTriggerIndex(value, offset)
+        if (slashIndex !== undefined) {
           show("/")
-          setStore("index", 0)
+          setStore("index", slashIndex)
           return
         }
 

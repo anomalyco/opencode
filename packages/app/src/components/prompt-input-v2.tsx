@@ -316,6 +316,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       title: item.title,
       description: item.description,
       keybind: command.keybindParts(item.id),
+      builtin: item.type === "builtin",
     })),
   )
   const variants = createMemo(() => ["default", ...props.controls.model.selection.variant.list()])

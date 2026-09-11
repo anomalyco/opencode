@@ -102,5 +102,6 @@ export type PromptInputV2Suggestion = {
   path?: string
   keybind?: string[]
   recent?: boolean
+  builtin?: boolean
   mention?: PromptInputV2FilePart | PromptInputV2AgentPart
 }
