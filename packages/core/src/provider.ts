@@ -103,12 +103,11 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
   return yield* importPackage(specifier, entrypoint)
 })
 
-// opencode-only; handled in aisdk.ts.
+/** opencode transport settings consumed in aisdk.ts; native packages never receive them. */
 const TRANSPORT_KEYS = ["chunkTimeout", "fetch", "timeout"] as const
 
-/** Settings for a native package: flat, minus opencode transport keys. A legacy nested `providerOptions` is flattened. */
 export function nativeSettings(settings: Settings): Settings {
-  return Struct.omit({ ...settings.providerOptions, ...settings }, ["providerOptions", ...TRANSPORT_KEYS])
+  return Struct.omit(settings, TRANSPORT_KEYS)
 }
 
 export function mergeOverlay(

@@ -29,13 +29,9 @@ describe("Provider", () => {
   })
 
   test("passes flat settings to native packages without opencode transport keys", () => {
-    expect(
-      Provider.nativeSettings({
-        apiKey: "secret",
-        reasoningEffort: "high",
-        chunkTimeout: 1000,
-        providerOptions: { textVerbosity: "low" },
-      }),
-    ).toEqual({ apiKey: "secret", reasoningEffort: "high", textVerbosity: "low" })
+    expect(Provider.nativeSettings({ apiKey: "secret", reasoningEffort: "high", chunkTimeout: 1000 })).toEqual({
+      apiKey: "secret",
+      reasoningEffort: "high",
+    })
   })
 })
