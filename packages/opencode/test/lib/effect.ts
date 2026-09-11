@@ -13,13 +13,18 @@ type Body<A, E, R> = Effect.Effect<A, E, R> | (() => Effect.Effect<A, E, R>)
 type InstanceOptions<E, R> = {
   git?: boolean
   config?: Partial<ConfigV1.Info> | (() => Partial<ConfigV1.Info>)
+  profile?: InstanceStore.LoadInput["profile"]
   init?: (directory: string) => Effect.Effect<void, E, R>
 }
 
 function isInstanceOptions<E, R>(
   options: InstanceOptions<E, R> | number | TestOptions | undefined,
 ): options is InstanceOptions<E, R> {
-  return !!options && typeof options === "object" && ("git" in options || "config" in options || "init" in options)
+  return (
+    !!options &&
+    typeof options === "object" &&
+    ("git" in options || "config" in options || "profile" in options || "init" in options)
+  )
 }
 
 function instanceArgs<E, R>(

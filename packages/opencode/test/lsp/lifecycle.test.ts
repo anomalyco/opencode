@@ -64,6 +64,19 @@ describe("LSP service lifecycle", () => {
   )
 
   it.instance(
+    "bare keeps LSP unavailable when config enables it",
+    () =>
+      LSP.Service.use((lsp) =>
+        Effect.gen(function* () {
+          const result = yield* lsp.hasClients(path.join((yield* TestInstance).directory, "test.ts"))
+          expect(result).toBe(false)
+          expect(spawnSpy).not.toHaveBeenCalled()
+        }),
+      ),
+    { config: { lsp: true }, profile: "bare" },
+  )
+
+  it.instance(
     "hasClients() keeps built-in LSPs when config object is provided",
     () =>
       LSP.Service.use((lsp) =>

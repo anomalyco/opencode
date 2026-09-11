@@ -166,14 +166,14 @@ export function tmpdirScoped<E = never, R = never>(options?: {
 }
 
 export const provideInstance =
-  (directory: string) =>
+  (directory: string, profile?: InstanceStore.LoadInput["profile"]) =>
   <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R | InstanceStore.Service> =>
-    InstanceStore.Service.use((store) => store.provide({ directory }, self))
+    InstanceStore.Service.use((store) => store.provide({ directory, profile }, self))
 
 export const provideInstanceEffect =
-  (directory: string) =>
+  (directory: string, profile?: InstanceStore.LoadInput["profile"]) =>
   <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R | InstanceStore.Service> =>
-    InstanceStore.Service.use((store) => store.provide({ directory }, self))
+    InstanceStore.Service.use((store) => store.provide({ directory, profile }, self))
 
 export const reloadInstance = (input: InstanceStore.LoadInput) =>
   InstanceStore.Service.use((store) => store.reload(input))
@@ -202,12 +202,16 @@ export const withTmpdirInstance =
   <E2 = never, R2 = never>(options?: {
     git?: boolean
     config?: Partial<ConfigV1.Info> | (() => Partial<ConfigV1.Info>)
+    profile?: InstanceStore.LoadInput["profile"]
     init?: (directory: string) => Effect.Effect<void, E2, R2>
   }) =>
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped(options)
-      return yield* self.pipe(Effect.provideService(TestInstance, { directory }), provideInstanceEffect(directory))
+      return yield* self.pipe(
+        Effect.provideService(TestInstance, { directory }),
+        provideInstanceEffect(directory, options?.profile),
+      )
     }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)))
 
 export function provideTmpdirServer<A, E, R>(
