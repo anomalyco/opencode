@@ -132,6 +132,23 @@ export function map(input: MapInput): Mapping | undefined {
       }
     case "@ai-sdk/openai-compatible":
       if (typeof input.settings.baseURL !== "string") return
+      if (input.providerID === "cloudflare-workers-ai") {
+        const accountId =
+          process.env.CLOUDFLARE_ACCOUNT_ID ??
+          (typeof input.settings.accountId === "string" ? input.settings.accountId : undefined)
+        return {
+          package: "@opencode/ai/providers/openai-compatible",
+          settings: {
+            ...baseSettings,
+            ...mapAPIKey(input.settings),
+            baseURL: accountId
+              ? input.settings.baseURL.replaceAll("${CLOUDFLARE_ACCOUNT_ID}", encodeURIComponent(accountId))
+              : input.settings.baseURL,
+            provider: input.providerID,
+            ...mapProviderOptions(input.settings, ["apiKey", "baseURL", "accountId"]),
+          },
+        }
+      }
       return {
         package: "@opencode/ai/providers/openai-compatible",
         settings: {
