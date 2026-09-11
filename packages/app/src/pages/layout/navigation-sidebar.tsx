@@ -127,6 +127,9 @@ export function NavigationSidebar() {
     started: {} as Record<string, number>,
     done: {} as Record<string, number>,
   })
+  // Projects added during this app session keep an empty row until their first thread exists;
+  // older projects whose threads are all settled stay out of the Projects section.
+  const [fresh, setFresh] = createStore<Record<string, boolean>>({})
 
   const ticker = setInterval(() => setNow(Date.now()), AGE_TICK)
   onCleanup(() => clearInterval(ticker))
@@ -259,7 +262,7 @@ export function NavigationSidebar() {
     const known = new Set(grouped.map((group) => group.key))
     const opened = home.project.list().flatMap((project): SidebarProjectSection[] => {
       const key = pathKey(project.worktree)
-      if (known.has(key)) return []
+      if (known.has(key) || fresh[key] !== true) return []
       return [{ key, project, name: displayName(project), records: [], visible: [], hidden: [] }]
     })
     return [...grouped, ...opened]
@@ -558,6 +561,7 @@ export function NavigationSidebar() {
       onSelect: (result) => {
         const directories = homeProjectDirectories(result)
         if (directories.length === 0) return
+        directories.forEach((directory) => setFresh(pathKey(directory), true))
         home.project.add(conn, directories)
         home.project.openProjectNewSession(conn, directories[0])
       },

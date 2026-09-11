@@ -3,6 +3,8 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createStore, produce } from "solid-js/store"
 import { Persist, persisted, removePersisted, draftPersistedKeys } from "@/utils/persist"
 import { ServerConnection, useServer } from "./server"
+import { useSettings } from "./settings"
+import { createMediaQuery } from "@solid-primitives/media"
 import { createEffect, getOwner, onCleanup, startTransition } from "solid-js"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { usePlatform } from "./platform"
@@ -72,6 +74,26 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const navigate = useNavigate()
     const location = useLocation()
     const memory = createTabMemory(getOwner())
+
+    const settings = useSettings()
+    const mobile = createMediaQuery("(max-width: 767px)")
+    let pruned = false
+    createEffect(() => {
+      if (pruned || !ready()) return
+      pruned = true
+      // The tab-strip paradigm reopens and prefetches every persisted tab at startup; sidebar
+      // navigation only needs the tab you were actually on, so drop the rest once on launch.
+      if (settings.general.navigationMode() !== "sidebar" || mobile()) return
+      const sessionID = location.pathname.match(/\/session\/([^/]+)$/)?.[1]
+      const draftID = new URLSearchParams(location.search).get("draftId")
+      setStore((tabs) =>
+        tabs.filter(
+          (tab) =>
+            (tab.type === "session" && tab.sessionId === sessionID) ||
+            (tab.type === "draft" && tab.draftID === draftID),
+        ),
+      )
+    })
 
     const closing = new Set<string>()
     let recentWrite = 0
