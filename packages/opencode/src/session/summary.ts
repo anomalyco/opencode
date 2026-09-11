@@ -122,8 +122,12 @@ const layer = Layer.effect(
       const target = messages.find((m) => m.info.id === input.messageID)
       if (!target || target.info.role !== "user") return
       const msgDiffs = yield* computeDiff({ messages })
-      target.info.summary = { ...target.info.summary, diffs: msgDiffs }
-      yield* sessions.updateMessage(target.info)
+      // Turn patches are their own durable stream: ordinary message updates must never duplicate them.
+      yield* events.publish(Session.Event.MessageDiffUpdated, {
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        diffs: msgDiffs,
+      })
     })
 
     const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
