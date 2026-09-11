@@ -63,6 +63,7 @@ const appLocales = [
   "tg",
   "tk",
   "uz",
+  "gl",
 ] as const
 const desktopLocales = appLocales
 const pluralCategories = new Map(
