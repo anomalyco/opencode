@@ -31,6 +31,7 @@ const promotedDrafts: Array<{ draftID: string; server: string; sessionId: string
 const sentPrompts: string[] = []
 const promptInputs: unknown[] = []
 const sentCommands: unknown[] = []
+const interruptedSessions: string[] = []
 const commands: Array<{ name: string }> = []
 let serverSessionSyncs = 0
 
@@ -102,6 +103,9 @@ const clientFor = (directory: string) => {
         },
         shell: async (input: { sessionID: string; id?: string; command: string }) => {
           sentShell.push(input)
+        },
+        interrupt: async (input: { sessionID: string }) => {
+          interruptedSessions.push(input.sessionID)
         },
       },
     },
@@ -290,6 +294,7 @@ beforeEach(() => {
   sentPrompts.length = 0
   promptInputs.length = 0
   sentCommands.length = 0
+  interruptedSessions.length = 0
   commands.length = 0
   promptValue = [{ type: "text", content: "ls", start: 0, end: 2 }]
   params = {}
@@ -305,6 +310,31 @@ beforeEach(() => {
 })
 
 describe("prompt submit worktree selection", () => {
+  test("aborts the scoped session instead of the route session", async () => {
+    params = { id: "main-session" }
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "side-session" }),
+      sessionID: () => "side-session",
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => true,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: () => 0,
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+    })
+
+    await submit.abort()
+
+    expect(interruptedSessions).toEqual(["side-session"])
+  })
+
   test("reads the latest worktree accessor value per submit", async () => {
     const submit = createPromptSubmit({
       prompt,

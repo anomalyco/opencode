@@ -21,11 +21,14 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { useSessionArchive } from "@/pages/session/session-archive"
 import { createSessionOwnership } from "./session-ownership"
 import { useLocal } from "@/context/local"
+import { isSideChatTab } from "@/pages/session/side-chat"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   focusInput: () => void
+  openSideChat: () => void
+  closeSideChat: (tabID: string) => void
   review?: () => boolean
   fileBrowser?: () => boolean
 }
@@ -88,6 +91,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     review: actions.review,
     hasReview,
     fileBrowser: actions.fileBrowser,
+    customTab: isSideChatTab,
   })
   const activeFileTab = tabState.activeFileTab
   const closableTab = tabState.closableTab
@@ -270,6 +274,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const closeTab = () => {
     const tab = closableTab()
     if (!tab) return
+    if (isSideChatTab(tab)) {
+      actions.closeSideChat(tab)
+      return
+    }
     tabs().close(tab)
   }
 
@@ -490,6 +498,15 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       slash: "fork",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: fork,
+    }),
+    sessionCommand({
+      id: "session.sideChat",
+      title: language.t("command.session.sideChat"),
+      description: language.t("command.session.sideChat.description"),
+      keybind: "ctrl+shift+n",
+      slash: "side",
+      disabled: !params.id || !!info()?.parentID,
+      onSelect: actions.openSideChat,
     }),
     sessionCommand({
       id: "session.export",

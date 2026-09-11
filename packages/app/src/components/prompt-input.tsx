@@ -1203,6 +1203,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     createPromptSubmit({
       prompt,
       info,
+      sessionID: () => props.controls.session.id,
       imageAttachments,
       commentCount,
       autoAccept: () => accepting(),

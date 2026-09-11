@@ -238,6 +238,21 @@ describe("Session", () => {
     }),
   )
 
+  it.instance("can preserve the source session as the fork parent", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const created = yield* Effect.acquireRelease(session.create({ title: "parent" }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      const fork = yield* Effect.acquireRelease(session.fork({ sessionID: created.id, parentID: created.id }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+
+      expect(fork.parentID).toBe(created.id)
+      expect((yield* session.children(created.id)).map((item) => item.id)).toContain(fork.id)
+    }),
+  )
+
   it.instance("forks the chronological prefix across mixed message ID ordering", () =>
     Effect.gen(function* () {
       const session = yield* SessionNs.Service

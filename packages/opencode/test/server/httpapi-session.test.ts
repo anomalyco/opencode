@@ -746,8 +746,10 @@ describe("session HttpApi", () => {
         const forked = yield* requestJson<Session.Info>(pathFor(SessionPaths.fork, { sessionID: created.id }), {
           method: "POST",
           headers,
+          body: JSON.stringify({ parentID: created.id }),
         })
         expect(forked.id).not.toBe(created.id)
+        expect(forked.parentID).toBe(created.id)
 
         const forkedWithoutContentType = yield* requestJson<Session.Info>(
           pathFor(SessionPaths.fork, { sessionID: created.id }),
