@@ -103,6 +103,64 @@ test("clicks a target at relative coordinates through descendant text", async ()
   )
 })
 
+test("unpaced clicks preserve native event order, button release and rendered state", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const renderer = yield* SimulationRenderer.create({})
+        const events: string[] = []
+        const label = new TextRenderable(renderer, { content: "Not clicked" })
+        let clicks = 0
+        const button = new BoxRenderable(renderer, {
+          id: "click-order",
+          width: 20,
+          height: 1,
+          onMouseDown: () => {
+            events.push("down")
+            queueMicrotask(() => events.push("down microtask"))
+          },
+          onMouseUp: () => {
+            events.push("up")
+            label.content = `Clicks: ${++clicks}`
+          },
+        })
+        button.add(label)
+        renderer.root.add(button)
+        const harness = createHarness(renderer)
+        yield* Effect.promise(() => harness.renderOnce())
+
+        for (let index = 0; index < 5; index++) {
+          const result = yield* execute(harness, { type: "ui.click", target: button.num, x: 1, y: 0 })
+          expect(clicks).toBe(index + 1)
+          expect(events.splice(0)).toEqual(["down", "down microtask", "up"])
+          expect(harness.mockMouse.getPressedButtons()).toEqual([])
+          expect(harness.screen()).toContain(`Clicks: ${index + 1}`)
+          expect(result).toEqual(state(harness))
+        }
+      }),
+    ),
+  )
+})
+
+test("unpaced clicks retain native double-click text selection", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const renderer = yield* SimulationRenderer.create({})
+        const text = new TextRenderable(renderer, { content: "alpha beta", selectable: true })
+        renderer.root.add(text)
+        const harness = createHarness(renderer)
+        yield* Effect.promise(() => harness.renderOnce())
+
+        yield* execute(harness, { type: "ui.click", target: text.num, x: 1, y: 0 })
+        yield* execute(harness, { type: "ui.click", target: text.num, x: 1, y: 0 })
+        expect(renderer.getSelection()?.getSelectedText()).toBe("alpha")
+        expect(harness.mockMouse.getPressedButtons()).toEqual([])
+      }),
+    ),
+  )
+})
+
 test("mouse input drives native hover, drag, buttons and scrolling at absolute coordinates", async () => {
   await Effect.runPromise(
     Effect.scoped(
