@@ -111,7 +111,7 @@ describe("Memory Persistence (SQLite .db)", () => {
     }
   })
 
-  it("provides fts and bm25 status on the Memory service", async () => {
+  it("provides fts and bm25 status on the Memory service and performs end-to-end recall", async () => {
     const memory = await Effect.runPromise(
       Effect.gen(function* () {
         return yield* Memory.Service
@@ -119,11 +119,22 @@ describe("Memory Persistence (SQLite .db)", () => {
     )
     expect(typeof memory.fts.available).toBe("boolean")
     expect(typeof memory.fts.bm25).toBe("boolean")
-    if (memory.fts.available) {
-      expect(memory.fts.available).toBe(true)
-    } else {
-      const items = await Effect.runPromise(memory.recall({ query: "Bun", limit: 1 }))
-      expect(Array.isArray(items)).toBe(true)
-    }
+
+    // End-to-end verification: teach and recall work seamlessly whether FTS5 or LIKE fallback is active
+    const item = await Effect.runPromise(
+      memory.teach({
+        title: "CI Portability Teaching",
+        content: "Ensuring CI portability across diverse SQLite builds and runners.",
+        category: "testing",
+      }),
+    )
+    expect(item.id).toBeDefined()
+
+    const results = await Effect.runPromise(memory.recall({ query: "portability", limit: 5 }))
+    expect(Array.isArray(results)).toBe(true)
+    expect(results.length).toBeGreaterThan(0)
+    expect(results[0].title).toBe("CI Portability Teaching")
+
+    await Effect.runPromise(memory.remove(item.id))
   })
 })
