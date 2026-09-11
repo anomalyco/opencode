@@ -62,6 +62,7 @@ export type AuthorizeInput = Schema.Schema.Type<typeof AuthorizeInput>
 export const CallbackInput = Schema.Struct({
   method: Schema.Finite.annotate({ description: "Auth method index" }),
   code: Schema.optional(Schema.String).annotate({ description: "OAuth authorization code" }),
+  profile: Schema.optional(Schema.String).annotate({ description: "Auth profile name" }),
 })
 export type CallbackInput = Schema.Schema.Type<typeof CallbackInput>
 
@@ -201,22 +202,30 @@ const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.
       if (!result || result.type !== "success") return yield* new OauthCallbackFailed({})
 
       if ("key" in result) {
-        yield* auth.set(input.providerID, {
-          type: "api",
-          key: result.key,
-          ...(result.metadata ? { metadata: result.metadata } : {}),
-        })
+        yield* auth.set(
+          input.providerID,
+          {
+            type: "api",
+            key: result.key,
+            ...(result.metadata ? { metadata: result.metadata } : {}),
+          },
+          input.profile,
+        )
       }
 
       if ("refresh" in result) {
         const { type: _, provider: __, refresh, access, expires, ...extra } = result
-        yield* auth.set(input.providerID, {
-          type: "oauth",
-          access,
-          refresh,
-          expires,
-          ...extra,
-        })
+        yield* auth.set(
+          input.providerID,
+          {
+            type: "oauth",
+            access,
+            refresh,
+            expires,
+            ...extra,
+          },
+          input.profile,
+        )
       }
     })
 

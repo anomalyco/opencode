@@ -25,9 +25,35 @@ const promptValue = <Value>(value: Option.Option<Value>) => {
   return Effect.succeed(value.value)
 }
 
-const put = Effect.fn("Cli.providers.put")(function* (key: string, info: Auth.Info) {
+const put = Effect.fn("Cli.providers.put")(function* (providerID: string, info: Auth.Info, profile?: string) {
   const auth = yield* Auth.Service
-  yield* Effect.orDie(auth.set(key, info))
+  yield* Effect.orDie(auth.set(providerID, info, profile))
+})
+
+/**
+ * Prompt for profile name if provider already has a default profile.
+ * Returns undefined for default profile, or the profile name.
+ */
+const promptForProfile = Effect.fn("Cli.providers.promptForProfile")(function* (provider: string) {
+  const authSvc = yield* Auth.Service
+  const hasDefault = yield* Effect.orDie(authSvc.hasDefault(provider))
+  if (!hasDefault) return undefined
+
+  const existingProfiles = yield* Effect.orDie(authSvc.profiles(provider))
+  const existingNames = existingProfiles.map((p) => p.profile ?? "default").join(", ")
+  yield* Prompt.log.info(`Existing profiles: ${existingNames}`)
+
+  const profileName = yield* Prompt.text({
+    message: "Enter profile name (leave empty for default)",
+    placeholder: "e.g. work, personal",
+    validate: (x) => {
+      if (!x || x.length === 0) return undefined
+      if (!Auth.validateProfileName(x)) return "Only letters, numbers, hyphens, and underscores allowed"
+      return undefined
+    },
+  })
+  const value = yield* promptValue(profileName)
+  return value || undefined
 })
 
 const cliTry = <Value>(message: string, fn: () => PromiseLike<Value>) =>
@@ -40,6 +66,7 @@ const handlePluginAuth = Effect.fn("Cli.providers.pluginAuth")(function* (
   plugin: { auth: PluginAuth },
   provider: string,
   methodName?: string,
+  profile?: string,
 ) {
   const index = yield* Effect.gen(function* () {
     if (!methodName) {
@@ -113,20 +140,28 @@ const handlePluginAuth = Effect.fn("Cli.providers.pluginAuth")(function* (
         const saveProvider = result.provider ?? provider
         if ("refresh" in result) {
           const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          yield* put(saveProvider, {
-            type: "oauth",
-            refresh,
-            access,
-            expires,
-            ...extraFields,
-          })
+          yield* put(
+            saveProvider,
+            {
+              type: "oauth",
+              refresh,
+              access,
+              expires,
+              ...extraFields,
+            },
+            profile,
+          )
         }
         if ("key" in result) {
-          yield* put(saveProvider, {
-            type: "api",
-            key: result.key,
-            ...(result.metadata ? { metadata: result.metadata } : {}),
-          })
+          yield* put(
+            saveProvider,
+            {
+              type: "api",
+              key: result.key,
+              ...(result.metadata ? { metadata: result.metadata } : {}),
+            },
+            profile,
+          )
         }
         yield* spinner.stop("Login successful")
       }
@@ -146,20 +181,28 @@ const handlePluginAuth = Effect.fn("Cli.providers.pluginAuth")(function* (
         const saveProvider = result.provider ?? provider
         if ("refresh" in result) {
           const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          yield* put(saveProvider, {
-            type: "oauth",
-            refresh,
-            access,
-            expires,
-            ...extraFields,
-          })
+          yield* put(
+            saveProvider,
+            {
+              type: "oauth",
+              refresh,
+              access,
+              expires,
+              ...extraFields,
+            },
+            profile,
+          )
         }
         if ("key" in result) {
-          yield* put(saveProvider, {
-            type: "api",
-            key: result.key,
-            ...(result.metadata ? { metadata: result.metadata } : {}),
-          })
+          yield* put(
+            saveProvider,
+            {
+              type: "api",
+              key: result.key,
+              ...(result.metadata ? { metadata: result.metadata } : {}),
+            },
+            profile,
+          )
         }
         yield* Prompt.log.success("Login successful")
       }
@@ -179,11 +222,15 @@ const handlePluginAuth = Effect.fn("Cli.providers.pluginAuth")(function* (
     const metadata = Object.keys(inputs).length ? { metadata: inputs } : {}
     const authorizeApi = method.authorize
     if (!authorizeApi) {
-      yield* put(provider, {
-        type: "api",
-        key: apiKey,
-        ...metadata,
-      })
+      yield* put(
+        provider,
+        {
+          type: "api",
+          key: apiKey,
+          ...metadata,
+        },
+        profile,
+      )
       yield* Prompt.outro("Done")
       return true
     }
@@ -195,11 +242,15 @@ const handlePluginAuth = Effect.fn("Cli.providers.pluginAuth")(function* (
     if (result.type === "success") {
       const saveProvider = result.provider ?? provider
       const merged = { ...(metadata.metadata ?? {}), ...(result.metadata ?? {}) }
-      yield* put(saveProvider, {
-        type: "api",
-        key: result.key ?? apiKey,
-        ...(Object.keys(merged).length ? { metadata: merged } : {}),
-      })
+      yield* put(
+        saveProvider,
+        {
+          type: "api",
+          key: result.key ?? apiKey,
+          ...(Object.keys(merged).length ? { metadata: merged } : {}),
+        },
+        profile,
+      )
       yield* Prompt.log.success("Login successful")
     }
     yield* Prompt.outro("Done")
@@ -236,12 +287,90 @@ export function resolvePluginProviders(input: {
   return result
 }
 
+export const ProvidersSetDefaultCommand = effectCmd({
+  command: "set-default",
+  describe: "set a named profile as the default for a provider",
+  instance: false,
+  handler: Effect.fn("Cli.providers.setDefault")(function* (_args) {
+    const authSvc = yield* Auth.Service
+    const modelsDev = yield* ModelsDev.Service
+
+    UI.empty()
+    yield* Prompt.intro("Set default profile")
+    const credentials: Array<[string, Auth.Info]> = Object.entries(yield* Effect.orDie(authSvc.all()))
+    const database = yield* modelsDev.get()
+
+    // Group by provider
+    const grouped: Record<string, Array<{ profile?: string; key: string }>> = {}
+    for (const [key] of credentials) {
+      const parsed = Auth.parseKey(key)
+      if (!grouped[parsed.providerID]) grouped[parsed.providerID] = []
+      grouped[parsed.providerID].push({ profile: parsed.profile, key })
+    }
+
+    // Filter to providers with named profiles
+    const eligibleProviders = Object.entries(grouped).filter(([, profiles]) =>
+      profiles.some((p) => p.profile !== undefined),
+    )
+
+    if (eligibleProviders.length === 0) {
+      yield* Prompt.log.error("No providers with multiple profiles found")
+      yield* Prompt.outro("Done")
+      return
+    }
+
+    // Select provider
+    const providerID = yield* promptValue(
+      yield* Prompt.autocomplete({
+        message: "Select provider",
+        maxItems: 8,
+        options: eligibleProviders.map(([id, profiles]) => {
+          const name = database[id]?.name || id
+          const count = profiles.length
+          return {
+            label: `${name} ${UI.Style.TEXT_DIM}(${count} profiles)`,
+            value: id,
+          }
+        }),
+      }),
+    )
+
+    // Get named profiles for this provider
+    const namedProfiles = grouped[providerID].filter((p) => p.profile !== undefined)
+    if (namedProfiles.length === 0) {
+      yield* Prompt.log.error("No named profiles found for this provider")
+      yield* Prompt.outro("Done")
+      return
+    }
+
+    // Select profile to promote
+    const profile = yield* promptValue(
+      yield* Prompt.select({
+        message: "Select profile to set as default",
+        options: namedProfiles.map((p) => ({
+          label: p.profile!,
+          value: p.profile!,
+        })),
+      }),
+    )
+
+    yield* Effect.orDie(authSvc.setDefault(providerID, profile))
+    yield* Prompt.log.success(`Profile "${profile}" is now the default for ${database[providerID]?.name || providerID}`)
+    yield* Prompt.outro("Done")
+  }),
+})
+
 export const ProvidersCommand = cmd({
   command: "providers",
   aliases: ["auth"],
   describe: "manage AI providers and credentials",
   builder: (yargs) =>
-    yargs.command(ProvidersListCommand).command(ProvidersLoginCommand).command(ProvidersLogoutCommand).demandCommand(),
+    yargs
+      .command(ProvidersListCommand)
+      .command(ProvidersLoginCommand)
+      .command(ProvidersLogoutCommand)
+      .command(ProvidersSetDefaultCommand)
+      .demandCommand(),
   async handler() {},
 })
 
@@ -263,9 +392,20 @@ export const ProvidersListCommand = effectCmd({
     const results = Object.entries(yield* Effect.orDie(authSvc.all()))
     const database = yield* modelsDev.get()
 
-    for (const [providerID, result] of results) {
+    // Group by provider
+    const grouped: Record<string, Array<{ profile?: string; type: string }>> = {}
+    for (const [key, result] of results) {
+      const parsed = Auth.parseKey(key)
+      if (!grouped[parsed.providerID]) grouped[parsed.providerID] = []
+      grouped[parsed.providerID].push({ profile: parsed.profile, type: result.type })
+    }
+
+    for (const [providerID, profiles] of Object.entries(grouped)) {
       const name = database[providerID]?.name || providerID
-      yield* Prompt.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
+      for (const p of profiles) {
+        const profileLabel = p.profile ? `:${p.profile}` : " (default)"
+        yield* Prompt.log.info(`${name}${profileLabel} ${UI.Style.TEXT_DIM}${p.type}`)
+      }
     }
 
     yield* Prompt.outro(`${results.length} credentials`)
@@ -428,12 +568,6 @@ export const ProvidersLoginCommand = effectCmd({
       )
     }
 
-    const plugin = hooks.findLast((x) => x.auth?.provider === provider)
-    if (plugin && plugin.auth) {
-      const handled = yield* handlePluginAuth({ auth: plugin.auth! }, provider, args.method)
-      if (handled) return
-    }
-
     if (provider === "other") {
       provider = (yield* promptValue(
         yield* Prompt.text({
@@ -442,15 +576,18 @@ export const ProvidersLoginCommand = effectCmd({
         }),
       )).replace(/^@ai-sdk\//, "")
 
-      const customPlugin = hooks.findLast((x) => x.auth?.provider === provider)
-      if (customPlugin && customPlugin.auth) {
-        const handled = yield* handlePluginAuth({ auth: customPlugin.auth! }, provider, args.method)
-        if (handled) return
-      }
-
       yield* Prompt.log.warn(
         `This only stores a credential for ${provider} - you will need configure it in opencode.json, check the docs for examples.`,
       )
+    }
+
+    // Prompt for profile name if provider already has credentials
+    const profile = yield* promptForProfile(provider)
+
+    const plugin = hooks.findLast((x) => x.auth?.provider === provider)
+    if (plugin && plugin.auth) {
+      const handled = yield* handlePluginAuth({ auth: plugin.auth! }, provider, args.method, profile)
+      if (handled) return
     }
 
     if (provider === "amazon-bedrock") {
@@ -482,7 +619,7 @@ export const ProvidersLoginCommand = effectCmd({
       validate: (x) => (x && x.length > 0 ? undefined : "Required"),
     })
     const apiKey = yield* promptValue(key)
-    yield* Effect.orDie(authSvc.set(provider, { type: "api", key: apiKey }))
+    yield* Effect.orDie(authSvc.set(provider, { type: "api", key: apiKey }, profile))
 
     yield* Prompt.outro("Done")
   }),
@@ -510,25 +647,32 @@ export const ProvidersLogoutCommand = effectCmd({
       return
     }
     const database = yield* modelsDev.get()
-    const options = credentials.map(([key, value]) => ({
-      label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
-      value: key,
-    }))
-    const provider = args.provider
+    const options = credentials.map(([key, value]) => {
+      const parsed = Auth.parseKey(key)
+      const providerName = database[parsed.providerID]?.name || parsed.providerID
+      const profileLabel = parsed.profile ? `:${parsed.profile}` : " (default)"
+      return {
+        label: providerName + profileLabel + UI.Style.TEXT_DIM + " " + value.type,
+        value: key,
+      }
+    })
+    const selection = args.provider
       ? options.find(
           (option) =>
             option.value === args.provider ||
-            database[option.value]?.name?.toLowerCase() === args.provider?.toLowerCase(),
+            Auth.parseKey(option.value).providerID === args.provider ||
+            database[Auth.parseKey(option.value).providerID]?.name?.toLowerCase() === args.provider?.toLowerCase(),
         )?.value
       : yield* promptValue(
           yield* Prompt.autocomplete({
-            message: "Select provider",
+            message: "Select credential",
             maxItems: 8,
             options,
           }),
         )
-    if (!provider) return yield* fail(`Unknown configured provider "${args.provider}"`)
-    yield* Effect.orDie(authSvc.remove(provider))
+    if (!selection) return yield* fail(`Unknown configured provider "${args.provider}"`)
+    const parsed = Auth.parseKey(selection)
+    yield* Effect.orDie(authSvc.remove(parsed.providerID, parsed.profile))
     yield* Prompt.outro("Logout successful")
   }),
 })
