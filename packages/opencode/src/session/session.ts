@@ -26,7 +26,7 @@ import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
 import type { SQL } from "drizzle-orm"
-import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { MessageV2 } from "./message-v2"
 import type { InstanceContext } from "../project/instance-context"
@@ -628,28 +628,7 @@ const layer: Layer.Layer<
 
     const updateMessage = <T extends SessionV1.Info>(msg: T): Effect.Effect<T> =>
       Effect.gen(function* () {
-        const existing =
-          msg.role === "user" && msg.summary?.diffs !== undefined
-            ? yield* db
-                .select({
-                  matches: sql<number>`json_extract(${MessageTable.data}, '$.summary.diffs') = json(${JSON.stringify(msg.summary.diffs)})`,
-                })
-                .from(MessageTable)
-                .where(and(eq(MessageTable.id, msg.id), eq(MessageTable.session_id, msg.sessionID)))
-                .get()
-                .pipe(Effect.orDie)
-            : undefined
-        const info =
-          existing?.matches === 1 && msg.role === "user" && msg.summary?.diffs !== undefined
-            ? {
-                ...msg,
-                summary: {
-                  ...msg.summary,
-                  diffs: msg.summary.diffs.map(({ patch: _, ...item }) => item),
-                },
-              }
-            : msg
-        yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID: msg.sessionID, info })
+        yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID: msg.sessionID, info: msg })
         return msg
       }).pipe(Effect.withSpan("Session.updateMessage"))
 
