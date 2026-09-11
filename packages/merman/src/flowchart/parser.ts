@@ -127,6 +127,40 @@ function stripNodeToken(token: string): string {
     .trim()
 }
 
+function splitFanoutToken(token: string): string[] {
+  const parts: string[] = []
+  const stack: string[] = []
+  let quote: '"' | "'" | undefined
+  let start = 0
+  const closes: Record<string, string> = { "[": "]", "(": ")", "{": "}" }
+
+  for (let index = 0; index < token.length; index++) {
+    const character = token[index]!
+    if (quote) {
+      if (character === quote && token[index - 1] !== "\\") quote = undefined
+      continue
+    }
+    if (character === '"' || character === "'") {
+      quote = character
+      continue
+    }
+    if (character in closes) {
+      stack.push(character)
+      continue
+    }
+    if (stack.length > 0 && character === closes[stack.at(-1)!]) {
+      stack.pop()
+      continue
+    }
+    if (stack.length === 0 && character === "&") {
+      parts.push(token.slice(start, index))
+      start = index + 1
+    }
+  }
+  parts.push(token.slice(start))
+  return parts
+}
+
 function edgeStyleFromArrow(...arrows: string[]): FlowchartEdgeStyle | undefined {
   if (arrows.some((arrow) => arrow.includes("=="))) return "thick"
   if (arrows.some((arrow) => arrow.includes("."))) return "dashed"
@@ -313,38 +347,67 @@ export function parseMermaidFlowchartDiagram(content: string): FlowchartDiagram 
       ]
 
       if (nodeTokens.every((token) => stripNodeToken(token).length > 0)) {
-        const unsupportedEndpoint = nodeTokens.find((token, index) => {
-          const stripped = stripNodeToken(token)
-          const orderOnlyEndpoint = edgeOperators[index - 1]?.orderOnly || edgeOperators[index]?.orderOnly
-          return (
-            !(orderOnlyEndpoint && subgraphs.some((subgraph) => subgraph.id === stripped)) &&
-            !isSupportedNodeToken(stripped)
-          )
-        })
+        const groups = nodeTokens.map((token) => splitFanoutToken(token))
+        if (groups.some((parts) => parts.some((part) => stripNodeToken(part).length === 0))) {
+          throw new MermaidSyntaxError("flowchart", source.lineNumber, line)
+        }
+        const unsupportedEndpoint = groups.find((parts, index) =>
+          parts.some((part) => {
+            const stripped = stripNodeToken(part)
+            const orderOnlyEndpoint = edgeOperators[index - 1]?.orderOnly || edgeOperators[index]?.orderOnly
+            return (
+              !(orderOnlyEndpoint && subgraphs.some((subgraph) => subgraph.id === stripped)) &&
+              !isSupportedNodeToken(stripped)
+            )
+          }),
+        )
         if (unsupportedEndpoint) throw new MermaidSyntaxError("flowchart", source.lineNumber, line)
-        const chainNodeIds = nodeTokens.map((token, index) => {
-          const stripped = stripNodeToken(token)
-          const orderOnlyEndpoint = edgeOperators[index - 1]?.orderOnly || edgeOperators[index]?.orderOnly
-          if (orderOnlyEndpoint && subgraphs.some((subgraph) => subgraph.id === stripped)) return stripped
-          return ensureNode(nodes, stripped).id
-        })
-        for (const nodeId of chainNodeIds) {
-          if (nodes.has(nodeId)) addNodeToSubgraph(currentSubgraph, nodeId)
+        const chainNodeGroups = groups.map((parts, index) =>
+          parts.map((part) => {
+            const stripped = stripNodeToken(part)
+            const orderOnlyEndpoint = edgeOperators[index - 1]?.orderOnly || edgeOperators[index]?.orderOnly
+            if (orderOnlyEndpoint && subgraphs.some((subgraph) => subgraph.id === stripped)) return stripped
+            return ensureNode(nodes, stripped).id
+          }),
+        )
+        for (const group of chainNodeGroups) {
+          for (const nodeId of group) {
+            if (nodes.has(nodeId)) addNodeToSubgraph(currentSubgraph, nodeId)
+          }
         }
         for (let index = 0; index < edgeOperators.length; index++) {
           const operator = edgeOperators[index]!
-          const edge = createEdge(
-            chainNodeIds[index]!,
-            chainNodeIds[index + 1]!,
-            operator.label,
-            operator.style,
-            operator.arrowhead,
-            operator.sourceArrowhead,
-          )
-          edges.push(operator.orderOnly ? { ...edge, orderOnly: true } : edge)
+          for (const from of chainNodeGroups[index]!) {
+            for (const to of chainNodeGroups[index + 1]!) {
+              const edge = createEdge(
+                from,
+                to,
+                operator.label,
+                operator.style,
+                operator.arrowhead,
+                operator.sourceArrowhead,
+              )
+              edges.push(operator.orderOnly ? { ...edge, orderOnly: true } : edge)
+            }
+          }
         }
         continue
       }
+    }
+
+    const fanoutParts = splitFanoutToken(line)
+    if (fanoutParts.length > 1) {
+      if (fanoutParts.some((part) => stripNodeToken(part).length === 0)) {
+        throw new MermaidSyntaxError("flowchart", source.lineNumber, line)
+      }
+      if (!fanoutParts.every((part) => isSupportedNodeToken(stripNodeToken(part)))) {
+        throw new MermaidSyntaxError("flowchart", source.lineNumber, line)
+      }
+      for (const part of fanoutParts) {
+        const node = ensureNode(nodes, stripNodeToken(part))
+        addNodeToSubgraph(currentSubgraph, node.id)
+      }
+      continue
     }
 
     if (isSupportedNodeToken(line)) {

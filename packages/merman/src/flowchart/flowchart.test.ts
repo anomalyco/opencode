@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { MermaidSyntaxError } from "../diagnostics.js"
 import { parseColor, TextAttributes } from "@opentui/core"
 import stringWidth from "string-width"
 import { diagramArrowHeadBetween } from "../core/drawing.js"
@@ -1278,6 +1279,45 @@ flowchart TD
       { from: "B", to: "C", label: "retry", style: "dashed" },
       { from: "C", to: "D", label: "done", style: "thick" },
     ])
+  })
+
+  test("expands ampersand fan-out into one edge per pair", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  N & M & O --> LM[LanguageModel]`)
+
+    expect(diagram.nodes.map((node) => node.id)).toEqual(["N", "M", "O", "LM"])
+    expect(diagram.edges).toEqual([
+      { from: "N", to: "LM", label: "" },
+      { from: "M", to: "LM", label: "" },
+      { from: "O", to: "LM", label: "" },
+    ])
+  })
+
+  test("expands ampersand groups on both sides of an edge", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  A[X] & B[Y] -->|shared| C & D`)
+
+    expect(diagram.nodes.map((node) => node.id)).toEqual(["A", "B", "C", "D"])
+    expect(diagram.edges).toEqual([
+      { from: "A", to: "C", label: "shared" },
+      { from: "A", to: "D", label: "shared" },
+      { from: "B", to: "C", label: "shared" },
+      { from: "B", to: "D", label: "shared" },
+    ])
+  })
+
+  test("keeps ampersands inside labels and edge labels intact", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  X[a & b] -->|x & y| Y`)
+
+    expect(diagram.nodes.find((node) => node.id === "X")?.label).toBe("a & b")
+    expect(diagram.edges).toEqual([{ from: "X", to: "Y", label: "x & y" }])
+  })
+
+  test("rejects empty ampersand segments", () => {
+    for (const statement of ["A & --> B", "& A --> B", "A --> B &"]) {
+      expect(() => parseMermaidFlowchartDiagram(`flowchart LR\n  ${statement}`)).toThrow(MermaidSyntaxError)
+    }
   })
 
   test("parses chained undirected solid edges", () => {
