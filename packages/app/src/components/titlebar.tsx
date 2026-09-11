@@ -72,11 +72,11 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   const location = useLocation()
   const params = useParams()
   const useV2Titlebar = createMemo(() => settings.general.newLayoutDesigns())
+  const mobile = createMediaQuery("(max-width: 767px)")
   // Sidebar navigation mode replaces the tab strip on desktop widths; mobile keeps tabs.
   const sidebarNavigation = createMemo(
     () => useV2Titlebar() && !mobile() && settings.general.navigationMode() === "sidebar",
   )
-  const mobile = createMediaQuery("(max-width: 767px)")
   const bottom = createMemo(() => useV2Titlebar() && mobile() && settings.general.mobileTitlebarPosition() === "bottom")
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
