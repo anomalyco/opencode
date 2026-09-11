@@ -82,7 +82,9 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
             process.platform === "darwin"
               ? { file: "open", arguments: ["-a", application, target] }
               : { file: application, arguments: [target] }
-          execFile(command.file, command.arguments, (error) => (error ? reject(error) : resolve()))
+          execFile(command.file, command.arguments, { windowsHide: true }, (error) =>
+            error ? reject(error) : resolve(),
+          )
         }),
       )
     }),
