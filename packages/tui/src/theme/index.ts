@@ -88,8 +88,10 @@ export type Theme = {
   readonly syntaxPunctuation: RGBA
   readonly thinkingOpacity: number
   _hasSelectedListItemText: boolean
+  transparent: boolean
 }
-type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText">
+export type ThemeTransparency = "auto" | "on" | "off"
+type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText" | "transparent">
 export type SyntaxStyleOverrides = Record<string, { italic?: boolean }>
 
 export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
@@ -157,8 +159,8 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   solarized,
   synthwave84,
   tokyonight,
-  vesper,
   vercel,
+  vesper,
   zenburn,
   carbonfox,
 }
@@ -238,7 +240,7 @@ export function upsertTheme(name: string, theme: unknown) {
   return true
 }
 
-export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
+export function resolveTheme(theme: ThemeJson, mode: "dark" | "light", transparency: ThemeTransparency = "auto") {
   const defs = theme.defs ?? {}
   function resolveColor(c: ColorValue, chain: string[] = []): RGBA {
     if (c instanceof RGBA) return c
@@ -291,10 +293,18 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   // Handle thinkingOpacity - optional with default of 0.6
   const thinkingOpacity = theme.theme.thinkingOpacity ?? 0.6
 
+  if (transparency === "on" && resolved.background) {
+    resolved.background = RGBA.fromValues(resolved.background.r, resolved.background.g, resolved.background.b, 0)
+  }
+  if (transparency === "off" && resolved.background && resolved.background.a < 1) {
+    resolved.background = RGBA.fromValues(resolved.background.r, resolved.background.g, resolved.background.b, 1)
+  }
+
   return {
     ...resolved,
     _hasSelectedListItemText: hasSelectedListItemText,
     thinkingOpacity,
+    transparent: resolved.background !== undefined && resolved.background.a < 1,
   } as Theme
 }
 
