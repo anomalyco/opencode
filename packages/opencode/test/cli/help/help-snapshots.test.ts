@@ -129,6 +129,7 @@ describe("opencode CLI help-text snapshots", () => {
           // yargs writes --help to stderr, not stdout. Snapshotting stderr
           // means our test catches the help body; stdout for these commands
           // is expected to be empty.
+          expect(result.stderr.endsWith("\n")).toBe(true)
           expect(normalize(result.stderr)).toMatchSnapshot(`opencode ${argv.join(" ")} --help`)
         }
         if (failures.length > 0) {
