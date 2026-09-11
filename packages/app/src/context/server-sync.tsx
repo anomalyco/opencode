@@ -1,11 +1,15 @@
 import type {
   Config,
+  McpLocalConfig,
+  McpRemoteConfig,
   OpencodeClient,
   Path,
   Project,
   ProviderAuthResponse,
   SessionStatus,
 } from "@opencode-ai/sdk/v2/client"
+
+export type McpServerConfig = McpLocalConfig | McpRemoteConfig
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { type Accessor, batch, createMemo, getOwner, onCleanup, onMount, untrack } from "solid-js"
@@ -690,6 +694,27 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     session,
     homeSessions,
     mcp: {
+      // Test a server config without persisting it. Returns the structured result
+      // (reachability, auth status, discovered tools, error) from the server.
+      test: async (directory: string, name: string, config: McpServerConfig) => {
+        const key = directoryKey(directory)
+        const result = await serverSDK.client.mcp.test({ name, config, directory: key })
+        return result.data
+      },
+      // Persist a server to the global config (add or edit) and refresh live status.
+      save: async (directory: string, name: string, config: McpServerConfig) => {
+        const key = directoryKey(directory)
+        await serverSDK.client.mcp.save({ name, config, directory: key })
+        bootstrap.refetch()
+        await queryClient.refetchQueries(queryOptionsApi.mcp(key))
+      },
+      // Remove a server from the global config and refresh live status.
+      remove: async (directory: string, name: string) => {
+        const key = directoryKey(directory)
+        await serverSDK.client.mcp.remove({ name, directory: key })
+        bootstrap.refetch()
+        await queryClient.refetchQueries(queryOptionsApi.mcp(key))
+      },
       toggle: async (directory: string, name: string) => {
         const key = directoryKey(directory)
         const sdk = sdkFor(key)

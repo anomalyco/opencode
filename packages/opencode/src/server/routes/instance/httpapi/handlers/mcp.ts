@@ -3,7 +3,7 @@ import { Effect, Schema } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { McpServerNotFoundError } from "../errors"
-import { AddPayload, AuthCallbackPayload, StatusMap, UnsupportedOAuthError } from "../groups/mcp"
+import { AddPayload, AuthCallbackPayload, SavePayload, StatusMap, UnsupportedOAuthError } from "../groups/mcp"
 
 export const mcpHandlers = HttpApiBuilder.group(InstanceHttpApi, "mcp", (handlers) =>
   Effect.gen(function* () {
@@ -18,6 +18,33 @@ export const mcpHandlers = HttpApiBuilder.group(InstanceHttpApi, "mcp", (handler
       return yield* Schema.decodeUnknownEffect(StatusMap)(
         "status" in result ? { [ctx.payload.name]: result } : result,
       ).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+    })
+
+    const test = Effect.fn("McpHttpApi.test")(function* (ctx: { payload: typeof AddPayload.Type }) {
+      return yield* mcp.test(ctx.payload.name, ctx.payload.config)
+    })
+
+    const save = Effect.fn("McpHttpApi.save")(function* (ctx: {
+      params: { name: string }
+      payload: typeof SavePayload.Type
+    }) {
+      const result = (yield* mcp.save(ctx.params.name, ctx.payload.config)).status
+      return yield* Schema.decodeUnknownEffect(StatusMap)(result).pipe(
+        Effect.mapError(() => new HttpApiError.BadRequest({})),
+      )
+    })
+
+    const remove = Effect.fn("McpHttpApi.remove")(function* (ctx: { params: { name: string } }) {
+      yield* mcp
+        .remove(ctx.params.name)
+        .pipe(
+          Effect.catchTag("MCP.NotFoundError", (error) =>
+            Effect.fail(
+              new McpServerNotFoundError({ name: error.name, message: `MCP server not found: ${error.name}` }),
+            ),
+          ),
+        )
+      return { success: true as const }
     })
 
     const authStart = Effect.fn("McpHttpApi.authStart")(function* (ctx: { params: { name: string } }) {
@@ -101,6 +128,9 @@ export const mcpHandlers = HttpApiBuilder.group(InstanceHttpApi, "mcp", (handler
     return handlers
       .handle("status", status)
       .handle("add", add)
+      .handle("test", test)
+      .handle("save", save)
+      .handle("remove", remove)
       .handle("authStart", authStart)
       .handle("authCallback", authCallback)
       .handle("authAuthenticate", authAuthenticate)
