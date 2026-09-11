@@ -787,6 +787,8 @@ export const dict = {
   "session.header.reveal.finder": "Mutasd be a Finder-ben",
   "session.header.reveal.fileExplorer": "Mutasd be a File Explorer-ben",
   "session.header.reveal.containingFolder": "Nyissa meg a tartalmazó mappát",
+  "session.file.openInApp": "Nyitás {{app}}-ben",
+
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

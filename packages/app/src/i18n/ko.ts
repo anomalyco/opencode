@@ -817,6 +817,8 @@ export const dict = {
   "session.header.reveal.finder": "Finder에서 보기",
   "session.header.reveal.fileExplorer": "파일 탐색기에서 보기",
   "session.header.reveal.containingFolder": "이 항목이 있는 폴더 열기",
+  "session.file.openInApp": "{{app}}에서 열기",
+
   "session.header.open.fileManager": "파일 관리자",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",

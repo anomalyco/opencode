@@ -1154,6 +1154,8 @@ export const dict = {
   "session.header.reveal.finder": "在 Finder 中顯示",
   "session.header.reveal.fileExplorer": "在檔案總管中顯示",
   "session.header.reveal.containingFolder": "開啟所在的檔案夾",
+  "session.file.openInApp": "在 {{app}} 中開啟",
+
   "session.header.open.fileManager": "檔案管理員",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",

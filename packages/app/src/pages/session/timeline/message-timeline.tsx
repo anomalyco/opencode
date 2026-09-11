@@ -60,6 +60,7 @@ import { normalize } from "@opencode-ai/session-ui/session-diff"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
+import { FileContextMenu } from "@/components/file-context-menu"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { useSessionKey } from "@/pages/session/session-layout"
@@ -185,24 +186,26 @@ function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
               return (
                 <Accordion.Item value={diff.file}>
                   <StickyAccordionHeader>
-                    <Accordion.Trigger>
-                      <div data-slot="session-turn-diff-trigger">
-                        <span data-slot="session-turn-diff-path">
-                          <Show when={diff.file.includes("/")}>
-                            <span data-slot="session-turn-diff-directory">{`\u202A${getDirectory(diff.file)}\u202C`}</span>
-                          </Show>
-                          <span data-slot="session-turn-diff-filename">{getFilename(diff.file)}</span>
-                        </span>
-                        <div data-slot="session-turn-diff-meta">
-                          <span data-slot="session-turn-diff-changes">
-                            <DiffChanges changes={diff} />
+                    <FileContextMenu path={diff.file}>
+                      <Accordion.Trigger>
+                        <div data-slot="session-turn-diff-trigger">
+                          <span data-slot="session-turn-diff-path">
+                            <Show when={diff.file.includes("/")}>
+                              <span data-slot="session-turn-diff-directory">{`\u202A${getDirectory(diff.file)}\u202C`}</span>
+                            </Show>
+                            <span data-slot="session-turn-diff-filename">{getFilename(diff.file)}</span>
                           </span>
-                          <span data-slot="session-turn-diff-chevron">
-                            <Icon name="chevron-down" size="small" />
-                          </span>
+                          <div data-slot="session-turn-diff-meta">
+                            <span data-slot="session-turn-diff-changes">
+                              <DiffChanges changes={diff} />
+                            </span>
+                            <span data-slot="session-turn-diff-chevron">
+                              <Icon name="chevron-down" size="small" />
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    </Accordion.Trigger>
+                      </Accordion.Trigger>
+                    </FileContextMenu>
                   </StickyAccordionHeader>
                   <Accordion.Content>
                     <Show when={opened()}>

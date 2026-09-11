@@ -793,6 +793,8 @@ export const dict = {
   "session.header.reveal.finder": "Atskleiskite Finder",
   "session.header.reveal.fileExplorer": "Atskleiskite File Explorer",
   "session.header.reveal.containingFolder": "Atidarykite aplanką, kuriame yra",
+  "session.file.openInApp": "Atidaryti {{app}}",
+
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",
