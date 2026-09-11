@@ -6,6 +6,7 @@ import { Effect, Option, Schema } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
 import { ConfigAgent } from "../agent"
+import { ConfigAdvisor } from "../advisor"
 import { ConfigMarkdown } from "../markdown"
 import { FSUtil } from "../../fs-util"
 import { ModelV2 } from "../../model"
@@ -31,6 +32,7 @@ type PathAction =
 const pathActions = ["external_directory", "read", "edit"] as const satisfies readonly PathAction[]
 const agentKeys = new Set([
   "model",
+  "advisor",
   "variant",
   "request",
   "system",
@@ -105,6 +107,7 @@ export const Plugin = define({
               if (item.hidden !== undefined) agent.hidden = item.hidden
               if (item.color !== undefined) agent.color = item.color
               if (item.steps !== undefined) agent.steps = item.steps
+              if (item.advisor !== undefined) agent.advisor = ConfigAdvisor.merge(agent.advisor, item.advisor)
               if (item.permissions !== undefined) {
                 agent.permissions.push(...expandPermissions(item.permissions, global.home))
               }

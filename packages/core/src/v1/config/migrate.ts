@@ -6,6 +6,8 @@ import { ConfigMCPV1 } from "./mcp"
 import { ConfigPermissionV1 } from "./permission"
 import { ConfigProviderV1 } from "./provider"
 import { ConfigProviderOptionsV1 } from "./provider-options"
+import { Schema } from "effect"
+import { Advisor } from "@opencode-ai/schema/advisor"
 
 const keys = new Set([
   "logLevel",
@@ -111,6 +113,7 @@ export function migrateAgent(info: ConfigAgentV1.Info) {
   }
   return {
     model: info.model,
+    advisor: info.advisor === undefined ? undefined : Schema.encodeSync(Advisor.Input)(info.advisor),
     variant: info.variant,
     request: Object.keys(body).length ? { body } : undefined,
     system: info.prompt,

@@ -31,6 +31,8 @@ import { ConfigMarkdown } from "@/config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { SessionProcessor } from "./processor"
+import { SessionAdvisor } from "./advisor"
+import { ConfigAdvisor } from "@opencode-ai/core/config/advisor"
 import { Tool } from "@/tool/tool"
 import { Permission } from "@/permission"
 import { SessionStatus } from "./status"
@@ -1083,7 +1085,33 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        const advisorRun: SessionAdvisor.Run = { pending: new Map(), pauseResumptions: 0 }
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
+
+        const abandonAdvisor = Effect.fn("SessionPrompt.abandonAdvisor")(function* () {
+          for (const owner of advisorRun.pending.values()) {
+            if (owner.sessionID !== sessionID) continue
+            const part = yield* sessions.getPart(owner).pipe(Effect.orDie)
+            if (part?.type !== "tool") continue
+            const native = SessionAdvisor.call(part)
+            if (!native || native.state === "completed") continue
+            yield* sessions.updatePart({
+              ...part,
+              metadata: { ...part.metadata, opencodeAdvisor: { ...native, state: "abandoned" } },
+              state: {
+                status: "error",
+                input: part.state.input,
+                error: SessionAdvisor.interrupted,
+                metadata: { interrupted: true },
+                time: { start: "time" in part.state ? part.state.time.start : Date.now(), end: Date.now() },
+              },
+            })
+          }
+          advisorRun.pending.clear()
+        })
+
+        yield* Effect.addFinalizer(() => abandonAdvisor())
+        let scanned = false
 
         while (true) {
           yield* status.set(sessionID, { type: "busy" })
@@ -1092,6 +1120,29 @@ const layer = Layer.effect(
           let msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
             Effect.provideService(Database.Service, database),
           )
+
+          // A consultation left pending by a previous process (cancel, crash, restart) is terminal: mark it
+          // abandoned before anything is sent. Reuses this iteration's history read instead of a second one.
+          if (!scanned) {
+            scanned = true
+            for (const message of msgs) {
+              for (const part of message.parts) {
+                if (part.type !== "tool" || part.metadata?.opencodeAdvisor === undefined) continue
+                const native = SessionAdvisor.call(part)
+                if (native?.state !== "pending") continue
+                advisorRun.pending.set(part.callID, {
+                  sessionID,
+                  messageID: part.messageID,
+                  partID: part.id,
+                  definition: native,
+                })
+              }
+            }
+            if (advisorRun.pending.size > 0) {
+              yield* abandonAdvisor()
+              continue
+            }
+          }
 
           const { user: lastUser, assistant: lastAssistant, finished: lastFinished, tasks } = MessageV2.latest(msgs)
 
@@ -1112,6 +1163,7 @@ const layer = Layer.effect(
             lastAssistant?.finish &&
             !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
+            advisorRun.pending.size === 0 &&
             lastAssistant.parentID === lastUser.id
           ) {
             const orphan = lastAssistantMsg?.parts.find(
@@ -1147,6 +1199,7 @@ const layer = Layer.effect(
           }
 
           if (task?.type === "compaction") {
+            yield* abandonAdvisor()
             const result = yield* compaction.process({
               messages: msgs,
               parentID: lastUser.id,
@@ -1163,6 +1216,7 @@ const layer = Layer.effect(
             lastFinished.summary !== true &&
             (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
           ) {
+            yield* abandonAdvisor()
             yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
             continue
           }
@@ -1175,8 +1229,51 @@ const layer = Layer.effect(
             yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
             throw error
           }
+          const invalidAdvisor = ConfigAdvisor.invalid(agent.advisor)
+          if (invalidAdvisor) {
+            const error = new NamedError.Unknown({
+              message: `Advisor config for agent "${agent.name}" is incomplete (${invalidAdvisor}); set both model and maxUses or disable it with advisor: false.`,
+            })
+            yield* abandonAdvisor()
+            yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
+            throw error
+          }
           const maxSteps = agent.steps ?? Infinity
           const isLastStep = step >= maxSteps
+          if (advisorRun.pending.size > 0) {
+            const settings = ConfigAdvisor.tryResolve(agent.advisor)
+            const currentSession = yield* sessions.get(sessionID).pipe(Effect.orDie)
+            const allowed =
+              settings &&
+              Permission.evaluate("advisor", "*", agent.permission, currentSession.permission ?? []).action ===
+                "allow" &&
+              [...advisorRun.pending.values()].every(
+                (owner) =>
+                  owner.definition.model === settings.model &&
+                  owner.definition.maxUses === settings.maxUses &&
+                  owner.definition.providerID === model.providerID &&
+                  owner.definition.executorModelID === model.api.id,
+              )
+            const lastLedger = lastAssistantMsg?.parts
+              .filter((part) => part.type === "step-finish")
+              .map((part) => SessionAdvisor.response(part))
+              .findLast((ledger) => ledger !== undefined)
+            const paused = lastLedger?.rawFinishReason === "pause_turn" || lastAssistant?.finish === "stop"
+            if (!allowed || isLastStep || (paused && advisorRun.pauseResumptions >= 3)) {
+              const error = new NamedError.Unknown({
+                message: allowed
+                  ? "Advisor continuation limit reached; unfinished consultation was interrupted."
+                  : "Advisor configuration changed; unfinished consultation was interrupted.",
+              }).toObject()
+              yield* abandonAdvisor()
+              if (lastAssistant) yield* sessions.updateMessage({ ...lastAssistant, error })
+              yield* events.publish(Session.Event.Error, { sessionID, error })
+              break
+            }
+            advisorRun.pauseResumptions = paused ? advisorRun.pauseResumptions + 1 : 0
+          } else {
+            advisorRun.pauseResumptions = 0
+          }
           msgs = yield* SessionReminders.apply({ messages: msgs, agent, session }).pipe(
             Effect.provideService(RuntimeFlags.Service, flags),
             Effect.provideService(FSUtil.Service, fsys),
@@ -1215,6 +1312,7 @@ const layer = Layer.effect(
               assistantMessage: msg,
               sessionID,
               model,
+              advisorRun,
             })
             .pipe(Effect.onInterrupt(() => finalizeInterruptedAssistant))
 
@@ -1259,7 +1357,7 @@ const layer = Layer.effect(
               sys.environment(model),
               instruction.system().pipe(Effect.orDie),
               sys.mcp(agent, session.permission),
-              MessageV2.toModelMessagesEffect(msgs, model),
+              MessageV2.toModelMessagesEffect(msgs, model, { advisorPending: new Set(advisorRun.pending.keys()) }),
             ])
             const system = [
               ...env,
@@ -1282,6 +1380,7 @@ const layer = Layer.effect(
               ],
               tools,
               model,
+              purpose: isLastStep ? "final" : "foreground",
               toolChoice: format.type === "json_schema" ? "required" : undefined,
             })
 
@@ -1292,7 +1391,10 @@ const layer = Layer.effect(
               return "break" as const
             }
 
-            const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
+            const finished =
+              advisorRun.pending.size === 0 &&
+              handle.message.finish &&
+              !["tool-calls", "unknown"].includes(handle.message.finish)
             if (finished && !handle.message.error) {
               // Surface any content-filter finish (e.g. Anthropic stop_reason:
               // refusal) as an error. These turns may have produced no visible
@@ -1338,6 +1440,7 @@ const layer = Layer.effect(
         yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
         return yield* lastAssistant(sessionID)
       },
+      Effect.scoped,
     )
 
     const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (

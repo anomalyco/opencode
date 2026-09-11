@@ -6,6 +6,7 @@ import { Model } from "./model"
 import { Permission } from "./permission"
 import { Provider } from "./provider"
 import { PositiveInt, statics } from "./schema"
+import { Advisor } from "./advisor"
 
 export const ID = Schema.String.pipe(Schema.brand("AgentV2.ID"))
 export type ID = typeof ID.Type
@@ -20,6 +21,7 @@ export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
   model: Model.Ref.pipe(optional),
+  advisor: Advisor.Input.pipe(optional),
   request: Provider.Request,
   system: Schema.String.pipe(optional),
   description: Schema.String.pipe(optional),

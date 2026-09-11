@@ -24,6 +24,19 @@ const agentLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
 
 const it = testEffect(agentLayer())
 
+it.instance(
+  "keeps advisor configuration on its named executor agent",
+  () =>
+    Effect.gen(function* () {
+      const agents = yield* Agent.Service
+      const build = yield* agents.get("build")
+      expect(build).toMatchObject({ advisor: { model: "claude-opus-4-6", maxUses: 3 } })
+      expect(build.options).not.toHaveProperty("advisor")
+      expect(yield* agents.get("general")).not.toHaveProperty("advisor", { model: "claude-opus-4-6", maxUses: 3 })
+    }),
+  { config: { agent: { build: { advisor: { model: "claude-opus-4-6", maxUses: 3 } } } } },
+)
+
 // Helper to evaluate permission for a tool with wildcard pattern
 function evalPerm(agent: Agent.Info | undefined, permission: string): PermissionV1.Action | undefined {
   if (!agent) return undefined

@@ -22,6 +22,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { buildPrompt } from "@opencode-ai/core/session/compaction"
 import { SessionCompactionEvent } from "@opencode-ai/schema/session-compaction-event"
+import { SessionAdvisor } from "./advisor"
 
 export const Event = SessionCompactionEvent
 
@@ -262,6 +263,14 @@ const layer = Layer.effect(
       }
 
       if (!keep || keep.start === 0) return { head: input.messages, tail_start_id: undefined }
+      const closed = SessionAdvisor.tailStart(input.messages, keep.start)
+      if (
+        closed < keep.start &&
+        (yield* estimate({ messages: input.messages.slice(closed), model: input.model })) <= budget
+      ) {
+        if (closed === 0) return { head: input.messages, tail_start_id: undefined }
+        keep = { start: closed, id: input.messages[closed].info.id }
+      }
       return {
         head: input.messages.slice(0, keep.start),
         tail_start_id: keep.id,
@@ -294,6 +303,7 @@ const layer = Layer.effect(
           const part = msg.parts[partIndex]
           if (part.type !== "tool") continue
           if (part.state.status !== "completed") continue
+          if (SessionAdvisor.call(part)) continue
           if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
           if (part.state.time.compacted) break loop
           const estimate = Token.estimate(part.state.output)

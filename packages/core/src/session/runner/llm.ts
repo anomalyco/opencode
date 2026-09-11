@@ -197,6 +197,15 @@ const layer = Layer.effect(
       const system =
         initialized ?? (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
       const model = yield* models.resolve(session)
+      if (agent.info?.advisor !== undefined && agent.info.advisor !== false) {
+        return yield* Effect.fail(
+          new SessionRunnerModel.UnsupportedApiError({
+            providerID: ProviderV2.ID.make(model.provider),
+            modelID: ModelV2.ID.make(model.id),
+            api: "native advisor requires the V1 SDK-backed session runtime",
+          }),
+        )
+      }
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
