@@ -230,14 +230,14 @@ export function Session() {
       : [],
   )
   const permissions = createMemo(() => {
-    if (session()?.parentID) return []
+    if (session()?.parentID) return sync.data.permission[route.sessionID] ?? []
     return children().flatMap((x) => sync.data.permission[x.id] ?? [])
   })
   const questions = createMemo(() => {
-    if (session()?.parentID) return []
+    if (session()?.parentID) return sync.data.question[route.sessionID] ?? []
     return children().flatMap((x) => sync.data.question[x.id] ?? [])
   })
-  const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
+  const visible = createMemo(() => permissions().length === 0 && questions().length === 0)
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
 
   const pending = createMemo(() => {
