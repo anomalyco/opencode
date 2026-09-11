@@ -187,6 +187,10 @@ export const dict = {
   "command.session.unshare.description": "Dừng chia sẻ phiên này",
   "command.session.export": "Xuất phiên",
   "command.session.export.description": "Xuất toàn bộ bản ghi phiên dưới dạng JSON",
+  "command.session.thinking": "Toggle reasoning",
+  "command.session.thinking.description": "Show or hide model reasoning in the session",
+  "toast.session.thinking.on": "Reasoning shown",
+  "toast.session.thinking.off": "Reasoning hidden",
 
   "palette.search.placeholder": "Tìm kiếm tệp, lệnh và phiên",
   "palette.search.placeholder.home": "Tìm kiếm lệnh và phiên",
