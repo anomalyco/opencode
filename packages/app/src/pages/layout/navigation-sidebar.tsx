@@ -26,12 +26,13 @@ import { ServerConnection } from "@/context/server"
 import { useSettings } from "@/context/settings"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
+import { useDirectoryPicker } from "@/components/directory-picker"
 import { sessionHasOpenTab, useTabs } from "@/context/tabs"
 import { createHomeController } from "@/pages/home/home-controller"
 import { createHomeProjectsController } from "@/pages/home/home-projects-controller"
 import { archiveHomeSession } from "@/pages/home-session-archive"
 import { shouldOpenSessionInBackground } from "@/pages/home-session-open"
-import { displayName, errorMessage } from "@/pages/layout/helpers"
+import { displayName, errorMessage, homeProjectDirectories } from "@/pages/layout/helpers"
 import {
   buildSidebarRecords,
   groupSidebarRecords,
@@ -77,7 +78,7 @@ const ROW =
   "group/row relative flex h-7 min-w-0 w-full shrink-0 cursor-default items-center gap-2 rounded-[6px] bg-transparent px-1.5 text-start text-v2-text-text-muted [font-weight:440] transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base data-[selected=true]:bg-v2-background-bg-layer-03 data-[selected=true]:text-v2-text-text-base data-[selected=true]:hover:bg-v2-background-bg-layer-03 focus-visible:bg-v2-background-bg-layer-01 focus-visible:text-v2-text-text-base focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]"
 // Trailing padding reserves the hover action zone so titles never sit under the buttons and
 // rows keep identical geometry with or without hover.
-const ROW_SESSION = `${ROW} pe-20`
+const ROW_SESSION = `${ROW} pe-24`
 const ROW_PROJECT = `${ROW} pe-14`
 const ROW_ACTIONS =
   "hover-reveal absolute end-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-[6px] bg-v2-background-bg-layer-02 p-0.5 opacity-0 shadow-[var(--v2-elevation-raised)] group-hover/row:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
@@ -108,6 +109,7 @@ export function NavigationSidebar() {
   const dialog = useDialog()
   const home = createHomeController()
   const projects = createHomeProjectsController(home)
+  const pickDirectory = useDirectoryPicker()
 
   const [filter, setFilter] = createSignal("")
   const [now, setNow] = createSignal(Date.now())
@@ -236,7 +238,7 @@ export function NavigationSidebar() {
     const records = buildSidebarRecords({ sessions: sessions(), projects: home.project.list() }).filter((record) =>
       matchesSidebarFilter(record, filter()),
     )
-    return groupSidebarRecords(records).map((group) => {
+    const grouped = groupSidebarRecords(records).map((group) => {
       const parts = partitionSidebarRecords({
         records: group.records,
         pinned: (record) => alwaysVisible(record),
@@ -252,10 +254,22 @@ export function NavigationSidebar() {
         hidden: parts.hidden,
       }
     })
+    // Open projects without any visible thread yet (freshly added, everything settled) still
+    // deserve a row so adding a project gives immediate feedback in the sidebar.
+    const known = new Set(grouped.map((group) => group.key))
+    const opened = home.project.list().flatMap((project): SidebarProjectSection[] => {
+      const key = pathKey(project.worktree)
+      if (known.has(key)) return []
+      return [{ key, project, name: displayName(project), records: [], visible: [], hidden: [] }]
+    })
+    return [...grouped, ...opened]
   })
 
   const settled = createMemo(() => groups().flatMap((group) => group.hidden))
-  const visibleGroups = createMemo(() => groups().filter((group) => group.visible.length > 0))
+  const visibleGroups = createMemo(() => {
+    if (filter()) return groups().filter((group) => group.visible.length > 0)
+    return groups()
+  })
   const empty = createMemo(() => visibleGroups().length === 0 && settled().length === 0)
 
   const archived = useQuery(() => ({
@@ -534,6 +548,22 @@ export function NavigationSidebar() {
     home.project.openProjectNewSession(conn, target)
   }
 
+  function addProject() {
+    const conn = connection()
+    if (!conn || home.server.health(conn)?.healthy === false) return
+    pickDirectory({
+      server: conn,
+      title: language.t("command.project.open"),
+      multiple: true,
+      onSelect: (result) => {
+        const directories = homeProjectDirectories(result)
+        if (directories.length === 0) return
+        home.project.add(conn, directories)
+        home.project.openProjectNewSession(conn, directories[0])
+      },
+    })
+  }
+
   command.register(() => [
     {
       id: "sidebar.thread.new",
@@ -582,10 +612,7 @@ export function NavigationSidebar() {
               size="small"
               icon={<IconV2 name="folder-add-left" />}
               aria-label={language.t("home.project.add")}
-              onClick={() => {
-                const conn = home.server.focused()
-                if (conn) projects.project.choose(conn)
-              }}
+              onClick={addProject}
             />
           </TooltipV2>
         </div>
@@ -1003,6 +1030,12 @@ function SidebarSessionRow(props: {
     return `${Math.floor(minutes / 60)}h`
   }
 
+  // Fade the tail of long titles under the status badge instead of colliding with it.
+  const titleMask = createMemo(() => {
+    if (props.settled || (!live() && !props.pinned)) return ""
+    return "[mask-image:linear-gradient(to_right,black,black_calc(100%-24px),transparent)] group-hover/row:[mask-image:none]"
+  })
+
   const badge = () => (
     <Show when={live()}>
       {(value) => (
@@ -1066,7 +1099,7 @@ function SidebarSessionRow(props: {
             loading={status.loading()}
           />
           <span class={NAME}>
-            <span class="min-w-0 truncate">{title()}</span>
+            <span class={`min-w-0 truncate ${titleMask()}`}>{title()}</span>
           </span>
         </button>
       </TooltipV2>

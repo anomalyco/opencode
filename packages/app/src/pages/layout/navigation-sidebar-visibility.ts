@@ -1,6 +1,6 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import type { LocalProject } from "@/context/layout"
-import { compareSessionTime, displayName, projectForSession } from "@/pages/layout/helpers"
+import { displayName, projectForSession } from "@/pages/layout/helpers"
 import { pathKey } from "@/utils/path-key"
 
 export const SIDEBAR_SESSION_DAY = 86_400_000
@@ -18,6 +18,14 @@ export type SidebarProjectGroup = {
   records: SidebarSessionRecord[]
 }
 
+// Creation order keeps rows stable while threads stream; sorting by last activity would make
+// working threads trade places on every update.
+function compareSessionCreated(a: Session, b: Session) {
+  if (b.time.created !== a.time.created) return b.time.created - a.time.created
+  if (a.id === b.id) return 0
+  return a.id < b.id ? -1 : 1
+}
+
 export function buildSidebarRecords(input: { sessions: Session[]; projects: LocalProject[] }) {
   const projectByID = new Map(input.projects.flatMap((project) => (project.id ? [[project.id, project]] : [])))
   const directories = new Set(
@@ -27,7 +35,7 @@ export function buildSidebarRecords(input: { sessions: Session[]; projects: Loca
     .filter((session) => directories.has(pathKey(session.directory)))
     .filter((session) => !session.parentID)
   const unique = [...new Map(sessions.map((session) => [session.id, session] as const)).values()].sort(
-    compareSessionTime,
+    compareSessionCreated,
   )
   return unique.flatMap((session): SidebarSessionRecord[] => {
     const directory = pathKey(session.directory)

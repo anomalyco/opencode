@@ -48,8 +48,8 @@ describe("navigation sidebar visibility", () => {
       buildSidebarRecords({
         projects,
         sessions: [
-          session({ id: "1", directory: "/src/a", time: { created: 1, updated: 5, archived: undefined } }),
-          session({ id: "2", directory: "/src/b", time: { created: 1, updated: 9, archived: undefined } }),
+          session({ id: "1", directory: "/src/a", time: { created: 2, updated: 5, archived: undefined } }),
+          session({ id: "2", directory: "/src/b", time: { created: 3, updated: 9, archived: undefined } }),
           session({ id: "3", directory: "/src/a", time: { created: 1, updated: 2, archived: undefined } }),
         ],
       }),
