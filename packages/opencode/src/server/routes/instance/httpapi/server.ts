@@ -191,16 +191,18 @@ const docRoute = HttpRouter.use((router) => router.add("GET", "/doc", () => Effe
   Layer.provide(authOnlyRouterLayer),
 )
 
-const uiRoute = HttpRouter.use((router) =>
-  Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
-    const client = yield* HttpClient.HttpClient
-    const flags = yield* RuntimeFlags.Service
-    yield* router.add("*", "/*", (request) =>
-      serveUIEffect(request, { fs, client, disableEmbeddedWebUi: flags.disableEmbeddedWebUi }),
-    )
-  }),
-).pipe(Layer.provide(authOnlyRouterLayer))
+function uiRouteWithBasePath(basePath?: string) {
+  return HttpRouter.use((router) =>
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const client = yield* HttpClient.HttpClient
+      const flags = yield* RuntimeFlags.Service
+      yield* router.add("*", "/*", (request) =>
+        serveUIEffect(request, { fs, client, disableEmbeddedWebUi: flags.disableEmbeddedWebUi, basePath }),
+      )
+    }),
+  ).pipe(Layer.provide(authOnlyRouterLayer))
+}
 
 type RouteRequirements =
   | HttpRouter.HttpRouter
@@ -269,10 +271,10 @@ const app = LayerNode.group([
 ])
 
 export function createRoutes(
-  corsOptions?: CorsOptions,
+  options?: CorsOptions & { basePath?: string },
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
+  const uiRoute = uiRouteWithBasePath(options?.basePath)
   const locationServiceMapV2 = buildLocationServiceMap()
-
   return Layer.mergeAll(
     rootApiRoutes,
     eventApiRoutes,
@@ -287,11 +289,11 @@ export function createRoutes(
       compressionLayer,
       corsVaryFix,
       fenceLayer,
-      cors(corsOptions),
+      cors(options),
       AppNodeBuilderV1.build(MoveSession.node, [[LocationServiceMap.node, locationServiceMapV2]]),
       HttpServer.layerServices,
     ]),
-    Layer.provide(Layer.succeed(CorsConfig)(corsOptions)),
+    Layer.provide(Layer.succeed(CorsConfig)(options)),
     Layer.provide(sessionLocationLayer),
     Layer.provide(locationLayer),
     Layer.provide(PtyEnvironment.layer),

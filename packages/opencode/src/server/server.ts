@@ -5,7 +5,8 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
-import { createServer } from "node:http"
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
+import type { Duplex } from "node:stream"
 import { MDNS } from "./mdns"
 import { HttpApiApp } from "./routes/instance/httpapi/server"
 import { disposeMiddleware } from "./routes/instance/httpapi/lifecycle"
@@ -21,6 +22,7 @@ export type Listener = {
   hostname: string
   port: number
   url: URL
+  basePath: string
   stop: (close?: boolean) => Promise<void>
 }
 
@@ -34,6 +36,7 @@ type ListenOptions = CorsOptions & {
   hostname: string
   mdns?: boolean
   mdnsDomain?: string
+  basePath?: string
 }
 type ListenerState = {
   scope: Scope.Scope
@@ -41,7 +44,8 @@ type ListenerState = {
   http: ListenerServer
   websockets: WebSocketTracker.Interface
 }
-type EffectListener = Omit<Listener, "stop"> & {
+type EffectListener = Omit<Listener, "stop" | "basePath"> & {
+  basePath: string
   stop: (close?: boolean) => Effect.Effect<void>
 }
 
@@ -76,15 +80,17 @@ export async function listen(opts: ListenOptions): Promise<Listener> {
     hostname: listener.hostname,
     port: listener.port,
     url: listener.url,
+    basePath: listener.basePath,
     stop: (close?: boolean) => Effect.runPromiseExit(listener.stop(close)).then(() => undefined),
   }
 }
 
 const listenEffect: (opts: ListenOptions) => Effect.Effect<EffectListener, unknown> = Effect.fn("Server.listen")(
   function* (opts: ListenOptions) {
+    const basePath = opts.basePath ?? ""
     const state = yield* startWithPortFallback(opts)
     const address = yield* tcpAddress(state)
-    const listenerUrl = makeURL(opts.hostname, address.port)
+    const listenerUrl = makeURL(opts.hostname, address.port, basePath)
     const unpublishMdns = yield* setupMdns(opts, address.port, state.scope)
     url = listenerUrl
 
@@ -92,6 +98,7 @@ const listenEffect: (opts: ListenOptions) => Effect.Effect<EffectListener, unkno
       hostname: opts.hostname,
       port: address.port,
       url: listenerUrl,
+      basePath,
       stop: yield* makeStop(state, unpublishMdns, listenerUrl),
     }
   },
@@ -104,7 +111,7 @@ function listenerLayer(opts: ListenOptions, port: number) {
     disableListenLog: true,
   }).pipe(
     Layer.provideMerge(AppNodeBuilder.build(WebSocketTracker.node)),
-    Layer.provideMerge(serverLayer({ port, hostname: opts.hostname })),
+    Layer.provideMerge(serverLayer({ port, hostname: opts.hostname, basePath: opts.basePath })),
     // Install a fresh `ConfigProvider` per listener so `Config.string(...)`
     // reads reflect the current `process.env`. Effect's default
     // `ConfigProvider` snapshots `process.env` on first read and caches the
@@ -145,10 +152,11 @@ function tcpAddress(state: ListenerState) {
   })
 }
 
-function makeURL(hostname: string, port: number) {
+function makeURL(hostname: string, port: number, basePath = "") {
   const result = new URL("http://localhost")
   result.hostname = hostname
   result.port = String(port)
+  if (basePath) result.pathname = basePath
   return result
 }
 
@@ -196,8 +204,39 @@ function forceClose(state: ListenerState) {
   return Effect.all([state.http.closeAll, state.websockets.closeAll], { concurrency: "unbounded", discard: true })
 }
 
-function serverLayer(opts: { port: number; hostname: string }) {
+function serverLayer(opts: { port: number; hostname: string; basePath?: string }) {
   const server = createServer()
+  const bp = opts.basePath ?? ""
+
+  if (bp) {
+    const originalEmit = server.emit.bind(server)
+    server.emit = ((event: string, ...args: unknown[]) => {
+      if (event === "request" || event === "upgrade") {
+        const req = args[0] as IncomingMessage
+        const [pathname, query] = (req.url ?? "").split("?", 2)
+        if (pathname === bp && event === "request") {
+          const res = args[1] as ServerResponse
+          res.writeHead(301, { Location: bp + "/" + (query ? "?" + query : "") })
+          res.end()
+          return true
+        } else if (req.url && req.url.startsWith(bp + "/")) {
+          req.url = req.url.slice(bp.length) || "/"
+        } else {
+          if (event === "request") {
+            const res = args[1] as ServerResponse
+            res.writeHead(404, { "Content-Type": "text/plain" })
+            res.end("Not Found")
+          } else {
+            const socket = args[1] as Duplex
+            socket.destroy()
+          }
+          return true
+        }
+      }
+      return originalEmit(event, ...args)
+    }) as typeof server.emit
+  }
+
   const serverRef = { closeStarted: false, forceStop: false }
   const close = server.close.bind(server)
   // Keep shutdown owned by NodeHttpServer, but honor listener.stop(true) by
