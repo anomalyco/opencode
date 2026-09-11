@@ -17,6 +17,7 @@ const patterns = [
   /exceeds the limit of \d+/i,
   /exceeds the available context size/i,
   /greater than the context length/i,
+  /context window exceeded/i,
   /context window exceeds limit/i,
   /exceeded model token limit/i,
   /context[_ ]length[_ ]exceeded/i,
