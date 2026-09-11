@@ -145,6 +145,57 @@ describe("bootstrapDirectory", () => {
     expect(mcpReads.sort()).toEqual(["command", "resource", "status"])
   })
 
+  test("directory is marked complete without waiting for a slow MCP server", async () => {
+    const [store, setStore] = directoryState()
+    let mcpSettled = false
+    const mcpBlock = () =>
+      new Promise<{ data: Record<string, unknown> }>((resolve) =>
+        setTimeout(() => {
+          mcpSettled = true
+          resolve({ data: {} })
+        }, 400),
+      )
+
+    await bootstrapDirectory({
+      directory: "/project",
+      scope: ServerScope.local,
+      mcp: true,
+      global: {
+        config: {} satisfies Config,
+        path: { state: "", config: "", worktree: "/project", directory: "/project", home: "/home" },
+        project: [{ id: "project", worktree: "/project" } as Project],
+        provider,
+      },
+      sdk: {
+        app: { agents: async () => ({ data: [{ name: "build", mode: "primary" }] }) },
+        config: { get: async () => ({ data: {} }) },
+        session: { status: async () => ({ data: {} }) },
+        vcs: { get: async () => ({ data: undefined }) },
+        command: { list: async () => ({ data: [] }) },
+        permission: { list: async () => ({ data: [] }) },
+        question: { list: async () => ({ data: [] }) },
+        v2: { reference: { list: async () => ({ data: { data: [] } }) } },
+        mcp: { status: async () => mcpBlock() },
+        experimental: { resource: { list: async () => mcpBlock() } },
+        provider: { list: async () => ({ data: { all: [], connected: [], default: {} } }) },
+      } as unknown as OpencodeClient,
+      api,
+      store,
+      setStore,
+      vcsCache: { setStore() {} } as unknown as VcsCache,
+      loadSessions() {},
+      translate: (key) => key,
+      queryClient: new QueryClient(),
+      protocol: Promise.resolve("v1"),
+    })
+
+    expect(store.status).toBe("partial")
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    // Bootstrap must finish while MCP is still pending.
+    expect(store.status).toBe("complete")
+    expect(mcpSettled).toBe(false)
+  })
+
   test("skips legacy config while refreshing a v2 directory", async () => {
     const [store, setStore] = directoryState()
 
