@@ -132,6 +132,25 @@ All instruction files are combined with your `AGENTS.md` files.
 
 ---
 
+## Dynamic context in instruction files
+
+Instruction files support inline shell directives with `!`command`` syntax.
+
+```markdown
+Current branch: !`git branch --show-current`
+```
+
+When instruction files are loaded:
+
+- Each `!`command`` is executed
+- The directive is replaced with command stdout
+- Commands run from the instruction file's directory
+- Failures are returned as command output (non-throwing behavior)
+
+Use short, deterministic commands. Avoid interactive or long-running commands.
+
+---
+
 ## Referencing External Files
 
 While opencode doesn't automatically parse file references in `AGENTS.md`, you can achieve similar functionality in two ways:
