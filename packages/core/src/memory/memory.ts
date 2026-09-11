@@ -161,6 +161,7 @@ export function initDatabase(dbPath: string): Database {
       END;
     `)
   } catch (error) {
+    ;(db as any).ftsError = error
     console.warn(`Memory: FTS5 full-text search initialization failed for "${dbPath}"; falling back to LIKE search.`, error)
   }
 
@@ -195,8 +196,14 @@ export const layer = Layer.effect(
         ).pipe(Effect.annotateLogs({ dbPath, fts: true, bm25: false, error: String(error) }))
       }
     } else {
+      const initError = (db as any).ftsError
       yield* Effect.logWarning("Memory: FTS5 table is unavailable; falling back to LIKE search").pipe(
-        Effect.annotateLogs({ dbPath, fts: false, bm25: false }),
+        Effect.annotateLogs({
+          dbPath,
+          fts: false,
+          bm25: false,
+          ...(initError ? { error: String(initError) } : {}),
+        }),
       )
     }
 
