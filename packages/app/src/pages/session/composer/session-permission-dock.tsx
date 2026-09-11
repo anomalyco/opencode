@@ -22,6 +22,7 @@ export function SessionPermissionDock(props: {
   return (
     <DockPrompt
       kind="permission"
+      footerInside
       header={
         <div data-slot="permission-row" data-variant="header">
           <span data-slot="permission-icon">
