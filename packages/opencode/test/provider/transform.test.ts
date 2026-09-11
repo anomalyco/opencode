@@ -6209,3 +6209,74 @@ describe("ProviderTransform.options - kimi family adaptive thinking", () => {
     expect(result.thinking).toBeUndefined()
   })
 })
+
+describe("ProviderTransform.message - sap-ai-core assistant prefill stripping", () => {
+  const createModel = (overrides: Record<string, any> = {}) =>
+    ({
+      id: "sap-ai-core/anthropic--claude-4.6-sonnet",
+      providerID: "sap-ai-core",
+      api: {
+        id: "anthropic--claude-4.6-sonnet",
+        url: "https://api.ai.prod.eu-central-1.aws.ml.hana.ondemand.com",
+        npm: "@jerome-benoit/sap-ai-provider-v2",
+      },
+      name: "Claude 4.6 Sonnet",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      ...overrides,
+    }) as any
+
+  const sapModel = createModel()
+
+  test("strips trailing assistant message", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "Hi there!" },
+      { role: "user", content: "How are you?" },
+      { role: "assistant", content: "I am doing well." },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, sapModel, {}) as any[]
+
+    expect(result).toHaveLength(3)
+    expect(result[result.length - 1].role).toBe("user")
+    expect(result[result.length - 1].content).toBe("How are you?")
+  })
+
+  test("strips multiple trailing assistant messages", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "Step 1" },
+      { role: "assistant", content: "Step 2" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, sapModel, {}) as any[]
+
+    expect(result).toHaveLength(1)
+    expect(result[0].role).toBe("user")
+    expect(result[0].content).toBe("Hello")
+  })
+
+  test("leaves conversation ending in user message unchanged", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "Hi" },
+      { role: "user", content: "Tell me a joke" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, sapModel, {}) as any[]
+
+    expect(result).toHaveLength(3)
+    expect(result[2].role).toBe("user")
+    expect(result[2].content).toBe("Tell me a joke")
+  })
+})
+
+
