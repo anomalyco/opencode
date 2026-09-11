@@ -433,6 +433,58 @@ describe("ACP service sessions", () => {
     expect(select(resumed, "mode")?.currentValue).toBe("plan")
   })
 
+  it.each(["loadSession", "resumeSession"] as const)("%s preserves default effort", async (method) => {
+    const { service, prompts, updates } = makeService(
+      [
+        {
+          info: {
+            role: "user",
+            model: { providerID: "test", modelID: "second-model", variant: "medium" },
+            agent: "build",
+          },
+          parts: [],
+        },
+      ],
+      {
+        get: () =>
+          Promise.resolve({
+            data: {
+              id: "ses_loaded",
+              agent: "build",
+              model: { providerID: "test", id: "second-model", variant: "default" },
+            },
+          }),
+      },
+    )
+
+    const restored = await Effect.runPromise(
+      service[method]({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }),
+    )
+    expect(select(restored, "effort")?.currentValue).toBe("default")
+    expect(flattenSelectOptions(select(restored, "effort")).map((option) => option.value)).toContain("default")
+
+    await Effect.runPromise(service.setSessionModel({ sessionId: "ses_loaded", modelId: "test/second-model" }))
+    const update = updates.findLast((item) => item.update.sessionUpdate === "config_option_update")?.update
+    if (update?.sessionUpdate !== "config_option_update") throw new Error("missing config option update")
+    expect(select({ configOptions: update.configOptions }, "effort")?.currentValue).toBe("default")
+
+    const synchronized = await Effect.runPromise(
+      service.setSessionConfigOption({ sessionId: "ses_loaded", configId: "model", value: "test/second-model" }),
+    )
+    expect(select(synchronized, "effort")?.currentValue).toBe("default")
+
+    await Effect.runPromise(service.prompt({ sessionId: "ses_loaded", prompt: [{ type: "text", text: "hello" }] }))
+    expect(prompts).toEqual([expect.objectContaining({ variant: "default" })])
+
+    await Effect.runPromise(
+      service.setSessionConfigOption({ sessionId: "ses_loaded", configId: "effort", value: "medium" }),
+    )
+    const reset = await Effect.runPromise(
+      service.setSessionConfigOption({ sessionId: "ses_loaded", configId: "effort", value: "default" }),
+    )
+    expect(select(reset, "effort")?.currentValue).toBe("default")
+  })
+
   it("falls back from stale durable state to valid message state", async () => {
     const { service } = makeService(
       [
@@ -466,6 +518,21 @@ describe("ACP service sessions", () => {
     expect(select(loaded, "model")?.currentValue).toBe("test/second-model")
     expect(select(loaded, "effort")?.currentValue).toBe("medium")
     expect(select(loaded, "mode")?.currentValue).toBe("plan")
+  })
+
+  it("restores default effort from history when durable model state is absent", async () => {
+    const { service } = makeService([
+      {
+        info: {
+          role: "user",
+          model: { providerID: "test", modelID: "second-model", variant: "default" },
+          agent: "build",
+        },
+        parts: [],
+      },
+    ])
+    const resumed = await Effect.runPromise(service.resumeSession({ cwd: "/workspace", sessionId: "ses_loaded" }))
+    expect(select(resumed, "effort")?.currentValue).toBe("default")
   })
 
   it("replays loaded session transcript chunks", async () => {
@@ -950,7 +1017,11 @@ describe("ACP service sessions", () => {
 
     expect(select(updated, "model")?.currentValue).toBe("test/second-model")
     expect(select(updated, "effort")?.currentValue).toBe("low")
-    expect(flattenSelectOptions(select(updated, "effort")).map((option) => option.value)).toEqual(["low", "medium"])
+    expect(flattenSelectOptions(select(updated, "effort")).map((option) => option.value)).toEqual([
+      "low",
+      "medium",
+      "default",
+    ])
     expect(updates.findLast((item) => item.update.sessionUpdate === "config_option_update")?.update).toEqual({
       sessionUpdate: "config_option_update",
       configOptions: updated.configOptions,

@@ -34,7 +34,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import type { AssistantMessage, Message, OpencodeClient, Session, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
 import * as ACPError from "./error"
-import { buildConfigOptions, parseModelSelection } from "./config-option"
+import { buildConfigOptions, DEFAULT_VARIANT_VALUE, parseModelSelection } from "./config-option"
 import { promptContentToParts } from "./content"
 import { Directory } from "./directory"
 import { ACPEvent } from "./event"
@@ -435,7 +435,7 @@ export function make(input: {
     if (params.configId === "effort") {
       const model = current.model ?? selectDefaultModel(snapshot)
       const variants = Directory.variants(snapshot, model)
-      if (!variants || !Object.keys(variants).includes(params.value)) {
+      if (!variants || !hasVariant(variants, params.value)) {
         return yield* new ACPError.InvalidEffortError({ effort: params.value })
       }
       const state = yield* session.setVariant(params.sessionId, params.value)
@@ -922,8 +922,14 @@ function selectModelVariant(
   const variants = Directory.variants(snapshot, selected.model)
   if (!variants) return
   if (selected.variant) return selected.variant
-  if (sameModel(selected.model, current.model) && current.variant && current.variant in variants) return current.variant
+  if (sameModel(selected.model, current.model) && current.variant && hasVariant(variants, current.variant))
+    return current.variant
   return selectVariant(snapshot, selected.model)
+}
+
+function hasVariant(variants: Directory.ModelVariants, variant: string) {
+  // "default" is also the persisted sentinel for no explicit variant override.
+  return variant === DEFAULT_VARIANT_VALUE || Object.hasOwn(variants, variant)
 }
 
 function configOptions(snapshot: Directory.Snapshot, session: ConfigState) {
@@ -1124,8 +1130,10 @@ function restoreVariant(
 ) {
   const variants = Directory.variants(snapshot, model)
   if (!variants) return
-  if (sameModel(model, durable.model) && durable.variant && durable.variant in variants) return durable.variant
-  if (sameModel(model, history.model) && history.variant && history.variant in variants) return history.variant
+  if (sameModel(model, durable.model) && durable.variant && hasVariant(variants, durable.variant))
+    return durable.variant
+  if (sameModel(model, history.model) && history.variant && hasVariant(variants, history.variant))
+    return history.variant
   return selectVariant(snapshot, model)
 }
 
