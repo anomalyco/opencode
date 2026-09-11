@@ -748,12 +748,16 @@ for (const fixture of g6PromptCases) {
                 : undefined
       // The canonical EOF case is recognition-blocked until the real adapter
       // produces the marker; it is not independent proof of caller precedence.
+      // An incomplete stream settles as a terminal: finish "error" carries the
+      // recognition message while the durable step-finish part keeps its own
+      // "unknown" reason. The message is asserted before any asymmetric matcher,
+      // whose write-back would otherwise replace the received string.
       if (fixture.finish === "eof") {
-        expect(stored.info.error).toMatchObject({ name: "UnknownError", data: { message: expect.any(String) } })
         if (stored.info.error?.name !== "UnknownError") throw new Error("G6 canonical marker not recognized")
+        expect(typeof stored.info.error.data.message).toBe("string")
         expect(stored.info.error.data.message.trim().length).toBeGreaterThan(0)
         expect(errors).toEqual([stored.info.error])
-        expect(stored.info.finish).toBe(finish)
+        expect(stored.info.finish).toBe("error")
         expect(stored.info.structured).toBeUndefined()
       } else {
         expect({

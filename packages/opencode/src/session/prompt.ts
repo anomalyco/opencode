@@ -1309,7 +1309,7 @@ const layer = Layer.effect(
               reactiveAllowed,
             )
 
-            if (structured !== undefined) {
+            if (structured !== undefined && !handle.message.error && handle.message.finish !== "content-filter") {
               handle.message.structured = structured
               handle.message.finish = handle.message.finish ?? "stop"
               yield* sessions.updateMessage(handle.message)
