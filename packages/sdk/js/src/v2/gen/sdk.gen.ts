@@ -181,6 +181,8 @@ import type {
   SessionChildrenResponses,
   SessionCommandErrors,
   SessionCommandResponses,
+  SessionCostErrors,
+  SessionCostResponses,
   SessionCreateErrors,
   SessionCreateResponses,
   SessionDeleteErrors,
@@ -335,10 +337,14 @@ import type {
   V2ReferenceListResponses,
   V2SessionActiveErrors,
   V2SessionActiveResponses,
+  V2SessionChildrenErrors,
+  V2SessionChildrenResponses,
   V2SessionCompactErrors,
   V2SessionCompactResponses,
   V2SessionContextErrors,
   V2SessionContextResponses,
+  V2SessionCostErrors,
+  V2SessionCostResponses,
   V2SessionCreateErrors,
   V2SessionCreateResponses,
   V2SessionEventsErrors,
@@ -3633,6 +3639,38 @@ export class Session2 extends HeyApiClient {
   }
 
   /**
+   * Get total session cost
+   *
+   * Retrieve the total cost and token usage for a session, aggregated across all descendant (subagent) sessions.
+   */
+  public cost<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionCostResponses, SessionCostErrors, ThrowOnError>({
+      url: "/session/{sessionID}/cost",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Get session todos
    *
    * Retrieve the todo list associated with a specific session, showing tasks and action items.
@@ -5531,6 +5569,44 @@ export class Session3 extends HeyApiClient {
     const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
     return (options?.client ?? this.client).get<V2SessionGetResponses, V2SessionGetErrors, ThrowOnError>({
       url: "/api/session/{sessionID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get session children
+   *
+   * Retrieve all child sessions forked from the specified parent session.
+   */
+  public children<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).get<V2SessionChildrenResponses, V2SessionChildrenErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/children",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get total session cost
+   *
+   * Retrieve the total cost and token usage for a session, aggregated across all descendant (subagent) sessions.
+   */
+  public cost<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).get<V2SessionCostResponses, V2SessionCostErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/cost",
       ...options,
       ...params,
     })

@@ -168,6 +168,10 @@ export interface Interface {
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  readonly children: (parentID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info[]>
+  readonly totalCost: (
+    sessionID: SessionSchema.ID,
+  ) => Effect.Effect<{ cost: number; tokens: NonNullable<SessionSchema.Info["tokens"]> }, NotFoundError>
   readonly revert: {
     readonly stage: (input: {
       sessionID: SessionSchema.ID
@@ -430,6 +434,48 @@ const layer = Layer.effect(
       interrupt: Effect.fn("V2Session.interrupt")((sessionID) =>
         Effect.uninterruptible(execution.interrupt(sessionID)),
       ),
+      children: Effect.fn("V2Session.children")(function* (parentID) {
+        const rows = yield* db
+          .select()
+          .from(SessionTable)
+          .where(and(eq(SessionTable.parent_id, parentID)))
+          .all()
+          .pipe(Effect.orDie)
+        return rows.map(fromRow)
+      }),
+      totalCost: Effect.fn("V2Session.totalCost")(function* (sessionID) {
+        const own = yield* result.get(sessionID)
+        let cost = own.cost ?? 0
+        let tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+        if (own.tokens) {
+          tokens = {
+            input: own.tokens.input,
+            output: own.tokens.output,
+            reasoning: own.tokens.reasoning,
+            cache: { read: own.tokens.cache.read, write: own.tokens.cache.write },
+          }
+        }
+        const queue = [sessionID]
+        const visited = new Set([sessionID])
+        while (queue.length > 0) {
+          const current = queue.shift()!
+          const kids = yield* result.children(current)
+          for (const kid of kids) {
+            if (visited.has(kid.id)) continue
+            visited.add(kid.id)
+            cost += kid.cost ?? 0
+            if (kid.tokens) {
+              tokens.input += kid.tokens.input
+              tokens.output += kid.tokens.output
+              tokens.reasoning += kid.tokens.reasoning
+              tokens.cache.read += kid.tokens.cache.read
+              tokens.cache.write += kid.tokens.cache.write
+            }
+            queue.push(kid.id)
+          }
+        }
+        return { cost, tokens }
+      }),
       revert: {
         stage: Effect.fn("V2Session.revert.stage")(function* (input) {
           const session = yield* result.get(input.sessionID)

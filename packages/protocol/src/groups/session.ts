@@ -170,6 +170,46 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         ),
     )
     .add(
+      HttpApiEndpoint.get("session.children", "/api/session/:sessionID/children", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({ data: Schema.Array(Session.Info) }),
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.children",
+            summary: "Get session children",
+            description: "Retrieve all child sessions forked from the specified parent session.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.cost", "/api/session/:sessionID/cost", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({
+          data: Schema.Struct({
+            cost: Schema.Finite,
+            tokens: Schema.Struct({
+              input: Schema.Finite,
+              output: Schema.Finite,
+              reasoning: Schema.Finite,
+              cache: Schema.Struct({ read: Schema.Finite, write: Schema.Finite }),
+            }),
+          }),
+        }),
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.cost",
+            summary: "Get total session cost",
+            description:
+              "Retrieve the total cost and token usage for a session, aggregated across all descendant (subagent) sessions.",
+          }),
+        ),
+    )
+    .add(
       HttpApiEndpoint.post("session.switchAgent", "/api/session/:sessionID/agent", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({ agent: Agent.ID }),

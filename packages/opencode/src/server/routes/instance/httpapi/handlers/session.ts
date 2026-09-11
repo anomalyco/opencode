@@ -91,6 +91,11 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* session.children(ctx.params.sessionID)
     })
 
+    const cost = Effect.fn("SessionHttpApi.cost")(function* (ctx: { params: { sessionID: SessionID } }) {
+      yield* requireSession(ctx.params.sessionID)
+      return yield* SessionError.mapStorageNotFound(session.totalCost(ctx.params.sessionID))
+    })
+
     const todo = Effect.fn("SessionHttpApi.todo")(function* (ctx: { params: { sessionID: SessionID } }) {
       yield* requireSession(ctx.params.sessionID)
       return yield* todoSvc.get(ctx.params.sessionID)
@@ -415,6 +420,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("status", status)
       .handle("get", get)
       .handle("children", children)
+      .handle("cost", cost)
       .handle("todo", todo)
       .handle("diff", diff)
       .handle("messages", messages)

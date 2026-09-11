@@ -31,11 +31,15 @@ export type SDK = {
       parameters: { readonly sessionID: string; readonly directory: string },
       options: { readonly throwOnError: true },
     ) => Promise<{ readonly data?: readonly SessionMessage[] | null }>
+    readonly cost: (
+      parameters: { readonly sessionID: string },
+    ) => Promise<{ readonly data?: { readonly cost?: number } | null }>
   }
 }
 
 export interface MessageLoaderInterface {
   readonly messages: (input: MessagesInput) => Effect.Effect<readonly SessionMessage[], unknown>
+  readonly cost: (input: { readonly sessionID: string }) => Effect.Effect<number, unknown>
 }
 
 export interface ContextLimitLoaderInterface {
@@ -77,6 +81,10 @@ export function messageLoaderFromSDK(sdk: SDK): MessageLoaderInterface {
         sdk.session
           .messages({ sessionID: input.sessionID, directory: input.directory }, { throwOnError: true })
           .then((response) => response.data ?? []),
+      ),
+    cost: (input) =>
+      Effect.promise(() =>
+        sdk.session.cost({ sessionID: input.sessionID }).then((response) => response.data?.cost ?? 0),
       ),
   })
 }
@@ -205,6 +213,10 @@ const layer = Layer.effect(
       })
       if (!size) return
 
+      const cost = yield* messageLoader
+        .cost({ sessionID: input.sessionID })
+        .pipe(Effect.orElseSucceed(() => totalSessionCost(messages)))
+
       yield* Effect.promise(() =>
         input.connection
           .sessionUpdate({
@@ -213,7 +225,7 @@ const layer = Layer.effect(
               sessionUpdate: "usage_update",
               used: contextTokens(message),
               size,
-              cost: { amount: totalSessionCost(messages), currency: "USD" },
+              cost: { amount: cost, currency: "USD" },
             },
           })
           .catch(() => {}),
